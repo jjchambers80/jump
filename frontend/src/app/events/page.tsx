@@ -1,0 +1,303 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { api } from '../../services/api';
+
+interface Event {
+  id: string;
+  name: string;
+  description?: string;
+  venue: string;
+  date: string;
+  ticketPrice: string;
+  availableTickets: number;
+  capacity: number;
+  soldTickets: number;
+  status: string;
+}
+
+interface EventListResponse {
+  events: Event[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+function EventCard({ event }: { event: Event }) {
+  const eventDate = new Date(event.date);
+  const formattedDate = eventDate.toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+  const formattedTime = eventDate.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  const ticketPriceNum = parseFloat(event.ticketPrice);
+  const soldPercentage =
+    event.capacity > 0 ? ((event.capacity - event.availableTickets) / event.capacity) * 100 : 0;
+  const isSoldOut = event.availableTickets === 0;
+  const isAlmostSoldOut = soldPercentage > 80 && !isSoldOut;
+
+  return (
+    <Link
+      href={`/events/${event.id}`}
+      className="block bg-white rounded-lg shadow-md hover:shadow-xl transition-shadow duration-300 overflow-hidden"
+    >
+      <div className="p-6">
+        <h3 className="text-2xl font-bold text-gray-900 mb-2">{event.name}</h3>
+
+        <div className="flex items-center text-gray-600 mb-2">
+          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+            />
+          </svg>
+          <span className="text-sm">
+            {formattedDate} at {formattedTime}
+          </span>
+        </div>
+
+        <div className="flex items-center text-gray-600 mb-4">
+          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+            />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+            />
+          </svg>
+          <span className="text-sm">{event.venue}</span>
+        </div>
+
+        {event.description && (
+          <p className="text-gray-700 mb-4 line-clamp-2">{event.description}</p>
+        )}
+
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <span className="text-3xl font-bold text-blue-600">
+              ${(parseFloat(event.ticketPrice) / 100).toFixed(2)}
+            </span>
+            <span className="text-gray-500 ml-2">per ticket</span>
+          </div>
+
+          <div className="text-right">
+            {isSoldOut ? (
+              <span className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-semibold">
+                Sold Out
+              </span>
+            ) : isAlmostSoldOut ? (
+              <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-semibold">
+                Almost Sold Out
+              </span>
+            ) : (
+              <span className="text-green-600 text-sm font-semibold">
+                {event.availableTickets} tickets available
+              </span>
+            )}
+          </div>
+        </div>
+
+        {!isSoldOut && (
+          <div className="mt-4">
+            <button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition-colors duration-200">
+              View Details & Purchase
+            </button>
+          </div>
+        )}
+      </div>
+    </Link>
+  );
+}
+
+export default function EventsPage() {
+  const [events, setEvents] = useState<Event[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const limit = 12;
+
+  useEffect(() => {
+    fetchEvents();
+  }, [page]);
+
+  const fetchEvents = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await api.get<EventListResponse>(`/events?page=${page}&limit=${limit}`);
+
+      setEvents(response.events);
+      setTotalPages(response.totalPages);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load events. Please try again.');
+      console.error('Error fetching events:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePreviousPage = () => {
+    if (page > 1) {
+      setPage(page - 1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handleNextPage = () => {
+    if (page < totalPages) {
+      setPage(page + 1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <svg
+            className="animate-spin h-12 w-12 text-blue-600 mx-auto mb-4"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle
+              className="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              strokeWidth="4"
+            ></circle>
+            <path
+              className="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+            ></path>
+          </svg>
+          <p className="text-gray-600">Loading events...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-lg shadow-md p-8 max-w-md w-full text-center">
+          <div className="text-red-600 mb-4">
+            <svg
+              className="w-16 h-16 mx-auto"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Oops!</h2>
+          <p className="text-gray-600 mb-6">{error}</p>
+          <button
+            onClick={fetchEvents}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded transition-colors duration-200"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <h1 className="text-4xl font-bold text-gray-900">Upcoming Events</h1>
+          <p className="mt-2 text-lg text-gray-600">Discover and book tickets for amazing events</p>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        {events.length === 0 ? (
+          <div className="text-center py-12">
+            <svg
+              className="w-24 h-24 text-gray-400 mx-auto mb-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+              />
+            </svg>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">No events available</h3>
+            <p className="text-gray-600">Check back soon for upcoming events!</p>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {events.map((event) => (
+                <EventCard key={event.id} event={event} />
+              ))}
+            </div>
+
+            {totalPages > 1 && (
+              <div className="mt-12 flex items-center justify-center space-x-4">
+                <button
+                  onClick={handlePreviousPage}
+                  disabled={page === 1}
+                  className={`px-6 py-2 rounded-lg font-semibold transition-colors duration-200 ${
+                    page === 1
+                      ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      : 'bg-white text-blue-600 border border-blue-600 hover:bg-blue-50'
+                  }`}
+                >
+                  Previous
+                </button>
+                <span className="text-gray-700">
+                  Page {page} of {totalPages}
+                </span>
+                <button
+                  onClick={handleNextPage}
+                  disabled={page === totalPages}
+                  className={`px-6 py-2 rounded-lg font-semibold transition-colors duration-200 ${
+                    page === totalPages
+                      ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      : 'bg-blue-600 text-white hover:bg-blue-700'
+                  }`}
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
