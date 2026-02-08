@@ -48,38 +48,46 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-md p-6">
-      <h3 className="text-xl font-bold text-gray-900 mb-6">Purchase Summary</h3>
+    <form
+      onSubmit={handleSubmit}
+      className="bg-white dark:bg-slate-800 rounded-lg shadow-md dark:shadow-lg dark:shadow-black/20 p-6"
+    >
+      <h3 className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-6">Purchase Summary</h3>
 
       {/* Order Summary */}
-      <div className="bg-gray-50 rounded-lg p-4 mb-6">
+      <div className="bg-gray-50 dark:bg-slate-900 rounded-lg p-4 mb-6">
         <div className="space-y-3">
           <div className="flex justify-between">
-            <span className="text-gray-700">Event</span>
-            <span className="font-semibold text-gray-900">{event.name}</span>
+            <span className="text-gray-700 dark:text-slate-300">Event</span>
+            <span className="font-semibold text-gray-900 dark:text-slate-100">{event.name}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-700">Quantity</span>
-            <span className="font-semibold text-gray-900">
+            <span className="text-gray-700 dark:text-slate-300">Quantity</span>
+            <span className="font-semibold text-gray-900 dark:text-slate-100">
               {quantity} ticket{quantity > 1 ? 's' : ''}
             </span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-700">Price per ticket</span>
-            <span className="font-semibold text-gray-900">
+            <span className="text-gray-700 dark:text-slate-300">Price per ticket</span>
+            <span className="font-semibold text-gray-900 dark:text-slate-100">
               ${(event.ticketPrice / 100).toFixed(2)}
             </span>
           </div>
-          <div className="border-t border-gray-300 pt-3 flex justify-between">
-            <span className="text-lg font-bold text-gray-900">Total</span>
-            <span className="text-lg font-bold text-blue-600">${totalAmount.toFixed(2)}</span>
+          <div className="border-t border-gray-300 dark:border-slate-600 pt-3 flex justify-between">
+            <span className="text-lg font-bold text-gray-900 dark:text-slate-100">Total</span>
+            <span className="text-lg font-bold text-blue-600 dark:text-indigo-400">
+              ${totalAmount.toFixed(2)}
+            </span>
           </div>
         </div>
       </div>
 
       {/* Email Input */}
       <div className="mb-6">
-        <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-2">
+        <label
+          htmlFor="email"
+          className="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-2"
+        >
           Email Address
         </label>
         <input
@@ -92,23 +100,25 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
               setErrors({ ...errors, email: undefined });
             }
           }}
-          className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-            errors.email ? 'border-red-500' : 'border-gray-300'
+          className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100 dark:placeholder-slate-500 ${
+            errors.email ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'
           }`}
           placeholder="your.email@example.com"
           disabled={isLoading}
         />
-        {errors.email && <p className="mt-2 text-sm text-red-600">{errors.email}</p>}
-        <p className="mt-2 text-sm text-gray-500">
+        {errors.email && (
+          <p className="mt-2 text-sm text-red-600 dark:text-red-400">{errors.email}</p>
+        )}
+        <p className="mt-2 text-sm text-gray-500 dark:text-slate-500">
           Your tickets will be sent to this email address
         </p>
       </div>
 
       {/* Payment Notice */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-6">
         <div className="flex items-start">
           <svg
-            className="w-5 h-5 text-blue-600 mr-2 flex-shrink-0 mt-0.5"
+            className="w-5 h-5 text-blue-600 dark:text-indigo-400 mr-2 flex-shrink-0 mt-0.5"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -121,8 +131,10 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
             />
           </svg>
           <div>
-            <p className="text-sm text-blue-800 font-semibold mb-1">Secure Payment</p>
-            <p className="text-xs text-blue-700">
+            <p className="text-sm text-blue-800 dark:text-blue-300 font-semibold mb-1">
+              Secure Payment
+            </p>
+            <p className="text-xs text-blue-700 dark:text-blue-400">
               You will be redirected to Stripe for secure payment processing. Your payment
               information is never stored on our servers.
             </p>
@@ -135,7 +147,9 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
         type="submit"
         disabled={isLoading}
         className={`w-full py-3 px-6 rounded-lg font-bold text-white transition-colors duration-200 ${
-          isLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+          isLoading
+            ? 'bg-gray-400 dark:bg-slate-600 cursor-not-allowed'
+            : 'bg-blue-600 hover:bg-blue-700 dark:bg-indigo-600 dark:hover:bg-indigo-700'
         }`}
       >
         {isLoading ? (
@@ -168,13 +182,13 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
       </button>
 
       {/* Terms and Conditions */}
-      <p className="mt-4 text-xs text-gray-500 text-center">
+      <p className="mt-4 text-xs text-gray-500 dark:text-slate-500 text-center">
         By completing this purchase, you agree to our{' '}
-        <a href="/terms" className="text-blue-600 hover:underline">
+        <a href="/terms" className="text-blue-600 dark:text-indigo-400 hover:underline">
           Terms of Service
         </a>{' '}
         and{' '}
-        <a href="/privacy" className="text-blue-600 hover:underline">
+        <a href="/privacy" className="text-blue-600 dark:text-indigo-400 hover:underline">
           Privacy Policy
         </a>
       </p>

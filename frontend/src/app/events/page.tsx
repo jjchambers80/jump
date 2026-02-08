@@ -47,12 +47,12 @@ function EventCard({ event }: { event: Event }) {
   return (
     <Link
       href={`/events/${event.id}`}
-      className="block bg-white rounded-lg shadow-md hover:shadow-xl transition-shadow duration-300 overflow-hidden"
+      className="block bg-white dark:bg-slate-800 rounded-lg shadow-md dark:shadow-lg dark:shadow-black/20 hover:shadow-xl dark:hover:shadow-xl dark:hover:shadow-black/30 transition-shadow duration-300 overflow-hidden"
     >
       <div className="p-6">
-        <h3 className="text-2xl font-bold text-gray-900 mb-2">{event.name}</h3>
+        <h3 className="text-2xl font-bold text-gray-900 dark:text-slate-100 mb-2">{event.name}</h3>
 
-        <div className="flex items-center text-gray-600 mb-2">
+        <div className="flex items-center text-gray-600 dark:text-slate-400 mb-2">
           <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               strokeLinecap="round"
@@ -66,7 +66,7 @@ function EventCard({ event }: { event: Event }) {
           </span>
         </div>
 
-        <div className="flex items-center text-gray-600 mb-4">
+        <div className="flex items-center text-gray-600 dark:text-slate-400 mb-4">
           <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               strokeLinecap="round"
@@ -85,28 +85,28 @@ function EventCard({ event }: { event: Event }) {
         </div>
 
         {event.description && (
-          <p className="text-gray-700 mb-4 line-clamp-2">{event.description}</p>
+          <p className="text-gray-700 dark:text-slate-300 mb-4 line-clamp-2">{event.description}</p>
         )}
 
         <div className="flex items-center justify-between">
           <div className="flex items-center">
-            <span className="text-3xl font-bold text-blue-600">
+            <span className="text-3xl font-bold text-blue-600 dark:text-indigo-400">
               ${(parseFloat(event.ticketPrice) / 100).toFixed(2)}
             </span>
-            <span className="text-gray-500 ml-2">per ticket</span>
+            <span className="text-gray-500 dark:text-slate-400 ml-2">per ticket</span>
           </div>
 
           <div className="text-right">
             {isSoldOut ? (
-              <span className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-semibold">
+              <span className="bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400 px-3 py-1 rounded-full text-sm font-semibold">
                 Sold Out
               </span>
             ) : isAlmostSoldOut ? (
-              <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-semibold">
+              <span className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400 px-3 py-1 rounded-full text-sm font-semibold">
                 Almost Sold Out
               </span>
             ) : (
-              <span className="text-green-600 text-sm font-semibold">
+              <span className="text-green-700 dark:text-green-400 text-sm font-semibold">
                 {event.availableTickets} tickets available
               </span>
             )}
@@ -170,10 +170,10 @@ export default function EventsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center">
         <div className="text-center">
           <svg
-            className="animate-spin h-12 w-12 text-blue-600 mx-auto mb-4"
+            className="animate-spin h-12 w-12 text-blue-600 dark:text-indigo-400 mx-auto mb-4"
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
             viewBox="0 0 24 24"
@@ -192,7 +192,7 @@ export default function EventsPage() {
               d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
             ></path>
           </svg>
-          <p className="text-gray-600">Loading events...</p>
+          <p className="text-gray-600 dark:text-slate-400">Loading events...</p>
         </div>
       </div>
     );
@@ -200,9 +200,9 @@ export default function EventsPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-md p-8 max-w-md w-full text-center">
-          <div className="text-red-600 mb-4">
+      <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md dark:shadow-lg dark:shadow-black/20 p-8 max-w-md w-full text-center">
+          <div className="text-red-600 dark:text-red-400 mb-4">
             <svg
               className="w-16 h-16 mx-auto"
               fill="none"
@@ -217,8 +217,8 @@ export default function EventsPage() {
               />
             </svg>
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Oops!</h2>
-          <p className="text-gray-600 mb-6">{error}</p>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-slate-100 mb-2">Oops!</h2>
+          <p className="text-gray-600 dark:text-slate-400 mb-6">{error}</p>
           <button
             onClick={fetchEvents}
             className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded transition-colors duration-200"
@@ -231,11 +231,13 @@ export default function EventsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-white border-b border-gray-200">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
+      <div className="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <h1 className="text-4xl font-bold text-gray-900">Upcoming Events</h1>
-          <p className="mt-2 text-lg text-gray-600">Discover and book tickets for amazing events</p>
+          <h1 className="text-4xl font-bold text-gray-900 dark:text-slate-100">Upcoming Events</h1>
+          <p className="mt-2 text-lg text-gray-600 dark:text-slate-400">
+            Discover and book tickets for amazing events
+          </p>
         </div>
       </div>
 
@@ -243,7 +245,7 @@ export default function EventsPage() {
         {events.length === 0 ? (
           <div className="text-center py-12">
             <svg
-              className="w-24 h-24 text-gray-400 mx-auto mb-4"
+              className="w-24 h-24 text-gray-400 dark:text-slate-500 mx-auto mb-4"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -255,8 +257,12 @@ export default function EventsPage() {
                 d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
               />
             </svg>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">No events available</h3>
-            <p className="text-gray-600">Check back soon for upcoming events!</p>
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-slate-100 mb-2">
+              No events available
+            </h3>
+            <p className="text-gray-600 dark:text-slate-400">
+              Check back soon for upcoming events!
+            </p>
           </div>
         ) : (
           <>
@@ -273,13 +279,13 @@ export default function EventsPage() {
                   disabled={page === 1}
                   className={`px-6 py-2 rounded-lg font-semibold transition-colors duration-200 ${
                     page === 1
-                      ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                      : 'bg-white text-blue-600 border border-blue-600 hover:bg-blue-50'
+                      ? 'bg-gray-200 dark:bg-slate-700 text-gray-400 dark:text-slate-500 cursor-not-allowed'
+                      : 'bg-white dark:bg-slate-800 text-blue-600 dark:text-indigo-400 border border-blue-600 dark:border-indigo-400 hover:bg-blue-50 dark:hover:bg-slate-700'
                   }`}
                 >
                   Previous
                 </button>
-                <span className="text-gray-700">
+                <span className="text-gray-700 dark:text-slate-300">
                   Page {page} of {totalPages}
                 </span>
                 <button
@@ -287,7 +293,7 @@ export default function EventsPage() {
                   disabled={page === totalPages}
                   className={`px-6 py-2 rounded-lg font-semibold transition-colors duration-200 ${
                     page === totalPages
-                      ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      ? 'bg-gray-200 dark:bg-slate-700 text-gray-400 dark:text-slate-500 cursor-not-allowed'
                       : 'bg-blue-600 text-white hover:bg-blue-700'
                   }`}
                 >

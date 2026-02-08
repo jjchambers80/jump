@@ -104,7 +104,7 @@ function CreateEventForm() {
   const minDate = tomorrow.toISOString().slice(0, 16);
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 py-8">
       <div className="max-w-2xl mx-auto px-4">
         <div className="mb-6">
           <button
@@ -115,23 +115,31 @@ function CreateEventForm() {
           </button>
         </div>
 
-        <h1 className="text-3xl font-bold text-gray-900 mb-8">Create New Event</h1>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-slate-100 mb-8">
+          Create New Event
+        </h1>
 
         {success && (
-          <div className="mb-6 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-md">
+          <div className="mb-6 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-slate-700 text-green-700 dark:text-green-400 px-4 py-3 rounded-md">
             ✅ {success}
           </div>
         )}
 
         {error && (
-          <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
+          <div className="mb-6 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-slate-700 text-red-700 dark:text-red-400 px-4 py-3 rounded-md">
             ❌ {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="bg-white shadow-md rounded-lg p-8 space-y-6">
+        <form
+          onSubmit={handleSubmit}
+          className="bg-white dark:bg-slate-800 shadow-md dark:shadow-lg dark:shadow-black/20 rounded-lg p-8 space-y-6"
+        >
           <div>
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="name"
+              className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+            >
               Event Name *
             </label>
             <input
@@ -140,18 +148,23 @@ function CreateEventForm() {
               maxLength={255}
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                validationErrors.name ? 'border-red-300' : 'border-gray-300'
+              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-slate-700 dark:text-slate-100 ${
+                validationErrors.name
+                  ? 'border-red-300 dark:border-red-500'
+                  : 'border-gray-300 dark:border-slate-600'
               }`}
               placeholder="e.g. Summer Music Festival 2026"
             />
             {validationErrors.name && (
-              <p className="mt-1 text-sm text-red-600">{validationErrors.name}</p>
+              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{validationErrors.name}</p>
             )}
           </div>
 
           <div>
-            <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="date"
+              className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+            >
               Event Date & Time *
             </label>
             <input
@@ -160,17 +173,22 @@ function CreateEventForm() {
               min={minDate}
               value={formData.date}
               onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                validationErrors.date ? 'border-red-300' : 'border-gray-300'
+              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-slate-700 dark:text-slate-100 ${
+                validationErrors.date
+                  ? 'border-red-300 dark:border-red-500'
+                  : 'border-gray-300 dark:border-slate-600'
               }`}
             />
             {validationErrors.date && (
-              <p className="mt-1 text-sm text-red-600">{validationErrors.date}</p>
+              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{validationErrors.date}</p>
             )}
           </div>
 
           <div>
-            <label htmlFor="venue" className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="venue"
+              className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+            >
               Venue *
             </label>
             <input
@@ -179,19 +197,26 @@ function CreateEventForm() {
               maxLength={500}
               value={formData.venue}
               onChange={(e) => setFormData({ ...formData, venue: e.target.value })}
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                validationErrors.venue ? 'border-red-300' : 'border-gray-300'
+              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-slate-700 dark:text-slate-100 ${
+                validationErrors.venue
+                  ? 'border-red-300 dark:border-red-500'
+                  : 'border-gray-300 dark:border-slate-600'
               }`}
               placeholder="e.g. Madison Square Garden, New York"
             />
             {validationErrors.venue && (
-              <p className="mt-1 text-sm text-red-600">{validationErrors.venue}</p>
+              <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+                {validationErrors.venue}
+              </p>
             )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label htmlFor="capacity" className="block text-sm font-medium text-gray-700 mb-1">
+              <label
+                htmlFor="capacity"
+                className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+              >
                 Capacity *
               </label>
               <input
@@ -201,19 +226,26 @@ function CreateEventForm() {
                 max={100000}
                 value={formData.capacity}
                 onChange={(e) => setFormData({ ...formData, capacity: e.target.value })}
-                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                  validationErrors.capacity ? 'border-red-300' : 'border-gray-300'
+                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-slate-700 dark:text-slate-100 ${
+                  validationErrors.capacity
+                    ? 'border-red-300 dark:border-red-500'
+                    : 'border-gray-300 dark:border-slate-600'
                 }`}
                 placeholder="e.g. 500"
               />
               {validationErrors.capacity && (
-                <p className="mt-1 text-sm text-red-600">{validationErrors.capacity}</p>
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+                  {validationErrors.capacity}
+                </p>
               )}
-              <p className="mt-1 text-xs text-gray-500">1 to 100,000</p>
+              <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">1 to 100,000</p>
             </div>
 
             <div>
-              <label htmlFor="ticketPrice" className="block text-sm font-medium text-gray-700 mb-1">
+              <label
+                htmlFor="ticketPrice"
+                className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+              >
                 Ticket Price (USD) *
               </label>
               <input
@@ -223,15 +255,19 @@ function CreateEventForm() {
                 step={0.01}
                 value={formData.ticketPrice}
                 onChange={(e) => setFormData({ ...formData, ticketPrice: e.target.value })}
-                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                  validationErrors.ticketPrice ? 'border-red-300' : 'border-gray-300'
+                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-slate-700 dark:text-slate-100 ${
+                  validationErrors.ticketPrice
+                    ? 'border-red-300 dark:border-red-500'
+                    : 'border-gray-300 dark:border-slate-600'
                 }`}
                 placeholder="e.g. 49.99"
               />
               {validationErrors.ticketPrice && (
-                <p className="mt-1 text-sm text-red-600">{validationErrors.ticketPrice}</p>
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+                  {validationErrors.ticketPrice}
+                </p>
               )}
-              <p className="mt-1 text-xs text-gray-500">0 for free events</p>
+              <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">0 for free events</p>
             </div>
           </div>
 
@@ -243,7 +279,7 @@ function CreateEventForm() {
             >
               {loading ? 'Creating Event...' : 'Create Event'}
             </button>
-            <p className="mt-2 text-xs text-gray-500 text-center">
+            <p className="mt-2 text-xs text-gray-500 dark:text-slate-500 text-center">
               Events are created in DRAFT status. You can publish them from the dashboard.
             </p>
           </div>

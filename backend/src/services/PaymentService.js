@@ -44,8 +44,10 @@ class PaymentService {
       );
     }
 
-    // Calculate total amount
-    const totalAmount = event.ticketPrice * quantity;
+    // Calculate total amount (convert Prisma Decimal to Number, then to cents for Stripe)
+    const unitPriceDollars = Number(event.ticketPrice);
+    const unitPriceCents = Math.round(unitPriceDollars * 100);
+    const totalAmount = unitPriceDollars * quantity;
 
     // Create or find customer
     let customer = await prisma.customer.findUnique({
@@ -79,7 +81,7 @@ class PaymentService {
                 venue: event.venue,
               },
             },
-            unit_amount: event.ticketPrice,
+            unit_amount: unitPriceCents,
           },
           quantity,
         },
