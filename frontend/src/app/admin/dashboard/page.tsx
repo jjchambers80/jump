@@ -69,13 +69,15 @@ function DashboardContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
       {/* Header */}
-      <header className="bg-white shadow-sm">
+      <header className="bg-white dark:bg-slate-800 shadow-sm dark:shadow-lg dark:shadow-black/20">
         <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
-            <p className="text-sm text-gray-500">Welcome, {user?.name}</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">
+              Admin Dashboard
+            </h1>
+            <p className="text-sm text-gray-500 dark:text-slate-500">Welcome, {user?.name}</p>
           </div>
           <div className="flex items-center gap-4">
             <Link
@@ -86,7 +88,7 @@ function DashboardContent() {
             </Link>
             <button
               onClick={handleLogout}
-              className="text-gray-600 hover:text-gray-900 text-sm font-medium"
+              className="text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-slate-100 text-sm font-medium"
             >
               Sign Out
             </button>
@@ -96,7 +98,7 @@ function DashboardContent() {
 
       <main className="max-w-7xl mx-auto px-4 py-8">
         {error && (
-          <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
+          <div className="mb-6 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-slate-700 text-red-700 dark:text-red-400 px-4 py-3 rounded-md">
             {error}
           </div>
         )}
@@ -127,9 +129,11 @@ function DashboardContent() {
 
         {/* Capacity bar */}
         {stats && stats.totalCapacity > 0 && (
-          <div className="bg-white rounded-lg shadow-sm p-6 mb-8">
-            <h3 className="text-sm font-medium text-gray-700 mb-2">Overall Capacity</h3>
-            <div className="w-full bg-gray-200 rounded-full h-4">
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm dark:shadow-lg dark:shadow-black/20 p-6 mb-8">
+            <h3 className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
+              Overall Capacity
+            </h3>
+            <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-4">
               <div
                 className="bg-indigo-600 h-4 rounded-full transition-all duration-500"
                 style={{
@@ -137,7 +141,7 @@ function DashboardContent() {
                 }}
               />
             </div>
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
               {stats.ticketsSold} / {stats.totalCapacity} tickets sold (
               {((stats.ticketsSold / stats.totalCapacity) * 100).toFixed(1)}%)
             </p>
@@ -145,14 +149,16 @@ function DashboardContent() {
         )}
 
         {/* Events List (T112) */}
-        <div className="bg-white rounded-lg shadow-sm">
-          <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-            <h2 className="text-lg font-semibold text-gray-900">Your Events</h2>
-            <span className="text-sm text-gray-500">{events.length} events</span>
+        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm dark:shadow-lg dark:shadow-black/20">
+          <div className="px-6 py-4 border-b border-gray-200 dark:border-slate-700 flex justify-between items-center">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Your Events</h2>
+            <span className="text-sm text-gray-500 dark:text-slate-500">
+              {events.length} events
+            </span>
           </div>
 
           {events.length === 0 ? (
-            <div className="px-6 py-12 text-center text-gray-500">
+            <div className="px-6 py-12 text-center text-gray-500 dark:text-slate-500">
               <p className="text-lg mb-2">No events yet</p>
               <p className="text-sm mb-4">Create your first event to get started</p>
               <Link
@@ -163,26 +169,28 @@ function DashboardContent() {
               </Link>
             </div>
           ) : (
-            <div className="divide-y divide-gray-200">
+            <div className="divide-y divide-gray-200 dark:divide-slate-700">
               {events.map((event) => (
                 <div
                   key={event.id}
-                  className="px-6 py-4 flex items-center justify-between hover:bg-gray-50"
+                  className="px-6 py-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-slate-700"
                 >
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-medium text-gray-900">{event.name}</h3>
+                      <h3 className="text-sm font-medium text-gray-900 dark:text-slate-100">
+                        {event.name}
+                      </h3>
                       <span
                         className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
                           event.status === 'PUBLISHED'
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-yellow-100 text-yellow-800'
+                            ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400'
+                            : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400'
                         }`}
                       >
                         {event.status}
                       </span>
                     </div>
-                    <div className="mt-1 text-sm text-gray-500 flex gap-4">
+                    <div className="mt-1 text-sm text-gray-500 dark:text-slate-500 flex gap-4">
                       <span>📅 {new Date(event.date).toLocaleDateString()}</span>
                       <span>📍 {event.venue}</span>
                       <span>
@@ -210,7 +218,7 @@ function DashboardContent() {
         </div>
 
         {/* Auto-refresh indicator */}
-        <p className="mt-4 text-xs text-gray-400 text-center">
+        <p className="mt-4 text-xs text-gray-400 dark:text-slate-500 text-center">
           Dashboard auto-refreshes every 5 seconds
         </p>
       </main>
@@ -230,12 +238,12 @@ function StatCard({
   subtitle?: string;
 }) {
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6">
+    <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm dark:shadow-lg dark:shadow-black/20 p-6">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-gray-600">{label}</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
-          {subtitle && <p className="text-xs text-gray-500 mt-1">{subtitle}</p>}
+          <p className="text-sm text-gray-600 dark:text-slate-400">{label}</p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-slate-100 mt-1">{value}</p>
+          {subtitle && <p className="text-xs text-gray-500 dark:text-slate-500 mt-1">{subtitle}</p>}
         </div>
         <span className="text-3xl">{icon}</span>
       </div>

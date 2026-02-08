@@ -1,7 +1,7 @@
 // Email Service
 // Sends ticket emails with QR codes per FR-008, FR-020
 
-import sgMail from '../config/sendgrid.js';
+import resend from '../config/sendgrid.js';
 import logger from '../utils/logger.js';
 
 class EmailService {
@@ -50,8 +50,8 @@ class EmailService {
           .join('');
 
         const msg = {
-          to: customerEmail,
-          from: process.env.SENDGRID_FROM_EMAIL || 'tickets@jump.com',
+          to: [customerEmail],
+          from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
           subject: `Your Tickets for ${tickets[0].event.name}`,
           html: `
             <html>
@@ -86,7 +86,7 @@ class EmailService {
         };
 
         // Send email
-        await sgMail.send(msg);
+        await resend.emails.send(msg);
 
         logger.info('Ticket email sent successfully', {
           email: customerEmail,
@@ -137,8 +137,8 @@ class EmailService {
   async sendPurchaseConfirmation(customerEmail, eventName, quantity, confirmationUrl) {
     try {
       const msg = {
-        to: customerEmail,
-        from: process.env.SENDGRID_FROM_EMAIL || 'tickets@jump.com',
+        to: [customerEmail],
+        from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
         subject: `Purchase Confirmed - ${eventName}`,
         html: `
           <html>
@@ -167,7 +167,7 @@ class EmailService {
         `,
       };
 
-      await sgMail.send(msg);
+      await resend.emails.send(msg);
 
       logger.info('Purchase confirmation email sent', {
         email: customerEmail,

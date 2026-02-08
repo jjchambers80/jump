@@ -11,6 +11,7 @@ import EmailService from '../../services/EmailService.js';
 import { validatePurchaseRequest, validateConfirmRequest } from '../validators/ticketValidators.js';
 import { requireAuth } from '../../middleware/auth.js';
 import logger from '../../utils/logger.js';
+import stripe from '../../config/stripe.js';
 
 const router = express.Router();
 
@@ -83,6 +84,15 @@ router.get('/confirm', validateConfirmRequest, async (req, res, next) => {
     // Get payment details
     const payment = await PaymentService.getPaymentBySessionId(session_id);
 
+    // If payment is still PENDING, check Stripe directly for the real status
+    if (payment.status === 'PENDING') {
+      const stripeSession = await stripe.checkout.sessions.retrieve(session_id);
+      if (stripeSession.payment_status === 'paid') {
+        await PaymentService.updatePaymentStatus(session_id, 'SUCCEEDED');
+        payment.status = 'SUCCEEDED';
+      }
+    }
+
     // Check if payment succeeded
     if (payment.status !== 'SUCCEEDED') {
       return res.status(400).json({
@@ -97,7 +107,7 @@ router.get('/confirm', validateConfirmRequest, async (req, res, next) => {
 
     if (!tickets) {
       // Calculate quantity from payment amount
-      const quantity = Math.floor(payment.amount / payment.event.ticketPrice);
+      const quantity = Math.floor(Number(payment.amount) / Number(payment.event.ticketPrice));
 
       // Create tickets atomically
       tickets = await TicketService.createTicketsAfterPayment(
@@ -157,6 +167,7 @@ router.get('/confirm', validateConfirmRequest, async (req, res, next) => {
         status: ticket.status,
         qrCode: ticket.qrCode,
         event: ticket.event || payment.event,
+        customer: ticket.customer || payment.customer,
         pricePaid: ticket.pricePaid,
         purchaseTime: ticket.purchaseTime,
       })),

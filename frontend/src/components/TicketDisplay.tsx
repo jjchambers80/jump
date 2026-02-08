@@ -3,20 +3,23 @@ import React from 'react';
 interface TicketDisplayProps {
   ticket: {
     id: string;
+    qrCode?: string;
     qrCodeImage?: string;
     event: {
       name: string;
       venue: string;
-      eventDate: string;
+      date?: string;
+      eventDate?: string;
     };
-    customer: {
+    customer?: {
       email: string;
     };
+    customerEmail?: string;
   };
 }
 
 export const TicketDisplay: React.FC<TicketDisplayProps> = ({ ticket }) => {
-  const eventDate = new Date(ticket.event.eventDate);
+  const eventDate = new Date(ticket.event.date || ticket.event.eventDate || '');
   const formattedDate = eventDate.toLocaleDateString('en-US', {
     weekday: 'long',
     year: 'numeric',
@@ -27,9 +30,10 @@ export const TicketDisplay: React.FC<TicketDisplayProps> = ({ ticket }) => {
     hour: '2-digit',
     minute: '2-digit',
   });
+  const holderEmail = ticket.customer?.email || ticket.customerEmail || '';
 
   return (
-    <div className="bg-white rounded-lg shadow-lg overflow-hidden max-w-md mx-auto border-2 border-gray-200">
+    <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg dark:shadow-lg dark:shadow-black/20 overflow-hidden max-w-md mx-auto border-2 border-gray-200 dark:border-slate-700 transition-colors">
       {/* Ticket Header */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6">
         <h2 className="text-2xl font-bold mb-2">{ticket.event.name}</h2>
@@ -75,11 +79,15 @@ export const TicketDisplay: React.FC<TicketDisplayProps> = ({ ticket }) => {
       </div>
 
       {/* QR Code Section */}
-      {ticket.qrCodeImage && (
-        <div className="p-6 bg-gray-50">
-          <div className="bg-white p-4 rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center">
-            <img src={ticket.qrCodeImage} alt="Ticket QR Code" className="w-48 h-48" />
-            <p className="text-sm text-gray-600 mt-3 text-center">
+      {(ticket.qrCode || ticket.qrCodeImage) && (
+        <div className="p-6 bg-gray-50 dark:bg-slate-900">
+          <div className="bg-white dark:bg-slate-800 p-4 rounded-lg border-2 border-dashed border-gray-300 dark:border-slate-600 flex flex-col items-center">
+            <img
+              src={ticket.qrCode || ticket.qrCodeImage}
+              alt="Ticket QR Code"
+              className="w-48 h-48"
+            />
+            <p className="text-sm text-gray-600 dark:text-slate-400 mt-3 text-center">
               Show this QR code at the venue entrance
             </p>
           </div>
@@ -87,24 +95,28 @@ export const TicketDisplay: React.FC<TicketDisplayProps> = ({ ticket }) => {
       )}
 
       {/* Ticket Details */}
-      <div className="p-6 border-t-2 border-dashed border-gray-300">
+      <div className="p-6 border-t-2 border-dashed border-gray-300 dark:border-slate-600">
         <div className="space-y-3">
           <div>
-            <p className="text-xs text-gray-500 uppercase tracking-wide">Ticket ID</p>
-            <p className="text-sm font-mono text-gray-900">{ticket.id}</p>
+            <p className="text-xs text-gray-500 dark:text-slate-500 uppercase tracking-wide">
+              Ticket ID
+            </p>
+            <p className="text-sm font-mono text-gray-900 dark:text-slate-100">{ticket.id}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-500 uppercase tracking-wide">Ticket Holder</p>
-            <p className="text-sm text-gray-900">{ticket.customer.email}</p>
+            <p className="text-xs text-gray-500 dark:text-slate-500 uppercase tracking-wide">
+              Ticket Holder
+            </p>
+            <p className="text-sm text-gray-900 dark:text-slate-100">{holderEmail}</p>
           </div>
         </div>
       </div>
 
       {/* Important Notice */}
-      <div className="bg-yellow-50 border-t border-yellow-200 p-4">
+      <div className="bg-yellow-50 dark:bg-yellow-900/20 border-t border-yellow-200 dark:border-yellow-800/30 p-4">
         <div className="flex items-start">
           <svg
-            className="w-5 h-5 text-yellow-600 mr-2 flex-shrink-0 mt-0.5"
+            className="w-5 h-5 text-yellow-600 dark:text-yellow-500 mr-2 flex-shrink-0 mt-0.5"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -117,8 +129,10 @@ export const TicketDisplay: React.FC<TicketDisplayProps> = ({ ticket }) => {
             />
           </svg>
           <div>
-            <p className="text-xs text-yellow-800 font-semibold mb-1">Important Notice</p>
-            <ul className="text-xs text-yellow-700 space-y-1">
+            <p className="text-xs text-yellow-800 dark:text-yellow-200 font-semibold mb-1">
+              Important Notice
+            </p>
+            <ul className="text-xs text-yellow-700 dark:text-yellow-300 space-y-1">
               <li>• This ticket is non-transferable</li>
               <li>• Do not share or screenshot this QR code</li>
               <li>• Arrive 30 minutes before the event starts</li>

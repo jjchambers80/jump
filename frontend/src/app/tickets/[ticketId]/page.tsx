@@ -38,7 +38,7 @@ function StatusBadge({ status }: { status: string }) {
       return (
         <span
           data-testid="expired-badge"
-          className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-200 text-gray-600"
+          className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-200 dark:bg-slate-700 text-gray-600 dark:text-slate-400"
         >
           <svg className="w-4 h-4 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
             <path
@@ -52,7 +52,7 @@ function StatusBadge({ status }: { status: string }) {
       );
     case 'REDEEMED':
       return (
-        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-700">
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
           <svg className="w-4 h-4 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
             <path
               fillRule="evenodd"
@@ -65,7 +65,7 @@ function StatusBadge({ status }: { status: string }) {
       );
     default:
       return (
-        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-700">
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
           <svg className="w-4 h-4 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
             <path
               fillRule="evenodd"
@@ -126,10 +126,10 @@ function TicketDetailContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mx-auto" />
-          <p className="mt-3 text-gray-500">Loading ticket...</p>
+          <p className="mt-3 text-gray-500 dark:text-slate-500">Loading ticket...</p>
         </div>
       </div>
     );
@@ -137,10 +137,12 @@ function TicketDetailContent() {
 
   if (error || !ticket) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center">
         <div className="text-center max-w-md">
           <div className="text-red-500 text-4xl mb-4">⚠️</div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">{error || 'Ticket not found'}</h2>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-2">
+            {error || 'Ticket not found'}
+          </h2>
           <Link
             href="/my-tickets"
             className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition mt-4"
@@ -158,13 +160,13 @@ function TicketDetailContent() {
   const venue = ticket.event?.venue || ticket.venue || '';
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b">
+      <div className="bg-white dark:bg-slate-800 shadow-sm border-b dark:border-slate-700">
         <div className="max-w-2xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
           <Link
             href="/my-tickets"
-            className="inline-flex items-center text-sm text-gray-600 hover:text-indigo-600 transition"
+            className="inline-flex items-center text-sm text-gray-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
           >
             <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
@@ -182,16 +184,16 @@ function TicketDetailContent() {
       {/* Ticket Card */}
       <div className="max-w-2xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
         <div
-          className={`bg-white rounded-2xl shadow-lg overflow-hidden ${isExpired ? 'opacity-80' : ''}`}
+          className={`bg-white dark:bg-slate-800 rounded-2xl shadow-lg dark:shadow-lg dark:shadow-black/20 overflow-hidden ${isExpired ? 'opacity-80' : ''}`}
         >
           {/* Event Info Header */}
           <div
-            className={`px-6 py-5 ${isExpired ? 'bg-gray-100' : 'bg-gradient-to-r from-indigo-600 to-purple-600'}`}
+            className={`px-6 py-5 ${isExpired ? 'bg-gray-100 dark:bg-slate-700' : 'bg-gradient-to-r from-indigo-600 to-purple-600'}`}
           >
             <div className="flex items-center justify-between">
               <h2
                 data-testid="ticket-event-name"
-                className={`text-xl font-bold ${isExpired ? 'text-gray-500' : 'text-white'}`}
+                className={`text-xl font-bold ${isExpired ? 'text-gray-500 dark:text-slate-500' : 'text-white'}`}
               >
                 {eventName}
               </h2>
@@ -200,7 +202,7 @@ function TicketDetailContent() {
             <div className="mt-2 space-y-1">
               <p
                 data-testid="ticket-event-date"
-                className={`text-sm flex items-center gap-1.5 ${isExpired ? 'text-gray-400' : 'text-indigo-100'}`}
+                className={`text-sm flex items-center gap-1.5 ${isExpired ? 'text-gray-400 dark:text-slate-500' : 'text-indigo-100'}`}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
@@ -214,7 +216,7 @@ function TicketDetailContent() {
               </p>
               <p
                 data-testid="ticket-venue"
-                className={`text-sm flex items-center gap-1.5 ${isExpired ? 'text-gray-400' : 'text-indigo-100'}`}
+                className={`text-sm flex items-center gap-1.5 ${isExpired ? 'text-gray-400 dark:text-slate-500' : 'text-indigo-100'}`}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
@@ -236,11 +238,11 @@ function TicketDetailContent() {
           </div>
 
           {/* QR Code Section */}
-          <div className="px-6 py-8 flex flex-col items-center border-b border-gray-100">
+          <div className="px-6 py-8 flex flex-col items-center border-b border-gray-100 dark:border-slate-700">
             {ticket.qrCode ? (
               <div
                 data-testid="qr-code"
-                className={`p-4 bg-white rounded-xl border-2 ${isExpired ? 'border-gray-200' : 'border-indigo-100'} shadow-sm`}
+                className={`p-4 bg-white dark:bg-slate-800 rounded-xl border-2 ${isExpired ? 'border-gray-200 dark:border-slate-700' : 'border-indigo-100 dark:border-indigo-900/50'} shadow-sm`}
               >
                 <img
                   ref={qrRef}
@@ -252,14 +254,14 @@ function TicketDetailContent() {
             ) : (
               <div
                 data-testid="qr-code"
-                className="w-48 h-48 bg-gray-100 rounded-xl flex items-center justify-center"
+                className="w-48 h-48 bg-gray-100 dark:bg-slate-700 rounded-xl flex items-center justify-center"
               >
-                <p className="text-gray-400 text-sm">QR Code unavailable</p>
+                <p className="text-gray-400 dark:text-slate-500 text-sm">QR Code unavailable</p>
               </div>
             )}
 
             {isExpired && (
-              <p className="mt-3 text-sm text-gray-500 font-medium">
+              <p className="mt-3 text-sm text-gray-500 dark:text-slate-500 font-medium">
                 This ticket has expired and is no longer valid for entry
               </p>
             )}
@@ -285,33 +287,36 @@ function TicketDetailContent() {
 
           {/* Ticket Details */}
           <div className="px-6 py-5">
-            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+            <h3 className="text-sm font-semibold text-gray-500 dark:text-slate-500 uppercase tracking-wide mb-3">
               Ticket Details
             </h3>
             <dl className="grid grid-cols-2 gap-4">
               <div>
-                <dt className="text-xs font-medium text-gray-400">Ticket ID</dt>
-                <dd className="mt-0.5 text-sm text-gray-900 font-mono">
+                <dt className="text-xs font-medium text-gray-400 dark:text-slate-500">Ticket ID</dt>
+                <dd className="mt-0.5 text-sm text-gray-900 dark:text-slate-100 font-mono">
                   {ticket.id.slice(0, 8)}...
                 </dd>
               </div>
               <div>
-                <dt className="text-xs font-medium text-gray-400">Status</dt>
-                <dd className="mt-0.5 text-sm text-gray-900 capitalize">
+                <dt className="text-xs font-medium text-gray-400 dark:text-slate-500">Status</dt>
+                <dd className="mt-0.5 text-sm text-gray-900 dark:text-slate-100 capitalize">
                   {ticket.status.toLowerCase()}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs font-medium text-gray-400" data-testid="ticket-price">
+                <dt
+                  className="text-xs font-medium text-gray-400 dark:text-slate-500"
+                  data-testid="ticket-price"
+                >
                   Price Paid
                 </dt>
-                <dd className="mt-0.5 text-sm text-gray-900 font-semibold">
+                <dd className="mt-0.5 text-sm text-gray-900 dark:text-slate-100 font-semibold">
                   {formatPrice(ticket.pricePaid)}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs font-medium text-gray-400">Purchased</dt>
-                <dd className="mt-0.5 text-sm text-gray-900">
+                <dt className="text-xs font-medium text-gray-400 dark:text-slate-500">Purchased</dt>
+                <dd className="mt-0.5 text-sm text-gray-900 dark:text-slate-100">
                   {new Date(ticket.purchaseTime || ticket.purchaseDate || '').toLocaleDateString(
                     'en-US',
                     {

@@ -1,12 +1,12 @@
-// SendGrid email service configuration
+// Resend email service configuration
 // Email delivery for QR codes per FR-008
 
-import sgMail from '@sendgrid/mail';
+import { Resend } from 'resend';
 
-if (!process.env.SENDGRID_API_KEY) {
-  console.warn('SENDGRID_API_KEY not set - email functionality will not work');
-} else {
-  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+if (!process.env.RESEND_API_KEY) {
+  console.warn('RESEND_API_KEY not set - email functionality will not work');
 }
 
-export default sgMail;
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+export default resend;
