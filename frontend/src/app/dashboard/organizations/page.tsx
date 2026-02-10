@@ -24,6 +24,9 @@ export default function OrganizationsPage() {
   const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [creating, setCreating] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const fetchOrganizations = useCallback(async () => {
     try {
@@ -56,6 +59,32 @@ export default function OrganizationsPage() {
       setError(err.message || 'Failed to create organization');
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleEdit = (org: Organization) => {
+    setEditingId(org.id);
+    setEditName(org.name);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setEditName('');
+  };
+
+  const handleSaveEdit = async (orgId: string) => {
+    if (!editName.trim()) return;
+    try {
+      setSaving(true);
+      setError(null);
+      await api.patch(`/organizations/${orgId}`, { name: editName.trim() });
+      setEditingId(null);
+      setEditName('');
+      await fetchOrganizations();
+    } catch (err: any) {
+      setError(err.message || 'Failed to update organization');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -121,34 +150,78 @@ export default function OrganizationsPage() {
               key={org.id}
               className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 flex items-center justify-between"
             >
-              <div>
-                <h3 className="text-base font-semibold text-gray-900 dark:text-white">
-                  {org.name}
-                </h3>
-                <div className="flex items-center gap-4 mt-1 text-sm text-gray-500 dark:text-slate-400">
-                  <span
-                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                      org.status === 'ACTIVE'
-                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                        : 'bg-gray-100 text-gray-600 dark:bg-slate-700 dark:text-slate-400'
-                    }`}
+              <div className="flex-1">
+                {editingId === org.id ? (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleSaveEdit(org.id);
+                    }}
+                    className="flex items-center gap-2"
                   >
-                    {org.status}
-                  </span>
-                  {org._count && (
-                    <>
-                      <span>
-                        {org._count.venues} venue{org._count.venues !== 1 ? 's' : ''}
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      className="flex-1 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-1.5 text-sm text-gray-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      autoFocus
+                    />
+                    <button
+                      type="submit"
+                      disabled={saving || !editName.trim()}
+                      className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-500 disabled:opacity-50"
+                    >
+                      {saving ? 'Saving…' : 'Save'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCancelEdit}
+                      className="rounded-md bg-gray-200 dark:bg-slate-600 px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-slate-200 hover:bg-gray-300 dark:hover:bg-slate-500"
+                    >
+                      Cancel
+                    </button>
+                  </form>
+                ) : (
+                  <>
+                    <h3 className="text-base font-semibold text-gray-900 dark:text-white">
+                      {org.name}
+                    </h3>
+                    <div className="flex items-center gap-4 mt-1 text-sm text-gray-500 dark:text-slate-400">
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                          org.status === 'ACTIVE'
+                            ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                            : 'bg-gray-100 text-gray-600 dark:bg-slate-700 dark:text-slate-400'
+                        }`}
+                      >
+                        {org.status}
                       </span>
-                      <span>
-                        {org._count.users} user{org._count.users !== 1 ? 's' : ''}
-                      </span>
-                    </>
-                  )}
-                </div>
+                      {org._count && (
+                        <>
+                          <span>
+                            {org._count.venues} venue{org._count.venues !== 1 ? 's' : ''}
+                          </span>
+                          <span>
+                            {org._count.users} user{org._count.users !== 1 ? 's' : ''}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
-              <div className="text-xs text-gray-400 dark:text-slate-500">
-                Created {new Date(org.createdAt).toLocaleDateString()}
+              <div className="flex items-center gap-3 ml-4">
+                {editingId !== org.id && (
+                  <button
+                    onClick={() => handleEdit(org)}
+                    className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300"
+                  >
+                    Edit
+                  </button>
+                )}
+                <div className="text-xs text-gray-400 dark:text-slate-500">
+                  Created {new Date(org.createdAt).toLocaleDateString()}
+                </div>
               </div>
             </div>
           ))}

@@ -6,12 +6,36 @@ import NextAuth from 'next-auth';
 import { PrismaAdapter } from '@auth/prisma-adapter';
 import { prisma } from '@jump/db';
 import jwt from 'jsonwebtoken';
+import Credentials from 'next-auth/providers/credentials';
 import authConfig from './auth.config';
 
 const AUTH_SECRET = process.env.AUTH_SECRET!;
 
+// Build providers: start with auth.config providers, add dev-only credentials
+const providers = [...authConfig.providers];
+
+if (process.env.NODE_ENV === 'development') {
+  providers.push(
+    Credentials({
+      id: 'dev-email',
+      name: 'Dev Email Sign-In',
+      credentials: {
+        email: { label: 'Email', type: 'email' },
+      },
+      async authorize(credentials) {
+        const email = credentials?.email as string;
+        if (!email) return null;
+        const user = await prisma.user.findUnique({ where: { email } });
+        if (!user) return null;
+        return { id: user.id, email: user.email, name: user.name };
+      },
+    })
+  );
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
+  providers,
   adapter: PrismaAdapter(prisma),
   session: { strategy: 'jwt' },
   callbacks: {

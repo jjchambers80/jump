@@ -74,6 +74,33 @@ export default function Navbar() {
 
             {!loading && isAuthenticated && isAdmin && (
               <Link
+                href="/dashboard/organizations"
+                className="text-sm font-medium text-gray-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
+              >
+                Orgs
+              </Link>
+            )}
+
+            {!loading && isAuthenticated && isAdmin && (
+              <Link
+                href="/dashboard/venues"
+                className="text-sm font-medium text-gray-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
+              >
+                Venues
+              </Link>
+            )}
+
+            {!loading && isAuthenticated && isAdmin && (
+              <Link
+                href="/dashboard/events"
+                className="text-sm font-medium text-gray-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
+              >
+                Events
+              </Link>
+            )}
+
+            {!loading && isAuthenticated && isAdmin && (
+              <Link
                 href="/dashboard/analytics"
                 className="text-sm font-medium text-gray-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
               >
