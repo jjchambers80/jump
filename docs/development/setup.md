@@ -1,8 +1,9 @@
-# Quick Start: Online Ticket Purchase and QR Code Generation
+# Quick Start: Jump Ticketing Platform
 
-**Feature**: 001-online-ticket-purchase  
-**Branch**: `001-online-ticket-purchase`  
-**Tech Stack**: Node.js 20, Express.js 4, Next.js 14, PostgreSQL 15, Redis 7, Prisma 5
+**Feature**: 003-schema-redesign  
+**Date**: 2026-02-09  
+**Tech Stack**: Node.js 20, Express.js 4, Next.js 14, PostgreSQL 15, Redis 7, Prisma 6, Auth.js v5  
+**Architecture**: npm workspaces monorepo with shared `@jump/db` package
 
 ## Prerequisites
 
@@ -11,7 +12,7 @@
 - **Redis**: 7.x ([download](https://redis.io/download/))
 - **Git**: For version control
 - **Stripe Account**: Test API keys ([sign up](https://stripe.com/))
-- **SendGrid Account**: Email API key ([sign up](https://sendgrid.com/))
+- **Resend Account**: Email API key ([sign up](https://resend.com/))
 
 **Verify Installations**:
 
@@ -24,6 +25,54 @@ redis-server --version  # Should show 7.x.x
 
 ---
 
+## Monorepo Structure
+
+```
+jump/
+  package.json          # Root — npm workspaces config
+  packages/
+    db/                 # @jump/db — shared Prisma client + schema
+      prisma/
+        schema.prisma   # Single source of truth for data model
+      src/
+        index.ts        # Singleton PrismaClient, re-exports types
+      generated/        # Prisma-generated client (gitignored)
+  backend/              # Express.js API server
+    package.json        # Depends on @jump/db via workspace
+  frontend/             # Next.js application
+    package.json        # Depends on @jump/db via workspace
+```
+
+The root `package.json` declares npm workspaces:
+
+```json
+{
+  "private": true,
+  "workspaces": ["backend", "frontend", "packages/*"],
+  "scripts": {
+    "db:generate": "npm run generate --workspace=packages/db",
+    "db:migrate": "npm run migrate:dev --workspace=packages/db",
+    "db:seed": "npm run seed --workspace=packages/db",
+    "db:reset": "npm run migrate:reset --workspace=packages/db",
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:frontend": "npm run dev --workspace=frontend"
+  }
+}
+```
+
+### The `@jump/db` Package
+
+Both `backend` and `frontend` import from the shared `@jump/db` workspace package:
+
+```javascript
+// In any backend service or frontend server component
+import { prisma } from "@jump/db";
+```
+
+This ensures a single Prisma client instance (singleton pattern) and shared type definitions across the monorepo.
+
+---
+
 ## Project Setup
 
 ### 1. Clone and Install Dependencies
@@ -33,153 +82,130 @@ redis-server --version  # Should show 7.x.x
 git clone <repository-url> jump
 cd jump
 
-# Checkout feature branch
-git checkout 001-online-ticket-purchase
-
-# Install backend dependencies
-cd backend
-npm install
-
-# Install frontend dependencies
-cd ../frontend
+# Install ALL workspace dependencies from the root
 npm install
 ```
 
-### 2. Environment Configuration
+`npm install` at the root links all workspaces (`backend`, `frontend`, `packages/db`) and installs their dependencies. The `packages/db` postinstall script automatically runs `prisma generate`.
+
+### 2. Generate Prisma Client
+
+If the Prisma client was not generated during install, run manually:
+
+```bash
+npm run db:generate
+```
+
+This generates the typed Prisma client into `packages/db/generated/client/`.
+
+### 3. Environment Configuration
+
+**Shared Database** (`packages/db/.env`):
+
+```env
+DATABASE_URL="postgresql://jump:jump@localhost:5432/jump?schema=public"
+```
 
 **Backend** (`backend/.env`):
 
 ```env
-# Database
-DATABASE_URL="postgresql://postgres:password@localhost:5432/jump_dev"
+# Database (same as packages/db)
+DATABASE_URL="postgresql://jump:jump@localhost:5432/jump?schema=public"
 
-# Redis
-REDIS_URL="redis://localhost:6379"
+# Auth (must match frontend AUTH_SECRET)
+AUTH_SECRET="your-32-char-random-secret-here"
 
 # Stripe
-STRIPE_SECRET_KEY="sk_test_..." # Get from Stripe Dashboard
-STRIPE_PUBLISHABLE_KEY="pk_test_..."
-STRIPE_WEBHOOK_SECRET="whsec_..." # Get after webhook setup (step 5)
-
-# JWT
-JWT_SECRET="your-256-bit-secret-key-here" # Generate with: openssl rand -base64 32
+STRIPE_SECRET_KEY="sk_test_..."
+STRIPE_WEBHOOK_SECRET="whsec_..."
 
 # Email
-SENDGRID_API_KEY="SG...." # Get from SendGrid Dashboard
-SENDGRID_FROM_EMAIL="noreply@jump.example.com"
+RESEND_API_KEY="re_..."
 
 # Server
 PORT=3000
 NODE_ENV=development
-
-# Session
-SESSION_SECRET="another-secure-random-string" # Generate with: openssl rand -base64 32
-SESSION_TTL=86400  # 24 hours in seconds
 ```
 
 **Frontend** (`frontend/.env.local`):
 
 ```env
-NEXT_PUBLIC_API_URL="http://localhost:3000/api/v1"
-NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_test_..."
+# API
+NEXT_PUBLIC_API_URL="http://localhost:3000"
+
+# Auth.js
+AUTH_SECRET="your-32-char-random-secret-here"
+AUTH_RESEND_KEY="re_..."
+AUTH_GOOGLE_ID="your-google-client-id"
+AUTH_GOOGLE_SECRET="your-google-client-secret"
+
+# Database (same as packages/db — needed for Auth.js PrismaAdapter)
+DATABASE_URL="postgresql://jump:jump@localhost:5432/jump?schema=public"
 ```
 
-### 3. Database Setup
+> **Important**: `AUTH_SECRET` must be identical in both `backend/.env` and `frontend/.env.local` for JWT verification to work across services.
+
+### 4. Database Setup
 
 **Create Database**:
 
 ```bash
 psql -U postgres
-CREATE DATABASE jump_dev;
+CREATE DATABASE jump;
+CREATE USER jump WITH PASSWORD 'jump';
+GRANT ALL PRIVILEGES ON DATABASE jump TO jump;
 \q
 ```
 
 **Run Prisma Migrations**:
 
 ```bash
-cd backend
-npx prisma migrate dev --name init_online_ticket_purchase
+npm run db:migrate
 ```
 
-This creates:
+This runs migrations from `packages/db/prisma/migrations/`.
 
-- Tables: `admins`, `customers`, `events`, `tickets`, `payment_transactions`, `sessions`
-- Indexes: All required indexes from data-model.md
-- Enums: EventStatus, TicketStatus, PaymentStatus, UserType
-
-**Seed Test Data** (optional):
+**Seed Test Data**:
 
 ```bash
-npx prisma db seed
+npm run db:seed
 ```
 
-Creates:
-
-- Test admin: `admin@test.com` / `testpass123`
-- Test customer: `customer@test.com` / `testpass123`
-- Test event: "Test Concert" (capacity: 100, price: $50)
+Creates sample organizations, venues, events with price tiers, and test users.
 
 **Verify Database**:
 
 ```bash
-npx prisma studio
+cd packages/db && npx prisma studio
 ```
 
 Opens GUI at `http://localhost:5555` to browse tables.
 
-### 4. Redis Setup
-
-**Start Redis Server**:
+### 5. Redis Setup
 
 ```bash
 # macOS (Homebrew)
 brew services start redis
 
-# Linux
-sudo systemctl start redis
-
-# Manual start
-redis-server
-```
-
-**Verify Redis**:
-
-```bash
+# Verify
 redis-cli ping
 # Should return: PONG
 ```
 
-### 5. Stripe Webhook Setup (Local Development)
-
-**Install Stripe CLI**:
+### 6. Stripe Webhook Setup (Local Development)
 
 ```bash
-# macOS
+# Install Stripe CLI
 brew install stripe/stripe-cli/stripe
 
-# Other platforms: https://stripe.com/docs/stripe-cli
-```
-
-**Login to Stripe**:
-
-```bash
+# Login
 stripe login
+
+# Forward webhooks to local backend
+stripe listen --forward-to localhost:3000/webhooks/stripe
 ```
 
-**Forward Webhooks to Local Server**:
-
-```bash
-stripe listen --forward-to localhost:3000/api/v1/webhooks/stripe
-```
-
-**Copy Webhook Secret**:
-The CLI will display:
-
-```
-> Ready! Your webhook signing secret is whsec_xxxxx
-```
-
-Add this to `backend/.env` as `STRIPE_WEBHOOK_SECRET`.
+Copy the webhook signing secret (`whsec_...`) from the CLI output to `backend/.env` as `STRIPE_WEBHOOK_SECRET`.
 
 ---
 
@@ -187,41 +213,47 @@ Add this to `backend/.env` as `STRIPE_WEBHOOK_SECRET`.
 
 ### Development Mode
 
-**Terminal 1 - Backend**:
+**Terminal 1 — Backend**:
 
 ```bash
-cd backend
-npm run dev
+npm run dev:backend
 ```
 
 Server starts at `http://localhost:3000`
 
-**Terminal 2 - Frontend**:
+**Terminal 2 — Frontend**:
 
 ```bash
-cd frontend
-npm run dev
+npm run dev:frontend
 ```
 
 App starts at `http://localhost:3001`
 
-**Terminal 3 - Stripe Webhook Forwarding** (keep running):
+**Terminal 3 — Stripe Webhook Forwarding** (keep running):
 
 ```bash
-stripe listen --forward-to localhost:3000/api/v1/webhooks/stripe
-```
-
-**Terminal 4 - Redis** (if not running as service):
-
-```bash
-redis-server
+stripe listen --forward-to localhost:3000/webhooks/stripe
 ```
 
 ### Verify Setup
 
-1. **Backend Health**: `curl http://localhost:3000/api/v1/health` → `{"status": "ok"}`
-2. **Frontend**: Visit `http://localhost:3001` → Should see event listing
-3. **Admin Portal**: Visit `http://localhost:3001/admin` → Login with test admin
+1. **Backend Health**: `curl http://localhost:3000/health` -> `{"status": "ok"}`
+2. **Frontend**: Visit `http://localhost:3001` -> Should see event listing
+3. **Events API**: `curl http://localhost:3000/events` -> JSON list of published events
+
+---
+
+## Key Commands Reference
+
+| Command               | Description                                         |
+| --------------------- | --------------------------------------------------- |
+| `npm install`         | Install all workspace dependencies (run from root)  |
+| `npm run db:generate` | Generate Prisma client from schema                  |
+| `npm run db:migrate`  | Run pending database migrations                     |
+| `npm run db:seed`     | Seed database with sample data                      |
+| `npm run db:reset`    | Drop DB, re-run migrations, re-seed                 |
+| `npm run dev:backend` | Start backend dev server (port 3000)                |
+| `npm run dev:frontend`| Start frontend dev server (port 3001)               |
 
 ---
 
@@ -231,12 +263,10 @@ redis-server
 
 ```bash
 # Backend
-cd backend
-npm test
+cd backend && npm test
 
 # Frontend
-cd frontend
-npm test
+cd frontend && npm test
 ```
 
 ### Contract Tests (API Endpoints)
@@ -246,288 +276,109 @@ cd backend
 npm run test:contract
 ```
 
-Tests all endpoints against OpenAPI schema in `contracts/api.yaml`.
-
-### Integration Tests (E2E Purchase Flow)
+### E2E Tests
 
 ```bash
 cd frontend
-npm run test:e2e
-```
-
-Uses Playwright to test complete ticket purchase flow:
-
-1. Browse events
-2. Select tickets
-3. Complete Stripe Checkout (test mode)
-4. Receive QR codes
-
-### Load Testing (Capacity Enforcement)
-
-```bash
-cd backend
-npm run test:load
-```
-
-Simulates 100 concurrent purchase attempts for event with 50 capacity (validates FR-009).
-
----
-
-## Development Workflow
-
-### TDD Workflow (Constitution Principle III)
-
-1. **Write Test** (Red phase):
-
-   ```bash
-   cd backend/tests/integration
-   # Create test file: ticket-purchase.test.ts
-   npm test -- ticket-purchase.test.ts  # Fails (not implemented)
-   ```
-
-2. **Implement Feature** (Green phase):
-
-   ```bash
-   cd backend/src
-   # Create route handler, service logic
-   npm test -- ticket-purchase.test.ts  # Passes
-   ```
-
-3. **Refactor** (Refactor phase):
-   ```bash
-   # Improve code clarity while tests remain green
-   npm test  # All tests still pass
-   ```
-
-### Database Changes
-
-**Create Migration**:
-
-```bash
-cd backend
-# Modify schema.prisma
-npx prisma migrate dev --name <description>
-```
-
-**Reset Database** (development only):
-
-```bash
-npx prisma migrate reset  # Drops DB, runs all migrations, seeds data
-```
-
-### API Contract Updates
-
-1. Edit `specs/001-online-ticket-purchase/contracts/api.yaml`
-2. Validate: `npx @redocly/cli lint contracts/api.yaml`
-3. Preview: `npx @redocly/cli preview-docs contracts/api.yaml`
-4. Generate types: `npm run generate:types`
-
-### Code Quality
-
-**Lint Code**:
-
-```bash
-npm run lint       # ESLint
-npm run lint:fix   # Auto-fix issues
-```
-
-**Format Code**:
-
-```bash
-npm run format     # Prettier
-```
-
-**Type Check**:
-
-```bash
-npm run type-check  # TypeScript
+npx playwright test
 ```
 
 ---
 
-## Common Tasks
+## Environment Variables Summary
 
-### Create Admin Account (Manual)
-
-```bash
-cd backend
-node scripts/create-admin.js --email admin@example.com --name "Admin Name" --org "Org Name"
-# Outputs temporary password
-```
-
-### Generate QR Code Locally
-
-```bash
-node scripts/generate-qr.js --ticket-id <uuid>
-# Saves QR code PNG to ./temp/qr-<uuid>.png
-```
-
-### Check Metrics
-
-```bash
-curl http://localhost:3000/metrics
-```
-
-Returns Prometheus-format metrics (FR-025):
-
-- `http_request_duration_ms`
-- `ticket_sales_total`
-- `payment_status_total`
-- `qr_generation_total`
-- `active_sessions`
-
-### Tail Logs
-
-```bash
-cd backend
-npm run logs
-```
-
-Streams Winston JSON logs with correlation IDs.
+| Variable                | Location          | Required | Description                        |
+| ----------------------- | ----------------- | -------- | ---------------------------------- |
+| `DATABASE_URL`          | packages/db, backend, frontend | Yes | PostgreSQL connection string |
+| `AUTH_SECRET`           | backend, frontend | Yes      | Shared JWT signing secret          |
+| `STRIPE_SECRET_KEY`     | backend           | Yes      | Stripe API secret key              |
+| `STRIPE_WEBHOOK_SECRET` | backend           | Yes      | Stripe webhook signing secret      |
+| `RESEND_API_KEY`        | backend           | Yes      | Resend email API key               |
+| `NEXT_PUBLIC_API_URL`   | frontend          | Yes      | Backend API base URL               |
+| `AUTH_RESEND_KEY`       | frontend          | No       | Resend key for Auth.js magic links |
+| `AUTH_GOOGLE_ID`        | frontend          | No       | Google OAuth client ID             |
+| `AUTH_GOOGLE_SECRET`    | frontend          | No       | Google OAuth client secret         |
+| `PORT`                  | backend           | No       | Backend port (default: 3000)       |
+| `NODE_ENV`              | backend           | No       | Environment (development/production)|
 
 ---
 
 ## Troubleshooting
 
+### Cannot find module '@jump/db'
+
+Run `npm install` from the repository root to link workspaces:
+
+```bash
+cd /path/to/jump && npm install
+```
+
+### Cannot find module '../generated/client'
+
+The Prisma client has not been generated. Run:
+
+```bash
+npm run db:generate
+```
+
 ### Database Connection Errors
-
-**Error**: `Error: connect ECONNREFUSED 127.0.0.1:5432`
-
-**Fix**:
 
 ```bash
 # Check PostgreSQL is running
 pg_isready
 
-# Start PostgreSQL
 # macOS: brew services start postgresql@15
 # Linux: sudo systemctl start postgresql
 ```
 
-### Redis Connection Errors
-
-**Error**: `Error: connect ECONNREFUSED 127.0.0.1:6379`
-
-**Fix**:
+### Prisma Migration Errors
 
 ```bash
-redis-cli ping  # Should return PONG
-# If not: redis-server &
-```
-
-### Stripe Webhook Signature Failures
-
-**Error**: `No signatures found matching the expected signature`
-
-**Fix**:
-
-1. Ensure `stripe listen` is running
-2. Copy webhook secret from CLI output to `.env`
-3. Restart backend: `npm run dev`
-
-### Prisma Type Errors
-
-**Error**: `Property 'event' does not exist on type 'Ticket'`
-
-**Fix**:
-
-```bash
-npx prisma generate  # Regenerate Prisma Client types
+# Reset database (drops all data)
+npm run db:reset
 ```
 
 ### Port Already in Use
 
-**Error**: `Error: listen EADDRINUSE: address already in use :::3000`
-
-**Fix**:
-
 ```bash
-# Find process using port 3000
-lsof -ti:3000
-# Kill process
-kill -9 <PID>
+# Find and kill process on port 3000
+lsof -ti:3000 | xargs kill -9
 ```
+
+### Auth.js JWT Errors
+
+Ensure `AUTH_SECRET` is identical in both `backend/.env` and `frontend/.env.local`.
 
 ---
 
 ## Architecture Overview
 
 ```
-┌─────────────────┐         ┌──────────────────┐
-│   Frontend      │         │     Backend      │
-│   (Next.js)     │◄───────┤   (Express.js)   │
-│   Port 3001     │  HTTP   │   Port 3000      │
-└─────────────────┘         └──────────────────┘
-                                     │
-                    ┌────────────────┼────────────────┐
-                    │                │                │
-               ┌────▼────┐      ┌───▼────┐     ┌────▼─────┐
-               │PostgreSQL│      │ Redis  │     │  Stripe  │
-               │ Port 5432│      │Port 6379│     │  API     │
-               └──────────┘      └────────┘     └──────────┘
++-----------------+         +------------------+
+|   Frontend      |         |     Backend      |
+|   (Next.js)     |<--------|   (Express.js)   |
+|   Port 3001     |  HTTP   |   Port 3000      |
++-----------------+         +------------------+
+        |                            |
+        |   +----------+    +-------+--------+--------+
+        +-->| @jump/db |<---+       |        |        |
+            | (Prisma) |    |       |        |        |
+            +----+-----+ +--+---+ +-+----+ +-+------+
+                 |        |Redis | |Stripe| |Resend  |
+            +----+-----+  +-----+ +------+ +--------+
+            |PostgreSQL|
+            +----------+
 ```
 
-**Request Flow** (Ticket Purchase):
-
-1. Customer → Frontend (Next.js)
-2. Frontend → Backend `/tickets/purchase` (Express.js)
-3. Backend → PostgreSQL (capacity check with `FOR UPDATE` lock)
-4. Backend → Stripe API (create Checkout session)
-5. Backend → Frontend (return `checkoutUrl`)
-6. Customer → Stripe Checkout (external)
-7. Stripe → Backend `/webhooks/stripe` (payment confirmation)
-8. Backend → PostgreSQL (create tickets)
-9. Backend → SendGrid (email QR codes)
-10. Customer → Frontend `/tickets/confirm` (display QR codes)
-
----
-
-## Next Steps
-
-After setup:
-
-1. **Run Tests**: `npm test` (backend and frontend)
-2. **Test Purchase Flow**: Complete test ticket purchase with Stripe test card `4242 4242 4242 4242`
-3. **Review Logs**: Check Winston logs for correlation IDs and metrics
-4. **Explore API**: Use Swagger UI (`npx @redocly/cli preview-docs contracts/api.yaml`)
-5. **Read Docs**: Review `docs/` folder (generated per Constitution Principle VIII)
-
----
-
-## Production Deployment (Future)
-
-**Not covered in MVP setup**:
-
-- Container builds (Dockerfile for backend/frontend)
-- Database migration strategy (zero-downtime)
-- Redis Sentinel/Cluster (high availability)
-- Environment-specific configs (staging, production)
-- Monitoring setup (Prometheus + Grafana)
-- SSL/TLS certificates (Let's Encrypt)
-- Horizontal scaling (load balancer configuration)
-
-Defer to post-MVP deployment planning.
+**Key architectural change from Phase 1**: The `@jump/db` package is the single source of truth for the database schema. Both backend and frontend import the Prisma client from this shared package, eliminating schema drift between services.
 
 ---
 
 ## Resources
 
 - **Prisma Docs**: https://www.prisma.io/docs
+- **Auth.js Docs**: https://authjs.dev
 - **Stripe Test Cards**: https://stripe.com/docs/testing
 - **Next.js Docs**: https://nextjs.org/docs
 - **Express.js Docs**: https://expressjs.com/
-- **Redis Commands**: https://redis.io/commands
-- **PostgreSQL Docs**: https://www.postgresql.org/docs/
-
----
-
-## Support
-
-For issues or questions:
-
-1. Check [Troubleshooting](#troubleshooting) section above
-2. Review contract tests: `npm run test:contract`
-3. Consult `research.md` for architecture decisions
-4. Refer to `data-model.md` for database schema
-
-Constitution Principle VIII: Living Documentation ensures all decisions are documented in `/docs` folder (generated during implementation).
+- **Resend Docs**: https://resend.com/docs

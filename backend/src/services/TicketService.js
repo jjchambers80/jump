@@ -1,157 +1,212 @@
 // Ticket Service
-// Handles ticket creation with atomic inventory management per FR-004, FR-009
+// Handles ticket creation (after payment), retrieval, and redemption
+// Per FR-025, FR-030, FR-031, FR-032, FR-033, FR-034, FR-035
 
-import { PrismaClient } from '@prisma/client';
-import { NotFoundError, ConflictError } from '../middleware/errorHandler.js';
-import { recordTicketSale } from '../utils/metrics.js';
-import { logTicketPurchase } from '../utils/logger.js';
-
-const prisma = new PrismaClient();
+import { prisma } from '@jump/db';
+import { generateBarcodes } from '../utils/barcode.js';
+import qrService from './QRService.js';
+import logger from '../utils/logger.js';
+import { NotFoundError, ConflictError, ValidationError } from '../middleware/errorHandler.js';
 
 class TicketService {
   /**
-   * Create tickets after successful payment with atomic transaction
-   * @param {string} paymentTransactionId - UUID of payment transaction
-   * @param {string} eventId - UUID of the event
-   * @param {string} customerId - UUID of the customer
-   * @param {number} quantity - Number of tickets to create
-   * @param {string} stripeTxId - Stripe transaction ID
-   * @param {string} correlationId - Request correlation ID
-   * @returns {Promise<Array>} Created tickets
+   * Create individual Ticket records for a completed order.
+   * Called by PaymentService.handleCheckoutCompleted() after successful payment.
+   *
+   * For each ticket:
+   * 1. Generate unique barcode (JUMP-XXXXXXXXXXXX)
+   * 2. Generate QR code JWT { sub: ticketId, eventId, barcode }
+   * 3. Snapshot pricePaid from the PriceTier.price
+   *
+   * Also moves inventory from quantityReserved → quantitySold on the PriceTier.
+   *
+   * @param {string} orderId
+   * @returns {Promise<Object[]>} Created tickets with QR data
    */
-  async createTicketsAfterPayment(
-    paymentTransactionId,
-    eventId,
-    customerId,
-    quantity,
-    stripeTxId,
-    correlationId
-  ) {
-    // Use Prisma transaction for atomic operation
-    const result = await prisma.$transaction(async (tx) => {
-      // 1. Get event with current ticket count (FOR UPDATE to lock row)
-      const event = await tx.event.findUnique({
-        where: { id: eventId },
-        include: {
-          _count: {
-            select: { tickets: true },
-          },
-        },
-      });
-
-      if (!event) {
-        throw new NotFoundError('Event not found');
-      }
-
-      // 2. Check capacity (atomic check)
-      const soldTickets = event._count.tickets;
-      const availableTickets = event.capacity - soldTickets;
-
-      if (availableTickets < quantity) {
-        throw new ConflictError(
-          `Insufficient capacity. Only ${availableTickets} tickets available.`,
-          { requested: quantity, available: availableTickets }
-        );
-      }
-
-      // 3. Create tickets
-      const tickets = [];
-      for (let i = 0; i < quantity; i++) {
-        const ticket = await tx.ticket.create({
-          data: {
-            eventId,
-            customerId,
-            pricePaid: event.ticketPrice,
-            status: 'VALID',
-            stripeTxId,
-            qrCodeJwt: '', // Will be set later by QRService
-          },
-        });
-        tickets.push(ticket);
-      }
-
-      return { tickets, event };
-    });
-
-    // Record metrics
-    result.tickets.forEach(() => {
-      recordTicketSale(eventId);
-    });
-
-    // Log purchase
-    logTicketPurchase({
-      customerId,
-      eventId,
-      ticketIds: result.tickets.map((t) => t.id),
-      amount: result.event.ticketPrice * quantity,
-      stripeTxId,
-      correlationId,
-    });
-
-    return result.tickets;
-  }
-
-  /**
-   * Get tickets by Stripe transaction ID
-   * @param {string} stripeTxId - Stripe transaction ID
-   * @returns {Promise<Array>} Tickets with event details
-   */
-  async getTicketsByStripeTransaction(stripeTxId) {
-    const tickets = await prisma.ticket.findMany({
-      where: { stripeTxId },
+  async createTicketsForOrder(orderId) {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
       include: {
-        event: {
-          select: {
-            name: true,
-            date: true,
-            venue: true,
-          },
-        },
-        customer: {
-          select: {
-            email: true,
-            name: true,
-          },
-        },
+        event: true,
+        contact: true,
       },
     });
 
-    if (tickets.length === 0) {
-      throw new NotFoundError('Tickets not found for this transaction');
+    if (!order) {
+      throw new NotFoundError('Order not found');
     }
+
+    // Determine priceTierId from the Stripe session metadata
+    let priceTierId;
+    if (order.stripeSessionId) {
+      const stripeModule = await import('../config/stripe.js');
+      try {
+        const session = await stripeModule.default.checkout.sessions.retrieve(
+          order.stripeSessionId
+        );
+        priceTierId = session.metadata?.priceTierId;
+      } catch {
+        logger.warn('Could not retrieve Stripe session for priceTierId', { orderId });
+      }
+    }
+
+    if (!priceTierId) {
+      throw new ValidationError('Cannot determine price tier for order');
+    }
+
+    const tier = await prisma.priceTier.findUnique({
+      where: { id: priceTierId },
+    });
+
+    if (!tier) {
+      throw new NotFoundError('Price tier not found');
+    }
+
+    // Generate unique barcodes
+    const barcodes = generateBarcodes(order.quantity);
+
+    // Create tickets in a transaction
+    const tickets = await prisma.$transaction(async (tx) => {
+      const created = [];
+
+      for (let i = 0; i < order.quantity; i++) {
+        const ticket = await tx.ticket.create({
+          data: {
+            orderId: order.id,
+            eventId: order.eventId,
+            priceTierId: tier.id,
+            contactId: order.contactId,
+            pricePaid: tier.price,
+            barcode: barcodes[i],
+            status: 'VALID',
+          },
+        });
+
+        // Generate QR code JWT
+        const qrJwt = qrService.generateQRCodeJWT(
+          ticket.id,
+          order.eventId,
+          barcodes[i],
+          order.event.date
+        );
+
+        // Store QR JWT on ticket
+        const updatedTicket = await tx.ticket.update({
+          where: { id: ticket.id },
+          data: { qrCodeJwt: qrJwt },
+          include: {
+            priceTier: { select: { name: true } },
+          },
+        });
+
+        created.push(updatedTicket);
+      }
+
+      // Move inventory: reserved → sold
+      await tx.priceTier.update({
+        where: { id: tier.id },
+        data: {
+          quantitySold: { increment: order.quantity },
+          quantityReserved: { decrement: order.quantity },
+        },
+      });
+
+      return created;
+    });
+
+    logger.info('Tickets created for order', {
+      orderId,
+      ticketCount: tickets.length,
+      priceTierId,
+    });
 
     return tickets;
   }
 
   /**
-   * Update ticket with QR code
-   * @param {string} ticketId - UUID of the ticket
-   * @param {string} qrCodeJwt - JWT token for QR code
-   * @returns {Promise<Object>} Updated ticket
+   * Get all tickets for a user by their contact email.
+   *
+   * @param {string} email - User's email address
+   * @returns {Promise<Object[]>} Formatted ticket list
    */
-  async updateTicketQRCode(ticketId, qrCodeJwt) {
-    return await prisma.ticket.update({
-      where: { id: ticketId },
-      data: { qrCodeJwt },
+  async getMyTickets(email) {
+    const contact = await prisma.contact.findUnique({
+      where: { email: email.toLowerCase() },
     });
+
+    if (!contact) {
+      return [];
+    }
+
+    const tickets = await prisma.ticket.findMany({
+      where: { contactId: contact.id },
+      include: {
+        event: {
+          include: {
+            venue: { select: { name: true, address: true } },
+          },
+        },
+        priceTier: { select: { name: true, price: true } },
+        order: { select: { orderRef: true, createdAt: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Lazy expiration for past events
+    for (const ticket of tickets) {
+      if (ticket.status === 'VALID' && new Date(ticket.event.date) < new Date()) {
+        await prisma.ticket.update({
+          where: { id: ticket.id },
+          data: { status: 'EXPIRED' },
+        });
+        ticket.status = 'EXPIRED';
+      }
+    }
+
+    return tickets.map((ticket) => ({
+      id: ticket.id,
+      barcode: ticket.barcode,
+      eventId: ticket.eventId,
+      eventName: ticket.event.name,
+      eventDate: ticket.event.date,
+      venue: ticket.event.venue
+        ? `${ticket.event.venue.name}${ticket.event.venue.address ? ' — ' + ticket.event.venue.address : ''}`
+        : '',
+      pricePaid: Number(ticket.pricePaid),
+      priceTierName: ticket.priceTier?.name,
+      status: ticket.status,
+      redeemedAt: ticket.redeemedAt,
+      purchaseDate: ticket.order?.createdAt || ticket.createdAt,
+      purchaseTime: ticket.order?.createdAt || ticket.createdAt,
+      qrCodeJwt: ticket.qrCodeJwt || null,
+      event: {
+        name: ticket.event.name,
+        date: ticket.event.date,
+        venue: ticket.event.venue
+          ? `${ticket.event.venue.name}${ticket.event.venue.address ? ' — ' + ticket.event.venue.address : ''}`
+          : '',
+      },
+    }));
   }
 
   /**
-   * Get ticket by ID
-   * @param {string} ticketId - UUID of the ticket
-   * @returns {Promise<Object>} Ticket with event and customer details
+   * Get a single ticket by ID.
+   *
+   * @param {string} ticketId
+   * @returns {Promise<Object>}
    */
   async getTicketById(ticketId) {
     const ticket = await prisma.ticket.findUnique({
       where: { id: ticketId },
       include: {
-        event: true,
-        customer: {
-          select: {
-            email: true,
-            name: true,
+        event: {
+          include: {
+            venue: { select: { name: true, address: true } },
           },
         },
+        priceTier: { select: { name: true, price: true } },
+        contact: { select: { firstName: true, lastName: true, email: true } },
+        order: { select: { orderRef: true, createdAt: true } },
       },
     });
 
@@ -159,109 +214,187 @@ class TicketService {
       throw new NotFoundError('Ticket not found');
     }
 
-    return ticket;
-  }
-
-  /**
-   * Get tickets by customer ID with expiration logic
-   * Orders by event date descending per FR-017
-   * Marks tickets as EXPIRED when event.date + 1 hour < NOW() per FR-018
-   * @param {string} customerId - UUID of the customer
-   * @returns {Promise<Array>} Customer's tickets with event details
-   */
-  async getCustomerTickets(customerId) {
-    const tickets = await prisma.ticket.findMany({
-      where: { customerId },
-      include: {
-        event: {
-          select: {
-            name: true,
-            date: true,
-            venue: true,
-          },
-        },
-      },
-      orderBy: {
-        event: {
-          date: 'desc',
-        },
-      },
-    });
-
-    // Apply expiration logic: mark EXPIRED when event.date + 1 hour < NOW()
-    const now = new Date();
-    const expiredTicketIds = [];
-
-    for (const ticket of tickets) {
-      if (ticket.status === 'VALID' && ticket.event?.date) {
-        const expirationTime = new Date(ticket.event.date.getTime() + 60 * 60 * 1000);
-        if (expirationTime < now) {
-          expiredTicketIds.push(ticket.id);
-          ticket.status = 'EXPIRED';
-        }
-      }
-    }
-
-    // Batch update expired tickets in database
-    if (expiredTicketIds.length > 0) {
-      await prisma.ticket.updateMany({
-        where: { id: { in: expiredTicketIds } },
+    // Lazy expiration check
+    if (ticket.status === 'VALID' && new Date(ticket.event.date) < new Date()) {
+      await prisma.ticket.update({
+        where: { id: ticketId },
         data: { status: 'EXPIRED' },
       });
+      ticket.status = 'EXPIRED';
     }
 
-    return tickets;
+    return await this._formatTicketDetail(ticket);
   }
 
   /**
-   * Get tickets by customer ID (legacy - orders by purchaseTime)
-   * @param {string} customerId - UUID of the customer
-   * @returns {Promise<Array>} Customer's tickets
+   * Redeem a ticket via QR code JWT payload.
+   *
+   * Validation chain:
+   * 1. Verify JWT signature + expiration
+   * 2. Look up ticket by sub (ticketId)
+   * 3. Check event association (if eventId provided)
+   * 4. Lazy expiration (if event.date < now)
+   * 5. Check for duplicate redemption
+   * 6. Atomically set status → REDEEMED + redeemedAt
+   *
+   * @param {string} qrPayload - Raw JWT string from QR code scan
+   * @param {string|null} expectedEventId - Optional event ID for cross-event validation
+   * @returns {Promise<Object>} RedemptionResult or throws with RedemptionRejection info
    */
-  async getTicketsByCustomer(customerId) {
-    return await prisma.ticket.findMany({
-      where: { customerId },
-      include: {
-        event: {
-          select: {
-            name: true,
-            date: true,
-            venue: true,
-          },
-        },
-      },
-      orderBy: {
-        purchaseTime: 'desc',
-      },
-    });
-  }
+  async redeemTicket(qrPayload, expectedEventId = null) {
+    // 1. Verify JWT
+    let decoded;
+    try {
+      decoded = qrService.verifyQRCode(qrPayload);
+    } catch (error) {
+      if (error.code === 'QR_EXPIRED') {
+        const expiredError = new ValidationError('QR code has expired');
+        expiredError.redemptionStatus = 'EXPIRED';
+        throw expiredError;
+      }
+      const invalidError = new ValidationError('Invalid or forged QR code');
+      invalidError.redemptionStatus = 'INVALID';
+      invalidError.statusCode = 400;
+      throw invalidError;
+    }
 
-  /**
-   * Mark ticket as redeemed
-   * @param {string} ticketId - UUID of the ticket
-   * @returns {Promise<Object>} Updated ticket
-   */
-  async redeemTicket(ticketId) {
+    const ticketId = decoded.sub;
+
+    // 2. Look up ticket
     const ticket = await prisma.ticket.findUnique({
       where: { id: ticketId },
+      include: {
+        event: { select: { id: true, name: true, date: true } },
+        priceTier: { select: { name: true } },
+        contact: { select: { firstName: true, lastName: true } },
+      },
     });
 
     if (!ticket) {
-      throw new NotFoundError('Ticket not found');
+      const notFoundError = new ValidationError('Ticket not found');
+      notFoundError.redemptionStatus = 'INVALID';
+      notFoundError.statusCode = 400;
+      throw notFoundError;
     }
 
+    // 3. Event association check
+    if (expectedEventId && ticket.eventId !== expectedEventId) {
+      const wrongEventError = new ConflictError('Ticket belongs to a different event');
+      wrongEventError.redemptionStatus = 'WRONG_EVENT';
+      wrongEventError.statusCode = 403;
+      throw wrongEventError;
+    }
+
+    // 4. Lazy expiration
+    if (ticket.status === 'VALID' && new Date(ticket.event.date) < new Date()) {
+      await prisma.ticket.update({
+        where: { id: ticketId },
+        data: { status: 'EXPIRED' },
+      });
+
+      const expiredError = new ConflictError('Ticket has expired (event has passed)');
+      expiredError.redemptionStatus = 'EXPIRED';
+      expiredError.ticketId = ticketId;
+      expiredError.statusCode = 410;
+      throw expiredError;
+    }
+
+    // 5. Check current status
     if (ticket.status === 'REDEEMED') {
-      throw new ConflictError('Ticket already redeemed');
+      const dupError = new ConflictError('Ticket has already been redeemed');
+      dupError.redemptionStatus = 'ALREADY_REDEEMED';
+      dupError.ticketId = ticketId;
+      dupError.originalRedemptionTime = ticket.redeemedAt;
+      throw dupError;
     }
 
     if (ticket.status === 'EXPIRED') {
-      throw new ConflictError('Ticket has expired');
+      const expiredError = new ConflictError('Ticket has expired');
+      expiredError.redemptionStatus = 'EXPIRED';
+      expiredError.ticketId = ticketId;
+      expiredError.statusCode = 410;
+      throw expiredError;
     }
 
-    return await prisma.ticket.update({
+    if (ticket.status === 'VOIDED') {
+      const voidedError = new ConflictError('Ticket has been voided');
+      voidedError.redemptionStatus = 'VOIDED';
+      voidedError.ticketId = ticketId;
+      throw voidedError;
+    }
+
+    // 6. Redeem
+    const now = new Date();
+    await prisma.ticket.update({
       where: { id: ticketId },
-      data: { status: 'REDEEMED' },
+      data: {
+        status: 'REDEEMED',
+        redeemedAt: now,
+      },
     });
+
+    logger.info('Ticket redeemed', {
+      ticketId,
+      eventId: ticket.eventId,
+      barcode: ticket.barcode,
+    });
+
+    return {
+      status: 'REDEEMED',
+      ticketId: ticket.id,
+      barcode: ticket.barcode,
+      priceTierName: ticket.priceTier.name,
+      contactName: `${ticket.contact.firstName} ${ticket.contact.lastName}`,
+      redeemedAt: now,
+    };
+  }
+
+  // ─── Formatters ───
+
+  async _formatTicketDetail(ticket) {
+    // Generate a real QR code data URL image from the JWT
+    let qrCode = null;
+    if (ticket.qrCodeJwt) {
+      try {
+        const { default: qrService } = await import('./QRService.js');
+        qrCode = await qrService.generateQRCodeImage(ticket.qrCodeJwt);
+      } catch (err) {
+        logger.warn('Failed to generate QR image for ticket detail', {
+          ticketId: ticket.id,
+          error: err.message,
+        });
+      }
+    }
+
+    const venueStr = ticket.event?.venue
+      ? `${ticket.event.venue.name}${ticket.event.venue.address ? ' — ' + ticket.event.venue.address : ''}`
+      : '';
+
+    const purchaseTimestamp = ticket.order?.createdAt || ticket.createdAt;
+
+    return {
+      id: ticket.id,
+      barcode: ticket.barcode,
+      qrCode,
+      qrCodeJwt: ticket.qrCodeJwt || null,
+      priceTierName: ticket.priceTier?.name,
+      pricePaid: Number(ticket.pricePaid),
+      status: ticket.status,
+      redeemedAt: ticket.redeemedAt,
+      createdAt: ticket.createdAt,
+      purchaseDate: purchaseTimestamp,
+      purchaseTime: purchaseTimestamp,
+      event: {
+        id: ticket.event?.id,
+        name: ticket.event?.name,
+        date: ticket.event?.date,
+        status: ticket.event?.status,
+        venue: venueStr,
+      },
+      venue: venueStr,
+      contact: ticket.contact,
+      orderRef: ticket.order?.orderRef,
+    };
   }
 }
 

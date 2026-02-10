@@ -1,35 +1,47 @@
 openapi: 3.0.3
 info:
   title: Jump Ticketing API
-  description: REST API for online ticket purchase and event management
-  version: 1.0.0
+  description: |
+    REST API for the Jump ticketing platform.
+    Schema redesign: normalized Organization -> Venue -> Event -> PriceTier -> Order -> Ticket hierarchy.
+  version: 2.0.0
   contact:
     name: Jump Platform
 servers:
-  - url: http://localhost:3000/api/v1
+  - url: http://localhost:3000
     description: Local development
-  - url: https://api.jump.example.com/v1
+  - url: https://api.jump.example.com
     description: Production
 
 tags:
   - name: Events
-    description: Event listing and management
+    description: Public event listing
+  - name: Orders
+    description: Ticket purchase and order management
   - name: Tickets
-    description: Ticket purchase and retrieval
+    description: Ticket retrieval and redemption
+  - name: Organizations
+    description: Organization management
+  - name: Org Events
+    description: Organization-scoped event management
+  - name: Org Venues
+    description: Organization-scoped venue management
+  - name: Org Orders
+    description: Organization-scoped order management
+  - name: Users
+    description: User administration
   - name: Auth
-    description: Authentication and session management
-  - name: Admin
-    description: Administrative operations (RBAC protected)
+    description: Authentication (Auth.js v5)
   - name: Webhooks
     description: External service callbacks
 
 paths:
-  # ===== EVENTS =====
+  # ===== PUBLIC EVENTS =====
   /events:
     get:
       tags: [Events]
       summary: List published events
-      description: Returns paginated list of published events with available capacity
+      description: Returns paginated list of published events with price tiers and available capacity
       operationId: listEvents
       parameters:
         - name: page
@@ -61,15 +73,10 @@ paths:
   /events/{eventId}:
     get:
       tags: [Events]
-      summary: Get event details
+      summary: Get event details with price tiers
       operationId: getEvent
       parameters:
-        - name: eventId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+        - $ref: "#/components/parameters/EventId"
       responses:
         "200":
           description: Event details retrieved
@@ -80,12 +87,154 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  # ===== ORDERS =====
+  /orders:
+    post:
+      tags: [Orders]
+      summary: Create order (guest checkout)
+      description: |
+        Initiates a ticket purchase. Creates a Contact (or finds existing by email),
+        creates an Order with PENDING status, reserves PriceTier inventory, and
+        creates a Stripe Checkout session. Public endpoint — no auth required.
+      operationId: createOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [eventId, items, email, firstName, lastName]
+              properties:
+                eventId:
+                  type: string
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [priceTierId, quantity]
+                    properties:
+                      priceTierId:
+                        type: string
+                      quantity:
+                        type: integer
+                        minimum: 1
+                        maximum: 10
+                email:
+                  type: string
+                  format: email
+                firstName:
+                  type: string
+                lastName:
+                  type: string
+      responses:
+        "201":
+          description: Order created, Stripe Checkout session returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  order:
+                    $ref: "#/components/schemas/Order"
+                  checkoutUrl:
+                    type: string
+                    format: uri
+                  sessionId:
+                    type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          description: Insufficient capacity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /orders/my:
+    get:
+      tags: [Orders]
+      summary: Get authenticated user's orders
+      description: Returns all orders placed by the currently authenticated user (matched via Contact.userId)
+      operationId: getMyOrders
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Order list retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orders:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Order"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /orders/{orderId}:
+    get:
+      tags: [Orders]
+      summary: Get order detail
+      description: Returns order with tickets. Requires authentication; user must own the order.
+      operationId: getOrder
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Order detail retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /orders/lookup:
+    post:
+      tags: [Orders]
+      summary: Guest order lookup
+      description: Look up an order by email and order reference (for guests without accounts)
+      operationId: lookupOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, orderRef]
+              properties:
+                email:
+                  type: string
+                  format: email
+                orderRef:
+                  type: string
+                  description: Human-readable order reference (e.g., "JMP-A1B2C3")
+      responses:
+        "200":
+          description: Order found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   # ===== TICKETS =====
   /tickets/purchase:
     post:
       tags: [Tickets]
-      summary: Purchase tickets
-      description: Initiates Stripe Checkout session for ticket purchase
+      summary: Purchase tickets (legacy)
+      description: Initiates Stripe Checkout session for ticket purchase. Prefer POST /orders for new integrations.
       operationId: purchaseTickets
       requestBody:
         required: true
@@ -97,7 +246,6 @@ paths:
               properties:
                 eventId:
                   type: string
-                  format: uuid
                 quantity:
                   type: integer
                   minimum: 1
@@ -124,12 +272,6 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "409":
           description: Insufficient capacity
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-              example:
-                error: "Only 3 tickets available"
 
   /tickets/confirm:
     get:
@@ -156,30 +298,18 @@ paths:
                     items:
                       $ref: "#/components/schemas/TicketDetail"
         "202":
-          description: Payment processing
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: "processing"
-                  message:
-                    type: string
-                    example: "Payment confirmation pending"
+          description: Payment still processing
 
   /tickets/my:
     get:
       tags: [Tickets]
-      summary: Get customer purchase history
-      description: Returns all tickets purchased by authenticated customer
+      summary: Get authenticated user's tickets
       operationId: getMyTickets
       security:
-        - cookieAuth: []
+        - bearerAuth: []
       responses:
         "200":
-          description: Ticket history retrieved
+          description: Ticket list retrieved
           content:
             application/json:
               schema:
@@ -192,130 +322,199 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
-  # ===== AUTH =====
-  /auth/register:
+  /tickets/redeem:
     post:
-      tags: [Auth]
-      summary: Register customer account
-      operationId: registerCustomer
+      tags: [Tickets]
+      summary: Redeem ticket via QR code
+      description: Validates and redeems a ticket using the signed JWT from the QR code barcode
+      operationId: redeemTicket
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [email, name, password]
+              required: [qrToken]
               properties:
-                email:
+                qrToken:
                   type: string
-                  format: email
-                name:
-                  type: string
-                password:
-                  type: string
-                  format: password
-                  minLength: 8
+                  description: Signed JWT from the ticket QR code
       responses:
-        "201":
-          description: Account created
+        "200":
+          description: Ticket redeemed successfully
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Customer"
+                $ref: "#/components/schemas/TicketDetail"
+        "400":
+          description: Invalid or expired QR token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "409":
-          description: Email already exists
+          description: Ticket already redeemed
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
 
-  /auth/login:
+  # ===== ORGANIZATIONS =====
+  /organizations:
+    get:
+      tags: [Organizations]
+      summary: List organizations
+      operationId: listOrganizations
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Organization list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  organizations:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Organization"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
     post:
-      tags: [Auth]
-      summary: Login customer or admin
-      operationId: login
+      tags: [Organizations]
+      summary: Create organization
+      description: Admin-only endpoint for creating a new organization
+      operationId: createOrganization
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [email, password]
+              required: [name]
               properties:
-                email:
+                name:
                   type: string
-                  format: email
-                password:
-                  type: string
-                  format: password
       responses:
-        "200":
-          description: Login successful
-          headers:
-            Set-Cookie:
-              schema:
-                type: string
-                example: sessionId=abc123; HttpOnly; Secure; SameSite=Strict
+        "201":
+          description: Organization created
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  user:
-                    oneOf:
-                      - $ref: "#/components/schemas/Customer"
-                      - $ref: "#/components/schemas/Admin"
-                  userType:
-                    type: string
-                    enum: [customer, admin]
+                $ref: "#/components/schemas/Organization"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
-  /auth/logout:
-    post:
-      tags: [Auth]
-      summary: Logout and invalidate session
-      operationId: logout
-      security:
-        - cookieAuth: []
-      responses:
-        "204":
-          description: Logout successful
-
-  /auth/me:
+  # ===== ORG-SCOPED VENUES =====
+  /organizations/{orgId}/venues:
     get:
-      tags: [Auth]
-      summary: Get current user session
-      operationId: getCurrentUser
+      tags: [Org Venues]
+      summary: List venues for organization
+      operationId: listOrgVenues
       security:
-        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
       responses:
         "200":
-          description: Session valid
+          description: Venue list
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  user:
-                    oneOf:
-                      - $ref: "#/components/schemas/Customer"
-                      - $ref: "#/components/schemas/Admin"
-                  userType:
-                    type: string
-                    enum: [customer, admin]
+                  venues:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Venue"
         "401":
           $ref: "#/components/responses/Unauthorized"
 
-  # ===== ADMIN =====
-  /admin/events:
     post:
-      tags: [Admin]
-      summary: Create event
-      description: Admin-only endpoint for event creation
-      operationId: createEvent
+      tags: [Org Venues]
+      summary: Create venue
+      operationId: createVenue
       security:
-        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, address]
+              properties:
+                name:
+                  type: string
+                address:
+                  type: string
+                timezone:
+                  type: string
+                  default: "America/New_York"
+      responses:
+        "201":
+          description: Venue created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Venue"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  # ===== ORG-SCOPED EVENTS =====
+  /organizations/{orgId}/events:
+    get:
+      tags: [Org Events]
+      summary: List events for organization
+      description: Returns all events (any status) for the organization, accessible to org members
+      operationId: listOrgEvents
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [DRAFT, PUBLISHED, CANCELLED]
+      responses:
+        "200":
+          description: Event list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EventDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+    post:
+      tags: [Org Events]
+      summary: Create event with price tiers
+      description: Creates a new event under a venue belonging to this organization, including price tiers
+      operationId: createOrgEvent
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
       requestBody:
         required: true
         content:
@@ -336,21 +535,16 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
-  /admin/events/{eventId}:
+  /organizations/{orgId}/events/{eventId}:
     patch:
-      tags: [Admin]
+      tags: [Org Events]
       summary: Update event
-      description: Admin-only endpoint for event modification
-      operationId: updateEvent
+      operationId: updateOrgEvent
       security:
-        - cookieAuth: []
+        - bearerAuth: []
       parameters:
-        - name: eventId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/EventId"
       requestBody:
         required: true
         content:
@@ -369,21 +563,17 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /admin/events/{eventId}/publish:
+  /organizations/{orgId}/events/{eventId}/publish:
     post:
-      tags: [Admin]
+      tags: [Org Events]
       summary: Publish event
-      description: Makes event visible to customers
-      operationId: publishEvent
+      description: Transitions event from DRAFT to PUBLISHED, making it visible to customers
+      operationId: publishOrgEvent
       security:
-        - cookieAuth: []
+        - bearerAuth: []
       parameters:
-        - name: eventId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/EventId"
       responses:
         "200":
           description: Event published
@@ -391,6 +581,225 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EventDetail"
+        "400":
+          description: Event not in DRAFT status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /organizations/{orgId}/events/{eventId}/cancel:
+    post:
+      tags: [Org Events]
+      summary: Cancel event
+      description: Transitions event to CANCELLED status. Voids all valid tickets.
+      operationId: cancelOrgEvent
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/EventId"
+      responses:
+        "200":
+          description: Event cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventDetail"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /organizations/{orgId}/events/{eventId}/analytics:
+    get:
+      tags: [Org Events]
+      summary: Get per-tier analytics for event
+      description: Returns sales analytics broken down by price tier
+      operationId: getEventAnalytics
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/EventId"
+      responses:
+        "200":
+          description: Analytics retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventAnalytics"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ===== ORG-SCOPED ORDERS =====
+  /organizations/{orgId}/events/{eventId}/orders:
+    get:
+      tags: [Org Orders]
+      summary: List orders for event (org-scoped)
+      description: Returns all orders for a specific event, accessible to org admins/organizers
+      operationId: listEventOrders
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
+        - $ref: "#/components/parameters/EventId"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [PENDING, COMPLETED, FAILED]
+      responses:
+        "200":
+          description: Order list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orders:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Order"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  # ===== USERS (ADMIN) =====
+  /users:
+    get:
+      tags: [Users]
+      summary: List users (admin)
+      description: Admin-only endpoint to list all users with filtering
+      operationId: listUsers
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [CUSTOMER, ORGANIZER, ADMIN]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: User list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/User"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /users/{userId}:
+    patch:
+      tags: [Users]
+      summary: Update user (admin)
+      description: Admin-only endpoint to update user role, organization, or active status
+      operationId: updateUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role:
+                  type: string
+                  enum: [CUSTOMER, ORGANIZER, ADMIN]
+                organizationId:
+                  type: string
+                  nullable: true
+                isActive:
+                  type: boolean
+      responses:
+        "200":
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ===== AUTH =====
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current user session
+      operationId: getCurrentUser
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Session valid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ===== ADMIN (LEGACY) =====
+  /admin/events:
+    post:
+      tags: [Admin]
+      summary: Create event (legacy)
+      description: Legacy admin endpoint. Prefer POST /organizations/{orgId}/events for new integrations.
+      operationId: createEvent
+      deprecated: true
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EventCreate"
+      responses:
+        "201":
+          description: Event created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
 
@@ -398,17 +807,11 @@ paths:
     get:
       tags: [Admin]
       summary: Get admin dashboard statistics
-      description: Real-time sales and redemption counts
+      description: Legacy stats endpoint. Prefer /organizations/{orgId}/events/{eventId}/analytics.
       operationId: getDashboardStats
+      deprecated: true
       security:
-        - cookieAuth: []
-      parameters:
-        - name: eventId
-          in: query
-          required: false
-          schema:
-            type: string
-            format: uuid
+        - bearerAuth: []
       responses:
         "200":
           description: Stats retrieved
@@ -424,7 +827,9 @@ paths:
     post:
       tags: [Webhooks]
       summary: Stripe payment webhook
-      description: Receives Stripe payment confirmation events
+      description: |
+        Receives Stripe payment events (checkout.session.completed, payment_intent.succeeded, etc.).
+        Updates Order status, confirms PriceTier inventory, generates QR codes, and emails tickets.
       operationId: stripeWebhook
       parameters:
         - name: stripe-signature
@@ -438,7 +843,6 @@ paths:
           application/json:
             schema:
               type: object
-              description: Stripe event payload (varies by event type)
       responses:
         "200":
           description: Webhook processed
@@ -447,28 +851,89 @@ paths:
 
 components:
   securitySchemes:
-    cookieAuth:
-      type: apiKey
-      in: cookie
-      name: sessionId
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Auth.js v5 JWT token
+
+  parameters:
+    OrgId:
+      name: orgId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Organization ID (cuid)
+
+    EventId:
+      name: eventId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Event ID (cuid)
 
   schemas:
+    Organization:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Venue:
+      type: object
+      properties:
+        id:
+          type: string
+        organizationId:
+          type: string
+        name:
+          type: string
+        address:
+          type: string
+        timezone:
+          type: string
+        isPublic:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
     EventSummary:
       type: object
       properties:
         id:
           type: string
-          format: uuid
         name:
+          type: string
+        description:
           type: string
         date:
           type: string
           format: date-time
-        venue:
+        category:
           type: string
-        ticketPrice:
-          type: number
-          format: decimal
+        status:
+          type: string
+          enum: [DRAFT, PUBLISHED, CANCELLED]
+        venue:
+          $ref: "#/components/schemas/Venue"
+        priceTiers:
+          type: array
+          items:
+            $ref: "#/components/schemas/PriceTier"
         remainingCapacity:
           type: integer
 
@@ -481,102 +946,217 @@ components:
               type: integer
             ticketsSold:
               type: integer
-            status:
+            createdAt:
               type: string
-              enum: [draft, published]
-            organizer:
-              type: object
-              properties:
-                name:
-                  type: string
-                organization:
-                  type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
 
     EventCreate:
       type: object
-      required: [name, date, venue, capacity, ticketPrice]
+      required: [venueId, name, date, capacity, priceTiers]
       properties:
+        venueId:
+          type: string
         name:
           type: string
           maxLength: 255
+        description:
+          type: string
         date:
           type: string
           format: date-time
-        venue:
-          type: string
-          maxLength: 500
         capacity:
           type: integer
           minimum: 1
           maximum: 100000
-        ticketPrice:
-          type: number
-          format: decimal
-          minimum: 0
+        category:
+          type: string
+        priceTiers:
+          type: array
+          items:
+            type: object
+            required: [name, price, quantityTotal]
+            properties:
+              name:
+                type: string
+              price:
+                type: number
+                format: decimal
+                minimum: 0
+              quantityTotal:
+                type: integer
+                minimum: 1
 
     EventUpdate:
       type: object
       properties:
         name:
           type: string
+        description:
+          type: string
         date:
           type: string
           format: date-time
-        venue:
+        capacity:
+          type: integer
+        category:
           type: string
-        ticketPrice:
+
+    PriceTier:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        price:
           type: number
           format: decimal
+        quantityTotal:
+          type: integer
+        quantitySold:
+          type: integer
+        quantityAvailable:
+          type: integer
+        isActive:
+          type: boolean
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+        eventId:
+          type: string
+        orderRef:
+          type: string
+        totalAmount:
+          type: number
+          format: decimal
+        currency:
+          type: string
+        quantity:
+          type: integer
+        status:
+          type: string
+          enum: [PENDING, COMPLETED, FAILED]
+        createdAt:
+          type: string
+          format: date-time
+
+    OrderDetail:
+      allOf:
+        - $ref: "#/components/schemas/Order"
+        - type: object
+          properties:
+            event:
+              $ref: "#/components/schemas/EventSummary"
+            contact:
+              type: object
+              properties:
+                email:
+                  type: string
+                firstName:
+                  type: string
+                lastName:
+                  type: string
+            tickets:
+              type: array
+              items:
+                $ref: "#/components/schemas/TicketDetail"
 
     TicketDetail:
       type: object
       properties:
         id:
           type: string
-          format: uuid
         event:
           $ref: "#/components/schemas/EventSummary"
-        purchaseTime:
-          type: string
-          format: date-time
+        priceTier:
+          type: object
+          properties:
+            name:
+              type: string
         pricePaid:
           type: number
           format: decimal
+        barcode:
+          type: string
         qrCode:
           type: string
-          description: Base64-encoded PNG or data URL
+          description: Base64-encoded QR code image or data URL
         status:
           type: string
-          enum: [valid, redeemed, expired]
-
-    Customer:
-      type: object
-      properties:
-        id:
+          enum: [VALID, REDEEMED, EXPIRED, VOIDED]
+        redeemedAt:
           type: string
-          format: uuid
-        email:
-          type: string
-          format: email
-        name:
-          type: string
+          format: date-time
+          nullable: true
         createdAt:
           type: string
           format: date-time
 
-    Admin:
+    User:
       type: object
       properties:
         id:
           type: string
-          format: uuid
         email:
           type: string
           format: email
         name:
           type: string
-        organization:
+        firstName:
           type: string
+        lastName:
+          type: string
+        role:
+          type: string
+          enum: [CUSTOMER, ORGANIZER, ADMIN]
+        organizationId:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    EventAnalytics:
+      type: object
+      properties:
+        eventId:
+          type: string
+        eventName:
+          type: string
+        totalCapacity:
+          type: integer
+        totalSold:
+          type: integer
+        totalRevenue:
+          type: number
+          format: decimal
+        tiers:
+          type: array
+          items:
+            type: object
+            properties:
+              tierId:
+                type: string
+              tierName:
+                type: string
+              price:
+                type: number
+                format: decimal
+              quantityTotal:
+                type: integer
+              quantitySold:
+                type: integer
+              revenue:
+                type: number
+                format: decimal
 
     DashboardStats:
       type: object
@@ -589,12 +1169,6 @@ components:
           type: integer
         ticketsRedeemed:
           type: integer
-        salesRate:
-          type: number
-          description: Tickets sold per minute (last hour)
-        paymentSuccessRate:
-          type: number
-          description: Percentage (0-100)
 
     Pagination:
       type: object
@@ -647,7 +1221,7 @@ components:
             $ref: "#/components/schemas/Error"
           example:
             error: "Forbidden"
-            message: "Admin role required"
+            message: "Admin or organizer role required"
 
     NotFound:
       description: Resource not found
@@ -657,4 +1231,4 @@ components:
             $ref: "#/components/schemas/Error"
           example:
             error: "Not found"
-            message: "Event does not exist"
+            message: "Resource does not exist"

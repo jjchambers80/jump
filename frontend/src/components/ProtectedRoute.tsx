@@ -1,11 +1,11 @@
 // Protected Route wrapper
-// Requires authentication, redirects to login if not authenticated (T108)
+// Requires authentication, redirects to sign-in if not authenticated (T108, updated T096)
 
 'use client';
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '../hooks/useAuth';
+import { useSession } from 'next-auth/react';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -14,9 +14,11 @@ interface ProtectedRouteProps {
 
 export default function ProtectedRoute({
   children,
-  fallbackUrl = '/auth/login',
+  fallbackUrl = '/auth/signin',
 }: ProtectedRouteProps) {
-  const { isAuthenticated, loading } = useAuth();
+  const { status } = useSession();
+  const loading = status === 'loading';
+  const isAuthenticated = status === 'authenticated';
   const router = useRouter();
 
   useEffect(() => {

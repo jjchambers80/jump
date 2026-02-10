@@ -2,10 +2,8 @@
 // Creates 2 admins, 5 customers, and 3 events
 
 import 'dotenv/config';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@jump/db';
 import bcrypt from 'bcrypt';
-
-const prisma = new PrismaClient();
 
 async function main() {
   console.log('🌱 Starting seed...');

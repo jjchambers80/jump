@@ -14,8 +14,7 @@ import AxeBuilder from '@axe-core/playwright';
 
 const pages = [
   { name: 'Events listing', path: '/events' },
-  { name: 'Login', path: '/auth/login' },
-  { name: 'Register', path: '/auth/register' },
+  { name: 'Sign In', path: '/auth/signin' },
 ];
 
 test.describe('WCAG AA Color Contrast — Light Mode', () => {

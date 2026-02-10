@@ -1,0 +1,617 @@
+// Order Service
+// Handles order creation, lookup, and management
+// Per FR-023, FR-024, FR-052, FR-053, FR-054, contracts/api.yaml
+
+import { prisma } from '@jump/db';
+import { randomBytes } from 'crypto';
+import stripe from '../config/stripe.js';
+import logger from '../utils/logger.js';
+import { NotFoundError, ConflictError, ValidationError } from '../middleware/errorHandler.js';
+
+class OrderService {
+  /**
+   * Generate a unique order reference (JMP-XXXXXX).
+   * Uses alphanumeric uppercase characters (no 0/O/1/I).
+   *
+   * @returns {string} Order reference like JMP-A3BK7N
+   */
+  _generateOrderRef() {
+    const charset = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const bytes = randomBytes(6);
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+      code += charset[bytes[i] % charset.length];
+    }
+    return `JMP-${code}`;
+  }
+
+  /**
+   * Create a new order with atomic inventory reservation.
+   *
+   * Flow:
+   * 1. Validate event is PUBLISHED
+   * 2. Validate price tier exists, is active, has sufficient inventory
+   * 3. Upsert Contact by email
+   * 4. Create Order with PENDING status
+   * 5. Reserve inventory (increment quantityReserved on PriceTier)
+   * 6. Create Stripe Checkout session
+   * 7. Return order + Stripe checkout URL
+   *
+   * @param {Object} params
+   * @param {string} params.eventId
+   * @param {string} params.priceTierId
+   * @param {number} params.quantity
+   * @param {Object} params.contact - { email, firstName, lastName }
+   * @param {string|null} params.userId - Authenticated user ID (if logged in)
+   * @returns {Promise<{ orderId, orderRef, stripeCheckoutUrl }>}
+   */
+  async createOrder({ eventId, priceTierId, quantity, contact, userId = null }) {
+    // Generate order ref outside transaction to avoid retry collisions
+    let orderRef = this._generateOrderRef();
+
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Validate event
+      const event = await tx.event.findUnique({
+        where: { id: eventId },
+        include: {
+          venue: true,
+        },
+      });
+
+      if (!event) {
+        throw new NotFoundError('Event not found');
+      }
+
+      if (event.status !== 'PUBLISHED') {
+        throw new ValidationError('Event is not available for purchase');
+      }
+
+      if (new Date(event.date) < new Date()) {
+        throw new ValidationError('Event has already occurred');
+      }
+
+      // 2. Validate price tier exists and check basic constraints
+      const tier = await tx.priceTier.findFirst({
+        where: {
+          id: priceTierId,
+          eventId,
+        },
+      });
+
+      if (!tier) {
+        throw new NotFoundError('Price tier not found for this event');
+      }
+
+      if (!tier.isActive) {
+        throw new ValidationError('Price tier is not active');
+      }
+
+      // Check per-order limits
+      if (tier.minPerOrder && quantity < tier.minPerOrder) {
+        throw new ValidationError(
+          `Minimum quantity per order for this tier is ${tier.minPerOrder}`
+        );
+      }
+
+      if (tier.maxPerOrder && quantity > tier.maxPerOrder) {
+        throw new ValidationError(
+          `Maximum quantity per order for this tier is ${tier.maxPerOrder}`
+        );
+      }
+
+      // Atomic inventory reservation using raw SQL with row-level locking
+      // SELECT FOR UPDATE prevents concurrent reads, ensuring serialised access
+      const reserved = await tx.$queryRawUnsafe(
+        `UPDATE "PriceTier"
+         SET "quantityReserved" = "quantityReserved" + $1
+         WHERE "id" = $2
+           AND ("quantityTotal" - "quantitySold" - "quantityReserved") >= $1
+         RETURNING *`,
+        quantity,
+        priceTierId
+      );
+
+      if (!reserved || reserved.length === 0) {
+        // Re-read to provide accurate availability info
+        const current = await tx.priceTier.findUnique({ where: { id: priceTierId } });
+        const available = current
+          ? current.quantityTotal - current.quantitySold - current.quantityReserved
+          : 0;
+        throw new ConflictError('Insufficient inventory', {
+          available,
+          requested: quantity,
+        });
+      }
+
+      // 3. Upsert contact
+      const contactRecord = await tx.contact.upsert({
+        where: { email: contact.email.toLowerCase() },
+        update: {
+          firstName: contact.firstName,
+          lastName: contact.lastName,
+          ...(userId && { userId }),
+        },
+        create: {
+          email: contact.email.toLowerCase(),
+          firstName: contact.firstName,
+          lastName: contact.lastName,
+          ...(userId && { userId }),
+        },
+      });
+
+      // 4. Calculate total
+      const totalAmount = Number(tier.price) * quantity;
+
+      // Ensure unique orderRef
+      let existingRef = await tx.order.findUnique({ where: { orderRef } });
+      while (existingRef) {
+        orderRef = this._generateOrderRef();
+        existingRef = await tx.order.findUnique({ where: { orderRef } });
+      }
+
+      // 5. Create order
+      const order = await tx.order.create({
+        data: {
+          eventId,
+          contactId: contactRecord.id,
+          orderRef,
+          totalAmount,
+          currency: 'usd',
+          quantity,
+          status: 'PENDING',
+        },
+      });
+
+      // 6. Inventory already reserved atomically in step 2 above
+
+      return { order, event, tier, contactRecord };
+    });
+
+    const { order, event, tier, contactRecord } = result;
+
+    // 7. Create Stripe Checkout session (outside transaction — external call)
+    let stripeSession;
+    try {
+      stripeSession = await stripe.checkout.sessions.create({
+        mode: 'payment',
+        payment_method_types: ['card'],
+        customer_email: contactRecord.email,
+        line_items: [
+          {
+            price_data: {
+              currency: 'usd',
+              product_data: {
+                name: `${event.name} — ${tier.name}`,
+                description: `${quantity} ticket(s) for ${event.name} at ${event.venue.name}`,
+              },
+              unit_amount: Math.round(Number(tier.price) * 100), // cents
+            },
+            quantity,
+          },
+        ],
+        metadata: {
+          orderId: order.id,
+          orderRef: order.orderRef,
+          eventId: event.id,
+          priceTierId: tier.id,
+        },
+        success_url: `${process.env.FRONTEND_URL || 'http://localhost:3001'}/orders/${order.id}?status=success`,
+        cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:3001'}/events/${event.id}?status=cancelled`,
+        expires_at: Math.floor(Date.now() / 1000) + 1800, // 30 minutes from now
+      });
+    } catch (stripeError) {
+      // Roll back reservation if Stripe fails
+      logger.error('Stripe session creation failed, rolling back reservation', {
+        orderId: order.id,
+        error: stripeError.message,
+      });
+      await prisma.priceTier.update({
+        where: { id: tier.id },
+        data: { quantityReserved: { decrement: quantity } },
+      });
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { status: 'FAILED' },
+      });
+      throw stripeError;
+    }
+
+    // Link Stripe session to order
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { stripeSessionId: stripeSession.id },
+    });
+
+    // Create payment transaction record
+    await prisma.paymentTransaction.create({
+      data: {
+        orderId: order.id,
+        stripePaymentIntentId: stripeSession.payment_intent || null,
+        amount: order.totalAmount,
+        currency: order.currency,
+        status: 'PENDING',
+      },
+    });
+
+    logger.info('Order created', {
+      orderId: order.id,
+      orderRef: order.orderRef,
+      eventId: event.id,
+      quantity,
+      totalAmount: order.totalAmount,
+    });
+
+    return {
+      orderId: order.id,
+      orderRef: order.orderRef,
+      stripeCheckoutUrl: stripeSession.url,
+    };
+  }
+
+  /**
+   * Get order by ID with full details (event, contact, tickets, payment).
+   *
+   * @param {string} orderId
+   * @returns {Promise<Object>} OrderDetail
+   */
+  async getOrderById(orderId) {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        event: {
+          include: {
+            venue: {
+              select: { id: true, name: true, address: true },
+            },
+          },
+        },
+        contact: {
+          select: { firstName: true, lastName: true, email: true },
+        },
+        tickets: {
+          include: {
+            priceTier: { select: { name: true } },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+        payment: true,
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundError('Order not found');
+    }
+
+    return this._formatOrderDetail(order);
+  }
+
+  /**
+   * Get orders for a contact by email (authenticated user's orders).
+   *
+   * @param {string} email - User email
+   * @param {Object} pagination
+   * @returns {Promise<{ data: OrderSummary[], pagination }>}
+   */
+  async getMyOrders(email, { page = 1, limit = 20 } = {}) {
+    const contact = await prisma.contact.findUnique({
+      where: { email: email.toLowerCase() },
+    });
+
+    if (!contact) {
+      return { data: [], pagination: { page, limit, total: 0, totalPages: 0 } };
+    }
+
+    const [orders, total] = await Promise.all([
+      prisma.order.findMany({
+        where: { contactId: contact.id },
+        include: {
+          event: {
+            select: { name: true, date: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.order.count({
+        where: { contactId: contact.id },
+      }),
+    ]);
+
+    return {
+      data: orders.map((o) => this._formatOrderSummary(o)),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  /**
+   * Lookup order by email + orderRef (guest lookup).
+   *
+   * @param {string} email
+   * @param {string} orderRef
+   * @returns {Promise<Object>} OrderDetail
+   */
+  async lookupOrder(email, orderRef) {
+    const order = await prisma.order.findFirst({
+      where: {
+        orderRef: orderRef.toUpperCase(),
+        contact: { email: email.toLowerCase() },
+      },
+      include: {
+        event: {
+          include: {
+            venue: {
+              select: { id: true, name: true, address: true },
+            },
+          },
+        },
+        contact: {
+          select: { firstName: true, lastName: true, email: true },
+        },
+        tickets: {
+          include: {
+            priceTier: { select: { name: true } },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+        payment: true,
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundError('Order not found');
+    }
+
+    return this._formatOrderDetail(order);
+  }
+
+  /**
+   * Get all orders for an event (org-scoped).
+   *
+   * @param {string} eventId
+   * @param {Object} pagination
+   * @returns {Promise<{ data: OrderSummary[], pagination }>}
+   */
+  async getOrdersByEvent(eventId, { page = 1, limit = 20 } = {}) {
+    const [orders, total] = await Promise.all([
+      prisma.order.findMany({
+        where: { eventId },
+        include: {
+          event: {
+            select: { name: true, date: true },
+          },
+          contact: {
+            select: { firstName: true, lastName: true, email: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.order.count({
+        where: { eventId },
+      }),
+    ]);
+
+    return {
+      data: orders.map((o) => this._formatOrderSummary(o)),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  /**
+   * Complete an order after successful payment.
+   * Called by webhook handler.
+   *
+   * @param {string} orderId
+   */
+  async completeOrder(orderId) {
+    await prisma.order.update({
+      where: { id: orderId },
+      data: { status: 'COMPLETED' },
+    });
+
+    logger.info('Order completed', { orderId });
+  }
+
+  /**
+   * Fail an order (release reserved inventory).
+   * Called by webhook handler on payment failure or session expiry.
+   *
+   * @param {string} orderId
+   * @param {string} reason
+   */
+  async failOrder(orderId, reason) {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { id: true, quantity: true, status: true, stripeSessionId: true },
+    });
+
+    if (!order || order.status !== 'PENDING') {
+      logger.warn('Cannot fail order — not in PENDING status', {
+        orderId,
+        currentStatus: order?.status,
+      });
+      return;
+    }
+
+    // Find the price tier for this order from its Stripe metadata
+    // We need to look up the tier from the order's tickets or from stripe session metadata
+    // Since tickets aren't created yet for PENDING orders, use the Stripe session metadata
+    let priceTierId;
+    try {
+      if (order.stripeSessionId) {
+        const session = await stripe.checkout.sessions.retrieve(order.stripeSessionId);
+        priceTierId = session.metadata?.priceTierId;
+      }
+    } catch {
+      // Stripe lookup failed, try to find tier from other context
+      logger.warn('Could not retrieve Stripe session for tier lookup', { orderId });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.order.update({
+        where: { id: orderId },
+        data: { status: 'FAILED' },
+      });
+
+      // Release reserved inventory
+      if (priceTierId) {
+        await tx.priceTier.update({
+          where: { id: priceTierId },
+          data: {
+            quantityReserved: { decrement: order.quantity },
+          },
+        });
+      }
+    });
+
+    logger.info('Order failed — inventory released', {
+      orderId,
+      reason,
+      quantity: order.quantity,
+    });
+  }
+
+  /**
+   * Verify payment with Stripe and complete the order if paid.
+   * This is a belt-and-suspenders approach alongside webhooks.
+   * Idempotent: if already COMPLETED, returns the order as-is.
+   *
+   * @param {string} orderId
+   * @returns {Promise<Object>} Updated order detail
+   */
+  async verifyAndCompleteOrder(orderId) {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { event: true, contact: true },
+    });
+
+    if (!order) {
+      throw new NotFoundError('Order not found');
+    }
+
+    // Already completed — return formatted detail
+    if (order.status === 'COMPLETED') {
+      return this.getOrderById(orderId);
+    }
+
+    // Only verify PENDING orders
+    if (order.status !== 'PENDING' || !order.stripeSessionId) {
+      return this.getOrderById(orderId);
+    }
+
+    // Check Stripe session status directly
+    const session = await stripe.checkout.sessions.retrieve(order.stripeSessionId);
+
+    if (session.payment_status === 'paid') {
+      // Delegate to PaymentService for the full completion flow
+      // (update payment transaction, create tickets, send email)
+      const PaymentService = (await import('./PaymentService.js')).default;
+      await PaymentService.handleCheckoutCompleted(order.stripeSessionId, session.payment_intent);
+      logger.info('Order verified and completed via direct Stripe check', {
+        orderId: order.id,
+        orderRef: order.orderRef,
+      });
+    }
+
+    return this.getOrderById(orderId);
+  }
+
+  /**
+   * Get order by Stripe session ID.
+   * Used by webhook handler.
+   *
+   * @param {string} stripeSessionId
+   * @returns {Promise<Object|null>}
+   */
+  async getOrderByStripeSession(stripeSessionId) {
+    return prisma.order.findUnique({
+      where: { stripeSessionId },
+      include: {
+        event: true,
+        contact: true,
+      },
+    });
+  }
+
+  // ─── Formatters ─────────────────────────────────────────
+
+  _formatOrderDetail(order) {
+    return {
+      id: order.id,
+      orderRef: order.orderRef,
+      event: {
+        id: order.event.id,
+        name: order.event.name,
+        date: order.event.date,
+        venue: order.event.venue
+          ? {
+              id: order.event.venue.id,
+              name: order.event.venue.name,
+              address: order.event.venue.address,
+            }
+          : undefined,
+      },
+      contact: order.contact,
+      quantity: order.quantity,
+      totalAmount: Number(order.totalAmount),
+      currency: order.currency,
+      status: order.status,
+      tickets: (order.tickets || []).map((t) => ({
+        id: t.id,
+        barcode: t.barcode,
+        qrCodeDataUrl: t.qrCodeJwt || null,
+        priceTierName: t.priceTier?.name,
+        pricePaid: Number(t.pricePaid),
+        status: t.status,
+        redeemedAt: t.redeemedAt,
+        createdAt: t.createdAt,
+      })),
+      payment: order.payment
+        ? {
+            id: order.payment.id,
+            amount: Number(order.payment.amount),
+            currency: order.payment.currency,
+            status: order.payment.status,
+            failureReason: order.payment.failureReason,
+            createdAt: order.payment.createdAt,
+          }
+        : null,
+      createdAt: order.createdAt,
+    };
+  }
+
+  _formatOrderSummary(order) {
+    return {
+      id: order.id,
+      orderRef: order.orderRef,
+      eventName: order.event?.name,
+      eventDate: order.event?.date,
+      quantity: order.quantity,
+      totalAmount: Number(order.totalAmount),
+      currency: order.currency,
+      status: order.status,
+      contact: order.contact
+        ? {
+            firstName: order.contact.firstName,
+            lastName: order.contact.lastName,
+            email: order.contact.email,
+          }
+        : undefined,
+      createdAt: order.createdAt,
+    };
+  }
+}
+
+export default new OrderService();

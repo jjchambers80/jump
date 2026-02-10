@@ -2,12 +2,10 @@
 // POST /customers/:customerId/delete-data - GDPR data deletion (FR-027, FR-028)
 
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@jump/db';
 import { requireAuth } from '../../middleware/auth.js';
 import { ForbiddenError, NotFoundError } from '../../middleware/errorHandler.js';
 import logger from '../../utils/logger.js';
-
-const prisma = new PrismaClient();
 const router = express.Router();
 
 // Require authentication for all customer routes

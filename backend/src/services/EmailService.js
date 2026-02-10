@@ -1,18 +1,19 @@
 // Email Service
-// Sends ticket emails with QR codes per FR-008, FR-020
+// Sends order confirmations and cancellation notifications
+// Uses Resend SDK per research.md R3, FR-036, FR-037
 
-import resend from '../config/sendgrid.js';
+import resend from '../config/resend.js';
+import qrService from './QRService.js';
 import logger from '../utils/logger.js';
 
 class EmailService {
   /**
-   * Send ticket email with QR codes
-   * @param {string} customerEmail - Recipient email
-   * @param {Array} tickets - Array of ticket objects with QR codes
-   * @param {string} correlationId - Request correlation ID
-   * @returns {Promise<void>}
+   * Send order confirmation email with ticket QR codes (FR-036)
+   * Fire-and-forget with async retry — does not block order completion.
+   * @param {Object} order - Order object with contact, event, tickets
+   * @param {Array} tickets - Ticket objects with barcode, pricePaid, qrCodeJwt
    */
-  async sendTicketEmail(customerEmail, tickets, correlationId) {
+  async sendOrderConfirmation(order, tickets) {
     const maxRetries = 3;
     let attempt = 0;
     let lastError;
@@ -21,165 +22,162 @@ class EmailService {
       try {
         attempt++;
 
-        // Build email content
-        const ticketDetails = tickets
-          .map(
-            (ticket, index) => `
-          <div style="border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 5px;">
-            <h3>Ticket #${index + 1}</h3>
-            <p><strong>Event:</strong> ${ticket.event.name}</p>
-            <p><strong>Date:</strong> ${new Date(ticket.event.date).toLocaleDateString('en-US', {
-              weekday: 'long',
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-            })}</p>
-            <p><strong>Venue:</strong> ${ticket.event.venue}</p>
-            <p><strong>Price Paid:</strong> $${(ticket.pricePaid / 100).toFixed(2)}</p>
-            ${
-              ticket.qrCode
-                ? `<div style="margin-top: 15px;">
-              <img src="${ticket.qrCode}" alt="QR Code" style="max-width: 200px;" />
-              <p style="font-size: 12px; color: #666;">Present this QR code at the venue</p>
-            </div>`
-                : ''
+        // Generate QR code images for each ticket
+        const ticketSections = [];
+
+        for (let index = 0; index < tickets.length; index++) {
+          const ticket = tickets[index];
+          let qrDataUrl = null;
+
+          // Generate QR code image from the ticket's JWT
+          if (ticket.qrCodeJwt) {
+            try {
+              qrDataUrl = await qrService.generateQRCodeImage(ticket.qrCodeJwt);
+            } catch (qrErr) {
+              logger.warn('Failed to generate QR image for email', {
+                ticketId: ticket.id,
+                error: qrErr.message,
+              });
             }
-          </div>
-        `
-          )
-          .join('');
+          }
+
+          ticketSections.push(`
+            <div style="background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 16px;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+                <div>
+                  <h4 style="margin: 0; color: #111; font-size: 15px;">Ticket #${index + 1}</h4>
+                  <p style="margin: 4px 0 0; color: #666; font-size: 13px;">${ticket.priceTier?.name || 'General'} — $${Number(ticket.pricePaid).toFixed(2)}</p>
+                </div>
+                <span style="background: #dcfce7; color: #166534; padding: 2px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; height: fit-content;">Valid</span>
+              </div>
+              ${
+                qrDataUrl
+                  ? `
+              <div style="text-align: center; padding: 16px 0;">
+                <div style="display: inline-block; background: #fff; padding: 12px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                  <img src="${qrDataUrl}" alt="QR Code for Ticket #${index + 1}" width="200" height="200" style="display: block;" />
+                </div>
+              </div>
+              `
+                  : ''
+              }
+              <p style="margin: 8px 0 0; color: #888; font-size: 12px; font-family: monospace; text-align: center;">${ticket.barcode}</p>
+            </div>
+          `);
+        }
 
         const msg = {
-          to: [customerEmail],
-          from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
-          subject: `Your Tickets for ${tickets[0].event.name}`,
+          to: [order.contact?.email || order.contactEmail],
+          from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+          subject: `Order Confirmed — ${order.event?.name || 'Your Event'} (${order.orderRef})`,
           html: `
             <html>
-              <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
                 <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
-                  <h1 style="color: #333;">Your Ticket Purchase Confirmation</h1>
+                  <h1 style="color: #333;">🎟️ Order Confirmed!</h1>
                 </div>
-                
                 <div style="padding: 20px;">
-                  <p>Thank you for your purchase! Here are your tickets:</p>
-                  
-                  ${ticketDetails}
-                  
-                  <div style="margin-top: 30px; padding: 15px; background-color: #e9ecef; border-radius: 5px;">
-                    <h4>Important Information:</h4>
-                    <ul style="line-height: 1.8;">
-                      <li>Please save this email or screenshot the QR codes</li>
-                      <li>Present the QR code at the venue entrance</li>
-                      <li>Each QR code is valid for one entry</li>
-                      <li>QR codes expire 24 hours after the event</li>
-                    </ul>
-                  </div>
-                  
-                  <div style="margin-top: 20px; text-align: center; color: #666; font-size: 12px;">
-                    <p>Questions? Contact us at support@jump.com</p>
-                    <p>Confirmation ID: ${tickets[0].stripeTxId}</p>
-                  </div>
+                  <p>Hi ${order.contact?.firstName || 'there'},</p>
+                  <p>Your order <strong>${order.orderRef}</strong> has been confirmed.</p>
+                  <h3 style="margin-top: 24px;">${order.event?.name || 'Event'}</h3>
+                  <p><strong>Total:</strong> $${Number(order.totalAmount).toFixed(2)} (${order.quantity} ticket${order.quantity > 1 ? 's' : ''})</p>
+
+                  <h3 style="margin-top: 24px; margin-bottom: 12px;">Your Tickets</h3>
+                  ${ticketSections.join('')}
+
+                  <p style="color: #666; font-size: 14px; margin-top: 24px;">Present your QR code at the venue entrance. Each ticket is valid for one entry.</p>
+                  <p style="color: #666; font-size: 12px;">Order reference: ${order.orderRef}</p>
                 </div>
               </body>
             </html>
           `,
         };
 
-        // Send email
         await resend.emails.send(msg);
 
-        logger.info('Ticket email sent successfully', {
-          email: customerEmail,
+        logger.info('Order confirmation email sent', {
+          orderId: order.id,
+          orderRef: order.orderRef,
+          email: order.contact?.email,
           ticketCount: tickets.length,
           attempt,
-          correlationId,
         });
 
-        return; // Success - exit retry loop
+        return;
       } catch (error) {
         lastError = error;
-
-        logger.warn('Email send attempt failed', {
-          email: customerEmail,
+        logger.warn('Order confirmation email attempt failed', {
+          orderId: order.id,
           attempt,
-          maxRetries,
           error: error.message,
-          correlationId,
         });
-
-        // If not the last attempt, wait before retrying
         if (attempt < maxRetries) {
-          await new Promise((resolve) => setTimeout(resolve, 1000 * attempt)); // Exponential backoff
+          await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
         }
       }
     }
 
-    // All retries failed
-    logger.error('Failed to send ticket email after all retries', {
-      email: customerEmail,
+    logger.error('Failed to send order confirmation after all retries', {
+      orderId: order.id,
+      orderRef: order.orderRef,
       attempts: maxRetries,
       error: lastError?.message,
-      correlationId,
     });
-
-    // Don't throw - we don't want to fail the entire purchase if email fails
-    // The tickets are still created and customer can retrieve them via API
+    // Don't throw — email failure must not break the order flow
   }
 
   /**
-   * Send confirmation email without QR codes (for immediate response)
-   * @param {string} customerEmail - Recipient email
-   * @param {string} eventName - Event name
-   * @param {number} quantity - Number of tickets purchased
-   * @param {string} confirmationUrl - URL to view tickets
-   * @returns {Promise<void>}
+   * Send cancellation notification to all ticket holders (FR-037)
+   * @param {Object} event - Event object
+   * @param {Array} tickets - Tickets to notify (with contact relations)
    */
-  async sendPurchaseConfirmation(customerEmail, eventName, quantity, confirmationUrl) {
-    try {
-      const msg = {
-        to: [customerEmail],
-        from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
-        subject: `Purchase Confirmed - ${eventName}`,
-        html: `
-          <html>
-            <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
-                <h1 style="color: #333;">✓ Purchase Successful!</h1>
-              </div>
-              
-              <div style="padding: 20px;">
-                <p>Your purchase of ${quantity} ticket(s) for <strong>${eventName}</strong> is confirmed.</p>
-                
-                <p>Your tickets and QR codes will be sent in a separate email shortly.</p>
-                
-                <div style="margin: 30px 0; text-align: center;">
-                  <a href="${confirmationUrl}" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">
-                    View Your Tickets
-                  </a>
+  async sendCancellationNotification(event, tickets) {
+    // Group tickets by contact email to avoid duplicate emails
+    const contactEmails = new Map();
+    for (const ticket of tickets) {
+      const email = ticket.contact?.email;
+      if (email && !contactEmails.has(email)) {
+        contactEmails.set(email, ticket.contact);
+      }
+    }
+
+    for (const [email, contact] of contactEmails) {
+      try {
+        const msg = {
+          to: [email],
+          from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+          subject: `Event Cancelled — ${event.name}`,
+          html: `
+            <html>
+              <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background-color: #fee2e2; padding: 20px; text-align: center;">
+                  <h1 style="color: #991b1b;">Event Cancelled</h1>
                 </div>
-                
-                <p style="color: #666; font-size: 14px;">
-                  If you don't receive your tickets email within 10 minutes, you can always access them at the link above.
-                </p>
-              </div>
-            </body>
-          </html>
-        `,
-      };
+                <div style="padding: 20px;">
+                  <p>Hi ${contact.firstName || 'there'},</p>
+                  <p>We're sorry to inform you that <strong>${event.name}</strong> has been cancelled.</p>
+                  <p>Your tickets have been voided and a refund will be processed automatically.</p>
+                  <p style="color: #666; font-size: 12px;">If you have questions, contact us at support@jump.events</p>
+                </div>
+              </body>
+            </html>
+          `,
+        };
 
-      await resend.emails.send(msg);
+        await resend.emails.send(msg);
 
-      logger.info('Purchase confirmation email sent', {
-        email: customerEmail,
-        eventName,
-        quantity,
-      });
-    } catch (error) {
-      logger.error('Failed to send confirmation email', {
-        email: customerEmail,
-        error: error.message,
-      });
-      // Don't throw - confirmation email is optional
+        logger.info('Cancellation notification sent', {
+          eventId: event.id,
+          email,
+        });
+      } catch (error) {
+        logger.error('Failed to send cancellation notification', {
+          eventId: event.id,
+          email,
+          error: error.message,
+        });
+        // Continue sending to other contacts
+      }
     }
   }
 }

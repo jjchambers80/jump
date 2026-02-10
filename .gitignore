@@ -48,6 +48,10 @@ tmp/
 temp/
 *.tmp
 
+# Packages/db build artifacts
+packages/db/generated/
+packages/db/dist/
+
 .history/*
 .specify/*
 .github/

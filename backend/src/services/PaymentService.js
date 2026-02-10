@@ -1,191 +1,137 @@
 // Payment Service
-// Handles Stripe payment integration per FR-003
+// Handles Stripe payment updates and webhook processing
+// Per FR-024, FR-028, FR-029, contracts/api.yaml
+//
+// NOTE: Stripe Checkout session creation is handled by OrderService.createOrder().
+// This service handles post-payment webhook processing:
+//   - checkout.session.completed → completeOrder + issue tickets + send email
+//   - checkout.session.expired   → failOrder + release inventory
 
-import { PrismaClient } from '@prisma/client';
-import stripe from '../config/stripe.js';
-import { NotFoundError, ConflictError } from '../middleware/errorHandler.js';
-import EventService from './EventService.js';
+import { prisma } from '@jump/db';
+import OrderService from './OrderService.js';
+import TicketService from './TicketService.js';
+import EmailService from './EmailService.js';
 import { recordPaymentStatus } from '../utils/metrics.js';
 import logger from '../utils/logger.js';
 
-const prisma = new PrismaClient();
-
 class PaymentService {
   /**
-   * Create Stripe Checkout Session for ticket purchase
-   * @param {string} eventId - UUID of the event
-   * @param {number} quantity - Number of tickets (1-10)
-   * @param {string} customerEmail - Customer email address
-   * @param {string} correlationId - Request correlation ID
-   * @returns {Promise<{sessionId: string, checkoutUrl: string}>}
+   * Handle successful Stripe checkout completion.
+   * Idempotent: if order is already COMPLETED, returns early.
+   *
+   * Flow:
+   * 1. Look up order by stripeSessionId
+   * 2. Skip if already COMPLETED (idempotent)
+   * 3. Update PaymentTransaction → SUCCEEDED
+   * 4. Create tickets for the order (TicketService)
+   * 5. Mark order COMPLETED
+   * 6. Send confirmation email (fire-and-forget)
+   *
+   * @param {string} stripeSessionId
+   * @param {string|null} paymentIntentId
    */
-  async createStripeCheckoutSession(eventId, quantity, customerEmail, correlationId) {
-    const log = logger;
+  async handleCheckoutCompleted(stripeSessionId, paymentIntentId = null) {
+    const order = await OrderService.getOrderByStripeSession(stripeSessionId);
 
-    // Get event details and check availability
-    const event = await EventService.getEventWithTicketCount(eventId);
-
-    // Check if event is published
-    if (event.status !== 'PUBLISHED') {
-      throw new NotFoundError('Event not found');
+    if (!order) {
+      logger.warn('Webhook: order not found for session', { stripeSessionId });
+      return;
     }
 
-    // Check capacity
-    if (event.availableTickets < quantity) {
-      log.warn('Insufficient capacity', {
-        eventId,
-        requested: quantity,
-        available: event.availableTickets,
-        correlationId,
+    // Idempotent: already processed
+    if (order.status === 'COMPLETED') {
+      logger.info('Webhook: order already completed (idempotent skip)', {
+        orderId: order.id,
+        stripeSessionId,
       });
-      throw new ConflictError(
-        `Insufficient capacity. Only ${event.availableTickets} tickets available.`,
-        { requested: quantity, available: event.availableTickets }
-      );
+      return;
     }
 
-    // Calculate total amount (convert Prisma Decimal to Number, then to cents for Stripe)
-    const unitPriceDollars = Number(event.ticketPrice);
-    const unitPriceCents = Math.round(unitPriceDollars * 100);
-    const totalAmount = unitPriceDollars * quantity;
-
-    // Create or find customer
-    let customer = await prisma.customer.findUnique({
-      where: { email: customerEmail },
-    });
-
-    if (!customer) {
-      // Create new customer
-      customer = await prisma.customer.create({
-        data: {
-          email: customerEmail,
-          name: customerEmail.split('@')[0], // Temporary name
-          passwordHash: '', // Empty for now, will be set on registration
-        },
+    if (order.status !== 'PENDING') {
+      logger.warn('Webhook: order not in PENDING status, skipping', {
+        orderId: order.id,
+        currentStatus: order.status,
       });
+      return;
     }
 
-    // Create Stripe Checkout Session
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      line_items: [
-        {
-          price_data: {
-            currency: 'usd',
-            product_data: {
-              name: event.name,
-              description: `${quantity} ticket(s) for ${event.name} at ${event.venue}`,
-              metadata: {
-                eventId: event.id,
-                eventDate: event.date.toISOString(),
-                venue: event.venue,
-              },
-            },
-            unit_amount: unitPriceCents,
-          },
-          quantity,
-        },
-      ],
-      mode: 'payment',
-      success_url: `${process.env.FRONTEND_URL}/confirmation?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.FRONTEND_URL}/events/${eventId}`,
-      customer_email: customerEmail,
-      metadata: {
-        eventId: event.id,
-        customerId: customer.id,
-        quantity: quantity.toString(),
-        correlationId,
-      },
-    });
-
-    // Create payment transaction record (PENDING status)
-    await prisma.paymentTransaction.create({
+    // Update payment transaction
+    await prisma.paymentTransaction.updateMany({
+      where: { orderId: order.id },
       data: {
-        stripeSessionId: session.id,
-        customerId: customer.id,
-        eventId: event.id,
-        amount: totalAmount,
-        currency: 'USD',
-        status: 'PENDING',
+        status: 'SUCCEEDED',
+        ...(paymentIntentId && { stripePaymentIntentId: paymentIntentId }),
       },
     });
 
-    log.info('Stripe checkout session created', {
-      sessionId: session.id,
-      eventId,
-      customerId: customer.id,
-      quantity,
-      amount: totalAmount,
-      correlationId,
+    // Create tickets
+    const tickets = await TicketService.createTicketsForOrder(order.id);
+
+    // Mark order COMPLETED
+    await OrderService.completeOrder(order.id);
+
+    recordPaymentStatus('succeeded');
+
+    logger.info('Checkout completed — tickets issued', {
+      orderId: order.id,
+      orderRef: order.orderRef,
+      ticketCount: tickets.length,
     });
 
-    return {
-      sessionId: session.id,
-      checkoutUrl: session.url,
-    };
+    // Send confirmation email (fire-and-forget)
+    try {
+      const fullOrder = await OrderService.getOrderById(order.id);
+      await EmailService.sendOrderConfirmation(fullOrder, tickets);
+    } catch (emailError) {
+      logger.error('Failed to send order confirmation email', {
+        orderId: order.id,
+        error: emailError.message,
+      });
+      // Don't fail the webhook — email is non-critical
+    }
   }
 
   /**
-   * Update payment transaction status (called by webhook)
-   * @param {string} stripeSessionId - Stripe checkout session ID
-   * @param {string} status - Payment status (SUCCEEDED, FAILED)
-   * @param {string} failureReason - Optional failure reason
+   * Handle Stripe checkout session expiry or payment failure.
+   * Idempotent: if order is already FAILED, returns early.
+   *
+   * @param {string} stripeSessionId
+   * @param {string} reason
    */
-  async updatePaymentStatus(stripeSessionId, status, failureReason = null) {
-    const payment = await prisma.paymentTransaction.findUnique({
-      where: { stripeSessionId },
-    });
+  async handleCheckoutFailed(stripeSessionId, reason = 'Payment failed') {
+    const order = await OrderService.getOrderByStripeSession(stripeSessionId);
 
-    if (!payment) {
-      throw new NotFoundError('Payment transaction not found');
+    if (!order) {
+      logger.warn('Webhook: order not found for failed session', { stripeSessionId });
+      return;
     }
 
-    // Prevent duplicate processing
-    if (payment.status === status) {
-      logger.info('Payment status already updated', { stripeSessionId, status });
-      return payment;
+    // Idempotent: already processed
+    if (order.status === 'FAILED') {
+      logger.info('Webhook: order already failed (idempotent skip)', {
+        orderId: order.id,
+      });
+      return;
     }
 
-    // Update status
-    const updated = await prisma.paymentTransaction.update({
-      where: { stripeSessionId },
+    // Update payment transaction
+    await prisma.paymentTransaction.updateMany({
+      where: { orderId: order.id },
       data: {
-        status,
-        failureReason,
+        status: 'FAILED',
+        failureReason: reason,
       },
     });
 
-    // Record metrics
-    recordPaymentStatus(status.toLowerCase());
+    // Fail order and release inventory
+    await OrderService.failOrder(order.id, reason);
 
-    logger.info('Payment status updated', {
-      stripeSessionId,
-      status,
-      failureReason,
+    recordPaymentStatus('failed');
+
+    logger.info('Checkout failed — inventory released', {
+      orderId: order.id,
+      reason,
     });
-
-    return updated;
-  }
-
-  /**
-   * Get payment transaction by Stripe session ID
-   * @param {string} stripeSessionId - Stripe checkout session ID
-   * @returns {Promise<Object>} Payment transaction
-   */
-  async getPaymentBySessionId(stripeSessionId) {
-    const payment = await prisma.paymentTransaction.findUnique({
-      where: { stripeSessionId },
-      include: {
-        customer: true,
-        event: true,
-      },
-    });
-
-    if (!payment) {
-      throw new NotFoundError('Payment not found');
-    }
-
-    return payment;
   }
 }
 

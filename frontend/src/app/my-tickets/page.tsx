@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import ProtectedRoute from '../../components/ProtectedRoute';
-import { useAuth } from '../../hooks/useAuth';
+import { useSession } from 'next-auth/react';
 import ticketService, { Ticket } from '../../services/ticketService';
 
 interface GroupedTickets {
@@ -207,7 +207,8 @@ function MyTicketsContent() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { user } = useAuth();
+  const { data: session } = useSession();
+  const user = session?.user;
 
   useEffect(() => {
     async function fetchTickets() {

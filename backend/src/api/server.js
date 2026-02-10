@@ -10,11 +10,16 @@ import { errorHandler } from '../middleware/errorHandler.js';
 import { metricsHandler, recordHttpMetric } from '../utils/metrics.js';
 import logger from '../utils/logger.js';
 import eventsRouter from './routes/events.js';
+import { orgEventsRouter } from './routes/events.js';
+import priceTiersRouter from './routes/priceTiers.js';
 import ticketsRouter from './routes/tickets.js';
 import webhooksRouter from './routes/webhooks.js';
-import authRouter from './routes/auth.js';
 import adminRouter from './routes/admin.js';
 import customersRouter from './routes/customers.js';
+import organizationsRouter from './routes/organizations.js';
+import venuesRouter from './routes/venues.js';
+import ordersRouter, { eventOrdersRouter } from './routes/orders.js';
+import usersRouter from './routes/users.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -75,11 +80,17 @@ app.get('/health', (req, res) => {
 app.get('/metrics', metricsHandler);
 
 // API routes
-app.use('/auth', authRouter);
 app.use('/admin', adminRouter);
 app.use('/customers', customersRouter);
 app.use('/events', eventsRouter);
+app.use('/organizations', organizationsRouter);
+app.use('/organizations/:orgId/venues', venuesRouter);
+app.use('/organizations/:orgId/events', orgEventsRouter);
+app.use('/organizations/:orgId/events/:eventId/price-tiers', priceTiersRouter);
+app.use('/orders', ordersRouter);
+app.use('/organizations/:orgId/events/:eventId/orders', eventOrdersRouter);
 app.use('/tickets', ticketsRouter);
+app.use('/users', usersRouter);
 app.use('/webhooks', webhooksRouter);
 
 // Error handling (must be last)

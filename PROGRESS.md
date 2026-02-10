@@ -173,3 +173,77 @@ See `specs/001-online-ticket-purchase/IMPLEMENTATION_SUMMARY.md` for complete de
 - Documentation: 100% ✅
 
 **Ready for**: QA testing, integration testing, and User Story 2 development.
+
+---
+
+## 🎉 Spec 003: Schema Redesign — COMPLETE
+
+**Date**: 2026-02-09  
+**Spec**: `specs/003-schema-redesign/`  
+**Status**: ✅ All 120 tasks complete (T001–T120)
+
+### Architecture Migration
+
+Migrated from flat Admin/Customer/Event/Ticket schema to a normalized multi-tenant architecture:
+
+```
+Organization → Venue → Event → PriceTier
+                                    ↓
+                        Order → Ticket → PaymentTransaction
+                          ↑
+                       Contact ← → User (Auth.js)
+```
+
+**Key Changes**:
+
+- **@jump/db shared package**: Prisma client singleton in `packages/db`, imported by both backend and frontend
+- **Auth.js v5**: Replaced bcrypt sessions with magic link (Resend) + Google OAuth, JWT strategy (HS256)
+- **Org-scoped endpoints**: All management routes scoped to `/organizations/:orgId/`
+- **Price tiers**: Multi-tier pricing per event with inventory tracking
+- **Contact model**: Guest purchases via Contact, linked to User on sign-in
+
+### Phase Completion
+
+| Phase                     | Tasks     | Tests                | Status |
+| ------------------------- | --------- | -------------------- | ------ |
+| 1. Setup                  | T001–T008 | —                    | ✅     |
+| 2. Foundational           | T009–T039 | —                    | ✅     |
+| 3. US4 Org & Venues       | T040–T051 | 20 pass              | ✅     |
+| 4. US1 Events & Tiers     | T052–T064 | 32 pass              | ✅     |
+| 5. US2 Customer Purchases | T065–T083 | 32 pass              | ✅     |
+| 6. US3 Ticket Redemption  | T084–T088 | 14 pass              | ✅     |
+| 7. US5 Auth               | T089–T099 | 11 pass              | ✅     |
+| 8. US6 Order History      | T100–T105 | (covered by Phase 5) | ✅     |
+| 9. US7 Analytics          | T106–T110 | 5 pass               | ✅     |
+| 10. Polish                | T111–T120 | —                    | ✅     |
+
+**Test Suite**: 11 suites, 114 tests passing (schema-redesign scope)
+
+### Files Created / Modified
+
+**Backend** (25+ files):
+
+- Services: EventService, OrderService, TicketService, QRService, PaymentService, UserService
+- Routes: events, orders, tickets, organizations, venues, priceTiers, users, webhooks
+- Validators: event, order, ticket, user validators
+- Middleware: auth (JWT HS256), rbac (role-based), errorHandler
+- Tests: 8 contract suites, 3 integration suites
+
+**Frontend** (15+ files):
+
+- Pages: events, orders (history, detail, lookup), scan, auth/signin, dashboard (events, analytics, users, organizations, venues)
+- Components: Navbar, AdminRoute, ProtectedRoute, OrganizationSelector, ThemeToggle
+- Services: api.ts (typed API client)
+- Auth: Auth.js v5 config (auth.ts, auth.config.ts, middleware.ts)
+
+**Shared**:
+
+- `packages/db/`: Prisma schema (12 models, 6 enums), client singleton, tsup build
+
+### Security
+
+- ✅ All org-scoped endpoints enforce `requireAuth` + `requireOrganizer`
+- ✅ All admin endpoints enforce `requireAdmin`
+- ✅ Guest order lookup returns generic errors (no enumeration)
+- ✅ JWT QR codes with HS256 signing + event-scoped expiration
+- ✅ Stripe webhook signature verification

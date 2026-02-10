@@ -1,29 +1,49 @@
 'use client';
 
+// Event detail page — displays event info with price tiers per FR-041
+// Uses new schema: venue object, priceTiers array, computed quantityAvailable
+
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '../../../services/api';
 
-interface EventResponse {
-  event: Event;
+interface EventVenue {
+  id: string;
+  name: string;
+  address: string;
+  timezone?: string;
+}
+
+interface PriceTier {
+  id: string;
+  name: string;
+  price: number;
+  quantityTotal: number;
+  quantitySold: number;
+  quantityReserved: number;
+  quantityAvailable: number;
+  displayOrder: number;
+  minPerOrder: number | null;
+  maxPerOrder: number | null;
+  isActive: boolean;
 }
 
 interface Event {
   id: string;
   name: string;
   description?: string;
-  venue: string;
   date: string;
-  ticketPrice: string;
-  availableTickets: number;
   capacity: number;
-  soldTickets: number;
-  isSoldOut: boolean;
+  category?: string;
   status: string;
-  organizer?: {
-    name: string;
-    organization: string;
-  };
+  venue: EventVenue | null;
+  priceTiers: PriceTier[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+function formatPrice(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
 }
 
 export default function EventDetailPage({ params }: { params: { eventId: string } }) {
@@ -31,6 +51,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedTierId, setSelectedTierId] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
 
   useEffect(() => {
@@ -42,8 +63,16 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
       setLoading(true);
       setError(null);
 
-      const response = await api.get<EventResponse>(`/events/${params.eventId}`);
-      setEvent(response.event);
+      const data = await api.get<Event>(`/events/${params.eventId}`);
+      setEvent(data);
+
+      // Pre-select first active tier with availability
+      const firstAvailable = data.priceTiers?.find(
+        (t: PriceTier) => t.isActive && t.quantityAvailable > 0
+      );
+      if (firstAvailable) {
+        setSelectedTierId(firstAvailable.id);
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to load event details');
       console.error('Error fetching event:', err);
@@ -52,12 +81,28 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
     }
   };
 
+  const selectedTier = event?.priceTiers?.find((t) => t.id === selectedTierId) ?? null;
+  const maxQuantity = selectedTier
+    ? Math.min(selectedTier.quantityAvailable, selectedTier.maxPerOrder ?? 10, 10)
+    : 0;
+
+  const totalAvailable =
+    event?.priceTiers?.reduce((sum, t) => sum + (t.isActive ? t.quantityAvailable : 0), 0) ?? 0;
+  const isSoldOut = totalAvailable === 0;
+
+  const handleTierSelect = (tierId: string) => {
+    setSelectedTierId(tierId);
+    setQuantity(1);
+  };
+
   const handleQuantityChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setQuantity(parseInt(e.target.value, 10));
   };
 
   const handleProceedToCheckout = () => {
-    router.push(`/checkout/${params.eventId}?quantity=${quantity}`);
+    if (selectedTierId) {
+      router.push(`/checkout/${params.eventId}?tierId=${selectedTierId}&quantity=${quantity}`);
+    }
   };
 
   if (loading) {
@@ -138,9 +183,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
     minute: '2-digit',
   });
 
-  const ticketPriceNum = parseFloat(event.ticketPrice);
-  const isSoldOut = event.availableTickets === 0;
-  const maxQuantity = Math.min(event.availableTickets, 10);
+  const activeTiers = event.priceTiers.filter((t) => t.isActive);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
@@ -162,9 +205,14 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
 
         <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg dark:shadow-lg dark:shadow-black/20 overflow-hidden">
           <div className="p-8">
-            <h1 className="text-4xl font-bold text-gray-900 dark:text-slate-100 mb-4">
-              {event.name}
-            </h1>
+            <div className="flex items-start justify-between mb-4">
+              <h1 className="text-4xl font-bold text-gray-900 dark:text-slate-100">{event.name}</h1>
+              {event.category && (
+                <span className="inline-block bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-300 text-sm font-medium px-3 py-1 rounded-full">
+                  {event.category}
+                </span>
+              )}
+            </div>
 
             <div className="flex items-center text-gray-600 dark:text-slate-400 mb-2">
               <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -180,60 +228,117 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
               </span>
             </div>
 
-            <div className="flex items-center text-gray-600 dark:text-slate-400 mb-6">
-              <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                />
-              </svg>
-              <span className="text-lg">{event.venue}</span>
-            </div>
-
-            <div className="prose max-w-none mb-8">
-              <p className="text-gray-700 dark:text-slate-300 text-lg leading-relaxed">
-                {event.description}
-              </p>
-            </div>
-
-            <div className="border-t border-gray-200 dark:border-slate-700 pt-6">
-              <div className="flex items-center justify-between mb-6">
+            {event.venue && (
+              <div className="flex items-center text-gray-600 dark:text-slate-400 mb-6">
+                <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
+                </svg>
                 <div>
-                  <p className="text-gray-600 dark:text-slate-400 text-sm mb-1">Ticket Price</p>
-                  <p className="text-4xl font-bold text-blue-600 dark:text-indigo-400">
-                    ${(ticketPriceNum / 100).toFixed(2)}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-gray-600 dark:text-slate-400 text-sm mb-1">Availability</p>
-                  {isSoldOut ? (
-                    <span className="inline-block bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400 px-4 py-2 rounded-full text-sm font-semibold">
-                      Sold Out
-                    </span>
-                  ) : (
-                    <p className="text-green-600 dark:text-green-400 text-lg font-semibold">
-                      {event.availableTickets} / {event.capacity} available
-                    </p>
-                  )}
+                  <span className="text-lg">{event.venue.name}</span>
+                  <span className="text-sm text-gray-500 dark:text-slate-500 block">
+                    {event.venue.address}
+                  </span>
                 </div>
               </div>
+            )}
 
-              {!isSoldOut && (
+            {event.description && (
+              <div className="prose max-w-none mb-8">
+                <p className="text-gray-700 dark:text-slate-300 text-lg leading-relaxed">
+                  {event.description}
+                </p>
+              </div>
+            )}
+
+            {/* Price Tiers Section */}
+            <div className="border-t border-gray-200 dark:border-slate-700 pt-6">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-slate-100 mb-4">Tickets</h2>
+
+              {isSoldOut ? (
+                <div className="text-center py-8">
+                  <span className="inline-block bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400 px-6 py-3 rounded-full text-lg font-semibold">
+                    Sold Out
+                  </span>
+                </div>
+              ) : activeTiers.length === 0 ? (
+                <p className="text-gray-500 dark:text-slate-400 text-center py-4">
+                  No ticket tiers available
+                </p>
+              ) : (
+                <div className="space-y-3 mb-6">
+                  {activeTiers.map((tier) => {
+                    const tierSoldOut = tier.quantityAvailable === 0;
+                    const isSelected = selectedTierId === tier.id;
+
+                    return (
+                      <button
+                        key={tier.id}
+                        onClick={() => !tierSoldOut && handleTierSelect(tier.id)}
+                        disabled={tierSoldOut}
+                        className={`w-full text-left p-4 rounded-lg border-2 transition-all duration-200 ${
+                          isSelected
+                            ? 'border-blue-600 dark:border-indigo-400 bg-blue-50 dark:bg-indigo-900/20'
+                            : tierSoldOut
+                              ? 'border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900/50 opacity-60 cursor-not-allowed'
+                              : 'border-gray-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-indigo-600 bg-white dark:bg-slate-800'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="font-semibold text-gray-900 dark:text-slate-100">
+                              {tier.name}
+                            </h3>
+                            <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
+                              {tierSoldOut ? 'Sold out' : `${tier.quantityAvailable} available`}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-2xl font-bold text-blue-600 dark:text-indigo-400">
+                              {formatPrice(tier.price)}
+                            </span>
+                            {isSelected && !tierSoldOut && (
+                              <div className="mt-1">
+                                <svg
+                                  className="w-6 h-6 text-blue-600 dark:text-indigo-400 ml-auto"
+                                  fill="currentColor"
+                                  viewBox="0 0 20 20"
+                                >
+                                  <path
+                                    fillRule="evenodd"
+                                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                    clipRule="evenodd"
+                                  />
+                                </svg>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Quantity & Checkout */}
+              {selectedTier && !isSoldOut && maxQuantity > 0 && (
                 <div className="bg-gray-50 dark:bg-slate-900 rounded-lg p-6">
                   <div className="mb-4">
                     <label
                       htmlFor="quantity"
                       className="block text-gray-700 dark:text-slate-300 font-semibold mb-2"
                     >
-                      Number of Tickets
+                      Number of Tickets ({selectedTier.name})
                     </label>
                     <select
                       id="quantity"
@@ -252,7 +357,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                   <div className="flex items-center justify-between mb-6">
                     <span className="text-gray-700 dark:text-slate-300 font-semibold">Total:</span>
                     <span className="text-3xl font-bold text-gray-900 dark:text-slate-100">
-                      ${((ticketPriceNum * quantity) / 100).toFixed(2)}
+                      {formatPrice(selectedTier.price * quantity)}
                     </span>
                   </div>
 

@@ -8,7 +8,6 @@
 import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import AdminRoute from '../../../components/AdminRoute';
-import { AuthProvider } from '../../../hooks/useAuth';
 import adminService from '../../../services/adminService';
 
 function CreateEventForm() {
@@ -291,10 +290,8 @@ function CreateEventForm() {
 
 export default function CreateEventPage() {
   return (
-    <AuthProvider>
-      <AdminRoute>
-        <CreateEventForm />
-      </AdminRoute>
-    </AuthProvider>
+    <AdminRoute>
+      <CreateEventForm />
+    </AdminRoute>
   );
 }

@@ -1,23 +1,26 @@
 // Admin Route wrapper
-// Requires admin role, shows 403 error for non-admins (T109, FR-013)
+// Requires admin role, shows 403 error for non-admins (T109, updated T096)
 
 'use client';
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '../hooks/useAuth';
+import { useSession } from 'next-auth/react';
 
 interface AdminRouteProps {
   children: React.ReactNode;
 }
 
 export default function AdminRoute({ children }: AdminRouteProps) {
-  const { isAuthenticated, isAdmin, loading } = useAuth();
+  const { data: session, status } = useSession();
+  const loading = status === 'loading';
+  const isAuthenticated = status === 'authenticated';
+  const isAdmin = (session?.user as any)?.role === 'ADMIN';
   const router = useRouter();
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
-      router.push('/auth/login');
+      router.push('/auth/signin');
     }
   }, [loading, isAuthenticated, router]);
 

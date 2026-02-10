@@ -3,6 +3,7 @@ export default {
   transform: {},
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
+    '^@jump/db$': '<rootDir>/../packages/db/src/index.js',
   },
   testMatch: ['**/*.test.js'],
   collectCoverageFrom: ['src/**/*.js', '!src/**/*.test.js', '!src/database/seeds/**'],

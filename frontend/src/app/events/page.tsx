@@ -1,28 +1,46 @@
 'use client';
 
+// Public events listing page — browse published events with price ranges
+// Uses new schema: venue object, priceRange, pagination wrapper per FR-041
+
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { api } from '../../services/api';
 
+interface EventVenue {
+  id: string;
+  name: string;
+  address: string;
+}
+
+interface PriceRange {
+  min: number;
+  max: number;
+}
+
 interface Event {
   id: string;
   name: string;
-  description?: string;
-  venue: string;
   date: string;
-  ticketPrice: string;
-  availableTickets: number;
-  capacity: number;
-  soldTickets: number;
+  venue: EventVenue;
+  category?: string;
   status: string;
+  priceRange: PriceRange | null;
+  availableTickets: number;
 }
 
 interface EventListResponse {
   events: Event[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+function formatPrice(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
 }
 
 function EventCard({ event }: { event: Event }) {
@@ -38,11 +56,8 @@ function EventCard({ event }: { event: Event }) {
     minute: '2-digit',
   });
 
-  const ticketPriceNum = parseFloat(event.ticketPrice);
-  const soldPercentage =
-    event.capacity > 0 ? ((event.capacity - event.availableTickets) / event.capacity) * 100 : 0;
   const isSoldOut = event.availableTickets === 0;
-  const isAlmostSoldOut = soldPercentage > 80 && !isSoldOut;
+  const isAlmostSoldOut = event.availableTickets > 0 && event.availableTickets <= 10;
 
   return (
     <Link
@@ -51,6 +66,12 @@ function EventCard({ event }: { event: Event }) {
     >
       <div className="p-6">
         <h3 className="text-2xl font-bold text-gray-900 dark:text-slate-100 mb-2">{event.name}</h3>
+
+        {event.category && (
+          <span className="inline-block bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-300 text-xs font-medium px-2.5 py-0.5 rounded mb-2">
+            {event.category}
+          </span>
+        )}
 
         <div className="flex items-center text-gray-600 dark:text-slate-400 mb-2">
           <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -81,19 +102,25 @@ function EventCard({ event }: { event: Event }) {
               d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
             />
           </svg>
-          <span className="text-sm">{event.venue}</span>
+          <span className="text-sm">{event.venue?.name || 'TBA'}</span>
         </div>
-
-        {event.description && (
-          <p className="text-gray-700 dark:text-slate-300 mb-4 line-clamp-2">{event.description}</p>
-        )}
 
         <div className="flex items-center justify-between">
           <div className="flex items-center">
-            <span className="text-3xl font-bold text-blue-600 dark:text-indigo-400">
-              ${(parseFloat(event.ticketPrice) / 100).toFixed(2)}
-            </span>
-            <span className="text-gray-500 dark:text-slate-400 ml-2">per ticket</span>
+            {event.priceRange ? (
+              <>
+                <span className="text-3xl font-bold text-blue-600 dark:text-indigo-400">
+                  {formatPrice(event.priceRange.min)}
+                </span>
+                {event.priceRange.min !== event.priceRange.max && (
+                  <span className="text-gray-500 dark:text-slate-400 ml-1">
+                    – {formatPrice(event.priceRange.max)}
+                  </span>
+                )}
+              </>
+            ) : (
+              <span className="text-gray-500 dark:text-slate-400 text-sm">No tiers available</span>
+            )}
           </div>
 
           <div className="text-right">
@@ -145,7 +172,7 @@ export default function EventsPage() {
       const response = await api.get<EventListResponse>(`/events?page=${page}&limit=${limit}`);
 
       setEvents(response.events);
-      setTotalPages(response.totalPages);
+      setTotalPages(response.pagination.totalPages);
     } catch (err: any) {
       setError(err.message || 'Failed to load events. Please try again.');
       console.error('Error fetching events:', err);

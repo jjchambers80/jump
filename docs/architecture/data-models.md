@@ -1,632 +1,530 @@
-# Data Model: Online Ticket Purchase and QR Code Generation
+# Data Model: Schema Redesign — Normalized Data Architecture
 
-**Feature**: 001-online-ticket-purchase  
-**Date**: 2026-02-04  
+**Feature**: 003-schema-redesign  
+**Date**: 2026-02-09  
 **Database**: PostgreSQL 15+  
-**ORM**: Prisma 5.x
+**ORM**: Prisma 6.x  
+**Package**: `@jump/db` (`packages/db`)
+
+---
 
 ## Entity Relationship Diagram
 
 ```
-┌─────────────────┐         ┌──────────────────┐         ┌─────────────────┐
-│     Admin       │         │      Event       │         │    Customer     │
-├─────────────────┤         ├──────────────────┤         ├─────────────────┤
-│ id (PK)         │1      * │ id (PK)          │1      * │ id (PK)         │
-│ email (UNIQUE)  ├────────→│ organizer_id(FK) │←────────┤ email (UNIQUE)  │
-│ name            │         │ name             │         │ name            │
-│ organization    │         │ date             │         │ password_hash   │
-│ password_hash   │         │ venue            │         │ created_at      │
-│ created_at      │         │ capacity         │         └─────────────────┘
-└─────────────────┘         │ ticket_price     │                 │
-                            │ status           │                 │
-                            │ created_at       │                 │1
-                            └──────────────────┘                 │
-                                    │1                           │
-                                    │                            │
-                                    │*                           │*
-                            ┌───────────────┐                    │
-                            │    Ticket     │                    │
-                            ├───────────────┤                    │
-                            │ id (PK)       │                    │
-                            │ event_id (FK) ├────────────────────┘
-                            │ customer_id(FK)───────────────────→┘
-                            │ purchase_time │
-                            │ price_paid    │
-                            │ qr_code_jwt   │
-                            │ status        │
-                            │ stripe_tx_id  │
-                            └───────────────┘
-                                    │1
-                                    │
-                                    │1
-                        ┌───────────────────────┐
-                        │ PaymentTransaction    │
-                        ├───────────────────────┤
-                        │ id (PK)               │
-                        │ stripe_session_id(UK) │
-                        │ customer_id (FK)      │
-                        │ event_id (FK)         │
-                        │ amount                │
-                        │ currency              │
-                        │ status                │
-                        │ timestamp             │
-                        │ failure_reason        │
-                        └───────────────────────┘
-                                    │*
-                                    │
-                                    │1
-                            ┌───────────────┐
-                            │   Session     │
-                            ├───────────────┤
-                            │ id (PK)       │
-                            │ user_id (FK)  │ (references Admin OR Customer)
-                            │ user_type     │ ('admin' | 'customer')
-                            │ token         │
-                            │ expires_at    │
-                            │ created_at    │
-                            └───────────────┘
++---------------------+        +--------------------------------+
+|    Organization     |        |          User                  |
++---------------------+        +--------------------------------+
+| id (PK, cuid)       |1     * | id (PK, cuid)                  |
+| name                +------->| organizationId (FK, nullable)  |
+| status              |        | email (UNIQUE)                 |
+| createdAt           |        | emailVerified                  |
+| updatedAt           |        | name                           |
++---------+-----------+        | firstName                      |
+          |1                   | lastName                       |
+          |                    | image                          |
+          |*                   | role                           |
++---------------------+        | isActive                       |
+|       Venue         |        | deletedAt                      |
++---------------------+        | createdAt / updatedAt          |
+| id (PK, cuid)       |        +-------+--------------+--------+
+| organizationId (FK) |                |1             |1
+| name                |                |              |
+| address             |                |*             |*
+| timezone            |        +---------------+ +--------------------+
+| isPublic            |        |   Account     | | VerificationToken  |
+| createdAt           |        +---------------+ +--------------------+
+| updatedAt           |        | id (PK, cuid) | | identifier         |
++---------+-----------+        | userId (FK)   | | token              |
+          |1                   | type          | | expires            |
+          |                    | provider      | | (composite PK)     |
+          |*                   | providerAcctId| +--------------------+
++---------------------+        +---------------+
+|       Event         |
++---------------------+                +--------------------+
+| id (PK, cuid)       |                |     Contact        |
+| venueId (FK)        |                +--------------------+
+| name                |                | id (PK, cuid)      |
+| description         |         *    1 | email (UNIQUE)     |
+| date                |    +--------->| firstName          |
+| capacity            |    |          | lastName           |
+| category            |    |          | userId (FK, opt.)  |
+| status              |    |          | createdAt          |
+| createdAt           |    |          | updatedAt          |
+| updatedAt           |    |          +--------------------+
++--+--------------+---+    |                    |1
+   |1             |1       |                    |
+   |              |        |                    |*
+   |*             |*       |           +--------------------+
++--------------+ +----------------+    |      Ticket        |
+|  PriceTier   | |     Order      |    +--------------------+
++--------------+ +----------------+    | id (PK, cuid)      |
+| id (PK,cuid) | | id (PK, cuid)  |    | orderId (FK)       |
+| eventId (FK) | | eventId (FK)   |    | eventId (FK)       |
+| name         | | contactId (FK) |--> | priceTierId (FK)   |
+| price        | | stripeSessionId|    | contactId (FK)     |
+| quantityTotal| | totalAmount    |    | pricePaid          |
+| quantitySold | | currency       |    | barcode (UNIQUE)   |
+| qtyReserved  | | quantity       |    | qrCodeJwt          |
+| displayOrder | | status         |    | status             |
+| minPerOrder  | | orderRef       |    | redeemedAt         |
+| maxPerOrder  | | createdAt      |    | createdAt          |
+| isActive     | | updatedAt      |    | updatedAt          |
+| createdAt    | +--------+-------+    +--------------------+
+| updatedAt    |          |1
++--------------+          |
+                          |1
+                 +------------------------+
+                 |  PaymentTransaction    |
+                 +------------------------+
+                 | id (PK, cuid)          |
+                 | orderId (FK, UNIQUE)   |
+                 | stripePaymentIntentId  |
+                 | amount                 |
+                 | currency               |
+                 | status                 |
+                 | failureReason          |
+                 | createdAt              |
+                 +------------------------+
 ```
+
+---
+
+## Shared Prisma Package: `@jump/db`
+
+The schema lives in `packages/db/prisma/schema.prisma` and is shared across the monorepo via npm workspaces. Both `backend` and `frontend` depend on the `@jump/db` workspace package.
+
+```typescript
+// packages/db/src/index.ts — singleton Prisma client
+import { PrismaClient } from "../generated/client/index.js";
+
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClient | undefined;
+};
+
+export const prisma = globalForPrisma.prisma ?? new PrismaClient();
+
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma;
+}
+
+export * from "../generated/client/index.js";
+export { PrismaClient };
+```
+
+**Usage in backend**:
+```javascript
+import { prisma } from "@jump/db";
+```
+
+**Usage in frontend** (server components / API routes):
+```typescript
+import { prisma } from "@jump/db";
+```
+
+---
 
 ## Entities
 
-### 1. Event
+### 1. User (Auth.js compatible)
 
-**Purpose**: Represents a ticketed event created by organizers
+**Purpose**: Authenticated identity. Created on first sign-in (magic link or Google). No passwords stored.
 
-| Column       | Type                       | Constraints                                           | Description                         |
-| ------------ | -------------------------- | ----------------------------------------------------- | ----------------------------------- |
-| id           | UUID                       | PRIMARY KEY                                           | Unique event identifier             |
-| organizer_id | UUID                       | FOREIGN KEY → Admin(id), NOT NULL                     | Event creator                       |
-| name         | VARCHAR(255)               | NOT NULL                                              | Event name                          |
-| date         | TIMESTAMP                  | NOT NULL, CHECK (date > NOW())                        | Event date/time (future dates only) |
-| venue        | VARCHAR(500)               | NOT NULL                                              | Event location                      |
-| capacity     | INTEGER                    | NOT NULL, CHECK (capacity > 0 AND capacity <= 100000) | Max ticket capacity (FR-012)        |
-| ticket_price | DECIMAL(10,2)              | NOT NULL, CHECK (ticket_price >= 0)                   | Price per ticket in USD (FR-012)    |
-| status       | ENUM('draft', 'published') | NOT NULL, DEFAULT 'draft'                             | Event visibility status             |
-| created_at   | TIMESTAMP                  | NOT NULL, DEFAULT NOW()                               | Creation timestamp                  |
+| Column         | Type          | Constraints                | Description                                 |
+| -------------- | ------------- | -------------------------- | ------------------------------------------- |
+| id             | String (cuid) | PK                         | Unique user identifier                      |
+| email          | String        | UNIQUE, NOT NULL           | Login email                                 |
+| emailVerified  | DateTime      | nullable                   | When email was verified (Auth.js)           |
+| name           | String        | nullable                   | Display name (Auth.js)                      |
+| image          | String        | nullable                   | Avatar URL (Auth.js / Google)               |
+| firstName      | String        | nullable                   | First name (custom)                         |
+| lastName       | String        | nullable                   | Last name (custom)                          |
+| role           | UserRole      | NOT NULL, DEFAULT CUSTOMER | One of CUSTOMER, ORGANIZER, ADMIN           |
+| organizationId | String        | FK -> Organization, nullable | Organization membership (organizers/admins) |
+| isActive       | Boolean       | NOT NULL, DEFAULT true     | Soft-disable account                        |
+| deletedAt      | DateTime      | nullable                   | Soft-delete timestamp                       |
+| createdAt      | DateTime      | NOT NULL, DEFAULT now()    | Creation timestamp                          |
+| updatedAt      | DateTime      | NOT NULL, auto             | Last update timestamp                       |
 
-**Indexes**:
+**Auth.js adapter notes**: The Prisma Adapter reads/writes `id`, `email`, `emailVerified`, `name`, `image` only. All custom fields (`firstName`, `lastName`, `role`, `organizationId`, `isActive`, `deletedAt`) are ignored by the adapter and managed by application code.
 
-- `idx_event_status` on `status` (filter published events for customer listing)
-- `idx_event_date` on `date` (sort by date)
-- `idx_event_organizer` on `organizer_id` (admin dashboard filtering)
-
-**Validation Rules** (enforced at application layer):
-
-- Future date validation: `date > NOW()`
-- Capacity range: `1 <= capacity <= 100,000` (FR-012)
-- Price non-negative: `ticket_price >= 0` (FR-012)
-
-**State Transitions**:
-
-- `draft` → `published` (FR-011: admin publishes event)
-- No transition from `published` back to `draft` in MVP (simplicity)
+**Indexes**: `organizationId`, `role`, `email`
 
 ---
 
-### 2. Ticket
+### 2. Account (Auth.js required)
 
-**Purpose**: Represents a single purchased ticket
+**Purpose**: Links a User to an external authentication provider. Multiple accounts (e.g., Google + Email) can belong to one User.
 
-| Column        | Type                                 | Constraints                          | Description                                                       |
-| ------------- | ------------------------------------ | ------------------------------------ | ----------------------------------------------------------------- |
-| id            | UUID                                 | PRIMARY KEY                          | Unique ticket identifier (FR-005)                                 |
-| event_id      | UUID                                 | FOREIGN KEY → Event(id), NOT NULL    | Associated event                                                  |
-| customer_id   | UUID                                 | FOREIGN KEY → Customer(id), NULLABLE | Ticket owner (NULL for guest checkout)                            |
-| purchase_time | TIMESTAMP                            | NOT NULL, DEFAULT NOW()              | Purchase timestamp                                                |
-| price_paid    | DECIMAL(10,2)                        | NOT NULL                             | Actual price paid (snapshot, may differ from current event price) |
-| qr_code_jwt   | TEXT                                 | NOT NULL                             | Signed JWT string for QR code (FR-006)                            |
-| status        | ENUM('valid', 'redeemed', 'expired') | NOT NULL, DEFAULT 'valid'            | Ticket status                                                     |
-| stripe_tx_id  | VARCHAR(255)                         | NOT NULL, UNIQUE                     | Stripe transaction ID for audit trail (FR-016)                    |
+| Column            | Type          | Constraints             | Description                    |
+| ----------------- | ------------- | ----------------------- | ------------------------------ |
+| id                | String (cuid) | PK                      | Unique account identifier      |
+| userId            | String        | FK -> User, NOT NULL    | Owning user                    |
+| type              | String        | NOT NULL                | Provider type (oauth, email)   |
+| provider          | String        | NOT NULL                | Provider name (google, resend) |
+| providerAccountId | String        | NOT NULL                | External account ID            |
+| refresh_token     | String        | nullable                | OAuth refresh token            |
+| access_token      | String        | nullable                | OAuth access token             |
+| expires_at        | Int           | nullable                | Token expiry (epoch seconds)   |
+| token_type        | String        | nullable                | Token type (bearer)            |
+| scope             | String        | nullable                | OAuth scopes                   |
+| id_token          | String        | nullable                | OpenID Connect ID token        |
+| session_state     | String        | nullable                | Provider session state         |
+| createdAt         | DateTime      | NOT NULL, DEFAULT now() | Creation timestamp             |
+| updatedAt         | DateTime      | NOT NULL, auto          | Last update timestamp          |
 
-**Indexes**:
-
-- `idx_ticket_event` on `event_id` (capacity calculations, event ticket listing)
-- `idx_ticket_customer` on `customer_id` (purchase history query, US4)
-- `idx_ticket_status` on `status` (filter valid/redeemed tickets)
-- `idx_ticket_stripe_tx` on `stripe_tx_id` (idempotency check for webhook processing)
-
-**Computed Fields** (application layer):
-
-- `is_expired`: `status = 'expired' OR (event.date + INTERVAL '1 hour') < NOW()` (FR-018)
-
-**State Transitions**:
-
-- `valid` → `redeemed` (future feature: QR code scanning)
-- `valid` → `expired` (automated: event date + 1 hour passes, FR-018)
-
-**QR Code JWT Structure** (FR-006):
-
-```json
-{
-  "ticket_id": "uuid",
-  "event_id": "uuid",
-  "customer_email": "email@example.com",
-  "exp": 1234567890 // event.date + 1 hour (Unix timestamp)
-}
-```
-
-Signed with HMAC-SHA256 (FR-007)
+**Unique constraint**: `(provider, providerAccountId)` — prevents duplicate provider links.  
+**Cascade**: Deleting a User cascades to delete all linked Accounts.
 
 ---
 
-### 3. Customer
+### 3. VerificationToken (Auth.js required)
 
-**Purpose**: Represents ticket buyers (both registered users and guest checkout)
+**Purpose**: Short-lived tokens for email magic link verification. Consumed once and deleted.
 
-| Column        | Type         | Constraints             | Description                                   |
-| ------------- | ------------ | ----------------------- | --------------------------------------------- |
-| id            | UUID         | PRIMARY KEY             | Unique customer identifier                    |
-| email         | VARCHAR(255) | NOT NULL, UNIQUE        | Customer email (login username)               |
-| name          | VARCHAR(255) | NOT NULL                | Customer full name                            |
-| password_hash | VARCHAR(255) | NULLABLE                | bcrypt hash (NULL for guest checkout, FR-022) |
-| created_at    | TIMESTAMP    | NOT NULL, DEFAULT NOW() | Account creation timestamp                    |
+| Column     | Type     | Constraints | Description                  |
+| ---------- | -------- | ----------- | ---------------------------- |
+| identifier | String   | NOT NULL    | Email address being verified |
+| token      | String   | NOT NULL    | Hashed verification token    |
+| expires    | DateTime | NOT NULL    | Token expiry timestamp       |
 
-**Indexes**:
-
-- `idx_customer_email` on `email` (login lookup, unique constraint)
-
-**Validation Rules**:
-
-- Email format: RFC 5322 compliant (FR-015)
-- Password: Min 8 characters, hashed with bcrypt work factor 10 (FR-022)
-
-**Guest Checkout Flow**:
-
-1. Customer enters email during checkout (no password)
-2. `Customer` record created with `password_hash = NULL`
-3. Ticket associated with customer via `email` match
-4. Customer can later "claim" account by setting password (US4: viewing purchase history)
+**Composite unique**: `(identifier, token)` — serves as the composite primary key.  
+**Lifecycle**: Created when magic link is requested -> consumed (deleted) when user clicks the link -> expired tokens cleaned up by Auth.js.
 
 ---
 
-### 4. Admin
+### 4. Organization
 
-**Purpose**: Represents event organizers with administrative privileges
+**Purpose**: Top-level tenant entity. All venues, events, and users are scoped to an organization.
 
-| Column        | Type         | Constraints             | Description                  |
-| ------------- | ------------ | ----------------------- | ---------------------------- |
-| id            | UUID         | PRIMARY KEY             | Unique admin identifier      |
-| email         | VARCHAR(255) | NOT NULL, UNIQUE        | Admin email (login username) |
-| name          | VARCHAR(255) | NOT NULL                | Admin full name              |
-| organization  | VARCHAR(255) | NULLABLE                | Organization name (optional) |
-| password_hash | VARCHAR(255) | NOT NULL                | bcrypt hash (FR-022)         |
-| created_at    | TIMESTAMP    | NOT NULL, DEFAULT NOW() | Account creation timestamp   |
+| Column    | Type               | Constraints              | Description                    |
+| --------- | ------------------ | ------------------------ | ------------------------------ |
+| id        | String (cuid)      | PK                       | Unique organization identifier |
+| name      | String             | NOT NULL                 | Organization display name      |
+| status    | OrganizationStatus | NOT NULL, DEFAULT ACTIVE | ACTIVE or INACTIVE             |
+| createdAt | DateTime           | NOT NULL, DEFAULT now()  | Creation timestamp             |
+| updatedAt | DateTime           | NOT NULL, auto           | Last update timestamp          |
 
-**Indexes**:
-
-- `idx_admin_email` on `email` (login lookup, unique constraint)
-
-**Role Enforcement** (Principle V: RBAC):
-
-- Admin creation: Manual process (no self-service signup in MVP)
-- Role stored in `Session.user_type` ('admin' vs 'customer')
-- API middleware checks `user_type` before allowing event creation (FR-013)
+**State transitions**: ACTIVE <-> INACTIVE (reversible — deactivation prevents new event creation but existing published events remain visible).
 
 ---
 
-### 5. PaymentTransaction
+### 5. Venue
 
-**Purpose**: Audit trail for all payment attempts (successful and failed)
+**Purpose**: Physical location belonging to an Organization. Reusable across multiple events.
 
-| Column            | Type                                   | Constraints                          | Description                                |
-| ----------------- | -------------------------------------- | ------------------------------------ | ------------------------------------------ |
-| id                | UUID                                   | PRIMARY KEY                          | Unique transaction identifier              |
-| stripe_session_id | VARCHAR(255)                           | NOT NULL, UNIQUE                     | Stripe Checkout Session ID                 |
-| customer_id       | UUID                                   | FOREIGN KEY → Customer(id), NULLABLE | Customer (NULL for failed guest checkouts) |
-| event_id          | UUID                                   | FOREIGN KEY → Event(id), NOT NULL    | Event being purchased                      |
-| amount            | DECIMAL(10,2)                          | NOT NULL                             | Total amount in USD                        |
-| currency          | VARCHAR(3)                             | NOT NULL, DEFAULT 'USD'              | Currency code                              |
-| status            | ENUM('pending', 'succeeded', 'failed') | NOT NULL, DEFAULT 'pending'          | Payment status                             |
-| timestamp         | TIMESTAMP                              | NOT NULL, DEFAULT NOW()              | Transaction timestamp                      |
-| failure_reason    | TEXT                                   | NULLABLE                             | Error message if status = 'failed'         |
+| Column         | Type          | Constraints                          | Description                  |
+| -------------- | ------------- | ------------------------------------ | ---------------------------- |
+| id             | String (cuid) | PK                                   | Unique venue identifier      |
+| organizationId | String        | FK -> Organization, NOT NULL         | Owning organization          |
+| name           | String        | NOT NULL                             | Venue display name           |
+| address        | String        | NOT NULL                             | Full address string          |
+| timezone       | String        | NOT NULL, DEFAULT "America/New_York" | IANA time zone               |
+| isPublic       | Boolean       | NOT NULL, DEFAULT true               | Publicly visible or unlisted |
+| createdAt      | DateTime      | NOT NULL, DEFAULT now()              | Creation timestamp           |
+| updatedAt      | DateTime      | NOT NULL, auto                       | Last update timestamp        |
 
-**Indexes**:
-
-- `idx_payment_stripe_session` on `stripe_session_id` (webhook idempotency check)
-- `idx_payment_customer` on `customer_id` (customer payment history)
-- `idx_payment_status` on `status` (metrics calculation, FR-025)
-
-**Audit Trail** (FR-016):
-
-- All payment attempts logged (including failures)
-- Immutable records (no DELETE, only INSERT/UPDATE status)
-- Webhook processing checks `stripe_session_id` uniqueness before ticket issuance (idempotency)
+**Indexes**: `organizationId`
 
 ---
 
-### 6. Session
+### 6. Contact
 
-**Purpose**: Database-backed session storage for authentication (FR-021, FR-023)
+**Purpose**: Ticket buyer/holder identity, independent of authentication. Created for both guests and signed-in users.
 
-| Column     | Type                      | Constraints             | Description                                 |
-| ---------- | ------------------------- | ----------------------- | ------------------------------------------- |
-| id         | VARCHAR(255)              | PRIMARY KEY             | Session token (UUID)                        |
-| user_id    | UUID                      | NOT NULL                | References Admin(id) OR Customer(id)        |
-| user_type  | ENUM('admin', 'customer') | NOT NULL                | Discriminator for user_id lookup            |
-| token      | VARCHAR(512)              | NOT NULL, UNIQUE        | Session token (secure random)               |
-| expires_at | TIMESTAMP                 | NOT NULL                | Expiration (24 hours from creation, FR-023) |
-| created_at | TIMESTAMP                 | NOT NULL, DEFAULT NOW() | Session start timestamp                     |
+| Column    | Type          | Constraints             | Description                              |
+| --------- | ------------- | ----------------------- | ---------------------------------------- |
+| id        | String (cuid) | PK                      | Unique contact identifier                |
+| email     | String        | UNIQUE, NOT NULL        | Contact email (immutable after creation) |
+| firstName | String        | NOT NULL                | First name                               |
+| lastName  | String        | NOT NULL                | Last name                                |
+| userId    | String        | FK -> User, nullable    | Optional link to auth account            |
+| createdAt | DateTime      | NOT NULL, DEFAULT now() | Creation timestamp                       |
+| updatedAt | DateTime      | NOT NULL, auto          | Last update timestamp                    |
 
-**Indexes**:
+**Key behaviors**:
 
-- `idx_session_token` on `token` (session lookup on each request)
-- `idx_session_expires` on `expires_at` (cleanup expired sessions)
+- Email is immutable once created (different email = new Contact)
+- `userId` is set when a signed-in user purchases, or when a guest later signs up with matching email
+- GDPR deletion: anonymize `email`, `firstName`, `lastName`; preserve Order/Ticket records
 
-**Session Lifecycle**:
-
-1. Login: Create Session with `expires_at = NOW() + 24 hours`
-2. Each request: Check `token` validity and `expires_at > NOW()`
-3. Logout: DELETE Session record
-4. Cleanup job: Periodically DELETE WHERE `expires_at < NOW()`
-
-**Redis Integration** (research.md ADR):
-
-- Sessions stored in Redis (primary) with 24-hour TTL
-- PostgreSQL `Session` table as backup/audit log (optional in MVP, defer to post-MVP)
+**Indexes**: `userId`, `email`
 
 ---
 
-## Relationships
+### 7. Event
 
-### One-to-Many
+**Purpose**: A ticketed occurrence at a venue on a specific date.
 
-- **Admin → Event**: One admin creates many events (`Event.organizer_id → Admin.id`)
-- **Event → Ticket**: One event has many tickets (`Ticket.event_id → Event.id`)
-- **Customer → Ticket**: One customer purchases many tickets (`Ticket.customer_id → Customer.id`)
-- **Customer → PaymentTransaction**: One customer has many payment attempts
-- **Event → PaymentTransaction**: One event has many payment attempts
+| Column      | Type          | Constraints             | Description                 |
+| ----------- | ------------- | ----------------------- | --------------------------- |
+| id          | String (cuid) | PK                      | Unique event identifier     |
+| venueId     | String        | FK -> Venue, NOT NULL   | Hosting venue               |
+| name        | String        | NOT NULL                | Event name                  |
+| description | String        | nullable                | Event description           |
+| date        | DateTime      | NOT NULL                | Event date/time             |
+| capacity    | Int           | NOT NULL, CHECK > 0     | Maximum capacity ceiling    |
+| category    | String        | nullable                | Free-text categorization    |
+| status      | EventStatus   | NOT NULL, DEFAULT DRAFT | DRAFT, PUBLISHED, CANCELLED |
+| createdAt   | DateTime      | NOT NULL, DEFAULT now() | Creation timestamp          |
+| updatedAt   | DateTime      | NOT NULL, auto          | Last update timestamp       |
 
-### Referential Integrity
+**State transitions**: DRAFT -> PUBLISHED -> CANCELLED (terminal).
 
-- **ON DELETE**: `CASCADE` for Event → Ticket (deleting event removes all tickets - post-MVP)
-- **ON DELETE**: `SET NULL` for Customer → Ticket (GDPR deletion preserves ticket audit trail, FR-027/FR-028)
-- **ON DELETE**: `RESTRICT` for Admin → Event (prevent deletion of admin with active events)
+**Validation rules** (application layer):
 
----
+- `date` must be in the future at creation time
+- `capacity` must be >= 1 and <= 100,000
+- Sum of all PriceTier `quantityTotal` values must not exceed `capacity`
 
-## Database Schema (Prisma)
+**Organization scoping**: Organization is resolved transitively through `venue.organizationId`.
 
-```prisma
-// schema.prisma
-
-generator client {
-  provider = "prisma-client-js"
-}
-
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-
-model Admin {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  name         String
-  organization String?
-  passwordHash String   @map("password_hash")
-  createdAt    DateTime @default(now()) @map("created_at")
-
-  events       Event[]
-
-  @@map("admins")
-}
-
-model Customer {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  name         String
-  passwordHash String?  @map("password_hash") // NULL for guest checkout
-  createdAt    DateTime @default(now()) @map("created_at")
-
-  tickets      Ticket[]
-  payments     PaymentTransaction[]
-
-  @@index([email])
-  @@map("customers")
-}
-
-model Event {
-  id          String      @id @default(uuid())
-  organizerId String      @map("organizer_id")
-  name        String
-  date        DateTime
-  venue       String
-  capacity    Int
-  ticketPrice Decimal     @map("ticket_price") @db.Decimal(10, 2)
-  status      EventStatus @default(DRAFT)
-  createdAt   DateTime    @default(now()) @map("created_at")
-
-  organizer   Admin       @relation(fields: [organizerId], references: [id])
-  tickets     Ticket[]
-  payments    PaymentTransaction[]
-
-  @@index([status])
-  @@index([date])
-  @@index([organizerId])
-  @@map("events")
-}
-
-enum EventStatus {
-  DRAFT      @map("draft")
-  PUBLISHED  @map("published")
-}
-
-model Ticket {
-  id            String       @id @default(uuid())
-  eventId       String       @map("event_id")
-  customerId    String?      @map("customer_id") // NULL for guest checkout
-  purchaseTime  DateTime     @default(now()) @map("purchase_time")
-  pricePaid     Decimal      @map("price_paid") @db.Decimal(10, 2)
-  qrCodeJwt     String       @map("qr_code_jwt")
-  status        TicketStatus @default(VALID)
-  stripeTxId    String       @unique @map("stripe_tx_id")
-
-  event         Event        @relation(fields: [eventId], references: [id])
-  customer      Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
-
-  @@index([eventId])
-  @@index([customerId])
-  @@index([status])
-  @@index([stripeTxId])
-  @@map("tickets")
-}
-
-enum TicketStatus {
-  VALID      @map("valid")
-  REDEEMED   @map("redeemed")
-  EXPIRED    @map("expired")
-}
-
-model PaymentTransaction {
-  id                String            @id @default(uuid())
-  stripeSessionId   String            @unique @map("stripe_session_id")
-  customerId        String?           @map("customer_id")
-  eventId           String            @map("event_id")
-  amount            Decimal           @db.Decimal(10, 2)
-  currency          String            @default("USD")
-  status            PaymentStatus     @default(PENDING)
-  timestamp         DateTime          @default(now())
-  failureReason     String?           @map("failure_reason")
-
-  customer          Customer?         @relation(fields: [customerId], references: [id])
-  event             Event             @relation(fields: [eventId], references: [id])
-
-  @@index([stripeSessionId])
-  @@index([customerId])
-  @@index([status])
-  @@map("payment_transactions")
-}
-
-enum PaymentStatus {
-  PENDING    @map("pending")
-  SUCCEEDED  @map("succeeded")
-  FAILED     @map("failed")
-}
-
-model Session {
-  id        String       @id @default(uuid())
-  userId    String       @map("user_id")
-  userType  UserType     @map("user_type")
-  token     String       @unique
-  expiresAt DateTime     @map("expires_at")
-  createdAt DateTime     @default(now()) @map("created_at")
-
-  @@index([token])
-  @@index([expiresAt])
-  @@map("sessions")
-}
-
-enum UserType {
-  ADMIN      @map("admin")
-  CUSTOMER   @map("customer")
-}
-```
+**Indexes**: `venueId`, `status`, `date`
 
 ---
 
-## Capacity Enforcement Implementation (FR-009)
+### 8. PriceTier
 
-**Critical Transaction** (prevents overselling):
+**Purpose**: Named pricing level within an event. Replaces the old single `ticketPrice` on Event.
+
+| Column           | Type          | Constraints             | Description                          |
+| ---------------- | ------------- | ----------------------- | ------------------------------------ |
+| id               | String (cuid) | PK                      | Unique tier identifier               |
+| eventId          | String        | FK -> Event, NOT NULL   | Parent event                         |
+| name             | String        | NOT NULL                | Display name (e.g., "Early Bird")    |
+| price            | Decimal(10,2) | NOT NULL, CHECK >= 0    | Tier price                           |
+| quantityTotal    | Int           | NOT NULL, CHECK > 0     | Total inventory for this tier        |
+| quantitySold     | Int           | NOT NULL, DEFAULT 0     | Confirmed sold count                 |
+| quantityReserved | Int           | NOT NULL, DEFAULT 0     | Temporarily held during checkout     |
+| displayOrder     | Int           | NOT NULL, DEFAULT 0     | Rendering sort order                 |
+| minPerOrder      | Int           | nullable                | Minimum tickets per order (optional) |
+| maxPerOrder      | Int           | nullable                | Maximum tickets per order (optional) |
+| isActive         | Boolean       | NOT NULL, DEFAULT true  | Purchasable when true                |
+| createdAt        | DateTime      | NOT NULL, DEFAULT now() | Creation timestamp                   |
+| updatedAt        | DateTime      | NOT NULL, auto          | Last update timestamp                |
+
+**Inventory invariant**: `quantitySold + quantityReserved <= quantityTotal` — enforced via row-level locking during purchase.
+
+**Available tickets**: `quantityTotal - quantitySold - quantityReserved`
+
+**Indexes**: `eventId`, `(eventId, isActive)` (composite)
+
+---
+
+### 9. Order
+
+**Purpose**: Groups tickets from a single purchase. Links a contact to an event and payment.
+
+| Column          | Type          | Constraints               | Description                    |
+| --------------- | ------------- | ------------------------- | ------------------------------ |
+| id              | String (cuid) | PK                        | Unique order identifier        |
+| eventId         | String        | FK -> Event, NOT NULL     | Target event                   |
+| contactId       | String        | FK -> Contact, NOT NULL   | Buyer contact                  |
+| stripeSessionId | String        | UNIQUE, nullable          | Stripe Checkout session ID     |
+| orderRef        | String        | UNIQUE, NOT NULL          | Human-readable order reference |
+| totalAmount     | Decimal(10,2) | NOT NULL                  | Total order amount             |
+| currency        | String        | NOT NULL, DEFAULT "usd"   | Currency code                  |
+| quantity        | Int           | NOT NULL                  | Total ticket count             |
+| status          | OrderStatus   | NOT NULL, DEFAULT PENDING | PENDING, COMPLETED, FAILED     |
+| createdAt       | DateTime      | NOT NULL, DEFAULT now()   | Creation timestamp             |
+| updatedAt       | DateTime      | NOT NULL, auto            | Last update timestamp          |
+
+**State transitions**: PENDING -> COMPLETED (payment succeeded) | PENDING -> FAILED (payment failed or 30-min timeout).
+
+**Idempotency**: Status transitions are one-directional. A COMPLETED or FAILED order cannot change status.
+
+**Order reference format**: Short alphanumeric string (e.g., "JMP-A1B2C3") for guest lookup.
+
+**Indexes**: `eventId`, `contactId`, `status`, `orderRef`
+
+---
+
+### 10. Ticket
+
+**Purpose**: Atomic unit of admission. Each ticket is individually scannable.
+
+| Column      | Type          | Constraints              | Description                                       |
+| ----------- | ------------- | ------------------------ | ------------------------------------------------- |
+| id          | String (cuid) | PK                       | Unique ticket identifier                          |
+| orderId     | String        | FK -> Order, NOT NULL    | Parent order                                      |
+| eventId     | String        | FK -> Event, NOT NULL    | Target event (denormalized for query performance) |
+| priceTierId | String        | FK -> PriceTier, NOT NULL | Pricing tier at time of purchase                 |
+| contactId   | String        | FK -> Contact, NOT NULL  | Ticket holder                                     |
+| pricePaid   | Decimal(10,2) | NOT NULL                 | Price snapshot at time of purchase                |
+| barcode     | String        | UNIQUE, NOT NULL         | Human-readable scannable barcode                  |
+| qrCodeJwt   | String        | nullable                 | Signed JWT for QR code                            |
+| status      | TicketStatus  | NOT NULL, DEFAULT VALID  | VALID, REDEEMED, EXPIRED, VOIDED                  |
+| redeemedAt  | DateTime      | nullable                 | Timestamp when scanned                            |
+| createdAt   | DateTime      | NOT NULL, DEFAULT now()  | Creation timestamp                                |
+| updatedAt   | DateTime      | NOT NULL, auto           | Last update timestamp                             |
+
+**State transitions**: VALID -> REDEEMED (scanned) | VALID -> EXPIRED (lazy, at scan time if event has passed) | VALID -> VOIDED (event cancelled).
+
+**Denormalization**: `eventId` is stored directly on Ticket for query performance (avoids joining through Order for scan validation).
+
+**QR code JWT payload**: `{ sub: ticketId, eventId, barcode, iat, exp }` — signed with HMAC-SHA256.
+
+**Indexes**: `orderId`, `eventId`, `priceTierId`, `contactId`, `barcode`, `status`
+
+---
+
+### 11. PaymentTransaction
+
+**Purpose**: Immutable Stripe payment audit record. Append-only — never updated or deleted after creation.
+
+| Column                | Type          | Constraints                  | Description                                   |
+| --------------------- | ------------- | ---------------------------- | --------------------------------------------- |
+| id                    | String (cuid) | PK                           | Unique transaction identifier                 |
+| orderId               | String        | FK -> Order, UNIQUE, NOT NULL | Linked order (1:1)                           |
+| stripePaymentIntentId | String        | UNIQUE, nullable             | Stripe PaymentIntent ID                       |
+| amount                | Decimal(10,2) | NOT NULL                     | Payment amount                                |
+| currency              | String        | NOT NULL, DEFAULT "usd"      | Currency code                                 |
+| status                | PaymentStatus | NOT NULL, DEFAULT PENDING    | PENDING, SUCCEEDED, FAILED                    |
+| failureReason         | String        | nullable                     | Failure description                           |
+| createdAt             | DateTime      | NOT NULL, DEFAULT now()      | Creation timestamp (no updatedAt — immutable) |
+
+**Immutability**: No `updatedAt` field. PaymentTransaction is append-only — never modified after creation. Status changes create new context (Order status reflects payment outcome).
+
+**Indexes**: `orderId`, `status`
+
+---
+
+## Enums Reference
+
+| Enum               | Values                           | Usage                                    |
+| ------------------ | -------------------------------- | ---------------------------------------- |
+| UserRole           | CUSTOMER, ORGANIZER, ADMIN       | User.role — single role per user         |
+| OrganizationStatus | ACTIVE, INACTIVE                 | Organization.status — reversible         |
+| EventStatus        | DRAFT, PUBLISHED, CANCELLED      | Event.status — linear lifecycle          |
+| OrderStatus        | PENDING, COMPLETED, FAILED       | Order.status — terminal after transition |
+| TicketStatus       | VALID, REDEEMED, EXPIRED, VOIDED | Ticket.status — EXPIRED evaluated lazily |
+| PaymentStatus      | PENDING, SUCCEEDED, FAILED       | PaymentTransaction.status — append-only  |
+
+---
+
+## Key Relationships Summary
+
+| Relationship               | Type | FK Location                | Notes                           |
+| -------------------------- | ---- | -------------------------- | ------------------------------- |
+| Organization -> User       | 1:N  | User.organizationId        | Organizers/admins belong to org |
+| Organization -> Venue      | 1:N  | Venue.organizationId       | Venues scoped to org            |
+| Venue -> Event             | 1:N  | Event.venueId              | Events hosted at venues         |
+| Event -> PriceTier         | 1:N  | PriceTier.eventId          | Multiple pricing options        |
+| Event -> Order             | 1:N  | Order.eventId              | Orders placed for event         |
+| Event -> Ticket            | 1:N  | Ticket.eventId             | Denormalized for query speed    |
+| Contact -> Order           | 1:N  | Order.contactId            | Buyer identity                  |
+| Contact -> Ticket          | 1:N  | Ticket.contactId           | Holder identity                 |
+| User -> Contact            | 1:N  | Contact.userId             | Optional auth link              |
+| User -> Account            | 1:N  | Account.userId             | Auth.js provider links          |
+| Order -> Ticket            | 1:N  | Ticket.orderId             | Purchase grouping               |
+| Order -> PaymentTransaction | 1:1 | PaymentTransaction.orderId | Payment audit                   |
+| PriceTier -> Ticket        | 1:N  | Ticket.priceTierId         | Tier tracking                   |
+
+---
+
+## Index Strategy
+
+| Table              | Index                 | Columns           | Rationale                      |
+| ------------------ | --------------------- | ----------------- | ------------------------------ |
+| User               | idx_user_org          | organizationId    | Filter users by organization   |
+| User               | idx_user_role         | role              | Filter by role for admin views |
+| User               | idx_user_email        | email             | Unique lookup (Auth.js)        |
+| Venue              | idx_venue_org         | organizationId    | Org-scoped venue listing       |
+| Contact            | idx_contact_user      | userId            | Link contact to auth user      |
+| Contact            | idx_contact_email     | email             | Guest lookup, dedup            |
+| Event              | idx_event_venue       | venueId           | Events at venue                |
+| Event              | idx_event_status      | status            | Filter published events        |
+| Event              | idx_event_date        | date              | Sort by date                   |
+| PriceTier          | idx_tier_event        | eventId           | Tiers for an event             |
+| PriceTier          | idx_tier_event_active | eventId, isActive | Active tiers for purchase      |
+| Order              | idx_order_event       | eventId           | Orders for an event            |
+| Order              | idx_order_contact     | contactId         | Order history                  |
+| Order              | idx_order_status      | status            | Filter by order state          |
+| Order              | idx_order_ref         | orderRef          | Guest lookup by reference      |
+| Ticket             | idx_ticket_order      | orderId           | Tickets in an order            |
+| Ticket             | idx_ticket_event      | eventId           | Tickets for an event           |
+| Ticket             | idx_ticket_tier       | priceTierId       | Tickets per tier               |
+| Ticket             | idx_ticket_contact    | contactId         | Holder's tickets               |
+| Ticket             | idx_ticket_barcode    | barcode           | Barcode scan lookup            |
+| Ticket             | idx_ticket_status     | status            | Filter by ticket state         |
+| PaymentTransaction | idx_payment_order     | orderId           | Payment for order              |
+| PaymentTransaction | idx_payment_status    | status            | Filter by payment state        |
+
+---
+
+## Capacity Enforcement
+
+**Critical Transaction** (prevents overselling via row-level locking on PriceTier):
 
 ```typescript
-// Pseudocode for atomic ticket purchase
-async function purchaseTickets(
-  eventId: string,
-  quantity: number,
-  customerId: string,
-) {
+async function purchaseTickets(eventId: string, items: { priceTierId: string; quantity: number }[]) {
   return await prisma.$transaction(async (tx) => {
-    // 1. Lock event row (SELECT FOR UPDATE)
-    const event = await tx.event.findUniqueOrThrow({
-      where: { id: eventId },
-      // Prisma doesn't expose FOR UPDATE directly, use raw query:
-    });
+    for (const item of items) {
+      const [tier] = await tx.$queryRaw`
+        SELECT * FROM "PriceTier" WHERE id = ${item.priceTierId} FOR UPDATE
+      `;
 
-    // Raw SQL for row-level locking
-    const [lockedEvent] = await tx.$queryRaw`
-      SELECT * FROM events WHERE id = ${eventId} FOR UPDATE
-    `;
+      const available = tier.quantityTotal - tier.quantitySold - tier.quantityReserved;
+      if (available < item.quantity) {
+        throw new Error(`Only ${available} tickets available for tier ${tier.name}`);
+      }
 
-    // 2. Calculate current capacity
-    const soldCount = await tx.ticket.count({
-      where: { eventId, status: { not: "expired" } },
-    });
-
-    const remaining = lockedEvent.capacity - soldCount;
-
-    // 3. Check capacity
-    if (remaining < quantity) {
-      throw new Error(`Only ${remaining} tickets available`);
+      await tx.priceTier.update({
+        where: { id: item.priceTierId },
+        data: { quantityReserved: { increment: item.quantity } },
+      });
     }
 
-    // 4. Create tickets (inventory implicitly decremented)
-    const tickets = await tx.ticket.createMany({
-      data: Array(quantity)
-        .fill(null)
-        .map(() => ({
-          eventId,
-          customerId,
-          pricePaid: lockedEvent.ticketPrice,
-          qrCodeJwt: generateJWT({ eventId, customerId }),
-          stripeTxId: stripeTransactionId,
-        })),
-    });
-
-    return tickets;
+    // Create order + tickets ...
   });
 }
 ```
 
-**Key Points**:
-
-- `SELECT FOR UPDATE` locks event row during transaction
-- Other concurrent transactions wait for lock release
-- Transaction commits atomically (all tickets created or none)
-- Prevents race condition per US3 acceptance scenario 2
-
 ---
 
-## Metrics Calculation (FR-025)
+## Migration from Previous Schema
 
-**Ticket Sales Rate** (tickets/minute):
+**Strategy**: Wipe and re-seed (pre-launch, no real data).
 
-```sql
-SELECT
-  COUNT(*) / EXTRACT(EPOCH FROM (MAX(purchase_time) - MIN(purchase_time))) * 60 AS tickets_per_minute
-FROM tickets
-WHERE purchase_time > NOW() - INTERVAL '1 hour';
-```
-
-**Payment Success Rate** (%):
-
-```sql
-SELECT
-  (COUNT(*) FILTER (WHERE status = 'succeeded')::FLOAT / COUNT(*)) * 100 AS success_rate_pct
-FROM payment_transactions
-WHERE timestamp > NOW() - INTERVAL '1 day';
-```
-
-**Remaining Capacity** (per event):
-
-```sql
-SELECT
-  e.capacity - COUNT(t.id) AS remaining
-FROM events e
-LEFT JOIN tickets t ON t.event_id = e.id AND t.status != 'expired'
-WHERE e.id = $1
-GROUP BY e.id, e.capacity;
-```
-
----
-
-## Data Retention & GDPR Compliance (FR-027, FR-028)
-
-**Customer Data Deletion Process** (30-day timeline):
-
-1. Customer submits deletion request via API
-2. System creates `DeletionRequest` record (separate table, not shown in MVP schema)
-3. After 30 days:
-   - `UPDATE customers SET email = 'deleted_' || id || '@gdpr.local', name = 'Deleted User', password_hash = NULL WHERE id = $1`
-   - Preserve `Ticket` records (audit trail) but anonymize customer linkage
-   - Preserve `PaymentTransaction` records (7-year financial retention per Constitution)
-4. QR codes in `tickets` table remain valid until expiration (event integrity preserved)
-
-**Financial Record Retention**:
-
-- `PaymentTransaction` table: NO DELETE for 7 years
-- `Ticket` table: NO DELETE (proof of purchase, refund validation)
-- Customer PII removed while preserving transactional data
-
----
-
-## Migration Strategy
-
-**Initial Migration** (Phase 1):
-
-```bash
-npx prisma migrate dev --name init_online_ticket_purchase
-```
-
-**Future Migrations** (examples):
-
-- Add `refunded` status to `TicketStatus` enum (post-MVP refund feature)
-- Add `promo_code_id` FK to `Ticket` (post-MVP discount feature)
-- Add `reserved_seat_id` FK to `Ticket` (post-MVP reserved seating)
-
-**Rollback Strategy**:
-
-- Prisma migrations are version-controlled (Git)
-- Rollback: `npx prisma migrate resolve --rolled-back <migration_name>`
-- Always test migrations in staging before production
+| Old Entity         | Action          | New Entity                                                      |
+| ------------------ | --------------- | --------------------------------------------------------------- |
+| Admin              | DROP            | -> User (role: ORGANIZER or ADMIN)                              |
+| Customer           | DROP            | -> User (role: CUSTOMER) + Contact                              |
+| Event              | DROP + RECREATE | -> Event (venueId FK, no ticketPrice) + PriceTier               |
+| Ticket             | DROP + RECREATE | -> Ticket (orderId, priceTierId, contactId, barcode added)      |
+| PaymentTransaction | DROP + RECREATE | -> PaymentTransaction (orderId FK, append-only)                 |
+| Session            | DROP            | -> Removed (JWT strategy, no DB sessions)                       |
+| ---                | CREATE          | Organization, Venue, Contact, Order, Account, VerificationToken |
 
 ---
 
 ## Performance Considerations
 
-**Index Coverage**:
-
-- All foreign keys have indexes (join performance)
-- Query-heavy columns indexed (`status`, `date`, `email`)
-- Composite indexes deferred to post-MVP (monitor query patterns first)
-
 **Connection Pooling**:
 
-- Prisma connection pool: 20 connections (research.md decision)
+- Prisma connection pool: 20 connections
 - Transaction timeout: 30 seconds (prevents deadlocks)
 
 **Query Optimization**:
 
-- `SELECT` only required columns (avoid `SELECT *`)
-- Use `findUnique` over `findMany` where possible (index usage)
-- Batch inserts for multiple tickets (`createMany` vs individual `create`)
+- All foreign keys have indexes (join performance)
+- Query-heavy columns indexed (`status`, `date`, `email`, `barcode`)
+- Composite index on `(eventId, isActive)` for PriceTier purchase queries
+- `SELECT` only required columns; use `findUnique` over `findMany` where possible
+- Batch inserts for multiple tickets (`createMany`)
 
 ---
 
-## Testing Data Seeds
+## Data Retention & GDPR Compliance
 
-**Seed Script** (`prisma/seed.ts`):
+**Contact Data Anonymization**:
 
-```typescript
-// Create test admin
-const admin = await prisma.admin.create({
-  data: {
-    email: "admin@test.com",
-    name: "Test Organizer",
-    passwordHash: await bcrypt.hash("testpass123", 10),
-  },
-});
+1. Contact submits deletion request
+2. Anonymize `email`, `firstName`, `lastName` on Contact
+3. Preserve Order and Ticket records (audit trail) with anonymized references
+4. Preserve PaymentTransaction records (7-year financial retention)
 
-// Create test event
-const event = await prisma.event.create({
-  data: {
-    organizerId: admin.id,
-    name: "Test Concert",
-    date: new Date("2026-03-15T19:00:00Z"),
-    venue: "Test Venue",
-    capacity: 100,
-    ticketPrice: 50.0,
-    status: "PUBLISHED",
-  },
-});
+**Financial Record Retention**:
 
-// Create test customer
-const customer = await prisma.customer.create({
-  data: {
-    email: "customer@test.com",
-    name: "Test Customer",
-    passwordHash: await bcrypt.hash("testpass123", 10),
-  },
-});
-```
-
-Run seeds: `npx prisma db seed`
-
----
-
-## Next Steps
-
-Data model complete. Proceeding to:
-
-1. **contracts/**: OpenAPI spec for REST endpoints using these entities
-2. **quickstart.md**: Database setup instructions (PostgreSQL, Prisma migrations)
+- PaymentTransaction: NO DELETE for 7 years (append-only)
+- Ticket: NO DELETE (proof of purchase)
+- Contact PII removed while preserving transactional data

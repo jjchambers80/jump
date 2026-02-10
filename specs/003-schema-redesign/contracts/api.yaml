@@ -1,0 +1,1619 @@
+openapi: 3.0.3
+info:
+  title: Jump Ticketing API — Schema Redesign
+  description: |
+    REST API contracts for the schema redesign feature (003).
+    Covers new endpoints for Organizations, Venues, Price Tiers, Orders,
+    Users, and Guest Lookup. Updates existing Event and Ticket endpoints.
+    Authentication moves to Auth.js v5 (JWT in Authorization header).
+  version: 2.0.0
+  contact:
+    name: Jump Platform
+
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Local development
+  - url: https://api.jump.example.com/v1
+    description: Production
+
+tags:
+  - name: Organizations
+    description: Organization management (admin-only)
+  - name: Venues
+    description: Venue management (organizer/admin, org-scoped)
+  - name: Events
+    description: Event listing and management (updated)
+  - name: PriceTiers
+    description: Price tier management within events
+  - name: Orders
+    description: Order creation, retrieval, and guest lookup
+  - name: Tickets
+    description: Ticket redemption and retrieval (updated)
+  - name: Users
+    description: User management (admin-only)
+  - name: Analytics
+    description: Event analytics (organizer/admin)
+  - name: Webhooks
+    description: External service callbacks
+
+security:
+  - BearerAuth: []
+
+paths:
+  # ===== ORGANIZATIONS (FR-048) =====
+  /organizations:
+    get:
+      tags: [Organizations]
+      summary: List organizations
+      operationId: listOrganizations
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+      responses:
+        "200":
+          description: Organizations retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  organizations:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Organization"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Organizations]
+      summary: Create an organization
+      operationId: createOrganization
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrganizationInput"
+      responses:
+        "201":
+          description: Organization created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organization"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /organizations/{organizationId}:
+    get:
+      tags: [Organizations]
+      summary: Get organization details
+      operationId: getOrganization
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationIdParam"
+      responses:
+        "200":
+          description: Organization details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organization"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Organizations]
+      summary: Update an organization
+      operationId: updateOrganization
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateOrganizationInput"
+      responses:
+        "200":
+          description: Organization updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organization"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ===== VENUES (FR-049) =====
+  /organizations/{organizationId}/venues:
+    get:
+      tags: [Venues]
+      summary: List venues for an organization
+      operationId: listVenues
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationIdParam"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+      responses:
+        "200":
+          description: Venues retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  venues:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Venue"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Venues]
+      summary: Create a venue
+      operationId: createVenue
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateVenueInput"
+      responses:
+        "201":
+          description: Venue created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Venue"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /organizations/{organizationId}/venues/{venueId}:
+    get:
+      tags: [Venues]
+      summary: Get venue details
+      operationId: getVenue
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationIdParam"
+        - $ref: "#/components/parameters/VenueIdParam"
+      responses:
+        "200":
+          description: Venue details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Venue"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Venues]
+      summary: Update a venue
+      operationId: updateVenue
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationIdParam"
+        - $ref: "#/components/parameters/VenueIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateVenueInput"
+      responses:
+        "200":
+          description: Venue updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Venue"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Venues]
+      summary: Delete a venue
+      description: Fails if the venue is referenced by existing events (FR-010).
+      operationId: deleteVenue
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationIdParam"
+        - $ref: "#/components/parameters/VenueIdParam"
+      responses:
+        "204":
+          description: Venue deleted
+        "409":
+          description: Venue is in use by events and cannot be deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ===== EVENTS (FR-050, updated) =====
+  /events:
+    get:
+      tags: [Events]
+      summary: List published events
+      description: Returns published events with price tier summaries. No auth required.
+      operationId: listEvents
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: dateFrom
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: dateTo
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Event list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EventSummary"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+
+  /events/{eventId}:
+    get:
+      tags: [Events]
+      summary: Get event details with price tiers
+      operationId: getEvent
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/EventIdParam"
+      responses:
+        "200":
+          description: Event details with price tiers and availability
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /organizations/{organizationId}/events:
+    get:
+      tags: [Events]
+      summary: List events for an organization (all statuses)
+      operationId: listOrgEvents
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationIdParam"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [DRAFT, PUBLISHED, CANCELLED]
+      responses:
+        "200":
+          description: Organization events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EventDetail"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+
+    post:
+      tags: [Events]
+      summary: Create an event with price tiers
+      operationId: createEvent
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEventInput"
+      responses:
+        "201":
+          description: Event created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventDetail"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /organizations/{organizationId}/events/{eventId}:
+    patch:
+      tags: [Events]
+      summary: Update an event
+      operationId: updateEvent
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationIdParam"
+        - $ref: "#/components/parameters/EventIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateEventInput"
+      responses:
+        "200":
+          description: Event updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventDetail"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /organizations/{organizationId}/events/{eventId}/publish:
+    post:
+      tags: [Events]
+      summary: Publish an event (DRAFT → PUBLISHED)
+      operationId: publishEvent
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationIdParam"
+        - $ref: "#/components/parameters/EventIdParam"
+      responses:
+        "200":
+          description: Event published
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventDetail"
+        "409":
+          description: Event cannot be published (wrong status or no price tiers)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /organizations/{organizationId}/events/{eventId}/cancel:
+    post:
+      tags: [Events]
+      summary: Cancel an event (PUBLISHED → CANCELLED)
+      operationId: cancelEvent
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationIdParam"
+        - $ref: "#/components/parameters/EventIdParam"
+      responses:
+        "200":
+          description: Event cancelled, ticket holders notified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventDetail"
+        "409":
+          description: Event cannot be cancelled (wrong status)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ===== PRICE TIERS (FR-051) =====
+  /organizations/{organizationId}/events/{eventId}/price-tiers:
+    get:
+      tags: [PriceTiers]
+      summary: List price tiers for an event
+      operationId: listPriceTiers
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationIdParam"
+        - $ref: "#/components/parameters/EventIdParam"
+      responses:
+        "200":
+          description: Price tiers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  priceTiers:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PriceTier"
+    post:
+      tags: [PriceTiers]
+      summary: Add a price tier to an event
+      operationId: createPriceTier
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationIdParam"
+        - $ref: "#/components/parameters/EventIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePriceTierInput"
+      responses:
+        "201":
+          description: Price tier created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriceTier"
+        "400":
+          description: Validation error (e.g., total tier inventory exceeds event capacity)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /organizations/{organizationId}/events/{eventId}/price-tiers/{priceTierId}:
+    patch:
+      tags: [PriceTiers]
+      summary: Update a price tier
+      operationId: updatePriceTier
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationIdParam"
+        - $ref: "#/components/parameters/EventIdParam"
+        - $ref: "#/components/parameters/PriceTierIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePriceTierInput"
+      responses:
+        "200":
+          description: Price tier updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriceTier"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /organizations/{organizationId}/events/{eventId}/price-tiers/{priceTierId}/activate:
+    post:
+      tags: [PriceTiers]
+      summary: Activate a price tier
+      operationId: activatePriceTier
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationIdParam"
+        - $ref: "#/components/parameters/EventIdParam"
+        - $ref: "#/components/parameters/PriceTierIdParam"
+      responses:
+        "200":
+          description: Price tier activated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriceTier"
+
+  /organizations/{organizationId}/events/{eventId}/price-tiers/{priceTierId}/deactivate:
+    post:
+      tags: [PriceTiers]
+      summary: Deactivate a price tier
+      operationId: deactivatePriceTier
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationIdParam"
+        - $ref: "#/components/parameters/EventIdParam"
+        - $ref: "#/components/parameters/PriceTierIdParam"
+      responses:
+        "200":
+          description: Price tier deactivated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriceTier"
+
+  /organizations/{organizationId}/events/{eventId}/price-tiers/reorder:
+    post:
+      tags: [PriceTiers]
+      summary: Reorder price tiers
+      operationId: reorderPriceTiers
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationIdParam"
+        - $ref: "#/components/parameters/EventIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tierIds]
+              properties:
+                tierIds:
+                  type: array
+                  items:
+                    type: string
+                  description: Ordered list of price tier IDs
+      responses:
+        "200":
+          description: Tiers reordered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  priceTiers:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PriceTier"
+
+  # ===== ORDERS (FR-052, FR-053, FR-054) =====
+  /orders:
+    post:
+      tags: [Orders]
+      summary: Create an order and initiate payment
+      description: |
+        Accepts contact details, event, tier selection, and quantity.
+        Creates a PENDING order, reserves inventory, creates a Stripe
+        Checkout session, and returns the session URL. No auth required
+        (supports guest checkout).
+      operationId: createOrder
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderInput"
+      responses:
+        "201":
+          description: Order created, Stripe Checkout session initiated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateOrderResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          description: Insufficient inventory or tier inactive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /orders/{orderId}:
+    get:
+      tags: [Orders]
+      summary: Get order details
+      description: |
+        Returns order with tickets and QR codes. Requires auth
+        (owner or admin) or matching guest lookup token.
+      operationId: getOrder
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrderIdParam"
+      responses:
+        "200":
+          description: Order details with tickets
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /orders/lookup:
+    post:
+      tags: [Orders]
+      summary: Guest order lookup
+      description: |
+        Allows guests to retrieve their order by email + order reference.
+        Returns a generic "not found" for invalid combinations to prevent
+        enumeration (FR-054).
+      operationId: lookupOrder
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrderLookupInput"
+      responses:
+        "200":
+          description: Order found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderDetail"
+        "404":
+          description: Order not found (generic, prevents enumeration)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /orders/my:
+    get:
+      tags: [Orders]
+      summary: List current user's orders
+      description: Returns orders linked to the authenticated user's contact records.
+      operationId: listMyOrders
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+      responses:
+        "200":
+          description: User's orders
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orders:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/OrderSummary"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /events/{eventId}/orders:
+    get:
+      tags: [Orders]
+      summary: List orders for an event (organizer/admin)
+      operationId: listEventOrders
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/EventIdParam"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [PENDING, COMPLETED, FAILED]
+      responses:
+        "200":
+          description: Event orders
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orders:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/OrderSummary"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  # ===== TICKETS (FR-055, updated) =====
+  /tickets/redeem:
+    post:
+      tags: [Tickets]
+      summary: Redeem a ticket via QR code scan
+      description: |
+        Accepts the QR code JWT payload, validates signature, checks
+        event match, verifies ticket status. On success, marks VALID → REDEEMED
+        with timestamp. Lazy expiration: if event has passed, returns EXPIRED
+        and updates status (FR-032).
+      operationId: redeemTicket
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RedeemTicketInput"
+      responses:
+        "200":
+          description: Ticket redeemed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RedemptionResult"
+        "400":
+          description: Invalid QR code (forged, tampered, malformed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Ticket already redeemed, expired, voided, or wrong event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RedemptionRejection"
+
+  # ===== USERS (FR-056) =====
+  /users:
+    get:
+      tags: [Users]
+      summary: List users (admin-only)
+      operationId: listUsers
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [CUSTOMER, ORGANIZER, ADMIN]
+        - name: organizationId
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/UserSummary"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /users/{userId}:
+    patch:
+      tags: [Users]
+      summary: Update user role or status (admin-only)
+      operationId: updateUser
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserInput"
+      responses:
+        "200":
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSummary"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ===== ANALYTICS (FR-057) =====
+  /organizations/{organizationId}/events/{eventId}/analytics:
+    get:
+      tags: [Analytics]
+      summary: Get event analytics
+      description: |
+        Returns per-tier and aggregate sales, revenue, and redemption
+        metrics for an event (FR-057).
+      operationId: getEventAnalytics
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationIdParam"
+        - $ref: "#/components/parameters/EventIdParam"
+      responses:
+        "200":
+          description: Event analytics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventAnalytics"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ===== WEBHOOKS =====
+  /webhooks/stripe:
+    post:
+      tags: [Webhooks]
+      summary: Stripe webhook handler
+      description: |
+        Processes checkout.session.completed and checkout.session.expired
+        events. Transitions order PENDING → COMPLETED (issues tickets,
+        sends email) or PENDING → FAILED (releases inventory). Idempotent
+        (FR-029).
+      operationId: stripeWebhook
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Webhook processed
+        "400":
+          description: Invalid signature
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Auth.js v5 JWT (HS256). Payload includes sub (userId), email, role.
+
+  parameters:
+    OrganizationIdParam:
+      name: organizationId
+      in: path
+      required: true
+      schema:
+        type: string
+    VenueIdParam:
+      name: venueId
+      in: path
+      required: true
+      schema:
+        type: string
+    EventIdParam:
+      name: eventId
+      in: path
+      required: true
+      schema:
+        type: string
+    PriceTierIdParam:
+      name: priceTierId
+      in: path
+      required: true
+      schema:
+        type: string
+    OrderIdParam:
+      name: orderId
+      in: path
+      required: true
+      schema:
+        type: string
+    PageParam:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 1
+        minimum: 1
+    LimitParam:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        default: 20
+        minimum: 1
+        maximum: 100
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid authentication token
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: Insufficient role or organization access
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ValidationError:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    # ─── Shared ───
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              example: VALIDATION_ERROR
+            message:
+              type: string
+              example: "Tier inventory exceeds event capacity"
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                  message:
+                    type: string
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        totalPages:
+          type: integer
+
+    # ─── Organization ───
+    Organization:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateOrganizationInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+
+    UpdateOrganizationInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE]
+
+    # ─── Venue ───
+    Venue:
+      type: object
+      properties:
+        id:
+          type: string
+        organizationId:
+          type: string
+        name:
+          type: string
+        address:
+          type: string
+        timezone:
+          type: string
+          example: America/New_York
+        isPublic:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateVenueInput:
+      type: object
+      required: [name, address]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        address:
+          type: string
+          minLength: 1
+        timezone:
+          type: string
+          default: America/New_York
+        isPublic:
+          type: boolean
+          default: true
+
+    UpdateVenueInput:
+      type: object
+      properties:
+        name:
+          type: string
+        address:
+          type: string
+        timezone:
+          type: string
+        isPublic:
+          type: boolean
+
+    # ─── Event ───
+    EventSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        date:
+          type: string
+          format: date-time
+        venue:
+          type: object
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            address:
+              type: string
+        category:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [DRAFT, PUBLISHED, CANCELLED]
+        priceRange:
+          type: object
+          properties:
+            min:
+              type: number
+            max:
+              type: number
+        availableTickets:
+          type: integer
+          description: Total available across all active tiers
+
+    EventDetail:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        date:
+          type: string
+          format: date-time
+        capacity:
+          type: integer
+        category:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [DRAFT, PUBLISHED, CANCELLED]
+        venue:
+          $ref: "#/components/schemas/Venue"
+        priceTiers:
+          type: array
+          items:
+            $ref: "#/components/schemas/PriceTier"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateEventInput:
+      type: object
+      required: [venueId, name, date, capacity, priceTiers]
+      properties:
+        venueId:
+          type: string
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+        date:
+          type: string
+          format: date-time
+        capacity:
+          type: integer
+          minimum: 1
+          maximum: 100000
+        category:
+          type: string
+        priceTiers:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/CreatePriceTierInput"
+
+    UpdateEventInput:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        date:
+          type: string
+          format: date-time
+        capacity:
+          type: integer
+          minimum: 1
+          maximum: 100000
+        category:
+          type: string
+
+    # ─── PriceTier ───
+    PriceTier:
+      type: object
+      properties:
+        id:
+          type: string
+        eventId:
+          type: string
+        name:
+          type: string
+        price:
+          type: number
+          format: decimal
+        quantityTotal:
+          type: integer
+        quantitySold:
+          type: integer
+        quantityReserved:
+          type: integer
+        quantityAvailable:
+          type: integer
+          description: "Computed: quantityTotal - quantitySold - quantityReserved"
+        displayOrder:
+          type: integer
+        minPerOrder:
+          type: integer
+          nullable: true
+        maxPerOrder:
+          type: integer
+          nullable: true
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreatePriceTierInput:
+      type: object
+      required: [name, price, quantityTotal]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        price:
+          type: number
+          minimum: 0
+        quantityTotal:
+          type: integer
+          minimum: 1
+        displayOrder:
+          type: integer
+        minPerOrder:
+          type: integer
+          minimum: 1
+        maxPerOrder:
+          type: integer
+          minimum: 1
+
+    UpdatePriceTierInput:
+      type: object
+      properties:
+        name:
+          type: string
+        price:
+          type: number
+          minimum: 0
+        quantityTotal:
+          type: integer
+          minimum: 1
+        displayOrder:
+          type: integer
+        minPerOrder:
+          type: integer
+          nullable: true
+        maxPerOrder:
+          type: integer
+          nullable: true
+
+    # ─── Order ───
+    CreateOrderInput:
+      type: object
+      required: [eventId, priceTierId, quantity, contact]
+      properties:
+        eventId:
+          type: string
+        priceTierId:
+          type: string
+        quantity:
+          type: integer
+          minimum: 1
+        contact:
+          type: object
+          required: [email, firstName, lastName]
+          properties:
+            email:
+              type: string
+              format: email
+            firstName:
+              type: string
+              minLength: 1
+            lastName:
+              type: string
+              minLength: 1
+
+    CreateOrderResponse:
+      type: object
+      properties:
+        orderId:
+          type: string
+        orderRef:
+          type: string
+        stripeCheckoutUrl:
+          type: string
+          format: uri
+          description: Redirect customer to this URL to complete payment
+
+    OrderSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        orderRef:
+          type: string
+        eventName:
+          type: string
+        eventDate:
+          type: string
+          format: date-time
+        quantity:
+          type: integer
+        totalAmount:
+          type: number
+          format: decimal
+        currency:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, COMPLETED, FAILED]
+        createdAt:
+          type: string
+          format: date-time
+
+    OrderDetail:
+      type: object
+      properties:
+        id:
+          type: string
+        orderRef:
+          type: string
+        event:
+          $ref: "#/components/schemas/EventSummary"
+        contact:
+          type: object
+          properties:
+            firstName:
+              type: string
+            lastName:
+              type: string
+            email:
+              type: string
+        quantity:
+          type: integer
+        totalAmount:
+          type: number
+          format: decimal
+        currency:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, COMPLETED, FAILED]
+        tickets:
+          type: array
+          items:
+            $ref: "#/components/schemas/TicketDetail"
+        payment:
+          $ref: "#/components/schemas/PaymentSummary"
+        createdAt:
+          type: string
+          format: date-time
+
+    OrderLookupInput:
+      type: object
+      required: [email, orderRef]
+      properties:
+        email:
+          type: string
+          format: email
+        orderRef:
+          type: string
+          description: Human-readable order reference (e.g., JMP-A1B2C3)
+
+    # ─── Ticket ───
+    TicketDetail:
+      type: object
+      properties:
+        id:
+          type: string
+        barcode:
+          type: string
+        qrCodeDataUrl:
+          type: string
+          description: Base64-encoded QR code PNG (only included in detail views)
+        priceTierName:
+          type: string
+        pricePaid:
+          type: number
+          format: decimal
+        status:
+          type: string
+          enum: [VALID, REDEEMED, EXPIRED, VOIDED]
+        redeemedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    RedeemTicketInput:
+      type: object
+      required: [qrPayload]
+      properties:
+        qrPayload:
+          type: string
+          description: Raw JWT string scanned from QR code
+        eventId:
+          type: string
+          description: Expected event ID (for cross-event validation)
+
+    RedemptionResult:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [REDEEMED]
+        ticketId:
+          type: string
+        barcode:
+          type: string
+        priceTierName:
+          type: string
+        contactName:
+          type: string
+        redeemedAt:
+          type: string
+          format: date-time
+
+    RedemptionRejection:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ALREADY_REDEEMED, EXPIRED, VOIDED, WRONG_EVENT]
+        ticketId:
+          type: string
+        message:
+          type: string
+        originalRedemptionTime:
+          type: string
+          format: date-time
+          nullable: true
+          description: Only present for ALREADY_REDEEMED
+
+    # ─── Payment ───
+    PaymentSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        amount:
+          type: number
+          format: decimal
+        currency:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, SUCCEEDED, FAILED]
+        failureReason:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    # ─── User ───
+    UserSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+          nullable: true
+        firstName:
+          type: string
+          nullable: true
+        lastName:
+          type: string
+          nullable: true
+        role:
+          type: string
+          enum: [CUSTOMER, ORGANIZER, ADMIN]
+        organizationId:
+          type: string
+          nullable: true
+        organizationName:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    UpdateUserInput:
+      type: object
+      properties:
+        role:
+          type: string
+          enum: [CUSTOMER, ORGANIZER, ADMIN]
+        organizationId:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+
+    # ─── Analytics ───
+    EventAnalytics:
+      type: object
+      properties:
+        eventId:
+          type: string
+        eventName:
+          type: string
+        capacity:
+          type: integer
+        totalTicketsSold:
+          type: integer
+        totalTicketsRedeemed:
+          type: integer
+        totalRevenue:
+          type: number
+          format: decimal
+        currency:
+          type: string
+        tiers:
+          type: array
+          items:
+            type: object
+            properties:
+              priceTierId:
+                type: string
+              name:
+                type: string
+              price:
+                type: number
+                format: decimal
+              quantityTotal:
+                type: integer
+              quantitySold:
+                type: integer
+              quantityRedeemed:
+                type: integer
+              quantityRemaining:
+                type: integer
+              revenue:
+                type: number
+                format: decimal

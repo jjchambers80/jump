@@ -1,0 +1,287 @@
+// Prisma schema for Jump Ticketing Platform
+// Feature: 003-schema-redesign — MVP Data Architecture
+// Package: @jump/db (packages/db)
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ──────────────────────────────────────────────
+// Auth.js v5 Required Models
+// ──────────────────────────────────────────────
+
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  emailVerified   DateTime?
+  name            String?
+  image           String?
+
+  // Custom fields (ignored by Auth.js adapter)
+  firstName       String?
+  lastName        String?
+  role            UserRole  @default(CUSTOMER)
+  organizationId  String?
+  isActive        Boolean   @default(true)
+  deletedAt       DateTime?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Auth.js relations
+  accounts        Account[]
+
+  // Domain relations
+  organization    Organization? @relation(fields: [organizationId], references: [id])
+  contacts        Contact[]
+
+  @@index([organizationId])
+  @@index([role])
+  @@index([email])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ──────────────────────────────────────────────
+// Domain Models
+// ──────────────────────────────────────────────
+
+model Organization {
+  id        String             @id @default(cuid())
+  name      String
+  status    OrganizationStatus @default(ACTIVE)
+
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  venues    Venue[]
+  users     User[]
+}
+
+model Venue {
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String
+  address        String
+  timezone       String       @default("America/New_York")
+  isPublic       Boolean      @default(true)
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  events         Event[]
+
+  @@index([organizationId])
+}
+
+model Contact {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  firstName String
+  lastName  String
+
+  userId    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  orders    Order[]
+  tickets   Ticket[]
+
+  @@index([userId])
+  @@index([email])
+}
+
+model Event {
+  id          String      @id @default(cuid())
+  venueId     String
+  name        String
+  description String?
+  date        DateTime
+  capacity    Int
+  category    String?
+  status      EventStatus @default(DRAFT)
+
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  venue       Venue       @relation(fields: [venueId], references: [id])
+  priceTiers  PriceTier[]
+  orders      Order[]
+  tickets     Ticket[]
+
+  @@index([venueId])
+  @@index([status])
+  @@index([date])
+}
+
+model PriceTier {
+  id               String  @id @default(cuid())
+  eventId          String
+  name             String
+  price            Decimal @db.Decimal(10, 2)
+  quantityTotal    Int
+  quantitySold     Int     @default(0)
+  quantityReserved Int     @default(0)
+  displayOrder     Int     @default(0)
+  minPerOrder      Int?
+  maxPerOrder      Int?
+  isActive         Boolean @default(true)
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  event            Event    @relation(fields: [eventId], references: [id])
+  tickets          Ticket[]
+
+  @@index([eventId])
+  @@index([eventId, isActive])
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  eventId         String
+  contactId       String
+  stripeSessionId String?     @unique
+  orderRef        String      @unique
+  totalAmount     Decimal     @db.Decimal(10, 2)
+  currency        String      @default("usd")
+  quantity        Int
+  status          OrderStatus @default(PENDING)
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  event           Event       @relation(fields: [eventId], references: [id])
+  contact         Contact     @relation(fields: [contactId], references: [id])
+  tickets         Ticket[]
+  payment         PaymentTransaction?
+
+  @@index([eventId])
+  @@index([contactId])
+  @@index([status])
+  @@index([orderRef])
+}
+
+model Ticket {
+  id          String       @id @default(cuid())
+  orderId     String
+  eventId     String
+  priceTierId String
+  contactId   String
+  pricePaid   Decimal      @db.Decimal(10, 2)
+  barcode     String       @unique
+  qrCodeJwt   String?
+  status      TicketStatus @default(VALID)
+  redeemedAt  DateTime?
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  order       Order        @relation(fields: [orderId], references: [id])
+  event       Event        @relation(fields: [eventId], references: [id])
+  priceTier   PriceTier    @relation(fields: [priceTierId], references: [id])
+  contact     Contact      @relation(fields: [contactId], references: [id])
+
+  @@index([orderId])
+  @@index([eventId])
+  @@index([priceTierId])
+  @@index([contactId])
+  @@index([barcode])
+  @@index([status])
+}
+
+model PaymentTransaction {
+  id                    String        @id @default(cuid())
+  orderId               String        @unique
+  stripePaymentIntentId String?       @unique
+  amount                Decimal       @db.Decimal(10, 2)
+  currency              String        @default("usd")
+  status                PaymentStatus @default(PENDING)
+  failureReason         String?
+
+  createdAt             DateTime      @default(now())
+  // NO updatedAt — append-only per constitution
+
+  order                 Order         @relation(fields: [orderId], references: [id])
+
+  @@index([orderId])
+  @@index([status])
+}
+
+// ──────────────────────────────────────────────
+// Enums
+// ──────────────────────────────────────────────
+
+enum UserRole {
+  CUSTOMER
+  ORGANIZER
+  ADMIN
+}
+
+enum OrganizationStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  CANCELLED
+}
+
+enum OrderStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum TicketStatus {
+  VALID
+  REDEEMED
+  EXPIRED
+  VOIDED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}

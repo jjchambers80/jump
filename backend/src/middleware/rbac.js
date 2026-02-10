@@ -1,36 +1,39 @@
 // Role-based access control middleware
-// Enforces admin-only access per FR-013
+// Uses req.user.role from JWT claims (set by auth.js middleware)
+// Supports: CUSTOMER, ORGANIZER, ADMIN roles per UserRole enum
 
-import { ForbiddenError } from './errorHandler.js';
+import { ForbiddenError, AuthenticationError } from './errorHandler.js';
 
-export const requireAdmin = (req, res, next) => {
-  try {
-    if (!req.user) {
-      throw new ForbiddenError('Authentication required');
+/**
+ * Factory middleware: requires the authenticated user to have one of the specified roles.
+ * Must be used AFTER requireAuth middleware.
+ *
+ * @param {...string} roles - Allowed roles (e.g., 'ADMIN', 'ORGANIZER')
+ * @returns {Function} Express middleware
+ */
+export const requireRole = (...roles) => {
+  return (req, res, next) => {
+    try {
+      if (!req.user) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      if (!roles.includes(req.user.role)) {
+        throw new ForbiddenError(`Access denied. Required role: ${roles.join(' or ')}`);
+      }
+
+      next();
+    } catch (error) {
+      next(error);
     }
-
-    if (req.user.type !== 'ADMIN') {
-      throw new ForbiddenError('Admin access required');
-    }
-
-    next();
-  } catch (error) {
-    next(error);
-  }
+  };
 };
 
-export const requireCustomer = (req, res, next) => {
-  try {
-    if (!req.user) {
-      throw new ForbiddenError('Authentication required');
-    }
+/** Convenience: requires ADMIN role */
+export const requireAdmin = requireRole('ADMIN');
 
-    if (req.user.type !== 'CUSTOMER') {
-      throw new ForbiddenError('Customer access required');
-    }
+/** Convenience: requires ORGANIZER or ADMIN role */
+export const requireOrganizer = requireRole('ORGANIZER', 'ADMIN');
 
-    next();
-  } catch (error) {
-    next(error);
-  }
-};
+/** Convenience: alias for requireAuth (any authenticated user) */
+export { requireAuth } from './auth.js';

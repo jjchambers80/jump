@@ -1,6 +1,6 @@
 import { Inter } from 'next/font/google';
 import './globals.css';
-import { AuthProvider } from '../hooks/useAuth';
+import { SessionProvider } from 'next-auth/react';
 import Navbar from '../components/Navbar';
 import { ThemeProvider } from '../components/ThemeProvider';
 
@@ -16,10 +16,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
         <ThemeProvider>
-          <AuthProvider>
+          <SessionProvider>
             <Navbar />
             {children}
-          </AuthProvider>
+          </SessionProvider>
         </ThemeProvider>
       </body>
     </html>

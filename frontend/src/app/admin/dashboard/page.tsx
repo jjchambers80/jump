@@ -8,12 +8,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AdminRoute from '../../../components/AdminRoute';
-import { AuthProvider, useAuth } from '../../../hooks/useAuth';
+import { useSession, signOut } from 'next-auth/react';
 import adminService, { AdminEvent, DashboardStats } from '../../../services/adminService';
 
 function DashboardContent() {
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { data: session } = useSession();
+  const user = session?.user;
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [events, setEvents] = useState<AdminEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,8 +57,7 @@ function DashboardContent() {
   };
 
   const handleLogout = async () => {
-    await logout();
-    router.push('/auth/login');
+    await signOut({ callbackUrl: '/auth/signin' });
   };
 
   if (loading) {
@@ -253,10 +253,8 @@ function StatCard({
 
 export default function DashboardPage() {
   return (
-    <AuthProvider>
-      <AdminRoute>
-        <DashboardContent />
-      </AdminRoute>
-    </AuthProvider>
+    <AdminRoute>
+      <DashboardContent />
+    </AdminRoute>
   );
 }
