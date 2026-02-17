@@ -1,23 +1,30 @@
-// Navigation bar component (T128, updated T096)
+// Navigation bar component (T128, updated T096, T022-T023)
 // Uses next-auth/react useSession for auth state
+// Admin links consolidated into single "Admin" link per R6
 
 'use client';
 
 import React from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import ThemeToggle from './ThemeToggle';
 
+const ADMIN_ROLES = ['ADMIN', 'ORGANIZER'];
+
 export default function Navbar() {
   const { data: session, status } = useSession();
+  const pathname = usePathname();
   const loading = status === 'loading';
   const isAuthenticated = status === 'authenticated';
   const user = session?.user;
-  const isAdmin = (user as any)?.role === 'ADMIN';
+  const userRole = (user as any)?.role;
+  const isAdminOrOrganizer = ADMIN_ROLES.includes(userRole);
+  const isAdminArea = pathname?.startsWith('/admin');
 
   return (
     <nav className="bg-white dark:bg-slate-900 shadow-sm border-b border-gray-200 dark:border-slate-700 transition-colors">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-14">
           {/* Logo / Brand */}
           <Link href="/events" className="flex items-center gap-2">
@@ -36,75 +43,35 @@ export default function Navbar() {
               Events
             </Link>
 
-            {!loading && isAuthenticated && !isAdmin && (
-              <Link
-                href="/my-tickets"
-                className="text-sm font-medium text-gray-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
-              >
-                My Tickets
-              </Link>
+            {/* Customer links — hidden for admin/organizer */}
+            {!loading && isAuthenticated && !isAdminOrOrganizer && (
+              <>
+                <Link
+                  href="/my-tickets"
+                  className="text-sm font-medium text-gray-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
+                >
+                  My Tickets
+                </Link>
+                <Link
+                  href="/orders"
+                  className="text-sm font-medium text-gray-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
+                >
+                  Orders
+                </Link>
+              </>
             )}
 
-            {!loading && isAuthenticated && !isAdmin && (
+            {/* Single Admin link — replaces 6 individual links (R6) */}
+            {!loading && isAuthenticated && isAdminOrOrganizer && (
               <Link
-                href="/orders"
-                className="text-sm font-medium text-gray-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
+                href="/admin"
+                className={`text-sm font-medium transition ${
+                  isAdminArea
+                    ? 'text-indigo-600 dark:text-indigo-400'
+                    : 'text-gray-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400'
+                }`}
               >
-                Orders
-              </Link>
-            )}
-
-            {!loading && isAuthenticated && isAdmin && (
-              <Link
-                href="/scan"
-                className="text-sm font-medium text-gray-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
-              >
-                Scan
-              </Link>
-            )}
-
-            {!loading && isAuthenticated && isAdmin && (
-              <Link
-                href="/admin/dashboard"
-                className="text-sm font-medium text-gray-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
-              >
-                Dashboard
-              </Link>
-            )}
-
-            {!loading && isAuthenticated && isAdmin && (
-              <Link
-                href="/dashboard/organizations"
-                className="text-sm font-medium text-gray-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
-              >
-                Orgs
-              </Link>
-            )}
-
-            {!loading && isAuthenticated && isAdmin && (
-              <Link
-                href="/dashboard/venues"
-                className="text-sm font-medium text-gray-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
-              >
-                Venues
-              </Link>
-            )}
-
-            {!loading && isAuthenticated && isAdmin && (
-              <Link
-                href="/dashboard/events"
-                className="text-sm font-medium text-gray-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
-              >
-                Events
-              </Link>
-            )}
-
-            {!loading && isAuthenticated && isAdmin && (
-              <Link
-                href="/dashboard/analytics"
-                className="text-sm font-medium text-gray-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
-              >
-                Analytics
+                Admin
               </Link>
             )}
 

@@ -6,6 +6,11 @@ import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { randomUUID } from 'crypto';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 import { errorHandler } from '../middleware/errorHandler.js';
 import { metricsHandler, recordHttpMetric } from '../utils/metrics.js';
 import logger from '../utils/logger.js';
@@ -22,7 +27,7 @@ import ordersRouter, { eventOrdersRouter } from './routes/orders.js';
 import usersRouter from './routes/users.js';
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3002;
 
 // Middleware
 app.use(
@@ -34,6 +39,9 @@ app.use(
 
 app.use(express.json());
 app.use(cookieParser());
+
+// Serve uploaded files statically
+app.use('/uploads', express.static(path.join(__dirname, '../../uploads')));
 
 // Security headers
 app.use((req, res, next) => {

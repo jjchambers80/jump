@@ -1,7 +1,9 @@
 'use client';
 
-// Event creation form — venue selector, capacity, price tier builder per FR-040
-// Organizer creates events at venues with multiple price tiers
+// Event creation form — admin area (T011)
+// Moved from dashboard/events/new/page.tsx
+// Links updated from /dashboard/* to /admin/*
+// AdminRoute guard provided by admin layout.tsx
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
@@ -15,7 +17,7 @@ interface Venue {
 }
 
 interface PriceTierInput {
-  key: string; // local key for React list
+  key: string;
   name: string;
   price: string;
   quantityTotal: string;
@@ -37,16 +39,13 @@ function newTier(): PriceTierInput {
 export default function CreateEventPage() {
   const router = useRouter();
 
-  // Org state
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
   const [orgsLoading, setOrgsLoading] = useState(true);
 
-  // Venues for selected org
   const [venues, setVenues] = useState<Venue[]>([]);
   const [venuesLoading, setVenuesLoading] = useState(false);
 
-  // Form state
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [venueId, setVenueId] = useState('');
@@ -58,7 +57,6 @@ export default function CreateEventPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch orgs on mount
   useEffect(() => {
     const fetchOrgs = async () => {
       try {
@@ -74,7 +72,6 @@ export default function CreateEventPage() {
     fetchOrgs();
   }, []);
 
-  // Fetch venues when org changes
   const fetchVenues = useCallback(async () => {
     if (!selectedOrgId) return;
     try {
@@ -93,7 +90,6 @@ export default function CreateEventPage() {
     fetchVenues();
   }, [fetchVenues]);
 
-  // Price tier helpers
   const addTier = () => setPriceTiers([...priceTiers, newTier()]);
   const removeTier = (key: string) => {
     if (priceTiers.length > 1) {
@@ -111,7 +107,6 @@ export default function CreateEventPage() {
     setPriceTiers(newTiers);
   };
 
-  // Capacity validation
   const totalTierQuantity = priceTiers.reduce(
     (sum, t) => sum + (parseInt(t.quantityTotal) || 0),
     0
@@ -136,7 +131,7 @@ export default function CreateEventPage() {
         category: category || undefined,
         priceTiers: priceTiers.map((t, i) => ({
           name: t.name,
-          price: Math.round(parseFloat(t.price) * 100), // dollars → cents
+          price: parseFloat(t.price), // dollars - backend stores as Decimal
           quantityTotal: parseInt(t.quantityTotal),
           displayOrder: i,
           minPerOrder: t.minPerOrder ? parseInt(t.minPerOrder) : undefined,
@@ -145,7 +140,7 @@ export default function CreateEventPage() {
       };
 
       await api.post(`/organizations/${selectedOrgId}/events`, payload);
-      router.push('/dashboard/events');
+      router.push('/admin/events');
     } catch (err: any) {
       setError(err.message || 'Failed to create event');
     } finally {
@@ -162,7 +157,7 @@ export default function CreateEventPage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Create Event</h1>
         <button
-          onClick={() => router.push('/dashboard/events')}
+          onClick={() => router.push('/admin/events')}
           className="text-sm text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
         >
           ← Back to Events
@@ -227,7 +222,7 @@ export default function CreateEventPage() {
                 <p className="text-sm text-gray-500 dark:text-slate-400">
                   No venues found.{' '}
                   <a
-                    href="/dashboard/venues"
+                    href="/admin/venues"
                     className="text-indigo-600 dark:text-indigo-400 hover:underline"
                   >
                     Create one first
@@ -425,7 +420,7 @@ export default function CreateEventPage() {
           </button>
           <button
             type="button"
-            onClick={() => router.push('/dashboard/events')}
+            onClick={() => router.push('/admin/events')}
             className="rounded-md border border-gray-300 dark:border-slate-600 px-6 py-2.5 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
           >
             Cancel

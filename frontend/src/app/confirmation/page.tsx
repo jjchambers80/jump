@@ -15,10 +15,8 @@ interface TicketInfo {
   barcode: string;
   status: string;
   pricePaid: number;
-  qrCode?: string;
-  priceTier: {
-    name: string;
-  };
+  priceTierName?: string;
+  qrCodeDataUrl?: string;
 }
 
 interface OrderDetail {
@@ -42,15 +40,15 @@ interface OrderDetail {
       address: string;
     } | null;
   };
-  priceTier: {
+  priceTier?: {
     name: string;
     price: number;
   };
   tickets: TicketInfo[];
 }
 
-function formatPrice(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
+function formatPrice(dollars: number): string {
+  return `$${Number(dollars).toFixed(2)}`;
 }
 
 export default function ConfirmationPage() {
@@ -83,8 +81,38 @@ export default function ConfirmationPage() {
     try {
       setLoading(true);
       setError(null);
-      const data = await api.get<OrderDetail>(`/orders/${id}`);
+
+      // Coming from Stripe redirect — verify payment to complete the order
+      let data: OrderDetail;
+      try {
+        data = await api.post<OrderDetail>(`/orders/${id}/verify-payment`, {});
+      } catch {
+        // Fallback to plain GET if verify-payment fails (e.g. already completed)
+        data = await api.get<OrderDetail>(`/orders/${id}`);
+      }
       setOrder(data);
+
+      // If still PENDING, poll verify-payment a few times
+      // (Stripe webhook / session retrieval may take a moment)
+      if (data.status === 'PENDING') {
+        let pollCount = 0;
+        const MAX_POLLS = 8;
+        const poll = async () => {
+          if (pollCount >= MAX_POLLS) return;
+          pollCount++;
+          await new Promise((r) => setTimeout(r, 2000));
+          try {
+            const refreshed = await api.post<OrderDetail>(`/orders/${id}/verify-payment`, {});
+            setOrder(refreshed);
+            if (refreshed.status === 'PENDING') {
+              await poll();
+            }
+          } catch {
+            /* stop polling on error */
+          }
+        };
+        poll();
+      }
     } catch (err: any) {
       if (err.status === 404) {
         setError(
@@ -321,7 +349,9 @@ export default function ConfirmationPage() {
                 )}
                 <div className="flex justify-between">
                   <span className="text-gray-600 dark:text-slate-400">Tier</span>
-                  <span className="text-gray-900 dark:text-slate-100">{order.priceTier.name}</span>
+                  <span className="text-gray-900 dark:text-slate-100">
+                    {order.tickets?.[0]?.priceTierName || '—'}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600 dark:text-slate-400">Tickets</span>
@@ -342,123 +372,6 @@ export default function ConfirmationPage() {
               </div>
             </div>
           </div>
-
-          {/* Tickets with QR Codes */}
-          {isCompleted && order.tickets && order.tickets.length > 0 && (
-            <div className="border-t border-gray-200 dark:border-slate-700 pt-6">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-slate-100 mb-4">
-                Your Tickets
-              </h2>
-              <p className="text-gray-600 dark:text-slate-400 mb-6">
-                Present these QR codes at the event entrance for scanning.
-              </p>
-
-              <div className="space-y-6">
-                {order.tickets.map((ticket, index) => (
-                  <div
-                    key={ticket.id}
-                    className="bg-white dark:bg-slate-800 rounded-lg shadow-md dark:shadow-lg dark:shadow-black/20 overflow-hidden border-2 border-gray-200 dark:border-slate-700"
-                  >
-                    {/* Ticket Header */}
-                    <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className="text-lg font-bold">{order.event.name}</h3>
-                          <p className="text-blue-100 text-sm">{ticket.priceTier.name}</p>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-xs text-blue-200">
-                            Ticket {index + 1} of {order.tickets.length}
-                          </span>
-                          <p className="font-bold">{formatPrice(ticket.pricePaid)}</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Event Info */}
-                    <div className="p-4 border-b border-dashed border-gray-300 dark:border-slate-600">
-                      <div className="flex items-center text-gray-600 dark:text-slate-400 mb-1">
-                        <svg
-                          className="w-4 h-4 mr-2"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                          />
-                        </svg>
-                        <span className="text-sm">
-                          {formattedDate} at {formattedTime}
-                        </span>
-                      </div>
-                      {order.event.venue && (
-                        <div className="flex items-center text-gray-600 dark:text-slate-400">
-                          <svg
-                            className="w-4 h-4 mr-2"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                            />
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                            />
-                          </svg>
-                          <span className="text-sm">{order.event.venue.name}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* QR Code */}
-                    {ticket.qrCode && (
-                      <div className="p-6 bg-gray-50 dark:bg-slate-900 flex flex-col items-center">
-                        <div className="bg-white dark:bg-slate-800 p-4 rounded-lg border-2 border-dashed border-gray-300 dark:border-slate-600">
-                          <img
-                            src={ticket.qrCode}
-                            alt={`QR Code for ticket ${ticket.barcode}`}
-                            className="w-48 h-48"
-                          />
-                        </div>
-                        <p className="text-xs text-gray-500 dark:text-slate-500 mt-2 font-mono">
-                          {ticket.barcode}
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Status */}
-                    <div className="p-4 border-t border-gray-200 dark:border-slate-700 flex items-center justify-between">
-                      <span className="text-xs text-gray-500 dark:text-slate-500 uppercase tracking-wide">
-                        Status
-                      </span>
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                          ticket.status === 'VALID'
-                            ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400'
-                            : ticket.status === 'REDEEMED'
-                              ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400'
-                              : 'bg-gray-100 dark:bg-gray-900/30 text-gray-800 dark:text-gray-400'
-                        }`}
-                      >
-                        {ticket.status}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Pending Tickets Message */}
           {isPending && (
@@ -514,8 +427,12 @@ export default function ConfirmationPage() {
                   <div className="text-blue-800 dark:text-blue-300">
                     <p className="font-semibold mb-1">Important Information:</p>
                     <ul className="list-disc list-inside text-sm space-y-1">
-                      <li>A confirmation email has been sent to {order.contact.email}</li>
-                      <li>Save or screenshot your tickets for event entry</li>
+                      <li>
+                        A confirmation email has been sent to {order.contact.email}. If you do not
+                        receive your email in the next 10 minutes, please search your spam or junk
+                        folder.
+                      </li>
+                      <li>View your tickets by clicking the "View Tickets" button in your email</li>
                       <li>
                         Look up your order anytime with reference: <strong>{order.orderRef}</strong>
                       </li>

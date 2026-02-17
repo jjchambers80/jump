@@ -7,6 +7,7 @@ import { randomBytes } from 'crypto';
 import stripe from '../config/stripe.js';
 import logger from '../utils/logger.js';
 import { NotFoundError, ConflictError, ValidationError } from '../middleware/errorHandler.js';
+import qrService from './QRService.js';
 
 class OrderService {
   /**
@@ -195,7 +196,7 @@ class OrderService {
           eventId: event.id,
           priceTierId: tier.id,
         },
-        success_url: `${process.env.FRONTEND_URL || 'http://localhost:3001'}/orders/${order.id}?status=success`,
+        success_url: `${process.env.FRONTEND_URL || 'http://localhost:3001'}/confirmation?orderId=${order.id}`,
         cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:3001'}/events/${event.id}?status=cancelled`,
         expires_at: Math.floor(Date.now() / 1000) + 1800, // 30 minutes from now
       });
@@ -282,7 +283,7 @@ class OrderService {
       throw new NotFoundError('Order not found');
     }
 
-    return this._formatOrderDetail(order);
+    return await this._formatOrderDetail(order);
   }
 
   /**
@@ -367,7 +368,7 @@ class OrderService {
       throw new NotFoundError('Order not found');
     }
 
-    return this._formatOrderDetail(order);
+    return await this._formatOrderDetail(order);
   }
 
   /**
@@ -547,7 +548,33 @@ class OrderService {
 
   // ─── Formatters ─────────────────────────────────────────
 
-  _formatOrderDetail(order) {
+  async _formatOrderDetail(order) {
+    // Generate QR code data URL images from JWT tokens
+    const tickets = [];
+    for (const t of order.tickets || []) {
+      let qrCodeDataUrl = null;
+      if (t.qrCodeJwt) {
+        try {
+          qrCodeDataUrl = await qrService.generateQRCodeImage(t.qrCodeJwt);
+        } catch (err) {
+          logger.warn('Failed to generate QR image for order detail', {
+            ticketId: t.id,
+            error: err.message,
+          });
+        }
+      }
+      tickets.push({
+        id: t.id,
+        barcode: t.barcode,
+        qrCodeDataUrl,
+        priceTierName: t.priceTier?.name,
+        pricePaid: Number(t.pricePaid),
+        status: t.status,
+        redeemedAt: t.redeemedAt,
+        createdAt: t.createdAt,
+      });
+    }
+
     return {
       id: order.id,
       orderRef: order.orderRef,
@@ -568,16 +595,7 @@ class OrderService {
       totalAmount: Number(order.totalAmount),
       currency: order.currency,
       status: order.status,
-      tickets: (order.tickets || []).map((t) => ({
-        id: t.id,
-        barcode: t.barcode,
-        qrCodeDataUrl: t.qrCodeJwt || null,
-        priceTierName: t.priceTier?.name,
-        pricePaid: Number(t.pricePaid),
-        status: t.status,
-        redeemedAt: t.redeemedAt,
-        createdAt: t.createdAt,
-      })),
+      tickets,
       payment: order.payment
         ? {
             id: order.payment.id,

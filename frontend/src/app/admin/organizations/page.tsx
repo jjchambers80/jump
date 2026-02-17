@@ -1,7 +1,8 @@
 'use client';
 
-// Organizations dashboard page — admin-only per FR-038
-// Lists all organizations with create form
+// Organizations page — admin area (T008)
+// Moved from dashboard/organizations/page.tsx
+// AdminRoute guard provided by admin layout.tsx
 
 import React, { useEffect, useState, useCallback } from 'react';
 import api from '@/services/api';

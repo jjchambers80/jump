@@ -12,7 +12,7 @@ export default auth((req) => {
   const isLoggedIn = !!req.auth;
 
   // Protected routes that require authentication
-  const protectedPaths = ['/dashboard', '/orders'];
+  const protectedPaths = ['/admin', '/dashboard', '/orders'];
   const isProtected = protectedPaths.some((path) => nextUrl.pathname.startsWith(path));
 
   if (isProtected && !isLoggedIn) {

@@ -164,6 +164,10 @@ class EventService {
       updateData.venueId = updates.venueId;
     }
 
+    if (updates.logoUrl !== undefined) {
+      updateData.logoUrl = updates.logoUrl;
+    }
+
     const event = await prisma.event.update({
       where: { id: eventId },
       data: updateData,
@@ -527,6 +531,7 @@ class EventService {
       id: event.id,
       name: event.name,
       description: event.description,
+      logoUrl: event.logoUrl || null,
       date: event.date,
       capacity: event.capacity,
       category: event.category,

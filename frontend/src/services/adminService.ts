@@ -23,17 +23,18 @@ export interface AdminEvent {
   id: string;
   name: string;
   date: string;
-  venue: string;
+  venue: { id: string; name: string };
+  organization?: { id: string; name: string };
   capacity: number;
-  ticketPrice: number;
   status: 'DRAFT' | 'PUBLISHED';
   ticketsSold: number;
-  availableTickets: number;
-  createdAt: string;
-  organizer?: {
+  priceTiers: {
+    id: string;
     name: string;
-    organization: string | null;
-  };
+    priceCents: number;
+    quantityTotal: number;
+    quantitySold: number;
+  }[];
 }
 
 export interface DashboardStats {

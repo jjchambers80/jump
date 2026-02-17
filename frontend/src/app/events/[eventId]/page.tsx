@@ -32,6 +32,7 @@ interface Event {
   id: string;
   name: string;
   description?: string;
+  logoUrl?: string | null;
   date: string;
   capacity: number;
   category?: string;
@@ -42,8 +43,8 @@ interface Event {
   updatedAt: string;
 }
 
-function formatPrice(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
+function formatPrice(dollars: number): string {
+  return `$${Number(dollars).toFixed(2)}`;
 }
 
 export default function EventDetailPage({ params }: { params: { eventId: string } }) {
@@ -53,6 +54,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
   const [error, setError] = useState<string | null>(null);
   const [selectedTierId, setSelectedTierId] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
+  const [showDescription, setShowDescription] = useState(false);
 
   useEffect(() => {
     fetchEventDetails();
@@ -205,6 +207,15 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
 
         <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg dark:shadow-lg dark:shadow-black/20 overflow-hidden">
           <div className="p-8">
+            {event.logoUrl && (
+              <div className="mb-4">
+                <img
+                  src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}${event.logoUrl}`}
+                  alt={`${event.name} logo`}
+                  className="h-16 w-auto object-contain"
+                />
+              </div>
+            )}
             <div className="flex items-start justify-between mb-4">
               <h1 className="text-4xl font-bold text-gray-900 dark:text-slate-100">{event.name}</h1>
               {event.category && (
@@ -254,11 +265,20 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
             )}
 
             {event.description && (
-              <div className="prose max-w-none mb-8">
-                <p className="text-gray-700 dark:text-slate-300 text-lg leading-relaxed">
-                  {event.description}
-                </p>
-              </div>
+              <button
+                onClick={() => setShowDescription(true)}
+                className="flex items-center text-blue-600 dark:text-indigo-400 hover:text-blue-800 dark:hover:text-indigo-300 font-medium mb-6 transition-colors duration-200"
+              >
+                <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                <span className="text-lg">Event Information</span>
+              </button>
             )}
 
             {/* Price Tiers Section */}
@@ -373,6 +393,36 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
           </div>
         </div>
       </div>
+
+      {/* Event Information Dialog */}
+      {showDescription && event?.description && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onClick={() => setShowDescription(false)}
+        >
+          <div
+            className="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-slate-100">Event Information</h2>
+              <button
+                onClick={() => setShowDescription(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-slate-300 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6">
+              <p className="text-gray-700 dark:text-slate-300 text-lg leading-relaxed whitespace-pre-wrap">
+                {event.description}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

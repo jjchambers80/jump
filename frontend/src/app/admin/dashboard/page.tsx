@@ -1,15 +1,15 @@
-// Admin Dashboard page (T111, T112, T118)
+// Admin Dashboard page (T006, T111, T112, T118)
 // Real-time stats with auto-refresh every 5 seconds (ADR-004)
 // Event list with Edit and Publish buttons
+// AdminRoute wrapper removed — layout.tsx handles auth guard
 
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import AdminRoute from '../../../components/AdminRoute';
-import { useSession, signOut } from 'next-auth/react';
-import adminService, { AdminEvent, DashboardStats } from '../../../services/adminService';
+import { useSession } from 'next-auth/react';
+import adminService, { AdminEvent, DashboardStats } from '@/services/adminService';
 
 function DashboardContent() {
   const router = useRouter();
@@ -56,10 +56,6 @@ function DashboardContent() {
     }
   };
 
-  const handleLogout = async () => {
-    await signOut({ callbackUrl: '/auth/signin' });
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -69,34 +65,13 @@ function DashboardContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
-      {/* Header */}
-      <header className="bg-white dark:bg-slate-800 shadow-sm dark:shadow-lg dark:shadow-black/20">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">
-              Admin Dashboard
-            </h1>
-            <p className="text-sm text-gray-500 dark:text-slate-500">Welcome, {user?.name}</p>
-          </div>
-          <div className="flex items-center gap-4">
-            <Link
-              href="/admin/create-event"
-              className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors text-sm font-medium"
-            >
-              + Create Event
-            </Link>
-            <button
-              onClick={handleLogout}
-              className="text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-slate-100 text-sm font-medium"
-            >
-              Sign Out
-            </button>
-          </div>
+    <div>
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        {/* Welcome */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">Dashboard</h1>
+          <p className="text-sm text-gray-500 dark:text-slate-500">Welcome, {user?.name}</p>
         </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-4 py-8">
         {error && (
           <div className="mb-6 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-slate-700 text-red-700 dark:text-red-400 px-4 py-3 rounded-md">
             {error}
@@ -108,27 +83,31 @@ function DashboardContent() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             <StatCard
               label="Total Capacity"
-              value={stats.totalCapacity.toLocaleString()}
+              value={(stats.totalCapacity ?? 0).toLocaleString()}
               icon="🎫"
             />
             <StatCard
               label="Tickets Sold"
-              value={stats.ticketsSold.toLocaleString()}
+              value={(stats.ticketsSold ?? 0).toLocaleString()}
               icon="✅"
-              subtitle={`${stats.remainingCapacity.toLocaleString()} remaining`}
+              subtitle={`${(stats.remainingCapacity ?? 0).toLocaleString()} remaining`}
             />
             <StatCard
               label="Sales Rate"
-              value={`${stats.salesRate}/min`}
+              value={`${stats.salesRate ?? 0}/min`}
               icon="📈"
               subtitle="Last hour"
             />
-            <StatCard label="Payment Success" value={`${stats.paymentSuccessRate}%`} icon="💳" />
+            <StatCard
+              label="Payment Success"
+              value={`${stats.paymentSuccessRate ?? 100}%`}
+              icon="💳"
+            />
           </div>
         )}
 
         {/* Capacity bar */}
-        {stats && stats.totalCapacity > 0 && (
+        {stats && (stats.totalCapacity ?? 0) > 0 && (
           <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm dark:shadow-lg dark:shadow-black/20 p-6 mb-8">
             <h3 className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
               Overall Capacity
@@ -137,13 +116,13 @@ function DashboardContent() {
               <div
                 className="bg-indigo-600 h-4 rounded-full transition-all duration-500"
                 style={{
-                  width: `${Math.min(100, (stats.ticketsSold / stats.totalCapacity) * 100)}%`,
+                  width: `${Math.min(100, ((stats.ticketsSold ?? 0) / stats.totalCapacity) * 100)}%`,
                 }}
               />
             </div>
             <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
-              {stats.ticketsSold} / {stats.totalCapacity} tickets sold (
-              {((stats.ticketsSold / stats.totalCapacity) * 100).toFixed(1)}%)
+              {stats.ticketsSold ?? 0} / {stats.totalCapacity} tickets sold (
+              {(((stats.ticketsSold ?? 0) / stats.totalCapacity) * 100).toFixed(1)}%)
             </p>
           </div>
         )}
@@ -192,11 +171,13 @@ function DashboardContent() {
                     </div>
                     <div className="mt-1 text-sm text-gray-500 dark:text-slate-500 flex gap-4">
                       <span>📅 {new Date(event.date).toLocaleDateString()}</span>
-                      <span>📍 {event.venue}</span>
+                      <span>📍 {event.venue?.name ?? 'No venue'}</span>
                       <span>
                         🎫 {event.ticketsSold}/{event.capacity} sold
                       </span>
-                      <span>💰 ${Number(event.ticketPrice).toFixed(2)}</span>
+                      {event.priceTiers?.[0] && (
+                        <span>💰 ${(event.priceTiers[0].priceCents / 100).toFixed(2)}</span>
+                      )}
                     </div>
                   </div>
 
@@ -221,7 +202,7 @@ function DashboardContent() {
         <p className="mt-4 text-xs text-gray-400 dark:text-slate-500 text-center">
           Dashboard auto-refreshes every 5 seconds
         </p>
-      </main>
+      </div>
     </div>
   );
 }
@@ -252,9 +233,5 @@ function StatCard({
 }
 
 export default function DashboardPage() {
-  return (
-    <AdminRoute>
-      <DashboardContent />
-    </AdminRoute>
-  );
+  return <DashboardContent />;
 }

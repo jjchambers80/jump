@@ -3,68 +3,36 @@
 // Uses Resend SDK per research.md R3, FR-036, FR-037
 
 import resend from '../config/resend.js';
-import qrService from './QRService.js';
 import logger from '../utils/logger.js';
 
 class EmailService {
   /**
-   * Send order confirmation email with ticket QR codes (FR-036)
+   * Send order confirmation email with View Tickets link (FR-036)
    * Fire-and-forget with async retry — does not block order completion.
    * @param {Object} order - Order object with contact, event, tickets
-   * @param {Array} tickets - Ticket objects with barcode, pricePaid, qrCodeJwt
+   * @param {Array} tickets - Ticket objects with barcode, pricePaid
    */
   async sendOrderConfirmation(order, tickets) {
     const maxRetries = 3;
     let attempt = 0;
     let lastError;
 
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const viewTicketsUrl = `${frontendUrl}/orders/${order.id}`;
+
+    // Build a simple tier summary (e.g. "2x VIP, 1x General")
+    const tierCounts = {};
+    for (const ticket of tickets) {
+      const name = ticket.priceTier?.name || 'General';
+      tierCounts[name] = (tierCounts[name] || 0) + 1;
+    }
+    const tierSummary = Object.entries(tierCounts)
+      .map(([name, count]) => `${count}x ${name}`)
+      .join(', ');
+
     while (attempt < maxRetries) {
       try {
         attempt++;
-
-        // Generate QR code images for each ticket
-        const ticketSections = [];
-
-        for (let index = 0; index < tickets.length; index++) {
-          const ticket = tickets[index];
-          let qrDataUrl = null;
-
-          // Generate QR code image from the ticket's JWT
-          if (ticket.qrCodeJwt) {
-            try {
-              qrDataUrl = await qrService.generateQRCodeImage(ticket.qrCodeJwt);
-            } catch (qrErr) {
-              logger.warn('Failed to generate QR image for email', {
-                ticketId: ticket.id,
-                error: qrErr.message,
-              });
-            }
-          }
-
-          ticketSections.push(`
-            <div style="background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 16px;">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
-                <div>
-                  <h4 style="margin: 0; color: #111; font-size: 15px;">Ticket #${index + 1}</h4>
-                  <p style="margin: 4px 0 0; color: #666; font-size: 13px;">${ticket.priceTier?.name || 'General'} — $${Number(ticket.pricePaid).toFixed(2)}</p>
-                </div>
-                <span style="background: #dcfce7; color: #166534; padding: 2px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; height: fit-content;">Valid</span>
-              </div>
-              ${
-                qrDataUrl
-                  ? `
-              <div style="text-align: center; padding: 16px 0;">
-                <div style="display: inline-block; background: #fff; padding: 12px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                  <img src="${qrDataUrl}" alt="QR Code for Ticket #${index + 1}" width="200" height="200" style="display: block;" />
-                </div>
-              </div>
-              `
-                  : ''
-              }
-              <p style="margin: 8px 0 0; color: #888; font-size: 12px; font-family: monospace; text-align: center;">${ticket.barcode}</p>
-            </div>
-          `);
-        }
 
         const msg = {
           to: [order.contact?.email || order.contactEmail],
@@ -79,14 +47,20 @@ class EmailService {
                 <div style="padding: 20px;">
                   <p>Hi ${order.contact?.firstName || 'there'},</p>
                   <p>Your order <strong>${order.orderRef}</strong> has been confirmed.</p>
-                  <h3 style="margin-top: 24px;">${order.event?.name || 'Event'}</h3>
-                  <p><strong>Total:</strong> $${Number(order.totalAmount).toFixed(2)} (${order.quantity} ticket${order.quantity > 1 ? 's' : ''})</p>
 
-                  <h3 style="margin-top: 24px; margin-bottom: 12px;">Your Tickets</h3>
-                  ${ticketSections.join('')}
+                  <div style="background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 24px 0;">
+                    <h3 style="margin: 0 0 12px;">${order.event?.name || 'Event'}</h3>
+                    <p style="margin: 4px 0; color: #666; font-size: 14px;"><strong>Tickets:</strong> ${tierSummary}</p>
+                    <p style="margin: 4px 0; color: #666; font-size: 14px;"><strong>Total:</strong> $${Number(order.totalAmount).toFixed(2)}</p>
+                    <p style="margin: 4px 0; color: #666; font-size: 14px;"><strong>Order Ref:</strong> ${order.orderRef}</p>
+                  </div>
 
-                  <p style="color: #666; font-size: 14px; margin-top: 24px;">Present your QR code at the venue entrance. Each ticket is valid for one entry.</p>
-                  <p style="color: #666; font-size: 12px;">Order reference: ${order.orderRef}</p>
+                  <div style="text-align: center; margin: 32px 0;">
+                    <a href="${viewTicketsUrl}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 16px; font-weight: bold; padding: 14px 32px; border-radius: 8px; text-decoration: none;">View Tickets</a>
+                  </div>
+
+                  <p style="color: #666; font-size: 14px;">Your QR codes for event entry are available on the tickets page. Present them at the venue entrance — each ticket is valid for one entry.</p>
+                  <p style="color: #666; font-size: 12px; margin-top: 16px;">Order reference: ${order.orderRef}</p>
                 </div>
               </body>
             </html>

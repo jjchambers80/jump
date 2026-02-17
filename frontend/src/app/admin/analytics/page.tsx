@@ -1,12 +1,12 @@
-// Dashboard Analytics overview page (T110)
-// Organization and date range filtering for event analytics
-// Per US7 acceptance scenario 2
+// Analytics overview page — admin area (T013)
+// Moved from dashboard/analytics/page.tsx
+// AdminRoute wrapper removed — layout.tsx handles auth guard
+// Links updated from /dashboard/* to /admin/*
 
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import AdminRoute from '../../../components/AdminRoute';
 import OrganizationSelector, { type Organization } from '@/components/OrganizationSelector';
 import api from '@/services/api';
 
@@ -44,14 +44,6 @@ function formatDate(iso: string): string {
 }
 
 export default function AnalyticsOverviewPage() {
-  return (
-    <AdminRoute>
-      <AnalyticsOverviewContent />
-    </AdminRoute>
-  );
-}
-
-function AnalyticsOverviewContent() {
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
   const [events, setEvents] = useState<EventSummary[]>([]);
@@ -60,7 +52,6 @@ function AnalyticsOverviewContent() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
-  // Fetch orgs
   useEffect(() => {
     const fetchOrgs = async () => {
       try {
@@ -75,7 +66,6 @@ function AnalyticsOverviewContent() {
     fetchOrgs();
   }, []);
 
-  // Fetch events for org
   const fetchEvents = useCallback(async () => {
     if (!selectedOrgId) return;
     setLoading(true);
@@ -304,7 +294,7 @@ function AnalyticsOverviewContent() {
                           </td>
                           <td className="px-6 py-4 text-right">
                             <Link
-                              href={`/dashboard/events/${event.id}/analytics`}
+                              href={`/admin/events/${event.id}/analytics`}
                               className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
                             >
                               Details →

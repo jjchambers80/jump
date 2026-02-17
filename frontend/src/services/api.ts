@@ -91,6 +91,47 @@ class ApiClient {
   delete<T = any>(endpoint: string, options: RequestOptions = {}): Promise<T> {
     return this.request<T>(endpoint, { ...options, method: 'DELETE' });
   }
+
+  async upload<T = any>(
+    endpoint: string,
+    formData: FormData,
+    options: RequestOptions = {}
+  ): Promise<T> {
+    const url = `${this.baseURL}${endpoint}`;
+
+    // Don't set Content-Type — browser sets multipart boundary automatically
+    const headers: Record<string, string> = {
+      ...options.headers,
+    };
+
+    if (typeof window !== 'undefined' && !headers['Authorization']) {
+      try {
+        const session = (await getSession()) as any;
+        if (session?.accessToken) {
+          headers['Authorization'] = `Bearer ${session.accessToken}`;
+        }
+      } catch {
+        // No session available
+      }
+    }
+
+    const response = await fetch(url, {
+      ...options,
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw {
+        status: response.status,
+        message: data.message || 'Upload failed',
+        error: data.error,
+      };
+    }
+    return data;
+  }
 }
 
 // ===== Orders =====

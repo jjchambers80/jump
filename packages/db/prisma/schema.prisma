@@ -134,6 +134,7 @@ model Event {
   venueId     String
   name        String
   description String?
+  logoUrl     String?
   date        DateTime
   capacity    Int
   category    String?

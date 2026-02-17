@@ -39,8 +39,8 @@ interface EventListResponse {
   };
 }
 
-function formatPrice(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
+function formatPrice(dollars: number): string {
+  return `$${Number(dollars).toFixed(2)}`;
 }
 
 function EventCard({ event }: { event: Event }) {

@@ -7,8 +7,7 @@
 
 import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import AdminRoute from '../../../components/AdminRoute';
-import adminService from '../../../services/adminService';
+import adminService from '@/services/adminService';
 
 function CreateEventForm() {
   const router = useRouter();
@@ -289,9 +288,5 @@ function CreateEventForm() {
 }
 
 export default function CreateEventPage() {
-  return (
-    <AdminRoute>
-      <CreateEventForm />
-    </AdminRoute>
-  );
+  return <CreateEventForm />;
 }

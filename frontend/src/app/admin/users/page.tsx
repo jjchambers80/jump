@@ -1,11 +1,11 @@
-// Admin User Management Page (T099)
-// List users with role selector and activate/deactivate toggle
-// Per FR-046, admin-only access
+// User Management page — admin area (T014, T019)
+// Moved from dashboard/users/page.tsx
+// AdminRoute wrapper removed — layout.tsx handles auth guard
+// ADMIN-only access enforced by role check within page (T019)
 
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import AdminRoute from '../../../components/AdminRoute';
 import { useSession } from 'next-auth/react';
 import api from '@/services/api';
 
@@ -30,11 +30,21 @@ interface Pagination {
 }
 
 export default function UsersPage() {
-  return (
-    <AdminRoute>
-      <UsersContent />
-    </AdminRoute>
-  );
+  const { data: session, status } = useSession();
+  const userRole = (session?.user as any)?.role;
+
+  // T019: ADMIN-only guard — ORGANIZER sees access denied
+  if (status === 'authenticated' && userRole !== 'ADMIN') {
+    return (
+      <div className="max-w-md mx-auto py-16 px-4 text-center">
+        <div className="text-6xl mb-4">🔒</div>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Access Denied</h1>
+        <p className="text-gray-600 dark:text-slate-400">Admin role required to manage users.</p>
+      </div>
+    );
+  }
+
+  return <UsersContent />;
 }
 
 function UsersContent() {
@@ -45,7 +55,7 @@ function UsersContent() {
   const [error, setError] = useState<string | null>(null);
   const [roleFilter, setRoleFilter] = useState('');
   const [page, setPage] = useState(1);
-  const [updating, setUpdating] = useState<string | null>(null); // userId currently being updated
+  const [updating, setUpdating] = useState<string | null>(null);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);

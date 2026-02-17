@@ -1,7 +1,8 @@
 'use client';
 
-// Venues dashboard page — organizer/admin per FR-039
-// Lists venues scoped to selected organization, with create/edit forms
+// Venues page — admin area (T009)
+// Moved from dashboard/venues/page.tsx
+// AdminRoute guard provided by admin layout.tsx
 
 import React, { useEffect, useState, useCallback } from 'react';
 import api from '@/services/api';
@@ -47,7 +48,6 @@ export default function VenuesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Fetch organizations on mount
   useEffect(() => {
     const fetchOrgs = async () => {
       try {
@@ -65,7 +65,6 @@ export default function VenuesPage() {
     fetchOrgs();
   }, []);
 
-  // Fetch venues when org changes
   const fetchVenues = useCallback(async () => {
     if (!selectedOrgId) return;
     try {

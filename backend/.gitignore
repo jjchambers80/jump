@@ -28,6 +28,9 @@ prisma/migrations/**/*.sql
 coverage/
 .nyc_output/
 
+# Uploaded files
+uploads/
+
 # IDE
 .vscode/
 .idea/

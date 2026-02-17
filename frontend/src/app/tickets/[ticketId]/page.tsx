@@ -29,7 +29,7 @@ function formatTime(dateStr: string): string {
 
 function formatPrice(price: number | string): string {
   const numPrice = typeof price === 'string' ? parseFloat(price) : price;
-  return `$${(numPrice / 100).toFixed(2)}`;
+  return `$${Number(numPrice).toFixed(2)}`;
 }
 
 function StatusBadge({ status }: { status: string }) {

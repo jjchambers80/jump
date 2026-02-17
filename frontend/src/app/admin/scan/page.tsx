@@ -1,6 +1,6 @@
-// Ticket Scanning / Redemption Page (T088)
-// Color-coded verdict: green for valid, red for rejection
-// Per FR-032, FR-033, FR-034, FR-035, FR-055
+// Ticket Scanning / Redemption Page — admin area (T015)
+// Moved from scan/page.tsx
+// AdminRoute guard provided by admin layout.tsx
 
 'use client';
 
@@ -31,7 +31,6 @@ export default function ScanPage() {
       setQrInput('');
     } catch (err: any) {
       if (err.status === 409 || err.status === 410 || err.status === 403) {
-        // Structured rejection
         setVerdict({
           type: 'rejection',
           data: {
@@ -48,7 +47,6 @@ export default function ScanPage() {
       }
     } finally {
       setScanning(false);
-      // Refocus input for rapid scanning
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }

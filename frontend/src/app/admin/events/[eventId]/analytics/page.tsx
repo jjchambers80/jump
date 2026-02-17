@@ -1,14 +1,13 @@
-// Event Analytics page (T109, T110)
-// Per-tier sales breakdown: tier name, price, sold, redeemed, remaining, revenue
-// Organization and date range filtering per US7
-// Per FR-044, FR-057
+// Event Analytics page — admin area (T012)
+// Moved from dashboard/events/[eventId]/analytics/page.tsx
+// AdminRoute wrapper removed — layout.tsx handles auth guard
+// Links updated from /dashboard/* to /admin/*
 
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import AdminRoute from '@/components/AdminRoute';
 import OrganizationSelector, { type Organization } from '@/components/OrganizationSelector';
 import api from '@/services/api';
 
@@ -88,14 +87,6 @@ function StatCard({
 }
 
 export default function EventAnalyticsPage() {
-  return (
-    <AdminRoute>
-      <AnalyticsContent />
-    </AdminRoute>
-  );
-}
-
-function AnalyticsContent() {
   const params = useParams();
   const eventId = params.eventId as string;
 
@@ -105,7 +96,6 @@ function AnalyticsContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch orgs
   useEffect(() => {
     const fetchOrgs = async () => {
       try {
@@ -120,7 +110,6 @@ function AnalyticsContent() {
     fetchOrgs();
   }, []);
 
-  // Fetch analytics
   const fetchAnalytics = useCallback(async () => {
     if (!selectedOrgId || !eventId) return;
     setLoading(true);
@@ -149,7 +138,7 @@ function AnalyticsContent() {
     <div className="max-w-5xl mx-auto px-4 py-8">
       {/* Back link */}
       <Link
-        href="/dashboard/events"
+        href="/admin/events"
         className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 mb-6 inline-block"
       >
         ← Back to Events

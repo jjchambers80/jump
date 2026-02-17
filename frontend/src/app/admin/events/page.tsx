@@ -1,7 +1,9 @@
 'use client';
 
-// Dashboard events management page — per-tier inventory view per FR-040, T064
-// Org-scoped event listing with status filter, publish/cancel actions, tier inventory
+// Events management page — admin area (T010)
+// Moved from dashboard/events/page.tsx
+// Links updated from /dashboard/* to /admin/*
+// AdminRoute guard provided by admin layout.tsx
 
 import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
@@ -58,8 +60,8 @@ const statusColors: Record<string, string> = {
   CANCELLED: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
 };
 
-function formatPrice(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
+function formatPrice(dollars: number): string {
+  return `$${Number(dollars).toFixed(2)}`;
 }
 
 function formatDate(iso: string): string {
@@ -84,7 +86,6 @@ export default function DashboardEventsPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
 
-  // Fetch orgs
   useEffect(() => {
     const fetchOrgs = async () => {
       try {
@@ -100,7 +101,6 @@ export default function DashboardEventsPage() {
     fetchOrgs();
   }, []);
 
-  // Fetch events
   const fetchEvents = useCallback(async () => {
     if (!selectedOrgId) return;
     try {
@@ -168,7 +168,7 @@ export default function DashboardEventsPage() {
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Events</h1>
         {selectedOrgId && (
           <Link
-            href="/dashboard/events/new"
+            href="/admin/events/new"
             className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
           >
             Create Event
@@ -239,7 +239,6 @@ export default function DashboardEventsPage() {
                 key={event.id}
                 className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden"
               >
-                {/* Event Row */}
                 <div className="p-4">
                   <div className="flex items-start justify-between">
                     <div className="flex-1 min-w-0">
@@ -270,6 +269,23 @@ export default function DashboardEventsPage() {
 
                     {/* Actions */}
                     <div className="flex items-center gap-2 ml-4">
+                      {event.status !== 'CANCELLED' && (
+                        <Link
+                          href={`/admin/events/${event.id}/edit?orgId=${selectedOrgId}`}
+                          className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
+                        >
+                          Edit
+                        </Link>
+                      )}
+                      {event.status === 'PUBLISHED' && (
+                        <Link
+                          href={`/events/${event.id}`}
+                          target="_blank"
+                          className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
+                        >
+                          Event Page
+                        </Link>
+                      )}
                       <button
                         onClick={() => toggleExpand(event.id)}
                         className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
@@ -278,7 +294,7 @@ export default function DashboardEventsPage() {
                       </button>
                       {event.status === 'PUBLISHED' && (
                         <Link
-                          href={`/dashboard/events/${event.id}/analytics`}
+                          href={`/admin/events/${event.id}/analytics`}
                           className="rounded-md border border-indigo-300 dark:border-indigo-700 px-3 py-1 text-xs font-medium text-indigo-700 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
                         >
                           Analytics
