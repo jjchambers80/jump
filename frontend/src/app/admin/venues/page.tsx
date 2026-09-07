@@ -4,9 +4,11 @@
 // Moved from dashboard/venues/page.tsx
 // AdminRoute guard provided by admin layout.tsx
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import Link from 'next/link';
 import api from '@/services/api';
 import OrganizationSelector, { type Organization } from '@/components/OrganizationSelector';
+import { resolveAssetUrl } from '@/lib/assets';
 
 interface Venue {
   id: string;
@@ -14,6 +16,7 @@ interface Venue {
   address: string;
   timezone: string;
   isPublic: boolean;
+  logoUrl: string | null;
   organizationId: string;
   createdAt: string;
   updatedAt: string;
@@ -47,6 +50,10 @@ export default function VenuesPage() {
   const [formData, setFormData] = useState<VenueFormData>(EMPTY_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [selectedLogo, setSelectedLogo] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const fetchOrgs = async () => {
@@ -92,6 +99,8 @@ export default function VenuesPage() {
   const handleCreate = () => {
     setFormData(EMPTY_FORM);
     setEditingId(null);
+    setSelectedLogo(null);
+    setLogoPreview(null);
     setShowForm(true);
   };
 
@@ -103,6 +112,8 @@ export default function VenuesPage() {
       isPublic: venue.isPublic,
     });
     setEditingId(venue.id);
+    setSelectedLogo(null);
+    setLogoPreview(resolveAssetUrl(venue.logoUrl));
     setShowForm(true);
   };
 
@@ -110,6 +121,47 @@ export default function VenuesPage() {
     setShowForm(false);
     setEditingId(null);
     setFormData(EMPTY_FORM);
+    setSelectedLogo(null);
+    setLogoPreview(null);
+  };
+
+  const handleLogoSelect = (file: File) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setError('Only JPG, PNG, GIF, and WebP images are allowed');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Logo must be 5 MB or smaller');
+      return;
+    }
+    setError(null);
+    setSelectedLogo(file);
+    setLogoPreview(URL.createObjectURL(file));
+  };
+
+  const handleLogoRemove = async () => {
+    if (selectedLogo) {
+      setSelectedLogo(null);
+      const existingLogoUrl = editingId
+        ? resolveAssetUrl(venues.find((venue) => venue.id === editingId)?.logoUrl)
+        : null;
+      setLogoPreview(existingLogoUrl);
+      return;
+    }
+    if (!selectedOrgId || !editingId) return;
+
+    try {
+      setLogoUploading(true);
+      setError(null);
+      await api.delete(`/organizations/${selectedOrgId}/venues/${editingId}/logo`);
+      setLogoPreview(null);
+      await fetchVenues();
+    } catch (err: any) {
+      setError(err.message || 'Failed to remove venue logo');
+    } finally {
+      setLogoUploading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -120,15 +172,39 @@ export default function VenuesPage() {
       setSaving(true);
       setError(null);
 
+      let savedVenue: Venue;
       if (editingId) {
-        await api.patch(`/organizations/${selectedOrgId}/venues/${editingId}`, formData);
+        savedVenue = await api.patch<Venue>(
+          `/organizations/${selectedOrgId}/venues/${editingId}`,
+          formData
+        );
       } else {
-        await api.post(`/organizations/${selectedOrgId}/venues`, formData);
+        savedVenue = await api.post<Venue>(`/organizations/${selectedOrgId}/venues`, formData);
+      }
+
+      if (selectedLogo) {
+        try {
+          setLogoUploading(true);
+          const uploadData = new FormData();
+          uploadData.append('logo', selectedLogo);
+          await api.upload(`/organizations/${selectedOrgId}/venues/${savedVenue.id}/logo`, uploadData);
+        } catch (uploadError: any) {
+          setError(
+            `Venue saved, but its logo could not be uploaded: ${uploadError.message || 'Upload failed'}`
+          );
+          await fetchVenues();
+          setShowForm(false);
+          return;
+        } finally {
+          setLogoUploading(false);
+        }
       }
 
       setShowForm(false);
       setEditingId(null);
       setFormData(EMPTY_FORM);
+      setSelectedLogo(null);
+      setLogoPreview(null);
       await fetchVenues();
     } catch (err: any) {
       setError(err.message || 'Failed to save venue');
@@ -241,8 +317,68 @@ export default function VenuesPage() {
               className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
             />
             <label htmlFor="isPublic" className="text-sm text-gray-700 dark:text-slate-300">
-              Publicly listed
+              Public venue page enabled. When disabled, the public URL returns not found.
             </label>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+              Venue Logo
+            </label>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              {logoPreview ? (
+                <img
+                  src={logoPreview}
+                  alt="Venue logo preview"
+                  data-testid="venue-logo-preview"
+                  className="h-24 w-24 rounded-lg border border-gray-200 bg-white object-contain p-1 dark:border-slate-600"
+                />
+              ) : (
+                <div
+                  data-testid="venue-logo-preview-fallback"
+                  className="flex h-24 w-24 items-center justify-center rounded-lg bg-gray-100 text-2xl font-bold text-gray-500 dark:bg-slate-700 dark:text-slate-300"
+                  aria-label="No venue logo selected"
+                  role="img"
+                >
+                  {formData.name.trim().charAt(0).toUpperCase() || 'V'}
+                </div>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={logoUploading}
+                  className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-50"
+                >
+                  {logoPreview ? 'Replace logo' : 'Choose logo'}
+                </button>
+                {logoPreview && (
+                  <button
+                    type="button"
+                    onClick={handleLogoRemove}
+                    disabled={logoUploading}
+                    className="rounded-md border border-red-300 dark:border-red-700 px-3 py-2 text-sm font-medium text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
+                  >
+                    Remove logo
+                  </button>
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                className="hidden"
+                data-testid="venue-logo-input"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) handleLogoSelect(file);
+                  event.target.value = '';
+                }}
+              />
+            </div>
+            <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">
+              JPG, PNG, GIF, or WebP up to 5 MB.
+            </p>
           </div>
 
           <div className="flex gap-3">
@@ -251,7 +387,7 @@ export default function VenuesPage() {
               disabled={saving}
               className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50"
             >
-              {saving ? 'Saving…' : editingId ? 'Update' : 'Create'}
+              {saving || logoUploading ? 'Saving…' : editingId ? 'Update' : 'Create'}
             </button>
             <button
               type="button"
@@ -287,23 +423,46 @@ export default function VenuesPage() {
               key={venue.id}
               className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4"
             >
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="text-base font-semibold text-gray-900 dark:text-white">
-                    {venue.name}
-                  </h3>
-                  <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">{venue.address}</p>
-                  <div className="flex items-center gap-3 mt-2 text-xs text-gray-400 dark:text-slate-500">
-                    <span>🕐 {venue.timezone}</span>
-                    <span>{venue.isPublic ? '🌐 Public' : '🔒 Private'}</span>
-                    {venue._count && (
-                      <span>
-                        📅 {venue._count.events} event{venue._count.events !== 1 ? 's' : ''}
-                      </span>
-                    )}
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex min-w-0 items-start gap-3">
+                  {resolveAssetUrl(venue.logoUrl) ? (
+                    <img
+                      src={resolveAssetUrl(venue.logoUrl) || undefined}
+                      alt={`${venue.name} logo`}
+                      className="h-14 w-14 shrink-0 rounded-md border border-gray-200 bg-white object-contain p-1 dark:border-slate-600"
+                    />
+                  ) : (
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-md bg-gray-100 font-bold text-gray-500 dark:bg-slate-700 dark:text-slate-300" aria-hidden="true">
+                      {venue.name.trim().charAt(0).toUpperCase() || 'V'}
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <h3 className="text-base font-semibold text-gray-900 dark:text-white">
+                      {venue.name}
+                    </h3>
+                    <p className="mt-1 break-words text-sm text-gray-500 dark:text-slate-400">{venue.address}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-gray-400 dark:text-slate-500">
+                      <span>🕐 {venue.timezone}</span>
+                      <span>{venue.isPublic ? '🌐 Public' : '🔒 Private'}</span>
+                      {venue._count && (
+                        <span>
+                          📅 {venue._count.events} event{venue._count.events !== 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                  {venue.isPublic && (
+                    <Link
+                      href={`/venues/${venue.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-md border border-indigo-300 dark:border-indigo-700 px-3 py-1 text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+                    >
+                      View public page
+                    </Link>
+                  )}
                   <button
                     onClick={() => handleEdit(venue)}
                     className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"

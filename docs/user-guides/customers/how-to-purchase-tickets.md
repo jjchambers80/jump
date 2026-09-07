@@ -24,6 +24,7 @@ Jump Tickets lets you browse upcoming events, purchase tickets securely through 
    - Date, time, and venue
    - Ticket price
    - Available capacity
+   - If the venue name is linked, select it to see that venue's logo and other published events
 2. Use the quantity selector to choose how many tickets (1–10 per purchase)
 3. Enter your email address
 4. Click **"Buy Tickets"**

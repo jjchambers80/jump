@@ -7,6 +7,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import api from '@/services/api';
+import { resolveAssetUrl } from '@/lib/assets';
 
 interface Venue {
   id: string;
@@ -50,7 +51,6 @@ function toDatetimeLocal(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 export default function EditEventPage() {
   const router = useRouter();
@@ -136,9 +136,9 @@ export default function EditEventPage() {
       setError('Logo must be under 5MB');
       return;
     }
-    const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
+    const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     if (!allowed.includes(file.type)) {
-      setError('Only image files (JPG, PNG, GIF, WebP, SVG) are allowed');
+      setError('Only image files (JPG, PNG, GIF, WebP) are allowed');
       return;
     }
     try {
@@ -278,7 +278,7 @@ export default function EditEventPage() {
   const capacityNum = parseInt(capacity) || 0;
   const capacityExceeded = capacityNum > 0 && totalTierQuantity > capacityNum;
 
-  const logoSrc = logoUrl ? (logoUrl.startsWith('http') ? logoUrl : `${API_URL}${logoUrl}`) : null;
+  const logoSrc = resolveAssetUrl(logoUrl);
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
@@ -398,7 +398,7 @@ export default function EditEventPage() {
                         or drag and drop
                       </p>
                       <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">
-                        PNG, JPG, GIF, WebP, SVG up to 5MB
+                        PNG, JPG, GIF, WebP up to 5MB
                       </p>
                     </>
                   )}

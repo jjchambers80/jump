@@ -3,11 +3,12 @@
 // Uses auth.config.ts (edge-safe, no Prisma)
 
 import NextAuth from 'next-auth';
+import type { NextRequest } from 'next/server';
 import authConfig from './src/auth.config';
 
 const { auth } = NextAuth(authConfig);
 
-export default auth((req) => {
+export default auth((req: NextRequest & { auth: unknown }) => {
   const { nextUrl } = req;
   const isLoggedIn = !!req.auth;
 

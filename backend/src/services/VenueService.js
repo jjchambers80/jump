@@ -3,15 +3,11 @@
 
 import { prisma } from '@jump/db';
 import logger from '../utils/logger.js';
-import { ConflictError } from '../middleware/errorHandler.js';
+import { ConflictError, NotFoundError } from '../middleware/errorHandler.js';
+import { formatEventSummary } from '../utils/eventSummary.js';
 
 class VenueService {
-  /**
-   * Create a new venue within an organization
-   * @param {string} orgId - Organization ID
-   * @param {Object} data - { name, address, timezone?, isPublic? }
-   * @returns {Promise<Object>} Created venue
-   */
+  /** Create a new venue within an organization. */
   async createVenue(orgId, data) {
     const venue = await prisma.venue.create({
       data: {
@@ -33,12 +29,7 @@ class VenueService {
     return venue;
   }
 
-  /**
-   * Get venue by ID, scoped to organization
-   * @param {string} orgId - Organization ID
-   * @param {string} id - Venue ID
-   * @returns {Promise<Object|null>} Venue or null
-   */
+  /** Get venue by ID, scoped to organization. */
   async getVenueById(orgId, id) {
     return prisma.venue.findFirst({
       where: { id, organizationId: orgId },
@@ -50,11 +41,69 @@ class VenueService {
     });
   }
 
-  /**
-   * List venues for an organization
-   * @param {string} orgId - Organization ID
-   * @returns {Promise<Array>} List of venues
-   */
+  /** Get public venue fields and published event summaries. */
+  async getPublicVenueById(id) {
+    const venue = await prisma.venue.findFirst({
+      where: {
+        id,
+        isPublic: true,
+        organization: { status: 'ACTIVE' },
+      },
+      select: {
+        id: true,
+        name: true,
+        address: true,
+        timezone: true,
+        logoUrl: true,
+        events: {
+          where: { status: 'PUBLISHED' },
+          orderBy: { date: 'asc' },
+          select: {
+            id: true,
+            name: true,
+            date: true,
+            category: true,
+            status: true,
+            priceTiers: {
+              where: { isActive: true },
+              select: {
+                price: true,
+                quantityTotal: true,
+                quantitySold: true,
+                quantityReserved: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!venue) {
+      throw new NotFoundError('Venue not found');
+    }
+
+    const publicVenue = {
+      id: venue.id,
+      name: venue.name,
+      address: venue.address,
+      timezone: venue.timezone,
+      logoUrl: venue.logoUrl,
+    };
+    const eventVenue = {
+      id: venue.id,
+      name: venue.name,
+      address: venue.address,
+    };
+
+    return {
+      venue: publicVenue,
+      events: venue.events.map((event) =>
+        formatEventSummary({ ...event, venue: eventVenue })
+      ),
+    };
+  }
+
+  /** List venues for an organization. */
   async listVenuesByOrganization(orgId) {
     return prisma.venue.findMany({
       where: { organizationId: orgId },
@@ -67,24 +116,23 @@ class VenueService {
     });
   }
 
-  /**
-   * Update a venue
-   * @param {string} orgId - Organization ID
-   * @param {string} id - Venue ID
-   * @param {Object} data - Fields to update { name?, address?, timezone?, isPublic? }
-   * @returns {Promise<Object>} Updated venue
-   */
+  /** Update venue metadata after verifying organization ownership. */
   async updateVenue(orgId, id, data) {
+    const existing = await prisma.venue.findFirst({
+      where: { id, organizationId: orgId },
+      select: { id: true },
+    });
+    if (!existing) {
+      throw new NotFoundError('Venue not found');
+    }
+
     const updateData = {};
     if (data.name !== undefined) updateData.name = data.name;
     if (data.address !== undefined) updateData.address = data.address;
     if (data.timezone !== undefined) updateData.timezone = data.timezone;
     if (data.isPublic !== undefined) updateData.isPublic = data.isPublic;
 
-    const venue = await prisma.venue.update({
-      where: { id },
-      data: updateData,
-    });
+    const venue = await prisma.venue.update({ where: { id }, data: updateData });
 
     logger.info('Venue updated', {
       event: 'venue_updated',
@@ -96,16 +144,40 @@ class VenueService {
     return venue;
   }
 
-  /**
-   * Delete a venue (FR-010: prevent deletion if linked events exist)
-   * @param {string} orgId - Organization ID
-   * @param {string} id - Venue ID
-   * @returns {Promise<void>}
-   */
+  /** Set or clear a venue logo after verifying organization ownership. */
+  async setVenueLogo(orgId, id, logoUrl) {
+    const existing = await prisma.venue.findFirst({
+      where: { id, organizationId: orgId },
+      select: { logoUrl: true },
+    });
+    if (!existing) {
+      throw new NotFoundError('Venue not found');
+    }
+
+    const venue = await prisma.venue.update({ where: { id }, data: { logoUrl } });
+
+    logger.info('Venue logo updated', {
+      event: 'venue_logo_updated',
+      venueId: id,
+      organizationId: orgId,
+      removed: logoUrl === null,
+    });
+
+    return { venue, previousLogoUrl: existing.logoUrl };
+  }
+
+  /** Delete a venue unless linked events exist. */
   async deleteVenue(orgId, id) {
-    // Check for linked events
+    const existing = await prisma.venue.findFirst({
+      where: { id, organizationId: orgId },
+      select: { id: true },
+    });
+    if (!existing) {
+      throw new NotFoundError('Venue not found');
+    }
+
     const eventCount = await prisma.event.count({
-      where: { venueId: id },
+      where: { venueId: id, venue: { organizationId: orgId } },
     });
 
     if (eventCount > 0) {
@@ -114,9 +186,7 @@ class VenueService {
       );
     }
 
-    await prisma.venue.delete({
-      where: { id },
-    });
+    await prisma.venue.delete({ where: { id } });
 
     logger.info('Venue deleted', {
       event: 'venue_deleted',

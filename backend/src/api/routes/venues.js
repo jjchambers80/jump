@@ -3,19 +3,50 @@
 // Routes: /organizations/:orgId/venues
 
 import { Router } from 'express';
+import { prisma } from '@jump/db';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireOrganizer } from '../../middleware/rbac.js';
 import { validateCreateVenue, validateUpdateVenue } from '../validators/venueValidators.js';
 import venueService from '../../services/VenueService.js';
-import { NotFoundError } from '../../middleware/errorHandler.js';
+import { ForbiddenError, NotFoundError } from '../../middleware/errorHandler.js';
+import { getLogoUrl, removeLocalLogo, uploadLogo } from '../../middleware/logoUpload.js';
 
-const router = Router({ mergeParams: true }); // mergeParams to access :orgId
+/**
+ * Verifies the authenticated user belongs to the org in :orgId.
+ * Must run after requireAuth.
+ */
+const verifyOrgOwnership = async (req, res, next) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { organizationId: true },
+    });
+    if (!user?.organizationId || user.organizationId !== req.params.orgId) {
+      throw new ForbiddenError('Access denied to this organization');
+    }
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
+const publicRouter = Router();
+const orgRouter = Router({ mergeParams: true });
+
+publicRouter.get('/:venueId', async (req, res, next) => {
+  try {
+    const result = await venueService.getPublicVenueById(req.params.venueId);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
 
 /**
  * POST /organizations/:orgId/venues
  * Create a venue within an organization (organizer/admin)
  */
-router.post('/', requireAuth, requireOrganizer, validateCreateVenue, async (req, res, next) => {
+orgRouter.post('/', requireAuth, requireOrganizer, verifyOrgOwnership, validateCreateVenue, async (req, res, next) => {
   try {
     const venue = await venueService.createVenue(req.params.orgId, req.body);
     res.status(201).json(venue);
@@ -28,7 +59,7 @@ router.post('/', requireAuth, requireOrganizer, validateCreateVenue, async (req,
  * GET /organizations/:orgId/venues
  * List venues for an organization (organizer/admin)
  */
-router.get('/', requireAuth, requireOrganizer, async (req, res, next) => {
+orgRouter.get('/', requireAuth, requireOrganizer, verifyOrgOwnership, async (req, res, next) => {
   try {
     const venues = await venueService.listVenuesByOrganization(req.params.orgId);
     res.json(venues);
@@ -41,7 +72,7 @@ router.get('/', requireAuth, requireOrganizer, async (req, res, next) => {
  * GET /organizations/:orgId/venues/:id
  * Get venue details (organizer/admin)
  */
-router.get('/:id', requireAuth, requireOrganizer, async (req, res, next) => {
+orgRouter.get('/:id', requireAuth, requireOrganizer, verifyOrgOwnership, async (req, res, next) => {
   try {
     const venue = await venueService.getVenueById(req.params.orgId, req.params.id);
     if (!venue) {
@@ -57,7 +88,7 @@ router.get('/:id', requireAuth, requireOrganizer, async (req, res, next) => {
  * PATCH /organizations/:orgId/venues/:id
  * Update venue details (organizer/admin)
  */
-router.patch('/:id', requireAuth, requireOrganizer, validateUpdateVenue, async (req, res, next) => {
+orgRouter.patch('/:id', requireAuth, requireOrganizer, verifyOrgOwnership, validateUpdateVenue, async (req, res, next) => {
   try {
     const venue = await venueService.getVenueById(req.params.orgId, req.params.id);
     if (!venue) {
@@ -74,7 +105,41 @@ router.patch('/:id', requireAuth, requireOrganizer, validateUpdateVenue, async (
  * DELETE /organizations/:orgId/venues/:id
  * Delete a venue (organizer/admin, FR-010: blocked if events exist)
  */
-router.delete('/:id', requireAuth, requireOrganizer, async (req, res, next) => {
+orgRouter.post('/:id/logo', requireAuth, requireOrganizer, verifyOrgOwnership, uploadLogo, async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded' });
+    }
+
+    const logoUrl = getLogoUrl(req.file.filename);
+    const { venue, previousLogoUrl } = await venueService.setVenueLogo(
+      req.params.orgId,
+      req.params.id,
+      logoUrl
+    );
+    await removeLocalLogo(previousLogoUrl);
+    res.json(venue);
+  } catch (error) {
+    if (req.file) await removeLocalLogo(getLogoUrl(req.file.filename));
+    next(error);
+  }
+});
+
+orgRouter.delete('/:id/logo', requireAuth, requireOrganizer, verifyOrgOwnership, async (req, res, next) => {
+  try {
+    const { venue, previousLogoUrl } = await venueService.setVenueLogo(
+      req.params.orgId,
+      req.params.id,
+      null
+    );
+    await removeLocalLogo(previousLogoUrl);
+    res.json(venue);
+  } catch (error) {
+    next(error);
+  }
+});
+
+orgRouter.delete('/:id', requireAuth, requireOrganizer, verifyOrgOwnership, async (req, res, next) => {
   try {
     const venue = await venueService.getVenueById(req.params.orgId, req.params.id);
     if (!venue) {
@@ -87,4 +152,5 @@ router.delete('/:id', requireAuth, requireOrganizer, async (req, res, next) => {
   }
 });
 
-export default router;
+export default publicRouter;
+export { orgRouter as orgVenuesRouter };

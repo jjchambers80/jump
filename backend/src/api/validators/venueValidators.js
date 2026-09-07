@@ -5,11 +5,22 @@ import { ValidationError } from '../../middleware/errorHandler.js';
 
 // Common IANA timezone patterns (basic validation)
 const IANA_TZ_REGEX = /^[A-Za-z]+\/[A-Za-z_]+$/;
+const VENUE_FIELDS = new Set(['name', 'address', 'timezone', 'isPublic']);
+
+function rejectUnknownFields(body, next) {
+  const unknownFields = Object.keys(body).filter((field) => !VENUE_FIELDS.has(field));
+  if (unknownFields.length > 0) {
+    next(new ValidationError(`Unknown venue field(s): ${unknownFields.join(', ')}`));
+    return true;
+  }
+  return false;
+}
 
 /**
  * Validate venue creation payload
  */
 export const validateCreateVenue = (req, res, next) => {
+  if (rejectUnknownFields(req.body, next)) return;
   const { name, address, timezone, isPublic } = req.body;
 
   if (!name || typeof name !== 'string' || name.trim().length === 0) {
@@ -51,11 +62,15 @@ export const validateCreateVenue = (req, res, next) => {
  * Validate venue update payload
  */
 export const validateUpdateVenue = (req, res, next) => {
+  if (rejectUnknownFields(req.body, next)) return;
   const { name, address, timezone, isPublic } = req.body;
 
   if (name !== undefined) {
     if (typeof name !== 'string' || name.trim().length === 0) {
       return next(new ValidationError('Venue name must be a non-empty string'));
+    }
+    if (name.trim().length > 255) {
+      return next(new ValidationError('Venue name must be 255 characters or less'));
     }
     req.body.name = name.trim();
   }
@@ -63,6 +78,9 @@ export const validateUpdateVenue = (req, res, next) => {
   if (address !== undefined) {
     if (typeof address !== 'string' || address.trim().length === 0) {
       return next(new ValidationError('Address must be a non-empty string'));
+    }
+    if (address.trim().length > 500) {
+      return next(new ValidationError('Address must be 500 characters or less'));
     }
     req.body.address = address.trim();
   }

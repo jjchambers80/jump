@@ -5,6 +5,7 @@
 import { prisma } from '@jump/db';
 import { NotFoundError, ValidationError, ConflictError } from '../middleware/errorHandler.js';
 import logger from '../utils/logger.js';
+import { formatEventSummary } from '../utils/eventSummary.js';
 
 class EventService {
   /**
@@ -317,27 +318,7 @@ class EventService {
       prisma.event.count({ where }),
     ]);
 
-    const formattedEvents = events.map((event) => {
-      const activePrices = event.priceTiers.map((t) => Number(t.price));
-      const availableTickets = event.priceTiers.reduce(
-        (sum, t) => sum + (t.quantityTotal - t.quantitySold - t.quantityReserved),
-        0
-      );
-
-      return {
-        id: event.id,
-        name: event.name,
-        date: event.date,
-        venue: event.venue,
-        category: event.category,
-        status: event.status,
-        priceRange:
-          activePrices.length > 0
-            ? { min: Math.min(...activePrices), max: Math.max(...activePrices) }
-            : null,
-        availableTickets,
-      };
-    });
+    const formattedEvents = events.map(formatEventSummary);
 
     return {
       events: formattedEvents,

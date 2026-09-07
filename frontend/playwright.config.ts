@@ -1,5 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const testPort = process.env.PLAYWRIGHT_PORT || '3001';
+const baseURL = process.env.PLAYWRIGHT_BASE_URL || `http://localhost:${testPort}`;
+
 export default defineConfig({
   testDir: './',
   testMatch: ['tests/integration/**/*.spec.ts', 'e2e/**/*.spec.ts'],
@@ -9,7 +12,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
   use: {
-    baseURL: 'http://localhost:3001',
+    baseURL,
     trace: 'on-first-retry',
   },
 
@@ -25,8 +28,8 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:3001',
+    command: `npx next dev -p ${testPort}`,
+    url: baseURL,
     reuseExistingServer: !process.env.CI,
   },
 });
