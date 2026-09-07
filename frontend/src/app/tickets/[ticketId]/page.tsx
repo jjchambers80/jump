@@ -118,7 +118,7 @@ function TicketDetailContent() {
 
     const link = document.createElement('a');
     link.href = ticket.qrCode;
-    link.download = `ticket-${ticket.id.slice(0, 8)}-qr.png`;
+    link.download = `ticket-${ticket.ticketNumber}-qr.png`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -197,7 +197,14 @@ function TicketDetailContent() {
               >
                 {eventName}
               </h2>
-              <StatusBadge status={ticket.status} />
+              <div className="flex items-center gap-2">
+                {ticket.saleStatus === 'ENDED' && (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 dark:bg-slate-600 text-gray-600 dark:text-slate-300">
+                    Sale Ended
+                  </span>
+                )}
+                <StatusBadge status={ticket.status} />
+              </div>
             </div>
             <div className="mt-2 space-y-1">
               <p
@@ -247,7 +254,7 @@ function TicketDetailContent() {
                 <img
                   ref={qrRef}
                   src={ticket.qrCode}
-                  alt={`QR Code for ticket ${ticket.id.slice(0, 8)}`}
+                  alt={`QR Code for Ticket #${ticket.ticketNumber}`}
                   className={`w-48 h-48 ${isExpired ? 'grayscale opacity-50' : ''}`}
                 />
               </div>
@@ -285,6 +292,30 @@ function TicketDetailContent() {
             )}
           </div>
 
+          {/* Refund Policy Badge */}
+          <div className="px-6 pt-4">
+            {ticket.isRefundable === false && (
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                <svg className="w-3.5 h-3.5 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+                NON-REFUNDABLE
+              </span>
+            )}
+            {ticket.isRefundable === true && (
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border border-green-200 dark:border-green-800">
+                Refundable
+              </span>
+            )}
+          </div>
+
+          {/* Tier Description */}
+          {ticket.priceTierDescription && (
+            <div className="px-6 pt-3">
+              <p className="text-sm text-gray-600 dark:text-slate-400 italic">{ticket.priceTierDescription}</p>
+            </div>
+          )}
+
           {/* Ticket Details */}
           <div className="px-6 py-5">
             <h3 className="text-sm font-semibold text-gray-500 dark:text-slate-500 uppercase tracking-wide mb-3">
@@ -292,9 +323,9 @@ function TicketDetailContent() {
             </h3>
             <dl className="grid grid-cols-2 gap-4">
               <div>
-                <dt className="text-xs font-medium text-gray-400 dark:text-slate-500">Ticket ID</dt>
-                <dd className="mt-0.5 text-sm text-gray-900 dark:text-slate-100 font-mono">
-                  {ticket.id.slice(0, 8)}...
+                <dt className="text-xs font-medium text-gray-400 dark:text-slate-500">Ticket Number</dt>
+                <dd className="mt-0.5 text-sm text-gray-900 dark:text-slate-100 font-semibold">
+                  #{ticket.ticketNumber}
                 </dd>
               </div>
               <div>
@@ -313,6 +344,13 @@ function TicketDetailContent() {
                 <dd className="mt-0.5 text-sm text-gray-900 dark:text-slate-100 font-semibold">
                   {formatPrice(ticket.pricePaid)}
                 </dd>
+                {ticket.priceBreakdown && ticket.priceBreakdown.platformFee > 0 && (
+                  <dd className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                    Includes Base: {formatPrice(ticket.priceBreakdown.subtotal)}
+                    {ticket.priceBreakdown.platformFee > 0 && <>, Fees: {formatPrice(ticket.priceBreakdown.platformFee + ticket.priceBreakdown.processingFee)}</>}
+                    {ticket.priceBreakdown.tax > 0 && <>, Tax: {formatPrice(ticket.priceBreakdown.tax)}</>}
+                  </dd>
+                )}
               </div>
               <div>
                 <dt className="text-xs font-medium text-gray-400 dark:text-slate-500">Purchased</dt>
@@ -329,6 +367,20 @@ function TicketDetailContent() {
                   )}
                 </dd>
               </div>
+              {ticket.saleEndDate && (
+                <div>
+                  <dt className="text-xs font-medium text-gray-400 dark:text-slate-500">Sale End Date</dt>
+                  <dd className="mt-0.5 text-sm text-gray-900 dark:text-slate-100">
+                    {new Date(ticket.saleEndDate).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </dd>
+                </div>
+              )}
             </dl>
           </div>
         </div>

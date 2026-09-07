@@ -19,12 +19,23 @@ export interface Ticket {
   eventDate: string;
   venue: string;
   customerEmail: string;
-  ticketNumber: string;
+  ticketNumber: number;
   qrCode: string;
   qrCodeJwt: string;
   purchaseDate: string;
   purchaseTime: string;
   pricePaid: number;
+  priceTierDescription?: string;
+  saleStatus?: string;
+  saleEndDate?: string;
+  isRefundable?: boolean;
+  priceBreakdown?: {
+    subtotal: number;
+    platformFee: number;
+    processingFee: number;
+    tax: number;
+    total: number;
+  };
   status: string;
   event?: {
     name: string;

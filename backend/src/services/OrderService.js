@@ -8,6 +8,7 @@ import stripe from '../config/stripe.js';
 import logger from '../utils/logger.js';
 import { NotFoundError, ConflictError, ValidationError } from '../middleware/errorHandler.js';
 import qrService from './QRService.js';
+import feeService from './FeeService.js';
 
 class OrderService {
   /**
@@ -140,12 +141,13 @@ class OrderService {
         },
       });
 
-      // 4. Calculate total
+      // 4. Calculate total with fee breakdown (FTC all-in pricing)
       const quantity = items.reduce((sum, item) => sum + item.quantity, 0);
-      const totalAmount = items.reduce(
-        (sum, item) => sum + Number(tierById.get(item.priceTierId).price) * item.quantity,
-        0
-      );
+      const feeItems = items.map((item) => ({
+        unitPrice: Number(tierById.get(item.priceTierId).price),
+        quantity: item.quantity,
+      }));
+      const fees = feeService.computeOrderFees(feeItems);
 
       // Ensure unique orderRef
       let existingRef = await tx.order.findUnique({ where: { orderRef } });
@@ -154,21 +156,27 @@ class OrderService {
         existingRef = await tx.order.findUnique({ where: { orderRef } });
       }
 
-      // 5. Create order
+      // 5. Create order with fee breakdown
       const order = await tx.order.create({
         data: {
           eventId,
           contactId: contactRecord.id,
           orderRef,
-          totalAmount,
+          totalAmount: fees.total,
+          subtotalAmount: fees.subtotal,
+          platformFeeAmount: fees.platformFee,
+          processingFeeAmount: fees.processingFee,
+          taxAmount: fees.tax,
           currency: 'usd',
           quantity,
           status: 'PENDING',
           items: {
-            create: items.map((item) => ({
+            create: items.map((item, idx) => ({
               priceTierId: item.priceTierId,
               quantity: item.quantity,
               unitPrice: tierById.get(item.priceTierId).price,
+              platformFee: fees.itemBreakdowns[idx].platformFee,
+              processingFee: fees.itemBreakdowns[idx].processingFee,
             })),
           },
         },
@@ -176,11 +184,11 @@ class OrderService {
 
       // 6. Inventory already reserved atomically in step 2 above
 
-      return { order, event, tiers, contactRecord };
+      return { order, event, tiers, contactRecord, fees };
     });
 
-    const { order, event, tiers, contactRecord } = result;
-    const itemByTierId = new Map(items.map((item) => [item.priceTierId, item]));
+    const { order, event, tiers, contactRecord, fees } = result;
+    const itemByTierId = new Map(items.map((item, idx) => [item.priceTierId, { ...item, feeIdx: idx }]));
 
     // 7. Create Stripe Checkout session (outside transaction — external call)
     let stripeSession;
@@ -189,17 +197,23 @@ class OrderService {
         mode: 'payment',
         payment_method_types: ['card'],
         customer_email: contactRecord.email,
-        line_items: tiers.map((tier) => ({
-          price_data: {
-            currency: 'usd',
-            product_data: {
-              name: `${event.name} — ${tier.name}`,
-              description: `Tickets for ${event.name} at ${event.venue.name}`,
+        line_items: tiers.map((tier) => {
+          const itemWithIdx = itemByTierId.get(tier.id);
+          const breakdown = fees.itemBreakdowns[itemWithIdx.feeIdx];
+          // All-in unit price: base + proportional fees per ticket
+          const allInUnitCents = Math.round((breakdown.lineTotal / breakdown.quantity) * 100);
+          return {
+            price_data: {
+              currency: 'usd',
+              product_data: {
+                name: `${event.name} — ${tier.name}`,
+                description: `Tickets for ${event.name} at ${event.venue.name}`,
+              },
+              unit_amount: allInUnitCents,
             },
-            unit_amount: Math.round(Number(tier.price) * 100), // cents
-          },
-          quantity: itemByTierId.get(tier.id).quantity,
-        })),
+            quantity: itemWithIdx.quantity,
+          };
+        }),
         metadata: {
           orderId: order.id,
           orderRef: order.orderRef,
@@ -259,6 +273,7 @@ class OrderService {
       orderId: order.id,
       orderRef: order.orderRef,
       stripeCheckoutUrl: stripeSession.url,
+      totalAmount: Number(order.totalAmount),
     };
   }
 
@@ -616,8 +631,14 @@ class OrderService {
         priceTierName: item.priceTier?.name,
         quantity: item.quantity,
         unitPrice: Number(item.unitPrice),
-        lineTotal: Number(item.unitPrice) * item.quantity,
+        platformFee: Number(item.platformFee),
+        processingFee: Number(item.processingFee),
+        lineTotal: Number(item.unitPrice) * item.quantity + Number(item.platformFee) + Number(item.processingFee),
       })),
+      subtotalAmount: Number(order.subtotalAmount),
+      platformFeeAmount: Number(order.platformFeeAmount),
+      processingFeeAmount: Number(order.processingFeeAmount),
+      taxAmount: Number(order.taxAmount),
       totalAmount: Number(order.totalAmount),
       currency: order.currency,
       status: order.status,
@@ -643,6 +664,10 @@ class OrderService {
       eventName: order.event?.name,
       eventDate: order.event?.date,
       quantity: order.quantity,
+      subtotalAmount: Number(order.subtotalAmount),
+      platformFeeAmount: Number(order.platformFeeAmount),
+      processingFeeAmount: Number(order.processingFeeAmount),
+      taxAmount: Number(order.taxAmount),
       totalAmount: Number(order.totalAmount),
       currency: order.currency,
       status: order.status,

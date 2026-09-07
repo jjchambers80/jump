@@ -72,6 +72,10 @@ class EventService {
             minPerOrder: tier.minPerOrder ?? null,
             maxPerOrder: tier.maxPerOrder ?? null,
             isActive: true,
+            saleStartDate: tier.saleStartDate ?? null,
+            saleEndDate: tier.saleEndDate ?? null,
+            visibility: tier.visibility ?? 'PUBLIC',
+            isRefundable: tier.isRefundable ?? false,
           })),
         },
       },
@@ -525,22 +529,37 @@ class EventService {
             timezone: event.venue.timezone,
           }
         : null,
-      priceTiers: (event.priceTiers || []).map((t) => ({
-        id: t.id,
-        eventId: t.eventId,
-        name: t.name,
-        price: Number(t.price),
-        quantityTotal: t.quantityTotal,
-        quantitySold: t.quantitySold,
-        quantityReserved: t.quantityReserved,
-        quantityAvailable: t.quantityTotal - t.quantitySold - t.quantityReserved,
-        displayOrder: t.displayOrder,
-        minPerOrder: t.minPerOrder,
-        maxPerOrder: t.maxPerOrder,
-        isActive: t.isActive,
-        createdAt: t.createdAt,
-        updatedAt: t.updatedAt,
-      })),
+      priceTiers: (event.priceTiers || []).map((t) => {
+        const now = new Date();
+        const saleStart = t.saleStartDate ? new Date(t.saleStartDate) : null;
+        const saleEnd = t.saleEndDate ? new Date(t.saleEndDate) : null;
+        let saleStatus = 'ON_SALE';
+        if (saleStart && now < saleStart) saleStatus = 'NOT_STARTED';
+        else if (saleEnd && now > saleEnd) saleStatus = 'ENDED';
+
+        return {
+          id: t.id,
+          eventId: t.eventId,
+          name: t.name,
+          price: Number(t.price),
+          quantityTotal: t.quantityTotal,
+          quantitySold: t.quantitySold,
+          quantityReserved: t.quantityReserved,
+          quantityAvailable: t.quantityTotal - t.quantitySold - t.quantityReserved,
+          displayOrder: t.displayOrder,
+          minPerOrder: t.minPerOrder,
+          maxPerOrder: t.maxPerOrder,
+          isActive: t.isActive,
+          saleStartDate: t.saleStartDate,
+          saleEndDate: t.saleEndDate,
+          visibility: t.visibility,
+          isRefundable: t.isRefundable,
+          isOnSale: saleStatus === 'ON_SALE',
+          saleStatus,
+          createdAt: t.createdAt,
+          updatedAt: t.updatedAt,
+        };
+      }),
       createdAt: event.createdAt,
       updatedAt: event.updatedAt,
     };

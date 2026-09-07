@@ -19,20 +19,30 @@ interface Venue {
 interface PriceTierInput {
   key: string;
   name: string;
+  description: string;
   price: string;
   quantityTotal: string;
   minPerOrder: string;
   maxPerOrder: string;
+  saleStartDate: string;
+  saleEndDate: string;
+  visibility: 'PUBLIC' | 'PRIVATE' | 'HIDDEN';
+  isRefundable: boolean;
 }
 
 function newTier(): PriceTierInput {
   return {
     key: crypto.randomUUID(),
     name: '',
+    description: '',
     price: '',
     quantityTotal: '',
     minPerOrder: '1',
     maxPerOrder: '10',
+    saleStartDate: '',
+    saleEndDate: '',
+    visibility: 'PUBLIC',
+    isRefundable: false,
   };
 }
 
@@ -96,7 +106,7 @@ export default function CreateEventPage() {
       setPriceTiers(priceTiers.filter((t) => t.key !== key));
     }
   };
-  const updateTier = (key: string, field: keyof PriceTierInput, value: string) => {
+  const updateTier = (key: string, field: keyof PriceTierInput, value: string | boolean) => {
     setPriceTiers(priceTiers.map((t) => (t.key === key ? { ...t, [field]: value } : t)));
   };
   const moveTier = (index: number, direction: 'up' | 'down') => {
@@ -131,11 +141,16 @@ export default function CreateEventPage() {
         category: category || undefined,
         priceTiers: priceTiers.map((t, i) => ({
           name: t.name,
+          description: t.description || undefined,
           price: parseFloat(t.price), // dollars - backend stores as Decimal
           quantityTotal: parseInt(t.quantityTotal),
           displayOrder: i,
           minPerOrder: t.minPerOrder ? parseInt(t.minPerOrder) : undefined,
           maxPerOrder: t.maxPerOrder ? parseInt(t.maxPerOrder) : undefined,
+          saleStartDate: t.saleStartDate ? new Date(t.saleStartDate).toISOString() : null,
+          saleEndDate: t.saleEndDate ? new Date(t.saleEndDate).toISOString() : null,
+          visibility: t.visibility,
+          isRefundable: t.isRefundable,
         })),
       };
 
@@ -358,6 +373,17 @@ export default function CreateEventPage() {
                       required
                     />
                   </div>
+                  <div className="sm:col-span-2">
+                    <label className={labelClass}>Description</label>
+                    <textarea
+                      value={tier.description}
+                      onChange={(e) => updateTier(tier.key, 'description', e.target.value)}
+                      placeholder="Brief description (optional, e.g. VIP access includes backstage meet & greet)"
+                      maxLength={500}
+                      rows={2}
+                      className={inputClass}
+                    />
+                  </div>
                   <div>
                     <label className={labelClass}>Price ($) *</label>
                     <input
@@ -402,6 +428,51 @@ export default function CreateEventPage() {
                       min={1}
                       className={inputClass}
                     />
+                  </div>
+                </div>
+
+                {/* Sale Window & Visibility */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3 pt-3 border-t border-gray-100 dark:border-slate-700">
+                  <div>
+                    <label className={labelClass}>Sale Start</label>
+                    <input
+                      type="datetime-local"
+                      value={tier.saleStartDate}
+                      onChange={(e) => updateTier(tier.key, 'saleStartDate', e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Sale End</label>
+                    <input
+                      type="datetime-local"
+                      value={tier.saleEndDate}
+                      onChange={(e) => updateTier(tier.key, 'saleEndDate', e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Visibility</label>
+                    <select
+                      value={tier.visibility}
+                      onChange={(e) => updateTier(tier.key, 'visibility', e.target.value)}
+                      className={inputClass}
+                    >
+                      <option value="PUBLIC">Public</option>
+                      <option value="PRIVATE">Private</option>
+                      <option value="HIDDEN">Hidden</option>
+                    </select>
+                  </div>
+                  <div className="flex items-end pb-1">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={tier.isRefundable}
+                        onChange={(e) => updateTier(tier.key, 'isRefundable', e.target.checked)}
+                        className="rounded border-gray-300 dark:border-slate-600 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-slate-300">Refundable</span>
+                    </label>
                   </div>
                 </div>
               </div>

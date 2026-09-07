@@ -18,6 +18,7 @@ interface Venue {
 interface PriceTier {
   id: string;
   name: string;
+  description: string | null;
   price: number;
   quantityTotal: number;
   quantitySold: number;
@@ -26,6 +27,12 @@ interface PriceTier {
   minPerOrder: number | null;
   maxPerOrder: number | null;
   isActive: boolean;
+  saleStartDate: string | null;
+  saleEndDate: string | null;
+  visibility: 'PUBLIC' | 'PRIVATE' | 'HIDDEN';
+  isRefundable: boolean;
+  isOnSale: boolean;
+  saleStatus: 'NOT_STARTED' | 'ON_SALE' | 'ENDED';
 }
 
 interface EventDetail {
@@ -516,19 +523,57 @@ export default function EditEventPage() {
                 .map((tier) => (
                   <div
                     key={tier.id}
-                    className="flex items-center justify-between rounded-md border border-gray-200 dark:border-slate-600 px-4 py-2.5 text-sm"
+                    className="rounded-md border border-gray-200 dark:border-slate-600 px-4 py-3 text-sm"
                   >
-                    <div>
-                      <span className="font-medium text-gray-900 dark:text-slate-100">
-                        {tier.name}
-                      </span>
-                      <span className="text-gray-500 dark:text-slate-400 ml-2">
-                        ${Number(tier.price).toFixed(2)}
-                      </span>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-gray-900 dark:text-slate-100">
+                          {tier.name}
+                        </span>
+                        <span className="text-gray-500 dark:text-slate-400">
+                          ${Number(tier.price).toFixed(2)}
+                        </span>
+                        {tier.visibility !== 'PUBLIC' && (
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
+                            tier.visibility === 'HIDDEN'
+                              ? 'bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-slate-400'
+                              : 'bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400'
+                          }`}>
+                            {tier.visibility.toLowerCase()}
+                          </span>
+                        )}
+                        {tier.isRefundable && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400">
+                            refundable
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-slate-400">
+                        {tier.quantitySold} sold / {tier.quantityTotal} total
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-500 dark:text-slate-400">
-                      {tier.quantitySold} sold / {tier.quantityTotal} total
-                    </div>
+                    {tier.description && (
+                      <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">{tier.description}</p>
+                    )}
+                    {(tier.saleStartDate || tier.saleEndDate) && (
+                      <div className="mt-1.5 flex items-center gap-3 text-xs text-gray-400 dark:text-slate-500">
+                        {tier.saleStartDate && (
+                          <span>Starts: {new Date(tier.saleStartDate).toLocaleDateString()}</span>
+                        )}
+                        {tier.saleEndDate && (
+                          <span>Ends: {new Date(tier.saleEndDate).toLocaleDateString()}</span>
+                        )}
+                        <span className={`font-medium ${
+                          tier.saleStatus === 'ON_SALE'
+                            ? 'text-green-600 dark:text-green-400'
+                            : tier.saleStatus === 'NOT_STARTED'
+                              ? 'text-yellow-600 dark:text-yellow-400'
+                              : 'text-gray-500 dark:text-slate-500'
+                        }`}>
+                          {tier.saleStatus === 'ON_SALE' ? 'On Sale' : tier.saleStatus === 'NOT_STARTED' ? 'Not Started' : 'Ended'}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 ))}
             </div>

@@ -71,6 +71,15 @@ class TicketService {
     const tickets = await prisma.$transaction(async (tx) => {
       const created = [];
 
+      // Get next ticket number with row-level lock to prevent duplicates
+      const maxResult = await tx.$queryRaw`
+        SELECT COALESCE(MAX("ticketNumber"), 0) AS max_num
+        FROM "Ticket"
+        WHERE "eventId" = ${order.eventId}
+        FOR UPDATE
+      `;
+      let nextTicketNumber = Number(maxResult[0].max_num) + 1;
+
       let barcodeIndex = 0;
       for (const item of orderItems) {
         for (let i = 0; i < item.quantity; i++) {
@@ -81,6 +90,7 @@ class TicketService {
               eventId: order.eventId,
               priceTierId: item.priceTierId,
               contactId: order.contactId,
+              ticketNumber: nextTicketNumber++,
               pricePaid: item.unitPrice,
               barcode,
               status: 'VALID',
@@ -150,7 +160,7 @@ class TicketService {
             venue: { select: { name: true, address: true } },
           },
         },
-        priceTier: { select: { name: true, price: true } },
+        priceTier: { select: { name: true, price: true, description: true, saleStartDate: true, saleEndDate: true, isRefundable: true } },
         order: { select: { orderRef: true, createdAt: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -167,30 +177,45 @@ class TicketService {
       }
     }
 
-    return tickets.map((ticket) => ({
-      id: ticket.id,
-      barcode: ticket.barcode,
-      eventId: ticket.eventId,
-      eventName: ticket.event.name,
-      eventDate: ticket.event.date,
-      venue: ticket.event.venue
+    const now = new Date();
+    return tickets.map((ticket) => {
+      const venueStr = ticket.event.venue
         ? `${ticket.event.venue.name}${ticket.event.venue.address ? ' — ' + ticket.event.venue.address : ''}`
-        : '',
-      pricePaid: Number(ticket.pricePaid),
-      priceTierName: ticket.priceTier?.name,
-      status: ticket.status,
-      redeemedAt: ticket.redeemedAt,
-      purchaseDate: ticket.order?.createdAt || ticket.createdAt,
-      purchaseTime: ticket.order?.createdAt || ticket.createdAt,
-      qrCodeJwt: ticket.qrCodeJwt || null,
-      event: {
-        name: ticket.event.name,
-        date: ticket.event.date,
-        venue: ticket.event.venue
-          ? `${ticket.event.venue.name}${ticket.event.venue.address ? ' — ' + ticket.event.venue.address : ''}`
-          : '',
-      },
-    }));
+        : '';
+
+      // Compute sale status from tier dates
+      const saleStart = ticket.priceTier?.saleStartDate ? new Date(ticket.priceTier.saleStartDate) : null;
+      const saleEnd = ticket.priceTier?.saleEndDate ? new Date(ticket.priceTier.saleEndDate) : null;
+      let saleStatus = 'ON_SALE';
+      if (saleStart && now < saleStart) saleStatus = 'NOT_STARTED';
+      else if (saleEnd && now > saleEnd) saleStatus = 'ENDED';
+
+      return {
+        id: ticket.id,
+        ticketNumber: ticket.ticketNumber,
+        barcode: ticket.barcode,
+        eventId: ticket.eventId,
+        eventName: ticket.event.name,
+        eventDate: ticket.event.date,
+        venue: venueStr,
+        pricePaid: Number(ticket.pricePaid),
+        priceTierName: ticket.priceTier?.name,
+        priceTierDescription: ticket.priceTier?.description || null,
+        saleStatus,
+        saleEndDate: ticket.priceTier?.saleEndDate || null,
+        isRefundable: ticket.priceTier?.isRefundable ?? false,
+        status: ticket.status,
+        redeemedAt: ticket.redeemedAt,
+        purchaseDate: ticket.order?.createdAt || ticket.createdAt,
+        purchaseTime: ticket.order?.createdAt || ticket.createdAt,
+        qrCodeJwt: ticket.qrCodeJwt || null,
+        event: {
+          name: ticket.event.name,
+          date: ticket.event.date,
+          venue: venueStr,
+        },
+      };
+    });
   }
 
   /**
@@ -208,9 +233,9 @@ class TicketService {
             venue: { select: { name: true, address: true } },
           },
         },
-        priceTier: { select: { name: true, price: true } },
+        priceTier: { select: { name: true, price: true, description: true, saleStartDate: true, saleEndDate: true, isRefundable: true } },
         contact: { select: { firstName: true, lastName: true, email: true } },
-        order: { select: { orderRef: true, createdAt: true } },
+        order: { select: { orderRef: true, createdAt: true, subtotalAmount: true, platformFeeAmount: true, processingFeeAmount: true, taxAmount: true, totalAmount: true, quantity: true } },
       },
     });
 
@@ -376,13 +401,26 @@ class TicketService {
 
     const purchaseTimestamp = ticket.order?.createdAt || ticket.createdAt;
 
+    // Compute sale status from tier dates
+    const now = new Date();
+    const saleStart = ticket.priceTier?.saleStartDate ? new Date(ticket.priceTier.saleStartDate) : null;
+    const saleEnd = ticket.priceTier?.saleEndDate ? new Date(ticket.priceTier.saleEndDate) : null;
+    let saleStatus = 'ON_SALE';
+    if (saleStart && now < saleStart) saleStatus = 'NOT_STARTED';
+    else if (saleEnd && now > saleEnd) saleStatus = 'ENDED';
+
     return {
       id: ticket.id,
+      ticketNumber: ticket.ticketNumber,
       barcode: ticket.barcode,
       qrCode,
       qrCodeJwt: ticket.qrCodeJwt || null,
       priceTierName: ticket.priceTier?.name,
+      priceTierDescription: ticket.priceTier?.description || null,
       pricePaid: Number(ticket.pricePaid),
+      saleStatus,
+      saleEndDate: ticket.priceTier?.saleEndDate || null,
+      isRefundable: ticket.priceTier?.isRefundable ?? false,
       status: ticket.status,
       redeemedAt: ticket.redeemedAt,
       createdAt: ticket.createdAt,
@@ -398,6 +436,13 @@ class TicketService {
       venue: venueStr,
       contact: ticket.contact,
       orderRef: ticket.order?.orderRef,
+      priceBreakdown: ticket.order ? {
+        subtotal: Number(ticket.order.subtotalAmount),
+        platformFee: Number(ticket.order.platformFeeAmount),
+        processingFee: Number(ticket.order.processingFeeAmount),
+        tax: Number(ticket.order.taxAmount),
+        total: Number(ticket.order.totalAmount),
+      } : null,
     };
   }
 }

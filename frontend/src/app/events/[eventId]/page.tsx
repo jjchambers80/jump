@@ -20,6 +20,7 @@ interface EventVenue {
 interface PriceTier {
   id: string;
   name: string;
+  description?: string | null;
   price: number;
   quantityTotal: number;
   quantitySold: number;
@@ -48,6 +49,25 @@ interface Event {
 
 function formatPrice(dollars: number): string {
   return `$${Number(dollars).toFixed(2)}`;
+}
+
+// Fee computation mirroring backend FeeService (FTC all-in pricing)
+const FEE_CONFIG = {
+  platformFeePercent: 0.05,
+  stripeFeePercent: 0.029,
+  stripeFeeFixed: 0.30,
+  taxRate: 0,
+};
+
+function computeTierAllInPrice(basePrice: number) {
+  const round = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100;
+  const platformFee = round(basePrice * FEE_CONFIG.platformFeePercent);
+  const processingFee = round(
+    (basePrice + platformFee) * FEE_CONFIG.stripeFeePercent + FEE_CONFIG.stripeFeeFixed
+  );
+  const tax = round(basePrice * FEE_CONFIG.taxRate);
+  const total = round(basePrice + platformFee + processingFee + tax);
+  return { basePrice, platformFee, processingFee, tax, total };
 }
 
 export default function EventDetailPage({ params }: { params: { eventId: string } }) {
@@ -190,10 +210,13 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
     .map((tier) => ({ priceTierId: tier.id, quantity: quantities[tier.id] ?? 0 }))
     .filter((item) => item.quantity > 0);
   const totalQuantity = cartItems.reduce((sum, item) => sum + item.quantity, 0);
-  const totalAmount = activeTiers.reduce(
-    (sum, tier) => sum + tier.price * (quantities[tier.id] ?? 0),
-    0
-  );
+  // Compute all-in total with fees
+  const cartFeeItems = activeTiers
+    .filter((tier) => (quantities[tier.id] ?? 0) > 0)
+    .map((tier) => ({ price: tier.price, quantity: quantities[tier.id] ?? 0 }));
+  const cartSubtotal = cartFeeItems.reduce((s, i) => s + i.price * i.quantity, 0);
+  const cartFees = cartSubtotal > 0 ? computeTierAllInPrice(cartSubtotal) : { total: 0 };
+  const totalAmount = cartFees.total;
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
@@ -340,15 +363,31 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                             <h3 className="font-semibold text-gray-900 dark:text-slate-100">
                               {tier.name}
                             </h3>
+                            {tier.description && (
+                              <p className="text-sm text-gray-500 dark:text-slate-400 mt-0.5">{tier.description}</p>
+                            )}
                             <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
                               {tierSoldOut ? 'Sold out' : `${tier.quantityAvailable} available`}
                             </p>
                           </div>
                           <div className="flex items-center gap-4">
                             <div className="text-right">
-                              <span className="text-2xl font-bold text-blue-600 dark:text-indigo-400">
-                                {formatPrice(tier.price)}
-                              </span>
+                              {(() => {
+                                const fees = computeTierAllInPrice(tier.price);
+                                return (
+                                  <>
+                                    <span className="text-2xl font-bold text-blue-600 dark:text-indigo-400">
+                                      {formatPrice(fees.total)}
+                                    </span>
+                                    <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5 max-w-[200px]">
+                                      Includes Base Price: {formatPrice(fees.basePrice)}
+                                      {fees.platformFee > 0 && <>, Service Fee: {formatPrice(fees.platformFee)}</>}
+                                      {fees.processingFee > 0 && <>, Processing: {formatPrice(fees.processingFee)}</>}
+                                      {fees.tax > 0 && <>, Tax: {formatPrice(fees.tax)}</>}
+                                    </p>
+                                  </>
+                                );
+                              })()}
                             </div>
                             <div className="flex items-center rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800">
                               <button

@@ -16,12 +16,15 @@ const router = express.Router({ mergeParams: true });
 
 /**
  * GET /organizations/:orgId/events/:eventId/price-tiers
- * List price tiers for an event (public, no auth)
+ * List price tiers for an event.
+ * Public view filters by visibility and sale window.
+ * Pass ?includeAll=true with org auth to see all tiers (admin view).
  */
 router.get('/', async (req, res, next) => {
   try {
     const { eventId } = req.params;
-    const result = await priceTierService.listPriceTiers(eventId);
+    const includeAll = req.query.includeAll === 'true';
+    const result = await priceTierService.listPriceTiers(eventId, { includeAll });
     res.json(result);
   } catch (error) {
     next(error);

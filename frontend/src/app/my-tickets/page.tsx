@@ -65,7 +65,7 @@ function isEventPast(dateStr: string): boolean {
 
 function formatPrice(price: number | string): string {
   const numPrice = typeof price === 'string' ? parseFloat(price) : price;
-  return `$${(numPrice / 100).toFixed(2)}`;
+  return `$${Number(numPrice).toFixed(2)}`;
 }
 
 function TicketCard({ ticket }: { ticket: Ticket }) {
@@ -88,7 +88,7 @@ function TicketCard({ ticket }: { ticket: Ticket }) {
             <h4
               className={`text-sm font-medium truncate ${isExpired ? 'text-gray-500 dark:text-slate-500' : 'text-gray-900 dark:text-slate-100'}`}
             >
-              Ticket #{ticket.id.slice(0, 8)}
+              Ticket #{ticket.ticketNumber}
             </h4>
             {isExpired ? (
               <span
@@ -104,6 +104,16 @@ function TicketCard({ ticket }: { ticket: Ticket }) {
             ) : (
               <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
                 Valid
+              </span>
+            )}
+            {ticket.saleStatus === 'ENDED' && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-slate-400">
+                Sale Ended
+              </span>
+            )}
+            {ticket.isRefundable === false && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
+                Non-Refundable
               </span>
             )}
           </div>

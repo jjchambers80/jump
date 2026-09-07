@@ -49,12 +49,17 @@ class PriceTierService {
       data: {
         eventId,
         name: data.name,
+        description: data.description ?? null,
         price: data.price,
         quantityTotal,
         displayOrder: data.displayOrder ?? maxOrder + 1,
         minPerOrder: data.minPerOrder ?? null,
         maxPerOrder: data.maxPerOrder ?? null,
         isActive: true,
+        saleStartDate: data.saleStartDate ?? null,
+        saleEndDate: data.saleEndDate ?? null,
+        visibility: data.visibility ?? 'PUBLIC',
+        isRefundable: data.isRefundable ?? false,
       },
     });
 
@@ -93,6 +98,7 @@ class PriceTierService {
     const updateData = {};
 
     if (data.name !== undefined) updateData.name = data.name;
+    if (data.description !== undefined) updateData.description = data.description;
     if (data.price !== undefined) {
       if (Number(data.price) < 0) {
         throw new ValidationError('Price must be 0 or greater');
@@ -135,6 +141,10 @@ class PriceTierService {
     if (data.displayOrder !== undefined) updateData.displayOrder = parseInt(data.displayOrder);
     if (data.minPerOrder !== undefined) updateData.minPerOrder = data.minPerOrder;
     if (data.maxPerOrder !== undefined) updateData.maxPerOrder = data.maxPerOrder;
+    if (data.saleStartDate !== undefined) updateData.saleStartDate = data.saleStartDate;
+    if (data.saleEndDate !== undefined) updateData.saleEndDate = data.saleEndDate;
+    if (data.visibility !== undefined) updateData.visibility = data.visibility;
+    if (data.isRefundable !== undefined) updateData.isRefundable = data.isRefundable;
 
     const updated = await prisma.priceTier.update({
       where: { id: tierId },
@@ -239,27 +249,53 @@ class PriceTierService {
   }
 
   /**
-   * List price tiers for an event (public)
+   * List price tiers for an event
    * @param {string} eventId - Event ID
+   * @param {Object} options
+   * @param {boolean} options.includeAll - If true, return all tiers (admin view). If false, filter by visibility and sale window.
    * @returns {Promise<Object>} Price tiers list
    */
-  async listPriceTiers(eventId) {
+  async listPriceTiers(eventId, { includeAll = false } = {}) {
+    const where = { eventId };
+
+    if (!includeAll) {
+      where.visibility = { not: 'HIDDEN' };
+    }
+
     const tiers = await prisma.priceTier.findMany({
-      where: { eventId },
+      where,
       orderBy: { displayOrder: 'asc' },
     });
 
-    return { priceTiers: tiers.map((t) => this._formatTier(t)) };
+    const now = new Date();
+    const formatted = tiers.map((t) => this._formatTier(t));
+
+    if (!includeAll) {
+      return {
+        priceTiers: formatted.filter((t) => t.saleStatus !== 'NOT_STARTED' && t.saleStatus !== 'ENDED'),
+      };
+    }
+
+    return { priceTiers: formatted };
   }
 
   /**
    * Format tier for API response
    */
   _formatTier(tier) {
+    const now = new Date();
+    const saleStart = tier.saleStartDate ? new Date(tier.saleStartDate) : null;
+    const saleEnd = tier.saleEndDate ? new Date(tier.saleEndDate) : null;
+
+    let saleStatus = 'ON_SALE';
+    if (saleStart && now < saleStart) saleStatus = 'NOT_STARTED';
+    else if (saleEnd && now > saleEnd) saleStatus = 'ENDED';
+
     return {
       id: tier.id,
       eventId: tier.eventId,
       name: tier.name,
+      description: tier.description || null,
       price: Number(tier.price),
       quantityTotal: tier.quantityTotal,
       quantitySold: tier.quantitySold,
@@ -269,6 +305,12 @@ class PriceTierService {
       minPerOrder: tier.minPerOrder,
       maxPerOrder: tier.maxPerOrder,
       isActive: tier.isActive,
+      saleStartDate: tier.saleStartDate,
+      saleEndDate: tier.saleEndDate,
+      visibility: tier.visibility,
+      isRefundable: tier.isRefundable,
+      isOnSale: saleStatus === 'ON_SALE',
+      saleStatus,
       createdAt: tier.createdAt,
       updatedAt: tier.updatedAt,
     };

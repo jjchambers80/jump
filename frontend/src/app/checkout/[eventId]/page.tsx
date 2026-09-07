@@ -74,6 +74,26 @@ function formatPrice(dollars: number): string {
   return `$${Number(dollars).toFixed(2)}`;
 }
 
+// Fee computation mirroring backend FeeService (FTC all-in pricing)
+const FEE_CONFIG = {
+  platformFeePercent: 0.05,
+  stripeFeePercent: 0.029,
+  stripeFeeFixed: 0.30,
+  taxRate: 0,
+};
+
+function computeOrderFees(items: { price: number; quantity: number }[]) {
+  const round = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100;
+  const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const platformFee = round(subtotal * FEE_CONFIG.platformFeePercent);
+  const processingFee = round(
+    (subtotal + platformFee) * FEE_CONFIG.stripeFeePercent + FEE_CONFIG.stripeFeeFixed
+  );
+  const tax = round(subtotal * FEE_CONFIG.taxRate);
+  const total = round(subtotal + platformFee + processingFee + tax);
+  return { subtotal: round(subtotal), platformFee, processingFee, tax, total };
+}
+
 export default function CheckoutPage({ params }: { params: { eventId: string } }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -264,7 +284,9 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
   });
 
   const totalQuantity = selectedItems.reduce((sum, item) => sum + item.quantity, 0);
-  const totalAmount = selectedItems.reduce((sum, item) => sum + item.tier.price * item.quantity, 0);
+  const feeItems = selectedItems.map((item) => ({ price: item.tier.price, quantity: item.quantity }));
+  const fees = computeOrderFees(feeItems);
+  const totalAmount = fees.total;
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900 py-12">
@@ -322,10 +344,16 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
                   <span>Total tickets:</span>
                   <span>{totalQuantity}</span>
                 </div>
-                <div className="flex justify-between text-xl font-bold text-gray-900 dark:text-slate-100 pt-2 border-t border-gray-200 dark:border-slate-700">
+                <div className="flex justify-between text-2xl font-bold text-gray-900 dark:text-slate-100 pt-3 border-t border-gray-200 dark:border-slate-700">
                   <span>Total:</span>
                   <span>{formatPrice(totalAmount)}</span>
                 </div>
+                <p className="text-xs text-gray-500 dark:text-slate-400 pt-1">
+                  Includes Base Price: {formatPrice(fees.subtotal)}
+                  {fees.platformFee > 0 && <>, Service Fee: {formatPrice(fees.platformFee)}</>}
+                  {fees.processingFee > 0 && <>, Processing: {formatPrice(fees.processingFee)}</>}
+                  {fees.tax > 0 && <>, Tax: {formatPrice(fees.tax)}</>}
+                </p>
               </div>
             </div>
           </div>

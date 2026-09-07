@@ -183,17 +183,22 @@ model Event {
 }
 
 model PriceTier {
-  id               String  @id @default(cuid())
+  id               String          @id @default(cuid())
   eventId          String
   name             String
-  price            Decimal @db.Decimal(10, 2)
+  description      String?
+  price            Decimal         @db.Decimal(10, 2)
   quantityTotal    Int
-  quantitySold     Int     @default(0)
-  quantityReserved Int     @default(0)
-  displayOrder     Int     @default(0)
+  quantitySold     Int             @default(0)
+  quantityReserved Int             @default(0)
+  displayOrder     Int             @default(0)
   minPerOrder      Int?
   maxPerOrder      Int?
-  isActive         Boolean @default(true)
+  isActive         Boolean         @default(true)
+  saleStartDate    DateTime?
+  saleEndDate      DateTime?
+  visibility       TierVisibility  @default(PUBLIC)
+  isRefundable     Boolean         @default(false)
 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -212,7 +217,11 @@ model Order {
   contactId       String
   stripeSessionId String?     @unique
   orderRef        String      @unique
-  totalAmount     Decimal     @db.Decimal(10, 2)
+  totalAmount         Decimal     @db.Decimal(10, 2)
+  subtotalAmount      Decimal     @db.Decimal(10, 2)  @default(0)
+  platformFeeAmount   Decimal     @db.Decimal(10, 2)  @default(0)
+  processingFeeAmount Decimal     @db.Decimal(10, 2)  @default(0)
+  taxAmount           Decimal     @db.Decimal(10, 2)  @default(0)
   currency        String      @default("usd")
   quantity        Int
   status          OrderStatus @default(PENDING)
@@ -236,9 +245,11 @@ model OrderItem {
   id          String   @id @default(cuid())
   orderId     String
   priceTierId String
-  quantity    Int
-  unitPrice   Decimal  @db.Decimal(10, 2)
-  createdAt   DateTime @default(now())
+  quantity      Int
+  unitPrice     Decimal  @db.Decimal(10, 2)
+  platformFee   Decimal  @db.Decimal(10, 2)  @default(0)
+  processingFee Decimal  @db.Decimal(10, 2)  @default(0)
+  createdAt     DateTime @default(now())
 
   order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
   priceTier   PriceTier @relation(fields: [priceTierId], references: [id])
@@ -249,25 +260,27 @@ model OrderItem {
 }
 
 model Ticket {
-  id          String       @id @default(cuid())
-  orderId     String
-  eventId     String
-  priceTierId String
-  contactId   String
-  pricePaid   Decimal      @db.Decimal(10, 2)
-  barcode     String       @unique
-  qrCodeJwt   String?
-  status      TicketStatus @default(VALID)
-  redeemedAt  DateTime?
+  id           String       @id @default(cuid())
+  orderId      String
+  eventId      String
+  priceTierId  String
+  contactId    String
+  ticketNumber Int
+  pricePaid    Decimal      @db.Decimal(10, 2)
+  barcode      String       @unique
+  qrCodeJwt    String?
+  status       TicketStatus @default(VALID)
+  redeemedAt   DateTime?
 
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
-  order       Order        @relation(fields: [orderId], references: [id])
-  event       Event        @relation(fields: [eventId], references: [id])
-  priceTier   PriceTier    @relation(fields: [priceTierId], references: [id])
-  contact     Contact      @relation(fields: [contactId], references: [id])
+  order        Order        @relation(fields: [orderId], references: [id])
+  event        Event        @relation(fields: [eventId], references: [id])
+  priceTier    PriceTier    @relation(fields: [priceTierId], references: [id])
+  contact      Contact      @relation(fields: [contactId], references: [id])
 
+  @@unique([eventId, ticketNumber])
   @@index([orderId])
   @@index([eventId])
   @@index([priceTierId])
@@ -319,6 +332,12 @@ enum OrderStatus {
   PENDING
   COMPLETED
   FAILED
+}
+
+enum TierVisibility {
+  PUBLIC
+  PRIVATE
+  HIDDEN
 }
 
 enum TicketStatus {

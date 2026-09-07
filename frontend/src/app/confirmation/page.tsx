@@ -23,6 +23,10 @@ interface OrderDetail {
   id: string;
   orderRef: string;
   status: string;
+  subtotalAmount?: number;
+  platformFeeAmount?: number;
+  processingFeeAmount?: number;
+  taxAmount?: number;
   totalAmount: number;
   quantity: number;
   createdAt: string;
@@ -363,11 +367,21 @@ export default function ConfirmationPage() {
                     {order.contact.firstName} {order.contact.lastName}
                   </span>
                 </div>
-                <div className="border-t border-gray-200 dark:border-slate-700 pt-3 flex justify-between">
-                  <span className="text-lg font-bold text-gray-900 dark:text-slate-100">Total</span>
-                  <span className="text-lg font-bold text-blue-600 dark:text-indigo-400">
-                    {formatPrice(order.totalAmount)}
-                  </span>
+                <div className="border-t border-gray-200 dark:border-slate-700 pt-3">
+                  <div className="flex justify-between">
+                    <span className="text-lg font-bold text-gray-900 dark:text-slate-100">Total</span>
+                    <span className="text-lg font-bold text-blue-600 dark:text-indigo-400">
+                      {formatPrice(order.totalAmount)}
+                    </span>
+                  </div>
+                  {order.subtotalAmount !== undefined && order.subtotalAmount !== order.totalAmount && (
+                    <p className="text-xs text-gray-500 dark:text-slate-400 mt-1 text-right">
+                      Includes Base Price: {formatPrice(order.subtotalAmount)}
+                      {(order.platformFeeAmount ?? 0) > 0 && <>, Service Fee: {formatPrice(order.platformFeeAmount!)}</>}
+                      {(order.processingFeeAmount ?? 0) > 0 && <>, Processing: {formatPrice(order.processingFeeAmount!)}</>}
+                      {(order.taxAmount ?? 0) > 0 && <>, Tax: {formatPrice(order.taxAmount!)}</>}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
