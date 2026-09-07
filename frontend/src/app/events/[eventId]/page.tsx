@@ -5,13 +5,16 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { api } from '../../../services/api';
+import { resolveAssetUrl } from '../../../lib/assets';
 
 interface EventVenue {
   id: string;
   name: string;
   address: string;
   timezone?: string;
+  isPublic?: boolean;
 }
 
 interface PriceTier {
@@ -52,8 +55,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedTierId, setSelectedTierId] = useState<string | null>(null);
-  const [quantity, setQuantity] = useState(1);
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [showDescription, setShowDescription] = useState(false);
 
   useEffect(() => {
@@ -67,14 +69,6 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
 
       const data = await api.get<Event>(`/events/${params.eventId}`);
       setEvent(data);
-
-      // Pre-select first active tier with availability
-      const firstAvailable = data.priceTiers?.find(
-        (t: PriceTier) => t.isActive && t.quantityAvailable > 0
-      );
-      if (firstAvailable) {
-        setSelectedTierId(firstAvailable.id);
-      }
     } catch (err: any) {
       setError(err.message || 'Failed to load event details');
       console.error('Error fetching event:', err);
@@ -83,27 +77,33 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
     }
   };
 
-  const selectedTier = event?.priceTiers?.find((t) => t.id === selectedTierId) ?? null;
-  const maxQuantity = selectedTier
-    ? Math.min(selectedTier.quantityAvailable, selectedTier.maxPerOrder ?? 10, 10)
-    : 0;
-
   const totalAvailable =
     event?.priceTiers?.reduce((sum, t) => sum + (t.isActive ? t.quantityAvailable : 0), 0) ?? 0;
   const isSoldOut = totalAvailable === 0;
 
-  const handleTierSelect = (tierId: string) => {
-    setSelectedTierId(tierId);
-    setQuantity(1);
-  };
+  const updateQuantity = (tier: PriceTier, direction: 1 | -1) => {
+    setQuantities((current) => {
+      const quantity = current[tier.id] ?? 0;
+      const minimum = tier.minPerOrder ?? 1;
+      const maximum = Math.min(tier.quantityAvailable, tier.maxPerOrder ?? 10, 10);
+      if (direction === 1 && maximum < minimum) return current;
+      const nextQuantity =
+        direction === 1
+          ? quantity === 0
+            ? Math.min(minimum, maximum)
+            : Math.min(quantity + 1, maximum)
+          : quantity <= minimum
+            ? 0
+            : quantity - 1;
 
-  const handleQuantityChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setQuantity(parseInt(e.target.value, 10));
+      return { ...current, [tier.id]: nextQuantity };
+    });
   };
 
   const handleProceedToCheckout = () => {
-    if (selectedTierId) {
-      router.push(`/checkout/${params.eventId}?tierId=${selectedTierId}&quantity=${quantity}`);
+    if (cartItems.length > 0) {
+      const search = new URLSearchParams({ items: JSON.stringify(cartItems) });
+      router.push(`/checkout/${params.eventId}?${search.toString()}`);
     }
   };
 
@@ -186,6 +186,14 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
   });
 
   const activeTiers = event.priceTiers.filter((t) => t.isActive);
+  const cartItems = activeTiers
+    .map((tier) => ({ priceTierId: tier.id, quantity: quantities[tier.id] ?? 0 }))
+    .filter((item) => item.quantity > 0);
+  const totalQuantity = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+  const totalAmount = activeTiers.reduce(
+    (sum, tier) => sum + tier.price * (quantities[tier.id] ?? 0),
+    0
+  );
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
@@ -210,7 +218,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
             {event.logoUrl && (
               <div className="mb-4">
                 <img
-                  src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}${event.logoUrl}`}
+                  src={resolveAssetUrl(event.logoUrl) || undefined}
                   alt={`${event.name} logo`}
                   className="h-16 w-auto object-contain"
                 />
@@ -256,7 +264,16 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                   />
                 </svg>
                 <div>
-                  <span className="text-lg">{event.venue.name}</span>
+                  {event.venue.isPublic ? (
+                    <Link
+                      href={`/venues/${event.venue.id}`}
+                      className="text-lg text-blue-600 dark:text-indigo-400 hover:underline"
+                    >
+                      {event.venue.name}
+                    </Link>
+                  ) : (
+                    <span className="text-lg">{event.venue.name}</span>
+                  )}
                   <span className="text-sm text-gray-500 dark:text-slate-500 block">
                     {event.venue.address}
                   </span>
@@ -299,15 +316,19 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                 <div className="space-y-3 mb-6">
                   {activeTiers.map((tier) => {
                     const tierSoldOut = tier.quantityAvailable === 0;
-                    const isSelected = selectedTierId === tier.id;
+                    const quantity = quantities[tier.id] ?? 0;
+                    const minQuantity = tier.minPerOrder ?? 1;
+                    const maxQuantity = Math.min(
+                      tier.quantityAvailable,
+                      tier.maxPerOrder ?? 10,
+                      10
+                    );
 
                     return (
-                      <button
+                      <div
                         key={tier.id}
-                        onClick={() => !tierSoldOut && handleTierSelect(tier.id)}
-                        disabled={tierSoldOut}
-                        className={`w-full text-left p-4 rounded-lg border-2 transition-all duration-200 ${
-                          isSelected
+                        className={`w-full p-4 rounded-lg border-2 transition-all duration-200 ${
+                          quantity > 0
                             ? 'border-blue-600 dark:border-indigo-400 bg-blue-50 dark:bg-indigo-900/20'
                             : tierSoldOut
                               ? 'border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900/50 opacity-60 cursor-not-allowed'
@@ -323,67 +344,66 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                               {tierSoldOut ? 'Sold out' : `${tier.quantityAvailable} available`}
                             </p>
                           </div>
-                          <div className="text-right">
-                            <span className="text-2xl font-bold text-blue-600 dark:text-indigo-400">
-                              {formatPrice(tier.price)}
-                            </span>
-                            {isSelected && !tierSoldOut && (
-                              <div className="mt-1">
-                                <svg
-                                  className="w-6 h-6 text-blue-600 dark:text-indigo-400 ml-auto"
-                                  fill="currentColor"
-                                  viewBox="0 0 20 20"
-                                >
-                                  <path
-                                    fillRule="evenodd"
-                                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                                    clipRule="evenodd"
-                                  />
-                                </svg>
-                              </div>
-                            )}
+                          <div className="flex items-center gap-4">
+                            <div className="text-right">
+                              <span className="text-2xl font-bold text-blue-600 dark:text-indigo-400">
+                                {formatPrice(tier.price)}
+                              </span>
+                            </div>
+                            <div className="flex items-center rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800">
+                              <button
+                                type="button"
+                                aria-label={`Decrease ${tier.name} quantity`}
+                                onClick={() => updateQuantity(tier, -1)}
+                                disabled={tierSoldOut || quantity === 0}
+                                className="h-10 w-10 text-xl font-bold text-gray-700 dark:text-slate-200 disabled:opacity-30"
+                              >
+                                −
+                              </button>
+                              <span
+                                className="w-10 text-center font-semibold text-gray-900 dark:text-slate-100"
+                                aria-label={`${tier.name} quantity`}
+                              >
+                                {quantity}
+                              </span>
+                              <button
+                                type="button"
+                                aria-label={`Increase ${tier.name} quantity`}
+                                onClick={() => updateQuantity(tier, 1)}
+                                disabled={
+                                  tierSoldOut ||
+                                  maxQuantity < minQuantity ||
+                                  quantity >= maxQuantity
+                                }
+                                className="h-10 w-10 text-xl font-bold text-gray-700 dark:text-slate-200 disabled:opacity-30"
+                              >
+                                +
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
               )}
 
-              {/* Quantity & Checkout */}
-              {selectedTier && !isSoldOut && maxQuantity > 0 && (
+              {/* Cart total & checkout */}
+              {!isSoldOut && (
                 <div className="bg-gray-50 dark:bg-slate-900 rounded-lg p-6">
-                  <div className="mb-4">
-                    <label
-                      htmlFor="quantity"
-                      className="block text-gray-700 dark:text-slate-300 font-semibold mb-2"
-                    >
-                      Number of Tickets ({selectedTier.name})
-                    </label>
-                    <select
-                      id="quantity"
-                      value={quantity}
-                      onChange={handleQuantityChange}
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-800 dark:text-slate-100"
-                    >
-                      {Array.from({ length: maxQuantity }, (_, i) => i + 1).map((num) => (
-                        <option key={num} value={num}>
-                          {num} {num === 1 ? 'ticket' : 'tickets'}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
                   <div className="flex items-center justify-between mb-6">
-                    <span className="text-gray-700 dark:text-slate-300 font-semibold">Total:</span>
+                    <span className="text-gray-700 dark:text-slate-300 font-semibold">
+                      Total ({totalQuantity} {totalQuantity === 1 ? 'ticket' : 'tickets'}):
+                    </span>
                     <span className="text-3xl font-bold text-gray-900 dark:text-slate-100">
-                      {formatPrice(selectedTier.price * quantity)}
+                      {formatPrice(totalAmount)}
                     </span>
                   </div>
 
                   <button
                     onClick={handleProceedToCheckout}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-colors duration-200 text-lg"
+                    disabled={cartItems.length === 0}
+                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-lg transition-colors duration-200 text-lg"
                   >
                     Proceed to Checkout
                   </button>
@@ -405,13 +425,20 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-slate-100">Event Information</h2>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-slate-100">
+                Event Information
+              </h2>
               <button
                 onClick={() => setShowDescription(false)}
                 className="text-gray-400 hover:text-gray-600 dark:hover:text-slate-300 transition-colors"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
                 </svg>
               </button>
             </div>

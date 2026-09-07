@@ -63,6 +63,7 @@ describe('Orders API Contract Tests', () => {
   let testVenueId;
   let testEventId;
   let testTierId;
+  let vipTierId;
   let createdOrderId;
   let createdOrderRef;
 
@@ -120,6 +121,7 @@ describe('Orders API Contract Tests', () => {
       });
     testEventId = eventRes.body.id;
     testTierId = eventRes.body.priceTiers[0].id;
+    vipTierId = eventRes.body.priceTiers[1].id;
 
     // Publish the event
     await request(app)
@@ -181,6 +183,37 @@ describe('Orders API Contract Tests', () => {
 
       createdOrderId = res.body.orderId;
       createdOrderRef = res.body.orderRef;
+    });
+
+    it('should create one order containing multiple price tiers', async () => {
+      const res = await request(app)
+        .post('/orders')
+        .send({
+          eventId: testEventId,
+          items: [
+            { priceTierId: testTierId, quantity: 2 },
+            { priceTierId: vipTierId, quantity: 1 },
+          ],
+          contact: {
+            email: 'guest2@orders-test.com',
+            firstName: 'Multi',
+            lastName: 'Tier',
+          },
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body).toHaveProperty('orderId');
+
+      const order = await prisma.order.findUnique({
+        where: { id: res.body.orderId },
+        include: { items: { orderBy: { createdAt: 'asc' } } },
+      });
+      expect(order.quantity).toBe(3);
+      expect(Number(order.totalAmount)).toBe(125);
+      expect(order.items).toEqual([
+        expect.objectContaining({ priceTierId: testTierId, quantity: 2 }),
+        expect.objectContaining({ priceTierId: vipTierId, quantity: 1 }),
+      ]);
     });
 
     it('should return 400 when required fields are missing', async () => {

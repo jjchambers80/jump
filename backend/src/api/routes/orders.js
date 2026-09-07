@@ -8,7 +8,7 @@
 
 import express from 'express';
 import orderService from '../../services/OrderService.js';
-import { requireAuth, optionalAuth } from '../../middleware/auth.js';
+import { requireAuth } from '../../middleware/auth.js';
 import { requireOrganizer } from '../../middleware/rbac.js';
 import { validateCreateOrder, validateOrderLookup } from '../validators/orderValidators.js';
 
@@ -21,7 +21,7 @@ const router = express.Router();
  */
 router.post('/', validateCreateOrder, async (req, res, next) => {
   try {
-    const { eventId, priceTierId, quantity, contact } = req.body;
+    const { eventId, items, priceTierId, quantity, contact } = req.body;
 
     // Check if user is authenticated (optional)
     let userId = null;
@@ -42,8 +42,7 @@ router.post('/', validateCreateOrder, async (req, res, next) => {
 
     const result = await orderService.createOrder({
       eventId,
-      priceTierId,
-      quantity: parseInt(quantity),
+      items: items ?? [{ priceTierId, quantity: parseInt(quantity) }],
       contact,
       userId,
     });

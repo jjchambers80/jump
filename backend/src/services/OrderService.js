@@ -40,13 +40,12 @@ class OrderService {
    *
    * @param {Object} params
    * @param {string} params.eventId
-   * @param {string} params.priceTierId
-   * @param {number} params.quantity
+   * @param {{priceTierId: string, quantity: number}[]} params.items
    * @param {Object} params.contact - { email, firstName, lastName }
    * @param {string|null} params.userId - Authenticated user ID (if logged in)
    * @returns {Promise<{ orderId, orderRef, stripeCheckoutUrl }>}
    */
-  async createOrder({ eventId, priceTierId, quantity, contact, userId = null }) {
+  async createOrder({ eventId, items, contact, userId = null }) {
     // Generate order ref outside transaction to avoid retry collisions
     let orderRef = this._generateOrderRef();
 
@@ -71,57 +70,58 @@ class OrderService {
         throw new ValidationError('Event has already occurred');
       }
 
-      // 2. Validate price tier exists and check basic constraints
-      const tier = await tx.priceTier.findFirst({
+      // 2. Validate each price tier and reserve its inventory atomically
+      const tiers = await tx.priceTier.findMany({
         where: {
-          id: priceTierId,
+          id: { in: items.map((item) => item.priceTierId) },
           eventId,
         },
+        orderBy: { displayOrder: 'asc' },
       });
 
-      if (!tier) {
+      if (tiers.length !== items.length) {
         throw new NotFoundError('Price tier not found for this event');
       }
 
-      if (!tier.isActive) {
-        throw new ValidationError('Price tier is not active');
-      }
+      const tierById = new Map(tiers.map((tier) => [tier.id, tier]));
+      for (const item of items) {
+        const tier = tierById.get(item.priceTierId);
 
-      // Check per-order limits
-      if (tier.minPerOrder && quantity < tier.minPerOrder) {
-        throw new ValidationError(
-          `Minimum quantity per order for this tier is ${tier.minPerOrder}`
+        if (!tier.isActive) {
+          throw new ValidationError(`${tier.name} is not active`);
+        }
+        if (tier.minPerOrder && item.quantity < tier.minPerOrder) {
+          throw new ValidationError(
+            `Minimum quantity per order for ${tier.name} is ${tier.minPerOrder}`
+          );
+        }
+        if (tier.maxPerOrder && item.quantity > tier.maxPerOrder) {
+          throw new ValidationError(
+            `Maximum quantity per order for ${tier.name} is ${tier.maxPerOrder}`
+          );
+        }
+
+        const reserved = await tx.$queryRawUnsafe(
+          `UPDATE "PriceTier"
+           SET "quantityReserved" = "quantityReserved" + $1
+           WHERE "id" = $2
+             AND ("quantityTotal" - "quantitySold" - "quantityReserved") >= $1
+           RETURNING *`,
+          item.quantity,
+          item.priceTierId
         );
-      }
 
-      if (tier.maxPerOrder && quantity > tier.maxPerOrder) {
-        throw new ValidationError(
-          `Maximum quantity per order for this tier is ${tier.maxPerOrder}`
-        );
-      }
-
-      // Atomic inventory reservation using raw SQL with row-level locking
-      // SELECT FOR UPDATE prevents concurrent reads, ensuring serialised access
-      const reserved = await tx.$queryRawUnsafe(
-        `UPDATE "PriceTier"
-         SET "quantityReserved" = "quantityReserved" + $1
-         WHERE "id" = $2
-           AND ("quantityTotal" - "quantitySold" - "quantityReserved") >= $1
-         RETURNING *`,
-        quantity,
-        priceTierId
-      );
-
-      if (!reserved || reserved.length === 0) {
-        // Re-read to provide accurate availability info
-        const current = await tx.priceTier.findUnique({ where: { id: priceTierId } });
-        const available = current
-          ? current.quantityTotal - current.quantitySold - current.quantityReserved
-          : 0;
-        throw new ConflictError('Insufficient inventory', {
-          available,
-          requested: quantity,
-        });
+        if (!reserved || reserved.length === 0) {
+          const current = await tx.priceTier.findUnique({ where: { id: item.priceTierId } });
+          const available = current
+            ? current.quantityTotal - current.quantitySold - current.quantityReserved
+            : 0;
+          throw new ConflictError(`Insufficient inventory for ${tier.name}`, {
+            priceTierId: item.priceTierId,
+            available,
+            requested: item.quantity,
+          });
+        }
       }
 
       // 3. Upsert contact
@@ -141,7 +141,11 @@ class OrderService {
       });
 
       // 4. Calculate total
-      const totalAmount = Number(tier.price) * quantity;
+      const quantity = items.reduce((sum, item) => sum + item.quantity, 0);
+      const totalAmount = items.reduce(
+        (sum, item) => sum + Number(tierById.get(item.priceTierId).price) * item.quantity,
+        0
+      );
 
       // Ensure unique orderRef
       let existingRef = await tx.order.findUnique({ where: { orderRef } });
@@ -160,15 +164,23 @@ class OrderService {
           currency: 'usd',
           quantity,
           status: 'PENDING',
+          items: {
+            create: items.map((item) => ({
+              priceTierId: item.priceTierId,
+              quantity: item.quantity,
+              unitPrice: tierById.get(item.priceTierId).price,
+            })),
+          },
         },
       });
 
       // 6. Inventory already reserved atomically in step 2 above
 
-      return { order, event, tier, contactRecord };
+      return { order, event, tiers, contactRecord };
     });
 
-    const { order, event, tier, contactRecord } = result;
+    const { order, event, tiers, contactRecord } = result;
+    const itemByTierId = new Map(items.map((item) => [item.priceTierId, item]));
 
     // 7. Create Stripe Checkout session (outside transaction — external call)
     let stripeSession;
@@ -177,24 +189,21 @@ class OrderService {
         mode: 'payment',
         payment_method_types: ['card'],
         customer_email: contactRecord.email,
-        line_items: [
-          {
-            price_data: {
-              currency: 'usd',
-              product_data: {
-                name: `${event.name} — ${tier.name}`,
-                description: `${quantity} ticket(s) for ${event.name} at ${event.venue.name}`,
-              },
-              unit_amount: Math.round(Number(tier.price) * 100), // cents
+        line_items: tiers.map((tier) => ({
+          price_data: {
+            currency: 'usd',
+            product_data: {
+              name: `${event.name} — ${tier.name}`,
+              description: `Tickets for ${event.name} at ${event.venue.name}`,
             },
-            quantity,
+            unit_amount: Math.round(Number(tier.price) * 100), // cents
           },
-        ],
+          quantity: itemByTierId.get(tier.id).quantity,
+        })),
         metadata: {
           orderId: order.id,
           orderRef: order.orderRef,
           eventId: event.id,
-          priceTierId: tier.id,
         },
         success_url: `${process.env.FRONTEND_URL || 'http://localhost:3001'}/confirmation?orderId=${order.id}`,
         cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:3001'}/events/${event.id}?status=cancelled`,
@@ -206,14 +215,18 @@ class OrderService {
         orderId: order.id,
         error: stripeError.message,
       });
-      await prisma.priceTier.update({
-        where: { id: tier.id },
-        data: { quantityReserved: { decrement: quantity } },
-      });
-      await prisma.order.update({
-        where: { id: order.id },
-        data: { status: 'FAILED' },
-      });
+      await prisma.$transaction([
+        ...items.map((item) =>
+          prisma.priceTier.update({
+            where: { id: item.priceTierId },
+            data: { quantityReserved: { decrement: item.quantity } },
+          })
+        ),
+        prisma.order.update({
+          where: { id: order.id },
+          data: { status: 'FAILED' },
+        }),
+      ]);
       throw stripeError;
     }
 
@@ -238,7 +251,7 @@ class OrderService {
       orderId: order.id,
       orderRef: order.orderRef,
       eventId: event.id,
-      quantity,
+      quantity: order.quantity,
       totalAmount: order.totalAmount,
     });
 
@@ -273,6 +286,10 @@ class OrderService {
           include: {
             priceTier: { select: { name: true } },
           },
+          orderBy: { createdAt: 'asc' },
+        },
+        items: {
+          include: { priceTier: { select: { name: true } } },
           orderBy: { createdAt: 'asc' },
         },
         payment: true,
@@ -360,6 +377,10 @@ class OrderService {
           },
           orderBy: { createdAt: 'asc' },
         },
+        items: {
+          include: { priceTier: { select: { name: true } } },
+          orderBy: { createdAt: 'asc' },
+        },
         payment: true,
       },
     });
@@ -435,7 +456,7 @@ class OrderService {
   async failOrder(orderId, reason) {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      select: { id: true, quantity: true, status: true, stripeSessionId: true },
+      include: { items: true },
     });
 
     if (!order || order.status !== 'PENDING') {
@@ -446,18 +467,16 @@ class OrderService {
       return;
     }
 
-    // Find the price tier for this order from its Stripe metadata
-    // We need to look up the tier from the order's tickets or from stripe session metadata
-    // Since tickets aren't created yet for PENDING orders, use the Stripe session metadata
-    let priceTierId;
-    try {
-      if (order.stripeSessionId) {
+    let orderItems = order.items;
+    if (orderItems.length === 0 && order.stripeSessionId) {
+      try {
         const session = await stripe.checkout.sessions.retrieve(order.stripeSessionId);
-        priceTierId = session.metadata?.priceTierId;
+        if (session.metadata?.priceTierId) {
+          orderItems = [{ priceTierId: session.metadata.priceTierId, quantity: order.quantity }];
+        }
+      } catch {
+        logger.warn('Could not retrieve Stripe session for legacy inventory release', { orderId });
       }
-    } catch {
-      // Stripe lookup failed, try to find tier from other context
-      logger.warn('Could not retrieve Stripe session for tier lookup', { orderId });
     }
 
     await prisma.$transaction(async (tx) => {
@@ -466,12 +485,12 @@ class OrderService {
         data: { status: 'FAILED' },
       });
 
-      // Release reserved inventory
-      if (priceTierId) {
+      // Release reserved inventory for every cart item
+      for (const item of orderItems) {
         await tx.priceTier.update({
-          where: { id: priceTierId },
+          where: { id: item.priceTierId },
           data: {
-            quantityReserved: { decrement: order.quantity },
+            quantityReserved: { decrement: item.quantity },
           },
         });
       }
@@ -592,6 +611,13 @@ class OrderService {
       },
       contact: order.contact,
       quantity: order.quantity,
+      items: (order.items || []).map((item) => ({
+        priceTierId: item.priceTierId,
+        priceTierName: item.priceTier?.name,
+        quantity: item.quantity,
+        unitPrice: Number(item.unitPrice),
+        lineTotal: Number(item.unitPrice) * item.quantity,
+      })),
       totalAmount: Number(order.totalAmount),
       currency: order.currency,
       status: order.status,

@@ -279,6 +279,46 @@ describe('Purchase Flow Integration', () => {
     expect(res.body.tickets).toHaveLength(3);
   });
 
+  it('issues tickets for every price tier in a multi-item order', async () => {
+    const createRes = await request(app)
+      .post('/orders')
+      .send({
+        eventId: testEventId,
+        items: [
+          { priceTierId: testTierId, quantity: 1 },
+          { priceTierId: vipTierId, quantity: 2 },
+        ],
+        contact: {
+          email: 'buyer@purchase-integ.com',
+          firstName: 'Alice',
+          lastName: 'Buyer',
+        },
+      });
+
+    expect(createRes.status).toBe(201);
+    const order = await prisma.order.findUnique({ where: { id: createRes.body.orderId } });
+
+    const webhookRes = await request(app)
+      .post('/webhooks/stripe')
+      .send({
+        type: 'checkout.session.completed',
+        data: {
+          object: {
+            id: order.stripeSessionId,
+            payment_status: 'paid',
+            payment_intent: 'pi_integ_multi',
+            metadata: { orderId: order.id },
+          },
+        },
+      });
+
+    expect(webhookRes.status).toBe(200);
+    const tickets = await prisma.ticket.findMany({ where: { orderId: order.id } });
+    expect(tickets).toHaveLength(3);
+    expect(tickets.filter((ticket) => ticket.priceTierId === testTierId)).toHaveLength(1);
+    expect(tickets.filter((ticket) => ticket.priceTierId === vipTierId)).toHaveLength(2);
+  });
+
   it('Step 6: VIP order respects maxPerOrder limit', async () => {
     const res = await request(app)
       .post('/orders')

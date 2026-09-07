@@ -9,18 +9,45 @@ import { ValidationError } from '../../middleware/errorHandler.js';
  */
 export const validateCreateOrder = (req, res, next) => {
   const errors = [];
-  const { eventId, priceTierId, quantity, contact } = req.body;
+  const { eventId, items, priceTierId, quantity, contact } = req.body;
 
   if (!eventId) {
     errors.push({ field: 'eventId', message: 'eventId is required' });
   }
 
-  if (!priceTierId) {
-    errors.push({ field: 'priceTierId', message: 'priceTierId is required' });
-  }
+  if (items !== undefined) {
+    if (!Array.isArray(items) || items.length === 0) {
+      errors.push({ field: 'items', message: 'items must contain at least one ticket type' });
+    } else {
+      const tierIds = new Set();
+      items.forEach((item, index) => {
+        if (!item?.priceTierId) {
+          errors.push({
+            field: `items[${index}].priceTierId`,
+            message: 'priceTierId is required',
+          });
+        } else if (tierIds.has(item.priceTierId)) {
+          errors.push({ field: 'items', message: 'price tiers must be unique' });
+        } else {
+          tierIds.add(item.priceTierId);
+        }
 
-  if (!quantity || parseInt(quantity) < 1) {
-    errors.push({ field: 'quantity', message: 'quantity must be >= 1' });
+        if (!Number.isInteger(item?.quantity) || item.quantity < 1) {
+          errors.push({
+            field: `items[${index}].quantity`,
+            message: 'quantity must be an integer >= 1',
+          });
+        }
+      });
+    }
+  } else {
+    if (!priceTierId) {
+      errors.push({ field: 'priceTierId', message: 'priceTierId is required' });
+    }
+
+    if (!quantity || parseInt(quantity) < 1) {
+      errors.push({ field: 'quantity', message: 'quantity must be >= 1' });
+    }
   }
 
   if (!contact) {

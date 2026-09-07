@@ -82,15 +82,43 @@ model VerificationToken {
 // ──────────────────────────────────────────────
 
 model Organization {
-  id        String             @id @default(cuid())
-  name      String
-  status    OrganizationStatus @default(ACTIVE)
+  id               String             @id @default(cuid())
+  name             String
+  status           OrganizationStatus @default(ACTIVE)
+  businessType     String?
+  nickname         String?
+  countryCode      String?            @default("US")
+  addressLine1     String?
+  addressLine2     String?
+  city             String?
+  state            String?
+  postalCode       String?
+  phoneCountryCode String?            @default("+1")
+  phoneNumber      String?
+  ein              String?
 
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   venues    Venue[]
   users     User[]
+  people    OrganizationPerson[]
+}
+
+model OrganizationPerson {
+  id                      String       @id @default(cuid())
+  organizationId          String
+  firstName               String
+  lastName                String
+  dateOfBirth             DateTime     @db.Date
+  isAccountRepresentative Boolean      @default(false)
+  createdAt               DateTime     @default(now())
+  updatedAt               DateTime     @updatedAt
+
+  organization            Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // A partial unique index in the SQL migration enforces one account representative per organization.
+  @@index([organizationId])
 }
 
 model Venue {
@@ -98,6 +126,7 @@ model Venue {
   organizationId String
   name           String
   address        String
+  logoUrl        String?
   timezone       String       @default("America/New_York")
   isPublic       Boolean      @default(true)
 
@@ -171,6 +200,7 @@ model PriceTier {
 
   event            Event    @relation(fields: [eventId], references: [id])
   tickets          Ticket[]
+  orderItems       OrderItem[]
 
   @@index([eventId])
   @@index([eventId, isActive])
@@ -193,12 +223,29 @@ model Order {
   event           Event       @relation(fields: [eventId], references: [id])
   contact         Contact     @relation(fields: [contactId], references: [id])
   tickets         Ticket[]
+  items           OrderItem[]
   payment         PaymentTransaction?
 
   @@index([eventId])
   @@index([contactId])
   @@index([status])
   @@index([orderRef])
+}
+
+model OrderItem {
+  id          String   @id @default(cuid())
+  orderId     String
+  priceTierId String
+  quantity    Int
+  unitPrice   Decimal  @db.Decimal(10, 2)
+  createdAt   DateTime @default(now())
+
+  order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  priceTier   PriceTier @relation(fields: [priceTierId], references: [id])
+
+  @@unique([orderId, priceTierId])
+  @@index([orderId])
+  @@index([priceTierId])
 }
 
 model Ticket {

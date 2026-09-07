@@ -5,6 +5,9 @@
 process.env.NODE_ENV = 'test';
 process.env.AUTH_SECRET = 'test-secret-key-must-be-at-least-32-chars';
 process.env.DATABASE_URL = 'postgresql://postgres:postgres@localhost:5432/jump_test?schema=public';
+if (process.env.TEST_DATABASE_URL) {
+  process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
+}
 process.env.REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379/1';
 process.env.STRIPE_SECRET_KEY = 'sk_test_fake_key';
 process.env.RESEND_API_KEY = 're_test_fake_key';

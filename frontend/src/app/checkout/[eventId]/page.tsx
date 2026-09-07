@@ -1,7 +1,7 @@
 'use client';
 
 // Guest checkout page — collects contact info (name + email) and initiates order
-// Uses new order-based flow: POST /orders with contact, eventId, priceTierId, quantity
+// Uses order-based flow: POST /orders with contact, eventId, and price-tier items
 // Returns stripeCheckoutUrl for redirect per FR-042, contracts/api.yaml
 
 import React, { useState, useEffect } from 'react';
@@ -38,6 +38,38 @@ interface CreateOrderResponse {
   totalAmount: number;
 }
 
+interface CartItem {
+  priceTierId: string;
+  quantity: number;
+}
+
+function parseCartItems(
+  value: string | null,
+  legacyTierId: string | null,
+  legacyQuantity: string | null
+): CartItem[] {
+  if (value) {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(
+          (item): item is CartItem =>
+            typeof item?.priceTierId === 'string' &&
+            Number.isInteger(item?.quantity) &&
+            item.quantity > 0
+        );
+      }
+    } catch {
+      return [];
+    }
+  }
+
+  const quantity = Number.parseInt(legacyQuantity || '1', 10);
+  return legacyTierId && Number.isInteger(quantity) && quantity > 0
+    ? [{ priceTierId: legacyTierId, quantity }]
+    : [];
+}
+
 function formatPrice(dollars: number): string {
   return `$${Number(dollars).toFixed(2)}`;
 }
@@ -56,9 +88,12 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
   const [email, setEmail] = useState('');
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
-  // Get tier and quantity from URL params (set by event detail page)
-  const tierId = searchParams.get('tierId');
-  const quantity = parseInt(searchParams.get('quantity') || '1', 10);
+  // Legacy single-tier params remain supported for existing checkout links.
+  const cartItems = parseCartItems(
+    searchParams.get('items'),
+    searchParams.get('tierId'),
+    searchParams.get('quantity')
+  );
 
   useEffect(() => {
     fetchEventDetails();
@@ -77,7 +112,12 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
     }
   };
 
-  const selectedTier = event?.priceTiers?.find((t) => t.id === tierId) ?? null;
+  const selectedItems = cartItems
+    .map((item) => {
+      const tier = event?.priceTiers?.find((candidate) => candidate.id === item.priceTierId);
+      return tier ? { ...item, tier } : null;
+    })
+    .filter((item): item is CartItem & { tier: PriceTier } => item !== null);
 
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
@@ -100,7 +140,7 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateForm() || !selectedTier) return;
+    if (!validateForm() || selectedItems.length === 0) return;
 
     try {
       setProcessing(true);
@@ -108,8 +148,7 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
 
       const response = await api.post<CreateOrderResponse>('/orders', {
         eventId: params.eventId,
-        priceTierId: tierId,
-        quantity,
+        items: selectedItems.map(({ priceTierId, quantity }) => ({ priceTierId, quantity })),
         contact: {
           firstName: firstName.trim(),
           lastName: lastName.trim(),
@@ -191,15 +230,15 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
     );
   }
 
-  if (!selectedTier) {
+  if (selectedItems.length === 0 || selectedItems.length !== cartItems.length) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center p-4">
         <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md dark:shadow-lg dark:shadow-black/20 p-8 max-w-md w-full text-center">
           <h2 className="text-2xl font-bold text-gray-900 dark:text-slate-100 mb-2">
-            No Ticket Tier Selected
+            No Tickets Selected
           </h2>
           <p className="text-gray-600 dark:text-slate-400 mb-6">
-            Please go back and select a ticket tier.
+            Please go back and select one or more ticket types.
           </p>
           <button
             onClick={() => router.push(`/events/${params.eventId}`)}
@@ -224,7 +263,8 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
     minute: '2-digit',
   });
 
-  const totalAmount = selectedTier.price * quantity;
+  const totalQuantity = selectedItems.reduce((sum, item) => sum + item.quantity, 0);
+  const totalAmount = selectedItems.reduce((sum, item) => sum + item.tier.price * item.quantity, 0);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900 py-12">
@@ -267,17 +307,20 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
               )}
 
               <div className="border-t border-gray-200 dark:border-slate-700 pt-4 space-y-2">
+                {selectedItems.map((item) => (
+                  <div
+                    key={item.priceTierId}
+                    className="flex justify-between gap-4 text-gray-700 dark:text-slate-300"
+                  >
+                    <span>
+                      <span className="font-semibold">{item.tier.name}</span> × {item.quantity}
+                    </span>
+                    <span>{formatPrice(item.tier.price * item.quantity)}</span>
+                  </div>
+                ))}
                 <div className="flex justify-between text-gray-700 dark:text-slate-300">
-                  <span>Tier:</span>
-                  <span className="font-semibold">{selectedTier.name}</span>
-                </div>
-                <div className="flex justify-between text-gray-700 dark:text-slate-300">
-                  <span>Price per ticket:</span>
-                  <span>{formatPrice(selectedTier.price)}</span>
-                </div>
-                <div className="flex justify-between text-gray-700 dark:text-slate-300">
-                  <span>Quantity:</span>
-                  <span>{quantity}</span>
+                  <span>Total tickets:</span>
+                  <span>{totalQuantity}</span>
                 </div>
                 <div className="flex justify-between text-xl font-bold text-gray-900 dark:text-slate-100 pt-2 border-t border-gray-200 dark:border-slate-700">
                   <span>Total:</span>

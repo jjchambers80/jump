@@ -29,6 +29,10 @@ class TicketService {
       include: {
         event: true,
         contact: true,
+        items: {
+          include: { priceTier: true },
+          orderBy: { createdAt: 'asc' },
+        },
       },
     });
 
@@ -36,30 +40,28 @@ class TicketService {
       throw new NotFoundError('Order not found');
     }
 
-    // Determine priceTierId from the Stripe session metadata
-    let priceTierId;
-    if (order.stripeSessionId) {
+    let orderItems = order.items;
+    if (orderItems.length === 0 && order.stripeSessionId) {
       const stripeModule = await import('../config/stripe.js');
-      try {
-        const session = await stripeModule.default.checkout.sessions.retrieve(
-          order.stripeSessionId
-        );
-        priceTierId = session.metadata?.priceTierId;
-      } catch {
-        logger.warn('Could not retrieve Stripe session for priceTierId', { orderId });
+      const session = await stripeModule.default.checkout.sessions.retrieve(order.stripeSessionId);
+      const legacyTierId = session.metadata?.priceTierId;
+      const legacyTier = legacyTierId
+        ? await prisma.priceTier.findUnique({ where: { id: legacyTierId } })
+        : null;
+
+      if (legacyTier) {
+        orderItems = [
+          {
+            priceTierId: legacyTier.id,
+            quantity: order.quantity,
+            unitPrice: legacyTier.price,
+          },
+        ];
       }
     }
 
-    if (!priceTierId) {
-      throw new ValidationError('Cannot determine price tier for order');
-    }
-
-    const tier = await prisma.priceTier.findUnique({
-      where: { id: priceTierId },
-    });
-
-    if (!tier) {
-      throw new NotFoundError('Price tier not found');
+    if (orderItems.length === 0) {
+      throw new ValidationError('Order has no ticket items');
     }
 
     // Generate unique barcodes
@@ -69,47 +71,49 @@ class TicketService {
     const tickets = await prisma.$transaction(async (tx) => {
       const created = [];
 
-      for (let i = 0; i < order.quantity; i++) {
-        const ticket = await tx.ticket.create({
+      let barcodeIndex = 0;
+      for (const item of orderItems) {
+        for (let i = 0; i < item.quantity; i++) {
+          const barcode = barcodes[barcodeIndex++];
+          const ticket = await tx.ticket.create({
+            data: {
+              orderId: order.id,
+              eventId: order.eventId,
+              priceTierId: item.priceTierId,
+              contactId: order.contactId,
+              pricePaid: item.unitPrice,
+              barcode,
+              status: 'VALID',
+            },
+          });
+
+          const qrJwt = qrService.generateQRCodeJWT(
+            ticket.id,
+            order.eventId,
+            barcode,
+            order.event.date
+          );
+
+          const updatedTicket = await tx.ticket.update({
+            where: { id: ticket.id },
+            data: { qrCodeJwt: qrJwt },
+            include: {
+              priceTier: { select: { name: true } },
+            },
+          });
+
+          created.push(updatedTicket);
+        }
+
+        // Move inventory for this tier: reserved → sold
+        await tx.priceTier.update({
+          where: { id: item.priceTierId },
           data: {
-            orderId: order.id,
-            eventId: order.eventId,
-            priceTierId: tier.id,
-            contactId: order.contactId,
-            pricePaid: tier.price,
-            barcode: barcodes[i],
-            status: 'VALID',
+            quantitySold: { increment: item.quantity },
+            quantityReserved: { decrement: item.quantity },
           },
         });
-
-        // Generate QR code JWT
-        const qrJwt = qrService.generateQRCodeJWT(
-          ticket.id,
-          order.eventId,
-          barcodes[i],
-          order.event.date
-        );
-
-        // Store QR JWT on ticket
-        const updatedTicket = await tx.ticket.update({
-          where: { id: ticket.id },
-          data: { qrCodeJwt: qrJwt },
-          include: {
-            priceTier: { select: { name: true } },
-          },
-        });
-
-        created.push(updatedTicket);
       }
-
-      // Move inventory: reserved → sold
-      await tx.priceTier.update({
-        where: { id: tier.id },
-        data: {
-          quantitySold: { increment: order.quantity },
-          quantityReserved: { decrement: order.quantity },
-        },
-      });
 
       return created;
     });
@@ -117,7 +121,7 @@ class TicketService {
     logger.info('Tickets created for order', {
       orderId,
       ticketCount: tickets.length,
-      priceTierId,
+      priceTierIds: orderItems.map((item) => item.priceTierId),
     });
 
     return tickets;

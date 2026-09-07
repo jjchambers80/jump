@@ -139,7 +139,172 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /admin/settings/business-details:
+    get:
+      tags: [Organizations]
+      summary: Get the authenticated user's organization business details
+      description: Available to Admin and Organizer users. EIN values are always masked.
+      operationId: getCurrentBusinessDetails
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Business details retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BusinessDetailsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Organizations]
+      summary: Update the authenticated user's organization business details
+      description: Available to Admin and Organizer users. Omit EIN to preserve it or send null to clear it.
+      operationId: updateCurrentBusinessDetails
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BusinessDetailsUpdate"
+      responses:
+        "200":
+          description: Business details updated; EIN is masked in the response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BusinessDetailsResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /admin/settings/people:
+    get:
+      tags: [Organizations]
+      summary: List people for the authenticated user's organization
+      description: |
+        Available to Admin and Organizer users. Organization ownership is resolved
+        from the authenticated user. Date of birth is never returned.
+      operationId: listCurrentOrganizationPeople
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Organization people retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [people]
+                properties:
+                  people:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/OrganizationPersonSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Organizations]
+      summary: Add a person to the authenticated user's organization
+      description: |
+        Available to Admin and Organizer users. Organization ownership is resolved
+        from the authenticated user. Setting isAccountRepresentative to true removes
+        that designation from any existing representative in the same transaction;
+        false adds an unclassified business person. This release does not accept role
+        arrays or optional KYC fields. Date of birth is accepted only on create and is
+        never returned.
+      operationId: createCurrentOrganizationPerson
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrganizationPersonInput"
+      responses:
+        "201":
+          description: Organization person created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizationPersonSummary"
+        "400":
+          description: Invalid names, boolean, or malformed, impossible, or future date of birth
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: A concurrent account-representative assignment conflicted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/settings/people/{personId}:
+    delete:
+      tags: [Organizations]
+      summary: Remove a person from the authenticated user's organization
+      description: |
+        Available to Admin and Organizer users. A missing person and a person belonging
+        to another organization both return 404 so cross-tenant existence is not revealed.
+      operationId: deleteCurrentOrganizationPerson
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PersonIdParam"
+      responses:
+        "204":
+          description: Organization person deleted; response has no body
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   # ===== VENUES (FR-049) =====
+  /venues/{venueId}:
+    get:
+      tags: [Venues]
+      summary: Get a public venue and its published events
+      operationId: getPublicVenue
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/VenueIdParam"
+      responses:
+        "200":
+          description: Public venue details and published events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicVenueResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /organizations/{organizationId}/venues:
     get:
       tags: [Venues]
@@ -261,6 +426,57 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /organizations/{organizationId}/venues/{venueId}/logo:
+    post:
+      tags: [Venues]
+      summary: Upload or replace a venue logo
+      operationId: uploadVenueLogo
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationIdParam"
+        - $ref: "#/components/parameters/VenueIdParam"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [logo]
+              properties:
+                logo:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Venue logo updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Venue"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Venues]
+      summary: Remove a venue logo
+      operationId: removeVenueLogo
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationIdParam"
+        - $ref: "#/components/parameters/VenueIdParam"
+      responses:
+        "200":
+          description: Venue logo removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Venue"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -956,6 +1172,12 @@ components:
       required: true
       schema:
         type: string
+    PersonIdParam:
+      name: personId
+      in: path
+      required: true
+      schema:
+        type: string
     PageParam:
       name: page
       in: query
@@ -1074,6 +1296,160 @@ components:
           type: string
           enum: [ACTIVE, INACTIVE]
 
+    BusinessDetailsResponse:
+      type: object
+      required:
+        - id
+        - name
+        - businessType
+        - nickname
+        - countryCode
+        - addressLine1
+        - addressLine2
+        - city
+        - state
+        - postalCode
+        - phoneCountryCode
+        - phoneNumber
+        - hasEin
+        - einMasked
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        businessType:
+          type: string
+          nullable: true
+          enum: [SOLE_PROPRIETORSHIP, SINGLE_MEMBER_LLC, MULTI_MEMBER_LLC, PARTNERSHIP, C_CORPORATION, S_CORPORATION, NONPROFIT]
+        nickname:
+          type: string
+          nullable: true
+        countryCode:
+          type: string
+          nullable: true
+          example: US
+        addressLine1:
+          type: string
+          nullable: true
+        addressLine2:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        state:
+          type: string
+          nullable: true
+          pattern: "^[A-Z]{2}$"
+        postalCode:
+          type: string
+          nullable: true
+          pattern: "^\\d{5}(-\\d{4})?$"
+        phoneCountryCode:
+          type: string
+          nullable: true
+          example: "+1"
+        phoneNumber:
+          type: string
+          nullable: true
+          pattern: "^\\d{10}$"
+        hasEin:
+          type: boolean
+        einMasked:
+          type: string
+          nullable: true
+          example: "••-•••6789"
+
+    BusinessDetailsUpdate:
+      type: object
+      additionalProperties: false
+      required: [name, businessType, countryCode, addressLine1, city, state, postalCode, phoneCountryCode]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        businessType:
+          type: string
+          enum: [SOLE_PROPRIETORSHIP, SINGLE_MEMBER_LLC, MULTI_MEMBER_LLC, PARTNERSHIP, C_CORPORATION, S_CORPORATION, NONPROFIT]
+        nickname:
+          type: string
+          nullable: true
+          maxLength: 255
+        countryCode:
+          type: string
+          enum: [US]
+        addressLine1:
+          type: string
+          minLength: 1
+          maxLength: 255
+        addressLine2:
+          type: string
+          nullable: true
+          maxLength: 255
+        city:
+          type: string
+          minLength: 1
+          maxLength: 100
+        state:
+          type: string
+          pattern: "^[A-Za-z]{2}$"
+        postalCode:
+          type: string
+          pattern: "^\\d{5}(-\\d{4})?$"
+        phoneCountryCode:
+          type: string
+          enum: ["+1"]
+        phoneNumber:
+          type: string
+          nullable: true
+          description: Ten US digits; common punctuation is accepted and normalized.
+        ein:
+          type: string
+          nullable: true
+          description: Nine digits, optionally formatted as XX-XXXXXXX. Omit to preserve or send null to clear.
+
+    OrganizationPersonSummary:
+      type: object
+      additionalProperties: false
+      required: [id, firstName, lastName, isAccountRepresentative]
+      description: Safe person summary. Date of birth, organization ID, and internal timestamps are intentionally excluded.
+      properties:
+        id:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        isAccountRepresentative:
+          type: boolean
+
+    CreateOrganizationPersonInput:
+      type: object
+      additionalProperties: false
+      required: [firstName, lastName, dateOfBirth, isAccountRepresentative]
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Leading and trailing whitespace is trimmed; the resulting Unicode-capable name must be 1–100 characters.
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Leading and trailing whitespace is trimmed; the resulting Unicode-capable name must be 1–100 characters.
+        dateOfBirth:
+          type: string
+          format: date
+          pattern: "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+          description: Canonical YYYY-MM-DD calendar date. Impossible and future dates are rejected.
+          example: "2000-02-29"
+        isAccountRepresentative:
+          type: boolean
+          description: True atomically replaces any existing representative; false creates an unclassified business person.
+
     # ─── Venue ───
     Venue:
       type: object
@@ -1086,6 +1462,9 @@ components:
           type: string
         address:
           type: string
+        logoUrl:
+          type: string
+          nullable: true
         timezone:
           type: string
           example: America/New_York
@@ -1127,6 +1506,33 @@ components:
           type: string
         isPublic:
           type: boolean
+
+    PublicVenue:
+      type: object
+      required: [id, name, address, timezone, logoUrl]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        address:
+          type: string
+        timezone:
+          type: string
+        logoUrl:
+          type: string
+          nullable: true
+
+    PublicVenueResponse:
+      type: object
+      required: [venue, events]
+      properties:
+        venue:
+          $ref: "#/components/schemas/PublicVenue"
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventSummary"
 
     # ─── Event ───
     EventSummary:
