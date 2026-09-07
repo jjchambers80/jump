@@ -1,6 +1,6 @@
 // Admin Sidebar navigation component (T003, T018, T024)
 // Links per FR-005 (Dashboard, Orgs, Venues, Events, Analytics, Scan)
-// FR-006 (Users — ADMIN only), FR-011 (Create Event quick action)
+// FR-006 (Users — ADMIN only), with Settings pinned to the footer
 // Active state via usePathname(), mobile-responsive with toggle
 
 'use client';
@@ -119,14 +119,18 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
             })}
           </nav>
 
-          {/* Create Event quick action — FR-011 */}
+          {/* Settings remains pinned and visible when the navigation list scrolls. */}
           <div className="px-3 py-4 border-t border-gray-200 dark:border-slate-700">
             <Link
-              href="/admin/create-event"
+              href="/admin/settings"
               onClick={onClose}
-              className="flex items-center justify-center w-full px-3 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition-colors"
+              className={`flex items-center w-full px-3 py-2 text-sm font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                isActive('/admin/settings')
+                  ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
+                  : 'text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700'
+              }`}
             >
-              + Create Event
+              Settings
             </Link>
           </div>
         </div>

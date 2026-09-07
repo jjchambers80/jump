@@ -5,6 +5,7 @@
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import app from '../../src/api/server.js';
+import { prisma } from '@jump/db';
 
 const AUTH_SECRET = process.env.AUTH_SECRET;
 
@@ -150,6 +151,194 @@ describe('Organization Contract Tests', () => {
         .send({ name: 'Hacked Name' });
 
       expect(res.status).toBe(403);
+    });
+  });
+
+  describe('GET /admin/settings/business-details', () => {
+    const settingsEmails = [
+      'settings-admin@test.com',
+      'settings-organizer@test.com',
+      'settings-customer@test.com',
+      'settings-no-org@test.com',
+    ];
+    let settingsUser;
+    let organizerUser;
+    let customerUser;
+    let noOrgUser;
+    let settingsOrganization;
+
+    beforeAll(async () => {
+      await prisma.user.deleteMany({ where: { email: { in: settingsEmails } } });
+      settingsOrganization = await prisma.organization.create({
+        data: {
+          name: 'Settings Company LLC',
+          businessType: 'SINGLE_MEMBER_LLC',
+          countryCode: 'US',
+          addressLine1: '123 Main Street',
+          city: 'Cary',
+          state: 'NC',
+          postalCode: '27511',
+          phoneCountryCode: '+1',
+          ein: '123456789',
+        },
+      });
+      settingsUser = await prisma.user.create({
+        data: {
+          email: settingsEmails[0],
+          role: 'ADMIN',
+          organizationId: settingsOrganization.id,
+        },
+      });
+      organizerUser = await prisma.user.create({
+        data: {
+          email: settingsEmails[1],
+          role: 'ORGANIZER',
+          organizationId: settingsOrganization.id,
+        },
+      });
+      customerUser = await prisma.user.create({
+        data: { email: settingsEmails[2], role: 'CUSTOMER' },
+      });
+      noOrgUser = await prisma.user.create({
+        data: { email: settingsEmails[3], role: 'ADMIN' },
+      });
+    });
+
+    afterAll(async () => {
+      await prisma.user.deleteMany({ where: { email: { in: settingsEmails } } }).catch(() => {});
+      if (settingsOrganization?.id) {
+        await prisma.organization.deleteMany({ where: { id: settingsOrganization.id } }).catch(() => {});
+      }
+    });
+
+    it('returns the organization assigned to the authenticated admin', async () => {
+      const token = generateToken({
+        id: settingsUser.id,
+        email: settingsEmails[0],
+        role: 'ADMIN',
+      });
+
+      const res = await request(app)
+        .get('/admin/settings/business-details')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        id: settingsOrganization.id,
+        name: 'Settings Company LLC',
+        hasEin: true,
+        einMasked: '••-•••6789',
+      });
+      expect(res.body).not.toHaveProperty('ein');
+    });
+
+    it('allows an organizer assigned to the organization', async () => {
+      const token = generateToken({
+        id: organizerUser.id,
+        email: settingsEmails[1],
+        role: 'ORGANIZER',
+      });
+
+      const res = await request(app)
+        .get('/admin/settings/business-details')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.id).toBe(settingsOrganization.id);
+    });
+
+    it('rejects customers', async () => {
+      const token = generateToken({
+        id: customerUser.id,
+        email: settingsEmails[2],
+        role: 'CUSTOMER',
+      });
+
+      const res = await request(app)
+        .get('/admin/settings/business-details')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it('returns 404 when the user has no assigned organization', async () => {
+      const token = generateToken({ id: noOrgUser.id, email: settingsEmails[3], role: 'ADMIN' });
+
+      const res = await request(app)
+        .get('/admin/settings/business-details')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(404);
+    });
+
+    it('updates and normalizes the assigned organization without exposing EIN', async () => {
+      const token = generateToken({ id: settingsUser.id, email: settingsEmails[0], role: 'ADMIN' });
+
+      const res = await request(app)
+        .patch('/admin/settings/business-details')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          name: '  Renamed Company LLC ',
+          businessType: 'SINGLE_MEMBER_LLC',
+          nickname: ' Renamed ',
+          countryCode: 'us',
+          addressLine1: ' 456 Oak Avenue ',
+          addressLine2: null,
+          city: ' Raleigh ',
+          state: 'nc',
+          postalCode: '27601',
+          phoneCountryCode: '+1',
+          phoneNumber: '(919) 555-1212',
+          ein: '98-7654321',
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        name: 'Renamed Company LLC',
+        nickname: 'Renamed',
+        state: 'NC',
+        phoneNumber: '9195551212',
+        einMasked: '••-•••4321',
+      });
+      expect(res.body).not.toHaveProperty('ein');
+
+      const stored = await prisma.organization.findUnique({ where: { id: settingsOrganization.id } });
+      expect(stored.ein).toBe('987654321');
+    });
+
+    it('preserves EIN when it is omitted', async () => {
+      const token = generateToken({ id: settingsUser.id, email: settingsEmails[0], role: 'ADMIN' });
+
+      const res = await request(app)
+        .patch('/admin/settings/business-details')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          name: 'Renamed Company LLC',
+          businessType: 'SINGLE_MEMBER_LLC',
+          nickname: null,
+          countryCode: 'US',
+          addressLine1: '456 Oak Avenue',
+          addressLine2: null,
+          city: 'Raleigh',
+          state: 'NC',
+          postalCode: '27601',
+          phoneCountryCode: '+1',
+          phoneNumber: null,
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.einMasked).toBe('••-•••4321');
+    });
+
+    it('rejects unknown fields', async () => {
+      const token = generateToken({ id: settingsUser.id, email: settingsEmails[0], role: 'ADMIN' });
+
+      const res = await request(app)
+        .patch('/admin/settings/business-details')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ organizationId: 'another-organization' });
+
+      expect(res.status).toBe(400);
     });
   });
 });

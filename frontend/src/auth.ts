@@ -2,7 +2,7 @@
 // Full Auth.js v5 configuration with PrismaAdapter, JWT strategy, custom HS256 encode/decode
 // This file is NOT edge-safe — it imports Prisma. Use auth.config.ts for middleware.
 
-import NextAuth from 'next-auth';
+import NextAuth, { type NextAuthConfig } from 'next-auth';
 import { PrismaAdapter } from '@auth/prisma-adapter';
 import { prisma } from '@jump/db';
 import jwt from 'jsonwebtoken';
@@ -12,7 +12,7 @@ import authConfig from './auth.config';
 const AUTH_SECRET = process.env.AUTH_SECRET!;
 
 // Build providers: start with auth.config providers, add dev-only credentials
-const providers = [...authConfig.providers];
+const providers: NextAuthConfig['providers'] = [...authConfig.providers];
 
 if (process.env.NODE_ENV === 'development') {
   providers.push(

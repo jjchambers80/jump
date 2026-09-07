@@ -5,12 +5,86 @@ import express from 'express';
 import { prisma } from '@jump/db';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireOrganizer } from '../../middleware/rbac.js';
+import { NotFoundError } from '../../middleware/errorHandler.js';
+import { validateUpdateBusinessDetails } from '../validators/organizationValidators.js';
+import { validateCreateOrganizationPerson } from '../validators/organizationPersonValidators.js';
+import organizationService from '../../services/OrganizationService.js';
+import organizationPersonService from '../../services/OrganizationPersonService.js';
 
 const router = express.Router();
 
 // All admin routes require authentication + admin/organizer role
 router.use(requireAuth);
 router.use(requireOrganizer);
+
+/** GET /admin/settings/business-details — current user's assigned organization. */
+router.get('/settings/business-details', async (req, res, next) => {
+  try {
+    const businessDetails = await organizationService.getBusinessDetailsForUser(req.user.id);
+    if (!businessDetails) throw new NotFoundError('No organization is assigned to this user');
+    res.json(businessDetails);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** PATCH /admin/settings/business-details — update the current user's organization. */
+router.patch(
+  '/settings/business-details',
+  validateUpdateBusinessDetails,
+  async (req, res, next) => {
+    try {
+      const businessDetails = await organizationService.updateBusinessDetailsForUser(
+        req.user.id,
+        req.body
+      );
+      if (!businessDetails) throw new NotFoundError('No organization is assigned to this user');
+      res.json(businessDetails);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/** GET /admin/settings/people — list people in the current user's organization. */
+router.get('/settings/people', async (req, res, next) => {
+  try {
+    const people = await organizationPersonService.listPeopleForUser(req.user.id);
+    if (people === null) throw new NotFoundError('No organization is assigned to this user');
+    res.json({ people });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** POST /admin/settings/people — add a person to the current user's organization. */
+router.post(
+  '/settings/people',
+  validateCreateOrganizationPerson,
+  async (req, res, next) => {
+    try {
+      const person = await organizationPersonService.createPersonForUser(req.user.id, req.body);
+      if (person === null) throw new NotFoundError('No organization is assigned to this user');
+      res.status(201).json(person);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/** DELETE /admin/settings/people/:personId — remove only a same-organization person. */
+router.delete('/settings/people/:personId', async (req, res, next) => {
+  try {
+    const deleted = await organizationPersonService.deletePersonForUser(
+      req.user.id,
+      req.params.personId
+    );
+    if (!deleted) throw new NotFoundError('Organization person not found');
+    res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
 
 /**
  * GET /admin/dashboard/stats
@@ -19,30 +93,26 @@ router.use(requireOrganizer);
 router.get('/dashboard/stats', async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const userRole = req.user.role;
 
-    // Build venue filter based on role (events are tied to venues, venues to orgs)
-    let venueFilter = {};
-    if (userRole !== 'ADMIN') {
-      // ORGANIZER can only see their own organization's data
-      const membership = await prisma.organizationMember.findFirst({
-        where: { userId },
-        select: { organizationId: true },
+    // Scope to the user's organization (both ADMIN and ORGANIZER)
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { organizationId: true },
+    });
+
+    if (!user?.organizationId) {
+      // No org linked — return zeros
+      return res.json({
+        totalCapacity: 0,
+        ticketsSold: 0,
+        remainingCapacity: 0,
+        ticketsRedeemed: 0,
+        salesRate: 0,
+        paymentSuccessRate: 100,
       });
-      if (membership) {
-        venueFilter = { venue: { organizationId: membership.organizationId } };
-      } else {
-        // No org membership — return zeros
-        return res.json({
-          totalCapacity: 0,
-          ticketsSold: 0,
-          remainingCapacity: 0,
-          ticketsRedeemed: 0,
-          salesRate: 0,
-          paymentSuccessRate: 100,
-        });
-      }
     }
+
+    const venueFilter = { venue: { organizationId: user.organizationId } };
 
     // Get total capacity from all events
     const capacityResult = await prisma.event.aggregate({
@@ -78,10 +148,10 @@ router.get('/dashboard/stats', async (req, res, next) => {
     });
     const salesRate = Math.round(recentSales / 60);
 
-    // Calculate payment success rate
+    // Calculate payment success rate (scoped to org via event → venue)
     const [completedOrders, failedOrders] = await Promise.all([
-      prisma.order.count({ where: { status: 'COMPLETED' } }),
-      prisma.order.count({ where: { status: 'FAILED' } }),
+      prisma.order.count({ where: { status: 'COMPLETED', event: venueFilter } }),
+      prisma.order.count({ where: { status: 'FAILED', event: venueFilter } }),
     ]);
     const totalOrders = completedOrders + failedOrders;
     const paymentSuccessRate =
@@ -107,21 +177,18 @@ router.get('/dashboard/stats', async (req, res, next) => {
 router.get('/events', async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const userRole = req.user.role;
 
-    // Build venue filter based on role
-    let venueFilter = {};
-    if (userRole !== 'ADMIN') {
-      const membership = await prisma.organizationMember.findFirst({
-        where: { userId },
-        select: { organizationId: true },
-      });
-      if (membership) {
-        venueFilter = { venue: { organizationId: membership.organizationId } };
-      } else {
-        return res.json({ events: [] });
-      }
+    // Scope to the user's organization (both ADMIN and ORGANIZER)
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { organizationId: true },
+    });
+
+    if (!user?.organizationId) {
+      return res.json({ events: [] });
     }
+
+    const venueFilter = { venue: { organizationId: user.organizationId } };
 
     const events = await prisma.event.findMany({
       where: venueFilter,

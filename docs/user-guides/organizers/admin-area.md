@@ -27,10 +27,12 @@ The sidebar appears on the left side of every admin page and provides quick navi
 | Analytics     | `/admin/analytics`     | View ticket sales and revenue data | Admin, Organizer |
 | Scan          | `/admin/scan`          | Scan and validate tickets at entry | Admin, Organizer |
 | Users         | `/admin/users`         | Manage user accounts and roles     | **Admin only**   |
+| Settings      | `/admin/settings`      | Manage company business details    | Admin, Organizer |
 
-### Quick Actions
+### Pinned Settings Link
 
-- **Create Event** button at the bottom of the sidebar for quick access to event creation
+- **Settings** remains pinned at the bottom of the sidebar so it stays available when the navigation list scrolls.
+- Event creation remains available from the **Events** page.
 
 ### Active State
 
@@ -79,6 +81,26 @@ View all events for an organization. From here you can:
 - Create a new event
 - View event details
 - Access per-event analytics
+
+### Venues (`/admin/venues`)
+
+Create and maintain the venue information customers see. The venue form manages the venue name, address, timezone, logo, and public-page visibility.
+
+- Choose a JPG, PNG, GIF, or WebP logo up to 5 MB when creating or editing a venue.
+- Use **Replace logo** or **Remove logo** while editing to manage the current image.
+- Enable **Public venue page** to make `/venues/<venue-id>` available to customers. Disabling it makes that URL return a not-found page without deleting the venue or its events.
+- Use **View public page** beside a public venue to preview the customer-facing page.
+- Events remain managed under **Events**; the public venue page automatically lists only published events.
+
+### Settings (`/admin/settings`)
+
+The Settings page opens on **General** and shows the business details for the organization assigned to your account. Select **Edit** to update the type of business, registered legal business name, nickname, address, phone number, and EIN.
+
+- Business type, legal name, street address, city, state, and ZIP code are required when saving.
+- Select **Discard** to close the form without saving. If the form has changed, you will be asked before those edits are lost.
+- Existing EIN values are masked. Leave the EIN field blank to preserve the saved value, enter a replacement, or choose **Clear saved EIN** to remove it.
+- Admin and Organizer users can edit only their assigned organization through this page.
+- If your account has no assigned organization, Settings explains that an administrator must assign one before details can be edited.
 
 ### Analytics (`/admin/analytics`)
 

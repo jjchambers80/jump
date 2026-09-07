@@ -4,6 +4,17 @@
 import { prisma } from '@jump/db';
 import logger from '../utils/logger.js';
 
+export const serializeBusinessDetails = (organization) => {
+  const { ein, ...businessDetails } = organization;
+  const lastFour = ein?.slice(-4);
+
+  return {
+    ...businessDetails,
+    hasEin: Boolean(ein),
+    einMasked: lastFour ? `••-•••${lastFour}` : null,
+  };
+};
+
 class OrganizationService {
   /**
    * Create a new organization
@@ -80,6 +91,39 @@ class OrganizationService {
     });
 
     return organization;
+  }
+
+  /** Return masked business details for the organization assigned to a user. */
+  async getBusinessDetailsForUser(userId) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { organization: true },
+    });
+
+    return user?.organization ? serializeBusinessDetails(user.organization) : null;
+  }
+
+  /** Update only the organization assigned to a user and return a masked response. */
+  async updateBusinessDetailsForUser(userId, data) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { organizationId: true },
+    });
+
+    if (!user?.organizationId) return null;
+
+    const organization = await prisma.organization.update({
+      where: { id: user.organizationId },
+      data,
+    });
+
+    logger.info('Organization business details updated', {
+      event: 'organization_business_details_updated',
+      organizationId: organization.id,
+      changes: Object.keys(data),
+    });
+
+    return serializeBusinessDetails(organization);
   }
 }
 

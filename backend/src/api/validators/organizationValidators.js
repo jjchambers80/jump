@@ -3,6 +3,53 @@
 
 import { ValidationError } from '../../middleware/errorHandler.js';
 
+export const BUSINESS_TYPES = [
+  'SOLE_PROPRIETORSHIP',
+  'SINGLE_MEMBER_LLC',
+  'MULTI_MEMBER_LLC',
+  'PARTNERSHIP',
+  'C_CORPORATION',
+  'S_CORPORATION',
+  'NONPROFIT',
+];
+
+const US_STATE_CODES = new Set([
+  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL', 'GA', 'HI', 'ID',
+  'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO',
+  'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA',
+  'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY', 'AS',
+  'GU', 'MP', 'PR', 'VI',
+]);
+
+const BUSINESS_DETAIL_FIELDS = new Set([
+  'name', 'businessType', 'nickname', 'countryCode', 'addressLine1', 'addressLine2',
+  'city', 'state', 'postalCode', 'phoneCountryCode', 'phoneNumber', 'ein',
+]);
+
+const normalizeRequiredString = (body, field, label, maxLength = 255) => {
+  const value = body[field];
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new ValidationError(`${label} is required`);
+  }
+  if (value.trim().length > maxLength) {
+    throw new ValidationError(`${label} must be ${maxLength} characters or less`);
+  }
+  body[field] = value.trim();
+};
+
+const normalizeOptionalString = (body, field, label, maxLength = 255) => {
+  const value = body[field];
+  if (value === undefined || value === null) return;
+  if (typeof value !== 'string') {
+    throw new ValidationError(`${label} must be a string or null`);
+  }
+  const normalized = value.trim();
+  if (normalized.length > maxLength) {
+    throw new ValidationError(`${label} must be ${maxLength} characters or less`);
+  }
+  body[field] = normalized || null;
+};
+
 /**
  * Validate organization creation payload
  */
@@ -47,4 +94,90 @@ export const validateUpdateOrganization = (req, res, next) => {
   }
 
   next();
+};
+
+/** Validate and normalize the complete current-organization business details form. */
+export const validateUpdateBusinessDetails = (req, res, next) => {
+  try {
+    const fields = Object.keys(req.body || {});
+    const unknownField = fields.find((field) => !BUSINESS_DETAIL_FIELDS.has(field));
+    if (unknownField) {
+      throw new ValidationError(`Unknown field: ${unknownField}`);
+    }
+
+    normalizeRequiredString(req.body, 'name', 'Registered legal business name');
+    normalizeRequiredString(req.body, 'addressLine1', 'Business address');
+    normalizeRequiredString(req.body, 'city', 'City', 100);
+    normalizeOptionalString(req.body, 'nickname', 'Nickname');
+    normalizeOptionalString(req.body, 'addressLine2', 'Address line 2');
+
+    if (!BUSINESS_TYPES.includes(req.body.businessType)) {
+      throw new ValidationError('Type of business is invalid');
+    }
+
+    if (
+      typeof req.body.countryCode !== 'string' ||
+      req.body.countryCode.toUpperCase() !== 'US'
+    ) {
+      throw new ValidationError('Country code must be US');
+    }
+    req.body.countryCode = 'US';
+
+    if (
+      typeof req.body.state !== 'string' ||
+      !US_STATE_CODES.has(req.body.state.toUpperCase())
+    ) {
+      throw new ValidationError('State must be a valid two-letter US state or territory code');
+    }
+    req.body.state = req.body.state.toUpperCase();
+
+    if (
+      typeof req.body.postalCode !== 'string' ||
+      !/^\d{5}(-\d{4})?$/.test(req.body.postalCode.trim())
+    ) {
+      throw new ValidationError('ZIP code must be 5 digits or ZIP+4');
+    }
+    req.body.postalCode = req.body.postalCode.trim();
+
+    if (req.body.phoneCountryCode !== '+1') {
+      throw new ValidationError('Phone country code must be +1');
+    }
+
+    if (
+      req.body.phoneNumber === undefined ||
+      req.body.phoneNumber === null ||
+      req.body.phoneNumber === ''
+    ) {
+      req.body.phoneNumber = null;
+    } else if (typeof req.body.phoneNumber === 'string') {
+      if (!/^[\d\s().-]+$/.test(req.body.phoneNumber)) {
+        throw new ValidationError('Phone number contains invalid characters');
+      }
+      const digits = req.body.phoneNumber.replace(/\D/g, '');
+      if (digits.length !== 10) {
+        throw new ValidationError('Phone number must contain 10 digits');
+      }
+      req.body.phoneNumber = digits;
+    } else {
+      throw new ValidationError('Phone number must be a string or null');
+    }
+
+    if (req.body.ein !== undefined && req.body.ein !== null) {
+      if (typeof req.body.ein !== 'string') {
+        throw new ValidationError('EIN must be a string or null');
+      }
+      if (!/^\d{2}-?\d{7}$/.test(req.body.ein.trim())) {
+        throw new ValidationError('EIN must contain 9 digits');
+      }
+      const digits = req.body.ein.replace(/\D/g, '');
+      if (digits.length !== 9) {
+        throw new ValidationError('EIN must contain 9 digits');
+      }
+      req.body.ein = digits;
+    }
+
+    next();
+  } catch (error) {
+    next(error);
+  }
 };

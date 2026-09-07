@@ -30,15 +30,16 @@
 | organizationId (FK) |                |1             |1
 | name                |                |              |
 | address             |                |*             |*
-| timezone            |        +---------------+ +--------------------+
-| isPublic            |        |   Account     | | VerificationToken  |
-| createdAt           |        +---------------+ +--------------------+
-| updatedAt           |        | id (PK, cuid) | | identifier         |
-+---------+-----------+        | userId (FK)   | | token              |
-          |1                   | type          | | expires            |
-          |                    | provider      | | (composite PK)     |
-          |*                   | providerAcctId| +--------------------+
-+---------------------+        +---------------+
+| logoUrl (nullable)  |        +---------------+ +--------------------+
+| timezone            |        |   Account     | | VerificationToken  |
+| isPublic            |        +---------------+ +--------------------+
+| createdAt           |        | id (PK, cuid) | | identifier         |
+| updatedAt           |        | userId (FK)   | | token              |
++---------+-----------+        | type          | | expires            |
+|          |1                   | provider      | | (composite PK)     |
+|          |                    | providerAcctId| +--------------------+
+|          |*                   +---------------+
++---------------------+
 |       Event         |
 +---------------------+                +--------------------+
 | id (PK, cuid)       |                |     Contact        |
@@ -85,6 +86,17 @@
                  | failureReason          |
                  | createdAt              |
                  +------------------------+
+
++---------------------+ 1    * +--------------------------------+
+|    Organization     +------>|      OrganizationPerson        |
++---------------------+        +--------------------------------+
+                               | id (PK, cuid)                  |
+                               | organizationId (FK)            |
+                               | firstName / lastName           |
+                               | dateOfBirth (DATE)             |
+                               | isAccountRepresentative        |
+                               | createdAt / updatedAt          |
+                               +--------------------------------+
 ```
 
 ---
@@ -194,7 +206,7 @@ import { prisma } from "@jump/db";
 
 ### 4. Organization
 
-**Purpose**: Top-level tenant entity. All venues, events, and users are scoped to an organization.
+**Purpose**: Top-level tenant entity. All venues, events, users, and business people are scoped to an organization.
 
 | Column    | Type               | Constraints              | Description                    |
 | --------- | ------------------ | ------------------------ | ------------------------------ |
@@ -208,7 +220,30 @@ import { prisma } from "@jump/db";
 
 ---
 
-### 5. Venue
+### 5. OrganizationPerson
+
+**Purpose**: A business person associated with an Organization for business-verification workflows. This entity is separate from authenticated `User` identities and ticket-buyer `Contact` records.
+
+| Column                  | Type          | Constraints                  | Description                                      |
+| ----------------------- | ------------- | ---------------------------- | ------------------------------------------------ |
+| id                      | String (cuid) | PK                           | Unique person identifier                         |
+| organizationId          | String        | FK -> Organization, NOT NULL | Owning organization                              |
+| firstName               | String        | NOT NULL                     | Person's first name                              |
+| lastName                | String        | NOT NULL                     | Person's last name                               |
+| dateOfBirth             | Date          | NOT NULL                     | Date-only value with no time-zone interpretation |
+| isAccountRepresentative | Boolean       | NOT NULL, DEFAULT false      | Whether this person is the account representative |
+| createdAt               | DateTime      | NOT NULL, DEFAULT now()      | Creation timestamp                               |
+| updatedAt               | DateTime      | NOT NULL, auto               | Last update timestamp                            |
+
+**Representative invariant**: A PostgreSQL partial unique index on `organizationId WHERE isAccountRepresentative = true` permits any number of ordinary people but no more than one account representative per organization. Representative replacement must occur transactionally.
+
+**Privacy and lifecycle**: Date of birth is accepted only when creating a person and is omitted from list/create API responses and application logs. Deleting an Organization cascades to its people. People records, especially date of birth, must be retained only while required for the business-verification or legal purpose and deleted when that purpose ends or an applicable deletion request is honored. PostgreSQL storage and backups containing this personal data must be encrypted at rest; application-level encryption requires a separately designed KMS and key-rotation strategy.
+
+**Indexes**: `organizationId`; partial unique `OrganizationPerson_one_account_representative_per_org` on `organizationId` for rows where `isAccountRepresentative = true`.
+
+---
+
+### 6. Venue
 
 **Purpose**: Physical location belonging to an Organization. Reusable across multiple events.
 
@@ -218,6 +253,7 @@ import { prisma } from "@jump/db";
 | organizationId | String        | FK -> Organization, NOT NULL         | Owning organization          |
 | name           | String        | NOT NULL                             | Venue display name           |
 | address        | String        | NOT NULL                             | Full address string          |
+| logoUrl        | String        | nullable                             | Public venue logo URL        |
 | timezone       | String        | NOT NULL, DEFAULT "America/New_York" | IANA time zone               |
 | isPublic       | Boolean       | NOT NULL, DEFAULT true               | Publicly visible or unlisted |
 | createdAt      | DateTime      | NOT NULL, DEFAULT now()              | Creation timestamp           |
@@ -227,7 +263,7 @@ import { prisma } from "@jump/db";
 
 ---
 
-### 6. Contact
+### 7. Contact
 
 **Purpose**: Ticket buyer/holder identity, independent of authentication. Created for both guests and signed-in users.
 
@@ -251,7 +287,7 @@ import { prisma } from "@jump/db";
 
 ---
 
-### 7. Event
+### 8. Event
 
 **Purpose**: A ticketed occurrence at a venue on a specific date.
 
@@ -282,7 +318,7 @@ import { prisma } from "@jump/db";
 
 ---
 
-### 8. PriceTier
+### 9. PriceTier
 
 **Purpose**: Named pricing level within an event. Replaces the old single `ticketPrice` on Event.
 
@@ -310,7 +346,7 @@ import { prisma } from "@jump/db";
 
 ---
 
-### 9. Order
+### 10. Order
 
 **Purpose**: Groups tickets from a single purchase. Links a contact to an event and payment.
 
@@ -338,7 +374,7 @@ import { prisma } from "@jump/db";
 
 ---
 
-### 10. Ticket
+### 11. Ticket
 
 **Purpose**: Atomic unit of admission. Each ticket is individually scannable.
 
@@ -367,7 +403,7 @@ import { prisma } from "@jump/db";
 
 ---
 
-### 11. PaymentTransaction
+### 12. PaymentTransaction
 
 **Purpose**: Immutable Stripe payment audit record. Append-only — never updated or deleted after creation.
 
@@ -407,6 +443,7 @@ import { prisma } from "@jump/db";
 | -------------------------- | ---- | -------------------------- | ------------------------------- |
 | Organization -> User       | 1:N  | User.organizationId        | Organizers/admins belong to org |
 | Organization -> Venue      | 1:N  | Venue.organizationId       | Venues scoped to org            |
+| Organization -> OrganizationPerson | 1:N | OrganizationPerson.organizationId | Business people scoped to org; cascade delete |
 | Venue -> Event             | 1:N  | Event.venueId              | Events hosted at venues         |
 | Event -> PriceTier         | 1:N  | PriceTier.eventId          | Multiple pricing options        |
 | Event -> Order             | 1:N  | Order.eventId              | Orders placed for event         |
@@ -429,6 +466,8 @@ import { prisma } from "@jump/db";
 | User               | idx_user_role         | role              | Filter by role for admin views |
 | User               | idx_user_email        | email             | Unique lookup (Auth.js)        |
 | Venue              | idx_venue_org         | organizationId    | Org-scoped venue listing       |
+| OrganizationPerson | OrganizationPerson_organizationId_idx | organizationId | Org-scoped people listing |
+| OrganizationPerson | OrganizationPerson_one_account_representative_per_org | organizationId (partial) | At most one representative per org |
 | Contact            | idx_contact_user      | userId            | Link contact to auth user      |
 | Contact            | idx_contact_email     | email             | Guest lookup, dedup            |
 | Event              | idx_event_venue       | venueId           | Events at venue                |
@@ -493,7 +532,7 @@ async function purchaseTickets(eventId: string, items: { priceTierId: string; qu
 | Ticket             | DROP + RECREATE | -> Ticket (orderId, priceTierId, contactId, barcode added)      |
 | PaymentTransaction | DROP + RECREATE | -> PaymentTransaction (orderId FK, append-only)                 |
 | Session            | DROP            | -> Removed (JWT strategy, no DB sessions)                       |
-| ---                | CREATE          | Organization, Venue, Contact, Order, Account, VerificationToken |
+| ---                | CREATE          | Organization, OrganizationPerson, Venue, Contact, Order, Account, VerificationToken |
 
 ---
 
@@ -522,6 +561,13 @@ async function purchaseTickets(eventId: string, items: { priceTierId: string; qu
 2. Anonymize `email`, `firstName`, `lastName` on Contact
 3. Preserve Order and Ticket records (audit trail) with anonymized references
 4. Preserve PaymentTransaction records (7-year financial retention)
+
+**Organization Person Data**:
+
+- Retain people and date-of-birth data only for the documented business-verification or legal purpose.
+- Delete a person when that purpose ends or an applicable deletion request is honored; deleting the organization cascades to all of its people.
+- Never expose date of birth from list/create APIs or include it in application logs.
+- Encrypt PostgreSQL and backups at rest before production use of date-of-birth data.
 
 **Financial Record Retention**:
 
