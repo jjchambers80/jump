@@ -18,7 +18,7 @@ class FeeService {
    *   itemBreakdowns: Array<{unitPrice: number, quantity: number, platformFee: number, processingFee: number, lineTotal: number}>
    * }}
    */
-  computeOrderFees(items) {
+  computeOrderFees(items, taxRate = 0) {
     const subtotal = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
 
     // Platform fee on base price
@@ -29,8 +29,8 @@ class FeeService {
       (subtotal + platformFee) * FEE_CONFIG.stripeFeePercent + FEE_CONFIG.stripeFeeFixed
     );
 
-    // Tax placeholder
-    const tax = this._round(subtotal * FEE_CONFIG.taxRate);
+    // Tax from event's venue-based rate
+    const tax = this._round(subtotal * taxRate);
 
     const total = this._round(subtotal + platformFee + processingFee + tax);
 

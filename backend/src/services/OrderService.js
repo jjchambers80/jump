@@ -147,7 +147,7 @@ class OrderService {
         unitPrice: Number(tierById.get(item.priceTierId).price),
         quantity: item.quantity,
       }));
-      const fees = feeService.computeOrderFees(feeItems);
+      const fees = feeService.computeOrderFees(feeItems, Number(event.taxRate || 0));
 
       // Ensure unique orderRef
       let existingRef = await tx.order.findUnique({ where: { orderRef } });

@@ -126,6 +126,9 @@ model Venue {
   organizationId String
   name           String
   address        String
+  city           String?
+  state          String?
+  postalCode     String?
   logoUrl        String?
   timezone       String       @default("America/New_York")
   isPublic       Boolean      @default(true)
@@ -168,6 +171,7 @@ model Event {
   capacity    Int
   category    String?
   status      EventStatus @default(DRAFT)
+  taxRate     Decimal?    @db.Decimal(6, 5)
 
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt

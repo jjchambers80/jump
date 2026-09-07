@@ -27,6 +27,7 @@ interface Event {
   name: string;
   description?: string;
   date: string;
+  taxRate: number;
   venue: EventVenue | null;
   priceTiers: PriceTier[];
 }
@@ -79,17 +80,16 @@ const FEE_CONFIG = {
   platformFeePercent: 0.05,
   stripeFeePercent: 0.029,
   stripeFeeFixed: 0.30,
-  taxRate: 0,
 };
 
-function computeOrderFees(items: { price: number; quantity: number }[]) {
+function computeOrderFees(items: { price: number; quantity: number }[], taxRate: number = 0) {
   const round = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100;
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const platformFee = round(subtotal * FEE_CONFIG.platformFeePercent);
   const processingFee = round(
     (subtotal + platformFee) * FEE_CONFIG.stripeFeePercent + FEE_CONFIG.stripeFeeFixed
   );
-  const tax = round(subtotal * FEE_CONFIG.taxRate);
+  const tax = round(subtotal * taxRate);
   const total = round(subtotal + platformFee + processingFee + tax);
   return { subtotal: round(subtotal), platformFee, processingFee, tax, total };
 }
@@ -285,7 +285,7 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
 
   const totalQuantity = selectedItems.reduce((sum, item) => sum + item.quantity, 0);
   const feeItems = selectedItems.map((item) => ({ price: item.tier.price, quantity: item.quantity }));
-  const fees = computeOrderFees(feeItems);
+  const fees = computeOrderFees(feeItems, event?.taxRate ?? 0);
   const totalAmount = fees.total;
 
   return (

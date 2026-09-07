@@ -14,6 +14,9 @@ class VenueService {
         organizationId: orgId,
         name: data.name,
         address: data.address,
+        city: data.city || null,
+        state: data.state || null,
+        postalCode: data.postalCode || null,
         timezone: data.timezone || 'America/New_York',
         isPublic: data.isPublic !== undefined ? data.isPublic : true,
       },
@@ -129,6 +132,9 @@ class VenueService {
     const updateData = {};
     if (data.name !== undefined) updateData.name = data.name;
     if (data.address !== undefined) updateData.address = data.address;
+    if (data.city !== undefined) updateData.city = data.city;
+    if (data.state !== undefined) updateData.state = data.state;
+    if (data.postalCode !== undefined) updateData.postalCode = data.postalCode;
     if (data.timezone !== undefined) updateData.timezone = data.timezone;
     if (data.isPublic !== undefined) updateData.isPublic = data.isPublic;
 

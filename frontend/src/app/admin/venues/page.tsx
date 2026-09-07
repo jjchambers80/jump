@@ -9,11 +9,15 @@ import Link from 'next/link';
 import api from '@/services/api';
 import OrganizationSelector, { type Organization } from '@/components/OrganizationSelector';
 import { resolveAssetUrl } from '@/lib/assets';
+import { StateSelect } from '@/components/StateSelect';
 
 interface Venue {
   id: string;
   name: string;
   address: string;
+  city: string | null;
+  state: string | null;
+  postalCode: string | null;
   timezone: string;
   isPublic: boolean;
   logoUrl: string | null;
@@ -28,6 +32,9 @@ interface Venue {
 interface VenueFormData {
   name: string;
   address: string;
+  city: string;
+  state: string;
+  postalCode: string;
   timezone: string;
   isPublic: boolean;
 }
@@ -35,6 +42,9 @@ interface VenueFormData {
 const EMPTY_FORM: VenueFormData = {
   name: '',
   address: '',
+  city: '',
+  state: '',
+  postalCode: '',
   timezone: 'America/New_York',
   isPublic: true,
 };
@@ -108,6 +118,9 @@ export default function VenuesPage() {
     setFormData({
       name: venue.name,
       address: venue.address,
+      city: venue.city || '',
+      state: venue.state || '',
+      postalCode: venue.postalCode || '',
       timezone: venue.timezone,
       isPublic: venue.isPublic,
     });
@@ -296,16 +309,47 @@ export default function VenuesPage() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-              Address *
+              Street Address *
             </label>
             <input
               type="text"
               value={formData.address}
               onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-              placeholder="Full venue address"
+              placeholder="123 Main St"
               className="block w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               required
             />
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                City
+              </label>
+              <input
+                type="text"
+                value={formData.city}
+                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                placeholder="e.g. Raleigh"
+                className="block w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+            </div>
+            <StateSelect
+              value={formData.state}
+              onChange={(value) => setFormData({ ...formData, state: value })}
+            />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                Postal Code
+              </label>
+              <input
+                type="text"
+                value={formData.postalCode}
+                onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
+                placeholder="e.g. 27601"
+                className="block w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+            </div>
           </div>
 
           <div className="flex items-center gap-2">

@@ -6,6 +6,7 @@ import { prisma } from '@jump/db';
 import { NotFoundError, ValidationError, ConflictError } from '../middleware/errorHandler.js';
 import logger from '../utils/logger.js';
 import { formatEventSummary } from '../utils/eventSummary.js';
+import taxService from './TaxService.js';
 
 class EventService {
   /**
@@ -91,6 +92,9 @@ class EventService {
       eventId: event.id,
       eventName: event.name,
     });
+
+    // Compute tax rate from venue postal code (non-blocking — event exists even if this fails)
+    await this._refreshTaxRate(event);
 
     return this._formatEventDetail(event);
   }
@@ -189,6 +193,11 @@ class EventService {
       updatedFields: Object.keys(updateData),
     });
 
+    // Refresh tax rate if venue changed
+    if (updateData.venueId) {
+      await this._refreshTaxRate(event);
+    }
+
     return this._formatEventDetail(event);
   }
 
@@ -224,6 +233,9 @@ class EventService {
         priceTiers: { orderBy: { displayOrder: 'asc' } },
       },
     });
+
+    // Refresh tax rate on publish to ensure accuracy
+    await this._refreshTaxRate(event);
 
     logger.info('Event published', {
       event: 'event_published',
@@ -521,6 +533,7 @@ class EventService {
       capacity: event.capacity,
       category: event.category,
       status: event.status,
+      taxRate: event.taxRate ? Number(event.taxRate) : 0,
       venue: event.venue
         ? {
             id: event.venue.id,
@@ -563,6 +576,29 @@ class EventService {
       createdAt: event.createdAt,
       updatedAt: event.updatedAt,
     };
+  }
+  /**
+   * Compute and persist tax rate for an event based on its venue postal code.
+   * Fails silently — taxRate stays null/0 if lookup fails.
+   */
+  async _refreshTaxRate(event) {
+    const postalCode = event.venue?.postalCode;
+    if (!postalCode) return;
+
+    try {
+      const taxRate = await taxService.getTaxRateForVenue(postalCode);
+      await prisma.event.update({
+        where: { id: event.id },
+        data: { taxRate },
+      });
+      event.taxRate = taxRate;
+    } catch (error) {
+      logger.error('Failed to refresh tax rate', {
+        event: 'tax_rate_refresh_failed',
+        eventId: event.id,
+        error: error.message,
+      });
+    }
   }
 }
 

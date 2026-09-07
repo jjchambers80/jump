@@ -5,7 +5,7 @@ import { ValidationError } from '../../middleware/errorHandler.js';
 
 // Common IANA timezone patterns (basic validation)
 const IANA_TZ_REGEX = /^[A-Za-z]+\/[A-Za-z_]+$/;
-const VENUE_FIELDS = new Set(['name', 'address', 'timezone', 'isPublic']);
+const VENUE_FIELDS = new Set(['name', 'address', 'city', 'state', 'postalCode', 'timezone', 'isPublic']);
 
 function rejectUnknownFields(body, next) {
   const unknownFields = Object.keys(body).filter((field) => !VENUE_FIELDS.has(field));

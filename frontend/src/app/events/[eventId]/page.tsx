@@ -41,6 +41,7 @@ interface Event {
   capacity: number;
   category?: string;
   status: string;
+  taxRate: number;
   venue: EventVenue | null;
   priceTiers: PriceTier[];
   createdAt: string;
@@ -56,16 +57,15 @@ const FEE_CONFIG = {
   platformFeePercent: 0.05,
   stripeFeePercent: 0.029,
   stripeFeeFixed: 0.30,
-  taxRate: 0,
 };
 
-function computeTierAllInPrice(basePrice: number) {
+function computeTierAllInPrice(basePrice: number, taxRate: number = 0) {
   const round = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100;
   const platformFee = round(basePrice * FEE_CONFIG.platformFeePercent);
   const processingFee = round(
     (basePrice + platformFee) * FEE_CONFIG.stripeFeePercent + FEE_CONFIG.stripeFeeFixed
   );
-  const tax = round(basePrice * FEE_CONFIG.taxRate);
+  const tax = round(basePrice * taxRate);
   const total = round(basePrice + platformFee + processingFee + tax);
   return { basePrice, platformFee, processingFee, tax, total };
 }
@@ -373,7 +373,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                           <div className="flex items-center gap-4">
                             <div className="text-right">
                               {(() => {
-                                const fees = computeTierAllInPrice(tier.price);
+                                const fees = computeTierAllInPrice(tier.price, event?.taxRate ?? 0);
                                 return (
                                   <>
                                     <span className="text-2xl font-bold text-blue-600 dark:text-indigo-400">
@@ -381,7 +381,6 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                                     </span>
                                     <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5 max-w-[200px]">
                                       Includes Base Price: {formatPrice(fees.basePrice)}
-                                      {fees.platformFee > 0 && <>, Service Fee: {formatPrice(fees.platformFee)}</>}
                                       {fees.processingFee > 0 && <>, Processing: {formatPrice(fees.processingFee)}</>}
                                       {fees.tax > 0 && <>, Tax: {formatPrice(fees.tax)}</>}
                                     </p>
