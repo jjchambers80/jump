@@ -3,7 +3,7 @@
 
 import { getSession } from 'next-auth/react';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
 
 interface RequestOptions extends RequestInit {
   headers?: Record<string, string>;
@@ -43,14 +43,15 @@ class ApiClient {
 
     try {
       const response = await fetch(url, config);
-      const data = await response.json();
+      const text = await response.text();
+      const data = text ? JSON.parse(text) : undefined;
 
       if (!response.ok) {
         throw {
           status: response.status,
-          message: data.message || 'Request failed',
-          error: data.error,
-          details: data.details,
+          message: data?.message || 'Request failed',
+          error: data?.error,
+          details: data?.details,
         };
       }
 
