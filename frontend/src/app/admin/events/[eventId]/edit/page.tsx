@@ -23,6 +23,7 @@ interface PriceTier {
   quantityTotal: number;
   quantitySold: number;
   quantityAvailable: number;
+  quantityReserved: number;
   displayOrder: number;
   minPerOrder: number | null;
   maxPerOrder: number | null;
@@ -33,6 +34,64 @@ interface PriceTier {
   isRefundable: boolean;
   isOnSale: boolean;
   saleStatus: 'NOT_STARTED' | 'ON_SALE' | 'ENDED';
+}
+
+interface TierFormInput {
+  key: string; // existing tier id or temp UUID for new tiers
+  isNew: boolean;
+  name: string;
+  description: string;
+  price: string;
+  quantityTotal: string;
+  quantitySold: number; // read-only, for existing tiers
+  quantityReserved: number; // read-only, for existing tiers
+  minPerOrder: string;
+  maxPerOrder: string;
+  saleStartDate: string;
+  saleEndDate: string;
+  visibility: 'PUBLIC' | 'PRIVATE' | 'HIDDEN';
+  isRefundable: boolean;
+  isActive: boolean;
+}
+
+function tierToForm(t: PriceTier): TierFormInput {
+  return {
+    key: t.id,
+    isNew: false,
+    name: t.name,
+    description: t.description || '',
+    price: String(Number(t.price)),
+    quantityTotal: String(t.quantityTotal),
+    quantitySold: t.quantitySold,
+    quantityReserved: t.quantityReserved ?? 0,
+    minPerOrder: t.minPerOrder != null ? String(t.minPerOrder) : '',
+    maxPerOrder: t.maxPerOrder != null ? String(t.maxPerOrder) : '',
+    saleStartDate: t.saleStartDate ? toDatetimeLocal(t.saleStartDate) : '',
+    saleEndDate: t.saleEndDate ? toDatetimeLocal(t.saleEndDate) : '',
+    visibility: t.visibility,
+    isRefundable: t.isRefundable,
+    isActive: t.isActive,
+  };
+}
+
+function newTierForm(): TierFormInput {
+  return {
+    key: crypto.randomUUID(),
+    isNew: true,
+    name: '',
+    description: '',
+    price: '',
+    quantityTotal: '',
+    quantitySold: 0,
+    quantityReserved: 0,
+    minPerOrder: '1',
+    maxPerOrder: '10',
+    saleStartDate: '',
+    saleEndDate: '',
+    visibility: 'PUBLIC',
+    isRefundable: false,
+    isActive: true,
+  };
 }
 
 interface EventDetail {
@@ -83,6 +142,9 @@ export default function EditEventPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [priceTiers, setPriceTiers] = useState<TierFormInput[]>([]);
+  const [tiersInitialized, setTiersInitialized] = useState(false);
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -109,6 +171,10 @@ export default function EditEventPage() {
         setCapacity(String(event.capacity));
         setCategory(event.category || '');
         setLogoUrl(event.logoUrl || null);
+        // Initialize tier form state from loaded tiers
+        const sorted = [...event.priceTiers].sort((a, b) => a.displayOrder - b.displayOrder);
+        setPriceTiers(sorted.map(tierToForm));
+        setTiersInitialized(true);
       } catch (err: any) {
         setError(err.message || 'Failed to load event');
       } finally {
@@ -202,6 +268,30 @@ export default function EditEventPage() {
     e.target.value = '';
   };
 
+  // Tier helpers
+  const addTier = () => setPriceTiers([...priceTiers, newTierForm()]);
+  const removeTier = (key: string) => {
+    const tier = priceTiers.find((t) => t.key === key);
+    // Only allow removing new tiers or tiers with no sales
+    if (tier && !tier.isNew && tier.quantitySold > 0) return;
+    setPriceTiers(priceTiers.filter((t) => t.key !== key));
+  };
+  const updateTier = (key: string, field: keyof TierFormInput, value: string | boolean) => {
+    setPriceTiers(priceTiers.map((t) => (t.key === key ? { ...t, [field]: value } : t)));
+  };
+  const moveTier = (index: number, direction: 'up' | 'down') => {
+    const newTiers = [...priceTiers];
+    const swap = direction === 'up' ? index - 1 : index + 1;
+    if (swap < 0 || swap >= newTiers.length) return;
+    [newTiers[index], newTiers[swap]] = [newTiers[swap], newTiers[index]];
+    setPriceTiers(newTiers);
+  };
+
+  const totalTierQuantity = priceTiers.reduce(
+    (sum, t) => sum + (parseInt(t.quantityTotal) || 0),
+    0
+  );
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!orgId) return;
@@ -221,12 +311,71 @@ export default function EditEventPage() {
       if (capacity !== String(eventData?.capacity)) payload.capacity = parseInt(capacity);
       if (category !== (eventData?.category || '')) payload.category = category || null;
 
-      if (Object.keys(payload).length === 0) {
+      // Save tier changes
+      const tierBase = `/organizations/${orgId}/events/${eventId}/price-tiers`;
+      let tiersChanged = false;
+
+      // Create new tiers
+      for (const tier of priceTiers.filter((t) => t.isNew)) {
+        if (!tier.name || !tier.price || !tier.quantityTotal) continue;
+        await api.post(tierBase, {
+          name: tier.name,
+          description: tier.description || undefined,
+          price: parseFloat(tier.price),
+          quantityTotal: parseInt(tier.quantityTotal),
+          minPerOrder: tier.minPerOrder ? parseInt(tier.minPerOrder) : undefined,
+          maxPerOrder: tier.maxPerOrder ? parseInt(tier.maxPerOrder) : undefined,
+          saleStartDate: tier.saleStartDate ? new Date(tier.saleStartDate).toISOString() : null,
+          saleEndDate: tier.saleEndDate ? new Date(tier.saleEndDate).toISOString() : null,
+          visibility: tier.visibility,
+          isRefundable: tier.isRefundable,
+        });
+        tiersChanged = true;
+      }
+
+      // Update existing tiers
+      const originalTiers = eventData?.priceTiers || [];
+      for (const tier of priceTiers.filter((t) => !t.isNew)) {
+        const orig = originalTiers.find((o) => o.id === tier.key);
+        if (!orig) continue;
+        const patch: Record<string, unknown> = {};
+        if (tier.name !== orig.name) patch.name = tier.name;
+        if (tier.description !== (orig.description || '')) patch.description = tier.description || null;
+        if (parseFloat(tier.price) !== Number(orig.price)) patch.price = parseFloat(tier.price);
+        if (parseInt(tier.quantityTotal) !== orig.quantityTotal) patch.quantityTotal = parseInt(tier.quantityTotal);
+        if ((tier.minPerOrder ? parseInt(tier.minPerOrder) : null) !== orig.minPerOrder)
+          patch.minPerOrder = tier.minPerOrder ? parseInt(tier.minPerOrder) : null;
+        if ((tier.maxPerOrder ? parseInt(tier.maxPerOrder) : null) !== orig.maxPerOrder)
+          patch.maxPerOrder = tier.maxPerOrder ? parseInt(tier.maxPerOrder) : null;
+        const newStart = tier.saleStartDate ? new Date(tier.saleStartDate).toISOString() : null;
+        if (newStart !== orig.saleStartDate) patch.saleStartDate = newStart;
+        const newEnd = tier.saleEndDate ? new Date(tier.saleEndDate).toISOString() : null;
+        if (newEnd !== orig.saleEndDate) patch.saleEndDate = newEnd;
+        if (tier.visibility !== orig.visibility) patch.visibility = tier.visibility;
+        if (tier.isRefundable !== orig.isRefundable) patch.isRefundable = tier.isRefundable;
+
+        if (Object.keys(patch).length > 0) {
+          await api.patch(`${tierBase}/${tier.key}`, patch);
+          tiersChanged = true;
+        }
+      }
+
+      // Reorder if order changed
+      const origOrder = [...originalTiers].sort((a, b) => a.displayOrder - b.displayOrder).map((t) => t.id);
+      const currentExistingOrder = priceTiers.filter((t) => !t.isNew).map((t) => t.key);
+      if (JSON.stringify(origOrder) !== JSON.stringify(currentExistingOrder) && currentExistingOrder.length > 0) {
+        await api.post(`${tierBase}/reorder`, { tierIds: currentExistingOrder });
+        tiersChanged = true;
+      }
+
+      if (Object.keys(payload).length === 0 && !tiersChanged) {
         setError('No changes to save');
         return;
       }
 
-      await api.patch(`/organizations/${orgId}/events/${eventId}`, payload);
+      if (Object.keys(payload).length > 0) {
+        await api.patch(`/organizations/${orgId}/events/${eventId}`, payload);
+      }
       setSuccess(true);
       setTimeout(() => router.push('/admin/events'), 1000);
     } catch (err: any) {
@@ -281,7 +430,6 @@ export default function EditEventPage() {
   }
 
   const isPublished = eventData.status === 'PUBLISHED';
-  const totalTierQuantity = eventData.priceTiers.reduce((s, t) => s + t.quantityTotal, 0);
   const capacityNum = parseInt(capacity) || 0;
   const capacityExceeded = capacityNum > 0 && totalTierQuantity > capacityNum;
 
@@ -508,77 +656,210 @@ export default function EditEventPage() {
           </div>
         </div>
 
-        {/* Price Tiers (read-only summary) */}
-        {eventData.priceTiers.length > 0 && (
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
-              Price Tiers
-            </h2>
-            <p className="text-xs text-gray-500 dark:text-slate-400 mb-3">
-              Price tiers can be managed from the event list (Show Tiers).
+        {/* Price Tiers */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Price Tiers</h2>
+            <button
+              type="button"
+              onClick={addTier}
+              className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500"
+            >
+              + Add Tier
+            </button>
+          </div>
+
+          {capacityExceeded && (
+            <div className="mb-3 rounded-md bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 p-3">
+              <p className="text-sm text-yellow-800 dark:text-yellow-300">
+                ⚠ Total tier quantity ({totalTierQuantity}) exceeds event capacity ({capacityNum})
+              </p>
+            </div>
+          )}
+
+          {priceTiers.length === 0 && (
+            <p className="text-sm text-gray-500 dark:text-slate-400 py-4 text-center">
+              No price tiers. Click &quot;+ Add Tier&quot; to create one.
             </p>
-            <div className="space-y-2">
-              {eventData.priceTiers
-                .sort((a, b) => a.displayOrder - b.displayOrder)
-                .map((tier) => (
-                  <div
-                    key={tier.id}
-                    className="rounded-md border border-gray-200 dark:border-slate-600 px-4 py-3 text-sm"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-gray-900 dark:text-slate-100">
-                          {tier.name}
-                        </span>
-                        <span className="text-gray-500 dark:text-slate-400">
-                          ${Number(tier.price).toFixed(2)}
-                        </span>
-                        {tier.visibility !== 'PUBLIC' && (
-                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
-                            tier.visibility === 'HIDDEN'
-                              ? 'bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-slate-400'
-                              : 'bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400'
-                          }`}>
-                            {tier.visibility.toLowerCase()}
-                          </span>
-                        )}
-                        {tier.isRefundable && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400">
-                            refundable
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-xs text-gray-500 dark:text-slate-400">
-                        {tier.quantitySold} sold / {tier.quantityTotal} total
-                      </div>
-                    </div>
-                    {tier.description && (
-                      <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">{tier.description}</p>
+          )}
+
+          <div className="space-y-4">
+            {priceTiers.map((tier, index) => (
+              <div
+                key={tier.key}
+                className="rounded-lg border border-gray-200 dark:border-slate-600 p-4"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-500 dark:text-slate-400">
+                      Tier {index + 1}
+                    </span>
+                    {!tier.isNew && tier.quantitySold > 0 && (
+                      <span className="text-xs text-gray-400 dark:text-slate-500">
+                        ({tier.quantitySold} sold)
+                      </span>
                     )}
-                    {(tier.saleStartDate || tier.saleEndDate) && (
-                      <div className="mt-1.5 flex items-center gap-3 text-xs text-gray-400 dark:text-slate-500">
-                        {tier.saleStartDate && (
-                          <span>Starts: {new Date(tier.saleStartDate).toLocaleDateString()}</span>
-                        )}
-                        {tier.saleEndDate && (
-                          <span>Ends: {new Date(tier.saleEndDate).toLocaleDateString()}</span>
-                        )}
-                        <span className={`font-medium ${
-                          tier.saleStatus === 'ON_SALE'
-                            ? 'text-green-600 dark:text-green-400'
-                            : tier.saleStatus === 'NOT_STARTED'
-                              ? 'text-yellow-600 dark:text-yellow-400'
-                              : 'text-gray-500 dark:text-slate-500'
-                        }`}>
-                          {tier.saleStatus === 'ON_SALE' ? 'On Sale' : tier.saleStatus === 'NOT_STARTED' ? 'Not Started' : 'Ended'}
-                        </span>
-                      </div>
+                    {tier.isNew && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400">
+                        new
+                      </span>
                     )}
                   </div>
-                ))}
-            </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => moveTier(index, 'up')}
+                      disabled={index === 0}
+                      className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
+                      title="Move up"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveTier(index, 'down')}
+                      disabled={index === priceTiers.length - 1}
+                      className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
+                      title="Move down"
+                    >
+                      ↓
+                    </button>
+                    {(tier.isNew || tier.quantitySold === 0) && (
+                      <button
+                        type="button"
+                        onClick={() => removeTier(tier.key)}
+                        className="p-1 text-red-400 hover:text-red-600"
+                        title="Remove tier"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="col-span-2">
+                    <label className={labelClass}>Tier Name *</label>
+                    <input
+                      type="text"
+                      value={tier.name}
+                      onChange={(e) => updateTier(tier.key, 'name', e.target.value)}
+                      placeholder="e.g. General Admission"
+                      className={inputClass}
+                      required
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className={labelClass}>Description</label>
+                    <textarea
+                      value={tier.description}
+                      onChange={(e) => updateTier(tier.key, 'description', e.target.value)}
+                      placeholder="Brief description (optional)"
+                      maxLength={500}
+                      rows={2}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Price ($) *</label>
+                    <input
+                      type="number"
+                      value={tier.price}
+                      onChange={(e) => updateTier(tier.key, 'price', e.target.value)}
+                      placeholder="0.00"
+                      min={0}
+                      step="0.01"
+                      className={inputClass}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Quantity *</label>
+                    <input
+                      type="number"
+                      value={tier.quantityTotal}
+                      onChange={(e) => updateTier(tier.key, 'quantityTotal', e.target.value)}
+                      placeholder="100"
+                      min={tier.isNew ? 1 : tier.quantitySold + tier.quantityReserved}
+                      className={inputClass}
+                      required
+                    />
+                    {!tier.isNew && (tier.quantitySold > 0 || tier.quantityReserved > 0) && (
+                      <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
+                        Min: {tier.quantitySold + tier.quantityReserved} (sold + reserved)
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label className={labelClass}>Min / Order</label>
+                    <input
+                      type="number"
+                      value={tier.minPerOrder}
+                      onChange={(e) => updateTier(tier.key, 'minPerOrder', e.target.value)}
+                      min={1}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Max / Order</label>
+                    <input
+                      type="number"
+                      value={tier.maxPerOrder}
+                      onChange={(e) => updateTier(tier.key, 'maxPerOrder', e.target.value)}
+                      min={1}
+                      className={inputClass}
+                    />
+                  </div>
+                </div>
+
+                {/* Sale Window & Visibility */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3 pt-3 border-t border-gray-100 dark:border-slate-700">
+                  <div>
+                    <label className={labelClass}>Sale Start</label>
+                    <input
+                      type="datetime-local"
+                      value={tier.saleStartDate}
+                      onChange={(e) => updateTier(tier.key, 'saleStartDate', e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Sale End</label>
+                    <input
+                      type="datetime-local"
+                      value={tier.saleEndDate}
+                      onChange={(e) => updateTier(tier.key, 'saleEndDate', e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Visibility</label>
+                    <select
+                      value={tier.visibility}
+                      onChange={(e) => updateTier(tier.key, 'visibility', e.target.value)}
+                      className={inputClass}
+                    >
+                      <option value="PUBLIC">Public</option>
+                      <option value="PRIVATE">Private</option>
+                      <option value="HIDDEN">Hidden</option>
+                    </select>
+                  </div>
+                  <div className="flex items-end pb-1">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={tier.isRefundable}
+                        onChange={(e) => updateTier(tier.key, 'isRefundable', e.target.checked)}
+                        className="rounded border-gray-300 dark:border-slate-600 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-slate-300">Refundable</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
-        )}
+        </div>
 
         {/* Submit */}
         <div className="flex gap-3 pt-2">

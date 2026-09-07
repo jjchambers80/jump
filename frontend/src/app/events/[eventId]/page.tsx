@@ -77,6 +77,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
   const [error, setError] = useState<string | null>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [showDescription, setShowDescription] = useState(false);
+  const [showTierDescription, setShowTierDescription] = useState<PriceTier | null>(null);
 
   useEffect(() => {
     fetchEventDetails();
@@ -360,12 +361,21 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                       >
                         <div className="flex items-center justify-between">
                           <div>
-                            <h3 className="font-semibold text-gray-900 dark:text-slate-100">
+                            <h3 className="font-semibold text-gray-900 dark:text-slate-100 flex items-center gap-1.5">
                               {tier.name}
+                              {tier.description && (
+                                <button
+                                  type="button"
+                                  onClick={() => setShowTierDescription(tier)}
+                                  className="text-gray-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-indigo-400 transition-colors"
+                                  aria-label={`${tier.name} details`}
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                </button>
+                              )}
                             </h3>
-                            {tier.description && (
-                              <p className="text-sm text-gray-500 dark:text-slate-400 mt-0.5">{tier.description}</p>
-                            )}
                             <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
                               {tierSoldOut ? 'Sold out' : `${tier.quantityAvailable} available`}
                             </p>
@@ -451,6 +461,38 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
           </div>
         </div>
       </div>
+
+      {/* Tier Description Dialog */}
+      {showTierDescription && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onClick={() => setShowTierDescription(null)}
+        >
+          <div
+            className="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-lg w-full max-h-[80vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-slate-100">
+                {showTierDescription.name}
+              </h2>
+              <button
+                onClick={() => setShowTierDescription(null)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-slate-300 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6">
+              <p className="text-gray-700 dark:text-slate-300 text-lg leading-relaxed whitespace-pre-wrap">
+                {showTierDescription.description}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Event Information Dialog */}
       {showDescription && event?.description && (

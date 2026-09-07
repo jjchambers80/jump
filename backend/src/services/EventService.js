@@ -67,6 +67,7 @@ class EventService {
         priceTiers: {
           create: (priceTiers || []).map((tier, index) => ({
             name: tier.name,
+            description: tier.description ?? null,
             price: tier.price,
             quantityTotal: parseInt(tier.quantityTotal),
             displayOrder: tier.displayOrder ?? index,
@@ -554,6 +555,7 @@ class EventService {
           id: t.id,
           eventId: t.eventId,
           name: t.name,
+          description: t.description || null,
           price: Number(t.price),
           quantityTotal: t.quantityTotal,
           quantitySold: t.quantitySold,
