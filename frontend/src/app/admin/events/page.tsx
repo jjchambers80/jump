@@ -8,7 +8,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import api from '@/services/api';
-import OrganizationSelector, { type Organization } from '@/components/OrganizationSelector';
+import { useOrg } from '@/components/OrgContext';
 
 interface PriceTier {
   id: string;
@@ -75,31 +75,14 @@ function formatDate(iso: string): string {
 }
 
 export default function DashboardEventsPage() {
-  const [organizations, setOrganizations] = useState<Organization[]>([]);
-  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
+  const { selectedOrgId } = useOrg();
   const [events, setEvents] = useState<Event[]>([]);
-  const [loading, setLoading] = useState(true);
   const [eventsLoading, setEventsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchOrgs = async () => {
-      try {
-        const data = await api.get<Organization[]>('/organizations');
-        setOrganizations(data);
-        if (data.length > 0) setSelectedOrgId(data[0].id);
-      } catch (err: any) {
-        setError(err.message || 'Failed to load organizations');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchOrgs();
-  }, []);
 
   const fetchEvents = useCallback(async () => {
     if (!selectedOrgId) return;
@@ -124,11 +107,11 @@ export default function DashboardEventsPage() {
     fetchEvents();
   }, [fetchEvents]);
 
-  const handleOrgSelect = (orgId: string) => {
-    setSelectedOrgId(orgId);
+  // Reset pagination when org changes
+  useEffect(() => {
     setPage(1);
     setExpandedEventId(null);
-  };
+  }, [selectedOrgId]);
 
   const handleStatusChange = (status: StatusFilter) => {
     setStatusFilter(status);
@@ -174,16 +157,6 @@ export default function DashboardEventsPage() {
             Create Event
           </Link>
         )}
-      </div>
-
-      {/* Org Selector */}
-      <div className="mb-6">
-        <OrganizationSelector
-          organizations={organizations}
-          selectedOrgId={selectedOrgId}
-          onSelect={handleOrgSelect}
-          loading={loading}
-        />
       </div>
 
       {/* Status Filter */}

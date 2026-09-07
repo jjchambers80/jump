@@ -22,6 +22,9 @@ export default function Navbar() {
   const isAdminOrOrganizer = ADMIN_ROLES.includes(userRole);
   const isAdminArea = pathname?.startsWith('/admin');
 
+  // Admin area has its own header with OrgSwitcher
+  if (isAdminArea) return null;
+
   return (
     <nav className="bg-white dark:bg-slate-900 shadow-sm border-b border-gray-200 dark:border-slate-700 transition-colors">
       <div className="mx-auto px-4 sm:px-6">

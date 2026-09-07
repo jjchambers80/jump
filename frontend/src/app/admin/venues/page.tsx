@@ -7,9 +7,9 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import api from '@/services/api';
-import OrganizationSelector, { type Organization } from '@/components/OrganizationSelector';
 import { resolveAssetUrl } from '@/lib/assets';
 import { StateSelect } from '@/components/StateSelect';
+import { useOrg } from '@/components/OrgContext';
 
 interface Venue {
   id: string;
@@ -50,10 +50,8 @@ const EMPTY_FORM: VenueFormData = {
 };
 
 export default function VenuesPage() {
-  const [organizations, setOrganizations] = useState<Organization[]>([]);
-  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
+  const { selectedOrgId } = useOrg();
   const [venues, setVenues] = useState<Venue[]>([]);
-  const [loading, setLoading] = useState(true);
   const [venuesLoading, setVenuesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -64,23 +62,6 @@ export default function VenuesPage() {
   const [selectedLogo, setSelectedLogo] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const fetchOrgs = async () => {
-      try {
-        const data = await api.get<Organization[]>('/organizations');
-        setOrganizations(data);
-        if (data.length > 0) {
-          setSelectedOrgId(data[0].id);
-        }
-      } catch (err: any) {
-        setError(err.message || 'Failed to load organizations');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchOrgs();
-  }, []);
 
   const fetchVenues = useCallback(async () => {
     if (!selectedOrgId) return;
@@ -100,11 +81,11 @@ export default function VenuesPage() {
     fetchVenues();
   }, [fetchVenues]);
 
-  const handleOrgSelect = (orgId: string) => {
-    setSelectedOrgId(orgId);
+  // Reset form when org changes
+  useEffect(() => {
     setShowForm(false);
     setEditingId(null);
-  };
+  }, [selectedOrgId]);
 
   const handleCreate = () => {
     setFormData(EMPTY_FORM);
@@ -250,16 +231,6 @@ export default function VenuesPage() {
             Add Venue
           </button>
         )}
-      </div>
-
-      {/* Org Selector */}
-      <div className="mb-6">
-        <OrganizationSelector
-          organizations={organizations}
-          selectedOrgId={selectedOrgId}
-          onSelect={handleOrgSelect}
-          loading={loading}
-        />
       </div>
 
       {/* Error */}

@@ -7,7 +7,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import OrganizationSelector, { type Organization } from '@/components/OrganizationSelector';
+import { useOrg } from '@/components/OrgContext';
 import api from '@/services/api';
 
 interface EventSummary {
@@ -44,27 +44,17 @@ function formatDate(iso: string): string {
 }
 
 export default function AnalyticsOverviewPage() {
-  const [organizations, setOrganizations] = useState<Organization[]>([]);
-  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
+  const { selectedOrgId } = useOrg();
   const [events, setEvents] = useState<EventSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
+  // Reset events when org changes
   useEffect(() => {
-    const fetchOrgs = async () => {
-      try {
-        const data = await api.get<Organization[]>('/organizations');
-        setOrganizations(data);
-        if (data.length > 0) setSelectedOrgId(data[0].id);
-      } catch (err: any) {
-        setError(err.message || 'Failed to load organizations');
-        setLoading(false);
-      }
-    };
-    fetchOrgs();
-  }, []);
+    setEvents([]);
+  }, [selectedOrgId]);
 
   const fetchEvents = useCallback(async () => {
     if (!selectedOrgId) return;
@@ -110,19 +100,6 @@ export default function AnalyticsOverviewPage() {
     <div className="max-w-5xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Analytics</h1>
-      </div>
-
-      {/* Org Selector */}
-      <div className="mb-6">
-        <OrganizationSelector
-          organizations={organizations}
-          selectedOrgId={selectedOrgId}
-          onSelect={(id) => {
-            setSelectedOrgId(id);
-            setEvents([]);
-          }}
-          loading={organizations.length === 0 && loading}
-        />
       </div>
 
       {/* Date Range Filter */}

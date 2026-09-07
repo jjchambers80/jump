@@ -8,7 +8,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/services/api';
-import OrganizationSelector, { type Organization } from '@/components/OrganizationSelector';
+import { useOrg } from '@/components/OrgContext';
 
 interface Venue {
   id: string;
@@ -49,9 +49,7 @@ function newTier(): PriceTierInput {
 export default function CreateEventPage() {
   const router = useRouter();
 
-  const [organizations, setOrganizations] = useState<Organization[]>([]);
-  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
-  const [orgsLoading, setOrgsLoading] = useState(true);
+  const { selectedOrgId } = useOrg();
 
   const [venues, setVenues] = useState<Venue[]>([]);
   const [venuesLoading, setVenuesLoading] = useState(false);
@@ -66,21 +64,6 @@ export default function CreateEventPage() {
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchOrgs = async () => {
-      try {
-        const data = await api.get<Organization[]>('/organizations');
-        setOrganizations(data);
-        if (data.length > 0) setSelectedOrgId(data[0].id);
-      } catch (err: any) {
-        setError(err.message || 'Failed to load organizations');
-      } finally {
-        setOrgsLoading(false);
-      }
-    };
-    fetchOrgs();
-  }, []);
 
   const fetchVenues = useCallback(async () => {
     if (!selectedOrgId) return;
@@ -177,16 +160,6 @@ export default function CreateEventPage() {
         >
           ← Back to Events
         </button>
-      </div>
-
-      {/* Org Selector */}
-      <div className="mb-6">
-        <OrganizationSelector
-          organizations={organizations}
-          selectedOrgId={selectedOrgId}
-          onSelect={(id) => setSelectedOrgId(id)}
-          loading={orgsLoading}
-        />
       </div>
 
       {error && (

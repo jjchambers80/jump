@@ -8,7 +8,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import OrganizationSelector, { type Organization } from '@/components/OrganizationSelector';
+import { useOrg } from '@/components/OrgContext';
 import api from '@/services/api';
 
 interface TierAnalytics {
@@ -90,25 +90,15 @@ export default function EventAnalyticsPage() {
   const params = useParams();
   const eventId = params.eventId as string;
 
-  const [organizations, setOrganizations] = useState<Organization[]>([]);
-  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
+  const { selectedOrgId } = useOrg();
   const [analytics, setAnalytics] = useState<EventAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Reset when org changes
   useEffect(() => {
-    const fetchOrgs = async () => {
-      try {
-        const data = await api.get<Organization[]>('/organizations');
-        setOrganizations(data);
-        if (data.length > 0) setSelectedOrgId(data[0].id);
-      } catch (err: any) {
-        setError(err.message || 'Failed to load organizations');
-        setLoading(false);
-      }
-    };
-    fetchOrgs();
-  }, []);
+    setAnalytics(null);
+  }, [selectedOrgId]);
 
   const fetchAnalytics = useCallback(async () => {
     if (!selectedOrgId || !eventId) return;
@@ -145,19 +135,6 @@ export default function EventAnalyticsPage() {
       </Link>
 
       <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Event Analytics</h1>
-
-      {/* Org Selector */}
-      <div className="mb-6">
-        <OrganizationSelector
-          organizations={organizations}
-          selectedOrgId={selectedOrgId}
-          onSelect={(id) => {
-            setSelectedOrgId(id);
-            setAnalytics(null);
-          }}
-          loading={organizations.length === 0 && loading}
-        />
-      </div>
 
       {/* Error */}
       {error && (
