@@ -1,0 +1,12 @@
+[build]
+builder = "nixpacks"
+buildCommand = "cd .. && npm install && cd backend && npx prisma generate --schema=../packages/db/prisma/schema.prisma"
+
+[deploy]
+startCommand = "node src/api/server.js"
+healthcheckPath = "/health"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+[service]
+rootDirectory = "/"

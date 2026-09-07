@@ -1,0 +1,14 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "steps": {
+    "install": {
+      "commands": ["npm install"]
+    },
+    "build": {
+      "commands": ["cd packages/db && npx prisma generate"]
+    }
+  },
+  "deploy": {
+    "startCommand": "cd backend && node src/api/server.js"
+  }
+}

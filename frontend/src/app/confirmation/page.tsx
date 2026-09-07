@@ -5,7 +5,7 @@
 // Also supports direct order fetch via GET /orders/:orderId with session params
 // Per FR-043, T083
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { api } from '../../services/api';
@@ -55,7 +55,7 @@ function formatPrice(dollars: number): string {
   return `$${Number(dollars).toFixed(2)}`;
 }
 
-export default function ConfirmationPage() {
+function ConfirmationContent() {
   const searchParams = useSearchParams();
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -471,5 +471,19 @@ export default function ConfirmationPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ConfirmationPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center">
+          <p className="text-gray-600 dark:text-slate-400">Loading...</p>
+        </div>
+      }
+    >
+      <ConfirmationContent />
+    </Suspense>
   );
 }

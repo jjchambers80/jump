@@ -290,6 +290,7 @@ async function main() {
       contactId: contact1.id,
       pricePaid: 35.0,
       barcode: "JUMP-000000000001",
+      ticketNumber: 1,
       status: TicketStatus.VALID,
     },
   });
@@ -302,6 +303,7 @@ async function main() {
       contactId: contact1.id,
       pricePaid: 35.0,
       barcode: "JUMP-000000000002",
+      ticketNumber: 2,
       status: TicketStatus.VALID,
     },
   });
