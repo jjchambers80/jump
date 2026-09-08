@@ -1,6 +1,7 @@
 // Order Routes
 // POST /orders (public — guest checkout)
-// GET /orders/:orderId (authenticated — owner or admin)
+// GET /orders/:orderId (public — UUID is the secret; auth adds ownership check)
+// POST /orders/:orderId/verify-payment (public — completes order after Stripe redirect)
 // POST /orders/lookup (public — email + orderRef)
 // GET /orders/my (authenticated)
 // GET /events/:eventId/orders (org-scoped — organizer/admin)
@@ -8,7 +9,7 @@
 
 import express from 'express';
 import orderService from '../../services/OrderService.js';
-import { requireAuth } from '../../middleware/auth.js';
+import { requireAuth, optionalAuth } from '../../middleware/auth.js';
 import { requireOrganizer } from '../../middleware/rbac.js';
 import { validateCreateOrder, validateOrderLookup } from '../validators/orderValidators.js';
 
@@ -88,20 +89,13 @@ router.post('/lookup', validateOrderLookup, async (req, res, next) => {
 /**
  * POST /orders/:orderId/verify-payment
  * Verify payment with Stripe and complete the order if paid.
- * Belt-and-suspenders for when webhooks haven't arrived yet.
+ * Public — guest checkout users need this after Stripe redirect.
+ * Security: orderId is a UUID (not guessable), and only PENDING orders
+ * with a valid Stripe session are affected.
  */
-router.post('/:orderId/verify-payment', requireAuth, async (req, res, next) => {
+router.post('/:orderId/verify-payment', async (req, res, next) => {
   try {
     const result = await orderService.verifyAndCompleteOrder(req.params.orderId);
-
-    // Authorization: must be the contact's linked user, or ADMIN
-    if (req.user.role !== 'ADMIN' && result.contact?.email !== req.user.email) {
-      return res.status(403).json({
-        error: 'ForbiddenError',
-        message: 'You do not have access to this order',
-      });
-    }
-
     res.json(result);
   } catch (error) {
     next(error);
@@ -110,14 +104,15 @@ router.post('/:orderId/verify-payment', requireAuth, async (req, res, next) => {
 
 /**
  * GET /orders/:orderId
- * Get order detail (authenticated — owner check or admin).
+ * Get order detail. Public for UUID-based access (guest checkout flow).
+ * When authenticated, additionally verifies email ownership.
  */
-router.get('/:orderId', requireAuth, async (req, res, next) => {
+router.get('/:orderId', optionalAuth, async (req, res, next) => {
   try {
     const order = await orderService.getOrderById(req.params.orderId);
 
-    // Authorization: must be the contact's linked user, or ADMIN
-    if (req.user.role !== 'ADMIN' && order.contact?.email !== req.user.email) {
+    // If authenticated, verify ownership (prevent enumeration by logged-in users)
+    if (req.user && req.user.role !== 'ADMIN' && order.contact?.email !== req.user.email) {
       return res.status(403).json({
         error: 'ForbiddenError',
         message: 'You do not have access to this order',

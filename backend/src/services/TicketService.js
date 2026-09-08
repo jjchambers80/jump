@@ -71,12 +71,12 @@ class TicketService {
     const tickets = await prisma.$transaction(async (tx) => {
       const created = [];
 
-      // Get next ticket number with row-level lock to prevent duplicates
+      // Get next ticket number — advisory lock prevents concurrent duplicate ticket numbers
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${order.eventId}))`;
       const maxResult = await tx.$queryRaw`
         SELECT COALESCE(MAX("ticketNumber"), 0) AS max_num
         FROM "Ticket"
         WHERE "eventId" = ${order.eventId}
-        FOR UPDATE
       `;
       let nextTicketNumber = Number(maxResult[0].max_num) + 1;
 
