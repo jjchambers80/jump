@@ -12,6 +12,15 @@ module.exports = {
         background: 'var(--background)',
         foreground: 'var(--foreground)',
       },
+      keyframes: {
+        slideUp: {
+          '0%': { transform: 'translateY(100%)' },
+          '100%': { transform: 'translateY(0)' },
+        },
+      },
+      animation: {
+        'slide-up': 'slideUp 0.3s ease-out',
+      },
     },
   },
   plugins: [],
