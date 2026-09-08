@@ -9,6 +9,6 @@
     }
   },
   "deploy": {
-    "startCommand": "cd backend && node src/api/server.js"
+    "startCommand": "cd packages/db && npx prisma migrate deploy && cd ../../backend && node src/api/server.js"
   }
 }
