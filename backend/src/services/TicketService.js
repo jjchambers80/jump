@@ -378,6 +378,199 @@ class TicketService {
     };
   }
 
+  /**
+   * Get full ticket detail for admin view.
+   * Includes QR code image, attendee info, order details, and sibling tickets.
+   *
+   * @param {string} ticketId
+   * @returns {Promise<Object>}
+   */
+  async getTicketDetailForAdmin(ticketId) {
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      include: {
+        event: {
+          include: {
+            venue: { select: { name: true, address: true } },
+          },
+        },
+        priceTier: { select: { name: true, price: true, description: true } },
+        contact: { select: { id: true, firstName: true, lastName: true, email: true } },
+        order: {
+          include: {
+            contact: { select: { firstName: true, lastName: true, email: true } },
+            tickets: {
+              where: { id: { not: ticketId } },
+              include: {
+                priceTier: { select: { name: true } },
+                contact: { select: { firstName: true, lastName: true, email: true } },
+              },
+              orderBy: { ticketNumber: 'asc' },
+            },
+            payment: {
+              select: {
+                id: true,
+                amount: true,
+                currency: true,
+                status: true,
+                stripePaymentIntentId: true,
+                createdAt: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!ticket) {
+      throw new NotFoundError('Ticket not found');
+    }
+
+    // Generate QR code image
+    let qrCodeImage = null;
+    if (ticket.qrCodeJwt) {
+      try {
+        qrCodeImage = await qrService.generateQRCodeImage(ticket.qrCodeJwt);
+      } catch (err) {
+        logger.warn('Failed to generate QR image', { ticketId, error: err.message });
+      }
+    }
+
+    const venueStr = ticket.event?.venue
+      ? `${ticket.event.venue.name}${ticket.event.venue.address ? ', ' + ticket.event.venue.address : ''}`
+      : '';
+
+    // Format sibling tickets
+    const siblingTickets = (ticket.order?.tickets || []).map((t) => ({
+      id: t.id,
+      barcode: t.barcode,
+      ticketNumber: t.ticketNumber,
+      priceTierName: t.priceTier?.name,
+      pricePaid: Number(t.pricePaid),
+      status: t.status,
+      attendee: t.contact,
+    }));
+
+    return {
+      id: ticket.id,
+      ticketNumber: ticket.ticketNumber,
+      barcode: ticket.barcode,
+      qrCodeImage,
+      priceTierName: ticket.priceTier?.name,
+      pricePaid: Number(ticket.pricePaid),
+      status: ticket.status,
+      redeemedAt: ticket.redeemedAt,
+      createdAt: ticket.createdAt,
+      attendee: ticket.contact,
+      purchaser: ticket.order?.contact || null,
+      event: {
+        id: ticket.event?.id,
+        name: ticket.event?.name,
+        date: ticket.event?.date,
+        venue: venueStr,
+      },
+      order: {
+        id: ticket.order?.id,
+        orderRef: ticket.order?.orderRef,
+        totalAmount: Number(ticket.order?.totalAmount),
+        currency: ticket.order?.currency,
+      },
+      payment: ticket.order?.payment
+        ? {
+            status: ticket.order.payment.status,
+            amount: Number(ticket.order.payment.amount),
+            currency: ticket.order.payment.currency,
+            stripePaymentIntentId: ticket.order.payment.stripePaymentIntentId,
+            createdAt: ticket.order.payment.createdAt,
+          }
+        : null,
+      siblingTickets,
+    };
+  }
+
+  /**
+   * Update attendee (contact) info on a ticket.
+   *
+   * @param {string} ticketId
+   * @param {{ firstName?: string, lastName?: string, email?: string }} updates
+   * @returns {Promise<Object>} Updated contact
+   */
+  async updateTicketAttendee(ticketId, { firstName, lastName, email }) {
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      select: { contactId: true },
+    });
+
+    if (!ticket) {
+      throw new NotFoundError('Ticket not found');
+    }
+
+    const data = {};
+    if (firstName !== undefined) data.firstName = firstName;
+    if (lastName !== undefined) data.lastName = lastName;
+    if (email !== undefined) data.email = email;
+
+    const updated = await prisma.contact.update({
+      where: { id: ticket.contactId },
+      data,
+      select: { id: true, firstName: true, lastName: true, email: true },
+    });
+
+    logger.info('Ticket attendee updated', { ticketId, contactId: updated.id });
+    return updated;
+  }
+
+  /**
+   * Admin check-in: set ticket status to REDEEMED.
+   *
+   * @param {string} ticketId
+   * @returns {Promise<Object>}
+   */
+  async adminCheckIn(ticketId) {
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      select: { id: true, status: true },
+    });
+
+    if (!ticket) throw new NotFoundError('Ticket not found');
+    if (ticket.status === 'REDEEMED') throw new ConflictError('Ticket already checked in');
+    if (ticket.status === 'VOIDED') throw new ConflictError('Cannot check in a voided ticket');
+    if (ticket.status === 'EXPIRED') throw new ConflictError('Cannot check in an expired ticket');
+
+    const now = new Date();
+    const updated = await prisma.ticket.update({
+      where: { id: ticketId },
+      data: { status: 'REDEEMED', redeemedAt: now },
+    });
+
+    logger.info('Admin check-in', { ticketId });
+    return { status: updated.status, redeemedAt: updated.redeemedAt };
+  }
+
+  /**
+   * Admin undo check-in: revert ticket from REDEEMED to VALID.
+   *
+   * @param {string} ticketId
+   * @returns {Promise<Object>}
+   */
+  async adminUndoCheckIn(ticketId) {
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      select: { id: true, status: true },
+    });
+
+    if (!ticket) throw new NotFoundError('Ticket not found');
+    if (ticket.status !== 'REDEEMED') throw new ConflictError('Ticket is not checked in');
+
+    const updated = await prisma.ticket.update({
+      where: { id: ticketId },
+      data: { status: 'VALID', redeemedAt: null },
+    });
+
+    logger.info('Admin undo check-in', { ticketId });
+    return { status: updated.status, redeemedAt: null };
+  }
+
   // ─── Formatters ───
 
   async _formatTicketDetail(ticket) {

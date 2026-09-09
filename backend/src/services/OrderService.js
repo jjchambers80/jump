@@ -408,6 +408,48 @@ class OrderService {
   }
 
   /**
+   * Get all orders across an organization's events.
+   *
+   * @param {string} organizationId
+   * @param {Object} options - { page, limit, status, eventId, search }
+   * @returns {Promise<{ data: OrderSummary[], pagination }>}
+   */
+  async getOrdersByOrganization(organizationId, { page = 1, limit = 20, status, eventId, search } = {}) {
+    const where = {
+      event: { venue: { organizationId } },
+      ...(status && { status }),
+      ...(eventId && { eventId }),
+      ...(search && {
+        OR: [
+          { orderRef: { contains: search.toUpperCase(), mode: 'insensitive' } },
+          { contact: { email: { contains: search.toLowerCase(), mode: 'insensitive' } } },
+          { contact: { firstName: { contains: search, mode: 'insensitive' } } },
+          { contact: { lastName: { contains: search, mode: 'insensitive' } } },
+        ],
+      }),
+    };
+
+    const [orders, total] = await Promise.all([
+      prisma.order.findMany({
+        where,
+        include: {
+          event: { select: { name: true, date: true } },
+          contact: { select: { firstName: true, lastName: true, email: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.order.count({ where }),
+    ]);
+
+    return {
+      data: orders.map((o) => this._formatOrderSummary(o)),
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  /**
    * Get all orders for an event (org-scoped).
    *
    * @param {string} eventId
@@ -578,6 +620,73 @@ class OrderService {
         contact: true,
       },
     });
+  }
+
+  /**
+   * Get all tickets across an organization's events (ticket-level rows for admin list).
+   *
+   * @param {string} organizationId
+   * @param {Object} options - { page, limit, status, eventId, search }
+   * @returns {Promise<{ data: TicketRow[], pagination }>}
+   */
+  async getTicketsByOrganization(organizationId, { page = 1, limit = 20, status, eventId, search } = {}) {
+    const where = {
+      event: { venue: { organizationId } },
+      order: { status: 'COMPLETED' },
+      ...(status && { status }),
+      ...(eventId && { eventId }),
+      ...(search && {
+        OR: [
+          { barcode: { contains: search.toUpperCase(), mode: 'insensitive' } },
+          { order: { orderRef: { contains: search.toUpperCase(), mode: 'insensitive' } } },
+          { contact: { email: { contains: search.toLowerCase(), mode: 'insensitive' } } },
+          { contact: { firstName: { contains: search, mode: 'insensitive' } } },
+          { contact: { lastName: { contains: search, mode: 'insensitive' } } },
+          { order: { contact: { email: { contains: search.toLowerCase(), mode: 'insensitive' } } } },
+          { order: { contact: { firstName: { contains: search, mode: 'insensitive' } } } },
+          { order: { contact: { lastName: { contains: search, mode: 'insensitive' } } } },
+        ],
+      }),
+    };
+
+    const [tickets, total] = await Promise.all([
+      prisma.ticket.findMany({
+        where,
+        include: {
+          order: {
+            include: {
+              contact: { select: { firstName: true, lastName: true, email: true } },
+            },
+          },
+          contact: { select: { firstName: true, lastName: true, email: true } },
+          priceTier: { select: { name: true } },
+          event: { select: { name: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.ticket.count({ where }),
+    ]);
+
+    return {
+      data: tickets.map((t) => ({
+        id: t.id,
+        barcode: t.barcode,
+        ticketNumber: t.ticketNumber,
+        priceTierName: t.priceTier?.name,
+        pricePaid: Number(t.pricePaid),
+        status: t.status,
+        redeemedAt: t.redeemedAt,
+        createdAt: t.createdAt,
+        eventName: t.event?.name,
+        orderRef: t.order?.orderRef,
+        orderId: t.orderId,
+        purchaser: t.order?.contact || null,
+        attendee: t.contact || null,
+      })),
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
   }
 
   // ─── Formatters ─────────────────────────────────────────

@@ -6,10 +6,13 @@ import { prisma } from '@jump/db';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireOrganizer } from '../../middleware/rbac.js';
 import { NotFoundError } from '../../middleware/errorHandler.js';
+import { validateUpdateAttendee } from '../validators/adminValidators.js';
 import { validateUpdateBusinessDetails } from '../validators/organizationValidators.js';
 import { validateCreateOrganizationPerson } from '../validators/organizationPersonValidators.js';
 import organizationService from '../../services/OrganizationService.js';
 import organizationPersonService from '../../services/OrganizationPersonService.js';
+import orderService from '../../services/OrderService.js';
+import ticketService from '../../services/TicketService.js';
 
 const router = express.Router();
 
@@ -233,6 +236,226 @@ router.get('/events', async (req, res, next) => {
         ticketsSold: e.priceTiers.reduce((sum, t) => sum + t.quantitySold, 0),
       })),
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /admin/orders
+ * List orders across all events for the user's organization.
+ * Query: page, limit, status, eventId, search
+ */
+router.get('/orders', async (req, res, next) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { organizationId: true },
+    });
+
+    if (!user?.organizationId) {
+      return res.json({ data: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } });
+    }
+
+    const { page, limit, status, eventId, search } = req.query;
+    const result = await orderService.getOrdersByOrganization(user.organizationId, {
+      page: page ? parseInt(page) : 1,
+      limit: limit ? parseInt(limit) : 20,
+      status: status || undefined,
+      eventId: eventId || undefined,
+      search: search || undefined,
+    });
+
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /admin/tickets
+ * List tickets across all events for the user's organization (ticket-level rows).
+ * Query: page, limit, status, eventId, search
+ */
+router.get('/tickets', async (req, res, next) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { organizationId: true },
+    });
+
+    if (!user?.organizationId) {
+      return res.json({ data: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } });
+    }
+
+    const { page, limit, status, eventId, search } = req.query;
+    const result = await orderService.getTicketsByOrganization(user.organizationId, {
+      page: page ? parseInt(page) : 1,
+      limit: limit ? parseInt(limit) : 20,
+      status: status || undefined,
+      eventId: eventId || undefined,
+      search: search || undefined,
+    });
+
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /admin/tickets/:ticketId
+ * Get full ticket detail for admin view (QR code, attendee, payment, sibling tickets).
+ */
+router.get('/tickets/:ticketId', async (req, res, next) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { organizationId: true },
+    });
+
+    if (!user?.organizationId) throw new NotFoundError('Ticket not found');
+
+    const detail = await ticketService.getTicketDetailForAdmin(req.params.ticketId);
+
+    // Verify ticket belongs to this organization
+    const event = await prisma.event.findUnique({
+      where: { id: detail.event.id },
+      include: { venue: { select: { organizationId: true } } },
+    });
+
+    if (!event || event.venue.organizationId !== user.organizationId) {
+      throw new NotFoundError('Ticket not found');
+    }
+
+    res.json(detail);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * PATCH /admin/tickets/:ticketId/attendee
+ * Update attendee information on a ticket.
+ */
+router.patch('/tickets/:ticketId/attendee', validateUpdateAttendee, async (req, res, next) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { organizationId: true },
+    });
+
+    if (!user?.organizationId) throw new NotFoundError('Ticket not found');
+
+    // Verify ownership before update
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: req.params.ticketId },
+      include: { event: { include: { venue: { select: { organizationId: true } } } } },
+    });
+
+    if (!ticket || ticket.event.venue.organizationId !== user.organizationId) {
+      throw new NotFoundError('Ticket not found');
+    }
+
+    const { firstName, lastName, email } = req.body;
+    const updated = await ticketService.updateTicketAttendee(req.params.ticketId, {
+      firstName,
+      lastName,
+      email,
+    });
+
+    res.json(updated);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /admin/tickets/:ticketId/check-in
+ * Admin check-in: mark ticket as REDEEMED.
+ */
+router.post('/tickets/:ticketId/check-in', async (req, res, next) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { organizationId: true },
+    });
+
+    if (!user?.organizationId) throw new NotFoundError('Ticket not found');
+
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: req.params.ticketId },
+      include: { event: { include: { venue: { select: { organizationId: true } } } } },
+    });
+
+    if (!ticket || ticket.event.venue.organizationId !== user.organizationId) {
+      throw new NotFoundError('Ticket not found');
+    }
+
+    const result = await ticketService.adminCheckIn(req.params.ticketId);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /admin/tickets/:ticketId/undo-check-in
+ * Admin undo check-in: revert ticket from REDEEMED to VALID.
+ */
+router.post('/tickets/:ticketId/undo-check-in', async (req, res, next) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { organizationId: true },
+    });
+
+    if (!user?.organizationId) throw new NotFoundError('Ticket not found');
+
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: req.params.ticketId },
+      include: { event: { include: { venue: { select: { organizationId: true } } } } },
+    });
+
+    if (!ticket || ticket.event.venue.organizationId !== user.organizationId) {
+      throw new NotFoundError('Ticket not found');
+    }
+
+    const result = await ticketService.adminUndoCheckIn(req.params.ticketId);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /admin/orders/:orderId
+ * Get order detail, scoped to the user's organization.
+ */
+router.get('/orders/:orderId', async (req, res, next) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { organizationId: true },
+    });
+
+    if (!user?.organizationId) {
+      throw new NotFoundError('Order not found');
+    }
+
+    const order = await orderService.getOrderById(req.params.orderId);
+
+    // Verify order belongs to this organizer's organization
+    const event = await prisma.event.findUnique({
+      where: { id: order.event.id },
+      include: { venue: { select: { organizationId: true } } },
+    });
+
+    if (!event || event.venue.organizationId !== user.organizationId) {
+      throw new NotFoundError('Order not found');
+    }
+
+    res.json(order);
   } catch (error) {
     next(error);
   }

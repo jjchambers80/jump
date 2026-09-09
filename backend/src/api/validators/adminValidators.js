@@ -79,6 +79,64 @@ export const validateEventCreate = (req, res, next) => {
  * Validate event update request
  * All fields optional, but if provided must be valid
  */
+/**
+ * Validate attendee update request
+ * All fields optional, but at least one required. If provided, must be valid.
+ */
+export const validateUpdateAttendee = (req, res, next) => {
+  try {
+    const { firstName, lastName, email } = req.body;
+    const errors = [];
+
+    if (firstName === undefined && lastName === undefined && email === undefined) {
+      throw new ValidationError('At least one field (firstName, lastName, email) is required');
+    }
+
+    if (firstName !== undefined) {
+      if (typeof firstName !== 'string' || firstName.trim().length === 0) {
+        errors.push('First name cannot be empty');
+      } else if (firstName.length > 255) {
+        errors.push('First name must be 255 characters or less');
+      }
+    }
+
+    if (lastName !== undefined) {
+      if (typeof lastName !== 'string' || lastName.trim().length === 0) {
+        errors.push('Last name cannot be empty');
+      } else if (lastName.length > 255) {
+        errors.push('Last name must be 255 characters or less');
+      }
+    }
+
+    if (email !== undefined) {
+      if (typeof email !== 'string' || email.trim().length === 0) {
+        errors.push('Email cannot be empty');
+      } else {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email.trim())) {
+          errors.push('Email must be a valid email address');
+        }
+      }
+    }
+
+    if (errors.length > 0) {
+      throw new ValidationError('Validation failed', { errors });
+    }
+
+    // Normalize
+    if (firstName !== undefined) req.body.firstName = firstName.trim();
+    if (lastName !== undefined) req.body.lastName = lastName.trim();
+    if (email !== undefined) req.body.email = email.trim().toLowerCase();
+
+    next();
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      return next(error);
+    }
+    next(new ValidationError('Invalid request body'));
+  }
+};
+
 export const validateEventUpdate = (req, res, next) => {
   try {
     const { name, date, venue, capacity, ticketPrice } = req.body;
