@@ -786,7 +786,7 @@ pm2 logs jump-api --err
 
 - Backend: `backend/README.md`
 - Frontend: `frontend/README.md`
-- Architecture: `ARCHITECTURE.md`
+- Architecture: `docs/architecture/ARCHITECTURE.md`
 
 **Support:**
 

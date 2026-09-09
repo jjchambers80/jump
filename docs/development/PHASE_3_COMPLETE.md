@@ -372,12 +372,12 @@ frontend/tests/integration/
    - Development guide
    - Deployment instructions
 
-3. **Progress Summary** (`PROGRESS.md`)
+3. **Progress Summary** (`docs/development/PROGRESS.md`)
    - Phase completion status
    - Test results
    - Next steps
 
-4. **This Summary** (`PHASE_3_COMPLETE.md`)
+4. **This Summary** (`docs/development/PHASE_3_COMPLETE.md`)
    - Executive summary
    - What was delivered
    - Technical architecture
