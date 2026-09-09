@@ -1,5 +1,5 @@
 // Admin Sidebar navigation component (T003, T018, T024)
-// Links per FR-005 (Dashboard, Orgs, Venues, Events, Analytics, Scan)
+// Links per FR-005 (Dashboard, Orgs, Venues, Events, Analytics)
 // FR-006 (Users — ADMIN only), with Settings pinned to the footer
 // Active state via usePathname(), mobile-responsive with toggle
 
@@ -23,7 +23,6 @@ const navItems: NavItem[] = [
   { label: 'Events', href: '/admin/events' },
   { label: 'Orders', href: '/admin/orders' },
   { label: 'Analytics', href: '/admin/analytics' },
-  { label: 'Scan', href: '/admin/scan' },
   { label: 'Users', href: '/admin/users', roles: ['ADMIN'] },
 ];
 

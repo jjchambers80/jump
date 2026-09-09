@@ -97,16 +97,15 @@ class TicketService {
             },
           });
 
-          const qrJwt = qrService.generateQRCodeJWT(
+          const qrPayload = qrService.generateQRPayload(
             ticket.id,
             order.eventId,
-            barcode,
-            order.event.date
+            barcode
           );
 
           const updatedTicket = await tx.ticket.update({
             where: { id: ticket.id },
-            data: { qrCodeJwt: qrJwt },
+            data: { qrCodeJwt: qrPayload },
             include: {
               priceTier: { select: { name: true } },
             },
@@ -253,6 +252,151 @@ class TicketService {
     }
 
     return await this._formatTicketDetail(ticket);
+  }
+
+  /**
+   * Look up a ticket by barcode without redeeming it.
+   * Used by the scan preview step (scan → show info → confirm).
+   *
+   * @param {string} barcode - JUMP-XXXXXXXXXXXX barcode
+   * @param {string|null} expectedEventId - Optional event scoping
+   * @returns {Promise<Object>} Ticket preview info
+   */
+  async lookupByBarcode(barcode, expectedEventId = null) {
+    const ticket = await prisma.ticket.findUnique({
+      where: { barcode },
+      include: {
+        event: { select: { id: true, name: true, date: true } },
+        priceTier: { select: { name: true } },
+        contact: { select: { firstName: true, lastName: true, email: true } },
+      },
+    });
+
+    if (!ticket) {
+      const error = new ValidationError('Ticket not found');
+      error.redemptionStatus = 'INVALID';
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (expectedEventId && ticket.eventId !== expectedEventId) {
+      const error = new ConflictError('Ticket belongs to a different event');
+      error.redemptionStatus = 'WRONG_EVENT';
+      error.statusCode = 403;
+      throw error;
+    }
+
+    // Lazy expiration
+    if (ticket.status === 'VALID' && new Date(ticket.event.date) < new Date()) {
+      await prisma.ticket.update({
+        where: { id: ticket.id },
+        data: { status: 'EXPIRED' },
+      });
+      ticket.status = 'EXPIRED';
+    }
+
+    return {
+      ticketId: ticket.id,
+      barcode: ticket.barcode,
+      status: ticket.status,
+      priceTierName: ticket.priceTier?.name,
+      contactName: `${ticket.contact.firstName} ${ticket.contact.lastName}`,
+      contactEmail: ticket.contact.email,
+      eventId: ticket.event.id,
+      eventName: ticket.event.name,
+      eventDate: ticket.event.date,
+      redeemedAt: ticket.redeemedAt,
+    };
+  }
+
+  /**
+   * Redeem a ticket by barcode (new format — no JWT verification needed).
+   * Runs the same validation chain as redeemTicket minus JWT step.
+   *
+   * @param {string} barcode - JUMP-XXXXXXXXXXXX barcode
+   * @param {string|null} expectedEventId - Optional event scoping
+   * @returns {Promise<Object>} RedemptionResult
+   */
+  async redeemByBarcode(barcode, expectedEventId = null) {
+    const ticket = await prisma.ticket.findUnique({
+      where: { barcode },
+      include: {
+        event: { select: { id: true, name: true, date: true } },
+        priceTier: { select: { name: true } },
+        contact: { select: { firstName: true, lastName: true } },
+      },
+    });
+
+    if (!ticket) {
+      const error = new ValidationError('Ticket not found');
+      error.redemptionStatus = 'INVALID';
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (expectedEventId && ticket.eventId !== expectedEventId) {
+      const error = new ConflictError('Ticket belongs to a different event');
+      error.redemptionStatus = 'WRONG_EVENT';
+      error.statusCode = 403;
+      throw error;
+    }
+
+    // Lazy expiration
+    if (ticket.status === 'VALID' && new Date(ticket.event.date) < new Date()) {
+      await prisma.ticket.update({
+        where: { id: ticket.id },
+        data: { status: 'EXPIRED' },
+      });
+      const error = new ConflictError('Ticket has expired (event has passed)');
+      error.redemptionStatus = 'EXPIRED';
+      error.ticketId = ticket.id;
+      error.statusCode = 410;
+      throw error;
+    }
+
+    if (ticket.status === 'REDEEMED') {
+      const error = new ConflictError('Ticket has already been redeemed');
+      error.redemptionStatus = 'ALREADY_REDEEMED';
+      error.ticketId = ticket.id;
+      error.originalRedemptionTime = ticket.redeemedAt;
+      throw error;
+    }
+
+    if (ticket.status === 'EXPIRED') {
+      const error = new ConflictError('Ticket has expired');
+      error.redemptionStatus = 'EXPIRED';
+      error.ticketId = ticket.id;
+      error.statusCode = 410;
+      throw error;
+    }
+
+    if (ticket.status === 'VOIDED') {
+      const error = new ConflictError('Ticket has been voided');
+      error.redemptionStatus = 'VOIDED';
+      error.ticketId = ticket.id;
+      throw error;
+    }
+
+    const now = new Date();
+    await prisma.ticket.update({
+      where: { id: ticket.id },
+      data: { status: 'REDEEMED', redeemedAt: now },
+    });
+
+    logger.info('Ticket redeemed by barcode', {
+      ticketId: ticket.id,
+      eventId: ticket.eventId,
+      barcode: ticket.barcode,
+    });
+
+    return {
+      status: 'REDEEMED',
+      ticketId: ticket.id,
+      barcode: ticket.barcode,
+      priceTierName: ticket.priceTier.name,
+      contactName: `${ticket.contact.firstName} ${ticket.contact.lastName}`,
+      redeemedAt: now,
+    };
   }
 
   /**

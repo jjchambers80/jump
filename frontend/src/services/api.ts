@@ -204,7 +204,20 @@ export interface PaginatedResponse<T> {
   };
 }
 
-// ===== Ticket Redemption =====
+// ===== Ticket Scanning & Redemption =====
+
+export interface TicketPreview {
+  ticketId: string;
+  barcode: string;
+  status: 'VALID' | 'REDEEMED' | 'EXPIRED' | 'VOIDED';
+  priceTierName: string;
+  contactName: string;
+  contactEmail: string;
+  eventId: string;
+  eventName: string;
+  eventDate: string;
+  redeemedAt: string | null;
+}
 
 export interface RedemptionResult {
   status: 'REDEEMED';

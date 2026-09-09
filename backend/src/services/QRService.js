@@ -1,6 +1,6 @@
 // QR Code Service
-// Generates JWT-based QR codes for ticket verification
-// Per FR-030, data-model.md — payload: { sub: ticketId, eventId, barcode }
+// Generates QR codes for ticket verification
+// Supports both new query-string format and legacy JWT format
 
 import jwt from 'jsonwebtoken';
 import QRCode from 'qrcode';
@@ -11,7 +11,55 @@ const AUTH_SECRET = process.env.AUTH_SECRET;
 
 class QRService {
   /**
-   * Generate QR code JWT for a ticket.
+   * Generate a simple query-string QR payload for a ticket.
+   * Format: jump://ticket?id={ticketId}&b={barcode}&e={eventId}
+   *
+   * @param {string} ticketId - Ticket CUID
+   * @param {string} eventId - Event CUID
+   * @param {string} barcode - Unique ticket barcode (JUMP-XXXXXXXXXXXX)
+   * @returns {string} QR payload string
+   */
+  generateQRPayload(ticketId, eventId, barcode) {
+    const payload = `jump://ticket?id=${encodeURIComponent(ticketId)}&b=${encodeURIComponent(barcode)}&e=${encodeURIComponent(eventId)}`;
+    recordQRGeneration('success');
+    logger.info('QR payload generated', { ticketId, eventId, barcode });
+    return payload;
+  }
+
+  /**
+   * Parse a query-string QR payload.
+   * Returns { ticketId, barcode, eventId } or null if not a valid jump:// payload.
+   *
+   * @param {string} payload - Raw string from QR scan
+   * @returns {{ ticketId: string, barcode: string, eventId: string } | null}
+   */
+  parseQRPayload(payload) {
+    if (!payload || !payload.startsWith('jump://ticket?')) {
+      return null;
+    }
+    try {
+      const url = new URL(payload.replace('jump://', 'https://'));
+      const ticketId = url.searchParams.get('id');
+      const barcode = url.searchParams.get('b');
+      const eventId = url.searchParams.get('e');
+      if (!ticketId || !barcode || !eventId) return null;
+      return { ticketId, barcode, eventId };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Check if a payload is a jump:// format vs legacy JWT.
+   * @param {string} payload
+   * @returns {boolean}
+   */
+  isJumpPayload(payload) {
+    return payload && payload.startsWith('jump://');
+  }
+
+  /**
+   * Generate QR code JWT for a ticket (legacy format).
    * Payload: { sub: ticketId, eventId, barcode, iat, exp }
    * Signed with HS256 using AUTH_SECRET.
    * Expires 24 hours after the event date.
