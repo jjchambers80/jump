@@ -520,6 +520,22 @@ export default function AdminOrdersPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc');
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+  const [resendingTicketId, setResendingTicketId] = useState<string | null>(null);
+  const [resendResult, setResendResult] = useState<{ ticketId: string; success: boolean } | null>(null);
+
+  const handleResendConfirmation = async (ticketId: string, orderId: string) => {
+    setResendingTicketId(ticketId);
+    setResendResult(null);
+    try {
+      await api.post(`/admin/orders/${orderId}/resend-confirmation`, {});
+      setResendResult({ ticketId, success: true });
+    } catch {
+      setResendResult({ ticketId, success: false });
+    } finally {
+      setResendingTicketId(null);
+      setTimeout(() => setResendResult(null), 3000);
+    }
+  };
 
   // Load events for filter dropdown
   useEffect(() => {
@@ -813,13 +829,27 @@ export default function AdminOrdersPage() {
                   </div>
 
                   {/* Action */}
-                  <div className="text-right">
+                  <div className="text-right flex flex-col items-end gap-1">
                     <button
                       onClick={() => setSelectedTicketId(ticket.id)}
                       className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
                     >
                       view ticket
                     </button>
+                    {resendingTicketId === ticket.id ? (
+                      <span className="text-xs text-gray-400">sending...</span>
+                    ) : resendResult?.ticketId === ticket.id ? (
+                      <span className={`text-xs ${resendResult.success ? 'text-green-500' : 'text-red-500'}`}>
+                        {resendResult.success ? 'Sent!' : 'Failed'}
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => handleResendConfirmation(ticket.id, ticket.orderId)}
+                        className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
+                      >
+                        resend confirmation
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -856,12 +886,28 @@ export default function AdminOrdersPage() {
                       <span className="text-xs text-gray-500 dark:text-slate-400">
                         {formatDate(ticket.createdAt)}
                       </span>
-                      <button
-                        onClick={() => setSelectedTicketId(ticket.id)}
-                        className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
-                      >
-                        view ticket
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setSelectedTicketId(ticket.id)}
+                          className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
+                        >
+                          view ticket
+                        </button>
+                        {resendingTicketId === ticket.id ? (
+                          <span className="text-xs text-gray-400">sending...</span>
+                        ) : resendResult?.ticketId === ticket.id ? (
+                          <span className={`text-xs ${resendResult.success ? 'text-green-500' : 'text-red-500'}`}>
+                            {resendResult.success ? 'Sent!' : 'Failed'}
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => handleResendConfirmation(ticket.id, ticket.orderId)}
+                            className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
+                          >
+                            resend
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

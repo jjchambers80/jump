@@ -16,6 +16,7 @@ import orderService from '../../services/OrderService.js';
 import ticketService from '../../services/TicketService.js';
 import refundService from '../../services/RefundService.js';
 import imageService from '../../services/ImageService.js';
+import emailService from '../../services/EmailService.js';
 
 const router = express.Router();
 
@@ -436,6 +437,44 @@ router.get('/orders/:orderId', async (req, res, next) => {
     }
 
     res.json(order);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /admin/orders/:orderId/resend-confirmation
+ * Resend order confirmation email to the purchaser.
+ */
+router.post('/orders/:orderId/resend-confirmation', async (req, res, next) => {
+  try {
+    const scope = await resolveOrgScope(req.user.id, req.user.role);
+
+    if (!isUnscoped(scope) && !scope.organizationId) {
+      throw new NotFoundError('Order not found');
+    }
+
+    const order = await orderService.getOrderById(req.params.orderId);
+
+    // Verify order belongs to this organization (SYSTEM_ADMIN skips)
+    if (!isUnscoped(scope)) {
+      const event = await prisma.event.findUnique({
+        where: { id: order.event.id },
+        include: { venue: { select: { organizationId: true } } },
+      });
+
+      if (!event || event.venue.organizationId !== scope.organizationId) {
+        throw new NotFoundError('Order not found');
+      }
+    }
+
+    if (order.status !== 'COMPLETED') {
+      return res.status(400).json({ error: 'Can only resend confirmation for completed orders' });
+    }
+
+    await emailService.sendOrderConfirmation(order, order.tickets || []);
+
+    res.json({ success: true });
   } catch (error) {
     next(error);
   }
