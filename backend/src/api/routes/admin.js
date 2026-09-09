@@ -14,6 +14,7 @@ import organizationService from '../../services/OrganizationService.js';
 import organizationPersonService from '../../services/OrganizationPersonService.js';
 import orderService from '../../services/OrderService.js';
 import ticketService from '../../services/TicketService.js';
+import refundService from '../../services/RefundService.js';
 import imageService from '../../services/ImageService.js';
 
 const router = express.Router();
@@ -435,6 +436,109 @@ router.get('/orders/:orderId', async (req, res, next) => {
     }
 
     res.json(order);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /admin/orders/:orderId/refund
+ * Refund an entire order (all tickets voided, full amount returned).
+ * Body: { reason?: string }
+ */
+router.post('/orders/:orderId/refund', async (req, res, next) => {
+  try {
+    const scope = await resolveOrgScope(req.user.id, req.user.role);
+
+    if (!isUnscoped(scope) && !scope.organizationId) {
+      throw new NotFoundError('Order not found');
+    }
+
+    // Verify order belongs to this organization (SYSTEM_ADMIN skips)
+    if (!isUnscoped(scope)) {
+      const order = await orderService.getOrderById(req.params.orderId);
+      const event = await prisma.event.findUnique({
+        where: { id: order.event.id },
+        include: { venue: { select: { organizationId: true } } },
+      });
+
+      if (!event || event.venue.organizationId !== scope.organizationId) {
+        throw new NotFoundError('Order not found');
+      }
+    }
+
+    const result = await refundService.refundOrder(req.params.orderId, {
+      reason: req.body.reason || null,
+      initiatedBy: req.user.id,
+    });
+
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /admin/tickets/:ticketId/refund
+ * Refund a single ticket (void ticket, partial refund).
+ * Body: { reason?: string }
+ */
+router.post('/tickets/:ticketId/refund', async (req, res, next) => {
+  try {
+    const scope = await resolveOrgScope(req.user.id, req.user.role);
+
+    if (!isUnscoped(scope) && !scope.organizationId) {
+      throw new NotFoundError('Ticket not found');
+    }
+
+    if (!isUnscoped(scope)) {
+      const ticket = await prisma.ticket.findUnique({
+        where: { id: req.params.ticketId },
+        include: { event: { include: { venue: { select: { organizationId: true } } } } },
+      });
+
+      if (!ticket || ticket.event.venue.organizationId !== scope.organizationId) {
+        throw new NotFoundError('Ticket not found');
+      }
+    }
+
+    const result = await refundService.refundTicket(req.params.ticketId, {
+      reason: req.body.reason || null,
+      initiatedBy: req.user.id,
+    });
+
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /admin/orders/:orderId/refunds
+ * Get refund history for an order.
+ */
+router.get('/orders/:orderId/refunds', async (req, res, next) => {
+  try {
+    const scope = await resolveOrgScope(req.user.id, req.user.role);
+
+    if (!isUnscoped(scope) && !scope.organizationId) {
+      throw new NotFoundError('Order not found');
+    }
+
+    if (!isUnscoped(scope)) {
+      const order = await orderService.getOrderById(req.params.orderId);
+      const event = await prisma.event.findUnique({
+        where: { id: order.event.id },
+        include: { venue: { select: { organizationId: true } } },
+      });
+
+      if (!event || event.venue.organizationId !== scope.organizationId) {
+        throw new NotFoundError('Order not found');
+      }
+    }
+
+    const refunds = await refundService.getRefundsForOrder(req.params.orderId);
+    res.json({ refunds });
   } catch (error) {
     next(error);
   }

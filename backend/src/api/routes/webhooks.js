@@ -5,6 +5,7 @@
 import express from 'express';
 import stripe from '../../config/stripe.js';
 import PaymentService from '../../services/PaymentService.js';
+import RefundService from '../../services/RefundService.js';
 import logger from '../../utils/logger.js';
 
 const router = express.Router();
@@ -75,6 +76,22 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
         const session = event.data.object;
         logger.info('Stripe checkout session expired', { sessionId: session.id });
         await PaymentService.handleCheckoutFailed(session.id, 'Session expired');
+        break;
+      }
+
+      case 'charge.refunded': {
+        const charge = event.data.object;
+        logger.info('Stripe charge refunded', {
+          chargeId: charge.id,
+          paymentIntentId: charge.payment_intent,
+        });
+
+        // Process each refund on the charge
+        if (charge.refunds?.data) {
+          for (const refund of charge.refunds.data) {
+            await RefundService.handleExternalRefund(charge.payment_intent, refund);
+          }
+        }
         break;
       }
 

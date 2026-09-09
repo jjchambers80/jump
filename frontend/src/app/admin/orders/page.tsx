@@ -375,7 +375,11 @@ function TicketDetailModal({
                         <p><span className="font-medium">Date & Time:</span> {formatDate(detail.event.date)}</p>
                         <p><span className="font-medium">Amount charged:</span> {formatCurrency(detail.pricePaid)}</p>
                         <p><span className="font-medium">Confirmation:</span> {detail.barcode}</p>
-                        <p><span className="font-medium">Order:</span> {detail.order.orderRef}</p>
+                        <p><span className="font-medium">Order:</span>{' '}
+                          <Link href={`/admin/orders/${detail.order.id}`} className="text-indigo-600 dark:text-indigo-400 hover:underline">
+                            {detail.order.orderRef}
+                          </Link>
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -744,12 +748,9 @@ export default function AdminOrdersPage() {
                   <div className="min-w-0">
                     {ticket.purchaser ? (
                       <>
-                        <Link
-                          href={`/admin/orders/${ticket.orderId}`}
-                          className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:underline truncate block"
-                        >
+                        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
                           {ticket.purchaser.firstName} {ticket.purchaser.lastName}
-                        </Link>
+                        </p>
                         <p className="text-xs text-gray-500 dark:text-slate-400 truncate">
                           {ticket.purchaser.email}
                         </p>
@@ -784,7 +785,7 @@ export default function AdminOrdersPage() {
                       Conf #: {ticket.barcode}
                     </p>
                     <p className="text-xs text-gray-500 dark:text-slate-400 truncate">
-                      Order #: {ticket.orderRef}
+                      Order #: <Link href={`/admin/orders/${ticket.orderId}`} className="text-indigo-600 dark:text-indigo-400 hover:underline">{ticket.orderRef}</Link>
                     </p>
                   </div>
 
@@ -827,12 +828,9 @@ export default function AdminOrdersPage() {
                   <div className="flex items-start justify-between mb-2">
                     <div>
                       {ticket.purchaser && (
-                        <Link
-                          href={`/admin/orders/${ticket.orderId}`}
-                          className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
-                        >
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">
                           {ticket.purchaser.firstName} {ticket.purchaser.lastName}
-                        </Link>
+                        </p>
                       )}
                       {ticket.attendee && (
                         <p className="text-xs text-gray-500 dark:text-slate-400">

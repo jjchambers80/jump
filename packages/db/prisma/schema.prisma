@@ -274,6 +274,7 @@ model Order {
   tickets         Ticket[]
   items           OrderItem[]
   payment         PaymentTransaction?
+  refunds         Refund[]
 
   @@index([eventId])
   @@index([contactId])
@@ -319,6 +320,7 @@ model Ticket {
   event        Event        @relation(fields: [eventId], references: [id])
   priceTier    PriceTier    @relation(fields: [priceTierId], references: [id])
   contact      Contact      @relation(fields: [contactId], references: [id])
+  refunds      Refund[]
 
   @@unique([eventId, ticketNumber])
   @@index([orderId])
@@ -347,6 +349,27 @@ model PaymentTransaction {
   @@index([status])
 }
 
+model Refund {
+  id              String       @id @default(cuid())
+  orderId         String
+  ticketId        String?      // null = full order refund
+  stripeRefundId  String?
+  amount          Decimal      @db.Decimal(10, 2)
+  reason          String?
+  status          RefundStatus @default(PENDING)
+  initiatedBy     String?      // userId of admin who initiated, null for customer self-service
+
+  createdAt       DateTime     @default(now())
+  // NO updatedAt — append-only ledger
+
+  order           Order        @relation(fields: [orderId], references: [id])
+  ticket          Ticket?      @relation(fields: [ticketId], references: [id])
+
+  @@index([orderId])
+  @@index([ticketId])
+  @@index([stripeRefundId])
+}
+
 // ──────────────────────────────────────────────
 // Enums
 // ──────────────────────────────────────────────
@@ -373,6 +396,8 @@ enum OrderStatus {
   PENDING
   COMPLETED
   FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
 }
 
 enum TierVisibility {
@@ -389,6 +414,12 @@ enum TicketStatus {
 }
 
 enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+enum RefundStatus {
   PENDING
   SUCCEEDED
   FAILED

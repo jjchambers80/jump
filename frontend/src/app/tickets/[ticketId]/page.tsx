@@ -8,6 +8,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import ProtectedRoute from '../../../components/ProtectedRoute';
 import ticketService, { Ticket } from '../../../services/ticketService';
+import api from '../../../services/api';
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
@@ -34,6 +35,15 @@ function formatPrice(price: number | string): string {
 
 function StatusBadge({ status }: { status: string }) {
   switch (status) {
+    case 'VOIDED':
+      return (
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300">
+          <svg className="w-4 h-4 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+          </svg>
+          Refunded
+        </span>
+      );
     case 'EXPIRED':
       return (
         <span
@@ -88,6 +98,10 @@ function TicketDetailContent() {
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showRefundConfirm, setShowRefundConfirm] = useState(false);
+  const [refunding, setRefunding] = useState(false);
+  const [refundError, setRefundError] = useState<string | null>(null);
+  const [refundSuccess, setRefundSuccess] = useState(false);
 
   useEffect(() => {
     async function fetchTicket() {
@@ -123,6 +137,23 @@ function TicketDetailContent() {
     link.click();
     document.body.removeChild(link);
   }, [ticket]);
+
+  const handleRequestRefund = async () => {
+    setRefunding(true);
+    setRefundError(null);
+    try {
+      await api.post(`/tickets/${ticketId}/request-refund`, {});
+      setRefundSuccess(true);
+      setShowRefundConfirm(false);
+      // Refresh ticket data
+      const updated = await ticketService.getTicketById(ticketId);
+      setTicket(updated);
+    } catch (err: any) {
+      setRefundError(err.message || 'Refund request failed');
+    } finally {
+      setRefunding(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -292,9 +323,9 @@ function TicketDetailContent() {
             )}
           </div>
 
-          {/* Refund Policy Badge */}
-          <div className="px-6 pt-4">
-            {ticket.isRefundable === false && (
+          {/* Refund Section */}
+          <div className="px-6 pt-4 flex items-center gap-3">
+            {ticket.isRefundable === false && ticket.status !== 'VOIDED' && (
               <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
                 <svg className="w-3.5 h-3.5 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
@@ -302,9 +333,22 @@ function TicketDetailContent() {
                 NON-REFUNDABLE
               </span>
             )}
-            {ticket.isRefundable === true && (
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border border-green-200 dark:border-green-800">
-                Refundable
+            {ticket.isRefundable === true && ticket.status === 'VALID' && !refundSuccess && (
+              <>
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border border-green-200 dark:border-green-800">
+                  Refundable
+                </span>
+                <button
+                  onClick={() => { setShowRefundConfirm(true); setRefundError(null); }}
+                  className="px-3 py-1.5 text-sm font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition"
+                >
+                  Request Refund
+                </button>
+              </>
+            )}
+            {refundSuccess && (
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
+                Refund processed successfully
               </span>
             )}
           </div>
@@ -385,6 +429,41 @@ function TicketDetailContent() {
           </div>
         </div>
       </div>
+
+      {/* Refund Confirmation Dialog */}
+      {showRefundConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              Request Refund
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-slate-400 mb-4">
+              Are you sure you want to refund this ticket? You will receive{' '}
+              <strong>{formatPrice(ticket.pricePaid)}</strong> back to your original payment method.
+              This action cannot be undone.
+            </p>
+            {refundError && (
+              <p className="text-sm text-red-600 dark:text-red-400 mb-3">{refundError}</p>
+            )}
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowRefundConfirm(false)}
+                disabled={refunding}
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 bg-gray-100 dark:bg-slate-700 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-600 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRequestRefund}
+                disabled={refunding}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 transition"
+              >
+                {refunding ? 'Processing...' : 'Confirm Refund'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
