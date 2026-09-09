@@ -18,6 +18,9 @@ import imageService from '../../services/ImageService.js';
  */
 const verifyOrgOwnership = async (req, res, next) => {
   try {
+    // SYSTEM_ADMIN can access any organization
+    if (req.user.role === 'SYSTEM_ADMIN') return next();
+
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
       select: { organizationId: true },

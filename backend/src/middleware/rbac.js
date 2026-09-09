@@ -1,6 +1,6 @@
 // Role-based access control middleware
 // Uses req.user.role from JWT claims (set by auth.js middleware)
-// Supports: CUSTOMER, ORGANIZER, ADMIN roles per UserRole enum
+// Supports: CUSTOMER, ORGANIZER, ADMIN, SYSTEM_ADMIN roles per UserRole enum
 
 import { ForbiddenError, AuthenticationError } from './errorHandler.js';
 
@@ -29,11 +29,14 @@ export const requireRole = (...roles) => {
   };
 };
 
-/** Convenience: requires ADMIN role */
-export const requireAdmin = requireRole('ADMIN');
+/** Convenience: requires ADMIN or SYSTEM_ADMIN role */
+export const requireAdmin = requireRole('ADMIN', 'SYSTEM_ADMIN');
 
-/** Convenience: requires ORGANIZER or ADMIN role */
-export const requireOrganizer = requireRole('ORGANIZER', 'ADMIN');
+/** Convenience: requires ORGANIZER, ADMIN, or SYSTEM_ADMIN role */
+export const requireOrganizer = requireRole('ORGANIZER', 'ADMIN', 'SYSTEM_ADMIN');
+
+/** Convenience: requires SYSTEM_ADMIN role */
+export const requireSystemAdmin = requireRole('SYSTEM_ADMIN');
 
 /** Convenience: alias for requireAuth (any authenticated user) */
 export { requireAuth } from './auth.js';

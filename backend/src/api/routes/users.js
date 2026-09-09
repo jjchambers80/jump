@@ -6,6 +6,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireAdmin } from '../../middleware/rbac.js';
+import { ForbiddenError } from '../../middleware/errorHandler.js';
 import { validateUpdateUser } from '../validators/userValidators.js';
 import userService from '../../services/UserService.js';
 
@@ -37,6 +38,10 @@ router.get('/', requireAuth, requireAdmin, async (req, res, next) => {
  */
 router.patch('/:id', requireAuth, requireAdmin, validateUpdateUser, async (req, res, next) => {
   try {
+    // Only SYSTEM_ADMIN can assign SYSTEM_ADMIN role
+    if (req.body.role === 'SYSTEM_ADMIN' && req.user.role !== 'SYSTEM_ADMIN') {
+      throw new ForbiddenError('Only SYSTEM_ADMIN can assign SYSTEM_ADMIN role');
+    }
     const user = await userService.updateUser(req.params.id, req.body);
     res.json(user);
   } catch (error) {

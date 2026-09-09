@@ -112,7 +112,7 @@ router.get('/:orderId', optionalAuth, async (req, res, next) => {
     const order = await orderService.getOrderById(req.params.orderId);
 
     // If authenticated, verify ownership (prevent enumeration by logged-in users)
-    if (req.user && req.user.role !== 'ADMIN' && order.contact?.email !== req.user.email) {
+    if (req.user && !['ADMIN', 'SYSTEM_ADMIN'].includes(req.user.role) && order.contact?.email !== req.user.email) {
       return res.status(403).json({
         error: 'ForbiddenError',
         message: 'You do not have access to this order',

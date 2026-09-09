@@ -11,7 +11,7 @@ interface AdminRouteProps {
   children: React.ReactNode;
 }
 
-const ALLOWED_ROLES = ['ADMIN', 'ORGANIZER'];
+const ALLOWED_ROLES = ['ADMIN', 'ORGANIZER', 'SYSTEM_ADMIN'];
 
 export default function AdminRoute({ children }: AdminRouteProps) {
   const { data: session, status } = useSession();

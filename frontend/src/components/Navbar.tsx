@@ -10,7 +10,7 @@ import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import ThemeToggle from './ThemeToggle';
 
-const ADMIN_ROLES = ['ADMIN', 'ORGANIZER'];
+const ADMIN_ROLES = ['ADMIN', 'ORGANIZER', 'SYSTEM_ADMIN'];
 
 export default function Navbar() {
   const { data: session, status } = useSession();

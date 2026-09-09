@@ -23,7 +23,7 @@ const navItems: NavItem[] = [
   { label: 'Events', href: '/admin/events' },
   { label: 'Orders', href: '/admin/orders' },
   { label: 'Analytics', href: '/admin/analytics' },
-  { label: 'Users', href: '/admin/users', roles: ['ADMIN'] },
+  { label: 'Users', href: '/admin/users', roles: ['ADMIN', 'SYSTEM_ADMIN'] },
 ];
 
 interface AdminSidebarProps {

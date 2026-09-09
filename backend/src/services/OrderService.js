@@ -416,7 +416,7 @@ class OrderService {
    */
   async getOrdersByOrganization(organizationId, { page = 1, limit = 20, status, eventId, search } = {}) {
     const where = {
-      event: { venue: { organizationId } },
+      ...(organizationId && { event: { venue: { organizationId } } }),
       ...(status && { status }),
       ...(eventId && { eventId }),
       ...(search && {
@@ -631,7 +631,7 @@ class OrderService {
    */
   async getTicketsByOrganization(organizationId, { page = 1, limit = 20, status, eventId, search } = {}) {
     const where = {
-      event: { venue: { organizationId } },
+      ...(organizationId && { event: { venue: { organizationId } } }),
       order: { status: 'COMPLETED' },
       ...(status && { status }),
       ...(eventId && { eventId }),

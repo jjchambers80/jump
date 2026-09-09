@@ -1,11 +1,12 @@
 // Admin Routes — aggregate endpoints for admin dashboard
-// Requires ADMIN or ORGANIZER role
+// Requires ORGANIZER, ADMIN, or SYSTEM_ADMIN role
 
 import express from 'express';
 import { prisma } from '@jump/db';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireOrganizer } from '../../middleware/rbac.js';
 import { NotFoundError } from '../../middleware/errorHandler.js';
+import { resolveOrgScope, isUnscoped } from '../../middleware/orgScope.js';
 import { validateUpdateAttendee } from '../validators/adminValidators.js';
 import { validateUpdateBusinessDetails } from '../validators/organizationValidators.js';
 import { validateCreateOrganizationPerson } from '../validators/organizationPersonValidators.js';
@@ -96,15 +97,9 @@ router.delete('/settings/people/:personId', async (req, res, next) => {
  */
 router.get('/dashboard/stats', async (req, res, next) => {
   try {
-    const userId = req.user.id;
+    const scope = await resolveOrgScope(req.user.id, req.user.role);
 
-    // Scope to the user's organization (both ADMIN and ORGANIZER)
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { organizationId: true },
-    });
-
-    if (!user?.organizationId) {
+    if (!isUnscoped(scope) && !scope.organizationId) {
       // No org linked — return zeros
       return res.json({
         totalCapacity: 0,
@@ -116,7 +111,7 @@ router.get('/dashboard/stats', async (req, res, next) => {
       });
     }
 
-    const venueFilter = { venue: { organizationId: user.organizationId } };
+    const venueFilter = scope.venueFilter || {};
 
     // Get total capacity from all events
     const capacityResult = await prisma.event.aggregate({
@@ -180,19 +175,13 @@ router.get('/dashboard/stats', async (req, res, next) => {
  */
 router.get('/events', async (req, res, next) => {
   try {
-    const userId = req.user.id;
+    const scope = await resolveOrgScope(req.user.id, req.user.role);
 
-    // Scope to the user's organization (both ADMIN and ORGANIZER)
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { organizationId: true },
-    });
-
-    if (!user?.organizationId) {
+    if (!isUnscoped(scope) && !scope.organizationId) {
       return res.json({ events: [] });
     }
 
-    const venueFilter = { venue: { organizationId: user.organizationId } };
+    const venueFilter = scope.venueFilter || {};
 
     const events = await prisma.event.findMany({
       where: venueFilter,
@@ -249,17 +238,14 @@ router.get('/events', async (req, res, next) => {
  */
 router.get('/orders', async (req, res, next) => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: { organizationId: true },
-    });
+    const scope = await resolveOrgScope(req.user.id, req.user.role);
 
-    if (!user?.organizationId) {
+    if (!isUnscoped(scope) && !scope.organizationId) {
       return res.json({ data: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } });
     }
 
     const { page, limit, status, eventId, search } = req.query;
-    const result = await orderService.getOrdersByOrganization(user.organizationId, {
+    const result = await orderService.getOrdersByOrganization(scope.organizationId, {
       page: page ? parseInt(page) : 1,
       limit: limit ? parseInt(limit) : 20,
       status: status || undefined,
@@ -280,17 +266,14 @@ router.get('/orders', async (req, res, next) => {
  */
 router.get('/tickets', async (req, res, next) => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: { organizationId: true },
-    });
+    const scope = await resolveOrgScope(req.user.id, req.user.role);
 
-    if (!user?.organizationId) {
+    if (!isUnscoped(scope) && !scope.organizationId) {
       return res.json({ data: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } });
     }
 
     const { page, limit, status, eventId, search } = req.query;
-    const result = await orderService.getTicketsByOrganization(user.organizationId, {
+    const result = await orderService.getTicketsByOrganization(scope.organizationId, {
       page: page ? parseInt(page) : 1,
       limit: limit ? parseInt(limit) : 20,
       status: status || undefined,
@@ -310,23 +293,22 @@ router.get('/tickets', async (req, res, next) => {
  */
 router.get('/tickets/:ticketId', async (req, res, next) => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: { organizationId: true },
-    });
+    const scope = await resolveOrgScope(req.user.id, req.user.role);
 
-    if (!user?.organizationId) throw new NotFoundError('Ticket not found');
+    if (!isUnscoped(scope) && !scope.organizationId) throw new NotFoundError('Ticket not found');
 
     const detail = await ticketService.getTicketDetailForAdmin(req.params.ticketId);
 
-    // Verify ticket belongs to this organization
-    const event = await prisma.event.findUnique({
-      where: { id: detail.event.id },
-      include: { venue: { select: { organizationId: true } } },
-    });
+    // Verify ticket belongs to this organization (SYSTEM_ADMIN skips)
+    if (!isUnscoped(scope)) {
+      const event = await prisma.event.findUnique({
+        where: { id: detail.event.id },
+        include: { venue: { select: { organizationId: true } } },
+      });
 
-    if (!event || event.venue.organizationId !== user.organizationId) {
-      throw new NotFoundError('Ticket not found');
+      if (!event || event.venue.organizationId !== scope.organizationId) {
+        throw new NotFoundError('Ticket not found');
+      }
     }
 
     res.json(detail);
@@ -341,21 +323,20 @@ router.get('/tickets/:ticketId', async (req, res, next) => {
  */
 router.patch('/tickets/:ticketId/attendee', validateUpdateAttendee, async (req, res, next) => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: { organizationId: true },
-    });
+    const scope = await resolveOrgScope(req.user.id, req.user.role);
 
-    if (!user?.organizationId) throw new NotFoundError('Ticket not found');
+    if (!isUnscoped(scope) && !scope.organizationId) throw new NotFoundError('Ticket not found');
 
-    // Verify ownership before update
-    const ticket = await prisma.ticket.findUnique({
-      where: { id: req.params.ticketId },
-      include: { event: { include: { venue: { select: { organizationId: true } } } } },
-    });
+    // Verify ownership before update (SYSTEM_ADMIN skips)
+    if (!isUnscoped(scope)) {
+      const ticket = await prisma.ticket.findUnique({
+        where: { id: req.params.ticketId },
+        include: { event: { include: { venue: { select: { organizationId: true } } } } },
+      });
 
-    if (!ticket || ticket.event.venue.organizationId !== user.organizationId) {
-      throw new NotFoundError('Ticket not found');
+      if (!ticket || ticket.event.venue.organizationId !== scope.organizationId) {
+        throw new NotFoundError('Ticket not found');
+      }
     }
 
     const { firstName, lastName, email } = req.body;
@@ -377,20 +358,19 @@ router.patch('/tickets/:ticketId/attendee', validateUpdateAttendee, async (req, 
  */
 router.post('/tickets/:ticketId/check-in', async (req, res, next) => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: { organizationId: true },
-    });
+    const scope = await resolveOrgScope(req.user.id, req.user.role);
 
-    if (!user?.organizationId) throw new NotFoundError('Ticket not found');
+    if (!isUnscoped(scope) && !scope.organizationId) throw new NotFoundError('Ticket not found');
 
-    const ticket = await prisma.ticket.findUnique({
-      where: { id: req.params.ticketId },
-      include: { event: { include: { venue: { select: { organizationId: true } } } } },
-    });
+    if (!isUnscoped(scope)) {
+      const ticket = await prisma.ticket.findUnique({
+        where: { id: req.params.ticketId },
+        include: { event: { include: { venue: { select: { organizationId: true } } } } },
+      });
 
-    if (!ticket || ticket.event.venue.organizationId !== user.organizationId) {
-      throw new NotFoundError('Ticket not found');
+      if (!ticket || ticket.event.venue.organizationId !== scope.organizationId) {
+        throw new NotFoundError('Ticket not found');
+      }
     }
 
     const result = await ticketService.adminCheckIn(req.params.ticketId);
@@ -406,20 +386,19 @@ router.post('/tickets/:ticketId/check-in', async (req, res, next) => {
  */
 router.post('/tickets/:ticketId/undo-check-in', async (req, res, next) => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: { organizationId: true },
-    });
+    const scope = await resolveOrgScope(req.user.id, req.user.role);
 
-    if (!user?.organizationId) throw new NotFoundError('Ticket not found');
+    if (!isUnscoped(scope) && !scope.organizationId) throw new NotFoundError('Ticket not found');
 
-    const ticket = await prisma.ticket.findUnique({
-      where: { id: req.params.ticketId },
-      include: { event: { include: { venue: { select: { organizationId: true } } } } },
-    });
+    if (!isUnscoped(scope)) {
+      const ticket = await prisma.ticket.findUnique({
+        where: { id: req.params.ticketId },
+        include: { event: { include: { venue: { select: { organizationId: true } } } } },
+      });
 
-    if (!ticket || ticket.event.venue.organizationId !== user.organizationId) {
-      throw new NotFoundError('Ticket not found');
+      if (!ticket || ticket.event.venue.organizationId !== scope.organizationId) {
+        throw new NotFoundError('Ticket not found');
+      }
     }
 
     const result = await ticketService.adminUndoCheckIn(req.params.ticketId);
@@ -435,25 +414,24 @@ router.post('/tickets/:ticketId/undo-check-in', async (req, res, next) => {
  */
 router.get('/orders/:orderId', async (req, res, next) => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: { organizationId: true },
-    });
+    const scope = await resolveOrgScope(req.user.id, req.user.role);
 
-    if (!user?.organizationId) {
+    if (!isUnscoped(scope) && !scope.organizationId) {
       throw new NotFoundError('Order not found');
     }
 
     const order = await orderService.getOrderById(req.params.orderId);
 
-    // Verify order belongs to this organizer's organization
-    const event = await prisma.event.findUnique({
-      where: { id: order.event.id },
-      include: { venue: { select: { organizationId: true } } },
-    });
+    // Verify order belongs to this organizer's organization (SYSTEM_ADMIN skips)
+    if (!isUnscoped(scope)) {
+      const event = await prisma.event.findUnique({
+        where: { id: order.event.id },
+        include: { venue: { select: { organizationId: true } } },
+      });
 
-    if (!event || event.venue.organizationId !== user.organizationId) {
-      throw new NotFoundError('Order not found');
+      if (!event || event.venue.organizationId !== scope.organizationId) {
+        throw new NotFoundError('Order not found');
+      }
     }
 
     res.json(order);

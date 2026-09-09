@@ -162,7 +162,7 @@ router.get('/:ticketId', requireAuth, async (req, res, next) => {
     const ticket = await ticketService.getTicketById(req.params.ticketId);
 
     // Authorization: contact email must match, or ADMIN
-    if (req.user.role !== 'ADMIN' && ticket.contact?.email !== req.user.email) {
+    if (!['ADMIN', 'SYSTEM_ADMIN'].includes(req.user.role) && ticket.contact?.email !== req.user.email) {
       return res.status(403).json({
         error: 'ForbiddenError',
         message: 'You do not have access to this ticket',

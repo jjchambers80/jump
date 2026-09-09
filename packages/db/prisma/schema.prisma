@@ -355,6 +355,7 @@ enum UserRole {
   CUSTOMER
   ORGANIZER
   ADMIN
+  SYSTEM_ADMIN
 }
 
 enum OrganizationStatus {

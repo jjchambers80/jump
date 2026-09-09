@@ -33,8 +33,8 @@ export default function UsersPage() {
   const { data: session, status } = useSession();
   const userRole = (session?.user as any)?.role;
 
-  // T019: ADMIN-only guard — ORGANIZER sees access denied
-  if (status === 'authenticated' && userRole !== 'ADMIN') {
+  // T019: ADMIN/SYSTEM_ADMIN-only guard — ORGANIZER sees access denied
+  if (status === 'authenticated' && !['ADMIN', 'SYSTEM_ADMIN'].includes(userRole)) {
     return (
       <div className="max-w-md mx-auto py-16 px-4 text-center">
         <div className="text-6xl mb-4">🔒</div>
@@ -49,6 +49,7 @@ export default function UsersPage() {
 
 function UsersContent() {
   const { data: session } = useSession();
+  const userRole = (session?.user as any)?.role;
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [loading, setLoading] = useState(true);
@@ -108,7 +109,9 @@ function UsersContent() {
     }
   }
 
-  const roles = ['CUSTOMER', 'ORGANIZER', 'ADMIN'];
+  const roles = userRole === 'SYSTEM_ADMIN'
+    ? ['CUSTOMER', 'ORGANIZER', 'ADMIN', 'SYSTEM_ADMIN']
+    : ['CUSTOMER', 'ORGANIZER', 'ADMIN'];
 
   return (
     <div className="max-w-6xl mx-auto py-8 px-4">
