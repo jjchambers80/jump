@@ -472,7 +472,14 @@ router.post('/orders/:orderId/resend-confirmation', async (req, res, next) => {
       return res.status(400).json({ error: 'Can only resend confirmation for completed orders' });
     }
 
-    await emailService.sendOrderConfirmation(order, order.tickets || []);
+    // order.tickets are formatted (flat priceTierName), but EmailService
+    // expects nested priceTier: { name }. Remap to match the expected shape.
+    const tickets = (order.tickets || []).map(t => ({
+      ...t,
+      priceTier: { name: t.priceTierName || t.priceTier?.name || 'General' },
+    }));
+
+    await emailService.sendOrderConfirmation(order, tickets);
 
     res.json({ success: true });
   } catch (error) {

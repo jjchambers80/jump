@@ -522,8 +522,10 @@ export default function AdminOrdersPage() {
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [resendingTicketId, setResendingTicketId] = useState<string | null>(null);
   const [resendResult, setResendResult] = useState<{ ticketId: string; success: boolean } | null>(null);
+  const resendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleResendConfirmation = async (ticketId: string, orderId: string) => {
+    if (resendTimerRef.current) clearTimeout(resendTimerRef.current);
     setResendingTicketId(ticketId);
     setResendResult(null);
     try {
@@ -533,7 +535,9 @@ export default function AdminOrdersPage() {
       setResendResult({ ticketId, success: false });
     } finally {
       setResendingTicketId(null);
-      setTimeout(() => setResendResult(null), 3000);
+      resendTimerRef.current = setTimeout(() => {
+        setResendResult((prev) => prev?.ticketId === ticketId ? null : prev);
+      }, 3000);
     }
   };
 
