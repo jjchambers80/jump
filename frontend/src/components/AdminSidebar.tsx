@@ -22,6 +22,7 @@ const navItems: NavItem[] = [
   { label: 'Venues', href: '/admin/venues' },
   { label: 'Events', href: '/admin/events' },
   { label: 'Orders', href: '/admin/orders' },
+  { label: 'Check In', href: '/admin/orders/scan' },
   { label: 'Analytics', href: '/admin/analytics' },
   { label: 'Users', href: '/admin/users', roles: ['ADMIN', 'SYSTEM_ADMIN'] },
 ];
@@ -40,8 +41,17 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
     if (href === '/admin/dashboard') {
       return pathname === '/admin' || pathname === '/admin/dashboard';
     }
-    // Match exact or sub-routes (e.g. /admin/events/new matches /admin/events)
-    return pathname === href || pathname.startsWith(href + '/');
+    // Exact match always wins
+    if (pathname === href) return true;
+    // Sub-route match, but skip if a more specific nav item owns this path
+    // (e.g. /admin/orders/scan should match "Check In", not "Orders")
+    if (pathname.startsWith(href + '/')) {
+      const moreSpecific = navItems.some(
+        (item) => item.href !== href && item.href.startsWith(href + '/') && pathname.startsWith(item.href),
+      );
+      return !moreSpecific;
+    }
+    return false;
   };
 
   const visibleItems = navItems.filter((item) => !item.roles || item.roles.includes(userRole));

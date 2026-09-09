@@ -5,7 +5,7 @@ import express from 'express';
 import { prisma } from '@jump/db';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireOrganizer } from '../../middleware/rbac.js';
-import { NotFoundError } from '../../middleware/errorHandler.js';
+import { NotFoundError, ValidationError } from '../../middleware/errorHandler.js';
 import { resolveOrgScope, isUnscoped } from '../../middleware/orgScope.js';
 import { validateUpdateAttendee } from '../validators/adminValidators.js';
 import { validateUpdateBusinessDetails } from '../validators/organizationValidators.js';
@@ -17,6 +17,7 @@ import ticketService from '../../services/TicketService.js';
 import refundService from '../../services/RefundService.js';
 import imageService from '../../services/ImageService.js';
 import emailService from '../../services/EmailService.js';
+import qrService from '../../services/QRService.js';
 
 const router = express.Router();
 
@@ -598,6 +599,66 @@ router.post('/images/cleanup', async (req, res, next) => {
   try {
     const deleted = await imageService.cleanupOrphans();
     res.json({ deleted });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /admin/tickets/scan-order
+ * Scan a QR payload or barcode and return the full order context:
+ * the scanned ticket plus all sibling tickets in the same order.
+ *
+ * Body: { payload: string }
+ * 200 → OrderScanResult
+ */
+router.post('/tickets/scan-order', async (req, res, next) => {
+  try {
+    const { payload } = req.body;
+
+    if (!payload || typeof payload !== 'string') {
+      throw new ValidationError('payload is required');
+    }
+
+    let barcode;
+
+    if (qrService.isJumpPayload(payload)) {
+      const parsed = qrService.parseQRPayload(payload);
+      if (!parsed) {
+        throw new ValidationError('Invalid QR code format');
+      }
+      barcode = parsed.barcode;
+    } else if (payload.startsWith('JUMP-')) {
+      // Direct barcode entry
+      barcode = payload.trim();
+    } else {
+      // Try as legacy JWT
+      try {
+        const decoded = qrService.verifyQRCode(payload);
+        barcode = decoded.barcode;
+      } catch {
+        throw new ValidationError('Invalid QR code or barcode');
+      }
+    }
+
+    const result = await ticketService.scanOrderByBarcode(barcode);
+
+    // Org-scope check: ensure scanned ticket belongs to caller's organization
+    const scope = await resolveOrgScope(req.user.id, req.user.role);
+    if (!isUnscoped(scope)) {
+      if (!scope.organizationId) throw new NotFoundError('Ticket not found');
+
+      const event = await prisma.event.findUnique({
+        where: { id: result.eventId },
+        include: { venue: { select: { organizationId: true } } },
+      });
+
+      if (!event || event.venue.organizationId !== scope.organizationId) {
+        throw new NotFoundError('Ticket not found');
+      }
+    }
+
+    res.json(result);
   } catch (error) {
     next(error);
   }

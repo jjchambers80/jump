@@ -715,6 +715,69 @@ class TicketService {
     return { status: updated.status, redeemedAt: null };
   }
 
+  /**
+   * Scan a barcode and return the full order context: the scanned ticket
+   * plus all sibling tickets in the same order, for order-level check-in.
+   *
+   * @param {string} barcode - JUMP-XXXXXXXXXXXX barcode
+   * @returns {Promise<Object>} OrderScanResult
+   */
+  async scanOrderByBarcode(barcode) {
+    const ticket = await prisma.ticket.findUnique({
+      where: { barcode },
+      include: {
+        event: { select: { id: true, name: true, date: true } },
+        order: { select: { id: true, orderRef: true } },
+      },
+    });
+
+    if (!ticket) {
+      const error = new ValidationError('Ticket not found');
+      error.redemptionStatus = 'INVALID';
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const eventExpired = new Date(ticket.event.date) < new Date();
+
+    // Lazy-expire all VALID tickets in order in one batch if event has passed
+    if (eventExpired) {
+      await prisma.ticket.updateMany({
+        where: { orderId: ticket.order.id, status: 'VALID' },
+        data: { status: 'EXPIRED' },
+      });
+    }
+
+    // Fetch all tickets in the same order (after expiry so statuses are current)
+    const allTickets = await prisma.ticket.findMany({
+      where: { orderId: ticket.order.id },
+      include: {
+        priceTier: { select: { name: true } },
+        contact: { select: { firstName: true, lastName: true, email: true } },
+      },
+      orderBy: { ticketNumber: 'asc' },
+    });
+
+    return {
+      scannedTicketId: ticket.id,
+      orderRef: ticket.order.orderRef,
+      eventName: ticket.event.name,
+      eventDate: ticket.event.date,
+      eventId: ticket.event.id,
+      totalTickets: allTickets.length,
+      tickets: allTickets.map((t) => ({
+        ticketId: t.id,
+        barcode: t.barcode,
+        ticketNumber: t.ticketNumber,
+        status: t.status,
+        priceTierName: t.priceTier?.name,
+        contactName: `${t.contact?.firstName ?? ''} ${t.contact?.lastName ?? ''}`.trim(),
+        contactEmail: t.contact?.email ?? '',
+        redeemedAt: t.redeemedAt,
+      })),
+    };
+  }
+
   // ─── Formatters ───
 
   async _formatTicketDetail(ticket) {

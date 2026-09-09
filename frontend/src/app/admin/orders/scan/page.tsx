@@ -1,26 +1,25 @@
 // Ticket Check-In Scanner — admin area
-// Camera-based QR scanning with Eventeny-style two-step flow:
-// scan → preview → confirm check-in → result
+// Eventeny-style order-level check-in:
+// scan QR → show all tickets in order → check in individually
 
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
-import api, { TicketPreview, RedemptionResult, RedemptionRejection } from '@/services/api';
+import api, { OrderScanResult, OrderTicketPreview } from '@/services/api';
 
 type ScanState =
   | { step: 'scanning' }
-  | { step: 'preview'; ticket: TicketPreview }
-  | { step: 'checking-in'; ticket: TicketPreview }
-  | { step: 'checked-in'; result: RedemptionResult }
-  | { step: 'already-checked-in'; ticket: TicketPreview }
-  | { step: 'error'; status: string; message: string; ticketId?: string; originalRedemptionTime?: string };
+  | { step: 'order-view'; data: OrderScanResult }
+  | { step: 'error'; status: string; message: string };
 
 export default function ScanPage() {
   const [state, setState] = useState<ScanState>({ step: 'scanning' });
   const [cameraActive, setCameraActive] = useState(false);
   const [manualInput, setManualInput] = useState('');
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [checkingIn, setCheckingIn] = useState<Set<string>>(new Set());
+  const [ticketError, setTicketError] = useState<string | null>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const scannerElementId = 'qr-scanner';
   const processingRef = useRef(false);
@@ -28,8 +27,8 @@ export default function ScanPage() {
   const stopCamera = useCallback(async () => {
     if (scannerRef.current) {
       try {
-        const state = scannerRef.current.getState();
-        if (state === 2) { // SCANNING
+        const s = scannerRef.current.getState();
+        if (s === 2) {
           await scannerRef.current.stop();
         }
       } catch {
@@ -44,35 +43,16 @@ export default function ScanPage() {
     processingRef.current = true;
 
     try {
-      const result = await api.post<TicketPreview>('/tickets/scan', { payload });
-
-      if (result.status === 'REDEEMED') {
-        setState({
-          step: 'already-checked-in',
-          ticket: result,
-        });
-      } else if (result.status === 'EXPIRED') {
-        setState({ step: 'error', status: 'EXPIRED', message: 'Ticket has expired' });
-      } else if (result.status === 'VOIDED') {
-        setState({ step: 'error', status: 'VOIDED', message: 'Ticket has been voided' });
-      } else {
-        setState({ step: 'preview', ticket: result });
-      }
-
+      const result = await api.post<OrderScanResult>('/admin/tickets/scan-order', { payload });
+      setState({ step: 'order-view', data: result });
       await stopCamera();
     } catch (err: any) {
       await stopCamera();
-      if (err.status === 409 || err.status === 410 || err.status === 403) {
-        setState({
-          step: 'error',
-          status: err.details?.status || mapStatusCode(err.status),
-          message: err.message,
-          ticketId: err.details?.ticketId,
-          originalRedemptionTime: err.details?.originalRedemptionTime,
-        });
-      } else {
-        setState({ step: 'error', status: 'INVALID', message: err.message || 'Invalid QR code' });
-      }
+      setState({
+        step: 'error',
+        status: err.details?.status || 'INVALID',
+        message: err.message || 'Invalid QR code',
+      });
     } finally {
       processingRef.current = false;
     }
@@ -87,16 +67,9 @@ export default function ScanPage() {
 
       await scannerRef.current.start(
         { facingMode: 'environment' },
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 250 },
-        },
-        (decodedText) => {
-          processPayload(decodedText);
-        },
-        () => {
-          // ignore scan failures (no QR in frame)
-        }
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        (decodedText) => processPayload(decodedText),
+        () => {},
       );
       setCameraActive(true);
     } catch (err: any) {
@@ -109,7 +82,6 @@ export default function ScanPage() {
       startCamera();
     }
     return () => {
-      // Cleanup on unmount — fire-and-forget but ensure camera releases
       if (scannerRef.current) {
         try {
           const s = scannerRef.current.getState();
@@ -124,35 +96,88 @@ export default function ScanPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.step]);
 
-  async function handleCheckIn(ticket: TicketPreview) {
-    setState({ step: 'checking-in', ticket });
+  async function handleCheckIn(ticketId: string) {
+    setCheckingIn((prev) => new Set(prev).add(ticketId));
+    setTicketError(null);
     try {
-      const result = await api.post<RedemptionResult>('/tickets/redeem', {
-        barcode: ticket.barcode,
-        eventId: ticket.eventId,
+      const result = await api.post<{ status: string; redeemedAt: string }>(
+        `/admin/tickets/${ticketId}/check-in`, {},
+      );
+      setState((prev) => {
+        if (prev.step !== 'order-view') return prev;
+        return {
+          ...prev,
+          data: {
+            ...prev.data,
+            tickets: prev.data.tickets.map((t) =>
+              t.ticketId === ticketId
+                ? { ...t, status: 'REDEEMED' as const, redeemedAt: result.redeemedAt }
+                : t,
+            ),
+          },
+        };
       });
-      setState({ step: 'checked-in', result });
     } catch (err: any) {
-      if (err.details?.status === 'ALREADY_REDEEMED' || err.status === 409) {
-        setState({ step: 'already-checked-in', ticket });
-      } else {
-        setState({
-          step: 'error',
-          status: err.details?.status || 'ERROR',
-          message: err.message || 'Check-in failed',
+      if (err.status === 409) {
+        setState((prev) => {
+          if (prev.step !== 'order-view') return prev;
+          return {
+            ...prev,
+            data: {
+              ...prev.data,
+              tickets: prev.data.tickets.map((t) =>
+                t.ticketId === ticketId ? { ...t, status: 'REDEEMED' as const } : t,
+              ),
+            },
+          };
         });
+      } else {
+        setTicketError(err.message || 'Check-in failed');
       }
+    } finally {
+      setCheckingIn((prev) => {
+        const next = new Set(prev);
+        next.delete(ticketId);
+        return next;
+      });
+    }
+  }
+
+  async function handleUndoCheckIn(ticketId: string) {
+    setCheckingIn((prev) => new Set(prev).add(ticketId));
+    setTicketError(null);
+    try {
+      await api.post(`/admin/tickets/${ticketId}/undo-check-in`, {});
+      setState((prev) => {
+        if (prev.step !== 'order-view') return prev;
+        return {
+          ...prev,
+          data: {
+            ...prev.data,
+            tickets: prev.data.tickets.map((t) =>
+              t.ticketId === ticketId
+                ? { ...t, status: 'VALID' as const, redeemedAt: null }
+                : t,
+            ),
+          },
+        };
+      });
+    } catch (err: any) {
+      setTicketError(err.message || 'Undo check-in failed');
+    } finally {
+      setCheckingIn((prev) => {
+        const next = new Set(prev);
+        next.delete(ticketId);
+        return next;
+      });
     }
   }
 
   function handleScanNext() {
     setState({ step: 'scanning' });
     setManualInput('');
-  }
-
-  function handleCancel() {
-    setState({ step: 'scanning' });
-    setManualInput('');
+    setCheckingIn(new Set());
+    setTicketError(null);
   }
 
   function handleManualSubmit(e: React.FormEvent) {
@@ -160,15 +185,6 @@ export default function ScanPage() {
     const input = manualInput.trim();
     if (!input) return;
     processPayload(input);
-  }
-
-  function mapStatusCode(code: number): string {
-    switch (code) {
-      case 409: return 'ALREADY_REDEEMED';
-      case 410: return 'EXPIRED';
-      case 403: return 'WRONG_EVENT';
-      default: return 'INVALID';
-    }
   }
 
   const statusLabels: Record<string, string> = {
@@ -190,7 +206,6 @@ export default function ScanPage() {
       {/* === SCANNING STATE === */}
       {state.step === 'scanning' && (
         <>
-          {/* Camera viewfinder */}
           <div className="relative rounded-xl overflow-hidden bg-black mb-4">
             <div id={scannerElementId} className="w-full" />
             {!cameraActive && !cameraError && (
@@ -211,7 +226,6 @@ export default function ScanPage() {
             )}
           </div>
 
-          {/* Manual entry fallback */}
           <form onSubmit={handleManualSubmit} className="flex gap-2">
             <input
               type="text"
@@ -231,148 +245,79 @@ export default function ScanPage() {
         </>
       )}
 
-      {/* === PREVIEW STATE === */}
-      {(state.step === 'preview' || state.step === 'checking-in') && (
-        <div className="rounded-xl border-2 border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 p-6">
-          <div className="flex items-center gap-3 mb-5">
-            <div className="flex-shrink-0 w-12 h-12 bg-indigo-500 rounded-full flex items-center justify-center">
-              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
-              </svg>
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-indigo-800 dark:text-indigo-300">
-                Ticket Found
-              </h2>
-              <p className="text-sm text-indigo-600 dark:text-indigo-400">
-                Review and confirm check-in
-              </p>
-            </div>
+      {/* === ORDER VIEW STATE === */}
+      {state.step === 'order-view' && (
+        <div>
+          {/* Order header */}
+          <div className="mb-4 pb-4 border-b border-gray-200 dark:border-slate-700">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+              {state.data.eventName}
+            </h2>
+            <p className="text-sm text-gray-500 dark:text-slate-400">
+              Order #{state.data.orderRef}
+            </p>
+            <p className="text-sm text-gray-500 dark:text-slate-400">
+              Total tickets: {state.data.totalTickets}
+            </p>
           </div>
 
-          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-3 text-sm mb-6">
-            <dt className="text-indigo-700 dark:text-indigo-400 font-medium">Attendee</dt>
-            <dd className="text-indigo-900 dark:text-indigo-200 font-semibold">
-              {state.ticket.contactName}
-            </dd>
-
-            <dt className="text-indigo-700 dark:text-indigo-400 font-medium">Ticket Type</dt>
-            <dd className="text-indigo-900 dark:text-indigo-200">{state.ticket.priceTierName}</dd>
-
-            <dt className="text-indigo-700 dark:text-indigo-400 font-medium">Event</dt>
-            <dd className="text-indigo-900 dark:text-indigo-200">{state.ticket.eventName}</dd>
-
-            <dt className="text-indigo-700 dark:text-indigo-400 font-medium">Barcode</dt>
-            <dd className="text-indigo-900 dark:text-indigo-200 font-mono">{state.ticket.barcode}</dd>
-          </dl>
-
-          <div className="flex gap-3">
-            <button
-              onClick={() => handleCheckIn(state.ticket)}
-              disabled={state.step === 'checking-in'}
-              className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white font-semibold py-3 px-4 rounded-lg transition text-base"
-            >
-              {state.step === 'checking-in' ? 'Checking In...' : 'Check In'}
-            </button>
-            <button
-              onClick={handleCancel}
-              disabled={state.step === 'checking-in'}
-              className="px-4 py-3 border border-gray-300 dark:border-slate-600 text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 rounded-lg transition"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* === CHECKED IN STATE === */}
-      {state.step === 'checked-in' && (
-        <div className="rounded-xl border-2 border-green-500 bg-green-50 dark:bg-green-900/20 p-6">
-          <div className="flex items-center gap-3 mb-5">
-            <div className="flex-shrink-0 w-12 h-12 bg-green-500 rounded-full flex items-center justify-center">
-              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-green-800 dark:text-green-300">
-                Checked In
-              </h2>
-              <p className="text-sm text-green-600 dark:text-green-400">
-                Ticket redeemed successfully
-              </p>
-            </div>
-          </div>
-
-          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm mb-6">
-            <dt className="text-green-700 dark:text-green-400 font-medium">Name</dt>
-            <dd className="text-green-900 dark:text-green-200">{state.result.contactName}</dd>
-
-            <dt className="text-green-700 dark:text-green-400 font-medium">Tier</dt>
-            <dd className="text-green-900 dark:text-green-200">{state.result.priceTierName}</dd>
-
-            <dt className="text-green-700 dark:text-green-400 font-medium">Barcode</dt>
-            <dd className="text-green-900 dark:text-green-200 font-mono">{state.result.barcode}</dd>
-
-            <dt className="text-green-700 dark:text-green-400 font-medium">Checked In At</dt>
-            <dd className="text-green-900 dark:text-green-200">
-              {new Date(state.result.redeemedAt).toLocaleTimeString()}
-            </dd>
-          </dl>
-
-          <button
-            onClick={handleScanNext}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-lg transition"
-          >
-            Scan Next
-          </button>
-        </div>
-      )}
-
-      {/* === ALREADY CHECKED IN STATE === */}
-      {state.step === 'already-checked-in' && (
-        <div className="rounded-xl border-2 border-amber-500 bg-amber-50 dark:bg-amber-900/20 p-6">
-          <div className="flex items-center gap-3 mb-5">
-            <div className="flex-shrink-0 w-12 h-12 bg-amber-500 rounded-full flex items-center justify-center">
-              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
-              </svg>
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-amber-800 dark:text-amber-300">
-                Already Checked In
-              </h2>
-              <p className="text-sm text-amber-600 dark:text-amber-400">
-                This ticket was already redeemed
-              </p>
-            </div>
-          </div>
-
-          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm mb-4">
-            <dt className="text-amber-700 dark:text-amber-400 font-medium">Name</dt>
-            <dd className="text-amber-900 dark:text-amber-200">{state.ticket.contactName}</dd>
-
-            <dt className="text-amber-700 dark:text-amber-400 font-medium">Tier</dt>
-            <dd className="text-amber-900 dark:text-amber-200">{state.ticket.priceTierName}</dd>
-
-            <dt className="text-amber-700 dark:text-amber-400 font-medium">Barcode</dt>
-            <dd className="text-amber-900 dark:text-amber-200 font-mono">{state.ticket.barcode}</dd>
-
-            {state.ticket.redeemedAt && (
+          {/* Current ticket (the scanned one) */}
+          {(() => {
+            const scanned = state.data.tickets.find(
+              (t) => t.ticketId === state.data.scannedTicketId,
+            );
+            const siblings = state.data.tickets.filter(
+              (t) => t.ticketId !== state.data.scannedTicketId,
+            );
+            return (
               <>
-                <dt className="text-amber-700 dark:text-amber-400 font-medium">Checked In At</dt>
-                <dd className="text-amber-900 dark:text-amber-200">
-                  {new Date(state.ticket.redeemedAt).toLocaleString()}
-                </dd>
-              </>
-            )}
-          </dl>
+                {scanned && (
+                  <>
+                    <h3 className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-2">
+                      Current ticket
+                    </h3>
+                    <TicketCard
+                      ticket={scanned}
+                      loading={checkingIn.has(scanned.ticketId)}
+                      onCheckIn={() => handleCheckIn(scanned.ticketId)}
+                      onUndoCheckIn={() => handleUndoCheckIn(scanned.ticketId)}
+                    />
+                  </>
+                )}
 
+                {siblings.length > 0 && (
+                  <>
+                    <h3 className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mt-6 mb-2">
+                      Other tickets in this order
+                    </h3>
+                    {siblings.map((ticket) => (
+                      <TicketCard
+                        key={ticket.ticketId}
+                        ticket={ticket}
+                        loading={checkingIn.has(ticket.ticketId)}
+                        onCheckIn={() => handleCheckIn(ticket.ticketId)}
+                        onUndoCheckIn={() => handleUndoCheckIn(ticket.ticketId)}
+                      />
+                    ))}
+                  </>
+                )}
+              </>
+            );
+          })()}
+
+          {/* Ticket-level error banner */}
+          {ticketError && (
+            <div className="mt-4 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 text-sm text-red-700 dark:text-red-400">
+              {ticketError}
+            </div>
+          )}
+
+          {/* Scan next */}
           <button
             onClick={handleScanNext}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-lg transition"
+            className="w-full mt-6 bg-teal-600 hover:bg-teal-700 text-white font-medium py-3 px-4 rounded-lg transition text-base"
           >
-            Scan Next
+            Scan next QR code
           </button>
         </div>
       )}
@@ -394,21 +339,112 @@ export default function ScanPage() {
             </div>
           </div>
 
-          {state.originalRedemptionTime && (
-            <div className="mt-3 p-3 bg-red-100 dark:bg-red-900/30 rounded-lg text-sm">
-              <span className="text-red-700 dark:text-red-400 font-medium">First checked in at: </span>
-              <span className="text-red-900 dark:text-red-200">
-                {new Date(state.originalRedemptionTime).toLocaleString()}
-              </span>
-            </div>
-          )}
-
           <button
             onClick={handleScanNext}
             className="w-full mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-lg transition"
           >
             Scan Next
           </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TicketCard({
+  ticket,
+  loading,
+  onCheckIn,
+  onUndoCheckIn,
+}: {
+  ticket: OrderTicketPreview;
+  loading: boolean;
+  onCheckIn: () => void;
+  onUndoCheckIn: () => void;
+}) {
+  const isRedeemed = ticket.status === 'REDEEMED';
+  const isValid = ticket.status === 'VALID';
+  const isInactive = ticket.status === 'EXPIRED' || ticket.status === 'VOIDED';
+
+  const borderColor = isRedeemed
+    ? 'border-green-400 dark:border-green-600'
+    : isValid
+      ? 'border-gray-200 dark:border-slate-600'
+      : 'border-red-300 dark:border-red-700';
+
+  const bgColor = isRedeemed
+    ? 'bg-green-50 dark:bg-green-900/10'
+    : isValid
+      ? 'bg-white dark:bg-slate-800'
+      : 'bg-red-50 dark:bg-red-900/10';
+
+  return (
+    <div className={`rounded-xl border-2 ${borderColor} ${bgColor} p-4 mb-3`}>
+      <div className="flex items-center gap-2 mb-3">
+        {/* Status badge */}
+        {isValid && (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300">
+            Active
+          </span>
+        )}
+        {isRedeemed && (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+            Checked in
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+            </svg>
+          </span>
+        )}
+        {ticket.status === 'EXPIRED' && (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">
+            Expired
+          </span>
+        )}
+        {ticket.status === 'VOIDED' && (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">
+            Voided
+          </span>
+        )}
+      </div>
+
+      <p className="text-sm font-medium text-gray-500 dark:text-slate-400 mb-1">
+        {ticket.priceTierName}
+      </p>
+      <p className="text-base font-semibold text-gray-900 dark:text-white">
+        {ticket.contactName}
+      </p>
+      <p className="text-sm text-gray-500 dark:text-slate-400">{ticket.contactEmail}</p>
+      <p className="text-xs text-gray-400 dark:text-slate-500 font-mono mt-1">
+        Confirmation #: {ticket.barcode}
+      </p>
+
+      {isRedeemed && ticket.redeemedAt && (
+        <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+          Checked in at {new Date(ticket.redeemedAt).toLocaleTimeString()}
+        </p>
+      )}
+
+      {/* Action buttons */}
+      {!isInactive && (
+        <div className="mt-3">
+          {isValid && (
+            <button
+              onClick={onCheckIn}
+              disabled={loading}
+              className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white font-semibold py-3 px-4 rounded-lg transition text-base"
+            >
+              {loading ? 'Checking In...' : 'Check In'}
+            </button>
+          )}
+          {isRedeemed && (
+            <button
+              onClick={onUndoCheckIn}
+              disabled={loading}
+              className="w-full border border-gray-300 dark:border-slate-600 text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-50 font-medium py-2 px-4 rounded-lg transition text-sm"
+            >
+              {loading ? 'Undoing...' : 'Undo Check-In'}
+            </button>
+          )}
         </div>
       )}
     </div>

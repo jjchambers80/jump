@@ -241,5 +241,26 @@ export interface RedemptionError {
   error?: string;
 }
 
+export interface OrderTicketPreview {
+  ticketId: string;
+  barcode: string;
+  ticketNumber: number;
+  status: 'VALID' | 'REDEEMED' | 'EXPIRED' | 'VOIDED';
+  priceTierName: string;
+  contactName: string;
+  contactEmail: string;
+  redeemedAt: string | null;
+}
+
+export interface OrderScanResult {
+  scannedTicketId: string;
+  orderRef: string;
+  eventName: string;
+  eventDate: string;
+  eventId: string;
+  totalTickets: number;
+  tickets: OrderTicketPreview[];
+}
+
 export const api = new ApiClient();
 export default api;
