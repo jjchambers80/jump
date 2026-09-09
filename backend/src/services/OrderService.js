@@ -12,6 +12,22 @@ import feeService from './FeeService.js';
 
 class OrderService {
   /**
+   * Get the scannable QR payload for a ticket.
+   * If stored value is already jump:// format, use it directly.
+   * If stored value is legacy JWT, regenerate as jump:// format.
+   */
+  _getQrPayload(ticket, eventId) {
+    if (ticket.qrCodeJwt && qrService.isJumpPayload(ticket.qrCodeJwt)) {
+      return ticket.qrCodeJwt;
+    }
+    const eid = ticket.eventId || eventId;
+    if (ticket.barcode && eid) {
+      return qrService.generateQRPayload(ticket.id, eid, ticket.barcode);
+    }
+    return ticket.qrCodeJwt || null;
+  }
+
+  /**
    * Generate a unique order reference (JMP-XXXXXX).
    * Uses alphanumeric uppercase characters (no 0/O/1/I).
    *
@@ -692,13 +708,14 @@ class OrderService {
   // ─── Formatters ─────────────────────────────────────────
 
   async _formatOrderDetail(order) {
-    // Generate QR code data URL images from JWT tokens
+    // Generate QR code images using short jump:// payload for easy scanning
     const tickets = [];
     for (const t of order.tickets || []) {
       let qrCodeDataUrl = null;
-      if (t.qrCodeJwt) {
+      const qrPayload = this._getQrPayload(t, order.eventId);
+      if (qrPayload) {
         try {
-          qrCodeDataUrl = await qrService.generateQRCodeImage(t.qrCodeJwt);
+          qrCodeDataUrl = await qrService.generateQRCodeImage(qrPayload);
         } catch (err) {
           logger.warn('Failed to generate QR image for order detail', {
             ticketId: t.id,

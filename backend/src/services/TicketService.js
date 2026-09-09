@@ -10,6 +10,23 @@ import { NotFoundError, ConflictError, ValidationError } from '../middleware/err
 
 class TicketService {
   /**
+   * Get the scannable QR payload for a ticket.
+   * If stored value is already jump:// format, use it directly.
+   * If stored value is legacy JWT, regenerate as jump:// format.
+   */
+  _getQrPayload(ticket) {
+    if (ticket.qrCodeJwt && qrService.isJumpPayload(ticket.qrCodeJwt)) {
+      return ticket.qrCodeJwt;
+    }
+    // Regenerate as short jump:// payload (needs ticketId, eventId, barcode)
+    if (ticket.barcode && ticket.eventId) {
+      return qrService.generateQRPayload(ticket.id, ticket.eventId, ticket.barcode);
+    }
+    // Fallback: use stored value as-is (legacy JWT)
+    return ticket.qrCodeJwt || null;
+  }
+
+  /**
    * Create individual Ticket records for a completed order.
    * Called by PaymentService.handleCheckoutCompleted() after successful payment.
    *
@@ -570,11 +587,12 @@ class TicketService {
       throw new NotFoundError('Ticket not found');
     }
 
-    // Generate QR code image
+    // Generate QR code image using short jump:// payload for easy scanning
     let qrCodeImage = null;
-    if (ticket.qrCodeJwt) {
+    const qrPayload = this._getQrPayload(ticket);
+    if (qrPayload) {
       try {
-        qrCodeImage = await qrService.generateQRCodeImage(ticket.qrCodeJwt);
+        qrCodeImage = await qrService.generateQRCodeImage(qrPayload);
       } catch (err) {
         logger.warn('Failed to generate QR image', { ticketId, error: err.message });
       }
@@ -781,12 +799,12 @@ class TicketService {
   // ─── Formatters ───
 
   async _formatTicketDetail(ticket) {
-    // Generate a real QR code data URL image from the JWT
+    // Generate QR code image using short jump:// payload for easy scanning
     let qrCode = null;
-    if (ticket.qrCodeJwt) {
+    const qrPayload = this._getQrPayload(ticket);
+    if (qrPayload) {
       try {
-        const { default: qrService } = await import('./QRService.js');
-        qrCode = await qrService.generateQRCodeImage(ticket.qrCodeJwt);
+        qrCode = await qrService.generateQRCodeImage(qrPayload);
       } catch (err) {
         logger.warn('Failed to generate QR image for ticket detail', {
           ticketId: ticket.id,
