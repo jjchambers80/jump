@@ -25,6 +25,7 @@ import organizationsRouter from './routes/organizations.js';
 import venuesRouter, { orgVenuesRouter } from './routes/venues.js';
 import ordersRouter, { eventOrdersRouter } from './routes/orders.js';
 import usersRouter from './routes/users.js';
+import imagesRouter from './routes/images.js';
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -100,6 +101,7 @@ app.use('/orders', ordersRouter);
 app.use('/organizations/:orgId/events/:eventId/orders', eventOrdersRouter);
 app.use('/tickets', ticketsRouter);
 app.use('/users', usersRouter);
+app.use('/images', imagesRouter);
 app.use('/webhooks', webhooksRouter);
 
 // Error handling (must be last)

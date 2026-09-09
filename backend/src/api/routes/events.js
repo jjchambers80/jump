@@ -10,7 +10,8 @@ import express from 'express';
 import eventService from '../../services/EventService.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireOrganizer } from '../../middleware/rbac.js';
-import { getLogoUrl, uploadLogo } from '../../middleware/logoUpload.js';
+import { uploadImage } from '../../middleware/imageUpload.js';
+import imageService from '../../services/ImageService.js';
 import { validateCreateEvent, validateUpdateEvent } from '../validators/eventValidators.js';
 
 // ── Public routes (mounted at /events) ──
@@ -152,16 +153,26 @@ orgRouter.post(
   '/:eventId/logo',
   requireAuth,
   requireOrganizer,
-  uploadLogo,
+  uploadImage,
   async (req, res, next) => {
     try {
       const { orgId, eventId } = req.params;
       if (!req.file) {
         return res.status(400).json({ message: 'No file uploaded' });
       }
-      const logoUrl = getLogoUrl(req.file.filename);
-      const result = await eventService.updateEvent(orgId, eventId, { logoUrl });
-      res.json(result);
+
+      const image = await imageService.processUpload(
+        req.file.buffer,
+        req.file.originalname,
+        req.file.mimetype,
+        'event_logo'
+      );
+
+      const result = await eventService.updateEvent(orgId, eventId, {
+        logoUrl: image.urls.original,
+        imageId: image.id,
+      });
+      res.json({ ...result, image });
     } catch (error) {
       next(error);
     }
@@ -175,7 +186,7 @@ orgRouter.post(
 orgRouter.delete('/:eventId/logo', requireAuth, requireOrganizer, async (req, res, next) => {
   try {
     const { orgId, eventId } = req.params;
-    const result = await eventService.updateEvent(orgId, eventId, { logoUrl: null });
+    const result = await eventService.updateEvent(orgId, eventId, { logoUrl: null, imageId: null });
     res.json(result);
   } catch (error) {
     next(error);

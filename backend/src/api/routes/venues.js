@@ -9,7 +9,8 @@ import { requireOrganizer } from '../../middleware/rbac.js';
 import { validateCreateVenue, validateUpdateVenue } from '../validators/venueValidators.js';
 import venueService from '../../services/VenueService.js';
 import { ForbiddenError, NotFoundError } from '../../middleware/errorHandler.js';
-import { getLogoUrl, removeLocalLogo, uploadLogo } from '../../middleware/logoUpload.js';
+import { uploadImage } from '../../middleware/imageUpload.js';
+import imageService from '../../services/ImageService.js';
 
 /**
  * Verifies the authenticated user belongs to the org in :orgId.
@@ -105,34 +106,40 @@ orgRouter.patch('/:id', requireAuth, requireOrganizer, verifyOrgOwnership, valid
  * DELETE /organizations/:orgId/venues/:id
  * Delete a venue (organizer/admin, FR-010: blocked if events exist)
  */
-orgRouter.post('/:id/logo', requireAuth, requireOrganizer, verifyOrgOwnership, uploadLogo, async (req, res, next) => {
+orgRouter.post('/:id/logo', requireAuth, requireOrganizer, verifyOrgOwnership, uploadImage, async (req, res, next) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded' });
     }
 
-    const logoUrl = getLogoUrl(req.file.filename);
-    const { venue, previousLogoUrl } = await venueService.setVenueLogo(
+    const image = await imageService.processUpload(
+      req.file.buffer,
+      req.file.originalname,
+      req.file.mimetype,
+      'venue_logo'
+    );
+
+    const logoUrl = image.urls.original;
+    const { venue } = await venueService.setVenueLogo(
       req.params.orgId,
       req.params.id,
-      logoUrl
+      logoUrl,
+      image.id
     );
-    await removeLocalLogo(previousLogoUrl);
-    res.json(venue);
+    res.json({ ...venue, image });
   } catch (error) {
-    if (req.file) await removeLocalLogo(getLogoUrl(req.file.filename));
     next(error);
   }
 });
 
 orgRouter.delete('/:id/logo', requireAuth, requireOrganizer, verifyOrgOwnership, async (req, res, next) => {
   try {
-    const { venue, previousLogoUrl } = await venueService.setVenueLogo(
+    const { venue } = await venueService.setVenueLogo(
       req.params.orgId,
       req.params.id,
+      null,
       null
     );
-    await removeLocalLogo(previousLogoUrl);
     res.json(venue);
   } catch (error) {
     next(error);

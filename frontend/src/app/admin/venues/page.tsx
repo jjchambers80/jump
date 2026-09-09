@@ -4,12 +4,13 @@
 // Moved from dashboard/venues/page.tsx
 // AdminRoute guard provided by admin layout.tsx
 
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import api from '@/services/api';
 import { resolveAssetUrl } from '@/lib/assets';
 import { StateSelect } from '@/components/StateSelect';
 import { useOrg } from '@/components/OrgContext';
+import ImageUploader from '@/components/ImageUploader';
 
 interface Venue {
   id: string;
@@ -61,7 +62,6 @@ export default function VenuesPage() {
   const [logoUploading, setLogoUploading] = useState(false);
   const [selectedLogo, setSelectedLogo] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchVenues = useCallback(async () => {
     if (!selectedOrgId) return;
@@ -120,16 +120,6 @@ export default function VenuesPage() {
   };
 
   const handleLogoSelect = (file: File) => {
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    if (!allowedTypes.includes(file.type)) {
-      setError('Only JPG, PNG, GIF, and WebP images are allowed');
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setError('Logo must be 5 MB or smaller');
-      return;
-    }
-    setError(null);
     setSelectedLogo(file);
     setLogoPreview(URL.createObjectURL(file));
   };
@@ -340,60 +330,12 @@ export default function VenuesPage() {
             <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
               Venue Logo
             </label>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              {logoPreview ? (
-                <img
-                  src={logoPreview}
-                  alt="Venue logo preview"
-                  data-testid="venue-logo-preview"
-                  className="h-24 w-24 rounded-lg border border-gray-200 bg-white object-contain p-1 dark:border-slate-600"
-                />
-              ) : (
-                <div
-                  data-testid="venue-logo-preview-fallback"
-                  className="flex h-24 w-24 items-center justify-center rounded-lg bg-gray-100 text-2xl font-bold text-gray-500 dark:bg-slate-700 dark:text-slate-300"
-                  aria-label="No venue logo selected"
-                  role="img"
-                >
-                  {formData.name.trim().charAt(0).toUpperCase() || 'V'}
-                </div>
-              )}
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={logoUploading}
-                  className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-50"
-                >
-                  {logoPreview ? 'Replace logo' : 'Choose logo'}
-                </button>
-                {logoPreview && (
-                  <button
-                    type="button"
-                    onClick={handleLogoRemove}
-                    disabled={logoUploading}
-                    className="rounded-md border border-red-300 dark:border-red-700 px-3 py-2 text-sm font-medium text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
-                  >
-                    Remove logo
-                  </button>
-                )}
-              </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/gif,image/webp"
-                className="hidden"
-                data-testid="venue-logo-input"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) handleLogoSelect(file);
-                  event.target.value = '';
-                }}
-              />
-            </div>
-            <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">
-              JPG, PNG, GIF, or WebP up to 5 MB.
-            </p>
+            <ImageUploader
+              currentPreview={logoPreview}
+              onFileSelect={handleLogoSelect}
+              onRemove={handleLogoRemove}
+              uploading={logoUploading}
+            />
           </div>
 
           <div className="flex gap-3">

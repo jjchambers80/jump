@@ -78,6 +78,38 @@ model VerificationToken {
 }
 
 // ──────────────────────────────────────────────
+// Content-Addressed File Storage
+// ──────────────────────────────────────────────
+
+model File {
+  id           String   @id @default(cuid())
+  hash         String   @unique
+  mimeType     String
+  sizeBytes    Int
+  originalName String?
+  createdAt    DateTime @default(now())
+
+  images Image[]
+}
+
+model Image {
+  id        String   @id @default(cuid())
+  fileId    String
+  usageType String
+  focalX    Float    @default(0.5)
+  focalY    Float    @default(0.5)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  file   File    @relation(fields: [fileId], references: [id])
+  venues Venue[]
+  events Event[]
+
+  @@index([fileId])
+  @@index([usageType])
+}
+
+// ──────────────────────────────────────────────
 // Domain Models
 // ──────────────────────────────────────────────
 
@@ -130,6 +162,7 @@ model Venue {
   state          String?
   postalCode     String?
   logoUrl        String?
+  imageId        String?
   timezone       String       @default("America/New_York")
   isPublic       Boolean      @default(true)
 
@@ -137,6 +170,7 @@ model Venue {
   updatedAt      DateTime     @updatedAt
 
   organization   Organization @relation(fields: [organizationId], references: [id])
+  image          Image?       @relation(fields: [imageId], references: [id])
   events         Event[]
 
   @@index([organizationId])
@@ -167,6 +201,7 @@ model Event {
   name        String
   description String?
   logoUrl     String?
+  imageId     String?
   date        DateTime
   capacity    Int
   category    String?
@@ -177,6 +212,7 @@ model Event {
   updatedAt   DateTime    @updatedAt
 
   venue       Venue       @relation(fields: [venueId], references: [id])
+  image       Image?      @relation(fields: [imageId], references: [id])
   priceTiers  PriceTier[]
   orders      Order[]
   tickets     Ticket[]

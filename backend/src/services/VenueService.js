@@ -151,16 +151,19 @@ class VenueService {
   }
 
   /** Set or clear a venue logo after verifying organization ownership. */
-  async setVenueLogo(orgId, id, logoUrl) {
+  async setVenueLogo(orgId, id, logoUrl, imageId) {
     const existing = await prisma.venue.findFirst({
       where: { id, organizationId: orgId },
-      select: { logoUrl: true },
+      select: { logoUrl: true, imageId: true },
     });
     if (!existing) {
       throw new NotFoundError('Venue not found');
     }
 
-    const venue = await prisma.venue.update({ where: { id }, data: { logoUrl } });
+    const data = { logoUrl };
+    if (imageId !== undefined) data.imageId = imageId;
+
+    const venue = await prisma.venue.update({ where: { id }, data });
 
     logger.info('Venue logo updated', {
       event: 'venue_logo_updated',

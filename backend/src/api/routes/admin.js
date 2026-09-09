@@ -13,6 +13,7 @@ import organizationService from '../../services/OrganizationService.js';
 import organizationPersonService from '../../services/OrganizationPersonService.js';
 import orderService from '../../services/OrderService.js';
 import ticketService from '../../services/TicketService.js';
+import imageService from '../../services/ImageService.js';
 
 const router = express.Router();
 
@@ -456,6 +457,19 @@ router.get('/orders/:orderId', async (req, res, next) => {
     }
 
     res.json(order);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /admin/images/cleanup
+ * Delete orphaned file records with no image references.
+ */
+router.post('/images/cleanup', async (req, res, next) => {
+  try {
+    const deleted = await imageService.cleanupOrphans();
+    res.json({ deleted });
   } catch (error) {
     next(error);
   }

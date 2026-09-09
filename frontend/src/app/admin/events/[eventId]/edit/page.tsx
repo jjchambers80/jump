@@ -4,10 +4,11 @@
 // Loads existing event data and allows updating fields
 // Uses PATCH /organizations/:orgId/events/:eventId
 
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import api from '@/services/api';
 import { resolveAssetUrl } from '@/lib/assets';
+import ImageUploader from '@/components/ImageUploader';
 
 interface Venue {
   id: string;
@@ -138,9 +139,6 @@ export default function EditEventPage() {
   const [category, setCategory] = useState('');
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
-  const [dragOver, setDragOver] = useState(false);
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [priceTiers, setPriceTiers] = useState<TierFormInput[]>([]);
   const [tiersInitialized, setTiersInitialized] = useState(false);
@@ -204,16 +202,6 @@ export default function EditEventPage() {
 
   const handleLogoUpload = async (file: File) => {
     if (!orgId) return;
-    const maxSize = 5 * 1024 * 1024;
-    if (file.size > maxSize) {
-      setError('Logo must be under 5MB');
-      return;
-    }
-    const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    if (!allowed.includes(file.type)) {
-      setError('Only image files (JPG, PNG, GIF, WebP) are allowed');
-      return;
-    }
     try {
       setLogoUploading(true);
       setError(null);
@@ -243,29 +231,6 @@ export default function EditEventPage() {
     } finally {
       setLogoUploading(false);
     }
-  };
-
-  const onDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) handleLogoUpload(file);
-  };
-
-  const onDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(true);
-  };
-
-  const onDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-  };
-
-  const onFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) handleLogoUpload(file);
-    e.target.value = '';
   };
 
   // Tier helpers
@@ -481,90 +446,11 @@ export default function EditEventPage() {
             {/* Logo Upload */}
             <div className="md:col-span-2">
               <label className={labelClass}>Event Logo</label>
-              {logoSrc ? (
-                <div className="flex items-start gap-4">
-                  <div className="relative group">
-                    <img
-                      src={logoSrc}
-                      alt="Event logo"
-                      className="h-32 w-32 object-contain rounded-lg border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-900"
-                    />
-                    {logoUploading && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-lg">
-                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-col gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={logoUploading}
-                      className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-50"
-                    >
-                      Replace
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleLogoRemove}
-                      disabled={logoUploading}
-                      className="rounded-md border border-red-300 dark:border-red-700 px-3 py-1.5 text-xs font-medium text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  onDrop={onDrop}
-                  onDragOver={onDragOver}
-                  onDragLeave={onDragLeave}
-                  className={`relative cursor-pointer rounded-lg border-2 border-dashed p-6 text-center transition-colors ${
-                    dragOver
-                      ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
-                      : 'border-gray-300 dark:border-slate-600 hover:border-indigo-400 dark:hover:border-indigo-500 hover:bg-gray-50 dark:hover:bg-slate-700/50'
-                  }`}
-                >
-                  {logoUploading ? (
-                    <div className="flex flex-col items-center">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-2" />
-                      <p className="text-sm text-gray-500 dark:text-slate-400">Uploading…</p>
-                    </div>
-                  ) : (
-                    <>
-                      <svg
-                        className="mx-auto h-10 w-10 text-gray-400 dark:text-slate-500"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={1.5}
-                          d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                        />
-                      </svg>
-                      <p className="mt-2 text-sm text-gray-600 dark:text-slate-400">
-                        <span className="font-semibold text-indigo-600 dark:text-indigo-400">
-                          Click to upload
-                        </span>{' '}
-                        or drag and drop
-                      </p>
-                      <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">
-                        PNG, JPG, GIF, WebP up to 5MB
-                      </p>
-                    </>
-                  )}
-                </div>
-              )}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={onFileSelect}
-                className="hidden"
+              <ImageUploader
+                currentPreview={logoSrc}
+                onFileSelect={handleLogoUpload}
+                onRemove={handleLogoRemove}
+                uploading={logoUploading}
               />
             </div>
 

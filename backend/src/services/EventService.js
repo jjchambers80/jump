@@ -178,6 +178,10 @@ class EventService {
       updateData.logoUrl = updates.logoUrl;
     }
 
+    if (updates.imageId !== undefined) {
+      updateData.imageId = updates.imageId;
+    }
+
     const event = await prisma.event.update({
       where: { id: eventId },
       data: updateData,
