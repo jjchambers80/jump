@@ -9,11 +9,23 @@ import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import api from '@/services/api';
 import { resolveAssetUrl } from '@/lib/assets';
 import ImageUploader from '@/components/ImageUploader';
+import { TierCard, TierEditDialog, type TierFormData } from '@/components/TierEditDialog';
 
 interface Venue {
   id: string;
   name: string;
   address: string;
+}
+
+interface TierPreset {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number;
+  minPerOrder: number | null;
+  maxPerOrder: number | null;
+  visibility: 'PUBLIC' | 'PRIVATE' | 'HIDDEN';
+  isRefundable: boolean;
 }
 
 interface PriceTier {
@@ -128,6 +140,8 @@ export default function EditEventPage() {
 
   const [venues, setVenues] = useState<Venue[]>([]);
   const [venuesLoading, setVenuesLoading] = useState(false);
+  const [presets, setPresets] = useState<TierPreset[]>([]);
+  const [showPresetMenu, setShowPresetMenu] = useState(false);
   const [eventData, setEventData] = useState<EventDetail | null>(null);
   const [loadingEvent, setLoadingEvent] = useState(true);
 
@@ -142,6 +156,8 @@ export default function EditEventPage() {
 
   const [priceTiers, setPriceTiers] = useState<TierFormInput[]>([]);
   const [tiersInitialized, setTiersInitialized] = useState(false);
+
+  const [editingTierKey, setEditingTierKey] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -196,9 +212,48 @@ export default function EditEventPage() {
     }
   }, [orgId]);
 
+  const fetchPresets = useCallback(async () => {
+    if (!orgId) return;
+    try {
+      const data = await api.get<{ tierPresets: TierPreset[] }>(
+        `/organizations/${orgId}/tier-presets`
+      );
+      setPresets(data.tierPresets);
+    } catch {
+      // Non-critical — presets are optional
+    }
+  }, [orgId]);
+
   useEffect(() => {
     fetchVenues();
-  }, [fetchVenues]);
+    fetchPresets();
+  }, [fetchVenues, fetchPresets]);
+
+  const addTierFromPreset = (preset: TierPreset) => {
+    const key = crypto.randomUUID();
+    setPriceTiers([
+      ...priceTiers,
+      {
+        key,
+        isNew: true,
+        name: preset.name,
+        description: preset.description || '',
+        price: String(preset.price),
+        quantityTotal: '',
+        quantitySold: 0,
+        quantityReserved: 0,
+        minPerOrder: preset.minPerOrder ? String(preset.minPerOrder) : '1',
+        maxPerOrder: preset.maxPerOrder ? String(preset.maxPerOrder) : '10',
+        saleStartDate: '',
+        saleEndDate: '',
+        visibility: preset.visibility,
+        isRefundable: preset.isRefundable,
+        isActive: true,
+      },
+    ]);
+    setShowPresetMenu(false);
+    setEditingTierKey(key);
+  };
 
   const handleLogoUpload = async (file: File) => {
     if (!orgId) return;
@@ -234,7 +289,11 @@ export default function EditEventPage() {
   };
 
   // Tier helpers
-  const addTier = () => setPriceTiers([...priceTiers, newTierForm()]);
+  const addTier = () => {
+    const tier = newTierForm();
+    setPriceTiers([...priceTiers, tier]);
+    setEditingTierKey(tier.key);
+  };
   const removeTier = (key: string) => {
     const tier = priceTiers.find((t) => t.key === key);
     // Only allow removing new tiers or tiers with no sales
@@ -251,6 +310,14 @@ export default function EditEventPage() {
     [newTiers[index], newTiers[swap]] = [newTiers[swap], newTiers[index]];
     setPriceTiers(newTiers);
   };
+
+  const saveTierEdit = (updated: TierFormData) => {
+    setPriceTiers(priceTiers.map((t) => (t.key === updated.key ? { ...t, ...updated } : t)));
+    setEditingTierKey(null);
+  };
+
+  const editingTier = editingTierKey ? priceTiers.find((t) => t.key === editingTierKey) : null;
+  const editingTierIndex = editingTierKey ? priceTiers.findIndex((t) => t.key === editingTierKey) : -1;
 
   const totalTierQuantity = priceTiers.reduce(
     (sum, t) => sum + (parseInt(t.quantityTotal) || 0),
@@ -546,13 +613,43 @@ export default function EditEventPage() {
         <div>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Price Tiers</h2>
-            <button
-              type="button"
-              onClick={addTier}
-              className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500"
-            >
-              + Add Tier
-            </button>
+            <div className="flex items-center gap-2">
+              {presets.length > 0 && (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowPresetMenu(!showPresetMenu)}
+                    className="rounded-md border border-indigo-300 dark:border-indigo-700 px-3 py-1.5 text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+                  >
+                    Add from Preset
+                  </button>
+                  {showPresetMenu && (
+                    <div className="absolute right-0 z-10 mt-1 w-56 rounded-md border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 shadow-lg">
+                      {presets.map((preset) => (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => addTierFromPreset(preset)}
+                          className="block w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700"
+                        >
+                          <span className="font-medium">{preset.name}</span>
+                          <span className="ml-2 text-gray-400 dark:text-slate-500">
+                            {preset.price === 0 ? 'Free' : `$${preset.price.toFixed(2)}`}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={addTier}
+                className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500"
+              >
+                + Add Tier
+              </button>
+            </div>
           </div>
 
           {capacityExceeded && (
@@ -569,182 +666,30 @@ export default function EditEventPage() {
             </p>
           )}
 
-          <div className="space-y-4">
+          <div className="space-y-2">
             {priceTiers.map((tier, index) => (
-              <div
+              <TierCard
                 key={tier.key}
-                className="rounded-lg border border-gray-200 dark:border-slate-600 p-4"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-500 dark:text-slate-400">
-                      Tier {index + 1}
-                    </span>
-                    {!tier.isNew && tier.quantitySold > 0 && (
-                      <span className="text-xs text-gray-400 dark:text-slate-500">
-                        ({tier.quantitySold} sold)
-                      </span>
-                    )}
-                    {tier.isNew && (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400">
-                        new
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => moveTier(index, 'up')}
-                      disabled={index === 0}
-                      className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                      title="Move up"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => moveTier(index, 'down')}
-                      disabled={index === priceTiers.length - 1}
-                      className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                      title="Move down"
-                    >
-                      ↓
-                    </button>
-                    {(tier.isNew || tier.quantitySold === 0) && (
-                      <button
-                        type="button"
-                        onClick={() => removeTier(tier.key)}
-                        className="p-1 text-red-400 hover:text-red-600"
-                        title="Remove tier"
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <div className="col-span-2">
-                    <label className={labelClass}>Tier Name *</label>
-                    <input
-                      type="text"
-                      value={tier.name}
-                      onChange={(e) => updateTier(tier.key, 'name', e.target.value)}
-                      placeholder="e.g. General Admission"
-                      className={inputClass}
-                      required
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className={labelClass}>Description</label>
-                    <textarea
-                      value={tier.description}
-                      onChange={(e) => updateTier(tier.key, 'description', e.target.value)}
-                      placeholder="Brief description (optional)"
-                      maxLength={500}
-                      rows={2}
-                      className={inputClass}
-                    />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Price ($) *</label>
-                    <input
-                      type="number"
-                      value={tier.price}
-                      onChange={(e) => updateTier(tier.key, 'price', e.target.value)}
-                      placeholder="0.00"
-                      min={0}
-                      step="0.01"
-                      className={inputClass}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Quantity *</label>
-                    <input
-                      type="number"
-                      value={tier.quantityTotal}
-                      onChange={(e) => updateTier(tier.key, 'quantityTotal', e.target.value)}
-                      placeholder="100"
-                      min={tier.isNew ? 1 : tier.quantitySold + tier.quantityReserved}
-                      className={inputClass}
-                      required
-                    />
-                    {!tier.isNew && (tier.quantitySold > 0 || tier.quantityReserved > 0) && (
-                      <p className="mt-0.5 text-xs text-gray-400 dark:text-slate-500">
-                        Min: {tier.quantitySold + tier.quantityReserved} (sold + reserved)
-                      </p>
-                    )}
-                  </div>
-                  <div>
-                    <label className={labelClass}>Min / Order</label>
-                    <input
-                      type="number"
-                      value={tier.minPerOrder}
-                      onChange={(e) => updateTier(tier.key, 'minPerOrder', e.target.value)}
-                      min={1}
-                      className={inputClass}
-                    />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Max / Order</label>
-                    <input
-                      type="number"
-                      value={tier.maxPerOrder}
-                      onChange={(e) => updateTier(tier.key, 'maxPerOrder', e.target.value)}
-                      min={1}
-                      className={inputClass}
-                    />
-                  </div>
-                </div>
-
-                {/* Sale Window & Visibility */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3 pt-3 border-t border-gray-100 dark:border-slate-700">
-                  <div>
-                    <label className={labelClass}>Sale Start</label>
-                    <input
-                      type="datetime-local"
-                      value={tier.saleStartDate}
-                      onChange={(e) => updateTier(tier.key, 'saleStartDate', e.target.value)}
-                      className={inputClass}
-                    />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Sale End</label>
-                    <input
-                      type="datetime-local"
-                      value={tier.saleEndDate}
-                      onChange={(e) => updateTier(tier.key, 'saleEndDate', e.target.value)}
-                      className={inputClass}
-                    />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Visibility</label>
-                    <select
-                      value={tier.visibility}
-                      onChange={(e) => updateTier(tier.key, 'visibility', e.target.value)}
-                      className={inputClass}
-                    >
-                      <option value="PUBLIC">Public</option>
-                      <option value="PRIVATE">Private</option>
-                      <option value="HIDDEN">Hidden</option>
-                    </select>
-                  </div>
-                  <div className="flex items-end pb-1">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={tier.isRefundable}
-                        onChange={(e) => updateTier(tier.key, 'isRefundable', e.target.checked)}
-                        className="rounded border-gray-300 dark:border-slate-600 text-indigo-600 focus:ring-indigo-500"
-                      />
-                      <span className="text-sm text-gray-700 dark:text-slate-300">Refundable</span>
-                    </label>
-                  </div>
-                </div>
-              </div>
+                tier={tier}
+                index={index}
+                total={priceTiers.length}
+                canDelete={tier.isNew || tier.quantitySold === 0}
+                deleteBlockedReason={!tier.isNew && tier.quantitySold > 0 ? "Can't delete a tier that has tickets sold" : undefined}
+                onEdit={() => setEditingTierKey(tier.key)}
+                onMove={(dir) => moveTier(index, dir)}
+                onDelete={() => removeTier(tier.key)}
+              />
             ))}
           </div>
+
+          {editingTier && (
+            <TierEditDialog
+              tier={editingTier}
+              index={editingTierIndex}
+              onSave={saveTierEdit}
+              onCancel={() => setEditingTierKey(null)}
+            />
+          )}
         </div>
 
         {/* Submit */}
