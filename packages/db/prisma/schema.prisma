@@ -132,9 +132,10 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  venues    Venue[]
-  users     User[]
-  people    OrganizationPerson[]
+  venues      Venue[]
+  users       User[]
+  people      OrganizationPerson[]
+  tierPresets TierPreset[]
 }
 
 model OrganizationPerson {
@@ -249,6 +250,26 @@ model PriceTier {
 
   @@index([eventId])
   @@index([eventId, isActive])
+}
+
+model TierPreset {
+  id             String         @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+  price          Decimal        @db.Decimal(10, 2)
+  displayOrder   Int            @default(0)
+  minPerOrder    Int?
+  maxPerOrder    Int?
+  visibility     TierVisibility @default(PUBLIC)
+  isRefundable   Boolean        @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
 }
 
 model Order {
