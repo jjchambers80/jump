@@ -73,7 +73,7 @@ export default function ImageUploader({
           <img
             src={currentPreview}
             alt={`${label} preview`}
-            className="mx-auto mb-3 h-24 w-24 rounded-lg object-cover"
+            className="mx-auto mb-3 aspect-square max-h-48 rounded-lg object-contain"
           />
         ) : (
           <div className="mb-3 flex justify-center">

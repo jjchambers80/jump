@@ -18,10 +18,11 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/admin/dashboard' },
-  { label: 'Organizations', href: '/admin/organizations' },
   { label: 'Venues', href: '/admin/venues' },
   { label: 'Events', href: '/admin/events' },
+  { label: 'Tickets', href: '/admin/tickets' },
   { label: 'Orders', href: '/admin/orders' },
+  { label: 'Customers', href: '/admin/customers' },
   { label: 'Check In', href: '/admin/orders/scan' },
   { label: 'Analytics', href: '/admin/analytics' },
   { label: 'Users', href: '/admin/users', roles: ['ADMIN', 'SYSTEM_ADMIN'] },
