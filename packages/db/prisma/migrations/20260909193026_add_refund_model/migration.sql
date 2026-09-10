@@ -36,6 +36,9 @@ CREATE INDEX "Refund_ticketId_idx" ON "Refund"("ticketId");
 -- CreateIndex
 CREATE INDEX "Refund_stripeRefundId_idx" ON "Refund"("stripeRefundId");
 
+-- CreateIndex
+CREATE UNIQUE INDEX "Refund_stripeRefundId_key" ON "Refund"("stripeRefundId");
+
 -- AddForeignKey
 ALTER TABLE "Refund" ADD CONSTRAINT "Refund_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "Order"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
