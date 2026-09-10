@@ -4,7 +4,7 @@
 // Loads existing event data and allows updating fields
 // Uses PATCH /organizations/:orgId/events/:eventId
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, Suspense } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import api from '@/services/api';
 import { resolveAssetUrl } from '@/lib/assets';
@@ -131,7 +131,7 @@ function toDatetimeLocal(iso: string): string {
 }
 
 
-export default function EditEventPage() {
+function EditEventContent() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
@@ -711,5 +711,19 @@ export default function EditEventPage() {
         </div>
       </form>
     </div>
+  );
+}
+
+export default function EditEventPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center">
+          <p className="text-gray-500">Loading...</p>
+        </div>
+      }
+    >
+      <EditEventContent />
+    </Suspense>
   );
 }

@@ -149,8 +149,19 @@ class CustomerService {
    * @param {Object} updates - { note?, location?, emailSubscribed? }
    * @returns {Promise<Contact>}
    */
-  async updateCustomer(contactId, updates) {
-    const contact = await prisma.contact.findUnique({ where: { id: contactId } });
+  async updateCustomer(contactId, organizationId, updates) {
+    // Verify contact belongs to this org via completed orders
+    const contact = await prisma.contact.findFirst({
+      where: {
+        id: contactId,
+        orders: {
+          some: {
+            status: 'COMPLETED',
+            event: { venue: { organizationId } },
+          },
+        },
+      },
+    });
     if (!contact) {
       throw new NotFoundError('Customer not found');
     }

@@ -3,9 +3,11 @@
 // All endpoints org-scoped (requireAuth + requireOrganizer)
 
 import express from 'express';
+import { prisma } from '@jump/db';
 import tierPresetService from '../../services/TierPresetService.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireOrganizer } from '../../middleware/rbac.js';
+import { ForbiddenError } from '../../middleware/errorHandler.js';
 import {
   validateCreateTierPreset,
   validateUpdateTierPreset,
@@ -13,11 +15,27 @@ import {
 
 const router = express.Router({ mergeParams: true });
 
+const verifyOrgOwnership = async (req, res, next) => {
+  try {
+    if (req.user.role === 'SYSTEM_ADMIN') return next();
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { organizationId: true },
+    });
+    if (!user?.organizationId || user.organizationId !== req.params.orgId) {
+      throw new ForbiddenError('Access denied to this organization');
+    }
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
 /**
  * GET /organizations/:orgId/tier-presets
  * List all tier presets for an organization
  */
-router.get('/', requireAuth, requireOrganizer, async (req, res, next) => {
+router.get('/', requireAuth, requireOrganizer, verifyOrgOwnership, async (req, res, next) => {
   try {
     const { orgId } = req.params;
     const result = await tierPresetService.listPresets(orgId);
@@ -31,7 +49,7 @@ router.get('/', requireAuth, requireOrganizer, async (req, res, next) => {
  * GET /organizations/:orgId/tier-presets/:presetId
  * Get a single tier preset
  */
-router.get('/:presetId', requireAuth, requireOrganizer, async (req, res, next) => {
+router.get('/:presetId', requireAuth, requireOrganizer, verifyOrgOwnership, async (req, res, next) => {
   try {
     const { orgId, presetId } = req.params;
     const result = await tierPresetService.getPreset(orgId, presetId);
@@ -49,6 +67,7 @@ router.post(
   '/',
   requireAuth,
   requireOrganizer,
+  verifyOrgOwnership,
   validateCreateTierPreset,
   async (req, res, next) => {
     try {
@@ -69,6 +88,7 @@ router.patch(
   '/:presetId',
   requireAuth,
   requireOrganizer,
+  verifyOrgOwnership,
   validateUpdateTierPreset,
   async (req, res, next) => {
     try {
@@ -85,7 +105,7 @@ router.patch(
  * DELETE /organizations/:orgId/tier-presets/:presetId
  * Delete a tier preset
  */
-router.delete('/:presetId', requireAuth, requireOrganizer, async (req, res, next) => {
+router.delete('/:presetId', requireAuth, requireOrganizer, verifyOrgOwnership, async (req, res, next) => {
   try {
     const { orgId, presetId } = req.params;
     const result = await tierPresetService.deletePreset(orgId, presetId);

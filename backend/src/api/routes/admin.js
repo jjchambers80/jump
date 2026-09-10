@@ -695,8 +695,9 @@ router.get('/customers/:contactId', async (req, res, next) => {
 /** PATCH /admin/customers/:contactId — update note, location, emailSubscribed */
 router.patch('/customers/:contactId', async (req, res, next) => {
   try {
+    const scope = await resolveOrgScope(req.user.id, req.user.role);
     const { note, location, emailSubscribed } = req.body;
-    const updated = await customerService.updateCustomer(req.params.contactId, {
+    const updated = await customerService.updateCustomer(req.params.contactId, scope.organizationId, {
       note,
       location,
       emailSubscribed,
