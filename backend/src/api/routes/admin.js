@@ -15,6 +15,7 @@ import organizationPersonService from '../../services/OrganizationPersonService.
 import orderService from '../../services/OrderService.js';
 import ticketService from '../../services/TicketService.js';
 import refundService from '../../services/RefundService.js';
+import customerService from '../../services/CustomerService.js';
 import imageService from '../../services/ImageService.js';
 import emailService from '../../services/EmailService.js';
 import qrService from '../../services/QRService.js';
@@ -659,6 +660,48 @@ router.post('/tickets/scan-order', async (req, res, next) => {
     }
 
     res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** GET /admin/customers — list customers with search + pagination */
+router.get('/customers', async (req, res, next) => {
+  try {
+    const scope = await resolveOrgScope(req.user.id, req.user.role);
+    const { page, limit, search } = req.query;
+    const result = await customerService.getCustomersByOrganization(scope.organizationId, {
+      page,
+      limit,
+      search,
+    });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** GET /admin/customers/:contactId — single customer detail with order history */
+router.get('/customers/:contactId', async (req, res, next) => {
+  try {
+    const scope = await resolveOrgScope(req.user.id, req.user.role);
+    const result = await customerService.getCustomerById(req.params.contactId, scope.organizationId);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** PATCH /admin/customers/:contactId — update note, location, emailSubscribed */
+router.patch('/customers/:contactId', async (req, res, next) => {
+  try {
+    const { note, location, emailSubscribed } = req.body;
+    const updated = await customerService.updateCustomer(req.params.contactId, {
+      note,
+      location,
+      emailSubscribed,
+    });
+    res.json(updated);
   } catch (error) {
     next(error);
   }

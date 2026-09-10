@@ -180,8 +180,11 @@ model Venue {
 model Contact {
   id        String   @id @default(cuid())
   email     String   @unique
-  firstName String
-  lastName  String
+  firstName       String
+  lastName        String
+  location        String?
+  note            String?
+  emailSubscribed Boolean  @default(true)
 
   userId    String?
 
