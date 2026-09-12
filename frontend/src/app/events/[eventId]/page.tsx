@@ -10,6 +10,7 @@ import { api } from '../../../services/api';
 import { resolveAssetUrl } from '../../../lib/assets';
 import BrandScope from '../../../components/BrandScope';
 import CartLineItem from '../../../components/CartLineItem';
+import OrderTotals from '../../../components/OrderTotals';
 import ExpandCollapseAll from '../../../components/ExpandCollapseAll';
 import { computeOrderFees, computeTierAllInPrice, formatPrice } from '../../../lib/fees';
 import type { ThemeMode } from '@/lib/theme';
@@ -545,16 +546,11 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                 </div>
               )}
 
-              <div className="border-t border-gray-200 dark:border-slate-700 pt-4 mb-4">
-                <div className="flex justify-between">
-                  <span className="font-semibold text-gray-700 dark:text-slate-300">
-                    Total ({totalQuantity} {totalQuantity === 1 ? 'ticket' : 'tickets'})
-                  </span>
-                  <span className="text-xl font-bold text-gray-900 dark:text-slate-100">
-                    {formatPrice(totalAmount)}
-                  </span>
-                </div>
-              </div>
+              <OrderTotals
+                fees={cartFees}
+                totalLabel={`Total (${totalQuantity} ${totalQuantity === 1 ? 'ticket' : 'tickets'})`}
+                className="border-t border-gray-200 dark:border-slate-700 pt-4 mb-4"
+              />
 
               <button
                 onClick={handleProceedToCheckout}
@@ -658,14 +654,10 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                     />
                   ))}
 
-                  <div className="mt-3 pt-3 border-t border-gray-200 dark:border-slate-600">
-                    <div className="flex justify-between">
-                      <span className="font-bold text-gray-900 dark:text-slate-100">Total</span>
-                      <span className="text-xl font-bold text-gray-900 dark:text-slate-100">
-                        {formatPrice(totalAmount)}
-                      </span>
-                    </div>
-                  </div>
+                  <OrderTotals
+                    fees={cartFees}
+                    className="mt-3 pt-3 border-t border-gray-200 dark:border-slate-600"
+                  />
                 </div>
               )}
             </div>
