@@ -267,15 +267,32 @@ class ImageService {
   }
 
   /**
+   * Build the serving URL for one variant.
+   *
+   * Default: route through GET /images/:id/:hash/:variant so the backend
+   * streams bytes from storage. This works with a private bucket (Railway
+   * Buckets deny anonymous reads) and with local disk. Only when
+   * BUCKET_PUBLIC_URL is set (a CDN / public bucket) do we emit direct URLs.
+   */
+  servingUrl(image, variant) {
+    if (process.env.BUCKET_PUBLIC_URL) {
+      const hash = image.file.hash;
+      const key = variant === 'original'
+        ? originalKey(hash, image.file.mimeType)
+        : variantKey(variant, hash);
+      return this.storage.getPublicUrl(key);
+    }
+    return `/images/${image.id}/${image.file.hash}/${variant}`;
+  }
+
+  /**
    * Format image record for API response with serving URLs.
    */
   formatImageResponse(image) {
     const hash = image.file.hash;
-    const urls = {
-      original: this.storage.getPublicUrl(originalKey(hash, image.file.mimeType)),
-    };
+    const urls = { original: this.servingUrl(image, 'original') };
     for (const variant of Object.keys(VARIANTS)) {
-      urls[variant] = this.storage.getPublicUrl(variantKey(variant, hash));
+      urls[variant] = this.servingUrl(image, variant);
     }
 
     return {

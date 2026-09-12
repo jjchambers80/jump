@@ -23,6 +23,8 @@ Production deployment on Railway with two services (backend and frontend) and a 
 | `BACKEND_URL` | Internal Railway URL for backend service |
 | `NEXT_PUBLIC_API_URL` | Frontend env var pointing to the backend Railway domain |
 | `DATABASE_URL` | PostgreSQL connection string (provisioned by Railway) |
+| `BUCKET_NAME`, `BUCKET_ENDPOINT`, `BUCKET_ACCESS_KEY_ID`, `BUCKET_SECRET_ACCESS_KEY`, `BUCKET_REGION` | Railway Bucket credentials (auto-injected when the bucket is attached to the backend service). Selects `RemoteStorageBackend` for image uploads |
+| `BUCKET_PUBLIC_URL` | Optional. Leave unset — Railway Buckets deny anonymous reads, so images are served through the backend proxy `GET /images/:id/:hash/:variant` |
 
 All development environment variables are also required in production (e.g., `AUTH_SECRET`, `RESEND_API_KEY`, Stripe keys).
 
@@ -41,6 +43,8 @@ All development environment variables are also required in production (e.g., `AU
 - `NEXT_PUBLIC_API_URL` must point to the backend's Railway domain (public URL), not the internal URL.
 - Database migrations must be run via SSH tunnel — there is no direct migration step in the deploy pipeline.
 - Environment variables must be set per-service in the Railway dashboard.
+- The backend container filesystem is ephemeral. Any image stored under `backend/uploads/` (the pre-Sep-2026 `multer.diskStorage` path, `logoUrl` like `/uploads/logos/<uuid>.png`) is lost on every redeploy and cannot be recovered — re-upload via the admin UI so it lands in the bucket.
+- The Railway Bucket is private (anonymous GET → 403). Do not emit direct `BUCKET_ENDPOINT` URLs; `ImageService.formatImageResponse` routes through the backend proxy unless `BUCKET_PUBLIC_URL` is explicitly set.
 
 ## Related Features
 
