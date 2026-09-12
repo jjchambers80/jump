@@ -459,18 +459,18 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                           })()}
                         </div>
                         <div className="flex items-center gap-4">
-                          <div className="flex items-center rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800">
+                          <div className="flex items-center gap-3">
                             <button
                               type="button"
                               aria-label={`Decrease ${tier.name} quantity`}
                               onClick={() => updateQuantity(tier, -1)}
                               disabled={tierSoldOut || quantity === 0}
-                              className="h-10 w-10 text-xl font-bold text-gray-700 dark:text-slate-200 disabled:opacity-30"
+                              className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xl font-bold leading-none text-gray-700 dark:text-slate-200 transition-colors hover:border-gray-400 dark:hover:border-slate-500 disabled:opacity-30 disabled:hover:border-gray-300 dark:disabled:hover:border-slate-600"
                             >
                               −
                             </button>
                             <span
-                              className="w-10 text-center font-semibold text-gray-900 dark:text-slate-100"
+                              className="min-w-6 text-center text-lg font-semibold text-gray-900 dark:text-slate-100"
                               aria-label={`${tier.name} quantity`}
                             >
                               {quantity}
@@ -484,7 +484,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                                 maxQuantity < minQuantity ||
                                 quantity >= maxQuantity
                               }
-                              className="h-10 w-10 text-xl font-bold text-gray-700 dark:text-slate-200 disabled:opacity-30"
+                              className="flex h-10 w-10 items-center justify-center rounded-full bg-brand text-brand-fg text-xl font-bold leading-none transition-opacity hover:opacity-90 disabled:opacity-30 disabled:hover:opacity-30"
                             >
                               +
                             </button>
