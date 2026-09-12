@@ -333,15 +333,11 @@ function ConfirmationContent() {
             </h2>
             <div className="bg-gray-50 dark:bg-slate-900 rounded-lg p-6">
               {order.event.logoUrl && (
-                <div className="mb-5 flex justify-center">
-                  <div className="w-40 h-40 rounded-lg overflow-hidden bg-black/40 flex items-center justify-center">
-                    <img
-                      src={resolveAssetUrl(order.event.logoUrl) || undefined}
-                      alt={order.event.name}
-                      className="max-w-full max-h-full object-contain"
-                    />
-                  </div>
-                </div>
+                <img
+                  src={resolveAssetUrl(order.event.logoUrl) || undefined}
+                  alt={order.event.name}
+                  className="mb-5 max-h-40 w-auto max-w-full rounded-lg object-contain"
+                />
               )}
               <div className="space-y-3">
                 <div className="flex justify-between">
