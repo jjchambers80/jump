@@ -416,7 +416,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                             : 'border-gray-200 dark:border-slate-700 hover:border-brand-link bg-white dark:bg-slate-800'
                       }`}
                     >
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-stretch justify-between gap-4">
                         <div>
                           <h3 className="font-semibold text-gray-900 dark:text-slate-100 flex items-center gap-1.5">
                             {tier.name}
@@ -433,23 +433,10 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                               </button>
                             )}
                           </h3>
-                          {(availabilityText || !tier.isRefundable) && (
-                          <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
-                            {availabilityText}
-                            {!tier.isRefundable && (
-                              <span className={`relative inline-flex items-center text-xs text-amber-600 dark:text-amber-400 font-medium group cursor-help${availabilityText ? ' ml-2' : ''}`}>
-                                Non-refundable
-                                <svg className="w-3.5 h-3.5 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                                <span className="invisible group-hover:visible absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-gray-900 dark:bg-slate-700 text-white text-xs rounded-lg p-3 shadow-lg z-20 leading-relaxed">
-                                  <span className="font-semibold block mb-1">Non-Refundable Ticket</span>
-                                  This ticket is non-refundable, non-cancellable, and non-transferable after purchase. The delivery of the service is completed upon receiving this ticket by email.
-                                  <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900 dark:border-t-slate-700" />
-                                </span>
-                              </span>
-                            )}
-                          </p>
+                          {availabilityText && (
+                            <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
+                              {availabilityText}
+                            </p>
                           )}
                           {(() => {
                             const fees = computeTierAllInPrice(tier.price, event?.taxRate ?? 0);
@@ -467,7 +454,24 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                             );
                           })()}
                         </div>
-                        <div className="flex items-center gap-4">
+                        <div
+                          className={`flex flex-col items-end gap-2 ${
+                            tier.isRefundable ? 'justify-center' : 'justify-between'
+                          }`}
+                        >
+                          {!tier.isRefundable && (
+                            <span className="relative inline-flex items-center text-xs text-amber-600 dark:text-amber-400 font-medium group cursor-help">
+                              Non-refundable
+                              <svg className="w-3.5 h-3.5 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <span className="invisible group-hover:visible absolute bottom-full right-0 mb-2 w-64 bg-gray-900 dark:bg-slate-700 text-white text-xs rounded-lg p-3 shadow-lg z-20 leading-relaxed">
+                                <span className="font-semibold block mb-1">Non-Refundable Ticket</span>
+                                This ticket is non-refundable, non-cancellable, and non-transferable after purchase. The delivery of the service is completed upon receiving this ticket by email.
+                                <span className="absolute top-full right-4 border-4 border-transparent border-t-gray-900 dark:border-t-slate-700" />
+                              </span>
+                            </span>
+                          )}
                           <div className="flex items-center gap-3">
                             <button
                               type="button"
