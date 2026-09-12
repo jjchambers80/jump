@@ -1,5 +1,5 @@
 -- DropIndex
-DROP INDEX "Refund_stripeRefundId_key";
+DROP INDEX IF EXISTS "Refund_stripeRefundId_key";
 
 -- CreateTable
 CREATE TABLE "TierPreset" (
