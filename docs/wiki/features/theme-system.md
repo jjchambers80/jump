@@ -32,3 +32,4 @@ Three-mode theme system: Light, Dark, and Auto (follows OS preference). Built on
 ## Related Features
 
 - [Org Switcher](org-switcher.md) — shares the admin header where ThemeToggle appears.
+- [Organization Theme Mode](organization-theme-mode.md) — organizations can force light/dark/system on their public pages via `forcedTheme`.
