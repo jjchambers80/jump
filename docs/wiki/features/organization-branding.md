@@ -86,6 +86,7 @@ Validation error for bad hex: `400 "Brand color must be a hex value like #1d4ed8
 
 ## Related Features
 
+- [Organization Logo Box](organization-logo-box.md) — how the logo is rendered on the public org page
 - [Venue Management](venue-management.md) — venue logo uploads share `ImageService`
 - [Event Management](event-management.md) — event logo uploads, `organizationBrandColor` on detail
 - [Theme System](theme-system.md) — `.dark` class drives `--brand-link` selection
