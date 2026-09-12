@@ -742,6 +742,7 @@ class OrderService {
         id: order.event.id,
         name: order.event.name,
         date: order.event.date,
+        logoUrl: order.event.logoUrl ?? null,
         venue: order.event.venue
           ? {
               id: order.event.venue.id,
