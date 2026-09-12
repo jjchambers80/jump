@@ -1,22 +1,16 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, RefObject, useRef, useState } from 'react';
 import api from '@/services/api';
 import { BusinessDetails, BusinessDetailsPayload, US_STATES } from './types';
-import {
-  cardClass,
-  errorClass,
-  fieldClass,
-  hintClass,
-  labelClass,
-  primaryButtonClass,
-  secondaryButtonClass,
-  zipError,
-} from './formShared';
+import SettingsDialog from './SettingsDialog';
+import { errorClass, fieldClass, formAlertClass, hintClass, labelClass, zipError } from './formShared';
 
-interface StoreAddressCardProps {
+interface StoreAddressDialogProps {
   details: BusinessDetails;
+  onClose: () => void;
   onSaved: (details: BusinessDetails) => void;
+  returnFocusRef: RefObject<HTMLElement>;
 }
 
 interface FormState {
@@ -55,30 +49,18 @@ function isDirty(form: FormState, original: FormState) {
   return (Object.keys(form) as (keyof FormState)[]).some((key) => form[key] !== original[key]);
 }
 
-/** Inline card for the legal company name and US mailing address. */
-export default function StoreAddressCard({ details, onSaved }: StoreAddressCardProps) {
+/** Dialog for the legal company name and US mailing address. */
+export default function StoreAddressDialog({ details, onClose, onSaved, returnFocusRef }: StoreAddressDialogProps) {
   const [form, setForm] = useState<FormState>(() => initialForm(details));
   const [errors, setErrors] = useState<FormErrors>({});
   const [saving, setSaving] = useState(false);
-  const [status, setStatus] = useState('');
-
-  // Re-sync when another card or the dialog saves fresh details.
-  useEffect(() => {
-    setForm(initialForm(details));
-  }, [details]);
+  const firstFieldRef = useRef<HTMLInputElement>(null);
 
   const dirty = isDirty(form, initialForm(details));
 
   const update = (field: keyof FormState, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
     setErrors((current) => ({ ...current, [field]: undefined, form: undefined }));
-    setStatus('');
-  };
-
-  const handleCancel = () => {
-    setForm(initialForm(details));
-    setErrors({});
-    setStatus('');
   };
 
   const handleSubmit = async (event: FormEvent) => {
@@ -103,7 +85,6 @@ export default function StoreAddressCard({ details, onSaved }: StoreAddressCardP
       setSaving(true);
       const saved = await api.patch<BusinessDetails>('/admin/settings/business-details', payload);
       onSaved(saved);
-      setStatus('Store address saved.');
     } catch (error: any) {
       setErrors((current) => ({ ...current, form: error.message || 'Unable to save store address.' }));
     } finally {
@@ -112,22 +93,23 @@ export default function StoreAddressCard({ details, onSaved }: StoreAddressCardP
   };
 
   return (
-    <form noValidate onSubmit={handleSubmit} aria-labelledby="store-address-heading" className={cardClass}>
-      <div className="border-b border-gray-200 px-5 py-4 dark:border-slate-700">
-        <h3 id="store-address-heading" className="text-base font-semibold text-gray-900 dark:text-white">Store address</h3>
-        <p className={hintClass}>Used on receipts and for tax purposes.</p>
-      </div>
-
-      <fieldset disabled={saving} className="space-y-5 px-5 py-5">
-        {errors.form && (
-          <div role="alert" className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
-            {errors.form}
-          </div>
-        )}
+    <SettingsDialog
+      titleId="store-address-dialog-title"
+      title="Edit store address"
+      dirty={dirty}
+      saving={saving}
+      initialFocusRef={firstFieldRef}
+      returnFocusRef={returnFocusRef}
+      onClose={onClose}
+      onSubmit={handleSubmit}
+    >
+      <fieldset disabled={saving} className="space-y-5">
+        {errors.form && <div role="alert" className={formAlertClass}>{errors.form}</div>}
 
         <div>
           <label htmlFor="company-name" className={labelClass}>Company name</label>
           <input
+            ref={firstFieldRef}
             id="company-name"
             value={form.companyName}
             onChange={(event) => update('companyName', event.target.value)}
@@ -216,16 +198,6 @@ export default function StoreAddressCard({ details, onSaved }: StoreAddressCardP
           </div>
         </div>
       </fieldset>
-
-      <div className="flex items-center justify-end gap-2 border-t border-gray-200 bg-gray-50 px-5 py-3 dark:border-slate-700 dark:bg-slate-800/60">
-        <p role="status" aria-live="polite" className="mr-auto text-sm text-green-700 dark:text-green-400">{status}</p>
-        <button type="button" onClick={handleCancel} disabled={saving || !dirty} className={secondaryButtonClass}>
-          Cancel
-        </button>
-        <button type="submit" disabled={saving || !dirty} className={primaryButtonClass}>
-          {saving ? 'Saving…' : 'Save'}
-        </button>
-      </div>
-    </form>
+    </SettingsDialog>
   );
 }
