@@ -42,17 +42,19 @@ export default function CartLineItem({
       }`}
     >
       <span className="border-b border-dotted border-current pb-px">{formatPrice(line.total)}</span>
-      <svg
-        aria-hidden="true"
-        className={`w-4 h-4 shrink-0 transition-transform duration-200 ${
-          open ? 'rotate-90' : 'rotate-0'
-        }`}
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-      </svg>
+      {/* Down caret only while open — closed state relies on the dotted underline alone. */}
+      {open && (
+        <svg
+          aria-hidden="true"
+          data-testid="cart-line-caret"
+          className="w-4 h-4 shrink-0"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      )}
     </button>
   );
 

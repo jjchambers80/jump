@@ -5,7 +5,7 @@
 
 ## Overview
 
-Every ticket line in the customer cart shows its all-in price as a disclosure control: the amount has a dotted underline and a caret. Clicking it opens an accordion beneath the line listing the cost components that make up that price (base price, service fee, processing fee, tax, line total); the caret points down while open to signal it can be clicked again to close. An **Expand all / Collapse all** text toggle sits flush right on the same row as the cart heading and opens or closes every line at once. The behaviour is identical on the desktop sticky Order Summary, the mobile "Your Cart" drawer, and the checkout page Order Summary.
+Every ticket line in the customer cart shows its all-in price as a disclosure control: the amount has a dotted underline and no other adornment while closed. Clicking it opens an accordion beneath the line listing the cost components that make up that price (base price, service fee, processing fee, tax, line total); a down caret appears next to the price only while open, signalling it can be clicked again to close. An **Expand all / Collapse all** text toggle sits flush right on the same row as the cart heading and opens or closes every line at once. The behaviour is identical on the desktop sticky Order Summary, the mobile "Your Cart" drawer, and the checkout page Order Summary.
 
 Shipping this also fixed a pre-existing mismatch: cart lines were priced as `single-ticket all-in × qty` (charging Stripe's fixed $0.30 per ticket) while the cart total charged it once and ignored tax. Lines now use the same proportional allocation as the backend, so the visible line totals always add up to the visible order total.
 
@@ -14,12 +14,12 @@ Shipping this also fixed a pre-existing mismatch: cart lines were priced as `sin
 | File | Purpose |
 |------|---------|
 | `frontend/src/lib/fees.ts` | Single copy of `FEE_CONFIG`, `computeOrderFees` (order totals + per-line allocation), `computeTierAllInPrice`, `formatPrice`. Mirrors `backend/src/services/FeeService.js` |
-| `frontend/src/components/CartLineItem.tsx` | One cart line: price disclosure button (dotted underline + caret) and the breakdown accordion. `compact` variant for the desktop summary, `drawer` variant for the mobile sheet and checkout |
+| `frontend/src/components/CartLineItem.tsx` | One cart line: price disclosure button (dotted underline; down caret only while open) and the breakdown accordion. `compact` variant for the desktop summary, `drawer` variant for the mobile sheet and checkout |
 | `frontend/src/components/ExpandCollapseAll.tsx` | "Expand all" / "Collapse all" toggle (`aria-pressed`) placed on the heading row |
 | `frontend/src/app/events/[eventId]/page.tsx` | Owns `openLines` state shared by the desktop column and the mobile drawer; renders both lists from `cartFees.lines` |
 | `frontend/src/app/checkout/[eventId]/page.tsx` | Same components on the checkout Order Summary; its own `openLines` state |
 | `frontend/tests/unit/fees.test.ts` | Vitest: order math matches backend, fixed fee once per order, lines sum to totals, drift lands on the largest line |
-| `frontend/e2e/cart-line-breakdown.spec.ts` | Playwright: dotted underline, accordion open/close + caret, expand/collapse all placement and behaviour on desktop, drawer and checkout, line totals equal cart total, open state shared across viewports |
+| `frontend/e2e/cart-line-breakdown.spec.ts` | Playwright: dotted underline, accordion open/close, caret present only when open, expand/collapse all placement and behaviour on desktop, drawer and checkout, line totals equal cart total, open state shared across viewports |
 
 ## Configuration
 
@@ -44,7 +44,7 @@ No environment variables. `FEE_CONFIG` in `lib/fees.ts` must stay in sync with `
 
 ### Markup / a11y
 
-- Price: `<button aria-expanded aria-controls={regionId}>` with `data-testid="cart-line-price"`. The amount span carries `border-b border-dotted border-current`. The caret is a right-pointing chevron that rotates 90° (`rotate-90`) when open.
+- Price: `<button aria-expanded aria-controls={regionId}>` with `data-testid="cart-line-price"`. The amount span carries `border-b border-dotted border-current`. A down-chevron `<svg data-testid="cart-line-caret">` is rendered only when `open` is true — nothing is shown while closed.
 - Accordion: `<div role="region" hidden={!open} data-testid="line-breakdown">` with rows Base price `(qty × unit)`, Service fee, Processing fee, Tax (omitted when 0), Line total (`data-testid="line-breakdown-total"`).
 - Line wrapper: `data-testid="cart-line" data-open="true|false"`.
 - Lists: `data-testid="cart-lines-desktop" | "cart-lines-mobile" | "cart-lines-checkout"`.

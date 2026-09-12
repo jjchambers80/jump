@@ -81,18 +81,20 @@ test.describe('cart line-item price breakdown', () => {
       await expect(line).toHaveAttribute('data-open', 'false');
       await expect(price).toHaveAttribute('aria-expanded', 'false');
       await expect(line.getByTestId('line-breakdown')).toBeHidden();
+      // No caret at all while closed — only the dotted underline.
+      await expect(price.getByTestId('cart-line-caret')).toHaveCount(0);
 
       await price.click();
       await expect(line).toHaveAttribute('data-open', 'true');
       await expect(price).toHaveAttribute('aria-expanded', 'true');
       await expectBreakdownRows(line.getByTestId('line-breakdown'));
-      // Caret rotates to point down while open.
-      await expect(price.locator('svg')).toHaveClass(/rotate-90/);
+      // Down caret appears only while open.
+      await expect(price.getByTestId('cart-line-caret')).toBeVisible();
 
       await price.click();
       await expect(line).toHaveAttribute('data-open', 'false');
       await expect(line.getByTestId('line-breakdown')).toBeHidden();
-      await expect(price.locator('svg')).not.toHaveClass(/rotate-90/);
+      await expect(price.getByTestId('cart-line-caret')).toHaveCount(0);
     });
 
     test('expand all / collapse all sits in the Order Summary row and drives every line', async ({
@@ -178,12 +180,14 @@ test.describe('cart line-item price breakdown', () => {
       const first = lines.first();
       const price = first.getByTestId('cart-line-price');
       await expect(price.locator('span').first()).toHaveCSS('border-bottom-style', 'dotted');
+      await expect(price.getByTestId('cart-line-caret')).toHaveCount(0);
       await price.click();
       await expect(first).toHaveAttribute('data-open', 'true');
       await expectBreakdownRows(first.getByTestId('line-breakdown'));
-      await expect(price.locator('svg')).toHaveClass(/rotate-90/);
+      await expect(price.getByTestId('cart-line-caret')).toBeVisible();
       await price.click();
       await expect(first).toHaveAttribute('data-open', 'false');
+      await expect(price.getByTestId('cart-line-caret')).toHaveCount(0);
 
       // Toggle lives on the "Your Cart" title row, right of the title, left of the close X.
       const heading = page.getByRole('heading', { name: 'Your Cart' });
