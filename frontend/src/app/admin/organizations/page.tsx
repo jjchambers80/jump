@@ -8,8 +8,10 @@ import React, { useEffect, useState, useCallback } from 'react';
 import api from '@/services/api';
 import ImageUploader from '@/components/ImageUploader';
 import BrandColorPicker from '@/components/BrandColorPicker';
+import ThemeModePicker from '@/components/ThemeModePicker';
 import { resolveAssetUrl } from '@/lib/assets';
 import { evaluateBrandColor } from '@/lib/color';
+import { DEFAULT_THEME_MODE, type ThemeMode } from '@/lib/theme';
 
 interface Organization {
   id: string;
@@ -18,6 +20,7 @@ interface Organization {
   logoUrl?: string | null;
   coverUrl?: string | null;
   brandColor?: string | null;
+  themeMode?: ThemeMode;
   createdAt: string;
   updatedAt: string;
   _count?: {
@@ -38,6 +41,8 @@ export default function OrganizationsPage() {
   const [uploading, setUploading] = useState<string | null>(null);
   const [editBrandColor, setEditBrandColor] = useState<string | null>(null);
   const [savingBrandColor, setSavingBrandColor] = useState(false);
+  const [editThemeMode, setEditThemeMode] = useState<ThemeMode>(DEFAULT_THEME_MODE);
+  const [savingThemeMode, setSavingThemeMode] = useState(false);
 
   const fetchOrganizations = useCallback(async () => {
     try {
@@ -77,12 +82,27 @@ export default function OrganizationsPage() {
     setEditingId(org.id);
     setEditName(org.name);
     setEditBrandColor(org.brandColor ?? null);
+    setEditThemeMode(org.themeMode ?? DEFAULT_THEME_MODE);
   };
 
   const handleCancelEdit = () => {
     setEditingId(null);
     setEditName('');
     setEditBrandColor(null);
+    setEditThemeMode(DEFAULT_THEME_MODE);
+  };
+
+  const handleSaveThemeMode = async (orgId: string) => {
+    try {
+      setSavingThemeMode(true);
+      setError(null);
+      await api.patch(`/organizations/${orgId}`, { themeMode: editThemeMode });
+      await fetchOrganizations();
+    } catch (err: any) {
+      setError(err.message || 'Failed to update theme mode');
+    } finally {
+      setSavingThemeMode(false);
+    }
   };
 
   const handleSaveBrandColor = async (orgId: string) => {
@@ -298,6 +318,26 @@ export default function OrganizationsPage() {
                       {saving ? 'Saving…' : 'Save'}
                     </button>
                   </form>
+
+                  {/* Theme */}
+                  <h4 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1">
+                    Theme
+                  </h4>
+                  <p className="text-xs text-gray-500 dark:text-slate-400 mb-3">
+                    Controls light or dark mode on your public event, venue, and organization pages.
+                  </p>
+                  <ThemeModePicker value={editThemeMode} onChange={setEditThemeMode} />
+                  <div className="mt-3 mb-6">
+                    <button
+                      type="button"
+                      onClick={() => handleSaveThemeMode(org.id)}
+                      disabled={savingThemeMode || editThemeMode === (org.themeMode ?? DEFAULT_THEME_MODE)}
+                      data-testid="theme-mode-save"
+                      className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-500 disabled:opacity-50"
+                    >
+                      {savingThemeMode ? 'Saving…' : 'Save theme'}
+                    </button>
+                  </div>
 
                   {/* Branding */}
                   <h4 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-4">
