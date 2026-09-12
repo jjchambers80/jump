@@ -109,7 +109,7 @@ export default function BrandColorPicker({ value, onChange }: BrandColorPickerPr
         )}
       </div>
       {textError && (
-        <p id={`${inputId}-error`} className="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">
+        <p id={`${inputId}-error`} data-testid="brand-color-hex-error" className="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">
           {textError}
         </p>
       )}

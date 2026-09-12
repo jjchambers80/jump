@@ -30,6 +30,7 @@ Generated and maintained by running `/doc-feature` after completing feature work
 ### Admin & Organizer
 - [Admin Dashboard](features/admin-dashboard.md) — Stats, event management, analytics
 - [Organization Settings](features/organization-settings.md) — Business details, staff (OrganizationPerson)
+- [Organization Branding](features/organization-branding.md) — Logo, cover image, brand color with WCAG AA contrast checker
 - [Venue Management](features/venue-management.md) — CRUD, logo uploads, timezone config
 - [User Management](features/user-management.md) — Role assignment, account listing
 

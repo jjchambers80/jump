@@ -33,6 +33,7 @@ async function main() {
   const org = await prisma.organization.create({
     data: {
       name: "Jump Events Co.",
+      brandColor: "#047857", // emerald-700 — passes WCAG AA, shows brand inheritance locally
     },
   });
   console.log(`  ✅ Organization: ${org.name} (${org.id})`);
