@@ -15,10 +15,11 @@ Loads when agent touches `packages/db/` files. For root-level commands, see [`..
 3. `npm run db:generate` from repo root (regenerates client types)
 4. Postinstall hook runs generate automatically on `npm install`
 
-## Models (12 models, 6 enums)
+## Models (17 models, 9 enums)
 
 Core chain: Organization → Venue → Event → PriceTier → OrderItem → Ticket
-Supporting: User, Account, Session, Contact, Order, PaymentTransaction
+Supporting: User, Account, VerificationToken, Contact, Order, PaymentTransaction, Refund, OrganizationPerson, TierPreset, File, Image
+Enums: UserRole, OrganizationStatus, ThemeMode (org public-page light/dark enforcement), EventStatus, OrderStatus, TierVisibility, TicketStatus, PaymentStatus, RefundStatus
 
 ## Seed Data
 
