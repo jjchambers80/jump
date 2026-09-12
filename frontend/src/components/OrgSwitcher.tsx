@@ -80,6 +80,9 @@ export default function OrgSwitcher() {
       {/* Trigger button */}
       <button
         onClick={() => setOpen(!open)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        data-testid="org-switcher-trigger"
         className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
       >
         <span className="flex items-center justify-center w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-bold">

@@ -29,6 +29,7 @@ Auth.js v5 (JWT HS256) · Resend email · Redis caching · Railway deployment
 - **Route registration**: New route files must be registered in `backend/src/api/server.js`
 - **Auth middleware chain**: `requireAuth` → `requireRole('ORGANIZER'|'ADMIN')`
 - **Public endpoints**: Event listing, guest checkout, ticket lookup — no auth required
+- **Partial PATCH validators**: `validateUpdateBusinessDetails` validates only keys present in the body (whitelist + per-key rules). Follow that pattern when several UI cards save subsets of one record
 
 ## Frontend Patterns
 
@@ -68,3 +69,4 @@ Auth.js v5 (JWT HS256) · Resend email · Redis caching · Railway deployment
 5. Railway services need explicit PORT env var
 6. Public org/venue/event pages use `brand` Tailwind tokens (CSS vars set by `BrandScope`), not raw blue classes — see `docs/wiki/features/organization-branding.md`
 7. Org-scoped public pages must pass `themeMode` to `BrandScope`; never force a theme via `setTheme` (it overwrites the visitor's stored choice) — see `docs/wiki/features/organization-theme-mode.md`
+8. Backend CORS (`backend/src/api/server.js`): `FRONTEND_URL` is a comma-separated allowlist; outside production any `localhost`/`127.0.0.1` port is also allowed, so worktree previews on other ports work without env changes. A running backend must be restarted to pick up the change

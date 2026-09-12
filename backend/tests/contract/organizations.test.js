@@ -464,6 +464,69 @@ describe('Organization Contract Tests', () => {
       expect(res.body.einMasked).toBe('••-•••4321');
     });
 
+    it('accepts a partial store-contact payload and leaves other fields intact', async () => {
+      const token = generateToken({ id: settingsUser.id, email: settingsEmails[0], role: 'ADMIN' });
+
+      const res = await request(app)
+        .patch('/admin/settings/business-details')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          name: ' Store Front ',
+          email: ' Hello@Store.COM ',
+          phoneCountryCode: '+1',
+          phoneNumber: '(919) 555-0000',
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        name: 'Store Front',
+        email: 'hello@store.com',
+        phoneNumber: '9195550000',
+        addressLine1: '456 Oak Avenue',
+        city: 'Raleigh',
+        einMasked: '••-•••4321',
+      });
+    });
+
+    it('accepts a partial store-address payload with companyName', async () => {
+      const token = generateToken({ id: settingsUser.id, email: settingsEmails[0], role: 'ADMIN' });
+
+      const res = await request(app)
+        .patch('/admin/settings/business-details')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          companyName: 'Store Front Holdings LLC',
+          countryCode: 'US',
+          addressLine1: '789 Pine Street',
+          addressLine2: 'Suite 2',
+          city: 'Durham',
+          state: 'nc',
+          postalCode: '27701',
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        name: 'Store Front',
+        companyName: 'Store Front Holdings LLC',
+        addressLine1: '789 Pine Street',
+        addressLine2: 'Suite 2',
+        city: 'Durham',
+        state: 'NC',
+        postalCode: '27701',
+      });
+    });
+
+    it('rejects an invalid email in a partial payload', async () => {
+      const token = generateToken({ id: settingsUser.id, email: settingsEmails[0], role: 'ADMIN' });
+
+      const res = await request(app)
+        .patch('/admin/settings/business-details')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ email: 'not-an-email' });
+
+      expect(res.status).toBe(400);
+    });
+
     it('rejects unknown fields', async () => {
       const token = generateToken({ id: settingsUser.id, email: settingsEmails[0], role: 'ADMIN' });
 

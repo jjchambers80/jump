@@ -1,6 +1,8 @@
 export interface BusinessDetails {
   id: string;
   name: string;
+  companyName: string | null;
+  email: string | null;
   businessType: string | null;
   nickname: string | null;
   countryCode: string | null;
@@ -15,18 +17,24 @@ export interface BusinessDetails {
   einMasked: string | null;
 }
 
+/**
+ * PATCH /admin/settings/business-details accepts a partial body: only the
+ * keys sent are validated and written, so each Settings card sends its own.
+ */
 export interface BusinessDetailsPayload {
-  name: string;
-  businessType: string;
-  nickname: string | null;
-  countryCode: 'US';
-  addressLine1: string;
-  addressLine2: string | null;
-  city: string;
-  state: string;
-  postalCode: string;
-  phoneCountryCode: '+1';
-  phoneNumber: string | null;
+  name?: string;
+  companyName?: string | null;
+  email?: string | null;
+  businessType?: string;
+  nickname?: string | null;
+  countryCode?: 'US';
+  addressLine1?: string;
+  addressLine2?: string | null;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  phoneCountryCode?: '+1';
+  phoneNumber?: string | null;
   ein?: string | null;
 }
 

@@ -29,7 +29,7 @@ Generated and maintained by running `/doc-feature` after completing feature work
 
 ### Admin & Organizer
 - [Admin Dashboard](features/admin-dashboard.md) — Stats, event management, analytics
-- [Organization Settings](features/organization-settings.md) — Business details, staff (OrganizationPerson)
+- [Organization Settings](features/organization-settings.md) — Settings › General: read-only summary cards with edit dialogs (store contact, address, business details), people (OrganizationPerson)
 - [Organization Branding](features/organization-branding.md) — Logo, cover image, brand color with WCAG AA contrast checker
 - [Organization Theme Mode](features/organization-theme-mode.md) — Per-org light/dark/system enforcement on public org pages
 - [Venue Management](features/venue-management.md) — CRUD, logo uploads, timezone config

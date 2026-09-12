@@ -19,6 +19,8 @@ const people = [
 const businessDetails = {
   id: 'org-settings',
   name: 'Roman Skin Care LLC',
+  companyName: null,
+  email: 'hello@romanskincare.com',
   businessType: 'SINGLE_MEMBER_LLC',
   nickname: 'Roman',
   countryCode: 'US',
@@ -50,6 +52,21 @@ async function mockAdminSession(page: Page) {
 async function mockSettingsApi(page: Page, initialPeople: typeof people = []) {
   let current = { ...businessDetails };
   let submitted: Record<string, unknown> | null = null;
+  let organizationsGets = 0;
+
+  // The header switcher lists orgs from GET /organizations; the name it
+  // shows comes from here, not from the settings endpoint.
+  await page.route('http://localhost:3002/organizations', async (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    organizationsGets += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([
+        { id: current.id, name: current.name, status: 'ACTIVE', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
+      ]),
+    });
+  });
 
   await page.route('http://localhost:3002/admin/settings/people', async (route) => {
     if (route.request().method() === 'GET') {
@@ -80,14 +97,14 @@ async function mockSettingsApi(page: Page, initialPeople: typeof people = []) {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(current) });
   });
 
-  return { submitted: () => submitted };
+  return { submitted: () => submitted, organizationsGets: () => organizationsGets };
 }
 
 test.beforeEach(async ({ page }) => {
   await mockAdminSession(page);
 });
 
-test('places Settings in the sidebar footer and renders General business details', async ({ page }) => {
+test('places Settings in the sidebar footer and renders General as read-only summary cards', async ({ page }) => {
   await mockSettingsApi(page);
   await page.goto('/admin/settings');
 
@@ -101,13 +118,140 @@ test('places Settings in the sidebar footer and renders General business details
 
   await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'General' })).toHaveAttribute('aria-current', 'page');
-  await expect(page.getByRole('heading', { name: 'Roman Skin Care LLC' })).toBeVisible();
-  await expect(page.getByText('Business details')).toBeVisible();
-  await expect(page.getByText('••-•••0063')).toBeVisible();
-  await expect(page.getByText('Not provided')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'General', exact: true })).toBeVisible();
+
+  // Business details card: legal entity row with an actions affordance.
+  await expect(page.getByRole('heading', { name: 'Business details' })).toBeVisible();
+  const businessRow = page.getByRole('button', { name: 'Edit business details' });
+  await expect(businessRow).toContainText('Roman Skin Care LLC');
+  await expect(businessRow).toContainText('Single Member LLC · EIN ••-•••0063');
+
+  // Store contact details card: two rows, each opening its own editor.
+  await expect(page.getByRole('heading', { name: 'Store contact details' })).toBeVisible();
+  const contactRow = page.getByRole('button', { name: 'Edit store contact details' });
+  await expect(contactRow).toContainText('Roman Skin Care LLC');
+  await expect(contactRow).toContainText('hello@romanskincare.com · (919) 463-9575');
+  const addressRow = page.getByRole('button', { name: 'Edit store address' });
+  await expect(addressRow).toContainText('Store address');
+  await expect(addressRow).toContainText('1 Main Street, Cary, NC 27511, United States');
+
+  // Nothing is editable until a row is opened.
+  await expect(page.getByRole('textbox')).toHaveCount(0);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
-test('edits and saves business details without resubmitting an unchanged EIN', async ({ page }) => {
+test('saving store contact details closes the dialog and updates the org switcher immediately', async ({ page }) => {
+  const api = await mockSettingsApi(page);
+  await page.goto('/admin/settings');
+
+  const switcher = page.getByTestId('org-switcher-trigger');
+  await expect(switcher).toContainText('Roman Skin Care LLC');
+
+  const row = page.getByRole('button', { name: 'Edit store contact details' });
+  await row.click();
+  const dialog = page.getByRole('dialog', { name: 'Edit store contact details' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByLabel('Store name')).toBeFocused();
+  await expect(dialog.getByLabel('Store name')).toHaveValue('Roman Skin Care LLC');
+  await expect(dialog.getByLabel('Store email')).toHaveValue('hello@romanskincare.com');
+  await expect(dialog.getByLabel('Store phone number')).toHaveValue('9194639575');
+  await expect(dialog.getByRole('button', { name: 'Save' })).toBeDisabled();
+
+  await dialog.getByLabel('Store name').fill('Roman Skin Studio');
+  await dialog.getByLabel('Store email').fill(' Hello@RomanSkinStudio.com ');
+  await dialog.getByLabel('Store phone number').fill('(919) 555-1212');
+  await dialog.getByRole('button', { name: 'Save' }).click();
+
+  await expect(dialog).toBeHidden();
+  await expect(row).toBeFocused();
+  await expect(row).toContainText('Roman Skin Studio');
+  await expect(row).toContainText('hello@romanskinstudio.com · (919) 555-1212');
+  await expect(page.getByRole('status')).toHaveText('Store contact details saved.');
+  await expect(switcher).toContainText('Roman Skin Studio');
+  expect(api.submitted()).toEqual({
+    name: 'Roman Skin Studio',
+    email: 'hello@romanskinstudio.com',
+    phoneCountryCode: '+1',
+    phoneNumber: '9195551212',
+  });
+  await expect.poll(api.organizationsGets).toBeGreaterThanOrEqual(2);
+});
+
+test('validates store contact details and confirms before discarding unsaved changes', async ({ page }) => {
+  const api = await mockSettingsApi(page);
+  await page.goto('/admin/settings');
+
+  await page.getByRole('button', { name: 'Edit store contact details' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Edit store contact details' });
+  await dialog.getByLabel('Store name').fill('');
+  await dialog.getByLabel('Store email').fill('not-an-email');
+  await dialog.getByLabel('Store phone number').fill('555');
+  await dialog.getByRole('button', { name: 'Save' }).click();
+
+  await expect(dialog.getByText('Store name is required.')).toBeVisible();
+  await expect(dialog.getByText('Enter a valid email address.')).toBeVisible();
+  await expect(dialog.getByText('Enter a 10-digit phone number.')).toBeVisible();
+  expect(api.submitted()).toBeNull();
+
+  // Dismissing the confirm keeps the dialog and its values.
+  page.once('dialog', (confirm) => confirm.dismiss());
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByLabel('Store email')).toHaveValue('not-an-email');
+
+  // Accepting it closes without saving; the row still shows the saved values.
+  page.once('dialog', (confirm) => confirm.accept());
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  const row = page.getByRole('button', { name: 'Edit store contact details' });
+  await expect(row).toBeFocused();
+  await expect(row).toContainText('hello@romanskincare.com');
+  expect(api.submitted()).toBeNull();
+});
+
+test('saves the store address with company name as a partial payload', async ({ page }) => {
+  const api = await mockSettingsApi(page);
+  await page.goto('/admin/settings');
+
+  const row = page.getByRole('button', { name: 'Edit store address' });
+  await row.click();
+  const dialog = page.getByRole('dialog', { name: 'Edit store address' });
+  await expect(dialog.getByLabel('Company name')).toBeFocused();
+  await expect(dialog.getByLabel('Company name')).toHaveValue('');
+  await expect(dialog.getByLabel('Country/region')).toHaveValue('US');
+  await expect(dialog.getByLabel('Address', { exact: true })).toHaveValue('1 Main Street');
+  await expect(dialog.getByLabel('City')).toHaveValue('Cary');
+  await expect(dialog.getByLabel('State')).toHaveValue('NC');
+  await expect(dialog.getByLabel('ZIP code')).toHaveValue('27511');
+
+  await dialog.getByLabel('Company name').fill('Roman Skin Care Holdings LLC');
+  await dialog.getByLabel('Address', { exact: true }).fill('24 Oak Avenue');
+  await dialog.getByLabel('Apartment, suite, etc.').fill('Suite 2');
+  await dialog.getByLabel('ZIP code').fill('123');
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await expect(dialog.getByText('Enter a 5-digit ZIP code or ZIP+4.')).toBeVisible();
+  expect(api.submitted()).toBeNull();
+
+  await dialog.getByLabel('ZIP code').fill('27513');
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole('status')).toHaveText('Store address saved.');
+  await expect(row).toContainText('24 Oak Avenue, Suite 2, Cary, NC 27513, United States');
+  // The legal entity row picks up the company name.
+  await expect(page.getByRole('button', { name: 'Edit business details' })).toContainText('Roman Skin Care Holdings LLC');
+  expect(api.submitted()).toEqual({
+    companyName: 'Roman Skin Care Holdings LLC',
+    countryCode: 'US',
+    addressLine1: '24 Oak Avenue',
+    addressLine2: 'Suite 2',
+    city: 'Cary',
+    state: 'NC',
+    postalCode: '27513',
+  });
+  expect(api.submitted()).not.toHaveProperty('name');
+});
+
+test('edits business details in the dialog without resubmitting an unchanged EIN', async ({ page }) => {
   const api = await mockSettingsApi(page);
   await page.goto('/admin/settings');
 
@@ -116,40 +260,39 @@ test('edits and saves business details without resubmitting an unchanged EIN', a
 
   const dialog = page.getByRole('dialog', { name: 'Edit business details' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByLabel('Registered legal business name')).toHaveValue('Roman Skin Care LLC');
+  await expect(dialog.getByLabel('Type of business')).toHaveValue('SINGLE_MEMBER_LLC');
+  await expect(dialog.getByLabel('Nickname')).toHaveValue('Roman');
   await expect(dialog.getByLabel('Employer Identification Number (EIN)')).toHaveAttribute(
     'placeholder',
     '••-•••0063'
   );
+  // Store name, address, and phone are edited in their own dialogs only.
+  await expect(dialog.getByLabel(/Store name|Store email|Business address|Phone number|ZIP code/)).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
 
-  await dialog.getByLabel('Registered legal business name').fill('Roman Skin Studio LLC');
-  await dialog.getByLabel('Business address').fill('24 Oak Avenue');
-  await dialog.getByLabel('Phone number').fill('(919) 555-1212');
+  await dialog.getByLabel('Type of business').selectOption('S_CORPORATION');
+  await dialog.getByLabel('Nickname').fill('Roman Studio');
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
 
   await expect(dialog).toBeHidden();
-  await expect(page.getByRole('heading', { name: 'Roman Skin Studio LLC' })).toBeVisible();
-  expect(api.submitted()).toMatchObject({
-    name: 'Roman Skin Studio LLC',
-    addressLine1: '24 Oak Avenue',
-    phoneNumber: '9195551212',
+  await expect(editButton).toBeFocused();
+  await expect(editButton).toContainText('S corporation · EIN ••-•••0063');
+  await expect(page.getByRole('status')).toHaveText('Business details saved.');
+  expect(api.submitted()).toEqual({
+    businessType: 'S_CORPORATION',
+    nickname: 'Roman Studio',
   });
-  expect(api.submitted()).not.toHaveProperty('ein');
 });
 
-test('validates ZIP, phone, and EIN before saving', async ({ page }) => {
+test('validates EIN before saving', async ({ page }) => {
   await mockSettingsApi(page);
   await page.goto('/admin/settings');
   await page.getByRole('button', { name: 'Edit business details' }).click();
 
   const dialog = page.getByRole('dialog', { name: 'Edit business details' });
-  await dialog.getByLabel('ZIP code').fill('123');
-  await dialog.getByLabel('Phone number').fill('555');
   await dialog.getByLabel('Employer Identification Number (EIN)').fill('12-3');
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
 
-  await expect(dialog.getByText('Enter a 5-digit ZIP code or ZIP+4.')).toBeVisible();
-  await expect(dialog.getByText('Enter a 10-digit phone number.')).toBeVisible();
   await expect(dialog.getByText('Enter a 9-digit EIN.')).toBeVisible();
 });
 

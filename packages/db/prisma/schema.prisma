@@ -119,6 +119,8 @@ model Organization {
   id               String             @id @default(cuid())
   name             String
   status           OrganizationStatus @default(ACTIVE)
+  companyName      String?
+  email            String?
   businessType     String?
   nickname         String?
   countryCode      String?            @default("US")

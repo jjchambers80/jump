@@ -45,9 +45,16 @@ export const normalizeHexColor = (value) => {
 };
 
 const BUSINESS_DETAIL_FIELDS = new Set([
-  'name', 'businessType', 'nickname', 'countryCode', 'addressLine1', 'addressLine2',
-  'city', 'state', 'postalCode', 'phoneCountryCode', 'phoneNumber', 'ein',
+  'name', 'companyName', 'email', 'businessType', 'nickname', 'countryCode',
+  'addressLine1', 'addressLine2', 'city', 'state', 'postalCode',
+  'phoneCountryCode', 'phoneNumber', 'ein',
 ]);
+
+// Deliberately loose: one "@", no whitespace, a dot in the domain part.
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const hasField = (body, field) =>
+  Object.prototype.hasOwnProperty.call(body, field) && body[field] !== undefined;
 
 const normalizeRequiredString = (body, field, label, maxLength = 255) => {
   const value = body[field];
@@ -137,84 +144,98 @@ export const validateUpdateOrganization = (req, res, next) => {
   next();
 };
 
-/** Validate and normalize the complete current-organization business details form. */
+/**
+ * Validate and normalize a business details PATCH.
+ *
+ * Partial semantics: only the keys present in the body are validated and
+ * written, so each Settings card can save just its own fields. A key that is
+ * present must still be valid (e.g. `name` may be omitted but not blank).
+ */
 export const validateUpdateBusinessDetails = (req, res, next) => {
   try {
-    const fields = Object.keys(req.body || {});
+    const body = req.body || {};
+    req.body = body;
+    const fields = Object.keys(body);
     const unknownField = fields.find((field) => !BUSINESS_DETAIL_FIELDS.has(field));
     if (unknownField) {
       throw new ValidationError(`Unknown field: ${unknownField}`);
     }
+    if (fields.length === 0) {
+      throw new ValidationError('At least one field is required');
+    }
 
-    normalizeRequiredString(req.body, 'name', 'Registered legal business name');
-    normalizeRequiredString(req.body, 'addressLine1', 'Business address');
-    normalizeRequiredString(req.body, 'city', 'City', 100);
-    normalizeOptionalString(req.body, 'nickname', 'Nickname');
-    normalizeOptionalString(req.body, 'addressLine2', 'Address line 2');
+    if (hasField(body, 'name')) normalizeRequiredString(body, 'name', 'Store name');
+    if (hasField(body, 'addressLine1')) normalizeRequiredString(body, 'addressLine1', 'Business address');
+    if (hasField(body, 'city')) normalizeRequiredString(body, 'city', 'City', 100);
+    if (hasField(body, 'companyName')) normalizeOptionalString(body, 'companyName', 'Company name');
+    if (hasField(body, 'nickname')) normalizeOptionalString(body, 'nickname', 'Nickname');
+    if (hasField(body, 'addressLine2')) normalizeOptionalString(body, 'addressLine2', 'Address line 2');
 
-    if (!BUSINESS_TYPES.includes(req.body.businessType)) {
+    if (hasField(body, 'email')) {
+      normalizeOptionalString(body, 'email', 'Store email');
+      if (body.email !== null) {
+        const email = body.email.toLowerCase();
+        if (!EMAIL_PATTERN.test(email)) {
+          throw new ValidationError('Store email must be a valid email address');
+        }
+        body.email = email;
+      }
+    }
+
+    if (hasField(body, 'businessType') && !BUSINESS_TYPES.includes(body.businessType)) {
       throw new ValidationError('Type of business is invalid');
     }
 
-    if (
-      typeof req.body.countryCode !== 'string' ||
-      req.body.countryCode.toUpperCase() !== 'US'
-    ) {
-      throw new ValidationError('Country code must be US');
+    if (hasField(body, 'countryCode')) {
+      if (typeof body.countryCode !== 'string' || body.countryCode.toUpperCase() !== 'US') {
+        throw new ValidationError('Country code must be US');
+      }
+      body.countryCode = 'US';
     }
-    req.body.countryCode = 'US';
 
-    if (
-      typeof req.body.state !== 'string' ||
-      !US_STATE_CODES.has(req.body.state.toUpperCase())
-    ) {
-      throw new ValidationError('State must be a valid two-letter US state or territory code');
+    if (hasField(body, 'state')) {
+      if (typeof body.state !== 'string' || !US_STATE_CODES.has(body.state.toUpperCase())) {
+        throw new ValidationError('State must be a valid two-letter US state or territory code');
+      }
+      body.state = body.state.toUpperCase();
     }
-    req.body.state = req.body.state.toUpperCase();
 
-    if (
-      typeof req.body.postalCode !== 'string' ||
-      !/^\d{5}(-\d{4})?$/.test(req.body.postalCode.trim())
-    ) {
-      throw new ValidationError('ZIP code must be 5 digits or ZIP+4');
+    if (hasField(body, 'postalCode')) {
+      if (typeof body.postalCode !== 'string' || !/^\d{5}(-\d{4})?$/.test(body.postalCode.trim())) {
+        throw new ValidationError('ZIP code must be 5 digits or ZIP+4');
+      }
+      body.postalCode = body.postalCode.trim();
     }
-    req.body.postalCode = req.body.postalCode.trim();
 
-    if (req.body.phoneCountryCode !== '+1') {
+    if (hasField(body, 'phoneCountryCode') && body.phoneCountryCode !== '+1') {
       throw new ValidationError('Phone country code must be +1');
     }
 
-    if (
-      req.body.phoneNumber === undefined ||
-      req.body.phoneNumber === null ||
-      req.body.phoneNumber === ''
-    ) {
-      req.body.phoneNumber = null;
-    } else if (typeof req.body.phoneNumber === 'string') {
-      if (!/^[\d\s().-]+$/.test(req.body.phoneNumber)) {
-        throw new ValidationError('Phone number contains invalid characters');
+    if (hasField(body, 'phoneNumber')) {
+      if (body.phoneNumber === null || body.phoneNumber === '') {
+        body.phoneNumber = null;
+      } else if (typeof body.phoneNumber === 'string') {
+        if (!/^[\d\s().-]+$/.test(body.phoneNumber)) {
+          throw new ValidationError('Phone number contains invalid characters');
+        }
+        const digits = body.phoneNumber.replace(/\D/g, '');
+        if (digits.length !== 10) {
+          throw new ValidationError('Phone number must contain 10 digits');
+        }
+        body.phoneNumber = digits;
+      } else {
+        throw new ValidationError('Phone number must be a string or null');
       }
-      const digits = req.body.phoneNumber.replace(/\D/g, '');
-      if (digits.length !== 10) {
-        throw new ValidationError('Phone number must contain 10 digits');
-      }
-      req.body.phoneNumber = digits;
-    } else {
-      throw new ValidationError('Phone number must be a string or null');
     }
 
-    if (req.body.ein !== undefined && req.body.ein !== null) {
-      if (typeof req.body.ein !== 'string') {
+    if (hasField(body, 'ein') && body.ein !== null) {
+      if (typeof body.ein !== 'string') {
         throw new ValidationError('EIN must be a string or null');
       }
-      if (!/^\d{2}-?\d{7}$/.test(req.body.ein.trim())) {
+      if (!/^\d{2}-?\d{7}$/.test(body.ein.trim())) {
         throw new ValidationError('EIN must contain 9 digits');
       }
-      const digits = req.body.ein.replace(/\D/g, '');
-      if (digits.length !== 9) {
-        throw new ValidationError('EIN must contain 9 digits');
-      }
-      req.body.ein = digits;
+      body.ein = body.ein.replace(/\D/g, '');
     }
 
     next();

@@ -31,10 +31,25 @@ import imagesRouter from './routes/images.js';
 const app = express();
 const PORT = process.env.PORT || 3002;
 
+// CORS: FRONTEND_URL may list several origins (comma-separated). Outside
+// production any localhost/127.0.0.1 port is also allowed so a second dev
+// frontend (e.g. a worktree running on another port) can reach this backend.
+const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:3001')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+
+export function isAllowedOrigin(origin) {
+  if (!origin) return true; // same-origin, curl, server-to-server
+  if (allowedOrigins.includes(origin)) return true;
+  return process.env.NODE_ENV !== 'production' && LOCAL_ORIGIN.test(origin);
+}
+
 // Middleware
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3001',
+    origin: (origin, callback) => callback(null, isAllowedOrigin(origin)),
     credentials: true,
   })
 );
