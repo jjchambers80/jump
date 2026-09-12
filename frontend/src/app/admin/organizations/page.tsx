@@ -7,7 +7,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import api from '@/services/api';
 import ImageUploader from '@/components/ImageUploader';
+import BrandColorPicker from '@/components/BrandColorPicker';
 import { resolveAssetUrl } from '@/lib/assets';
+import { evaluateBrandColor } from '@/lib/color';
 
 interface Organization {
   id: string;
@@ -15,6 +17,7 @@ interface Organization {
   status: 'ACTIVE' | 'INACTIVE';
   logoUrl?: string | null;
   coverUrl?: string | null;
+  brandColor?: string | null;
   createdAt: string;
   updatedAt: string;
   _count?: {
@@ -33,6 +36,8 @@ export default function OrganizationsPage() {
   const [editName, setEditName] = useState('');
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
+  const [editBrandColor, setEditBrandColor] = useState<string | null>(null);
+  const [savingBrandColor, setSavingBrandColor] = useState(false);
 
   const fetchOrganizations = useCallback(async () => {
     try {
@@ -71,11 +76,26 @@ export default function OrganizationsPage() {
   const handleEdit = (org: Organization) => {
     setEditingId(org.id);
     setEditName(org.name);
+    setEditBrandColor(org.brandColor ?? null);
   };
 
   const handleCancelEdit = () => {
     setEditingId(null);
     setEditName('');
+    setEditBrandColor(null);
+  };
+
+  const handleSaveBrandColor = async (orgId: string) => {
+    try {
+      setSavingBrandColor(true);
+      setError(null);
+      await api.patch(`/organizations/${orgId}`, { brandColor: editBrandColor });
+      await fetchOrganizations();
+    } catch (err: any) {
+      setError(err.message || 'Failed to update brand color');
+    } finally {
+      setSavingBrandColor(false);
+    }
   };
 
   const handleSaveEdit = async (orgId: string) => {
@@ -307,6 +327,36 @@ export default function OrganizationsPage() {
                         uploading={uploading === `${org.id}-cover`}
                         label="cover image"
                       />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-600 dark:text-slate-400 mb-2">
+                        Brand color
+                      </label>
+                      <BrandColorPicker value={editBrandColor} onChange={setEditBrandColor} />
+                      {(() => {
+                        const dirty = editBrandColor !== (org.brandColor ?? null);
+                        const passes = editBrandColor
+                          ? evaluateBrandColor(editBrandColor).passesAA
+                          : true;
+                        return (
+                          <div className="mt-3 flex flex-wrap items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={() => handleSaveBrandColor(org.id)}
+                              disabled={savingBrandColor || !dirty}
+                              data-testid="brand-color-save"
+                              className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-500 disabled:opacity-50"
+                            >
+                              {savingBrandColor ? 'Saving…' : 'Save brand color'}
+                            </button>
+                            {!passes && (
+                              <span className="text-xs text-red-600 dark:text-red-400" data-testid="brand-color-warning">
+                                You can save this color, but it may not meet ADA requirements.
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
 
