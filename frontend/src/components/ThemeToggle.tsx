@@ -5,12 +5,15 @@ import { useState, useEffect } from 'react';
 
 export default function ThemeToggle() {
   const [mounted, setMounted] = useState(false);
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, forcedTheme } = useTheme();
 
   useEffect(() => setMounted(true), []);
 
   // Prevent hydration mismatch — render nothing until mounted
   if (!mounted) return null;
+
+  // An organization page is forcing its theme; the visitor cannot override it here
+  if (forcedTheme) return null;
 
   const cycleTheme = () => {
     if (theme === 'light') setTheme('dark');

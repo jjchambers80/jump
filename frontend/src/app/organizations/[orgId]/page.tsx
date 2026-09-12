@@ -5,6 +5,7 @@ import { api } from '../../../services/api';
 import { resolveAssetUrl } from '../../../lib/assets';
 import EventCard, { EventSummary } from '../../../components/EventCard';
 import BrandScope from '../../../components/BrandScope';
+import type { ThemeMode } from '@/lib/theme';
 
 interface OrganizationPublic {
   id: string;
@@ -12,6 +13,7 @@ interface OrganizationPublic {
   logoUrl: string | null;
   coverUrl: string | null;
   brandColor?: string | null;
+  themeMode?: ThemeMode | null;
 }
 
 interface OrgPageData {
@@ -147,7 +149,7 @@ export default function OrganizationPage({ params }: { params: { orgId: string }
   // Desktop without cover: centered single column
   // Mobile: cover at top, then content
   return (
-    <BrandScope color={organization.brandColor} className="min-h-screen bg-gray-50 dark:bg-slate-900">
+    <BrandScope color={organization.brandColor} themeMode={organization.themeMode} className="min-h-screen bg-gray-50 dark:bg-slate-900">
       {/* Mobile cover image */}
       {hasCover && (
         <div className="xl:hidden w-full">

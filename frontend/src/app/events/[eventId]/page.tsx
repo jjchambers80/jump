@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { api } from '../../../services/api';
 import { resolveAssetUrl } from '../../../lib/assets';
 import BrandScope from '../../../components/BrandScope';
+import type { ThemeMode } from '@/lib/theme';
 
 interface EventVenue {
   id: string;
@@ -47,6 +48,7 @@ interface Event {
   organizationId?: string | null;
   organizationName?: string | null;
   organizationBrandColor?: string | null;
+  organizationThemeMode?: ThemeMode | null;
   venue: EventVenue | null;
   priceTiers: PriceTier[];
   createdAt: string;
@@ -222,7 +224,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
   const totalAmount = cartFees.total;
 
   return (
-    <BrandScope color={event.organizationBrandColor} className="min-h-screen bg-gray-50 dark:bg-slate-900 pb-20 sm:pb-0">
+    <BrandScope color={event.organizationBrandColor} themeMode={event.organizationThemeMode} className="min-h-screen bg-gray-50 dark:bg-slate-900 pb-20 sm:pb-0">
       <div className="max-w-6xl mx-auto px-0 sm:px-6 lg:px-8 py-0 sm:py-12 lg:flex lg:gap-6 lg:items-start">
         <div className="flex-1 min-w-0 bg-transparent sm:bg-white sm:dark:bg-slate-800 rounded-none sm:rounded-lg sm:shadow-lg sm:dark:shadow-lg sm:dark:shadow-black/20 overflow-hidden">
           {/* Hero Header */}
