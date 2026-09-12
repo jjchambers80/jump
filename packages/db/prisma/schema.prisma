@@ -104,6 +104,8 @@ model Image {
   file   File    @relation(fields: [fileId], references: [id])
   venues Venue[]
   events Event[]
+  organizationLogos  Organization[] @relation("OrgLogo")
+  organizationCovers Organization[] @relation("OrgCover")
 
   @@index([fileId])
   @@index([usageType])
@@ -128,10 +130,18 @@ model Organization {
   phoneCountryCode String?            @default("+1")
   phoneNumber      String?
   ein              String?
+  logoUrl          String?
+  logoImageId      String?
+  coverUrl         String?
+  coverImageId     String?
+  brandColor       String?
+  themeMode        ThemeMode          @default(USER)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  logoImage   Image? @relation("OrgLogo", fields: [logoImageId], references: [id])
+  coverImage  Image? @relation("OrgCover", fields: [coverImageId], references: [id])
   venues      Venue[]
   users       User[]
   people      OrganizationPerson[]
@@ -408,6 +418,14 @@ enum UserRole {
 enum OrganizationStatus {
   ACTIVE
   INACTIVE
+}
+
+// Light/dark mode enforced on an organization's public pages. USER = visitor's own choice.
+enum ThemeMode {
+  LIGHT
+  DARK
+  SYSTEM
+  USER
 }
 
 enum EventStatus {

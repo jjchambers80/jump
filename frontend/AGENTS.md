@@ -23,7 +23,7 @@ app/
 - `auth.ts` — Auth.js v5 config (Google OAuth + magic link, JWT strategy)
 - `services/api.ts` — All backend API calls go through here
 - `components/` — Shared React components
-- `lib/` — Utilities and helpers
+- `lib/` — Utilities and helpers (`lib/color.ts` — WCAG contrast + brand CSS vars)
 
 ## Patterns
 
@@ -31,6 +31,8 @@ app/
 - **Data fetching**: Server components fetch directly; client components call `services/api.ts`
 - **Admin pages**: Must check session server-side and add to sidebar navigation
 - **Search params**: Always wrap `useSearchParams()` consumers in `<Suspense fallback={...}>`
+- **Brand colors**: On public organization/venue/event pages and `EventCard`, use the `brand` tokens (`bg-brand`, `hover:bg-brand-hover`, `text-brand-fg`, `text-brand-link`) instead of raw `blue-600`/`indigo-400` classes. Wrap the page root in `<BrandScope color={…} themeMode={…}>`. Color math lives in `lib/color.ts`; see `docs/wiki/features/organization-branding.md`
+- **Org theme mode**: `BrandScope`'s `themeMode` prop forces light/dark/system on public org pages through `useThemeMode().setForced` → next-themes `forcedTheme`. Never call `setTheme` to force — it overwrites `localStorage.theme`. Types/options in `lib/theme.ts`; see `docs/wiki/features/organization-theme-mode.md`
 
 ## Auth in Frontend
 

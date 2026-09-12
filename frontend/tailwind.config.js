@@ -11,6 +11,12 @@ module.exports = {
       colors: {
         background: 'var(--background)',
         foreground: 'var(--foreground)',
+        brand: {
+          DEFAULT: 'var(--brand)',
+          hover: 'var(--brand-hover)',
+          fg: 'var(--brand-fg)',
+          link: 'var(--brand-link)',
+        },
       },
       keyframes: {
         slideUp: {

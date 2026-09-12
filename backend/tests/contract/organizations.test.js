@@ -126,22 +126,71 @@ describe('Organization Contract Tests', () => {
   });
 
   describe('PATCH /organizations/:id', () => {
-    it('should return 200 when admin updates organization', async () => {
-      // Create first
+    const patchEmails = ['patch-admin@test.com', 'patch-other-admin@test.com'];
+    let orgId;
+    let otherOrgId;
+    let orgAdminToken;
+    let otherOrgAdminToken;
+    let systemAdminToken;
+
+    beforeAll(async () => {
+      await prisma.user.deleteMany({ where: { email: { in: patchEmails } } });
+
       const createRes = await request(app)
         .post('/organizations')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ name: 'Original Name' });
+      orgId = createRes.body.id;
 
-      const orgId = createRes.body.id;
+      const otherOrg = await prisma.organization.create({ data: { name: 'Other Patch Org' } });
+      otherOrgId = otherOrg.id;
 
+      const orgAdmin = await prisma.user.create({
+        data: { email: patchEmails[0], role: 'ADMIN', organizationId: orgId },
+      });
+      const otherAdmin = await prisma.user.create({
+        data: { email: patchEmails[1], role: 'ADMIN', organizationId: otherOrgId },
+      });
+
+      orgAdminToken = generateToken({ id: orgAdmin.id, email: orgAdmin.email, role: 'ADMIN' });
+      otherOrgAdminToken = generateToken({ id: otherAdmin.id, email: otherAdmin.email, role: 'ADMIN' });
+      systemAdminToken = generateToken({ role: 'SYSTEM_ADMIN', email: 'sysadmin@test.com' });
+    });
+
+    afterAll(async () => {
+      await prisma.user.deleteMany({ where: { email: { in: patchEmails } } }).catch(() => {});
+      await prisma.organization
+        .deleteMany({ where: { id: { in: [orgId, otherOrgId].filter(Boolean) } } })
+        .catch(() => {});
+    });
+
+    it('should return 200 when an admin of the org updates it', async () => {
       const res = await request(app)
         .patch(`/organizations/${orgId}`)
-        .set('Authorization', `Bearer ${adminToken}`)
+        .set('Authorization', `Bearer ${orgAdminToken}`)
         .send({ name: 'Updated Name' });
 
       expect(res.status).toBe(200);
       expect(res.body.name).toBe('Updated Name');
+    });
+
+    it('should return 200 when a system admin updates any org', async () => {
+      const res = await request(app)
+        .patch(`/organizations/${orgId}`)
+        .set('Authorization', `Bearer ${systemAdminToken}`)
+        .send({ name: 'Updated By Sysadmin' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.name).toBe('Updated By Sysadmin');
+    });
+
+    it('should return 403 when an admin of another org updates it', async () => {
+      const res = await request(app)
+        .patch(`/organizations/${orgId}`)
+        .set('Authorization', `Bearer ${otherOrgAdminToken}`)
+        .send({ name: 'Cross Org Name' });
+
+      expect(res.status).toBe(403);
     });
 
     it('should return 403 for non-admin users', async () => {
@@ -151,6 +200,82 @@ describe('Organization Contract Tests', () => {
         .send({ name: 'Hacked Name' });
 
       expect(res.status).toBe(403);
+    });
+
+    it('sets a normalized brand color', async () => {
+      const res = await request(app)
+        .patch(`/organizations/${orgId}`)
+        .set('Authorization', `Bearer ${orgAdminToken}`)
+        .send({ brandColor: '#1D4ED8' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.brandColor).toBe('#1d4ed8');
+    });
+
+    it('exposes the brand color on the public organization endpoint', async () => {
+      const res = await request(app).get(`/organizations/${orgId}/public`).expect(200);
+
+      expect(res.body.organization.brandColor).toBe('#1d4ed8');
+    });
+
+    it('clears the brand color with null', async () => {
+      const res = await request(app)
+        .patch(`/organizations/${orgId}`)
+        .set('Authorization', `Bearer ${orgAdminToken}`)
+        .send({ brandColor: null });
+
+      expect(res.status).toBe(200);
+      expect(res.body.brandColor).toBeNull();
+    });
+
+    it('returns 400 for an invalid brand color', async () => {
+      const res = await request(app)
+        .patch(`/organizations/${orgId}`)
+        .set('Authorization', `Bearer ${orgAdminToken}`)
+        .send({ brandColor: 'blue' });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('defaults themeMode to USER', async () => {
+      const org = await prisma.organization.findUnique({ where: { id: otherOrgId } });
+
+      expect(org.themeMode).toBe('USER');
+    });
+
+    it.each(['LIGHT', 'DARK', 'SYSTEM', 'USER'])('sets themeMode %s', async (themeMode) => {
+      const res = await request(app)
+        .patch(`/organizations/${orgId}`)
+        .set('Authorization', `Bearer ${orgAdminToken}`)
+        .send({ themeMode });
+
+      expect(res.status).toBe(200);
+      expect(res.body.themeMode).toBe(themeMode);
+    });
+
+    it('normalizes lowercase themeMode input', async () => {
+      const res = await request(app)
+        .patch(`/organizations/${orgId}`)
+        .set('Authorization', `Bearer ${orgAdminToken}`)
+        .send({ themeMode: 'dark' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.themeMode).toBe('DARK');
+    });
+
+    it('exposes themeMode on the public organization endpoint', async () => {
+      const res = await request(app).get(`/organizations/${orgId}/public`).expect(200);
+
+      expect(res.body.organization.themeMode).toBe('DARK');
+    });
+
+    it('returns 400 for an invalid themeMode', async () => {
+      const res = await request(app)
+        .patch(`/organizations/${orgId}`)
+        .set('Authorization', `Bearer ${orgAdminToken}`)
+        .send({ themeMode: 'blue' });
+
+      expect(res.status).toBe(400);
     });
   });
 

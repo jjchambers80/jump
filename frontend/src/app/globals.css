@@ -5,11 +5,32 @@
 :root {
   --background: #f9fafb;
   --foreground: #111827;
+
+  /* Platform brand defaults — match bg-blue-600 / hover:bg-blue-700 / text-blue-600 */
+  --brand: #2563eb;
+  --brand-hover: #1d4ed8;
+  --brand-fg: #ffffff;
+  --brand-link: #2563eb;
 }
 
 .dark {
   --background: #0f172a;
   --foreground: #f1f5f9;
+
+  /* Matches dark:text-indigo-400 */
+  --brand-link: #818cf8;
+}
+
+/*
+ * BrandScope sets --brand, --brand-hover, --brand-fg, --brand-link-light and
+ * --brand-link-dark inline. Theme switching stays in CSS so there is no hydration flash.
+ */
+.brand-scope {
+  --brand-link: var(--brand-link-light, #2563eb);
+}
+
+.dark .brand-scope {
+  --brand-link: var(--brand-link-dark, #818cf8);
 }
 
 body {

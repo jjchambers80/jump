@@ -25,6 +25,7 @@ cd backend && npm test              # All backend tests
 cd backend && npm run test:unit     # Unit tests only
 cd backend && npm run test:contract # Contract tests
 cd frontend && npm run test         # Playwright E2E
+cd frontend && npm run test:unit    # Vitest unit tests (lib/color.ts)
 ```
 
 ## Core Constraints

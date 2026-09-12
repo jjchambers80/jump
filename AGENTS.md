@@ -66,3 +66,5 @@ Auth.js v5 (JWT HS256) · Resend email · Redis caching · Railway deployment
 3. Stripe webhooks locally need: `stripe listen --forward-to localhost:3000/webhooks/stripe`
 4. Capacity is per-tier, not per-event
 5. Railway services need explicit PORT env var
+6. Public org/venue/event pages use `brand` Tailwind tokens (CSS vars set by `BrandScope`), not raw blue classes — see `docs/wiki/features/organization-branding.md`
+7. Org-scoped public pages must pass `themeMode` to `BrandScope`; never force a theme via `setTheme` (it overwrites the visitor's stored choice) — see `docs/wiki/features/organization-theme-mode.md`

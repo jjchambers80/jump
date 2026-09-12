@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import EventCard, { type EventSummary } from '@/components/EventCard';
 import { resolveAssetUrl } from '@/lib/assets';
+import BrandScope from '@/components/BrandScope';
+import type { ThemeMode } from '@/lib/theme';
 import api from '@/services/api';
 
 interface PublicVenue {
@@ -12,6 +14,8 @@ interface PublicVenue {
   address: string;
   timezone: string;
   logoUrl: string | null;
+  brandColor?: string | null;
+  themeMode?: ThemeMode | null;
 }
 
 interface PublicVenueResponse {
@@ -80,6 +84,7 @@ export default function PublicVenuePage({ params }: { params: { venueId: string 
   const logoSrc = resolveAssetUrl(data.venue.logoUrl);
 
   return (
+    <BrandScope color={data.venue.brandColor} themeMode={data.venue.themeMode}>
     <main className="min-h-screen overflow-x-hidden bg-gray-50 dark:bg-slate-900">
       <header className="border-b border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-800">
         <div className="mx-auto flex max-w-7xl flex-col items-center gap-5 px-4 py-8 text-center sm:flex-row sm:px-6 sm:text-left lg:px-8">
@@ -128,5 +133,6 @@ export default function PublicVenuePage({ params }: { params: { venueId: string 
         )}
       </section>
     </main>
+    </BrandScope>
   );
 }

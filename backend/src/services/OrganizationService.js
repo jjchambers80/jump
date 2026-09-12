@@ -3,6 +3,8 @@
 
 import { prisma } from '@jump/db';
 import logger from '../utils/logger.js';
+import { NotFoundError } from '../middleware/errorHandler.js';
+import { formatEventSummary } from '../utils/eventSummary.js';
 
 export const serializeBusinessDetails = (organization) => {
   const { ein, ...businessDetails } = organization;
@@ -71,13 +73,15 @@ class OrganizationService {
   /**
    * Update an organization
    * @param {string} id - Organization ID
-   * @param {Object} data - Fields to update { name?, status? }
+   * @param {Object} data - Fields to update { name?, status?, brandColor?, themeMode? }
    * @returns {Promise<Object>} Updated organization
    */
   async updateOrganization(id, data) {
     const updateData = {};
     if (data.name !== undefined) updateData.name = data.name;
     if (data.status !== undefined) updateData.status = data.status;
+    if (data.brandColor !== undefined) updateData.brandColor = data.brandColor;
+    if (data.themeMode !== undefined) updateData.themeMode = data.themeMode;
 
     const organization = await prisma.organization.update({
       where: { id },
@@ -124,6 +128,109 @@ class OrganizationService {
     });
 
     return serializeBusinessDetails(organization);
+  }
+
+  /** Get public organization info with published events. */
+  async getPublicOrganization(id) {
+    const org = await prisma.organization.findFirst({
+      where: { id, status: 'ACTIVE' },
+      select: {
+        id: true,
+        name: true,
+        logoUrl: true,
+        coverUrl: true,
+        brandColor: true,
+        themeMode: true,
+        venues: {
+          select: {
+            events: {
+              where: { status: 'PUBLISHED' },
+              orderBy: { date: 'asc' },
+              select: {
+                id: true,
+                name: true,
+                date: true,
+                category: true,
+                status: true,
+                venue: { select: { id: true, name: true, address: true } },
+                priceTiers: {
+                  where: { isActive: true },
+                  select: {
+                    price: true,
+                    quantityTotal: true,
+                    quantitySold: true,
+                    quantityReserved: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!org) {
+      throw new NotFoundError('Organization not found');
+    }
+
+    const events = org.venues.flatMap((v) => v.events).map(formatEventSummary);
+    events.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    return {
+      organization: {
+        id: org.id,
+        name: org.name,
+        logoUrl: org.logoUrl,
+        coverUrl: org.coverUrl,
+        brandColor: org.brandColor,
+        themeMode: org.themeMode,
+      },
+      events,
+    };
+  }
+
+  /** Set or clear organization logo. */
+  async setOrganizationLogo(id, logoUrl, imageId) {
+    const existing = await prisma.organization.findUnique({
+      where: { id },
+      select: { logoUrl: true, logoImageId: true },
+    });
+    if (!existing) throw new NotFoundError('Organization not found');
+
+    const data = { logoUrl };
+    if (imageId !== undefined) data.logoImageId = imageId;
+
+    const organization = await prisma.organization.update({ where: { id }, data });
+
+    logger.info('Organization logo updated', {
+      event: 'organization_logo_updated',
+      organizationId: id,
+      removed: logoUrl === null,
+    });
+
+    return { organization, previousLogoUrl: existing.logoUrl, previousLogoImageId: existing.logoImageId };
+  }
+
+  /** Set or clear organization cover image. */
+  async setOrganizationCover(id, coverUrl, imageId) {
+    const existing = await prisma.organization.findUnique({
+      where: { id },
+      select: { coverUrl: true, coverImageId: true },
+    });
+    if (!existing) throw new NotFoundError('Organization not found');
+
+    const data = { coverUrl };
+    if (imageId !== undefined) data.coverImageId = imageId;
+
+    const organization = await prisma.organization.update({ where: { id }, data });
+
+    logger.info('Organization cover updated', {
+      event: 'organization_cover_updated',
+      organizationId: id,
+      removed: coverUrl === null,
+    });
+
+    return { organization, previousCoverUrl: existing.coverUrl, previousCoverImageId: existing.coverImageId };
   }
 }
 

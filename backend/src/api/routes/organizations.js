@@ -10,9 +10,33 @@ import {
   validateUpdateOrganization,
 } from '../validators/organizationValidators.js';
 import organizationService from '../../services/OrganizationService.js';
-import { NotFoundError } from '../../middleware/errorHandler.js';
+import { NotFoundError, ForbiddenError } from '../../middleware/errorHandler.js';
+import { uploadImage } from '../../middleware/imageUpload.js';
+import imageService from '../../services/ImageService.js';
+import { prisma } from '@jump/db';
 
 const router = Router();
+
+/**
+ * Verifies the authenticated user belongs to the org in :id.
+ * Must run after requireAuth.
+ */
+const verifyOrgOwnership = async (req, res, next) => {
+  try {
+    if (req.user.role === 'SYSTEM_ADMIN') return next();
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { organizationId: true },
+    });
+    if (!user?.organizationId || user.organizationId !== req.params.id) {
+      throw new ForbiddenError('Access denied to this organization');
+    }
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
 
 /**
  * POST /organizations
@@ -64,6 +88,7 @@ router.patch(
   '/:id',
   requireAuth,
   requireAdmin,
+  verifyOrgOwnership,
   validateUpdateOrganization,
   async (req, res, next) => {
     try {
@@ -78,5 +103,116 @@ router.patch(
     }
   }
 );
+
+/**
+ * GET /organizations/:id/public
+ * Get public organization info with published events (no auth)
+ */
+router.get('/:id/public', async (req, res, next) => {
+  try {
+    const result = await organizationService.getPublicOrganization(req.params.id);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /organizations/:id/logo
+ * Upload organization logo (admin only)
+ */
+router.post('/:id/logo', requireAuth, requireAdmin, verifyOrgOwnership, uploadImage, async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded' });
+    }
+    const image = await imageService.processUpload(
+      req.file.buffer,
+      req.file.originalname,
+      req.file.mimetype,
+      'org_logo'
+    );
+    const { organization, previousLogoImageId } = await organizationService.setOrganizationLogo(
+      req.params.id,
+      image.urls.original,
+      image.id
+    );
+    if (previousLogoImageId && previousLogoImageId !== image.id) {
+      await imageService.deleteImage(previousLogoImageId).catch(() => {});
+    }
+    res.json({ ...organization, image });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * DELETE /organizations/:id/logo
+ * Remove organization logo (admin only)
+ */
+router.delete('/:id/logo', requireAuth, requireAdmin, verifyOrgOwnership, async (req, res, next) => {
+  try {
+    const { organization, previousLogoImageId } = await organizationService.setOrganizationLogo(
+      req.params.id,
+      null,
+      null
+    );
+    if (previousLogoImageId) {
+      await imageService.deleteImage(previousLogoImageId).catch(() => {});
+    }
+    res.json(organization);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /organizations/:id/cover
+ * Upload organization cover image (admin only)
+ */
+router.post('/:id/cover', requireAuth, requireAdmin, verifyOrgOwnership, uploadImage, async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded' });
+    }
+    const image = await imageService.processUpload(
+      req.file.buffer,
+      req.file.originalname,
+      req.file.mimetype,
+      'org_cover'
+    );
+    const { organization, previousCoverImageId } = await organizationService.setOrganizationCover(
+      req.params.id,
+      image.urls.original,
+      image.id
+    );
+    if (previousCoverImageId && previousCoverImageId !== image.id) {
+      await imageService.deleteImage(previousCoverImageId).catch(() => {});
+    }
+    res.json({ ...organization, image });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * DELETE /organizations/:id/cover
+ * Remove organization cover image (admin only)
+ */
+router.delete('/:id/cover', requireAuth, requireAdmin, verifyOrgOwnership, async (req, res, next) => {
+  try {
+    const { organization, previousCoverImageId } = await organizationService.setOrganizationCover(
+      req.params.id,
+      null,
+      null
+    );
+    if (previousCoverImageId) {
+      await imageService.deleteImage(previousCoverImageId).catch(() => {});
+    }
+    res.json(organization);
+  } catch (error) {
+    next(error);
+  }
+});
 
 export default router;
