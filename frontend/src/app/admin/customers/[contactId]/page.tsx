@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import api from '@/services/api';
 import { useOrg } from '@/components/OrgContext';
+import { resolveAssetUrl } from '@/lib/assets';
 
 interface OrderEvent {
   id: string;
@@ -239,7 +240,7 @@ export default function CustomerDetailPage() {
                     {/* Event logo */}
                     <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-slate-700 flex-shrink-0 overflow-hidden flex items-center justify-center">
                       {order.event.logoUrl ? (
-                        <img src={order.event.logoUrl} alt="" className="w-full h-full object-contain" />
+                        <img src={resolveAssetUrl(order.event.logoUrl) || undefined} alt="" className="w-full h-full object-contain" />
                       ) : (
                         <svg className="w-5 h-5 text-gray-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
