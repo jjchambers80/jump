@@ -7,6 +7,9 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '../../../services/api';
+import CartLineItem from '../../../components/CartLineItem';
+import ExpandCollapseAll from '../../../components/ExpandCollapseAll';
+import { computeOrderFees, formatPrice } from '../../../lib/fees';
 
 interface EventVenue {
   id: string;
@@ -71,29 +74,6 @@ function parseCartItems(
     : [];
 }
 
-function formatPrice(dollars: number): string {
-  return `$${Number(dollars).toFixed(2)}`;
-}
-
-// Fee computation mirroring backend FeeService (FTC all-in pricing)
-const FEE_CONFIG = {
-  platformFeePercent: 0.05,
-  stripeFeePercent: 0.029,
-  stripeFeeFixed: 0.30,
-};
-
-function computeOrderFees(items: { price: number; quantity: number }[], taxRate: number = 0) {
-  const round = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100;
-  const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const platformFee = round(subtotal * FEE_CONFIG.platformFeePercent);
-  const processingFee = round(
-    (subtotal + platformFee) * FEE_CONFIG.stripeFeePercent + FEE_CONFIG.stripeFeeFixed
-  );
-  const tax = round(subtotal * taxRate);
-  const total = round(subtotal + platformFee + processingFee + tax);
-  return { subtotal: round(subtotal), platformFee, processingFee, tax, total };
-}
-
 export default function CheckoutPage({ params }: { params: { eventId: string } }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -107,6 +87,7 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [openLines, setOpenLines] = useState<Record<string, boolean>>({});
 
   // Legacy single-tier params remain supported for existing checkout links.
   const cartItems = parseCartItems(
@@ -288,6 +269,14 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
   const fees = computeOrderFees(feeItems, event?.taxRate ?? 0);
   const totalAmount = fees.total;
 
+  const allLinesOpen = selectedItems.every((item) => openLines[item.priceTierId]);
+  const toggleLine = (tierId: string) =>
+    setOpenLines((current) => ({ ...current, [tierId]: !current[tierId] }));
+  const toggleAllLines = () => {
+    const next = !allLinesOpen;
+    setOpenLines(Object.fromEntries(selectedItems.map((item) => [item.priceTierId, next])));
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900 py-12">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -311,9 +300,12 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
 
           {/* Order Summary */}
           <div className="mb-8 pb-8 border-b border-gray-200 dark:border-slate-700">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-slate-100 mb-4">
-              Order Summary
-            </h2>
+            <div className="flex items-center justify-between gap-4 mb-4">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-slate-100">
+                Order Summary
+              </h2>
+              <ExpandCollapseAll allOpen={allLinesOpen} onToggle={toggleAllLines} />
+            </div>
 
             <div className="bg-gray-50 dark:bg-slate-900 rounded-lg p-6">
               <h3 className="font-bold text-lg text-gray-900 dark:text-slate-100 mb-2">
@@ -329,17 +321,19 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
               )}
 
               <div className="border-t border-gray-200 dark:border-slate-700 pt-4 space-y-2">
-                {selectedItems.map((item) => (
-                  <div
-                    key={item.priceTierId}
-                    className="flex justify-between gap-4 text-gray-700 dark:text-slate-300"
-                  >
-                    <span>
-                      <span className="font-semibold">{item.tier.name}</span> × {item.quantity}
-                    </span>
-                    <span>{formatPrice(item.tier.price * item.quantity)}</span>
-                  </div>
-                ))}
+                <div data-testid="cart-lines-checkout">
+                  {selectedItems.map((item, index) => (
+                    <CartLineItem
+                      key={item.priceTierId}
+                      id={`checkout-${item.priceTierId}`}
+                      name={item.tier.name}
+                      line={fees.lines[index]}
+                      open={!!openLines[item.priceTierId]}
+                      onToggle={() => toggleLine(item.priceTierId)}
+                      variant="drawer"
+                    />
+                  ))}
+                </div>
                 <div className="flex justify-between text-gray-700 dark:text-slate-300">
                   <span>Total tickets:</span>
                   <span>{totalQuantity}</span>

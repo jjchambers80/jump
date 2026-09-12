@@ -1,7 +1,7 @@
 # Fee Calculation
 
 **Status:** Implemented
-**Last Updated:** 2026-09-07
+**Last Updated:** 2026-09-12
 
 ## Overview
 
@@ -14,6 +14,7 @@ Implements FTC all-in pricing. FeeService calculates the full cost breakdown: su
 | `backend/src/services/FeeService.js` | Fee calculation logic (platform fee, processing fee) |
 | `backend/src/services/TaxService.js` | Tax rate lookup via Stripe Tax API |
 | `backend/src/services/OrderService.js` | Order creation with fee breakdown persistence |
+| `frontend/src/lib/fees.ts` | Frontend mirror — must stay in sync with `FeeService.js` and `config/fees.js` |
 
 ## How It Works
 
@@ -40,3 +41,4 @@ Implements FTC all-in pricing. FeeService calculates the full cost breakdown: su
 ## Related Features
 
 - [Tax Calculation](tax-calculation.md) — provides the venue-based tax rate used in fee breakdown.
+- [Cart Line-Item Breakdown](cart-line-item-breakdown.md) — customer-facing per-line view of this math.

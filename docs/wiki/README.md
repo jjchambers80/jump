@@ -17,6 +17,7 @@ Generated and maintained by running `/doc-feature` after completing feature work
 - [Fee Calculation](features/fee-calculation.md) — Platform fees, processing fees, pass-through pricing
 - [Tax Calculation](features/tax-calculation.md) — Venue-based tax rates via Stripe Tax API
 - [All-In Pricing](features/all-in-pricing.md) — FTC-compliant price display with fees included
+- [Cart Line-Item Breakdown](features/cart-line-item-breakdown.md) — Per-line fee accordion in the cart (dotted-underline price, caret) with Expand all / Collapse all; shared `lib/fees.ts`
 
 ### Tickets & Fulfillment
 - [Ticket Issuance](features/ticket-issuance.md) — Barcode generation, QR code JWTs, ticket lifecycle
