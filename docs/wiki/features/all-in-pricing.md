@@ -1,7 +1,7 @@
 # All-In Pricing
 
 **Status**: Implemented
-**Last Updated**: 2026-09-07
+**Last Updated**: 2026-09-12
 
 ## Overview
 
@@ -15,6 +15,7 @@ Jump displays FTC-compliant all-in pricing to customers. The price shown on even
 | `backend/src/services/TaxService.js` | Venue-based tax rate lookup via Stripe Tax API |
 | `backend/src/services/OrderService.js` | Applies fee calculation during order creation |
 | `frontend/src/app/events/[eventId]/page.tsx` | Displays all-in price to customers |
+| `frontend/src/lib/fees.ts` | Frontend mirror of `FeeService` (order totals + per-line allocation) used by the event cart and checkout |
 
 ## How It Works
 
@@ -38,3 +39,4 @@ Jump displays FTC-compliant all-in pricing to customers. The price shown on even
 - [Fee Calculation](fee-calculation.md) — Detailed fee math
 - [Tax Calculation](tax-calculation.md) — Stripe Tax API integration
 - [Price Tiers](price-tiers.md) — Base pricing configuration
+- [Cart Line-Item Breakdown](cart-line-item-breakdown.md) — Per-line accordion showing these components in the cart

@@ -9,6 +9,9 @@ import Link from 'next/link';
 import { api } from '../../../services/api';
 import { resolveAssetUrl } from '../../../lib/assets';
 import BrandScope from '../../../components/BrandScope';
+import CartLineItem from '../../../components/CartLineItem';
+import ExpandCollapseAll from '../../../components/ExpandCollapseAll';
+import { computeOrderFees, computeTierAllInPrice, formatPrice } from '../../../lib/fees';
 import type { ThemeMode } from '@/lib/theme';
 
 interface EventVenue {
@@ -55,28 +58,6 @@ interface Event {
   updatedAt: string;
 }
 
-function formatPrice(dollars: number): string {
-  return `$${Number(dollars).toFixed(2)}`;
-}
-
-// Fee computation mirroring backend FeeService (FTC all-in pricing)
-const FEE_CONFIG = {
-  platformFeePercent: 0.05,
-  stripeFeePercent: 0.029,
-  stripeFeeFixed: 0.30,
-};
-
-function computeTierAllInPrice(basePrice: number, taxRate: number = 0) {
-  const round = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100;
-  const platformFee = round(basePrice * FEE_CONFIG.platformFeePercent);
-  const processingFee = round(
-    (basePrice + platformFee) * FEE_CONFIG.stripeFeePercent + FEE_CONFIG.stripeFeeFixed
-  );
-  const tax = round(basePrice * taxRate);
-  const total = round(basePrice + platformFee + processingFee + tax);
-  return { basePrice, platformFee, processingFee, tax, total };
-}
-
 export default function EventDetailPage({ params }: { params: { eventId: string } }) {
   const router = useRouter();
   const [event, setEvent] = useState<Event | null>(null);
@@ -87,6 +68,9 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
   const [showTierDescription, setShowTierDescription] = useState<PriceTier | null>(null);
   const [showImagePreview, setShowImagePreview] = useState(false);
   const [showMobileCart, setShowMobileCart] = useState(false);
+  // Which cart lines have their price breakdown open — shared by the desktop
+  // summary and the mobile drawer so both views always agree.
+  const [openLines, setOpenLines] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetchEventDetails();
@@ -215,13 +199,21 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
     .map((tier) => ({ priceTierId: tier.id, quantity: quantities[tier.id] ?? 0 }))
     .filter((item) => item.quantity > 0);
   const totalQuantity = cartItems.reduce((sum, item) => sum + item.quantity, 0);
-  // Compute all-in total with fees
-  const cartFeeItems = activeTiers
-    .filter((tier) => (quantities[tier.id] ?? 0) > 0)
-    .map((tier) => ({ price: tier.price, quantity: quantities[tier.id] ?? 0 }));
-  const cartSubtotal = cartFeeItems.reduce((s, i) => s + i.price * i.quantity, 0);
-  const cartFees = cartSubtotal > 0 ? computeTierAllInPrice(cartSubtotal) : { total: 0 };
-  const totalAmount = cartFees.total;
+  // All-in order total with per-line fee allocation (mirrors backend FeeService)
+  const cartTiers = activeTiers.filter((tier) => (quantities[tier.id] ?? 0) > 0);
+  const cartFees = computeOrderFees(
+    cartTiers.map((tier) => ({ price: tier.price, quantity: quantities[tier.id] ?? 0 })),
+    event?.taxRate ?? 0
+  );
+  const totalAmount = cartTiers.length > 0 ? cartFees.total : 0;
+
+  const allLinesOpen = cartTiers.length > 0 && cartTiers.every((tier) => openLines[tier.id]);
+  const toggleLine = (tierId: string) =>
+    setOpenLines((current) => ({ ...current, [tierId]: !current[tierId] }));
+  const toggleAllLines = () => {
+    const next = !allLinesOpen;
+    setOpenLines(Object.fromEntries(cartTiers.map((tier) => [tier.id, next])));
+  };
 
   return (
     <BrandScope color={event.organizationBrandColor} themeMode={event.organizationThemeMode} className="min-h-screen bg-gray-50 dark:bg-slate-900 pb-20 sm:pb-0">
@@ -513,28 +505,30 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
         <div className="hidden lg:block lg:w-80 flex-shrink-0">
           <div className="sticky top-8">
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg dark:shadow-lg dark:shadow-black/20 p-6">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-slate-100 mb-4">Order Summary</h3>
+              <div className="flex items-center justify-between gap-4 mb-4">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-slate-100">Order Summary</h3>
+                <ExpandCollapseAll
+                  allOpen={allLinesOpen}
+                  onToggle={toggleAllLines}
+                  disabled={cartTiers.length === 0}
+                />
+              </div>
 
               {cartItems.length === 0 ? (
                 <p className="text-sm text-gray-500 dark:text-slate-400 mb-4">Select tickets to get started</p>
               ) : (
-                <div className="space-y-3 mb-4">
-                  {activeTiers
-                    .filter((tier) => (quantities[tier.id] ?? 0) > 0)
-                    .map((tier) => {
-                      const qty = quantities[tier.id] ?? 0;
-                      const fees = computeTierAllInPrice(tier.price, event?.taxRate ?? 0);
-                      return (
-                        <div key={tier.id} className="flex justify-between text-sm">
-                          <span className="text-gray-700 dark:text-slate-300">
-                            {tier.name} x{qty}
-                          </span>
-                          <span className="font-medium text-gray-900 dark:text-slate-100">
-                            {formatPrice(fees.total * qty)}
-                          </span>
-                        </div>
-                      );
-                    })}
+                <div className="space-y-3 mb-4" data-testid="cart-lines-desktop">
+                  {cartTiers.map((tier, index) => (
+                    <CartLineItem
+                      key={tier.id}
+                      id={`desktop-${tier.id}`}
+                      name={tier.name}
+                      line={cartFees.lines[index]}
+                      open={!!openLines[tier.id]}
+                      onToggle={() => toggleLine(tier.id)}
+                      variant="compact"
+                    />
+                  ))}
                 </div>
               )}
 
@@ -617,11 +611,17 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
             <div className="flex justify-center pt-3 pb-2">
               <div className="w-10 h-1 bg-gray-300 dark:bg-slate-600 rounded-full" />
             </div>
-            <div className="px-4 pb-2 flex items-center justify-between">
+            <div className="px-4 pb-2 flex items-center justify-between gap-3">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Your Cart</h3>
+              <ExpandCollapseAll
+                allOpen={allLinesOpen}
+                onToggle={toggleAllLines}
+                disabled={cartTiers.length === 0}
+              />
               <button
                 onClick={() => setShowMobileCart(false)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-slate-300 p-1"
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-slate-300 p-1 shrink-0"
+                aria-label="Close cart"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -632,31 +632,20 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
               {cartItems.length === 0 ? (
                 <p className="text-gray-500 dark:text-slate-400 text-center py-6">No tickets selected</p>
               ) : (
-                <div className="space-y-4">
-                  {activeTiers
-                    .filter((tier) => (quantities[tier.id] ?? 0) > 0)
-                    .map((tier) => {
-                      const qty = quantities[tier.id] ?? 0;
-                      const fees = computeTierAllInPrice(tier.price, event?.taxRate ?? 0);
-                      return (
-                        <div key={tier.id} className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-slate-700 last:border-0">
-                          <div>
-                            <p className="font-medium text-gray-900 dark:text-slate-100">{tier.name}</p>
-                            <p className="text-sm text-gray-500 dark:text-slate-400">
-                              {formatPrice(fees.total)} each
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-semibold text-gray-900 dark:text-slate-100">
-                              {formatPrice(fees.total * qty)}
-                            </p>
-                            <p className="text-sm text-gray-500 dark:text-slate-400">Qty: {qty}</p>
-                          </div>
-                        </div>
-                      );
-                    })}
+                <div data-testid="cart-lines-mobile">
+                  {cartTiers.map((tier, index) => (
+                    <CartLineItem
+                      key={tier.id}
+                      id={`mobile-${tier.id}`}
+                      name={tier.name}
+                      line={cartFees.lines[index]}
+                      open={!!openLines[tier.id]}
+                      onToggle={() => toggleLine(tier.id)}
+                      variant="drawer"
+                    />
+                  ))}
 
-                  <div className="pt-2 border-t border-gray-200 dark:border-slate-600">
+                  <div className="mt-3 pt-3 border-t border-gray-200 dark:border-slate-600">
                     <div className="flex justify-between">
                       <span className="font-bold text-gray-900 dark:text-slate-100">Total</span>
                       <span className="text-xl font-bold text-gray-900 dark:text-slate-100">
