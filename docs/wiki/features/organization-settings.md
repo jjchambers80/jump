@@ -90,6 +90,7 @@ Whitelisted fields: `name`, `companyName`, `email`, `businessType`, `nickname`, 
 - DOB is stored for people but never returned by list or create responses, nor logged.
 - Only one account representative per organization (partial unique index).
 - E2E tests mock `GET /organizations` in addition to the settings endpoints, because the switcher label comes from `OrgContext`, not from the settings response.
+- Previewing from a worktree frontend on another port (e.g. `:3011`) needs the backend's CORS allowlist to accept it. Since `128659a`, `FRONTEND_URL` is comma-separated and any `localhost` port is allowed outside production — restart the backend after pulling. Run the E2E suite with `PLAYWRIGHT_PORT=3011` so it does not reuse a dev server from a different checkout.
 
 ## Related Features
 
