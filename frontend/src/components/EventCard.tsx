@@ -80,7 +80,7 @@ export default function EventCard({ event }: { event: EventSummary }) {
           <div className="flex items-center">
             {event.priceRange ? (
               <>
-                <span className="text-3xl font-bold text-blue-600 dark:text-indigo-400">
+                <span className="text-3xl font-bold text-brand-link">
                   {formatPrice(event.priceRange.min)}
                 </span>
                 {event.priceRange.min !== event.priceRange.max && (
@@ -108,7 +108,7 @@ export default function EventCard({ event }: { event: EventSummary }) {
         </div>
 
         {!isSoldOut && (
-          <div className="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-center text-white font-bold py-2 px-4 rounded transition-colors duration-200">
+          <div className="mt-4 w-full bg-brand hover:bg-brand-hover text-center text-brand-fg font-bold py-2 px-4 rounded transition-colors duration-200">
             View Details &amp; Purchase
           </div>
         )}

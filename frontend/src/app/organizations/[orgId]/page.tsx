@@ -4,12 +4,14 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../../../services/api';
 import { resolveAssetUrl } from '../../../lib/assets';
 import EventCard, { EventSummary } from '../../../components/EventCard';
+import BrandScope from '../../../components/BrandScope';
 
 interface OrganizationPublic {
   id: string;
   name: string;
   logoUrl: string | null;
   coverUrl: string | null;
+  brandColor?: string | null;
 }
 
 interface OrgPageData {
@@ -43,7 +45,7 @@ export default function OrganizationPage({ params }: { params: { orgId: string }
       <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center">
         <div className="text-center">
           <svg
-            className="animate-spin h-12 w-12 text-blue-600 dark:text-indigo-400 mx-auto mb-4"
+            className="animate-spin h-12 w-12 text-brand-link mx-auto mb-4"
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
             viewBox="0 0 24 24"
@@ -145,7 +147,7 @@ export default function OrganizationPage({ params }: { params: { orgId: string }
   // Desktop without cover: centered single column
   // Mobile: cover at top, then content
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
+    <BrandScope color={organization.brandColor} className="min-h-screen bg-gray-50 dark:bg-slate-900">
       {/* Mobile cover image */}
       {hasCover && (
         <div className="xl:hidden w-full">
@@ -184,6 +186,6 @@ export default function OrganizationPage({ params }: { params: { orgId: string }
           {eventList}
         </div>
       )}
-    </div>
+    </BrandScope>
   );
 }

@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '../../../services/api';
 import { resolveAssetUrl } from '../../../lib/assets';
+import BrandScope from '../../../components/BrandScope';
 
 interface EventVenue {
   id: string;
@@ -45,6 +46,7 @@ interface Event {
   taxRate: number;
   organizationId?: string | null;
   organizationName?: string | null;
+  organizationBrandColor?: string | null;
   venue: EventVenue | null;
   priceTiers: PriceTier[];
   createdAt: string;
@@ -138,7 +140,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
       <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center">
         <div className="text-center">
           <svg
-            className="animate-spin h-12 w-12 text-blue-600 dark:text-indigo-400 mx-auto mb-4"
+            className="animate-spin h-12 w-12 text-brand-link mx-auto mb-4"
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
             viewBox="0 0 24 24"
@@ -220,7 +222,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
   const totalAmount = cartFees.total;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 pb-20 sm:pb-0">
+    <BrandScope color={event.organizationBrandColor} className="min-h-screen bg-gray-50 dark:bg-slate-900 pb-20 sm:pb-0">
       <div className="max-w-6xl mx-auto px-0 sm:px-6 lg:px-8 py-0 sm:py-12 lg:flex lg:gap-6 lg:items-start">
         <div className="flex-1 min-w-0 bg-transparent sm:bg-white sm:dark:bg-slate-800 rounded-none sm:rounded-lg sm:shadow-lg sm:dark:shadow-lg sm:dark:shadow-black/20 overflow-hidden">
           {/* Hero Header */}
@@ -407,10 +409,10 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                       key={tier.id}
                       className={`w-full p-4 rounded-lg border-2 transition-all duration-200 ${
                         quantity > 0
-                          ? 'border-blue-600 dark:border-indigo-400 bg-blue-50 dark:bg-indigo-900/20'
+                          ? 'border-brand-link bg-gray-50 dark:bg-slate-900/40'
                           : tierSoldOut
                             ? 'border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900/50 opacity-60 cursor-not-allowed'
-                            : 'border-gray-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-indigo-600 bg-white dark:bg-slate-800'
+                            : 'border-gray-200 dark:border-slate-700 hover:border-brand-link bg-white dark:bg-slate-800'
                       }`}
                     >
                       <div className="flex items-center justify-between">
@@ -421,7 +423,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                               <button
                                 type="button"
                                 onClick={() => setShowTierDescription(tier)}
-                                className="text-gray-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-indigo-400 transition-colors"
+                                className="text-gray-400 dark:text-slate-500 hover:text-brand-link transition-colors"
                                 aria-label={`${tier.name} details`}
                               >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -450,7 +452,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                             const fees = computeTierAllInPrice(tier.price, event?.taxRate ?? 0);
                             return (
                               <div className="mt-1">
-                                <span className="text-lg font-bold text-blue-600 dark:text-indigo-400">
+                                <span className="text-lg font-bold text-brand-link">
                                   {formatPrice(fees.total)}
                                 </span>
                                 <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">
@@ -548,7 +550,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
               <button
                 onClick={handleProceedToCheckout}
                 disabled={cartItems.length === 0}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-lg transition-colors duration-200 text-lg"
+                className="w-full bg-brand hover:bg-brand-hover disabled:bg-gray-400 disabled:cursor-not-allowed text-brand-fg disabled:text-white font-bold py-3 px-6 rounded-lg transition-colors duration-200 text-lg"
               >
                 Proceed to Checkout
               </button>
@@ -578,7 +580,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z" />
                 </svg>
                 {totalQuantity > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                  <span className="absolute -top-1 -right-1 bg-brand text-brand-fg text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
                     {totalQuantity}
                   </span>
                 )}
@@ -588,7 +590,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
               <button
                 onClick={handleProceedToCheckout}
                 disabled={cartItems.length === 0}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200 text-base flex items-center justify-center gap-2"
+                className="flex-1 bg-brand hover:bg-brand-hover disabled:bg-gray-400 disabled:cursor-not-allowed text-brand-fg disabled:text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200 text-base flex items-center justify-center gap-2"
               >
                 <span>Checkout {formatPrice(totalAmount)}</span>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -816,6 +818,6 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
           </div>
         </div>
       )}
-    </div>
+    </BrandScope>
   );
 }
