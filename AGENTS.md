@@ -29,6 +29,7 @@ Auth.js v5 (JWT HS256) · Resend email · Redis caching · Railway deployment
 - **Route registration**: New route files must be registered in `backend/src/api/server.js`
 - **Auth middleware chain**: `requireAuth` → `requireRole('ORGANIZER'|'ADMIN')`
 - **Public endpoints**: Event listing, guest checkout, ticket lookup — no auth required
+- **Partial PATCH validators**: `validateUpdateBusinessDetails` validates only keys present in the body (whitelist + per-key rules). Follow that pattern when several UI cards save subsets of one record
 
 ## Frontend Patterns
 
