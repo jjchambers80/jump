@@ -42,17 +42,6 @@ const ICONS: Record<ThemeMode, React.ReactNode> = {
       />
     </svg>
   ),
-  USER: (
-    /* Person */
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-      />
-    </svg>
-  ),
 };
 
 /**
@@ -67,7 +56,7 @@ export default function ThemeModePicker({ value, onChange }: ThemeModePickerProp
       role="radiogroup"
       aria-label="Theme mode"
       data-testid="theme-mode-picker"
-      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"
+      className="grid grid-cols-1 sm:grid-cols-3 gap-3"
     >
       {THEME_MODES.map((option) => {
         const selected = value === option.value;

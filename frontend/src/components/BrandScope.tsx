@@ -9,7 +9,7 @@ import { useThemeMode } from '@/components/ThemeProvider';
 interface BrandScopeProps {
   /** Organization brand color (#rrggbb). Null/undefined keeps platform defaults. */
   color: string | null | undefined;
-  /** Organization theme mode. LIGHT/DARK/SYSTEM force the page theme; USER/undefined leaves the visitor's choice. */
+  /** Organization theme mode. LIGHT/DARK/SYSTEM force the page theme; undefined leaves the visitor's choice. */
   themeMode?: ThemeMode | null;
   className?: string;
   children: ReactNode;

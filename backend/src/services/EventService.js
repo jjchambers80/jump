@@ -542,7 +542,7 @@ class EventService {
       organizationId: event.venue?.organization?.id || null,
       organizationName: event.venue?.organization?.name || null,
       organizationBrandColor: event.venue?.organization?.brandColor || null,
-      organizationThemeMode: event.venue?.organization?.themeMode || 'USER',
+      organizationThemeMode: event.venue?.organization?.themeMode || 'SYSTEM',
       venue: event.venue
         ? {
             id: event.venue.id,

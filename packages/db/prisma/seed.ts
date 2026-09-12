@@ -34,7 +34,7 @@ async function main() {
     data: {
       name: "Jump Events Co.",
       brandColor: "#047857", // emerald-700 — passes WCAG AA, shows brand inheritance locally
-      themeMode: "DARK", // forces dark on public pages so theme enforcement is visible in local QA
+      themeMode: "DARK", // default is SYSTEM; DARK makes enforcement visible in local QA
     },
   });
   console.log(`  ✅ Organization: ${org.name} (${org.id})`);

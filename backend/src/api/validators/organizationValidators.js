@@ -23,7 +23,7 @@ const US_STATE_CODES = new Set([
 
 const HEX_COLOR_PATTERN = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 
-export const THEME_MODES = ['LIGHT', 'DARK', 'SYSTEM', 'USER'];
+export const THEME_MODES = ['LIGHT', 'DARK', 'SYSTEM'];
 
 /** Normalize a theme mode to its uppercase enum value, or return null when invalid. */
 export const normalizeThemeMode = (value) => {

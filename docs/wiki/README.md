@@ -31,7 +31,7 @@ Generated and maintained by running `/doc-feature` after completing feature work
 - [Admin Dashboard](features/admin-dashboard.md) — Stats, event management, analytics
 - [Organization Settings](features/organization-settings.md) — Business details, staff (OrganizationPerson)
 - [Organization Branding](features/organization-branding.md) — Logo, cover image, brand color with WCAG AA contrast checker
-- [Organization Theme Mode](features/organization-theme-mode.md) — Force light/dark/system or leave to visitor on public org pages
+- [Organization Theme Mode](features/organization-theme-mode.md) — Per-org light/dark/system enforcement on public org pages
 - [Venue Management](features/venue-management.md) — CRUD, logo uploads, timezone config
 - [User Management](features/user-management.md) — Role assignment, account listing
 

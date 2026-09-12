@@ -93,7 +93,7 @@ class VenueService {
       timezone: venue.timezone,
       logoUrl: venue.logoUrl,
       brandColor: venue.organization?.brandColor || null,
-      themeMode: venue.organization?.themeMode || 'USER',
+      themeMode: venue.organization?.themeMode || 'SYSTEM',
     };
     const eventVenue = {
       id: venue.id,

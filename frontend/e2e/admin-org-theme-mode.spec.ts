@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 const API = 'http://localhost:3002';
 
-type ThemeMode = 'LIGHT' | 'DARK' | 'SYSTEM' | 'USER';
+type ThemeMode = 'LIGHT' | 'DARK' | 'SYSTEM';
 
 const org = {
   id: 'org-theme-1',
@@ -11,7 +11,7 @@ const org = {
   logoUrl: null,
   coverUrl: null,
   brandColor: null as string | null,
-  themeMode: 'USER' as ThemeMode,
+  themeMode: 'SYSTEM' as ThemeMode,
   createdAt: '2027-01-01T00:00:00.000Z',
   updatedAt: '2027-01-01T00:00:00.000Z',
   _count: { venues: 1, users: 1 },
@@ -158,14 +158,16 @@ test.beforeEach(async ({ page }) => {
   await mockAdminSession(page);
 });
 
-test('shows the Theme section above Branding with User choice selected by default', async ({ page }) => {
+test('shows the Theme section above Branding with System selected by default', async ({ page }) => {
   await mockOrgApi(page);
   await page.goto('/admin/organizations');
 
   await page.getByRole('button', { name: 'Edit' }).click();
   const picker = page.getByTestId('theme-mode-picker');
   await expect(picker).toBeVisible();
-  await expect(page.getByRole('radio', { name: /User choice/ })).toBeChecked();
+  await expect(page.getByRole('radio')).toHaveCount(3);
+  await expect(page.getByRole('radio', { name: /User choice/ })).toHaveCount(0);
+  await expect(page.getByRole('radio', { name: /System/ })).toBeChecked();
   await expect(page.getByTestId('theme-mode-save')).toBeDisabled();
 
   const themeHeading = page.getByRole('heading', { name: 'Theme', exact: true });
@@ -196,11 +198,11 @@ test('radio group is keyboard navigable', async ({ page }) => {
   await page.goto('/admin/organizations');
 
   await page.getByRole('button', { name: 'Edit' }).click();
-  await page.getByRole('radio', { name: /User choice/ }).focus();
+  await page.getByRole('radio', { name: /System/ }).focus();
   await page.keyboard.press('ArrowRight');
   await expect(page.getByRole('radio', { name: /Light/ })).toBeChecked();
   await page.keyboard.press('ArrowLeft');
-  await expect(page.getByRole('radio', { name: /User choice/ })).toBeChecked();
+  await expect(page.getByRole('radio', { name: /System/ })).toBeChecked();
 });
 
 test('DARK forces dark on the public org page even when the visitor chose light', async ({ page }) => {
@@ -243,28 +245,20 @@ test('SYSTEM follows the OS color scheme on the public event page and ignores th
   await expect(page.locator('html')).not.toHaveClass(/dark/);
 });
 
-test('USER respects the stored visitor choice', async ({ page }) => {
-  await mockOrgApi(page);
+test('client navigation between pages with different modes re-forces the theme', async ({ page }) => {
+  const api = await mockOrgApi(page);
+  api.setMode('DARK');
+  api.setEventMode('LIGHT');
   await setStoredTheme(page, 'dark');
 
   await page.goto(`/organizations/${org.id}`);
   await expect(page.getByTestId(`event-card-${publicEvent.id}`)).toBeVisible();
   await expect(page.locator('html')).toHaveClass(/dark/);
-});
 
-test('leaving a forced page via client navigation restores the visitor preference', async ({ page }) => {
-  const api = await mockOrgApi(page);
-  api.setMode('DARK');
-  api.setEventMode('USER');
-  await setStoredTheme(page, 'light');
-
-  await page.goto(`/organizations/${org.id}`);
-  await expect(page.getByTestId(`event-card-${publicEvent.id}`)).toBeVisible();
-  await expect(page.locator('html')).toHaveClass(/dark/);
-
-  // Client-side navigation keeps the provider mounted, so BrandScope's cleanup releases the forced theme
+  // Client-side navigation keeps the provider mounted; the next BrandScope swaps the forced value
   await page.getByTestId(`event-card-${publicEvent.id}`).click();
   await expect(page).toHaveURL(new RegExp(`/events/${publicEvent.id}$`));
   await expect(page.getByRole('heading', { name: publicEvent.name })).toBeVisible();
   await expect(page.locator('html')).not.toHaveClass(/dark/);
+  expect(await page.evaluate(() => localStorage.getItem('theme'))).toBe('dark');
 });
