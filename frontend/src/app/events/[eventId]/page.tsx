@@ -390,6 +390,13 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
               <div className="space-y-3">
                 {activeTiers.map((tier) => {
                   const tierSoldOut = tier.quantityAvailable === 0;
+                  // Only surface the remaining count once it's low enough to
+                  // create urgency; a large number is just noise.
+                  const availabilityText = tierSoldOut
+                    ? 'Sold out'
+                    : tier.quantityAvailable < 10
+                      ? `${tier.quantityAvailable} available`
+                      : null;
                   const quantity = quantities[tier.id] ?? 0;
                   const minQuantity = tier.minPerOrder ?? 1;
                   const maxQuantity = Math.min(
@@ -426,10 +433,11 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                               </button>
                             )}
                           </h3>
+                          {(availabilityText || !tier.isRefundable) && (
                           <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
-                            {tierSoldOut ? 'Sold out' : `${tier.quantityAvailable} available`}
+                            {availabilityText}
                             {!tier.isRefundable && (
-                              <span className="relative ml-2 inline-flex items-center text-xs text-amber-600 dark:text-amber-400 font-medium group cursor-help">
+                              <span className={`relative inline-flex items-center text-xs text-amber-600 dark:text-amber-400 font-medium group cursor-help${availabilityText ? ' ml-2' : ''}`}>
                                 Non-refundable
                                 <svg className="w-3.5 h-3.5 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -442,6 +450,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                               </span>
                             )}
                           </p>
+                          )}
                           {(() => {
                             const fees = computeTierAllInPrice(tier.price, event?.taxRate ?? 0);
                             return (
