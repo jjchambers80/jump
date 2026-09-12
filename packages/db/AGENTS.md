@@ -19,7 +19,7 @@ Loads when agent touches `packages/db/` files. For root-level commands, see [`..
 
 Core chain: Organization → Venue → Event → PriceTier → OrderItem → Ticket
 Supporting: User, Account, VerificationToken, Contact, Order, PaymentTransaction, Refund, OrganizationPerson, TierPreset, File, Image
-Enums: UserRole, OrganizationStatus, ThemeMode (org public-page light/dark enforcement), EventStatus, OrderStatus, TierVisibility, TicketStatus, PaymentStatus, RefundStatus
+Enums: UserRole, OrganizationStatus, ThemeMode (LIGHT/DARK/SYSTEM, org public-page enforcement), EventStatus, OrderStatus, TierVisibility, TicketStatus, PaymentStatus, RefundStatus
 
 ## Seed Data
 

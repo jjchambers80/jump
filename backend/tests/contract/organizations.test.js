@@ -237,13 +237,13 @@ describe('Organization Contract Tests', () => {
       expect(res.status).toBe(400);
     });
 
-    it('defaults themeMode to USER', async () => {
+    it('defaults themeMode to SYSTEM', async () => {
       const org = await prisma.organization.findUnique({ where: { id: otherOrgId } });
 
-      expect(org.themeMode).toBe('USER');
+      expect(org.themeMode).toBe('SYSTEM');
     });
 
-    it.each(['LIGHT', 'DARK', 'SYSTEM', 'USER'])('sets themeMode %s', async (themeMode) => {
+    it.each(['LIGHT', 'DARK', 'SYSTEM'])('sets themeMode %s', async (themeMode) => {
       const res = await request(app)
         .patch(`/organizations/${orgId}`)
         .set('Authorization', `Bearer ${orgAdminToken}`)
@@ -274,6 +274,15 @@ describe('Organization Contract Tests', () => {
         .patch(`/organizations/${orgId}`)
         .set('Authorization', `Bearer ${orgAdminToken}`)
         .send({ themeMode: 'blue' });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 400 for the removed USER themeMode', async () => {
+      const res = await request(app)
+        .patch(`/organizations/${orgId}`)
+        .set('Authorization', `Bearer ${orgAdminToken}`)
+        .send({ themeMode: 'USER' });
 
       expect(res.status).toBe(400);
     });

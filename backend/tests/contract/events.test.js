@@ -250,7 +250,7 @@ describe('Events API Contract Tests', () => {
         const res = await request(app).get(`/events/${publishedEventId}`).expect(200);
         expect(res.body.organizationThemeMode).toBe('DARK');
       } finally {
-        await prisma.organization.update({ where: { id: testOrgId }, data: { themeMode: 'USER' } });
+        await prisma.organization.update({ where: { id: testOrgId }, data: { themeMode: 'SYSTEM' } });
       }
     });
 

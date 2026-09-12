@@ -186,18 +186,17 @@ describe('normalizeThemeMode', () => {
     ['LIGHT', 'LIGHT'],
     ['dark', 'DARK'],
     [' system ', 'SYSTEM'],
-    ['User', 'USER'],
   ])('normalizes %p to %p', (input, expected) => {
     expect(normalizeThemeMode(input)).toBe(expected);
   });
 
-  it.each(['blue', 'auto', '', 123, null, undefined, {}])('returns null for invalid input %p', (value) => {
+  it.each(['blue', 'auto', 'USER', '', 123, null, undefined, {}])('returns null for invalid input %p', (value) => {
     expect(normalizeThemeMode(value)).toBeNull();
   });
 });
 
 describe('validateUpdateOrganization themeMode', () => {
-  it.each(['LIGHT', 'DARK', 'SYSTEM', 'USER'])('accepts %s', (mode) => {
+  it.each(['LIGHT', 'DARK', 'SYSTEM'])('accepts %s', (mode) => {
     const { error, body } = validateUpdate({ themeMode: mode });
 
     expect(error).toBeUndefined();
@@ -218,10 +217,10 @@ describe('validateUpdateOrganization themeMode', () => {
     expect(body).not.toHaveProperty('themeMode');
   });
 
-  it.each(['blue', 'auto', null, 123, {}])('rejects invalid value %p', (value) => {
+  it.each(['blue', 'auto', 'USER', null, 123, {}])('rejects invalid value %p', (value) => {
     const { error } = validateUpdate({ themeMode: value });
 
     expect(error?.statusCode).toBe(400);
-    expect(error?.message).toBe('Theme mode must be one of: LIGHT, DARK, SYSTEM, USER');
+    expect(error?.message).toBe('Theme mode must be one of: LIGHT, DARK, SYSTEM');
   });
 });
