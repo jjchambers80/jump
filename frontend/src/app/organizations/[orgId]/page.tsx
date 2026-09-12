@@ -5,6 +5,7 @@ import { api } from '../../../services/api';
 import { resolveAssetUrl } from '../../../lib/assets';
 import EventCard, { EventSummary } from '../../../components/EventCard';
 import BrandScope from '../../../components/BrandScope';
+import LogoBox from '../../../components/LogoBox';
 import type { ThemeMode } from '@/lib/theme';
 
 interface OrganizationPublic {
@@ -100,10 +101,10 @@ export default function OrganizationPage({ params }: { params: { orgId: string }
       {/* Org header */}
       <div className="mb-8">
         {logoSrc ? (
-          <img
+          <LogoBox
             src={logoSrc}
             alt={`${organization.name} logo`}
-            className="max-h-[85px] w-auto rounded-lg object-contain mb-3"
+            className="w-24 rounded-lg mb-3"
           />
         ) : (
           <h1 className="text-3xl font-bold text-gray-900 dark:text-slate-100 mb-2">
