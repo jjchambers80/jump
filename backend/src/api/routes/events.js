@@ -7,6 +7,7 @@
 // Per FR-050, contracts/api.yaml
 
 import express from 'express';
+import { prisma } from '@jump/db';
 import eventService from '../../services/EventService.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireOrganizer } from '../../middleware/rbac.js';
@@ -168,10 +169,14 @@ orgRouter.post(
         'event_logo'
       );
 
+      const existing = await prisma.event.findUnique({ where: { id: eventId }, select: { imageId: true } });
       const result = await eventService.updateEvent(orgId, eventId, {
         logoUrl: image.urls.original,
         imageId: image.id,
       });
+      if (existing?.imageId && existing.imageId !== image.id) {
+        await imageService.deleteImage(existing.imageId).catch(() => {});
+      }
       res.json({ ...result, image });
     } catch (error) {
       next(error);
@@ -186,7 +191,11 @@ orgRouter.post(
 orgRouter.delete('/:eventId/logo', requireAuth, requireOrganizer, async (req, res, next) => {
   try {
     const { orgId, eventId } = req.params;
+    const existing = await prisma.event.findUnique({ where: { id: eventId }, select: { imageId: true } });
     const result = await eventService.updateEvent(orgId, eventId, { logoUrl: null, imageId: null });
+    if (existing?.imageId) {
+      await imageService.deleteImage(existing.imageId).catch(() => {});
+    }
     res.json(result);
   } catch (error) {
     next(error);
