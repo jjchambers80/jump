@@ -229,6 +229,19 @@ describe('Events API Contract Tests', () => {
       expect(Array.isArray(res.body.priceTiers)).toBe(true);
     });
 
+    it('should include the organization brand color', async () => {
+      if (!publishedEventId) return;
+
+      await prisma.organization.update({ where: { id: testOrgId }, data: { brandColor: '#4338ca' } });
+      try {
+        const res = await request(app).get(`/events/${publishedEventId}`).expect(200);
+        expect(res.body.organizationId).toBe(testOrgId);
+        expect(res.body.organizationBrandColor).toBe('#4338ca');
+      } finally {
+        await prisma.organization.update({ where: { id: testOrgId }, data: { brandColor: null } });
+      }
+    });
+
     it('should return 404 for non-existent event', async () => {
       const res = await request(app).get('/events/clnonexistent000000').expect(404);
 

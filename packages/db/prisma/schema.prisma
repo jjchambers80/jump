@@ -134,6 +134,7 @@ model Organization {
   logoImageId      String?
   coverUrl         String?
   coverImageId     String?
+  brandColor       String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

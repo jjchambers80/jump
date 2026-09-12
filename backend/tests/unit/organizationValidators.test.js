@@ -1,5 +1,9 @@
 import { jest } from '@jest/globals';
-import { validateUpdateBusinessDetails } from '../../src/api/validators/organizationValidators.js';
+import {
+  validateUpdateBusinessDetails,
+  validateUpdateOrganization,
+  normalizeHexColor,
+} from '../../src/api/validators/organizationValidators.js';
 
 function validate(body) {
   const req = { body: { ...body } };
@@ -106,5 +110,72 @@ describe('validateUpdateBusinessDetails', () => {
 
     expect(error).toBeUndefined();
     expect(body).not.toHaveProperty('ein');
+  });
+});
+
+function validateUpdate(body) {
+  const req = { body: { ...body } };
+  const next = jest.fn();
+
+  validateUpdateOrganization(req, {}, next);
+
+  return { error: next.mock.calls[0]?.[0], body: req.body };
+}
+
+describe('normalizeHexColor', () => {
+  it('lowercases a 6-digit hex', () => {
+    expect(normalizeHexColor('#1D4ED8')).toBe('#1d4ed8');
+  });
+
+  it('expands a 3-digit hex', () => {
+    expect(normalizeHexColor('#abc')).toBe('#aabbcc');
+  });
+
+  it('trims surrounding whitespace', () => {
+    expect(normalizeHexColor('  #1d4ed8 ')).toBe('#1d4ed8');
+  });
+
+  it.each(['red', '#ggg', '#12345', '1d4ed8', '', 123, null, undefined])(
+    'returns null for invalid input %p',
+    (value) => {
+      expect(normalizeHexColor(value)).toBeNull();
+    }
+  );
+});
+
+describe('validateUpdateOrganization brandColor', () => {
+  it('accepts and normalizes a 6-digit hex', () => {
+    const { error, body } = validateUpdate({ brandColor: '#1D4ED8' });
+
+    expect(error).toBeUndefined();
+    expect(body.brandColor).toBe('#1d4ed8');
+  });
+
+  it('expands a 3-digit hex', () => {
+    const { error, body } = validateUpdate({ brandColor: '#ABC' });
+
+    expect(error).toBeUndefined();
+    expect(body.brandColor).toBe('#aabbcc');
+  });
+
+  it('allows null to clear the color', () => {
+    const { error, body } = validateUpdate({ brandColor: null });
+
+    expect(error).toBeUndefined();
+    expect(body.brandColor).toBeNull();
+  });
+
+  it('leaves brandColor untouched when omitted', () => {
+    const { error, body } = validateUpdate({ name: 'Org' });
+
+    expect(error).toBeUndefined();
+    expect(body).not.toHaveProperty('brandColor');
+  });
+
+  it.each(['red', '#ggg', '#12345', 123, {}])('rejects invalid value %p', (value) => {
+    const { error } = validateUpdate({ brandColor: value });
+
+    expect(error?.statusCode).toBe(400);
+    expect(error?.message).toBe('Brand color must be a hex value like #1d4ed8');
   });
 });

@@ -58,6 +58,7 @@ class VenueService {
         address: true,
         timezone: true,
         logoUrl: true,
+        organization: { select: { brandColor: true } },
         events: {
           where: { status: 'PUBLISHED' },
           orderBy: { date: 'asc' },
@@ -91,6 +92,7 @@ class VenueService {
       address: venue.address,
       timezone: venue.timezone,
       logoUrl: venue.logoUrl,
+      brandColor: venue.organization?.brandColor || null,
     };
     const eventVenue = {
       id: venue.id,

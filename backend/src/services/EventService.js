@@ -361,7 +361,7 @@ class EventService {
     const event = await prisma.event.findUnique({
       where: { id: eventId },
       include: {
-        venue: { include: { organization: { select: { id: true, name: true } } } },
+        venue: { include: { organization: { select: { id: true, name: true, brandColor: true } } } },
         priceTiers: { orderBy: { displayOrder: 'asc' } },
       },
     });
@@ -541,6 +541,7 @@ class EventService {
       taxRate: event.taxRate ? Number(event.taxRate) : 0,
       organizationId: event.venue?.organization?.id || null,
       organizationName: event.venue?.organization?.name || null,
+      organizationBrandColor: event.venue?.organization?.brandColor || null,
       venue: event.venue
         ? {
             id: event.venue.id,

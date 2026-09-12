@@ -176,8 +176,19 @@ describe('Venue Contract Tests', () => {
         address: '10 Public Plaza',
         timezone: 'America/New_York',
         logoUrl: '/uploads/logos/public-venue.webp',
+        brandColor: null,
       });
       expect(res.body.venue).not.toHaveProperty('organizationId');
+    });
+
+    it('exposes the owning organization brand color', async () => {
+      await prisma.organization.update({ where: { id: testOrgId }, data: { brandColor: '#047857' } });
+      try {
+        const res = await request(app).get(`/venues/${publicVenueId}`).expect(200);
+        expect(res.body.venue.brandColor).toBe('#047857');
+      } finally {
+        await prisma.organization.update({ where: { id: testOrgId }, data: { brandColor: null } });
+      }
     });
 
     it('returns only published events for the venue in date order', async () => {

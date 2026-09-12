@@ -21,6 +21,20 @@ const US_STATE_CODES = new Set([
   'GU', 'MP', 'PR', 'VI',
 ]);
 
+const HEX_COLOR_PATTERN = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
+
+/** Normalize a hex color to lowercase #rrggbb, or return null when invalid. */
+export const normalizeHexColor = (value) => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!HEX_COLOR_PATTERN.test(trimmed)) return null;
+  let hex = trimmed.slice(1).toLowerCase();
+  if (hex.length === 3) {
+    hex = hex.split('').map((c) => c + c).join('');
+  }
+  return `#${hex}`;
+};
+
 const BUSINESS_DETAIL_FIELDS = new Set([
   'name', 'businessType', 'nickname', 'countryCode', 'addressLine1', 'addressLine2',
   'city', 'state', 'postalCode', 'phoneCountryCode', 'phoneNumber', 'ein',
@@ -74,7 +88,7 @@ export const validateCreateOrganization = (req, res, next) => {
  * Validate organization update payload
  */
 export const validateUpdateOrganization = (req, res, next) => {
-  const { name, status } = req.body;
+  const { name, status, brandColor } = req.body;
 
   if (name !== undefined) {
     if (typeof name !== 'string' || name.trim().length === 0) {
@@ -91,6 +105,15 @@ export const validateUpdateOrganization = (req, res, next) => {
     if (!validStatuses.includes(status)) {
       return next(new ValidationError(`Status must be one of: ${validStatuses.join(', ')}`));
     }
+  }
+
+  // brandColor: null clears; string must be a 3- or 6-digit hex, normalized to #rrggbb
+  if (brandColor !== undefined && brandColor !== null) {
+    const normalized = normalizeHexColor(brandColor);
+    if (!normalized) {
+      return next(new ValidationError('Brand color must be a hex value like #1d4ed8'));
+    }
+    req.body.brandColor = normalized;
   }
 
   next();

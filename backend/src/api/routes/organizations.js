@@ -88,6 +88,7 @@ router.patch(
   '/:id',
   requireAuth,
   requireAdmin,
+  verifyOrgOwnership,
   validateUpdateOrganization,
   async (req, res, next) => {
     try {
