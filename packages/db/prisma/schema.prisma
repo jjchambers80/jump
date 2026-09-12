@@ -104,6 +104,8 @@ model Image {
   file   File    @relation(fields: [fileId], references: [id])
   venues Venue[]
   events Event[]
+  organizationLogos  Organization[] @relation("OrgLogo")
+  organizationCovers Organization[] @relation("OrgCover")
 
   @@index([fileId])
   @@index([usageType])
@@ -128,10 +130,16 @@ model Organization {
   phoneCountryCode String?            @default("+1")
   phoneNumber      String?
   ein              String?
+  logoUrl          String?
+  logoImageId      String?
+  coverUrl         String?
+  coverImageId     String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  logoImage   Image? @relation("OrgLogo", fields: [logoImageId], references: [id])
+  coverImage  Image? @relation("OrgCover", fields: [coverImageId], references: [id])
   venues      Venue[]
   users       User[]
   people      OrganizationPerson[]

@@ -43,6 +43,8 @@ interface Event {
   category?: string;
   status: string;
   taxRate: number;
+  organizationId?: string | null;
+  organizationName?: string | null;
   venue: EventVenue | null;
   priceTiers: PriceTier[];
   createdAt: string;
@@ -247,6 +249,20 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                   <span className="inline-block bg-white/15 backdrop-blur-sm text-white text-xs font-medium px-3 py-1 rounded-full mb-3">
                     {event.category}
                   </span>
+                )}
+                {event.organizationName && (
+                  <p className="text-sm font-medium text-gray-300 mb-1">
+                    {event.organizationId ? (
+                      <Link
+                        href={`/organizations/${event.organizationId}`}
+                        className="hover:text-white hover:underline transition-colors"
+                      >
+                        {event.organizationName}
+                      </Link>
+                    ) : (
+                      event.organizationName
+                    )}
+                  </p>
                 )}
                 <h1 className="text-2xl sm:text-4xl font-bold text-white mb-3">{event.name}</h1>
 

@@ -6,11 +6,15 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import api from '@/services/api';
+import ImageUploader from '@/components/ImageUploader';
+import { resolveAssetUrl } from '@/lib/assets';
 
 interface Organization {
   id: string;
   name: string;
   status: 'ACTIVE' | 'INACTIVE';
+  logoUrl?: string | null;
+  coverUrl?: string | null;
   createdAt: string;
   updatedAt: string;
   _count?: {
@@ -28,6 +32,7 @@ export default function OrganizationsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState<string | null>(null);
 
   const fetchOrganizations = useCallback(async () => {
     try {
@@ -86,6 +91,34 @@ export default function OrganizationsPage() {
       setError(err.message || 'Failed to update organization');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleImageUpload = async (orgId: string, type: 'logo' | 'cover', file: File) => {
+    try {
+      setUploading(`${orgId}-${type}`);
+      setError(null);
+      const formData = new FormData();
+      formData.append('logo', file);
+      await api.upload(`/organizations/${orgId}/${type}`, formData);
+      await fetchOrganizations();
+    } catch (err: any) {
+      setError(err.message || `Failed to upload ${type}`);
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  const handleImageRemove = async (orgId: string, type: 'logo' | 'cover') => {
+    try {
+      setUploading(`${orgId}-${type}`);
+      setError(null);
+      await api.delete(`/organizations/${orgId}/${type}`);
+      await fetchOrganizations();
+    } catch (err: any) {
+      setError(err.message || `Failed to remove ${type}`);
+    } finally {
+      setUploading(null);
     }
   };
 
@@ -149,45 +182,31 @@ export default function OrganizationsPage() {
           {organizations.map((org) => (
             <div
               key={org.id}
-              className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 flex items-center justify-between"
+              className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden"
             >
-              <div className="flex-1">
-                {editingId === org.id ? (
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      handleSaveEdit(org.id);
-                    }}
-                    className="flex items-center gap-2"
-                  >
-                    <input
-                      type="text"
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      className="flex-1 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-1.5 text-sm text-gray-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      autoFocus
+              {/* Header row */}
+              <div className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  {/* Logo thumbnail */}
+                  {org.logoUrl ? (
+                    <img
+                      src={resolveAssetUrl(org.logoUrl) || undefined}
+                      alt={`${org.name} logo`}
+                      className="w-10 h-10 rounded-md object-contain bg-gray-100 dark:bg-slate-700 flex-shrink-0"
                     />
-                    <button
-                      type="submit"
-                      disabled={saving || !editName.trim()}
-                      className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-500 disabled:opacity-50"
-                    >
-                      {saving ? 'Saving…' : 'Save'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleCancelEdit}
-                      className="rounded-md bg-gray-200 dark:bg-slate-600 px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-slate-200 hover:bg-gray-300 dark:hover:bg-slate-500"
-                    >
-                      Cancel
-                    </button>
-                  </form>
-                ) : (
-                  <>
-                    <h3 className="text-base font-semibold text-gray-900 dark:text-white">
+                  ) : (
+                    <div className="w-10 h-10 rounded-md bg-gray-100 dark:bg-slate-700 flex items-center justify-center flex-shrink-0">
+                      <span className="text-gray-400 dark:text-slate-500 text-lg font-bold">
+                        {org.name.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-base font-semibold text-gray-900 dark:text-white truncate">
                       {org.name}
                     </h3>
-                    <div className="flex items-center gap-4 mt-1 text-sm text-gray-500 dark:text-slate-400">
+                    <div className="flex items-center gap-4 mt-0.5 text-sm text-gray-500 dark:text-slate-400">
                       <span
                         className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                           org.status === 'ACTIVE'
@@ -208,22 +227,94 @@ export default function OrganizationsPage() {
                         </>
                       )}
                     </div>
-                  </>
-                )}
-              </div>
-              <div className="flex items-center gap-3 ml-4">
-                {editingId !== org.id && (
-                  <button
-                    onClick={() => handleEdit(org)}
-                    className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300"
-                  >
-                    Edit
-                  </button>
-                )}
-                <div className="text-xs text-gray-400 dark:text-slate-500">
-                  Created {new Date(org.createdAt).toLocaleDateString()}
+                  </div>
+                </div>
+
+                <div className="ml-4">
+                  {editingId !== org.id ? (
+                    <button
+                      onClick={() => handleEdit(org)}
+                      className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300"
+                    >
+                      Edit
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleCancelEdit}
+                      className="text-sm font-medium text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-300"
+                    >
+                      Done
+                    </button>
+                  )}
                 </div>
               </div>
+
+              {/* Edit section — name + branding */}
+              {editingId === org.id && (
+                <div className="border-t border-gray-200 dark:border-slate-700 p-4 bg-gray-50 dark:bg-slate-800/50">
+                  {/* Name edit */}
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleSaveEdit(org.id);
+                    }}
+                    className="flex items-center gap-2 mb-6"
+                  >
+                    <label className="text-sm font-medium text-gray-600 dark:text-slate-400 flex-shrink-0">
+                      Name
+                    </label>
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      className="flex-1 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-1.5 text-sm text-gray-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      autoFocus
+                    />
+                    <button
+                      type="submit"
+                      disabled={saving || !editName.trim()}
+                      className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-500 disabled:opacity-50"
+                    >
+                      {saving ? 'Saving…' : 'Save'}
+                    </button>
+                  </form>
+
+                  {/* Branding */}
+                  <h4 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-4">
+                    Branding
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-600 dark:text-slate-400 mb-2">
+                        Logo
+                      </label>
+                      <ImageUploader
+                        currentPreview={resolveAssetUrl(org.logoUrl)}
+                        onFileSelect={(file) => handleImageUpload(org.id, 'logo', file)}
+                        onRemove={() => handleImageRemove(org.id, 'logo')}
+                        uploading={uploading === `${org.id}-logo`}
+                        label="logo"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-600 dark:text-slate-400 mb-2">
+                        Cover Image
+                      </label>
+                      <ImageUploader
+                        currentPreview={resolveAssetUrl(org.coverUrl)}
+                        onFileSelect={(file) => handleImageUpload(org.id, 'cover', file)}
+                        onRemove={() => handleImageRemove(org.id, 'cover')}
+                        uploading={uploading === `${org.id}-cover`}
+                        label="cover image"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-4 text-xs text-gray-400 dark:text-slate-500">
+                    Created {new Date(org.createdAt).toLocaleDateString()}
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>
