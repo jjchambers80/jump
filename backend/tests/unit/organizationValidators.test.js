@@ -17,6 +17,8 @@ function validate(body) {
 
 const validBusinessDetails = {
   name: '  Example Company LLC  ',
+  companyName: ' Example Company Holdings LLC ',
+  email: ' Owner@Example.com ',
   businessType: 'SINGLE_MEMBER_LLC',
   nickname: '  Example Co  ',
   countryCode: 'us',
@@ -37,6 +39,8 @@ describe('validateUpdateBusinessDetails', () => {
     expect(error).toBeUndefined();
     expect(body).toEqual({
       name: 'Example Company LLC',
+      companyName: 'Example Company Holdings LLC',
+      email: 'owner@example.com',
       businessType: 'SINGLE_MEMBER_LLC',
       nickname: 'Example Co',
       countryCode: 'US',
@@ -58,10 +62,70 @@ describe('validateUpdateBusinessDetails', () => {
     ['city', ''],
     ['state', ''],
     ['postalCode', ''],
-  ])('rejects a missing required %s', (field, value) => {
+  ])('rejects a blank %s when the key is present', (field, value) => {
     const { error } = validate({ ...validBusinessDetails, [field]: value });
 
     expect(error?.statusCode).toBe(400);
+  });
+
+  it('accepts a partial store-contact payload and leaves other keys untouched', () => {
+    const { error, body } = validate({
+      name: '  Roman Skin Studio ',
+      email: '  Hello@Example.COM ',
+      phoneCountryCode: '+1',
+      phoneNumber: '(919) 555-1212',
+    });
+
+    expect(error).toBeUndefined();
+    expect(body).toEqual({
+      name: 'Roman Skin Studio',
+      email: 'hello@example.com',
+      phoneCountryCode: '+1',
+      phoneNumber: '9195551212',
+    });
+  });
+
+  it('accepts a partial store-address payload', () => {
+    const { error, body } = validate({
+      companyName: ' Roman Skin Care LLC ',
+      countryCode: 'us',
+      addressLine1: '24 Oak Avenue',
+      addressLine2: '',
+      city: 'Cary',
+      state: 'nc',
+      postalCode: '27511',
+    });
+
+    expect(error).toBeUndefined();
+    expect(body).toEqual({
+      companyName: 'Roman Skin Care LLC',
+      countryCode: 'US',
+      addressLine1: '24 Oak Avenue',
+      addressLine2: null,
+      city: 'Cary',
+      state: 'NC',
+      postalCode: '27511',
+    });
+  });
+
+  it('rejects an empty payload', () => {
+    const { error } = validate({});
+
+    expect(error?.statusCode).toBe(400);
+  });
+
+  it.each(['not-an-email', 'two@@example.com', 'spaces in@example.com', 'noatsign.com'])(
+    'rejects an invalid email %s',
+    (email) => {
+      const { error } = validate({ email });
+
+      expect(error?.statusCode).toBe(400);
+    }
+  );
+
+  it('allows email to be cleared with null or an empty string', () => {
+    expect(validate({ email: null }).body.email).toBeNull();
+    expect(validate({ email: '' }).body.email).toBeNull();
   });
 
   it.each([
