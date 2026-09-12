@@ -5,6 +5,7 @@ import { api } from '../../../services/api';
 import { resolveAssetUrl } from '../../../lib/assets';
 import EventCard, { EventSummary } from '../../../components/EventCard';
 import BrandScope from '../../../components/BrandScope';
+import LogoBox from '../../../components/LogoBox';
 import type { ThemeMode } from '@/lib/theme';
 
 interface OrganizationPublic {
@@ -97,8 +98,8 @@ export default function OrganizationPage({ params }: { params: { orgId: string }
 
   const eventList = (
     <>
-      {/* Org header */}
-      <div className="mb-8">
+      {/* Org header — with a cover, the mobile logo lives on the cover image instead */}
+      <div className={`mb-8 ${hasCover && logoSrc ? 'hidden xl:block' : ''}`}>
         {logoSrc ? (
           <img
             src={logoSrc}
@@ -145,9 +146,9 @@ export default function OrganizationPage({ params }: { params: { orgId: string }
     </>
   );
 
-  // Desktop with cover: two-column, image flush right
+  // Desktop with cover: two-column, image flush right, plain logo in content
   // Desktop without cover: centered single column
-  // Mobile: cover at top, then content
+  // Mobile: cover at top with square logo box straddling its bottom edge, then content
   return (
     <BrandScope color={organization.brandColor} themeMode={organization.themeMode} className="min-h-screen bg-gray-50 dark:bg-slate-900">
       {/* Mobile cover image */}
@@ -159,6 +160,15 @@ export default function OrganizationPage({ params }: { params: { orgId: string }
               alt={`${organization.name} cover`}
               className="w-full h-full object-cover"
             />
+            {logoSrc && (
+              <div className="absolute bottom-0 left-4 sm:left-6 translate-y-1/2">
+                <LogoBox
+                  src={logoSrc}
+                  alt={`${organization.name} logo`}
+                  className="w-24 rounded-lg shadow-lg"
+                />
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -168,7 +178,8 @@ export default function OrganizationPage({ params }: { params: { orgId: string }
         <div className="xl:flex min-h-screen">
           {/* Left: event content — full width below xl, pushed right at xl+ */}
           <div className="flex-1 xl:flex xl:justify-end">
-            <div className="w-full xl:max-w-4xl px-4 sm:px-6 py-8 xl:py-12">
+            {/* Extra top padding below xl clears the half of the logo box that overhangs the cover */}
+            <div className={`w-full xl:max-w-4xl px-4 sm:px-6 pb-8 xl:py-12 ${logoSrc ? 'pt-20' : 'pt-8'}`}>
               {eventList}
             </div>
           </div>
