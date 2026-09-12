@@ -26,6 +26,8 @@ interface OrgContextValue {
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
+  /** Patch one org in memory (e.g. after Settings saves a new name) without refetching. */
+  updateOrganization: (id: string, patch: Partial<Organization>) => void;
 }
 
 const OrgContext = createContext<OrgContextValue | null>(null);
@@ -60,6 +62,12 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
     fetchOrgs();
   }, [fetchOrgs]);
 
+  const updateOrganization = useCallback((id: string, patch: Partial<Organization>) => {
+    setOrganizations((current) =>
+      current.map((org) => (org.id === id ? { ...org, ...patch } : org))
+    );
+  }, []);
+
   const selectedOrg = organizations.find((o) => o.id === selectedOrgId) ?? null;
 
   return (
@@ -72,6 +80,7 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
         loading,
         error,
         refresh: fetchOrgs,
+        updateOrganization,
       }}
     >
       {children}

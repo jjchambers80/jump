@@ -2,12 +2,8 @@
 
 import { FormEvent, RefObject, useEffect, useMemo, useRef, useState } from 'react';
 import api from '@/services/api';
-import {
-  BUSINESS_TYPES,
-  BusinessDetails,
-  BusinessDetailsPayload,
-  US_STATES,
-} from './types';
+import { BUSINESS_TYPES, BusinessDetails, BusinessDetailsPayload } from './types';
+import { errorClass, fieldClass, labelClass } from './formShared';
 import PeopleSection from './PeopleSection';
 
 interface BusinessDetailsDialogProps {
@@ -17,16 +13,11 @@ interface BusinessDetailsDialogProps {
   returnFocusRef: RefObject<HTMLButtonElement>;
 }
 
+// Store name, address, and phone live in the inline cards on the Settings
+// page; this dialog only edits the remaining legal/business fields.
 interface FormState {
-  name: string;
   businessType: string;
   nickname: string;
-  addressLine1: string;
-  addressLine2: string;
-  city: string;
-  state: string;
-  postalCode: string;
-  phoneNumber: string;
   ein: string;
 }
 
@@ -34,42 +25,19 @@ type FormErrors = Partial<Record<keyof FormState | 'form', string>>;
 
 function initialForm(details: BusinessDetails): FormState {
   return {
-    name: details.name,
     businessType: details.businessType || '',
     nickname: details.nickname || '',
-    addressLine1: details.addressLine1 || '',
-    addressLine2: details.addressLine2 || '',
-    city: details.city || '',
-    state: details.state || '',
-    postalCode: details.postalCode || '',
-    phoneNumber: details.phoneNumber || '',
     ein: '',
   };
 }
 
 function validate(form: FormState): FormErrors {
   const errors: FormErrors = {};
-  if (!form.name.trim()) errors.name = 'Registered legal business name is required.';
   if (!form.businessType) errors.businessType = 'Type of business is required.';
-  if (!form.addressLine1.trim()) errors.addressLine1 = 'Business address is required.';
-  if (!form.city.trim()) errors.city = 'City is required.';
-  if (!form.state) errors.state = 'State is required.';
-  if (!/^\d{5}(-\d{4})?$/.test(form.postalCode.trim())) {
-    errors.postalCode = 'Enter a 5-digit ZIP code or ZIP+4.';
-  }
-  const phoneDigits = form.phoneNumber.replace(/\D/g, '');
-  if (form.phoneNumber && phoneDigits.length !== 10) {
-    errors.phoneNumber = 'Enter a 10-digit phone number.';
-  }
   const einDigits = form.ein.replace(/\D/g, '');
   if (form.ein && einDigits.length !== 9) errors.ein = 'Enter a 9-digit EIN.';
   return errors;
 }
-
-const fieldClass =
-  'mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100';
-const labelClass = 'block text-sm font-medium text-gray-700 dark:text-slate-300';
-const errorClass = 'mt-1 text-sm text-red-600 dark:text-red-400';
 
 export default function BusinessDetailsDialog({
   details,
@@ -94,14 +62,7 @@ export default function BusinessDetailsDialog({
   dirtyRef.current = dirty;
   savingRef.current = saving;
   childActiveRef.current = childActive;
-  const requiredComplete = Boolean(
-    form.name.trim() &&
-      form.businessType &&
-      form.addressLine1.trim() &&
-      form.city.trim() &&
-      form.state &&
-      form.postalCode.trim()
-  );
+  const requiredComplete = Boolean(form.businessType);
 
   const requestClose = () => {
     if (savingRef.current) return;
@@ -161,17 +122,8 @@ export default function BusinessDetailsDialog({
     }
 
     const payload: BusinessDetailsPayload = {
-      name: form.name.trim(),
       businessType: form.businessType,
       nickname: form.nickname.trim() || null,
-      countryCode: 'US',
-      addressLine1: form.addressLine1.trim(),
-      addressLine2: form.addressLine2.trim() || null,
-      city: form.city.trim(),
-      state: form.state,
-      postalCode: form.postalCode.trim(),
-      phoneCountryCode: '+1',
-      phoneNumber: form.phoneNumber ? form.phoneNumber.replace(/\D/g, '') : null,
     };
     if (einCleared) payload.ein = null;
     else if (einChanged && form.ein) payload.ein = form.ein.replace(/\D/g, '');
@@ -256,55 +208,8 @@ export default function BusinessDetailsDialog({
               </div>
 
               <div>
-                <label htmlFor="legal-name" className={labelClass}>Registered legal business name</label>
-                <input id="legal-name" value={form.name} onChange={(event) => update('name', event.target.value)} aria-invalid={Boolean(errors.name)} className={fieldClass} />
-                {errors.name && <p className={errorClass}>{errors.name}</p>}
-              </div>
-
-              <div>
                 <label htmlFor="nickname" className={labelClass}>Nickname</label>
                 <input id="nickname" value={form.nickname} onChange={(event) => update('nickname', event.target.value)} className={fieldClass} />
-              </div>
-
-              <div>
-                <label htmlFor="business-address" className={labelClass}>Business address</label>
-                <input id="business-address" value={form.addressLine1} onChange={(event) => update('addressLine1', event.target.value)} aria-invalid={Boolean(errors.addressLine1)} className={fieldClass} autoComplete="address-line1" />
-                {errors.addressLine1 && <p className={errorClass}>{errors.addressLine1}</p>}
-              </div>
-
-              <div>
-                <label htmlFor="address-line-2" className={labelClass}>Apartment, suite, etc.</label>
-                <input id="address-line-2" value={form.addressLine2} onChange={(event) => update('addressLine2', event.target.value)} className={fieldClass} autoComplete="address-line2" />
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div>
-                  <label htmlFor="city" className={labelClass}>City</label>
-                  <input id="city" value={form.city} onChange={(event) => update('city', event.target.value)} aria-invalid={Boolean(errors.city)} className={fieldClass} autoComplete="address-level2" />
-                  {errors.city && <p className={errorClass}>{errors.city}</p>}
-                </div>
-                <div>
-                  <label htmlFor="state" className={labelClass}>State</label>
-                  <select id="state" value={form.state} onChange={(event) => update('state', event.target.value)} aria-invalid={Boolean(errors.state)} className={fieldClass} autoComplete="address-level1">
-                    <option value="">Select state</option>
-                    {US_STATES.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
-                  </select>
-                  {errors.state && <p className={errorClass}>{errors.state}</p>}
-                </div>
-                <div>
-                  <label htmlFor="postal-code" className={labelClass}>ZIP code</label>
-                  <input id="postal-code" value={form.postalCode} onChange={(event) => update('postalCode', event.target.value)} aria-invalid={Boolean(errors.postalCode)} className={fieldClass} inputMode="numeric" autoComplete="postal-code" />
-                  {errors.postalCode && <p className={errorClass}>{errors.postalCode}</p>}
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="phone-number" className={labelClass}>Phone number</label>
-                <div className="mt-1 flex gap-2">
-                  <div aria-label="Phone country code" className="flex items-center rounded-md border border-gray-300 bg-gray-50 px-3 text-sm dark:border-slate-600 dark:bg-slate-800">🇺🇸 +1</div>
-                  <input id="phone-number" value={form.phoneNumber} onChange={(event) => update('phoneNumber', event.target.value)} aria-invalid={Boolean(errors.phoneNumber)} className={`${fieldClass} mt-0 flex-1`} inputMode="tel" autoComplete="tel-national" />
-                </div>
-                {errors.phoneNumber && <p className={errorClass}>{errors.phoneNumber}</p>}
               </div>
 
               <div>

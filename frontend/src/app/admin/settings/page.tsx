@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import api from '@/services/api';
+import { useOrg } from '@/components/OrgContext';
 import BusinessDetailsDialog from './BusinessDetailsDialog';
+import StoreAddressCard from './StoreAddressCard';
+import StoreContactCard from './StoreContactCard';
+import { cardClass } from './formShared';
 import { BusinessDetails, businessTypeLabel } from './types';
 
 const valueClass = 'mt-1 text-sm text-gray-900 dark:text-slate-100';
@@ -12,12 +16,8 @@ function display(value: string | null | undefined) {
   return value || 'Not provided';
 }
 
-function formatPhone(phone: string | null) {
-  if (!phone || phone.length !== 10) return display(phone);
-  return `(${phone.slice(0, 3)}) ${phone.slice(3, 6)}-${phone.slice(6)}`;
-}
-
 export default function SettingsPage() {
+  const { selectedOrgId, selectedOrg, updateOrganization, refresh } = useOrg();
   const [details, setDetails] = useState<BusinessDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,6 +48,19 @@ export default function SettingsPage() {
   useEffect(() => {
     loadBusinessDetails();
   }, [loadBusinessDetails]);
+
+  // Settings edits the signed-in user's assigned org; the header switcher can
+  // point at a different org for ADMIN users. Flag that so a renamed store
+  // showing up unchanged in the header is not a surprise.
+  const editingOtherOrg = Boolean(details && selectedOrgId && selectedOrgId !== details.id);
+
+  const handleContactSaved = (saved: BusinessDetails) => {
+    setDetails(saved);
+    // Optimistically patch the switcher so the new name shows immediately,
+    // then refetch in the background so the list stays authoritative.
+    updateOrganization(saved.id, { name: saved.name });
+    void refresh();
+  };
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
@@ -99,33 +112,49 @@ export default function SettingsPage() {
           )}
 
           {!loading && details && (
-            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
-              <div className="flex flex-col gap-4 border-b border-gray-200 px-5 py-5 sm:flex-row sm:items-start sm:justify-between dark:border-slate-700">
-                <div className="min-w-0">
-                  <h2 className="break-words text-xl font-semibold text-gray-900 dark:text-white">{details.name}</h2>
-                  <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">Business details</p>
+            <div className="space-y-8">
+              {editingOtherOrg && (
+                <div role="note" className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+                  You are editing <strong>{details.name}</strong>, but <strong>{selectedOrg?.name}</strong> is selected in the header. Changes here apply to {details.name}.
                 </div>
-                <button
-                  ref={editButtonRef}
-                  type="button"
-                  onClick={() => { setSavedMessage(''); setEditing(true); }}
-                  className="shrink-0 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600"
-                  aria-label="Edit business details"
-                >
-                  Edit
-                </button>
+              )}
+
+              <div>
+                <div className="mb-4">
+                  <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Store contact details</h2>
+                  <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">
+                    How customers and Jump can reach your store.
+                  </p>
+                </div>
+                <div className="space-y-6">
+                  <StoreContactCard details={details} onSaved={handleContactSaved} />
+                  <StoreAddressCard details={details} onSaved={setDetails} />
+                </div>
               </div>
 
-              <dl className="grid gap-x-8 gap-y-6 px-5 py-6 sm:grid-cols-2">
-                <div><dt className={labelClass}>Type of business</dt><dd className={valueClass}>{businessTypeLabel(details.businessType)}</dd></div>
-                <div><dt className={labelClass}>Nickname</dt><dd className={valueClass}>{display(details.nickname)}</dd></div>
-                <div><dt className={labelClass}>Business address</dt><dd className={valueClass}>{display(details.addressLine1)}</dd></div>
-                <div><dt className={labelClass}>Apartment, suite, etc.</dt><dd className={valueClass}>{display(details.addressLine2)}</dd></div>
-                <div><dt className={labelClass}>City</dt><dd className={valueClass}>{display(details.city)}</dd></div>
-                <div><dt className={labelClass}>State and ZIP</dt><dd className={valueClass}>{details.state || details.postalCode ? `${details.state || ''} ${details.postalCode || ''}`.trim() : 'Not provided'}</dd></div>
-                <div><dt className={labelClass}>Phone number</dt><dd className={valueClass}>{formatPhone(details.phoneNumber)}</dd></div>
-                <div><dt className={labelClass}>Employer Identification Number (EIN)</dt><dd className={valueClass}>{display(details.einMasked)}</dd></div>
-              </dl>
+              <div className={cardClass}>
+                <div className="flex flex-col gap-4 border-b border-gray-200 px-5 py-5 sm:flex-row sm:items-start sm:justify-between dark:border-slate-700">
+                  <div className="min-w-0">
+                    <h2 className="break-words text-xl font-semibold text-gray-900 dark:text-white">{details.name}</h2>
+                    <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">Business details</p>
+                  </div>
+                  <button
+                    ref={editButtonRef}
+                    type="button"
+                    onClick={() => { setSavedMessage(''); setEditing(true); }}
+                    className="shrink-0 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600"
+                    aria-label="Edit business details"
+                  >
+                    Edit
+                  </button>
+                </div>
+
+                <dl className="grid gap-x-8 gap-y-6 px-5 py-6 sm:grid-cols-2">
+                  <div><dt className={labelClass}>Type of business</dt><dd className={valueClass}>{businessTypeLabel(details.businessType)}</dd></div>
+                  <div><dt className={labelClass}>Nickname</dt><dd className={valueClass}>{display(details.nickname)}</dd></div>
+                  <div><dt className={labelClass}>Employer Identification Number (EIN)</dt><dd className={valueClass}>{display(details.einMasked)}</dd></div>
+                </dl>
+              </div>
             </div>
           )}
         </section>
