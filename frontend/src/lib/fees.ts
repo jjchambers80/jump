@@ -56,8 +56,10 @@ export function computeTierAllInPrice(basePrice: number, taxRate: number = 0) {
     (basePrice + platformFee) * FEE_CONFIG.stripeFeePercent + FEE_CONFIG.stripeFeeFixed
   );
   const tax = roundCurrency(basePrice * taxRate);
-  const total = roundCurrency(basePrice + platformFee + processingFee + tax);
-  return { basePrice, platformFee, processingFee, tax, total };
+  /** platformFee + processingFee — the single "Fees" figure shown on tier cards. */
+  const fees = roundCurrency(platformFee + processingFee);
+  const total = roundCurrency(basePrice + fees + tax);
+  return { basePrice, platformFee, processingFee, fees, tax, total };
 }
 
 /**

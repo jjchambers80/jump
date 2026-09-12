@@ -451,7 +451,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                                 </span>
                                 <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">
                                   Base: {formatPrice(fees.basePrice)}
-                                  {fees.processingFee > 0 && <> + Fees: {formatPrice(fees.processingFee)}</>}
+                                  {fees.fees > 0 && <> + Fees: {formatPrice(fees.fees)}</>}
                                   {fees.tax > 0 && <> + Tax: {formatPrice(fees.tax)}</>}
                                 </p>
                               </div>
