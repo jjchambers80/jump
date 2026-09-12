@@ -202,7 +202,7 @@ class OrganizationService {
       removed: logoUrl === null,
     });
 
-    return { organization, previousLogoUrl: existing.logoUrl };
+    return { organization, previousLogoUrl: existing.logoUrl, previousLogoImageId: existing.logoImageId };
   }
 
   /** Set or clear organization cover image. */
@@ -224,7 +224,7 @@ class OrganizationService {
       removed: coverUrl === null,
     });
 
-    return { organization, previousCoverUrl: existing.coverUrl };
+    return { organization, previousCoverUrl: existing.coverUrl, previousCoverImageId: existing.coverImageId };
   }
 }
 
