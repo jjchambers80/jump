@@ -73,7 +73,7 @@ class OrganizationService {
   /**
    * Update an organization
    * @param {string} id - Organization ID
-   * @param {Object} data - Fields to update { name?, status?, brandColor? }
+   * @param {Object} data - Fields to update { name?, status?, brandColor?, themeMode? }
    * @returns {Promise<Object>} Updated organization
    */
   async updateOrganization(id, data) {
@@ -81,6 +81,7 @@ class OrganizationService {
     if (data.name !== undefined) updateData.name = data.name;
     if (data.status !== undefined) updateData.status = data.status;
     if (data.brandColor !== undefined) updateData.brandColor = data.brandColor;
+    if (data.themeMode !== undefined) updateData.themeMode = data.themeMode;
 
     const organization = await prisma.organization.update({
       where: { id },
@@ -139,6 +140,7 @@ class OrganizationService {
         logoUrl: true,
         coverUrl: true,
         brandColor: true,
+        themeMode: true,
         venues: {
           select: {
             events: {
@@ -181,6 +183,7 @@ class OrganizationService {
         logoUrl: org.logoUrl,
         coverUrl: org.coverUrl,
         brandColor: org.brandColor,
+        themeMode: org.themeMode,
       },
       events,
     };

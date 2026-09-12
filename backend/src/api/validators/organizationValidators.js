@@ -23,6 +23,15 @@ const US_STATE_CODES = new Set([
 
 const HEX_COLOR_PATTERN = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 
+export const THEME_MODES = ['LIGHT', 'DARK', 'SYSTEM', 'USER'];
+
+/** Normalize a theme mode to its uppercase enum value, or return null when invalid. */
+export const normalizeThemeMode = (value) => {
+  if (typeof value !== 'string') return null;
+  const upper = value.trim().toUpperCase();
+  return THEME_MODES.includes(upper) ? upper : null;
+};
+
 /** Normalize a hex color to lowercase #rrggbb, or return null when invalid. */
 export const normalizeHexColor = (value) => {
   if (typeof value !== 'string') return null;
@@ -88,7 +97,7 @@ export const validateCreateOrganization = (req, res, next) => {
  * Validate organization update payload
  */
 export const validateUpdateOrganization = (req, res, next) => {
-  const { name, status, brandColor } = req.body;
+  const { name, status, brandColor, themeMode } = req.body;
 
   if (name !== undefined) {
     if (typeof name !== 'string' || name.trim().length === 0) {
@@ -114,6 +123,15 @@ export const validateUpdateOrganization = (req, res, next) => {
       return next(new ValidationError('Brand color must be a hex value like #1d4ed8'));
     }
     req.body.brandColor = normalized;
+  }
+
+  // themeMode: enum value, case-insensitive input normalized to uppercase
+  if (themeMode !== undefined) {
+    const normalized = normalizeThemeMode(themeMode);
+    if (!normalized) {
+      return next(new ValidationError(`Theme mode must be one of: ${THEME_MODES.join(', ')}`));
+    }
+    req.body.themeMode = normalized;
   }
 
   next();

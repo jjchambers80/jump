@@ -242,6 +242,18 @@ describe('Events API Contract Tests', () => {
       }
     });
 
+    it('should include the organization theme mode', async () => {
+      if (!publishedEventId) return;
+
+      await prisma.organization.update({ where: { id: testOrgId }, data: { themeMode: 'DARK' } });
+      try {
+        const res = await request(app).get(`/events/${publishedEventId}`).expect(200);
+        expect(res.body.organizationThemeMode).toBe('DARK');
+      } finally {
+        await prisma.organization.update({ where: { id: testOrgId }, data: { themeMode: 'USER' } });
+      }
+    });
+
     it('should return 404 for non-existent event', async () => {
       const res = await request(app).get('/events/clnonexistent000000').expect(404);
 

@@ -3,6 +3,7 @@ import {
   validateUpdateBusinessDetails,
   validateUpdateOrganization,
   normalizeHexColor,
+  normalizeThemeMode,
 } from '../../src/api/validators/organizationValidators.js';
 
 function validate(body) {
@@ -177,5 +178,50 @@ describe('validateUpdateOrganization brandColor', () => {
 
     expect(error?.statusCode).toBe(400);
     expect(error?.message).toBe('Brand color must be a hex value like #1d4ed8');
+  });
+});
+
+describe('normalizeThemeMode', () => {
+  it.each([
+    ['LIGHT', 'LIGHT'],
+    ['dark', 'DARK'],
+    [' system ', 'SYSTEM'],
+    ['User', 'USER'],
+  ])('normalizes %p to %p', (input, expected) => {
+    expect(normalizeThemeMode(input)).toBe(expected);
+  });
+
+  it.each(['blue', 'auto', '', 123, null, undefined, {}])('returns null for invalid input %p', (value) => {
+    expect(normalizeThemeMode(value)).toBeNull();
+  });
+});
+
+describe('validateUpdateOrganization themeMode', () => {
+  it.each(['LIGHT', 'DARK', 'SYSTEM', 'USER'])('accepts %s', (mode) => {
+    const { error, body } = validateUpdate({ themeMode: mode });
+
+    expect(error).toBeUndefined();
+    expect(body.themeMode).toBe(mode);
+  });
+
+  it('uppercases lowercase input', () => {
+    const { error, body } = validateUpdate({ themeMode: 'dark' });
+
+    expect(error).toBeUndefined();
+    expect(body.themeMode).toBe('DARK');
+  });
+
+  it('leaves themeMode untouched when omitted', () => {
+    const { error, body } = validateUpdate({ name: 'Org' });
+
+    expect(error).toBeUndefined();
+    expect(body).not.toHaveProperty('themeMode');
+  });
+
+  it.each(['blue', 'auto', null, 123, {}])('rejects invalid value %p', (value) => {
+    const { error } = validateUpdate({ themeMode: value });
+
+    expect(error?.statusCode).toBe(400);
+    expect(error?.message).toBe('Theme mode must be one of: LIGHT, DARK, SYSTEM, USER');
   });
 });

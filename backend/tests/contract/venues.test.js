@@ -177,6 +177,7 @@ describe('Venue Contract Tests', () => {
         timezone: 'America/New_York',
         logoUrl: '/uploads/logos/public-venue.webp',
         brandColor: null,
+        themeMode: 'USER',
       });
       expect(res.body.venue).not.toHaveProperty('organizationId');
     });
@@ -188,6 +189,16 @@ describe('Venue Contract Tests', () => {
         expect(res.body.venue.brandColor).toBe('#047857');
       } finally {
         await prisma.organization.update({ where: { id: testOrgId }, data: { brandColor: null } });
+      }
+    });
+
+    it('exposes the owning organization theme mode', async () => {
+      await prisma.organization.update({ where: { id: testOrgId }, data: { themeMode: 'LIGHT' } });
+      try {
+        const res = await request(app).get(`/venues/${publicVenueId}`).expect(200);
+        expect(res.body.venue.themeMode).toBe('LIGHT');
+      } finally {
+        await prisma.organization.update({ where: { id: testOrgId }, data: { themeMode: 'USER' } });
       }
     });
 

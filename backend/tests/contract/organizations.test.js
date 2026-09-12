@@ -236,6 +236,47 @@ describe('Organization Contract Tests', () => {
 
       expect(res.status).toBe(400);
     });
+
+    it('defaults themeMode to USER', async () => {
+      const org = await prisma.organization.findUnique({ where: { id: otherOrgId } });
+
+      expect(org.themeMode).toBe('USER');
+    });
+
+    it.each(['LIGHT', 'DARK', 'SYSTEM', 'USER'])('sets themeMode %s', async (themeMode) => {
+      const res = await request(app)
+        .patch(`/organizations/${orgId}`)
+        .set('Authorization', `Bearer ${orgAdminToken}`)
+        .send({ themeMode });
+
+      expect(res.status).toBe(200);
+      expect(res.body.themeMode).toBe(themeMode);
+    });
+
+    it('normalizes lowercase themeMode input', async () => {
+      const res = await request(app)
+        .patch(`/organizations/${orgId}`)
+        .set('Authorization', `Bearer ${orgAdminToken}`)
+        .send({ themeMode: 'dark' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.themeMode).toBe('DARK');
+    });
+
+    it('exposes themeMode on the public organization endpoint', async () => {
+      const res = await request(app).get(`/organizations/${orgId}/public`).expect(200);
+
+      expect(res.body.organization.themeMode).toBe('DARK');
+    });
+
+    it('returns 400 for an invalid themeMode', async () => {
+      const res = await request(app)
+        .patch(`/organizations/${orgId}`)
+        .set('Authorization', `Bearer ${orgAdminToken}`)
+        .send({ themeMode: 'blue' });
+
+      expect(res.status).toBe(400);
+    });
   });
 
   describe('GET /admin/settings/business-details', () => {
