@@ -28,6 +28,8 @@ Admin-facing QR code scanner at `/admin/scan` for event entry. Each ticket's QR 
 
 ## Gotchas
 
+- **`POST /tickets/scan` and `/redeem` are no longer open.** They accept a staff Bearer token (ORGANIZER or above) or `X-Scanner-Key` matching `SCANNER_API_KEY` for hardware readers (spec 006). Buyer sessions and `UNASSIGNED` users are refused. Before this, anyone holding a QR payload could redeem (void) the ticket remotely. The admin check-in UI never used these routes; it calls `/admin/tickets/scan-order` and `/admin/tickets/:id/check-in`, which are also org-scoped.
+
 - JWT expiry is set to 24 hours post-event, allowing late scanning.
 - Scanner requires camera permissions — browser will prompt on first use.
 - Each ticket is redeemable only once. Duplicate scan attempts are rejected.

@@ -282,7 +282,7 @@ describe('Ticket Redemption API Contract Tests — POST /tickets/redeem', () => 
   test('200 — redeems a valid ticket with correct QR payload', async () => {
     const qrPayload = generateQRPayload(validTicketId, testEventId, validTicketBarcode, futureDate);
 
-    const res = await request(app).post('/tickets/redeem').send({ qrPayload });
+    const res = await request(app).post('/tickets/redeem').set('Authorization', `Bearer ${adminToken}`).send({ qrPayload });
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('REDEEMED');
@@ -299,7 +299,7 @@ describe('Ticket Redemption API Contract Tests — POST /tickets/redeem', () => 
     // The validTicket was just redeemed in the previous test, try again
     const qrPayload = generateQRPayload(validTicketId, testEventId, validTicketBarcode, futureDate);
 
-    const res = await request(app).post('/tickets/redeem').send({ qrPayload });
+    const res = await request(app).post('/tickets/redeem').set('Authorization', `Bearer ${adminToken}`).send({ qrPayload });
 
     expect(res.status).toBe(409);
     expect(res.body.status).toBe('ALREADY_REDEEMED');
@@ -315,7 +315,7 @@ describe('Ticket Redemption API Contract Tests — POST /tickets/redeem', () => 
       futureDate
     );
 
-    const res = await request(app).post('/tickets/redeem').send({ qrPayload });
+    const res = await request(app).post('/tickets/redeem').set('Authorization', `Bearer ${adminToken}`).send({ qrPayload });
 
     expect(res.status).toBe(409);
     expect(res.body.status).toBe('ALREADY_REDEEMED');
@@ -326,7 +326,7 @@ describe('Ticket Redemption API Contract Tests — POST /tickets/redeem', () => 
 
   test('400 — rejects completely invalid QR payload', async () => {
     const res = await request(app)
-      .post('/tickets/redeem')
+      .post('/tickets/redeem').set('Authorization', `Bearer ${adminToken}`)
       .send({ qrPayload: 'not-a-valid-jwt-string' });
 
     expect(res.status).toBe(400);
@@ -341,14 +341,14 @@ describe('Ticket Redemption API Contract Tests — POST /tickets/redeem', () => 
       { algorithm: 'HS256', expiresIn: '1h' }
     );
 
-    const res = await request(app).post('/tickets/redeem').send({ qrPayload: forgedPayload });
+    const res = await request(app).post('/tickets/redeem').set('Authorization', `Bearer ${adminToken}`).send({ qrPayload: forgedPayload });
 
     expect(res.status).toBe(400);
     expect(res.body.status).toBe('INVALID');
   });
 
   test('400 — rejects missing qrPayload field', async () => {
-    const res = await request(app).post('/tickets/redeem').send({});
+    const res = await request(app).post('/tickets/redeem').set('Authorization', `Bearer ${adminToken}`).send({});
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('ValidationError');
@@ -366,7 +366,7 @@ describe('Ticket Redemption API Contract Tests — POST /tickets/redeem', () => 
     );
 
     const res = await request(app)
-      .post('/tickets/redeem')
+      .post('/tickets/redeem').set('Authorization', `Bearer ${adminToken}`)
       .send({ qrPayload, eventId: testEventId2 });
 
     expect(res.status).toBe(403);
@@ -385,7 +385,7 @@ describe('Ticket Redemption API Contract Tests — POST /tickets/redeem', () => 
     };
     const qrPayload = jwt.sign(payload, AUTH_SECRET, { algorithm: 'HS256', expiresIn: '365d' });
 
-    const res = await request(app).post('/tickets/redeem').send({ qrPayload });
+    const res = await request(app).post('/tickets/redeem').set('Authorization', `Bearer ${adminToken}`).send({ qrPayload });
 
     expect(res.status).toBe(410);
     expect(res.body.status).toBe('EXPIRED');
@@ -402,10 +402,41 @@ describe('Ticket Redemption API Contract Tests — POST /tickets/redeem', () => 
     const payload = { sub: voidedTicketId, eventId: testEventId, barcode: voidedTicketBarcode };
     const qrPayload = jwt.sign(payload, AUTH_SECRET, { algorithm: 'HS256', expiresIn: '365d' });
 
-    const res = await request(app).post('/tickets/redeem').send({ qrPayload });
+    const res = await request(app).post('/tickets/redeem').set('Authorization', `Bearer ${adminToken}`).send({ qrPayload });
 
     expect(res.status).toBe(409);
     expect(res.body.status).toBe('VOIDED');
     expect(res.body.ticketId).toBe(voidedTicketId);
+  });
+
+  describe('scanner authentication (POST /tickets/scan and /redeem)', () => {
+    const body = { qrPayload: 'jump://ticket?id=x&b=JUMP-NOPE&e=y' };
+
+    it('rejects anonymous, buyer, and non-staff callers', async () => {
+      expect((await request(app).post('/tickets/redeem').send(body)).status).toBe(401);
+      expect((await request(app).post('/tickets/scan').send({ payload: body.qrPayload })).status).toBe(401);
+
+      const buyer = jwt.sign({ sub: 'c1', org: 'o1', typ: 'buyer' }, AUTH_SECRET, { algorithm: 'HS256', expiresIn: '1h' });
+      expect((await request(app).post('/tickets/redeem').set('Authorization', `Bearer ${buyer}`).send(body)).status).toBe(401);
+
+      const unassigned = jwt.sign({ sub: 'u1', role: 'UNASSIGNED', email: 'x@y.z' }, AUTH_SECRET, { algorithm: 'HS256', expiresIn: '1h' });
+      expect((await request(app).post('/tickets/redeem').set('Authorization', `Bearer ${unassigned}`).send(body)).status).toBe(403);
+    });
+
+    it('accepts a reader device key only when SCANNER_API_KEY is set and matches', async () => {
+      const prev = process.env.SCANNER_API_KEY;
+      try {
+        delete process.env.SCANNER_API_KEY;
+        expect((await request(app).post('/tickets/redeem').set('X-Scanner-Key', 'anything').send(body)).status).toBe(401);
+
+        process.env.SCANNER_API_KEY = 'reader-secret-123';
+        expect((await request(app).post('/tickets/redeem').set('X-Scanner-Key', 'wrong').send(body)).status).toBe(401);
+        // Right key: passes the gate; the fake barcode then fails validation (400), not auth
+        expect((await request(app).post('/tickets/redeem').set('X-Scanner-Key', 'reader-secret-123').send(body)).status).toBe(400);
+      } finally {
+        if (prev === undefined) delete process.env.SCANNER_API_KEY;
+        else process.env.SCANNER_API_KEY = prev;
+      }
+    });
   });
 });
