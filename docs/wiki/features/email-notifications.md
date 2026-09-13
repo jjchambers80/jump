@@ -18,6 +18,7 @@ Transactional emails via Resend API. Order confirmation emails are sent after su
 | Variable | Description |
 |----------|-------------|
 | `RESEND_API_KEY` | API key for the Resend transactional email service |
+| `BACKEND_URL` | Optional. Public base URL of the backend, used to make organizer logo URLs absolute in email headers. Falls back to `https://$RAILWAY_PUBLIC_DOMAIN` (set automatically on Railway), then `http://localhost:$PORT` |
 
 ## How It Works
 
@@ -26,6 +27,10 @@ Transactional emails via Resend API. Order confirmation emails are sent after su
 3. The email is sent asynchronously via the Resend API (fire-and-forget).
 4. On failure, the service retries up to 3 times before giving up.
 5. Email send results (success or final failure) are logged but do not affect the order status.
+
+### Organizer logo
+
+Every email header shows the organization's logo centered above the heading (`orgLogoHtml` in `EmailService.js`, `max-height: 60px`). The confirmation email reads `order.event.organizationLogoUrl` / `organizationName` — both call sites pass the output of `OrderService.getOrderById`, which includes them. The cancellation email reads the same fields or falls back to `event.venue.organization`. Logos are served by the backend at a relative path (`/images/:id/:hash/:variant`), so `absoluteAssetUrl` prefixes the public backend URL (see `BACKEND_URL`); the header renders without the image when the org has no logo.
 
 ## Gotchas
 

@@ -49,6 +49,7 @@ cd frontend && npm run test:unit    # Vitest unit tests (lib/color.ts)
 | `NEXT_PUBLIC_API_URL` | frontend | Points to backend URL |
 | `BUCKET_NAME`, `BUCKET_ENDPOINT`, `BUCKET_ACCESS_KEY_ID`, `BUCKET_SECRET_ACCESS_KEY`, `BUCKET_REGION` | backend | S3-compatible image storage (Railway Bucket). Unset → local `uploads/` disk (ephemeral on Railway) |
 | `BUCKET_PUBLIC_URL` | backend | Optional. Only set for a public bucket/CDN; otherwise images are served through `GET /images/:id/:hash/:variant` |
+| `BACKEND_URL` | backend | Optional. Public backend base URL for absolute image links in emails. Falls back to `https://$RAILWAY_PUBLIC_DOMAIN`, then `http://localhost:$PORT` |
 
 ## Deployment
 
