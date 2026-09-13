@@ -1,6 +1,6 @@
 # Implementation Plan: Settings › Domains (Shopify-style connect flow)
 
-**Status**: Plan (2026-09-13). Not started.
+**Status**: Approved 2026-09-13. Phase A in progress on branch `feat/008-domains-ui`.
 **Input**: "Create a UI to configure a custom domain, organized under Settings, placed underneath General as a new menu item. Provide the domain via a dialog; on Next, a DNS configuration is presented. The example screens are from Shopify."
 **Builds on**: spec 007 phase 3 (custom domains backend), shipped to production 2026-09-13.
 **Reference screens**: Shopify Settings › Domains list (`Connect existing` / `Buy new domain`, Domain | Status table with a `Primary` badge and nested platform hosts) and the domain detail page (`test.com · Needs setup`, "Managed by Network Solutions", a numbered DNS checklist with Type / Name / Current value / Update to columns, "I updated DNS records", then greyed "DNS propagation" and "TLS certificate provisioning" steps, and a `More actions › Delete domain` menu).
@@ -96,7 +96,7 @@ Manage your organization and business information.
 
 - Rows are links to the detail page. The primary domain is listed first with the platform URL nested beneath it (Shopify nests the `myshopify.com` host under the primary). With no custom domains, the table shows only the platform URL row and an empty-state line: "Sell tickets on your own domain. Connect a subdomain you already own."
 - Status pills: `Connected` (ACTIVE, green), `Needs setup` (PENDING, blue), `Verifying` (VERIFIED — DNS proven, certificate pending, amber), `Failed` (FAILED, red).
-- `Connect existing` opens the dialog. No dropdown and no `Buy new domain` (out of scope; see 2.4).
+- `Connect existing` opens the dialog. `Buy new domain` is rendered as a disabled button with a "Coming soon" tooltip (no registrar integration; see 2.4).
 - Loading skeleton, 404-org message, and `aria-live` notice region carry over from the current page.
 
 ### 3.2 Connect existing domain (dialog)
@@ -247,8 +247,8 @@ A then B, one PR each, both behind nothing (the existing page is replaced wholes
 
 ---
 
-## 8. Open questions for the user
+## 8. Decisions (2026-09-13)
 
-1. Nav label: keep `Domains` (Shopify) or rename to `Domain` as worded in the ask? Plan assumes `Domains`.
-2. Apex domains now (phase C pulled into B, +0.5 day) or later?
-3. Is `Buy new domain` wanted as a disabled placeholder button, or omitted entirely? Plan omits it.
+1. Nav label stays `Domains`.
+2. Apex (root) domains stay in phase C. Railway cannot serve a root domain at providers without CNAME flattening (GoDaddy, Route 53, Squarespace, Azure), and `_checkDns` would need an A/AAAA comparison path; subdomains such as `tickets.<org>.com` cover the ticketing use case.
+3. `Buy new domain` ships as a disabled placeholder button.
