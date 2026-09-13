@@ -5,6 +5,41 @@
 import resend from '../config/resend.js';
 import logger from '../utils/logger.js';
 
+/**
+ * Public base URL of this backend, used to make relative asset URLs
+ * (e.g. /images/:id/:hash/:variant) absolute inside emails.
+ * BACKEND_URL wins; Railway exposes RAILWAY_PUBLIC_DOMAIN automatically.
+ */
+function backendPublicUrl() {
+  if (process.env.BACKEND_URL) return process.env.BACKEND_URL.replace(/\/$/, '');
+  if (process.env.RAILWAY_PUBLIC_DOMAIN) return `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
+  return `http://localhost:${process.env.PORT || 3000}`;
+}
+
+function absoluteAssetUrl(url) {
+  if (!url) return null;
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${backendPublicUrl()}/${url.replace(/^\//, '')}`;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * Centered organizer logo for the top of an email header. Empty string when
+ * the organization has no logo so the header renders unchanged.
+ */
+function orgLogoHtml(logoUrl, orgName) {
+  const src = absoluteAssetUrl(logoUrl);
+  if (!src) return '';
+  return `<img src="${src}" alt="${escapeHtml(orgName || 'Organizer')}" style="display: block; margin: 0 auto 16px; max-height: 60px; max-width: 240px; width: auto; height: auto;" />`;
+}
+
 class EmailService {
   /**
    * Send order confirmation email with View Tickets link (FR-036)
@@ -42,6 +77,7 @@ class EmailService {
             <html>
               <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
                 <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
+                  ${orgLogoHtml(order.event?.organizationLogoUrl, order.event?.organizationName)}
                   <h1 style="color: #333;">🎟️ Order Confirmed!</h1>
                 </div>
                 <div style="padding: 20px;">
@@ -125,6 +161,10 @@ class EmailService {
             <html>
               <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <div style="background-color: #fee2e2; padding: 20px; text-align: center;">
+                  ${orgLogoHtml(
+                    event.organizationLogoUrl ?? event.venue?.organization?.logoUrl,
+                    event.organizationName ?? event.venue?.organization?.name
+                  )}
                   <h1 style="color: #991b1b;">Event Cancelled</h1>
                 </div>
                 <div style="padding: 20px;">
