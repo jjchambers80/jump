@@ -42,10 +42,38 @@ async function graphql(query, variables) {
   return json.data;
 }
 
+// Railway's public API guide lists plain enum values (PENDING | ISSUED | FAILED,
+// PENDING | VALID | INVALID); the GraphQL schema exposes prefixed ones
+// (CERTIFICATE_STATUS_TYPE_VALID, DNS_RECORD_STATUS_PROPAGATED). Accept both
+// until an introspection run against the live token pins the spelling.
+export function normalizeCertificateStatus(raw) {
+  const v = String(raw || '').toUpperCase();
+  if (/VALID|ISSUED/.test(v)) return 'ISSUED';
+  if (/FAIL/.test(v)) return 'FAILED';
+  return 'PENDING';
+}
+
+function dnsRecordOk(raw) {
+  return /PROPAGATED|VALID$/.test(String(raw || '').toUpperCase());
+}
+
+function recordType(r) {
+  const t = String(r.recordType || r.type || '').toUpperCase();
+  if (t.includes('CNAME')) return 'CNAME';
+  if (t.includes('TXT')) return 'TXT';
+  // No type field: infer from the value shape
+  if (/^railway-verify=/i.test(r.requiredValue || '')) return 'TXT';
+  if (/\.railway\.app\.?$/i.test(r.requiredValue || '')) return 'CNAME';
+  return null;
+}
+
 /**
  * Create the custom domain on the frontend service.
+ * Railway requires BOTH records it returns: the CNAME and a TXT
+ * (_railway-verify.<host> -> railway-verify=<token>); without the TXT the
+ * host answers 404 even once the CNAME resolves.
  * @param {string} hostname
- * @returns {Promise<{ id: string, cnameTarget: string|null }>}
+ * @returns {Promise<{ id: string, cnameTarget: string|null, txtHost: string|null, txtValue: string|null }>}
  */
 export async function createCustomDomain(hostname) {
   const { projectId, environmentId, serviceId } = config();
@@ -60,15 +88,22 @@ export async function createCustomDomain(hostname) {
     { input: { domain: hostname, projectId, environmentId, serviceId } }
   );
   const created = data.customDomainCreate;
-  const cname = created.status?.dnsRecords?.find((r) => r.recordType === 'DNS_RECORD_TYPE_CNAME');
-  logger.info('Railway custom domain created', { hostname, railwayDomainId: created.id });
-  return { id: created.id, cnameTarget: cname?.requiredValue || null };
+  const records = created.status?.dnsRecords || [];
+  const cname = records.find((r) => recordType(r) === 'CNAME');
+  const txt = records.find((r) => recordType(r) === 'TXT');
+  logger.info('Railway custom domain created', { hostname, railwayDomainId: created.id, txtPresent: Boolean(txt) });
+  return {
+    id: created.id,
+    cnameTarget: cname?.requiredValue || null,
+    txtHost: txt?.hostlabel || null,
+    txtValue: txt?.requiredValue || null,
+  };
 }
 
 /**
  * Certificate / DNS status for a Railway custom domain.
  * @param {string} id
- * @returns {Promise<{ certificateReady: boolean, dnsOk: boolean }>}
+ * @returns {Promise<{ certificateStatus: 'PENDING'|'ISSUED'|'FAILED', certificateReady: boolean, dnsOk: boolean }>}
  */
 export async function getCustomDomainStatus(id) {
   const { projectId } = config();
@@ -82,9 +117,11 @@ export async function getCustomDomainStatus(id) {
     { id, projectId }
   );
   const status = data.customDomain?.status || {};
+  const certificateStatus = normalizeCertificateStatus(status.certificateStatus);
   return {
-    certificateReady: status.certificateStatus === 'CERTIFICATE_STATUS_TYPE_VALID',
-    dnsOk: (status.dnsRecords || []).every((r) => r.status === 'DNS_RECORD_STATUS_PROPAGATED'),
+    certificateStatus,
+    certificateReady: certificateStatus === 'ISSUED',
+    dnsOk: (status.dnsRecords || []).every((r) => dnsRecordOk(r.status)),
   };
 }
 

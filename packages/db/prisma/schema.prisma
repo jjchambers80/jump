@@ -159,10 +159,14 @@ model OrganizationDomain {
   organizationId    String
   hostname          String       @unique // lowercase, no scheme/port/path
   status            DomainStatus @default(PENDING)
-  verificationToken String       // value of TXT _jump-verify.<hostname>
+  verificationHost  String       @default("_jump-verify") // label(s) prepended to hostname for the ownership TXT
+  verificationToken String       // full TXT value, e.g. "jump-verify=<hex>" or Railway's "railway-verify=<token>"
   cnameTarget       String       // what <hostname> must CNAME to
   isPrimary         Boolean      @default(false)
   railwayDomainId   String?      // Railway custom-domain id when the API is configured
+  certificateStatus String?      // PENDING | ISSUED | FAILED, from Railway; null when TLS is not managed here
+  dnsProvider       String?      // detected from the zone's NS records (see lib/dnsProvider.js); null when unknown
+  lastDnsSnapshot   Json?        // { cname: { currentValue, status }, txt: { currentValue, status } } from the last check
   verifiedAt        DateTime?
   lastCheckedAt     DateTime?
   failingSince      DateTime?    // first failed check after a success; cleared on success
