@@ -35,7 +35,7 @@ Admin users can manage all user accounts in the system — view users, change ro
 
 - Admin-only — Organizers cannot manage users
 - Role changes take effect on next JWT refresh (existing tokens retain old role until expiry)
-- Users with `organizationId` are org-scoped; changing role may require org assignment
+- Org affiliation is `OrganizationMember`, not `User.organizationId`. `PATCH /users/:id { organizationId }` replaces the user's memberships (null clears); memberships exist only for ADMIN/ORGANIZER and are cleared when a user is demoted to CUSTOMER or promoted to SYSTEM_ADMIN. Responses expose the first membership as `organizationId` / `organizationName` plus `organizations: [{ id, name, role }]`. See [Tenant Identity](tenant-identity.md)
 
 ## Related Features
 

@@ -24,7 +24,7 @@ Guests can purchase tickets without creating an account. `POST /orders` creates 
    - Validates event is PUBLISHED and date is in the future.
    - Validates each tier is active, within min/max per-order limits.
    - Reserves inventory atomically via raw SQL `FOR UPDATE` (see [Price Tiers](price-tiers.md)).
-   - Upserts `Contact` by email (lowercase dedup). If authenticated user, links `userId`.
+   - Upserts `Contact` by `(organizationId, email)` — organization taken from `event.venue.organizationId`, email lowercased. The same email at another organization is a separate Contact ([Tenant Identity](tenant-identity.md)). Records `createAccount` / `emailSubscribed` on the Order as `optInAccount` / `optInMarketing`; they are applied to the Contact only when payment completes ([Buyer Accounts](buyer-accounts.md)).
    - Computes fee breakdown via `FeeService.computeOrderFees()` (subtotal, platformFee, processingFee, tax).
    - Generates unique `orderRef` (format: `JMP-XXXXXX`, charset excludes `0/O/1/I`).
    - Creates `Order` (status: PENDING) with `OrderItem` records including per-item fee breakdown.
@@ -57,7 +57,7 @@ Guests can purchase tickets without creating an account. `POST /orders` creates 
 
 ## Gotchas
 
-- **Contact is separate from User.** Guests don't need accounts. `Contact` is email-keyed; `User` is auth-keyed. A Contact may optionally link to a User via `userId`.
+- **Contact is separate from User.** Guests don't need accounts. `Contact` is keyed by `(organizationId, email)`; `User` is staff. Buyers never become Users; the optional "account" is a login-enabled Contact (`accountCreatedAt`) with passwordless sign-in — see [Buyer Accounts](buyer-accounts.md).
 - **OrderRef format: `JMP-XXXXXX`** using charset `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (no ambiguous chars). Uniqueness verified in transaction with retry loop.
 - **30-minute Stripe session expiry.** If the session expires, the `checkout.session.expired` webhook releases reserved inventory.
 - **Inventory rollback on Stripe API failure.** If `stripe.checkout.sessions.create` throws, order is marked FAILED and `quantityReserved` is decremented.
@@ -65,7 +65,7 @@ Guests can purchase tickets without creating an account. `POST /orders` creates 
 - **Checkout and confirmation pages render inside `BrandScope`.** Checkout uses `event.organizationBrandColor` / `organizationThemeMode` from `GET /events/:id`; the confirmation page gets the same two fields on `event` in order detail responses. Primary buttons, links, focus rings, the order-reference box and the total use the `brand` Tailwind tokens; tinted info boxes stay platform blue because the tokens have no alpha variants.
 - **Confirmation page shows the organizer logo centered at the top** (`event.organizationLogoUrl` / `organizationName` on order detail responses, `max-h-20`), above the success header; the event logo sits inside the Order Details card.
 - **Order detail responses include `event.logoUrl`** (`OrderService._formatOrderDetail`). The confirmation page renders it bare and left-aligned above the Order Details rows (`max-h-[65px]`), resolved via `lib/assets.resolveAssetUrl`. Local disk uploads live under `backend/uploads/` — a worktree backend serves 404 for them unless that directory is symlinked from the main checkout.
-- **Auth is optional on `POST /orders`.** If a Bearer token is present, the user ID is extracted and linked to the Contact. Failure to decode token is silently ignored (proceeds as guest).
+- **`POST /orders` ignores the Authorization header.** It used to write a staff JWT's `sub` onto `Contact.userId`, which failed the FK whenever that user was absent (e.g. a dev session leaking across ports). Checkout is always the same guest path; opt-ins are the only account-related input.
 
 ## Related Features
 

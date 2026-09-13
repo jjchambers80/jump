@@ -11,6 +11,8 @@ Generated and maintained by running `/doc-feature` after completing feature work
 - [Event Management](features/event-management.md) — CRUD, lifecycle (draft/published/cancelled), capacity
 - [Price Tiers](features/price-tiers.md) — Multi-tier pricing, inventory tracking, display ordering
 - [Guest Checkout](features/guest-checkout.md) — Stripe Checkout flow, contact creation, order management
+- [Tenant Identity](features/tenant-identity.md) — Per-organization buyers (`Contact` unique on org + email), staff memberships (`OrganizationMember`), membership-based scoping
+- [Buyer Accounts](features/buyer-accounts.md) — Checkout account opt-in (pre-checked) + marketing consent (unchecked), passwordless magic-link sign-in, org-scoped account page
 
 ### Payments & Pricing
 - [Stripe Integration](features/stripe-integration.md) — Payment processing, webhooks, Checkout Sessions

@@ -24,7 +24,7 @@ Organizations are the top-level tenant boundary in Jump. Each Organization owns 
 3. **Events** are created under an org but linked to a Venue (`event.venueId`). Org ownership is resolved transitively: `event.venue.organizationId`.
 4. **OrganizationPerson** records track business reps. When `isAccountRepresentative` is set, a transaction first clears the flag on all existing reps, then creates the new one. A Prisma `P2002` error (unique constraint) on concurrent writes throws `ConflictError`.
 5. **Business details** (EIN) are serialized with masking: only last 4 digits exposed via `einMasked` field (`--***XXXX`).
-6. **User-org binding**: Users have an `organizationId` FK. `getBusinessDetailsForUser` and `updateBusinessDetailsForUser` operate through the user's org.
+6. **User-org binding**: staff belong to organizations through `OrganizationMember(userId, organizationId, role)`; one user can hold several. `resolveActiveMembership` picks the active one (JWT `organizationId` claim if it is a real membership, else the oldest). `getBusinessDetailsForUser` / `updateBusinessDetailsForUser` operate through that. `User.organizationId` is legacy and unread. Buyers are `Contact` rows scoped per organization — see [Tenant Identity](tenant-identity.md).
 
 ## API Endpoints
 
@@ -41,6 +41,7 @@ Organizations are the top-level tenant boundary in Jump. Each Organization owns 
 - **OrganizationPerson DOB** is privacy-sensitive. Summary serialization intentionally omits it (only `id`, `firstName`, `lastName`, `isAccountRepresentative` returned).
 - **Max 1 account rep per org** enforced by a transaction that clears existing reps before creating the new one. Concurrent requests can hit `P2002` and should retry.
 - **EIN is never returned raw** -- only `hasEin` (boolean) and `einMasked` (last 4) are exposed.
+- **Org-param routes use `requireOrgMembership(param)`** from `middleware/orgScope.js` (SYSTEM_ADMIN bypasses). Do not reintroduce per-file `verifyOrgOwnership` helpers or read `User.organizationId`.
 
 ## Related Features
 

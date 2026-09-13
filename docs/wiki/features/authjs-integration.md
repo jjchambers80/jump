@@ -34,6 +34,9 @@ Auth.js v5 (next-auth 5.0.0-beta.30) handles authentication on the frontend usin
 
 ## Gotchas
 
+- **Auth.js is staff-only.** Buyers sign in with single-use emailed links and a separate `jump_buyer` cookie (`typ: 'buyer'` JWT) — see [Buyer Accounts](buyer-accounts.md). `middleware/auth.js` rejects buyer tokens and `requireBuyer` rejects staff tokens even though both use `AUTH_SECRET`.
+- **JWT carries `organizationId`** (first `OrganizationMember`, set at sign-in). The backend treats it as a preference and re-verifies it against memberships in `resolveOrgScope`.
+
 - `AUTH_SECRET` must be identical across frontend and backend services. Mismatch causes JWT verification to fail silently.
 - The credentials provider is dev-only and must not be enabled in production.
 - No database sessions are used — all session state lives in the JWT.

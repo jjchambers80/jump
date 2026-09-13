@@ -5,14 +5,14 @@
 
 ## Overview
 
-Shared `@jump/db` package (`packages/db/`) providing a singleton PrismaClient. The schema defines 13 models and 7 enums. Both the backend and frontend import from `@jump/db` for database access. Migrations are tracked in `packages/db/prisma/migrations/` with 9 migrations covering feature evolution from February to September 2026.
+Shared `@jump/db` package (`packages/db/`) providing a singleton PrismaClient. The schema defines 19 models and 11 enums. Both the backend and frontend import from `@jump/db` for database access. Migrations are tracked in `packages/db/prisma/migrations/` with 23 migrations covering feature evolution from February to September 2026.
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
 | `packages/db/src/index.ts` | Singleton PrismaClient export |
-| `packages/db/prisma/schema.prisma` | Schema definition (13 models, 7 enums) |
+| `packages/db/prisma/schema.prisma` | Schema definition (19 models, 11 enums) |
 | `packages/db/prisma/migrations/` | 9 migration files tracking schema evolution |
 
 ## How It Works
@@ -28,7 +28,8 @@ Shared `@jump/db` package (`packages/db/`) providing a singleton PrismaClient. T
 - Always import from `@jump/db` — never instantiate PrismaClient directly in backend or frontend code.
 - Run `npm install` from the monorepo root to correctly link workspace packages.
 - `prisma generate` runs on `postinstall`; if the generated client is stale, re-run `npm install`.
-- Migrations must be applied in order; never manually edit migration files.
+- Migrations must be applied in order; never manually edit migration files once merged.
+- Railway runs `prisma migrate deploy` at container start, so a data backfill that must precede a NOT NULL or unique constraint belongs **inside the same migration** (single transaction), not in a separate script step — see `20260913000000_contact_per_org_and_membership` and [Tenant Identity](tenant-identity.md).
 
 ## Related Features
 
