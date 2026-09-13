@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { signInAsStaff } from './helpers/session';
 
 const API = 'http://localhost:3002';
 
@@ -28,18 +29,10 @@ const publicEvent = {
   availableTickets: 42,
 };
 
-async function mockAdminSession(page: Page) {
-  await page.route('**/api/auth/session', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        user: { id: 'theme-admin', email: 'theme-admin@test.com', role: 'ADMIN' },
-        accessToken: 'theme-test-token',
-        expires: '2099-01-01T00:00:00.000Z',
-      }),
-    })
-  );
+// Real HS256 session cookie: the edge middleware decodes it itself, so
+// mocking GET /api/auth/session alone would redirect /admin to sign-in.
+async function mockAdminSession(page: Page, baseURL: string) {
+  await signInAsStaff(page, { id: 'theme-admin', email: 'theme-admin@test.com', role: 'ADMIN' }, baseURL);
 }
 
 /** Mocks the org list, PATCH, the public org/venue/event endpoints, and the /events list, sharing one themeMode. */
@@ -154,8 +147,8 @@ async function setStoredTheme(page: Page, theme: 'light' | 'dark' | 'system') {
   await page.addInitScript((t) => localStorage.setItem('theme', t), theme);
 }
 
-test.beforeEach(async ({ page }) => {
-  await mockAdminSession(page);
+test.beforeEach(async ({ page, baseURL }) => {
+  await mockAdminSession(page, baseURL!);
 });
 
 test('shows the Theme section above Branding with System selected by default', async ({ page }) => {

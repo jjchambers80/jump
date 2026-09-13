@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { signInAsStaff } from './helpers/session';
 import AxeBuilder from '@axe-core/playwright';
 
 const people = [
@@ -35,18 +36,10 @@ const businessDetails = {
   einMasked: '••-•••0063',
 };
 
-async function mockAdminSession(page: Page) {
-  await page.route('**/api/auth/session', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        user: { id: 'settings-admin', email: 'settings-admin@test.com', role: 'ADMIN' },
-        accessToken: 'settings-test-token',
-        expires: '2099-01-01T00:00:00.000Z',
-      }),
-    })
-  );
+// Real HS256 session cookie: the edge middleware decodes it itself, so
+// mocking GET /api/auth/session alone would redirect /admin to sign-in.
+async function mockAdminSession(page: Page, baseURL: string) {
+  await signInAsStaff(page, { id: 'settings-admin', email: 'settings-admin@test.com', role: 'ADMIN' }, baseURL);
 }
 
 async function mockSettingsApi(page: Page, initialPeople: typeof people = []) {
@@ -100,8 +93,8 @@ async function mockSettingsApi(page: Page, initialPeople: typeof people = []) {
   return { submitted: () => submitted, organizationsGets: () => organizationsGets };
 }
 
-test.beforeEach(async ({ page }) => {
-  await mockAdminSession(page);
+test.beforeEach(async ({ page, baseURL }) => {
+  await mockAdminSession(page, baseURL!);
 });
 
 test('places Settings in the sidebar footer and renders General as read-only summary cards', async ({ page }) => {
@@ -117,7 +110,7 @@ test('places Settings in the sidebar footer and renders General as read-only sum
   await expect(sidebar.locator('nav').getByRole('link', { name: 'Settings' })).toHaveCount(0);
 
   await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'General' })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'General' })).toHaveAttribute('aria-current', 'page');
   await expect(page.getByRole('heading', { name: 'General', exact: true })).toBeVisible();
 
   // Business details card: legal entity row with an actions affordance.
