@@ -6,6 +6,7 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
+import { staffToken, joinOrgByToken } from '../helpers/staff.js';
 
 const AUTH_SECRET = process.env.AUTH_SECRET;
 
@@ -87,12 +88,11 @@ describe('Purchase Flow Integration', () => {
   let stripeSessionId;
 
   beforeAll(async () => {
-    adminToken = generateToken({
-      id: 'integ-admin-id',
+    adminToken = await staffToken({
       role: 'ADMIN',
       email: 'admin@purchase-integ.com',
     });
-    organizerToken = generateToken({ role: 'ORGANIZER', email: 'organizer@purchase-integ.com' });
+    organizerToken = await staffToken({ role: 'ORGANIZER', email: 'organizer@purchase-integ.com' });
 
     // Create org → venue → event → tiers → publish
     const orgRes = await request(app)
@@ -100,6 +100,8 @@ describe('Purchase Flow Integration', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Purchase Integ Org' });
     testOrgId = orgRes.body.id;
+    await joinOrgByToken(adminToken, testOrgId, 'ADMIN');
+    await joinOrgByToken(organizerToken, testOrgId, 'ORGANIZER');
 
     const venueRes = await request(app)
       .post(`/organizations/${testOrgId}/venues`)
@@ -165,7 +167,8 @@ describe('Purchase Flow Integration', () => {
     // Verify order in DB is PENDING
     const order = await prisma.order.findUnique({ where: { id: orderId } });
     expect(order.status).toBe('PENDING');
-    expect(Number(order.totalAmount)).toBe(90.0); // 30 × 3
+    expect(Number(order.subtotalAmount)).toBe(90.0); // 30 × 3; totalAmount adds all-in fees
+    expect(Number(order.totalAmount)).toBeGreaterThan(90.0);
 
     // Capture stripeSessionId
     stripeSessionId = order.stripeSessionId;
@@ -217,11 +220,13 @@ describe('Purchase Flow Integration', () => {
     const barcodes = tickets.map((t) => t.barcode);
     expect(new Set(barcodes).size).toBe(3);
 
-    // Verify QR JWT contains correct payload
-    const decoded = jwt.verify(tickets[0].qrCodeJwt, AUTH_SECRET, { algorithms: ['HS256'] });
-    expect(decoded.sub).toBe(tickets[0].id);
-    expect(decoded.eventId).toBe(testEventId);
-    expect(decoded.barcode).toBe(tickets[0].barcode);
+    // Verify the stored QR payload is the compact jump:// form carrying ticket, barcode, event
+    const { default: qrService } = await import('../../src/services/QRService.js');
+    expect(qrService.isJumpPayload(tickets[0].qrCodeJwt)).toBe(true);
+    const parsed = qrService.parseQRPayload(tickets[0].qrCodeJwt);
+    expect(parsed.ticketId).toBe(tickets[0].id);
+    expect(parsed.eventId).toBe(testEventId);
+    expect(parsed.barcode).toBe(tickets[0].barcode);
 
     // Verify PriceTier inventory: reserved → sold
     const tier = await prisma.priceTier.findUnique({ where: { id: testTierId } });

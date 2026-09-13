@@ -5,6 +5,7 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
+import { staffToken, joinOrgByToken } from '../helpers/staff.js';
 
 const AUTH_SECRET = process.env.AUTH_SECRET;
 
@@ -56,18 +57,19 @@ describe('Capacity Enforcement Integration Tests', () => {
   let testOrgId;
 
   beforeAll(async () => {
-    adminToken = generateToken({
-      id: 'cap-admin-id',
+    adminToken = await staffToken({
       role: 'ADMIN',
       email: 'admin@capacity-integ.com',
     });
-    organizerToken = generateToken({ role: 'ORGANIZER', email: 'organizer@capacity-integ.com' });
+    organizerToken = await staffToken({ role: 'ORGANIZER', email: 'organizer@capacity-integ.com' });
 
     const orgRes = await request(app)
       .post('/organizations')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Capacity Integ Org' });
     testOrgId = orgRes.body.id;
+    await joinOrgByToken(adminToken, testOrgId, 'ADMIN');
+    await joinOrgByToken(organizerToken, testOrgId, 'ORGANIZER');
   });
 
   afterAll(async () => {
@@ -90,6 +92,7 @@ describe('Capacity Enforcement Integration Tests', () => {
         where: { venue: { organizationId: testOrgId } },
       });
       await prisma.venue.deleteMany({ where: { organizationId: testOrgId } });
+      await prisma.contact.deleteMany({ where: { organizationId: testOrgId } }).catch(() => {});
       await prisma.organization.deleteMany({ where: { id: testOrgId } });
       // Note: Contacts are intentionally not deleted here to avoid FK violations
       // with orders from other test suites sharing the same contact emails.

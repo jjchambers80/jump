@@ -26,14 +26,7 @@ describe('QRService', () => {
 
   describe('generateQRCodeJWT', () => {
     it('should generate a valid JWT token with correct payload', async () => {
-      const token = await QRService.generateQRCodeJWT(
-        'tkt-1',
-        'evt-1',
-        'user@test.com',
-        'Test Concert',
-        new Date('2026-06-15T20:00:00Z'),
-        'Test Arena'
-      );
+      const token = await QRService.generateQRCodeJWT('tkt-1', 'evt-1', 'JUMP-TEST00000001', new Date('2026-06-15T20:00:00Z'));
 
       expect(token).toBeTruthy();
       expect(typeof token).toBe('string');
@@ -43,35 +36,20 @@ describe('QRService', () => {
 
     it('should include all required fields in JWT payload', async () => {
       const eventDate = new Date('2026-06-15T20:00:00Z');
-      const token = await QRService.generateQRCodeJWT(
-        'tkt-1',
-        'evt-1',
-        'user@test.com',
-        'Test Concert',
-        eventDate,
-        'Test Arena'
-      );
+      const token = await QRService.generateQRCodeJWT('tkt-1', 'evt-1', 'JUMP-TEST00000001', eventDate);
 
       const decoded = QRService.decodeQRCode(token);
 
-      expect(decoded.ticket_id).toBe('tkt-1');
-      expect(decoded.event_id).toBe('evt-1');
-      expect(decoded.customer_email).toBe('user@test.com');
-      expect(decoded.event_name).toBe('Test Concert');
-      expect(decoded.venue).toBe('Test Arena');
-      expect(decoded.event_date).toBe(eventDate.toISOString());
-      expect(decoded.issued_at).toBeTruthy();
+      // Current payload is minimal: { sub, eventId, barcode } + iat/exp
+      expect(decoded.sub).toBe('tkt-1');
+      expect(decoded.eventId).toBe('evt-1');
+      expect(decoded.barcode).toBe('JUMP-TEST00000001');
+      expect(decoded.iat).toBeTruthy();
+      expect(decoded.exp).toBeGreaterThan(decoded.iat);
     });
 
     it('should record success metric on generation', async () => {
-      await QRService.generateQRCodeJWT(
-        'tkt-1',
-        'evt-1',
-        'user@test.com',
-        'Test Concert',
-        new Date('2026-06-15T20:00:00Z'),
-        'Test Arena'
-      );
+      await QRService.generateQRCodeJWT('tkt-1', 'evt-1', 'JUMP-TEST00000001', new Date('2026-06-15T20:00:00Z'));
 
       expect(recordQRGeneration).toHaveBeenCalledWith('success');
     });
@@ -79,36 +57,16 @@ describe('QRService', () => {
     it('should generate different tokens for different tickets', async () => {
       const eventDate = new Date('2026-06-15T20:00:00Z');
 
-      const token1 = await QRService.generateQRCodeJWT(
-        'tkt-1',
-        'evt-1',
-        'user@test.com',
-        'Concert',
-        eventDate,
-        'Arena'
-      );
-      const token2 = await QRService.generateQRCodeJWT(
-        'tkt-2',
-        'evt-1',
-        'user@test.com',
-        'Concert',
-        eventDate,
-        'Arena'
-      );
+      const token1 = await QRService.generateQRCodeJWT('tkt-1', 'evt-1', 'JUMP-TEST00000001', eventDate);
+      const token2 = await QRService.generateQRCodeJWT('tkt-2', 'evt-1', 'JUMP-TEST00000001', eventDate);
 
       expect(token1).not.toBe(token2);
     });
 
     it('should set JWT expiration to 24 hours after event date', async () => {
-      const eventDate = new Date('2026-06-15T20:00:00Z');
-      const token = await QRService.generateQRCodeJWT(
-        'tkt-1',
-        'evt-1',
-        'user@test.com',
-        'Concert',
-        eventDate,
-        'Arena'
-      );
+      // Must be in the future: past events get the 24h-from-now floor instead
+      const eventDate = new Date(Date.now() + 30 * 24 * 3600 * 1000);
+      const token = await QRService.generateQRCodeJWT('tkt-1', 'evt-1', 'JUMP-TEST00000001', eventDate);
 
       const decoded = QRService.decodeQRCode(token);
 
@@ -125,20 +83,13 @@ describe('QRService', () => {
   describe('verifyQRCode', () => {
     it('should verify and decode a valid JWT token', async () => {
       const eventDate = new Date('2026-06-15T20:00:00Z');
-      const token = await QRService.generateQRCodeJWT(
-        'tkt-1',
-        'evt-1',
-        'user@test.com',
-        'Concert',
-        eventDate,
-        'Arena'
-      );
+      const token = await QRService.generateQRCodeJWT('tkt-1', 'evt-1', 'JUMP-TEST00000001', eventDate);
 
       const decoded = QRService.verifyQRCode(token);
 
-      expect(decoded.ticket_id).toBe('tkt-1');
-      expect(decoded.event_id).toBe('evt-1');
-      expect(decoded.customer_email).toBe('user@test.com');
+      expect(decoded.sub).toBe('tkt-1');
+      expect(decoded.eventId).toBe('evt-1');
+      expect(decoded.barcode).toBe('JUMP-TEST00000001');
     });
 
     it('should throw error for invalid JWT token', () => {
@@ -147,14 +98,7 @@ describe('QRService', () => {
 
     it('should throw error for tampered JWT token', async () => {
       const eventDate = new Date('2026-06-15T20:00:00Z');
-      const token = await QRService.generateQRCodeJWT(
-        'tkt-1',
-        'evt-1',
-        'user@test.com',
-        'Concert',
-        eventDate,
-        'Arena'
-      );
+      const token = await QRService.generateQRCodeJWT('tkt-1', 'evt-1', 'JUMP-TEST00000001', eventDate);
 
       // Tamper with the token by changing a character in the signature
       const parts = token.split('.');
@@ -168,14 +112,7 @@ describe('QRService', () => {
   describe('generateQRCodeImage', () => {
     it('should generate a data URL PNG from JWT token', async () => {
       const eventDate = new Date('2026-06-15T20:00:00Z');
-      const token = await QRService.generateQRCodeJWT(
-        'tkt-1',
-        'evt-1',
-        'user@test.com',
-        'Concert',
-        eventDate,
-        'Arena'
-      );
+      const token = await QRService.generateQRCodeJWT('tkt-1', 'evt-1', 'JUMP-TEST00000001', eventDate);
 
       const dataUrl = await QRService.generateQRCodeImage(token);
 
@@ -192,18 +129,11 @@ describe('QRService', () => {
   describe('decodeQRCode', () => {
     it('should decode JWT without verification', async () => {
       const eventDate = new Date('2026-06-15T20:00:00Z');
-      const token = await QRService.generateQRCodeJWT(
-        'tkt-1',
-        'evt-1',
-        'user@test.com',
-        'Concert',
-        eventDate,
-        'Arena'
-      );
+      const token = await QRService.generateQRCodeJWT('tkt-1', 'evt-1', 'JUMP-TEST00000001', eventDate);
 
       const decoded = QRService.decodeQRCode(token);
 
-      expect(decoded.ticket_id).toBe('tkt-1');
+      expect(decoded.sub).toBe('tkt-1');
     });
 
     it('should return null for invalid token', () => {

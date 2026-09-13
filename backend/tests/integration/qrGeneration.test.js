@@ -11,6 +11,11 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
+import { staffToken, joinOrgByToken } from '../helpers/staff.js';
+
+// Ticket numbers are unique per event; fixtures just need distinct values.
+let ticketSeq = Math.floor(Math.random() * 100000);
+const nextTicketNumber = () => (ticketSeq += 1);
 
 const AUTH_SECRET = process.env.AUTH_SECRET;
 
@@ -61,8 +66,7 @@ describe('Ticket Redemption Integration Flow', () => {
   const pastDate = new Date('2024-01-15T20:00:00Z');
 
   beforeAll(async () => {
-    adminToken = generateToken({
-      id: 'admin-qr-integ',
+    adminToken = await staffToken({
       role: 'ADMIN',
       email: 'admin@qr-integ.com',
     });
@@ -73,6 +77,7 @@ describe('Ticket Redemption Integration Flow', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'QR Integ Org' });
     testOrgId = orgRes.body.id;
+    await joinOrgByToken(adminToken, testOrgId, 'ADMIN');
 
     const venueRes = await request(app)
       .post(`/organizations/${testOrgId}/venues`)
@@ -161,6 +166,7 @@ describe('Ticket Redemption Integration Flow', () => {
       data: {
         orderId: testOrderId,
         eventId: testEventId,
+        ticketNumber: nextTicketNumber(),
         priceTierId: testTierId,
         contactId: testContactId,
         pricePaid: 3500,
@@ -176,6 +182,7 @@ describe('Ticket Redemption Integration Flow', () => {
       data: {
         orderId: expiredOrderId,
         eventId: expiredEventId,
+        ticketNumber: nextTicketNumber(),
         priceTierId: expTier.id,
         contactId: testContactId,
         pricePaid: 1500,
@@ -197,6 +204,7 @@ describe('Ticket Redemption Integration Flow', () => {
       await prisma.event.deleteMany({ where: { id: { in: eventIds } } });
     }
     if (testVenueId) await prisma.venue.deleteMany({ where: { id: testVenueId } });
+    if (testOrgId) await prisma.contact.deleteMany({ where: { organizationId: testOrgId } });
     if (testOrgId) await prisma.organization.deleteMany({ where: { id: testOrgId } });
   });
 

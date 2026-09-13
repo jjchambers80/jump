@@ -21,7 +21,7 @@ npm run db:studio           # Prisma Studio GUI
 ## Testing
 
 ```bash
-cd backend && npm test              # All backend tests
+cd backend && npm test              # All backend tests (creates + migrates jump_test on your Postgres automatically)
 cd backend && npm run test:unit     # Unit tests only
 cd backend && npm run test:contract # Contract tests
 cd frontend && npm run test         # Playwright E2E
