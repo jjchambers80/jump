@@ -141,11 +141,13 @@ describe('Spec 007 phase 4 cleanup', () => {
   });
 
   describe('legacy buyer-as-User routes are gone', () => {
-    it('GET /orders/my and /tickets/my and POST /tickets/:id/request-refund no longer exist', async () => {
+    it('GET /orders/my, /tickets/my, /tickets/:id and POST /tickets/:id/request-refund no longer exist', async () => {
       const t = tokenFor(adminA);
       expect((await request(app).get('/orders/my').set('Authorization', `Bearer ${t}`)).status).toBe(404);
       expect((await request(app).get('/tickets/my').set('Authorization', `Bearer ${t}`)).status).toBe(404);
       expect((await request(app).post('/tickets/some-id/request-refund').set('Authorization', `Bearer ${t}`)).status).toBe(404);
+      // GET /tickets/:id (staff-auth ticket detail keyed on contact email) is gone too
+      expect((await request(app).get('/tickets/some-id').set('Authorization', `Bearer ${t}`)).status).toBe(404);
     });
   });
 
