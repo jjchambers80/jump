@@ -59,12 +59,11 @@ class OrderService {
    * @param {string} params.eventId
    * @param {{priceTierId: string, quantity: number}[]} params.items
    * @param {Object} params.contact - { email, firstName, lastName }
-   * @param {string|null} params.userId - Authenticated user ID (if logged in)
    * @param {boolean} [params.createAccount] - Buyer opted into a login-enabled account at this org
    * @param {boolean} [params.emailSubscribed] - Buyer opted into marketing email from this org
    * @returns {Promise<{ orderId, orderRef, stripeCheckoutUrl }>}
    */
-  async createOrder({ eventId, items, contact, userId = null, createAccount = false, emailSubscribed = false }) {
+  async createOrder({ eventId, items, contact, createAccount = false, emailSubscribed = false }) {
     // Generate order ref outside transaction to avoid retry collisions
     let orderRef = this._generateOrderRef();
 
@@ -149,19 +148,19 @@ class OrderService {
       const email = contact.email.toLowerCase();
       // Opt-ins are recorded on the Order (below) and applied to the Contact
       // by PaymentService once the payment completes, never here.
+      // Buyers are never linked to User (spec 007 D1); a staff session in the
+      // browser must not attach itself to the buyer record.
       const contactRecord = await tx.contact.upsert({
         where: { organizationId_email: { organizationId, email } },
         update: {
           firstName: contact.firstName,
           lastName: contact.lastName,
-          ...(userId && { userId }),
         },
         create: {
           organizationId,
           email,
           firstName: contact.firstName,
           lastName: contact.lastName,
-          ...(userId && { userId }),
         },
       });
 
