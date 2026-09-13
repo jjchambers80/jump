@@ -8,7 +8,13 @@ Loads when agent touches `backend/` files. For root-level commands and env vars,
 2. JWT callback injects `accessToken` into session
 3. Frontend sends `Authorization: Bearer <token>` to backend
 4. `middleware/auth.js` verifies JWT with shared `AUTH_SECRET` (HS256)
-5. `req.user` populated: `{sub, email, role, name}`
+5. `req.user` populated: `{id, email, role, name, organizationId}` — `organizationId` is the preferred active org claim; scoping still verifies it against `OrganizationMember`
+
+## Tenancy (spec 007)
+
+- Buyers = `Contact`, one row per `(organizationId, email)`. Checkout upserts by `organizationId_email` with the event's venue org.
+- Staff = `User` + `OrganizationMember(userId, organizationId, role)`. `resolveOrgScope(userId, role, preferredOrgId)` picks the active org; `requireOrgMembership(param)` guards `/organizations/:orgId/*` routes. SYSTEM_ADMIN bypasses both.
+- Customer admin queries filter `Contact.organizationId` directly; never scope contacts through orders.
 
 ## Payment Flow (WHY: Stripe is source of truth, not the client)
 

@@ -1,6 +1,6 @@
 import { jest } from '@jest/globals';
 
-const mockUserFindUnique = jest.fn();
+const mockMemberFindMany = jest.fn();
 const mockPersonFindMany = jest.fn();
 const mockPersonCreate = jest.fn();
 const mockPersonDeleteMany = jest.fn();
@@ -9,7 +9,7 @@ const mockLoggerInfo = jest.fn();
 
 jest.unstable_mockModule('@jump/db', () => ({
   prisma: {
-    user: { findUnique: mockUserFindUnique },
+    organizationMember: { findMany: mockMemberFindMany },
     organizationPerson: {
       findMany: mockPersonFindMany,
       create: mockPersonCreate,
@@ -47,8 +47,9 @@ const safePerson = {
   isAccountRepresentative: false,
 };
 
+// Org affiliation comes from OrganizationMember (spec 007); first membership is active.
 function assignOrganization(organizationId = 'org-1') {
-  mockUserFindUnique.mockResolvedValue({ organizationId });
+  mockMemberFindMany.mockResolvedValue([{ organizationId, role: 'ADMIN' }]);
 }
 
 describe('OrganizationPersonService', () => {
@@ -57,13 +58,12 @@ describe('OrganizationPersonService', () => {
   });
 
   it('resolves the organization from userId and returns null when none is assigned', async () => {
-    mockUserFindUnique.mockResolvedValue({ organizationId: null });
+    mockMemberFindMany.mockResolvedValue([]);
 
     await expect(organizationPersonService.listPeopleForUser('user-1')).resolves.toBeNull();
-    expect(mockUserFindUnique).toHaveBeenCalledWith({
-      where: { id: 'user-1' },
-      select: { organizationId: true },
-    });
+    expect(mockMemberFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: 'user-1' } })
+    );
     expect(mockPersonFindMany).not.toHaveBeenCalled();
   });
 
@@ -166,7 +166,7 @@ describe('OrganizationPersonService', () => {
   });
 
   it('returns null for delete when the actor has no organization', async () => {
-    mockUserFindUnique.mockResolvedValue(null);
+    mockMemberFindMany.mockResolvedValue([]);
 
     await expect(
       organizationPersonService.deletePersonForUser('user-1', 'person-1')

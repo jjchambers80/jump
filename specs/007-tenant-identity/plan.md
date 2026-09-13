@@ -98,18 +98,22 @@ enum MemberRole {
 
 `User.role` keeps `SYSTEM_ADMIN` and `CUSTOMER` for now; `ADMIN`/`ORGANIZER` semantics move to `OrganizationMember.role`. `User.organizationId` stays nullable and unused after this phase, dropped in phase 4.
 
-**Migrations** (three, so each can be verified in isolation):
+**Migration** — implemented 2026-09-13 as **one SQL migration**, `20260913000000_contact_per_org_and_membership`, not the three-step script plan originally written here. Reason: Railway runs `prisma migrate deploy` at container start, so a manual backfill script between two migrations would leave a window where the NOT NULL migration fails and the backend crash-loops (the P3009 incident of 2026-09-12). Prisma wraps a Postgres migration in one transaction, so the single file is all-or-nothing:
 
-| # | Migration | Content |
-|---|-----------|---------|
-| 1.1 | `add_contact_org_and_membership` | Add `Contact.organizationId` (nullable), `Contact.accountCreatedAt`; create `OrganizationMember` + `MemberRole`; copy every `User` with `organizationId` and role ADMIN/ORGANIZER into a membership row. |
-| 1.2 | `backfill_contact_organization` | Node script (`packages/db/scripts/backfill-contact-org.js`), not raw SQL, run once with `--dry-run` then for real. Per contact: collect distinct `organizationId` across **all** orders (any status) via `order.event.venue.organizationId`. One org: set `organizationId`. N orgs: keep the row for the org with the earliest order, insert N-1 clones (same name/email/location; `note` and `emailSubscribed` copied to every clone since we cannot attribute them), repoint `Order.contactId` and `Ticket.contactId` per org. Zero orders: production contacts are created only inside the checkout transaction (`OrderService.js:145`); the seed also creates contacts directly, so the script assigns zero-order contacts to the org of the seeded venue when `NODE_ENV !== 'production'` and aborts with a list otherwise. Idempotent: skips contacts with `organizationId` already set. Prints reconciliation counts. |
-| 1.3 | `contact_org_not_null_composite_unique` | `Contact.organizationId` NOT NULL; drop unique on `email`; add unique `(organizationId, email)`; change `emailSubscribed` default to `false` (existing rows untouched). |
+1. Create `MemberRole` + `OrganizationMember`; copy every ADMIN/ORGANIZER `User.organizationId` into a membership row.
+2. Add `Contact.organizationId` (nullable), `Contact.accountCreatedAt`; flip `emailSubscribed` default to `false`.
+3. Backfill: per contact, collect distinct orgs across **all** orders (any status) via `order.event.venue.organizationId`. Primary org = earliest order; the existing row keeps its id. Contacts with zero orders are deleted (nothing references them). Drop the global `Contact_email_key`, insert one clone per additional org (`note`/`emailSubscribed` copied since they cannot be attributed), repoint `Order.contactId` by org, then `Ticket.contactId = order.contactId`.
+4. `DO $$` guard raises (rolling everything back) if any contact is unscoped, any order points at a contact of another org, or any ticket disagrees with its order.
+5. `organizationId` NOT NULL, unique `(organizationId, email)`, FK to `Organization`.
+
+Rehearsed against a `pg_dump` of the dev DB plus a fixture with a second org, a buyer with orders at both, and a buyer whose first order was at the second org. Verified: correct primary selection, order/ticket repointing, membership copy, zero-order deletion, default flip.
+
+**Deploy runbook**: take a Railway DB backup, deploy; if the migration raises, the DB is unchanged and the container will crash-loop on P3009 — run `prisma migrate resolve --rolled-back 20260913000000_contact_per_org_and_membership` and redeploy the previous image. No manual step is required on success.
 
 **Backend changes**:
 
 - `OrderService.createCheckoutSession`: upsert by `{ organizationId_email: { organizationId, email } }`. `organizationId` derived from the event's venue inside the same transaction (already loaded for capacity checks).
-- `orgScope.resolveOrgScope(userId, role, activeOrgId?)`: SYSTEM_ADMIN unchanged. Otherwise read `OrganizationMember` for `userId`; if `activeOrgId` provided and a membership exists, use it; else first membership by `createdAt`. Return shape unchanged so the five consumers need no edits beyond `UserService`/`OrganizationService`, which write `User.organizationId` on org creation and must write a membership row instead.
+- `orgScope.resolveOrgScope(userId, role, activeOrgId?)`: SYSTEM_ADMIN unchanged. Also exports `requireOrgMembership(param)`, which replaced three duplicated `verifyOrgOwnership` guards in `venues.js`, `tierPresets.js`, `organizations.js`, and `resolveActiveMembership`, used by `OrganizationService` and `OrganizationPersonService`. Otherwise read `OrganizationMember` for `userId`; if `activeOrgId` provided and a membership exists, use it; else first membership by `createdAt`. Return shape unchanged so the five consumers need no edits beyond `UserService`/`OrganizationService`, which write `User.organizationId` on org creation and must write a membership row instead.
 - `CustomerService`: filter `Contact.organizationId = scope.organizationId` directly; remove the join-through-orders filter. `note` and `emailSubscribed` are now correct by construction.
 - `rbac.js` gates on `req.user.role` from the JWT claim, so no change there; instead the backend `auth.js` middleware and the frontend `auth.ts` JWT callback resolve `role` as `SYSTEM_ADMIN` from `User.role`, otherwise the `OrganizationMember.role` for the active org. `requireRole('ADMIN')` keeps working unchanged.
 - `packages/db/prisma/seed.ts` creates two contacts directly (`seed.ts:246`, `:255`); add `organizationId` and create membership rows for the seeded ADMIN/ORGANIZER users.
@@ -121,7 +125,7 @@ enum MemberRole {
 - Contract: `GET /customers` as org A ADMIN returns no row, note, or consent flag for an email that only bought at org B; the same email at both orgs returns two distinct rows to SYSTEM_ADMIN.
 - Contract: every existing admin route contract test passes unchanged for a single-membership user.
 
-**Exit criteria**: backfill dry-run against production snapshot reconciles; all backend tests green; Railway migration runbook written (see `docs/wiki/features/` incident notes for the P3009 precedent).
+**Status (2026-09-13)**: implemented on branch `worktree-plan-tenant-identity`. `tests/contract/tenantIsolation.test.js` (13 tests) covers schema uniqueness, customer list/detail/patch isolation, membership guards, JWT org claim, legacy-column independence, and the composite-key checkout upsert. Existing `organizations`, `organizationPeople`, `users` contract suites and the `organizationService`/`organizationPersonService` unit suites pass. `analytics`, `tickets`, `qrGeneration` suites were already failing before this work (they sign JWTs for users that do not exist in the DB); their contact fixtures were updated to the new shape but they remain red for that unrelated reason.
 
 ### Phase 2 — Checkout account opt-in + passwordless buyer login
 

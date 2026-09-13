@@ -141,16 +141,20 @@ class OrderService {
         }
       }
 
-      // 3. Upsert contact
+      // 3. Upsert contact — scoped to the event's organization (spec 007).
+      // The same email buying from two organizations is two Contact rows.
+      const organizationId = event.venue.organizationId;
+      const email = contact.email.toLowerCase();
       const contactRecord = await tx.contact.upsert({
-        where: { email: contact.email.toLowerCase() },
+        where: { organizationId_email: { organizationId, email } },
         update: {
           firstName: contact.firstName,
           lastName: contact.lastName,
           ...(userId && { userId }),
         },
         create: {
-          email: contact.email.toLowerCase(),
+          organizationId,
+          email,
           firstName: contact.firstName,
           lastName: contact.lastName,
           ...(userId && { userId }),
@@ -347,17 +351,14 @@ class OrderService {
    * @returns {Promise<{ data: OrderSummary[], pagination }>}
    */
   async getMyOrders(email, { page = 1, limit = 20 } = {}) {
-    const contact = await prisma.contact.findUnique({
-      where: { email: email.toLowerCase() },
-    });
-
-    if (!contact) {
-      return { data: [], pagination: { page, limit, total: 0, totalPages: 0 } };
-    }
+    // Contacts are per organization (spec 007); a verified email may own
+    // several Contact rows, so match on the relation rather than one row.
+    // Replaced by buyer sessions in phase 2.
+    const where = { contact: { email: email.toLowerCase() } };
 
     const [orders, total] = await Promise.all([
       prisma.order.findMany({
-        where: { contactId: contact.id },
+        where,
         include: {
           event: {
             select: { name: true, date: true },
@@ -367,9 +368,7 @@ class OrderService {
         skip: (page - 1) * limit,
         take: limit,
       }),
-      prisma.order.count({
-        where: { contactId: contact.id },
-      }),
+      prisma.order.count({ where }),
     ]);
 
     return {

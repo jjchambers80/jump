@@ -125,9 +125,9 @@ describe('Ticket Redemption Integration Flow', () => {
 
     // Contact
     const contact = await prisma.contact.upsert({
-      where: { email: 'attendee@qr-integ.com' },
+      where: { organizationId_email: { organizationId: testOrgId, email: 'attendee@qr-integ.com' } },
       update: {},
-      create: { email: 'attendee@qr-integ.com', firstName: 'QR', lastName: 'Attendee' },
+      create: { organizationId: testOrgId, email: 'attendee@qr-integ.com', firstName: 'QR', lastName: 'Attendee' },
     });
     testContactId = contact.id;
 

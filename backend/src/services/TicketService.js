@@ -160,16 +160,11 @@ class TicketService {
    * @returns {Promise<Object[]>} Formatted ticket list
    */
   async getMyTickets(email) {
-    const contact = await prisma.contact.findUnique({
-      where: { email: email.toLowerCase() },
-    });
-
-    if (!contact) {
-      return [];
-    }
-
+    // Contacts are per organization (spec 007); a verified email may own
+    // several Contact rows, so match on the relation rather than one row.
+    // Replaced by buyer sessions in phase 2.
     const tickets = await prisma.ticket.findMany({
-      where: { contactId: contact.id },
+      where: { contact: { email: email.toLowerCase() } },
       include: {
         event: {
           include: {

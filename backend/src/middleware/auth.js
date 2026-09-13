@@ -1,6 +1,6 @@
 // Authentication middleware
 // Verifies Auth.js HS256 JWT tokens from Authorization Bearer header
-// Attaches decoded user { sub, email, role, name } to req.user
+// Attaches decoded user { id, email, role, name, organizationId } to req.user
 
 import jwt from 'jsonwebtoken';
 import { AuthenticationError } from './errorHandler.js';
@@ -37,6 +37,7 @@ export const requireAuth = async (req, res, next) => {
       email: decoded.email,
       role: decoded.role,
       name: decoded.name,
+      organizationId: decoded.organizationId ?? null, // preferred active org (spec 007)
     };
 
     next();
@@ -70,6 +71,7 @@ export const optionalAuth = async (req, res, next) => {
           email: decoded.email,
           role: decoded.role,
           name: decoded.name,
+          organizationId: decoded.organizationId ?? null,
         };
       } catch {
         // Token invalid — proceed without user

@@ -1,6 +1,7 @@
 import { prisma } from '@jump/db';
 import { ConflictError } from '../middleware/errorHandler.js';
 import logger from '../utils/logger.js';
+import { resolveActiveMembership } from '../middleware/orgScope.js';
 
 const SUMMARY_SELECT = {
   id: true,
@@ -20,11 +21,8 @@ export function serializeOrganizationPerson(person) {
 
 class OrganizationPersonService {
   async getOrganizationIdForUser(userId) {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { organizationId: true },
-    });
-    return user?.organizationId || null;
+    const membership = await resolveActiveMembership(userId);
+    return membership?.organizationId || null;
   }
 
   async listPeopleForUser(userId) {

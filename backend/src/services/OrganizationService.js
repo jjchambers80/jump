@@ -5,6 +5,7 @@ import { prisma } from '@jump/db';
 import logger from '../utils/logger.js';
 import { NotFoundError } from '../middleware/errorHandler.js';
 import { formatEventSummary } from '../utils/eventSummary.js';
+import { resolveActiveMembership } from '../middleware/orgScope.js';
 
 export const serializeBusinessDetails = (organization) => {
   const { ein, ...businessDetails } = organization;
@@ -16,6 +17,13 @@ export const serializeBusinessDetails = (organization) => {
     einMasked: lastFour ? `••-•••${lastFour}` : null,
   };
 };
+
+// Staff counts come from OrganizationMember; keep the `_count.users` shape the
+// admin UI already reads.
+const withUserCount = ({ _count, ...org }) => ({
+  ...org,
+  _count: { venues: _count.venues, users: _count.members },
+});
 
 class OrganizationService {
   /**
@@ -45,14 +53,11 @@ class OrganizationService {
    * @returns {Promise<Object|null>} Organization or null
    */
   async getOrganizationById(id) {
-    return prisma.organization.findUnique({
+    const org = await prisma.organization.findUnique({
       where: { id },
-      include: {
-        _count: {
-          select: { venues: true, users: true },
-        },
-      },
+      include: { _count: { select: { venues: true, members: true } } },
     });
+    return org ? withUserCount(org) : null;
   }
 
   /**
@@ -60,14 +65,11 @@ class OrganizationService {
    * @returns {Promise<Array>} List of organizations
    */
   async listOrganizations() {
-    return prisma.organization.findMany({
+    const orgs = await prisma.organization.findMany({
       orderBy: { createdAt: 'desc' },
-      include: {
-        _count: {
-          select: { venues: true, users: true },
-        },
-      },
+      include: { _count: { select: { venues: true, members: true } } },
     });
+    return orgs.map(withUserCount);
   }
 
   /**
@@ -97,27 +99,25 @@ class OrganizationService {
     return organization;
   }
 
-  /** Return masked business details for the organization assigned to a user. */
+  /** Return masked business details for the user's active organization. */
   async getBusinessDetailsForUser(userId) {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { organization: true },
+    const membership = await resolveActiveMembership(userId);
+    if (!membership) return null;
+
+    const organization = await prisma.organization.findUnique({
+      where: { id: membership.organizationId },
     });
 
-    return user?.organization ? serializeBusinessDetails(user.organization) : null;
+    return organization ? serializeBusinessDetails(organization) : null;
   }
 
-  /** Update only the organization assigned to a user and return a masked response. */
+  /** Update only the user's active organization and return a masked response. */
   async updateBusinessDetailsForUser(userId, data) {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { organizationId: true },
-    });
-
-    if (!user?.organizationId) return null;
+    const membership = await resolveActiveMembership(userId);
+    if (!membership) return null;
 
     const organization = await prisma.organization.update({
-      where: { id: user.organizationId },
+      where: { id: membership.organizationId },
       data,
     });
 

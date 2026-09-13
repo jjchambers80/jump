@@ -44,12 +44,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user?.id) {
         const dbUser = await prisma.user.findUnique({
           where: { id: user.id },
-          select: { role: true, name: true, email: true },
+          select: {
+            role: true,
+            name: true,
+            email: true,
+            // Active org = oldest membership until an org switcher exists (spec 007)
+            memberships: {
+              orderBy: { createdAt: 'asc' },
+              take: 1,
+              select: { organizationId: true },
+            },
+          },
         });
         if (dbUser) {
           token.role = dbUser.role;
           token.name = dbUser.name;
           token.email = dbUser.email;
+          token.organizationId = dbUser.memberships[0]?.organizationId ?? null;
         }
       }
       return token;
@@ -59,6 +70,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (session.user) {
         session.user.id = token.sub as string;
         (session.user as any).role = token.role;
+        (session.user as any).organizationId = token.organizationId ?? null;
       }
       // Generate the raw JWT so the client can send it as a Bearer token to the backend
       (session as any).accessToken = jwt.sign(
@@ -67,6 +79,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: token.email,
           role: token.role,
           name: token.name,
+          organizationId: token.organizationId ?? null,
           iat: Math.floor(Date.now() / 1000),
         },
         AUTH_SECRET,
@@ -104,6 +117,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: token.email,
           role: token.role,
           name: token.name,
+          organizationId: token.organizationId ?? null,
           iat: Math.floor(Date.now() / 1000),
         },
         AUTH_SECRET,
