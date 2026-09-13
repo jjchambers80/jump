@@ -1,6 +1,6 @@
 # Implementation Plan: Settings › Domains (Shopify-style connect flow)
 
-**Status**: Approved 2026-09-13. Phase A in progress on branch `feat/008-domains-ui`.
+**Status**: Phases A and B implemented 2026-09-13 on branch `feat/008-domains-ui`. Phase C (apex, www companion) and phase D (ops) open.
 **Input**: "Create a UI to configure a custom domain, organized under Settings, placed underneath General as a new menu item. Provide the domain via a dialog; on Next, a DNS configuration is presented. The example screens are from Shopify."
 **Builds on**: spec 007 phase 3 (custom domains backend), shipped to production 2026-09-13.
 **Reference screens**: Shopify Settings › Domains list (`Connect existing` / `Buy new domain`, Domain | Status table with a `Primary` badge and nested platform hosts) and the domain detail page (`test.com · Needs setup`, "Managed by Network Solutions", a numbered DNS checklist with Type / Name / Current value / Update to columns, "I updated DNS records", then greyed "DNS propagation" and "TLS certificate provisioning" steps, and a `More actions › Delete domain` menu).

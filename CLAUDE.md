@@ -54,6 +54,7 @@ cd frontend && npm run test:unit    # Vitest unit tests (lib/color.ts)
 | `PLATFORM_HOSTS` / `NEXT_PUBLIC_PLATFORM_HOSTS` | backend / frontend | Optional. Comma-separated platform hostnames that must never resolve as a tenant storefront (localhost and `*.up.railway.app` are always platform) |
 | `RAILWAY_API_TOKEN`, `RAILWAY_FRONTEND_SERVICE_ID` | backend | Optional. With Railway-injected `RAILWAY_PROJECT_ID` + `RAILWAY_ENVIRONMENT_ID`, lets the backend attach verified custom domains to the frontend service for TLS. Unset: domains activate on DNS proof and TLS must be added in the Railway dashboard |
 | `DOMAIN_SWEEP_INTERVAL_MS` | backend | Optional. Custom-domain re-check interval (default 10 min) |
+| `DOMAIN_VERIFY_COOLDOWN_MS` | backend | Optional. Minimum gap between user-initiated "I updated DNS records" checks (default 15 s; tests use 0) |
 | `SCANNER_API_KEY` | backend | Optional. Shared key for hardware ticket readers calling `POST /tickets/scan` / `/redeem` via `X-Scanner-Key`. Unset: only staff sessions can scan |
 
 ## Deployment
