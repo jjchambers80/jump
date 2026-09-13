@@ -22,7 +22,14 @@ Loads when agent touches `backend/` files. For root-level commands and env vars,
 - Routes live in `api/routes/buyerAuth.js` under `/buyer`. `POST /buyer/auth/request` always returns 202. The frontend calls these only through `frontend/src/app/api/buyer/*` route handlers, which hold the session in the httpOnly `jump_buyer` cookie.
 - Checkout opt-ins: `POST /orders` accepts `createAccount` and `emailSubscribed` booleans, stored on `Order.optInAccount`/`optInMarketing`. `PaymentService.handleCheckoutCompleted` applies them to the Contact (only ever turning on) and issues the WELCOME link. Never set `accountCreatedAt` or `emailSubscribed` from an unpaid checkout.
 - Rate limiting behind the Next proxy: key on `clientIpForRateLimit(req)` (signed `X-Jump-Client-Ip`), not `req.ip`.
-- Storefront URLs in emails come from `utils/storefrontUrl.js` (first `FRONTEND_URL` entry).
+- Storefront URLs in emails and Stripe redirects come from `utils/storefrontUrl.js`, which is async and per organization: an ACTIVE custom domain (`DomainService.primaryHostname`) wins, else the first `FRONTEND_URL` entry. On a custom host the org page is `/` and the buyer account page is `/account`.
+
+## Custom Domains (spec 007 phase 3)
+
+- `OrganizationDomain` rows: PENDING → VERIFIED → ACTIVE → FAILED. `DomainService.verifyDomain` checks `TXT _jump-verify.<host>` and the CNAME; with `lib/railwayDomains.js` configured it also waits for the certificate, otherwise DNS proof activates. `server.js` sweeps every 10 min (active domains daily) with an unref'd timer.
+- `GET /domains/resolve?host=` (public, cached 60s) is what `frontend/src/middleware.ts` calls to map a tenant host to an organization. Only ACTIVE hosts resolve.
+- Admin routes: `/admin/settings/domains` (GET/POST), `/:id/verify`, `/:id/primary`, `DELETE`. Scoped via `resolveOrgScope`; SYSTEM_ADMIN passes `?organizationId=`.
+- Hostnames must be subdomains (no apex), never platform hosts. `normalizeHostname` is the single validator.
 
 ## Payment Flow (WHY: Stripe is source of truth, not the client)
 

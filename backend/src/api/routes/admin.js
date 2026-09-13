@@ -16,6 +16,7 @@ import orderService from '../../services/OrderService.js';
 import ticketService from '../../services/TicketService.js';
 import refundService from '../../services/RefundService.js';
 import customerService from '../../services/CustomerService.js';
+import domainService from '../../services/DomainService.js';
 import imageService from '../../services/ImageService.js';
 import emailService from '../../services/EmailService.js';
 import qrService from '../../services/QRService.js';
@@ -89,6 +90,70 @@ router.delete('/settings/people/:personId', async (req, res, next) => {
       req.params.personId
     );
     if (!deleted) throw new NotFoundError('Organization person not found');
+    res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Settings > Domains (spec 007 phase 3). Scoped to the caller's active org;
+// SYSTEM_ADMIN must pass ?organizationId= (no org means nothing to manage).
+// ---------------------------------------------------------------------------
+
+async function domainOrgFor(req) {
+  const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
+  const orgId = isUnscoped(scope) ? req.query.organizationId || req.body?.organizationId : scope.organizationId;
+  if (!orgId) throw new NotFoundError('No organization is assigned to this user');
+  return orgId;
+}
+
+/** GET /admin/settings/domains — list this organization's storefront domains. */
+router.get('/settings/domains', async (req, res, next) => {
+  try {
+    const organizationId = await domainOrgFor(req);
+    res.json({ domains: await domainService.listForOrganization(organizationId) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** POST /admin/settings/domains { hostname } — register a hostname and return its DNS records. */
+router.post('/settings/domains', async (req, res, next) => {
+  try {
+    const organizationId = await domainOrgFor(req);
+    const domain = await domainService.addDomain(organizationId, req.body?.hostname);
+    res.status(201).json(domain);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** POST /admin/settings/domains/:id/verify — re-check DNS now. */
+router.post('/settings/domains/:id/verify', async (req, res, next) => {
+  try {
+    const organizationId = await domainOrgFor(req);
+    res.json(await domainService.verifyDomain(organizationId, req.params.id));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** POST /admin/settings/domains/:id/primary — make this the primary storefront host. */
+router.post('/settings/domains/:id/primary', async (req, res, next) => {
+  try {
+    const organizationId = await domainOrgFor(req);
+    res.json(await domainService.setPrimary(organizationId, req.params.id));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** DELETE /admin/settings/domains/:id */
+router.delete('/settings/domains/:id', async (req, res, next) => {
+  try {
+    const organizationId = await domainOrgFor(req);
+    await domainService.removeDomain(organizationId, req.params.id);
     res.status(204).send();
   } catch (error) {
     next(error);

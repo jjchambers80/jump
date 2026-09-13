@@ -74,7 +74,7 @@ router.post('/auth/request', requestLimiter, async (req, res, next) => {
         .sendBuyerLoginEmail({
           contact: result.contact,
           organization: result.contact.organization,
-          loginUrl: buyerVerifyUrl(organizationId, result.rawToken),
+          loginUrl: await buyerVerifyUrl(organizationId, result.rawToken),
         })
         .catch((error) => {
           logger.error('Buyer login email failed', { contactId: result.contact.id, error: error.message });

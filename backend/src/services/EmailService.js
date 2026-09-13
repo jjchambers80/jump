@@ -56,7 +56,7 @@ class EmailService {
     let attempt = 0;
     let lastError;
 
-    const viewTicketsUrl = orderUrl(order.id);
+    const viewTicketsUrl = await orderUrl(order.id, order.event?.organizationId);
     const orgName = order.event?.organizationName || 'the organizer';
     const manageTicketsHtml = manageTicketsUrl
       ? `

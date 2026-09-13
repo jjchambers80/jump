@@ -151,8 +151,35 @@ model Organization {
   users       User[]
   members     OrganizationMember[]
   contacts    Contact[]
+  domains     OrganizationDomain[]
   people      OrganizationPerson[]
   tierPresets TierPreset[]
+}
+
+// White-label storefront hostname owned by an organization (spec 007 phase 3).
+// PENDING: records shown, not yet proven. VERIFIED: TXT + CNAME resolve; TLS
+// being provisioned. ACTIVE: serving; storefront URLs use it. FAILED: a
+// previously verified domain has not resolved for 72h.
+model OrganizationDomain {
+  id                String       @id @default(cuid())
+  organizationId    String
+  hostname          String       @unique // lowercase, no scheme/port/path
+  status            DomainStatus @default(PENDING)
+  verificationToken String       // value of TXT _jump-verify.<hostname>
+  cnameTarget       String       // what <hostname> must CNAME to
+  isPrimary         Boolean      @default(false)
+  railwayDomainId   String?      // Railway custom-domain id when the API is configured
+  verifiedAt        DateTime?
+  lastCheckedAt     DateTime?
+  failingSince      DateTime?    // first failed check after a success; cleared on success
+  lastError         String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([status])
 }
 
 // Staff membership: which organizations a User can administer, and in what role.
@@ -477,6 +504,13 @@ enum MemberRole {
 enum BuyerTokenPurpose {
   WELCOME
   LOGIN
+}
+
+enum DomainStatus {
+  PENDING
+  VERIFIED
+  ACTIVE
+  FAILED
 }
 
 enum OrganizationStatus {

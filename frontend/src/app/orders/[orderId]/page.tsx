@@ -144,6 +144,24 @@ function TicketCard({
 }
 
 export default function OrderDetailPage() {
+  // A buyer session (spec 007) is enough to view an order; fall back to the
+  // staff Auth.js gate only when there is none. On custom domains there is no
+  // staff sign-in at all, so this is the only path there.
+  const [buyer, setBuyer] = useState<'checking' | 'yes' | 'no'>('checking');
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/buyer/me', { cache: 'no-store' })
+      .then((r) => { if (!cancelled) setBuyer(r.ok ? 'yes' : 'no'); })
+      .catch(() => { if (!cancelled) setBuyer('no'); });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (buyer === 'checking') {
+    return <div className="min-h-screen bg-gray-50 dark:bg-slate-900" aria-busy="true" />;
+  }
+  if (buyer === 'yes') {
+    return <OrderDetailContent />;
+  }
   return (
     <ProtectedRoute>
       <OrderDetailContent />

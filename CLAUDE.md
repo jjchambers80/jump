@@ -50,6 +50,10 @@ cd frontend && npm run test:unit    # Vitest unit tests (lib/color.ts)
 | `BUCKET_NAME`, `BUCKET_ENDPOINT`, `BUCKET_ACCESS_KEY_ID`, `BUCKET_SECRET_ACCESS_KEY`, `BUCKET_REGION` | backend | S3-compatible image storage (Railway Bucket). Unset → local `uploads/` disk (ephemeral on Railway) |
 | `BUCKET_PUBLIC_URL` | backend | Optional. Only set for a public bucket/CDN; otherwise images are served through `GET /images/:id/:hash/:variant` |
 | `BACKEND_URL` | backend | Optional. Public backend base URL for absolute image links in emails. Falls back to `https://$RAILWAY_PUBLIC_DOMAIN`, then `http://localhost:$PORT` |
+| `STOREFRONT_CNAME_TARGET` | backend | Optional. Hostname organizations CNAME their storefront domain to (default: host of the first `FRONTEND_URL`). Custom domains, spec 007 phase 3 |
+| `PLATFORM_HOSTS` / `NEXT_PUBLIC_PLATFORM_HOSTS` | backend / frontend | Optional. Comma-separated platform hostnames that must never resolve as a tenant storefront (localhost and `*.up.railway.app` are always platform) |
+| `RAILWAY_API_TOKEN`, `RAILWAY_FRONTEND_SERVICE_ID` | backend | Optional. With Railway-injected `RAILWAY_PROJECT_ID` + `RAILWAY_ENVIRONMENT_ID`, lets the backend attach verified custom domains to the frontend service for TLS. Unset: domains activate on DNS proof and TLS must be added in the Railway dashboard |
+| `DOMAIN_SWEEP_INTERVAL_MS` | backend | Optional. Custom-domain re-check interval (default 10 min) |
 
 ## Deployment
 
