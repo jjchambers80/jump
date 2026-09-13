@@ -336,7 +336,7 @@ function ConfirmationContent() {
                 <img
                   src={resolveAssetUrl(order.event.logoUrl) || undefined}
                   alt={order.event.name}
-                  className="mb-5 max-h-[85px] w-auto max-w-full rounded-lg object-contain"
+                  className="mb-5 max-h-[65px] w-auto max-w-full rounded-lg object-contain"
                 />
               )}
               <div className="space-y-3">
