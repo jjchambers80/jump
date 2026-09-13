@@ -15,7 +15,9 @@ app/
 ├── orders/          # Order history
 ├── tickets/         # Individual ticket view (QR code)
 ├── venues/          # Venue pages
-└── api/auth/        # Auth.js API route handler
+├── organizations/   # Public org page + [orgId]/account (buyer sign-in, orders, tickets)
+├── api/auth/        # Auth.js API route handler (staff)
+└── api/buyer/       # Buyer session proxies: request/verify/logout/me/* (httpOnly jump_buyer cookie)
 ```
 
 ## Key Files
@@ -23,7 +25,7 @@ app/
 - `auth.ts` — Auth.js v5 config (Google OAuth + magic link, JWT strategy)
 - `services/api.ts` — All backend API calls go through here
 - `components/` — Shared React components
-- `lib/` — Utilities and helpers (`lib/color.ts` — WCAG contrast + brand CSS vars; `lib/fees.ts` — all-in fee math mirroring backend `FeeService`)
+- `lib/` — Utilities and helpers (`lib/color.ts` — WCAG contrast + brand CSS vars; `lib/fees.ts` — all-in fee math mirroring backend `FeeService`; `lib/buyerSession.ts` — server-only buyer cookie + backend proxy, signs the client IP for the backend rate limiter)
 
 ## Patterns
 
@@ -31,6 +33,7 @@ app/
 - **Data fetching**: Server components fetch directly; client components call `services/api.ts`
 - **Admin pages**: Must check session server-side and add to sidebar navigation
 - **Search params**: Always wrap `useSearchParams()` consumers in `<Suspense fallback={...}>`
+- **Buyer auth**: never call `/buyer/*` on the backend from the browser and never use Auth.js for buyers. Go through `app/api/buyer/*` route handlers so the session stays in the httpOnly cookie. See `docs/wiki/features/buyer-accounts.md`
 - **Brand colors**: On public organization/venue/event pages and `EventCard`, use the `brand` tokens (`bg-brand`, `hover:bg-brand-hover`, `text-brand-fg`, `text-brand-link`) instead of raw `blue-600`/`indigo-400` classes. Wrap the page root in `<BrandScope color={…} themeMode={…}>`. Color math lives in `lib/color.ts`; see `docs/wiki/features/organization-branding.md`
 - **Settings editors**: Settings › General is read-only summary rows (`app/admin/settings/SummaryRow.tsx`) that open modals built on `app/admin/settings/SettingsDialog.tsx` (focus trap, Escape/backdrop, discard confirm, Cancel/Save header). New settings sections should reuse both rather than inline forms; each dialog PATCHes only its own fields. See `docs/wiki/features/organization-settings.md`
 - **Public org logo**: `components/LogoBox.tsx` (square box, blurred backdrop for non-square logos) is only for the mobile cover on `/organizations/[orgId]`; desktop uses a plain `<img>`. Both are in the DOM at once, so tests assert visibility, not count. See `docs/wiki/features/organization-logo-box.md`
