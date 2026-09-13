@@ -10,6 +10,7 @@ import { api } from '../../../services/api';
 import { resolveAssetUrl } from '../../../lib/assets';
 import BrandScope from '../../../components/BrandScope';
 import CartLineItem from '../../../components/CartLineItem';
+import OrderTotals from '../../../components/OrderTotals';
 import ExpandCollapseAll from '../../../components/ExpandCollapseAll';
 import { computeOrderFees, computeTierAllInPrice, formatPrice } from '../../../lib/fees';
 import type { ThemeMode } from '@/lib/theme';
@@ -390,6 +391,13 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
               <div className="space-y-3">
                 {activeTiers.map((tier) => {
                   const tierSoldOut = tier.quantityAvailable === 0;
+                  // Only surface the remaining count once it's low enough to
+                  // create urgency; a large number is just noise.
+                  const availabilityText = tierSoldOut
+                    ? 'Sold out'
+                    : tier.quantityAvailable < 10
+                      ? `${tier.quantityAvailable} available`
+                      : null;
                   const quantity = quantities[tier.id] ?? 0;
                   const minQuantity = tier.minPerOrder ?? 1;
                   const maxQuantity = Math.min(
@@ -409,7 +417,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                             : 'border-gray-200 dark:border-slate-700 hover:border-brand-link bg-white dark:bg-slate-800'
                       }`}
                     >
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-stretch justify-between gap-4">
                         <div>
                           <h3 className="font-semibold text-gray-900 dark:text-slate-100 flex items-center gap-1.5">
                             {tier.name}
@@ -426,22 +434,11 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                               </button>
                             )}
                           </h3>
-                          <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
-                            {tierSoldOut ? 'Sold out' : `${tier.quantityAvailable} available`}
-                            {!tier.isRefundable && (
-                              <span className="relative ml-2 inline-flex items-center text-xs text-amber-600 dark:text-amber-400 font-medium group cursor-help">
-                                Non-refundable
-                                <svg className="w-3.5 h-3.5 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                                <span className="invisible group-hover:visible absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-gray-900 dark:bg-slate-700 text-white text-xs rounded-lg p-3 shadow-lg z-20 leading-relaxed">
-                                  <span className="font-semibold block mb-1">Non-Refundable Ticket</span>
-                                  This ticket is non-refundable, non-cancellable, and non-transferable after purchase. The delivery of the service is completed upon receiving this ticket by email.
-                                  <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900 dark:border-t-slate-700" />
-                                </span>
-                              </span>
-                            )}
-                          </p>
+                          {availabilityText && (
+                            <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
+                              {availabilityText}
+                            </p>
+                          )}
                           {(() => {
                             const fees = computeTierAllInPrice(tier.price, event?.taxRate ?? 0);
                             return (
@@ -451,26 +448,43 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                                 </span>
                                 <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">
                                   Base: {formatPrice(fees.basePrice)}
-                                  {fees.processingFee > 0 && <> + Fees: {formatPrice(fees.processingFee)}</>}
+                                  {fees.fees > 0 && <> + Fees: {formatPrice(fees.fees)}</>}
                                   {fees.tax > 0 && <> + Tax: {formatPrice(fees.tax)}</>}
                                 </p>
                               </div>
                             );
                           })()}
                         </div>
-                        <div className="flex items-center gap-4">
-                          <div className="flex items-center rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800">
+                        <div
+                          className={`flex flex-col items-end gap-2 ${
+                            tier.isRefundable ? 'justify-center' : 'justify-between'
+                          }`}
+                        >
+                          {!tier.isRefundable && (
+                            <span className="relative inline-flex items-center text-xs text-amber-600 dark:text-amber-400 font-medium group cursor-help">
+                              Non-refundable
+                              <svg className="w-3.5 h-3.5 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <span className="invisible group-hover:visible absolute bottom-full right-0 mb-2 w-64 bg-gray-900 dark:bg-slate-700 text-white text-xs rounded-lg p-3 shadow-lg z-20 leading-relaxed">
+                                <span className="font-semibold block mb-1">Non-Refundable Ticket</span>
+                                This ticket is non-refundable, non-cancellable, and non-transferable after purchase. The delivery of the service is completed upon receiving this ticket by email.
+                                <span className="absolute top-full right-4 border-4 border-transparent border-t-gray-900 dark:border-t-slate-700" />
+                              </span>
+                            </span>
+                          )}
+                          <div className="flex items-center gap-3">
                             <button
                               type="button"
                               aria-label={`Decrease ${tier.name} quantity`}
                               onClick={() => updateQuantity(tier, -1)}
                               disabled={tierSoldOut || quantity === 0}
-                              className="h-10 w-10 text-xl font-bold text-gray-700 dark:text-slate-200 disabled:opacity-30"
+                              className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xl font-bold leading-none text-gray-700 dark:text-slate-200 transition-colors hover:border-gray-400 dark:hover:border-slate-500 disabled:opacity-30 disabled:hover:border-gray-300 dark:disabled:hover:border-slate-600"
                             >
                               −
                             </button>
                             <span
-                              className="w-10 text-center font-semibold text-gray-900 dark:text-slate-100"
+                              className="min-w-6 text-center text-lg font-semibold text-gray-900 dark:text-slate-100"
                               aria-label={`${tier.name} quantity`}
                             >
                               {quantity}
@@ -484,7 +498,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                                 maxQuantity < minQuantity ||
                                 quantity >= maxQuantity
                               }
-                              className="h-10 w-10 text-xl font-bold text-gray-700 dark:text-slate-200 disabled:opacity-30"
+                              className="flex h-10 w-10 items-center justify-center rounded-full bg-brand text-brand-fg text-xl font-bold leading-none transition-opacity hover:opacity-90 disabled:opacity-30 disabled:hover:opacity-30"
                             >
                               +
                             </button>
@@ -532,16 +546,11 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                 </div>
               )}
 
-              <div className="border-t border-gray-200 dark:border-slate-700 pt-4 mb-4">
-                <div className="flex justify-between">
-                  <span className="font-semibold text-gray-700 dark:text-slate-300">
-                    Total ({totalQuantity} {totalQuantity === 1 ? 'ticket' : 'tickets'})
-                  </span>
-                  <span className="text-xl font-bold text-gray-900 dark:text-slate-100">
-                    {formatPrice(totalAmount)}
-                  </span>
-                </div>
-              </div>
+              <OrderTotals
+                fees={cartFees}
+                totalLabel={`Total (${totalQuantity} ${totalQuantity === 1 ? 'ticket' : 'tickets'})`}
+                className="border-t border-gray-200 dark:border-slate-700 pt-4 mb-4"
+              />
 
               <button
                 onClick={handleProceedToCheckout}
@@ -645,14 +654,10 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                     />
                   ))}
 
-                  <div className="mt-3 pt-3 border-t border-gray-200 dark:border-slate-600">
-                    <div className="flex justify-between">
-                      <span className="font-bold text-gray-900 dark:text-slate-100">Total</span>
-                      <span className="text-xl font-bold text-gray-900 dark:text-slate-100">
-                        {formatPrice(totalAmount)}
-                      </span>
-                    </div>
-                  </div>
+                  <OrderTotals
+                    fees={cartFees}
+                    className="mt-3 pt-3 border-t border-gray-200 dark:border-slate-600"
+                  />
                 </div>
               )}
             </div>

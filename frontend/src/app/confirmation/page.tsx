@@ -9,6 +9,7 @@ import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { api } from '../../services/api';
+import { resolveAssetUrl } from '../../lib/assets';
 
 interface TicketInfo {
   id: string;
@@ -39,6 +40,7 @@ interface OrderDetail {
     id: string;
     name: string;
     date: string;
+    logoUrl?: string | null;
     venue: {
       name: string;
       address: string;
@@ -330,6 +332,13 @@ function ConfirmationContent() {
               Order Details
             </h2>
             <div className="bg-gray-50 dark:bg-slate-900 rounded-lg p-6">
+              {order.event.logoUrl && (
+                <img
+                  src={resolveAssetUrl(order.event.logoUrl) || undefined}
+                  alt={order.event.name}
+                  className="mb-5 max-h-[65px] w-auto max-w-full rounded-lg object-contain"
+                />
+              )}
               <div className="space-y-3">
                 <div className="flex justify-between">
                   <span className="text-gray-600 dark:text-slate-400">Event</span>

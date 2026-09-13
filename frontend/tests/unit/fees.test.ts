@@ -99,6 +99,17 @@ describe('computeTierAllInPrice', () => {
     expect(tier.processingFee).toBe(order.processingFee);
     expect(tier.tax).toBe(order.tax);
   });
+
+  it('exposes a combined fees figure so Base + Fees + Tax equals the shown price', () => {
+    // $65 VIP at 7.25% tax: platform 3.25, processing 2.28, tax 4.71, total 75.24
+    const tier = computeTierAllInPrice(65, 0.0725);
+    expect(tier.platformFee).toBe(3.25);
+    expect(tier.processingFee).toBe(2.28);
+    expect(tier.fees).toBe(5.53);
+    expect(tier.tax).toBe(4.71);
+    expect(tier.total).toBe(75.24);
+    expect(sumBy([tier.basePrice, tier.fees, tier.tax], (v) => v)).toBe(tier.total);
+  });
 });
 
 describe('formatPrice', () => {
