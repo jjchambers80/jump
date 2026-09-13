@@ -50,6 +50,16 @@ No environment variables. `FEE_CONFIG` in `lib/fees.ts` must stay in sync with `
 - Lists: `data-testid="cart-lines-desktop" | "cart-lines-mobile" | "cart-lines-checkout"`.
 - Toggle: `data-testid="expand-collapse-all"`, `aria-pressed`. In the mobile drawer it sits between the "Your Cart" title and the close button (which now has `aria-label="Close cart"`).
 
+### Order totals (`OrderTotals`)
+
+Beneath the cart lines (desktop summary and mobile drawer) `frontend/src/components/OrderTotals.tsx` renders four rows: **Subtotal** (`subtotal + platformFee + processingFee`, i.e. the pre-tax amount the customer pays), **Tax**, **Shipping** (always `$0.00` — tickets are delivered digitally; the row is shown for clarity), and **Total**. `Subtotal + Tax + Shipping === Total`. Wrapper has `data-testid="order-totals"`. The desktop `totalLabel` includes the ticket count (`Total (2 tickets)`).
+
+### Tier cards
+
+- `computeTierAllInPrice(...).fees` is `platformFee + processingFee`; the card's "Base + Fees + Tax" line uses it so the parts add up to the displayed price (PR #11 fix).
+- Remaining count: the card shows `N available` only when `quantityAvailable < 10`, `Sold out` at 0, and nothing otherwise. The `Non-refundable` badge sits flush right on the tier-name row with the quantity selector directly below it.
+- Quantity selector is two standalone circular buttons (outlined −, brand-filled +) with the count between them.
+
 ## Gotchas
 
 - Do not re-add local `FEE_CONFIG` / fee helpers to a page — import from `lib/fees.ts`. Two diverging copies were the root cause of the old line-vs-total mismatch.

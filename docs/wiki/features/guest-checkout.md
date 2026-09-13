@@ -62,6 +62,7 @@ Guests can purchase tickets without creating an account. `POST /orders` creates 
 - **30-minute Stripe session expiry.** If the session expires, the `checkout.session.expired` webhook releases reserved inventory.
 - **Inventory rollback on Stripe API failure.** If `stripe.checkout.sessions.create` throws, order is marked FAILED and `quantityReserved` is decremented.
 - **All-in pricing.** Stripe line items use computed all-in unit price (base + proportional fees). Fee breakdown stored on Order and OrderItem separately.
+- **Order detail responses include `event.logoUrl`** (`OrderService._formatOrderDetail`). The confirmation page renders it bare and left-aligned above the Order Details rows (`max-h-[65px]`), resolved via `lib/assets.resolveAssetUrl`. Local disk uploads live under `backend/uploads/` — a worktree backend serves 404 for them unless that directory is symlinked from the main checkout.
 - **Auth is optional on `POST /orders`.** If a Bearer token is present, the user ID is extracted and linked to the Contact. Failure to decode token is silently ignored (proceeds as guest).
 
 ## Related Features
