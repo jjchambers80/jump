@@ -28,6 +28,8 @@ import ordersRouter, { eventOrdersRouter } from './routes/orders.js';
 import usersRouter from './routes/users.js';
 import imagesRouter from './routes/images.js';
 import buyerRouter from './routes/buyerAuth.js';
+import domainsRouter from './routes/domains.js';
+import domainService from '../services/DomainService.js';
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -56,7 +58,15 @@ export function isAllowedOrigin(origin) {
 // Middleware
 app.use(
   cors({
-    origin: (origin, callback) => callback(null, isAllowedOrigin(origin)),
+    // Static allowlist first; then any ACTIVE organization storefront domain
+    // (spec 007 phase 3), so browsers on custom hosts can call public endpoints.
+    origin: (origin, callback) => {
+      if (isAllowedOrigin(origin)) return callback(null, true);
+      domainService
+        .isActiveOrigin(origin)
+        .then((ok) => callback(null, ok))
+        .catch(() => callback(null, false));
+    },
     credentials: true,
   })
 );
@@ -125,6 +135,7 @@ app.use('/orders', ordersRouter);
 app.use('/organizations/:orgId/events/:eventId/orders', eventOrdersRouter);
 app.use('/tickets', ticketsRouter);
 app.use('/buyer', buyerRouter);
+app.use('/domains', domainsRouter);
 app.use('/users', usersRouter);
 app.use('/images', imagesRouter);
 app.use('/webhooks', webhooksRouter);
@@ -140,6 +151,13 @@ if (process.env.NODE_ENV !== 'test') {
     console.log(`📊 Metrics available at http://localhost:${PORT}/metrics`);
     console.log(`💚 Health check at http://localhost:${PORT}/health`);
   });
+
+  // Storefront domain sweep (spec 007 phase 3): re-check DNS/TLS for pending
+  // domains every 10 minutes, active ones daily. unref so it never holds the
+  // process open.
+  const DOMAIN_SWEEP_MS = Number(process.env.DOMAIN_SWEEP_INTERVAL_MS) || 10 * 60 * 1000;
+  setTimeout(() => domainService.checkAll().catch(() => {}), 15 * 1000).unref();
+  setInterval(() => domainService.checkAll().catch(() => {}), DOMAIN_SWEEP_MS).unref();
 }
 
 export default app;

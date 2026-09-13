@@ -251,7 +251,19 @@ Verification job (`backend/src/jobs/verifyDomains.js`, cron every 10 min, plus "
 - Contract: `GET /domains/resolve` for unknown host returns 404; admin routes on a custom host return 404 via middleware test.
 - Manual: real domain end to end on Railway staging, including certificate issuance time and the buyer magic link round-trip on the custom host.
 
-**Exit criteria**: scenario 8 in the spec passes on a real domain; buyer login works on that host; no admin surface reachable from it.
+**Status (2026-09-13)**: implemented on branch `feat/007-custom-domains`. Deviations from the sketch above:
+- `OrganizationDomain` also carries `cnameTarget`, `railwayDomainId`, `failingSince`, `lastError`. Hostnames must be subdomains (no apex; CNAME cannot live at an apex on most providers).
+- Railway integration is optional (`lib/railwayDomains.js`, gated on `RAILWAY_API_TOKEN` + `RAILWAY_FRONTEND_SERVICE_ID`). Without it a DNS-verified domain goes straight to ACTIVE and the operator attaches it in the Railway dashboard for TLS. The GraphQL field names in that client were written from Railway's public schema and have not been exercised against a live token yet.
+- Verification sweep is an in-process `setInterval` in `server.js` (10 min; active domains re-checked daily), not a separate cron. 72h grace before FAILED.
+- Host resolution: `frontend/src/middleware.ts` calls `GET /domains/resolve` (60s cache on both sides). Middleware had to move into `src/` — the root `frontend/middleware.ts` was never loaded by Next in this layout, so the Auth.js protection it contained never ran. The new middleware does tenant routing only; staff protection stays client-side because `auth.config.ts` cannot decode the custom HS256 session cookie on the edge.
+- `/orders/:id` now accepts a buyer session (needed on custom hosts where there is no staff sign-in); `ProtectedRoute` remains the fallback.
+- Storefront URL helpers are async and per organization; on a custom host the org page is `/` and the account page `/account`.
+- Per-org Resend sending domain: **not implemented** (emails still send from `RESEND_FROM_EMAIL`). Deferred to a follow-up.
+- Cross-org event URLs on a tenant host (`tickets.a.com/events/<org-b-event>`) render org B's public event; the page is public anyway on the platform host. Tightening this needs the event page to compare `organizationId` with the tenant header — follow-up.
+
+Tests: `tests/unit/domainService.test.js` (15), `tests/contract/domains.test.js` (10, DNS stubbed via `domainService._dns`), `frontend/tests/unit/storefrontHost.test.ts` (11). Smoke: tenant routing via spoofed `Host` header (root/account/admin/auth/other-org/unknown-host), CORS preflight from a tenant origin, Settings › Domains add + verify in a browser.
+
+**Exit criteria**: scenario 8 in the spec passes on a real domain; buyer login works on that host; no admin surface reachable from it — routing, resolution, CORS, and URL generation verified locally; a real domain + Railway certificate still needs a live run.
 
 ### Phase 4 — Cleanup
 

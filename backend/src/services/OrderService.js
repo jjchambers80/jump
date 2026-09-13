@@ -9,6 +9,7 @@ import logger from '../utils/logger.js';
 import { NotFoundError, ConflictError, ValidationError } from '../middleware/errorHandler.js';
 import qrService from './QRService.js';
 import feeService from './FeeService.js';
+import { confirmationUrl, eventUrl } from '../utils/storefrontUrl.js';
 
 class OrderService {
   /**
@@ -244,8 +245,9 @@ class OrderService {
           orderRef: order.orderRef,
           eventId: event.id,
         },
-        success_url: `${process.env.FRONTEND_URL || 'http://localhost:3001'}/confirmation?orderId=${order.id}`,
-        cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:3001'}/events/${event.id}?status=cancelled`,
+        // Return the buyer to the storefront they started on (custom domain when active)
+        success_url: await confirmationUrl(order.id, event.venue.organizationId),
+        cancel_url: await eventUrl(event.id, event.venue.organizationId, '?status=cancelled'),
         expires_at: Math.floor(Date.now() / 1000) + 1800, // 30 minutes from now
       });
     } catch (stripeError) {

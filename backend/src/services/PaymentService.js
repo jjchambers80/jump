@@ -148,7 +148,7 @@ class PaymentService {
       if (!row?.contact?.accountCreatedAt) return null;
 
       const { rawToken } = await BuyerAuthService.issueToken(row.contact, 'WELCOME');
-      return buyerVerifyUrl(row.contact.organizationId, rawToken);
+      return await buyerVerifyUrl(row.contact.organizationId, rawToken);
     } catch (error) {
       logger.error('Failed to issue buyer welcome link', { orderId, error: error.message });
       return null;

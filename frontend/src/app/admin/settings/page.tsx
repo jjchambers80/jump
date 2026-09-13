@@ -7,6 +7,7 @@ import BusinessDetailsDialog from './BusinessDetailsDialog';
 import StoreAddressDialog from './StoreAddressDialog';
 import StoreContactDialog from './StoreContactDialog';
 import SummaryRow from './SummaryRow';
+import SettingsNav from './SettingsNav';
 import { MapPinIcon, StoreIcon } from './icons';
 import { formatAddress, formatPhone } from './formShared';
 import { BusinessDetails, businessTypeLabel } from './types';
@@ -98,15 +99,7 @@ export default function SettingsPage() {
       </p>
 
       <div className="mt-8 flex min-w-0 flex-col gap-6 md:flex-row md:items-start">
-        <nav aria-label="Settings sections" className="w-full shrink-0 md:w-56">
-          <button
-            type="button"
-            aria-current="page"
-            className="w-full rounded-md bg-indigo-50 px-3 py-2 text-left text-sm font-semibold text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-indigo-900/30 dark:text-indigo-300"
-          >
-            General
-          </button>
-        </nav>
+        <SettingsNav />
 
         <section aria-labelledby="general-settings-heading" className="min-w-0 flex-1">
           <h2 id="general-settings-heading" className="flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white">
