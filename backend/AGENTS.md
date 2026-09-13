@@ -15,7 +15,7 @@ Loads when agent touches `backend/` files. For root-level commands and env vars,
 - Buyers = `Contact`, one row per `(organizationId, email)`. Checkout upserts by `organizationId_email` with the event's venue org.
 - Staff = `User` + `OrganizationMember(userId, organizationId, role)`. `resolveOrgScope(userId, role, preferredOrgId)` picks the active org; `requireOrgMembership(param)` guards `/organizations/:orgId/*` routes. SYSTEM_ADMIN bypasses both.
 - Customer admin queries filter `Contact.organizationId` directly; never scope contacts through orders.
-- There is no buyer surface on staff auth: `/orders/my`, `/tickets/my`, `/tickets/:id/request-refund` were removed in phase 4. Buyer self-service (orders, tickets, refunds) is under `/buyer/me/*` with `requireBuyer`.
+- There is no buyer surface on staff auth: `/orders/my`, `/tickets/my`, `/tickets/:id`, `/tickets/:id/request-refund` were removed in phase 4. Buyer self-service (orders, tickets, refunds) is under `/buyer/me/*` with `requireBuyer`.
 
 ## Buyer Auth (spec 007 phase 2)
 

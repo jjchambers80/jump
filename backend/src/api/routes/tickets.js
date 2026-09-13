@@ -8,7 +8,6 @@ import express from 'express';
 import ticketService from '../../services/TicketService.js';
 import refundService from '../../services/RefundService.js';
 import qrService from '../../services/QRService.js';
-import { requireAuth } from '../../middleware/auth.js';
 
 const router = express.Router();
 
@@ -137,28 +136,6 @@ router.post('/redeem', async (req, res, next) => {
     res.json(result);
   } catch (error) {
     handleRedemptionError(error, res, next);
-  }
-});
-
-/**
- * GET /tickets/:ticketId
- * Get single ticket details (requires authentication).
- */
-router.get('/:ticketId', requireAuth, async (req, res, next) => {
-  try {
-    const ticket = await ticketService.getTicketById(req.params.ticketId);
-
-    // Authorization: contact email must match, or ADMIN
-    if (!['ADMIN', 'SYSTEM_ADMIN'].includes(req.user.role) && ticket.contact?.email !== req.user.email) {
-      return res.status(403).json({
-        error: 'ForbiddenError',
-        message: 'You do not have access to this ticket',
-      });
-    }
-
-    res.json(ticket);
-  } catch (error) {
-    next(error);
   }
 });
 

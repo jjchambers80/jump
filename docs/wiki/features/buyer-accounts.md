@@ -83,7 +83,7 @@ See [Database Architecture](database-architecture.md).
 - **Buyer cookie is per host, session is per org.** On the shared Jump domain, signing in at org B replaces org A's session; the account page for org A then shows the email form. Expected until custom domains (phase 3).
 - **`onboarding@resend.dev`** as `RESEND_FROM_EMAIL` only delivers to the Resend account owner's address. Use a verified sending domain before real buyers rely on sign-in emails.
 - **Stripe webhook is the trigger.** Locally there is no `stripe listen` by default, so orders stay PENDING and no confirmation/welcome email fires. Contract tests call `PaymentService.handleCheckoutCompleted` directly.
-- **The Auth.js buyer surface is gone** (phase 4): `/my-tickets`, `/tickets/[ticketId]`, the `/orders` list page, `GET /orders/my`, `GET /tickets/my`, `POST /tickets/:id/request-refund`, and `Contact.userId`. Staff who buy tickets use the organization's `/account` page like any buyer. `/orders/:id` accepts a buyer session and falls back to the staff gate.
+- **The Auth.js buyer surface is gone** (phase 4): `/my-tickets`, `/tickets/[ticketId]`, the `/orders` list page, `GET /orders/my`, `GET /tickets/my`, `GET /tickets/:id`, `POST /tickets/:id/request-refund`, and `Contact.userId`. Staff who buy tickets use the organization's `/account` page like any buyer. `/orders/:id` accepts a buyer session and falls back to the staff gate.
 - **Refunds from the account page** go through `/api/buyer/me/tickets/:id/refund`; the button shows only for `isRefundable && status === 'VALID'`.
 
 ## Related Features
