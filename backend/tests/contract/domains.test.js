@@ -172,6 +172,29 @@ describe('Storefront domains contract (spec 007 phase 3)', () => {
     expect(res.body.lastError).toMatch(/TXT/);
   });
 
+  it('GET /domains/owner maps events, orders and venues to their organization', async () => {
+    const venue = await prisma.venue.create({ data: { organizationId: orgA.id, name: 'Owner V', address: '1' } });
+    const event = await prisma.event.create({ data: { venueId: venue.id, name: 'Owner E', date: new Date(Date.now() + 86400e3), capacity: 5, status: 'PUBLISHED' } });
+    const contact = await prisma.contact.create({ data: { organizationId: orgA.id, email: `owner@${TAG}.test`, firstName: 'O', lastName: 'W' } });
+    const order = await prisma.order.create({ data: { eventId: event.id, contactId: contact.id, orderRef: `${TAG}-OWN`, totalAmount: 1, subtotalAmount: 1, quantity: 1, status: 'PENDING' } });
+    try {
+      for (const q of [`eventId=${event.id}`, `orderId=${order.id}`, `venueId=${venue.id}`]) {
+        const res = await request(app).get(`/domains/owner?${q}`);
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual({ organizationId: orgA.id });
+        expect(res.headers['cache-control']).toMatch(/max-age=300/);
+      }
+      expect((await request(app).get('/domains/owner?eventId=does-not-exist')).status).toBe(404);
+      expect((await request(app).get('/domains/owner?eventId=not%20valid')).status).toBe(400);
+      expect((await request(app).get('/domains/owner')).status).toBe(400);
+    } finally {
+      await prisma.order.delete({ where: { id: order.id } });
+      await prisma.contact.delete({ where: { id: contact.id } });
+      await prisma.event.delete({ where: { id: event.id } });
+      await prisma.venue.delete({ where: { id: venue.id } });
+    }
+  });
+
   it('DELETE removes the domain and the host stops resolving', async () => {
     expect((await request(app).delete(`/admin/settings/domains/${domain.id}`).set('Authorization', `Bearer ${tokenFor(adminA)}`)).status).toBe(204);
     expect((await request(app).get('/domains/resolve').query({ host })).status).toBe(404);

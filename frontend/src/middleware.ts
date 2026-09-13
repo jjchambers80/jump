@@ -11,7 +11,7 @@ import NextAuth from 'next-auth';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import authConfig from './auth.config';
-import { isPlatformHost, normalizeHost, platformHostsFromEnv, routeForTenantHost } from './lib/storefrontHost';
+import { isPlatformHost, normalizeHost, platformHostsFromEnv, routeForTenantHost, tenantResourceFor } from './lib/storefrontHost';
 
 // The email (Resend) provider requires a database adapter, which does not
 // exist on the edge; Auth() would throw MissingAdapter and skip the check.
@@ -50,6 +50,28 @@ async function resolveTenantHost(host: string): Promise<string | null> {
   return orgId;
 }
 
+// (kind:id) -> { orgId | null, expires }. Ownership never changes, so cache longer.
+const OWNER_TTL_MS = 5 * 60 * 1000;
+const ownerCache = new Map<string, { orgId: string | null; expires: number }>();
+
+async function resourceOwner(kind: 'event' | 'order' | 'venue', id: string): Promise<string | null> {
+  const key = `${kind}:${id}`;
+  const hit = ownerCache.get(key);
+  if (hit && hit.expires > Date.now()) return hit.orgId;
+  let orgId: string | null = null;
+  try {
+    const res = await fetch(`${API_URL}/domains/owner?${kind}Id=${encodeURIComponent(id)}`, {
+      headers: { accept: 'application/json' },
+      cache: 'no-store',
+    });
+    if (res.ok) orgId = (await res.json())?.organizationId ?? null;
+  } catch {
+    orgId = null; // backend unreachable: fail closed on tenant hosts
+  }
+  ownerCache.set(key, { orgId, expires: Date.now() + OWNER_TTL_MS });
+  return orgId;
+}
+
 function notFound(req: NextRequest) {
   // Rewrite to a path no route serves so the app's not-found page renders on this host
   return NextResponse.rewrite(new URL('/__storefront-not-found', req.url), { status: 404 });
@@ -75,6 +97,11 @@ export default auth(async (req: NextRequest & { auth: unknown }) => {
 
   const route = routeForTenantHost(req.nextUrl.pathname, orgId);
   if (route.kind === 'notFound') return notFound(req);
+
+  // A resource in the URL must belong to this organization: tickets.a.com
+  // must not render org B's event, checkout, order or venue pages.
+  const resource = tenantResourceFor(req.nextUrl.pathname, req.nextUrl.searchParams);
+  if (resource && (await resourceOwner(resource.kind, resource.id)) !== orgId) return notFound(req);
 
   const headers = new Headers(req.headers);
   headers.set('x-jump-org-id', orgId);

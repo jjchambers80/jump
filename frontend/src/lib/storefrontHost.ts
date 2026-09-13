@@ -73,3 +73,27 @@ export function routeForTenantHost(pathname: string, orgId: string): StorefrontR
 
   return { kind: 'notFound' };
 }
+
+export type TenantResource = { kind: 'event' | 'order' | 'venue'; id: string };
+
+const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+/**
+ * The organization-owned resource named by a storefront URL, if any. The
+ * middleware confirms it belongs to the tenant host's organization so that
+ * tickets.a.com cannot render org B's event, checkout, order or venue pages.
+ */
+export function tenantResourceFor(pathname: string, searchParams: URLSearchParams): TenantResource | null {
+  const m = pathname.match(/^\/(events|checkout|orders|venues)\/([^/]+)\/?$/);
+  if (m) {
+    const id = decodeURIComponent(m[2]);
+    if (!ID_RE.test(id)) return null;
+    const kind = m[1] === 'events' || m[1] === 'checkout' ? 'event' : m[1] === 'orders' ? 'order' : 'venue';
+    return { kind, id };
+  }
+  if (pathname === '/confirmation') {
+    const id = searchParams.get('orderId');
+    if (id && ID_RE.test(id)) return { kind: 'order', id };
+  }
+  return null;
+}

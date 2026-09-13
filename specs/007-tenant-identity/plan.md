@@ -259,7 +259,7 @@ Verification job (`backend/src/jobs/verifyDomains.js`, cron every 10 min, plus "
 - `/orders/:id` now accepts a buyer session (needed on custom hosts where there is no staff sign-in); `ProtectedRoute` remains the fallback.
 - Storefront URL helpers are async and per organization; on a custom host the org page is `/` and the account page `/account`.
 - Per-org Resend sending domain: **not implemented** (emails still send from `RESEND_FROM_EMAIL`). Deferred to a follow-up.
-- Cross-org event URLs on a tenant host (`tickets.a.com/events/<org-b-event>`) render org B's public event; the page is public anyway on the platform host. Tightening this needs the event page to compare `organizationId` with the tenant header — follow-up.
+- Cross-org resource URLs on a tenant host are rejected in the middleware via `GET /domains/owner` (`fix/tenant-resource-ownership`): events, checkout, orders, venues and `/confirmation?orderId=` must belong to the host's organization.
 
 Tests: `tests/unit/domainService.test.js` (15), `tests/contract/domains.test.js` (10, DNS stubbed via `domainService._dns`), `frontend/tests/unit/storefrontHost.test.ts` (11). Smoke: tenant routing via spoofed `Host` header (root/account/admin/auth/other-org/unknown-host), CORS preflight from a tenant origin, Settings › Domains add + verify in a browser.
 
