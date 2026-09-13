@@ -11,6 +11,7 @@ import { useSearchParams } from 'next/navigation';
 import { api } from '../../services/api';
 import { resolveAssetUrl } from '../../lib/assets';
 import BrandScope from '../../components/BrandScope';
+import WalletButtons from '../../components/WalletButtons';
 import type { ThemeMode } from '../../lib/theme';
 
 interface TicketInfo {
@@ -20,6 +21,7 @@ interface TicketInfo {
   pricePaid: number;
   priceTierName?: string;
   qrCodeDataUrl?: string;
+  wallet?: { apple: string | null; google: string | null };
 }
 
 interface OrderDetail {
@@ -449,6 +451,38 @@ function ConfirmationContent() {
               </div>
             </div>
           )}
+
+          {/* Add to wallet — one row per VALID ticket, only when a provider is enabled */}
+          {isCompleted &&
+            order.tickets?.some((t) => t.status === 'VALID' && (t.wallet?.apple || t.wallet?.google)) && (
+              <div className="border-t border-gray-200 dark:border-slate-700 pt-6 mb-6" data-testid="wallet-section">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-slate-100 mb-1">
+                  Add to your wallet
+                </h2>
+                <p className="text-sm text-gray-600 dark:text-slate-400 mb-4">
+                  Save each ticket to your phone so it is ready at the door.
+                </p>
+                <ul className="space-y-3">
+                  {order.tickets
+                    .filter((t) => t.status === 'VALID')
+                    .map((t, index) => (
+                      <li
+                        key={t.id}
+                        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-gray-50 dark:bg-slate-900 rounded-lg px-4 py-3"
+                      >
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
+                            Ticket {index + 1}
+                            {t.priceTierName ? ` · ${t.priceTierName}` : ''}
+                          </p>
+                          <p className="text-xs font-mono text-gray-500 dark:text-slate-400">{t.barcode}</p>
+                        </div>
+                        <WalletButtons wallet={t.wallet} size="compact" />
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            )}
 
           {/* Important Info */}
           {isCompleted && (

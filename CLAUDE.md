@@ -50,6 +50,8 @@ cd frontend && npm run test:unit    # Vitest unit tests (lib/color.ts)
 | `BUCKET_NAME`, `BUCKET_ENDPOINT`, `BUCKET_ACCESS_KEY_ID`, `BUCKET_SECRET_ACCESS_KEY`, `BUCKET_REGION` | backend | S3-compatible image storage (Railway Bucket). Unset → local `uploads/` disk (ephemeral on Railway) |
 | `BUCKET_PUBLIC_URL` | backend | Optional. Only set for a public bucket/CDN; otherwise images are served through `GET /images/:id/:hash/:variant` |
 | `BACKEND_URL` | backend | Optional. Public backend base URL for absolute image links in emails. Falls back to `https://$RAILWAY_PUBLIC_DOMAIN`, then `http://localhost:$PORT` |
+| `APPLE_PASS_TYPE_ID`, `APPLE_TEAM_ID`, `APPLE_PASS_CERT_PEM`, `APPLE_PASS_KEY_PEM`, `APPLE_PASS_KEY_PASSPHRASE`, `APPLE_WWDR_PEM` | backend | Optional. Enables Apple Wallet passes. See `specs/006-wallet-passes/quickstart.md` |
+| `GOOGLE_WALLET_ISSUER_ID`, `GOOGLE_WALLET_SA_EMAIL`, `GOOGLE_WALLET_SA_PRIVATE_KEY`, `GOOGLE_WALLET_ORIGINS` | backend | Optional. Enables Google Wallet passes |
 
 ## Deployment
 

@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import ProtectedRoute from '../../../components/ProtectedRoute';
 import api, { OrderDetail, OrderTicket } from '@/services/api';
+import WalletButtons from '@/components/WalletButtons';
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('en-US', {
@@ -122,6 +123,9 @@ function TicketCard({
             />
           </div>
         </div>
+      )}
+      {showQr && ticket.status === 'VALID' && (
+        <WalletButtons wallet={ticket.wallet} size="compact" className="justify-center mb-4" />
       )}
 
       {/* Ticket details */}

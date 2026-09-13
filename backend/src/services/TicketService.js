@@ -5,8 +5,19 @@
 import { prisma } from '@jump/db';
 import { generateBarcodes } from '../utils/barcode.js';
 import qrService from './QRService.js';
+import walletTokenService from './wallet/WalletTokenService.js';
+import { randomBytes } from 'crypto';
 import logger from '../utils/logger.js';
 import { NotFoundError, ConflictError, ValidationError } from '../middleware/errorHandler.js';
+
+/**
+ * Opaque NFC redemption value carried by wallet passes (phase 3): 32 random
+ * bytes as base64url = 43 chars, within both Apple VAS and Google Smart Tap's
+ * 64-byte message limit.
+ */
+function generateNfcToken() {
+  return randomBytes(32).toString('base64url');
+}
 
 class TicketService {
   /**
@@ -122,7 +133,7 @@ class TicketService {
 
           const updatedTicket = await tx.ticket.update({
             where: { id: ticket.id },
-            data: { qrCodeJwt: qrPayload },
+            data: { qrCodeJwt: qrPayload, nfcToken: generateNfcToken() },
             include: {
               priceTier: { select: { name: true } },
             },
@@ -225,6 +236,7 @@ class TicketService {
         purchaseDate: ticket.order?.createdAt || ticket.createdAt,
         purchaseTime: ticket.order?.createdAt || ticket.createdAt,
         qrCodeJwt: ticket.qrCodeJwt || null,
+        wallet: walletTokenService.links(ticket),
         event: {
           name: ticket.event.name,
           date: ticket.event.date,
@@ -618,6 +630,7 @@ class TicketService {
       ticketNumber: ticket.ticketNumber,
       barcode: ticket.barcode,
       qrCodeImage,
+      wallet: walletTokenService.links(ticket),
       priceTierName: ticket.priceTier?.name,
       pricePaid: Number(ticket.pricePaid),
       status: ticket.status,
@@ -833,6 +846,7 @@ class TicketService {
       barcode: ticket.barcode,
       qrCode,
       qrCodeJwt: ticket.qrCodeJwt || null,
+      wallet: walletTokenService.links(ticket),
       priceTierName: ticket.priceTier?.name,
       priceTierDescription: ticket.priceTier?.description || null,
       pricePaid: Number(ticket.pricePaid),

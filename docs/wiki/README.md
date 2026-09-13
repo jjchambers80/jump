@@ -22,6 +22,7 @@ Generated and maintained by running `/doc-feature` after completing feature work
 ### Tickets & Fulfillment
 - [Ticket Issuance](features/ticket-issuance.md) — Barcode generation, QR code JWTs, ticket lifecycle
 - [QR Code Scanning](features/qr-code-scanning.md) — Redemption flow, JWT verification, admin scanner
+- [Wallet Passes](features/wallet-passes.md) — Apple Wallet .pkpass + Google Wallet save links on confirmation, order, ticket pages and email
 - [Email Notifications](features/email-notifications.md) — Transactional emails via Resend with retry
 
 ### Authentication & Authorization

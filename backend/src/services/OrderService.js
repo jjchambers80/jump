@@ -8,6 +8,7 @@ import stripe from '../config/stripe.js';
 import logger from '../utils/logger.js';
 import { NotFoundError, ConflictError, ValidationError } from '../middleware/errorHandler.js';
 import qrService from './QRService.js';
+import walletTokenService from './wallet/WalletTokenService.js';
 import feeService from './FeeService.js';
 
 class OrderService {
@@ -737,6 +738,7 @@ class OrderService {
         id: t.id,
         barcode: t.barcode,
         qrCodeDataUrl,
+        wallet: walletTokenService.links(t),
         priceTierName: t.priceTier?.name,
         pricePaid: Number(t.pricePaid),
         status: t.status,

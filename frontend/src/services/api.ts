@@ -149,10 +149,16 @@ export interface OrderSummary {
   createdAt: string;
 }
 
+export interface WalletLinks {
+  apple: string | null;
+  google: string | null;
+}
+
 export interface OrderTicket {
   id: string;
   barcode: string;
   qrCodeDataUrl: string | null;
+  wallet?: WalletLinks;
   priceTierName: string;
   pricePaid: number;
   status: 'VALID' | 'REDEEMED' | 'EXPIRED' | 'VOIDED';
