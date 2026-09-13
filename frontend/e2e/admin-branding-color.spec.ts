@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { signInAsStaff } from './helpers/session';
 import AxeBuilder from '@axe-core/playwright';
 
 const API = 'http://localhost:3002';
@@ -26,18 +27,10 @@ const publicEvent = {
   availableTickets: 42,
 };
 
-async function mockAdminSession(page: Page) {
-  await page.route('**/api/auth/session', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        user: { id: 'brand-admin', email: 'brand-admin@test.com', role: 'ADMIN' },
-        accessToken: 'brand-test-token',
-        expires: '2099-01-01T00:00:00.000Z',
-      }),
-    })
-  );
+// Real HS256 session cookie: the edge middleware decodes it itself, so
+// mocking GET /api/auth/session alone would redirect /admin to sign-in.
+async function mockAdminSession(page: Page, baseURL: string) {
+  await signInAsStaff(page, { id: 'brand-admin', email: 'brand-admin@test.com', role: 'ADMIN' }, baseURL);
 }
 
 /** Mocks the org list, PATCH, and the public org/venue/event endpoints, sharing one brandColor. */
@@ -99,8 +92,8 @@ function hexToRgb(hex: string): string {
   return `rgb(${(v >> 16) & 255}, ${(v >> 8) & 255}, ${v & 255})`;
 }
 
-test.beforeEach(async ({ page }) => {
-  await mockAdminSession(page);
+test.beforeEach(async ({ page, baseURL }) => {
+  await mockAdminSession(page, baseURL!);
 });
 
 test('picks a preset, sees a passing badge, and saves the normalized hex', async ({ page }) => {
