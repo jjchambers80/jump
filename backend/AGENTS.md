@@ -16,6 +16,13 @@ Loads when agent touches `backend/` files. For root-level commands and env vars,
 - Staff = `User` + `OrganizationMember(userId, organizationId, role)`. `resolveOrgScope(userId, role, preferredOrgId)` picks the active org; `requireOrgMembership(param)` guards `/organizations/:orgId/*` routes. SYSTEM_ADMIN bypasses both.
 - Customer admin queries filter `Contact.organizationId` directly; never scope contacts through orders.
 
+## Buyer Auth (spec 007 phase 2)
+
+- Buyers sign in without passwords. `BuyerAuthService` issues single-use hashed tokens (`BuyerLoginToken`: LOGIN 15 min, WELCOME 7 days) and mints a separate HS256 JWT with `typ: 'buyer'`. `middleware/auth.js` rejects buyer tokens; `middleware/buyerAuth.js` (`requireBuyer`) rejects staff tokens.
+- Routes live in `api/routes/buyerAuth.js` under `/buyer`. `POST /buyer/auth/request` always returns 202. The frontend calls these only through `frontend/src/app/api/buyer/*` route handlers, which hold the session in the httpOnly `jump_buyer` cookie.
+- Checkout opt-ins: `POST /orders` accepts `createAccount` and `emailSubscribed` booleans. Both only ever turn on from checkout; `PaymentService` issues the WELCOME link into the confirmation email when `Contact.accountCreatedAt` is set.
+- Storefront URLs in emails come from `utils/storefrontUrl.js` (first `FRONTEND_URL` entry).
+
 ## Payment Flow (WHY: Stripe is source of truth, not the client)
 
 1. `POST /orders` → creates Order + Contact + reserves tier inventory

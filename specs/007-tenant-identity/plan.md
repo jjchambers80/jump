@@ -188,7 +188,9 @@ enum BuyerTokenPurpose {
 - Contract: request endpoint returns 202 for unknown email and issues nothing; rate limit trips; `GET /buyer/me/orders` with an org A session never returns org B orders for the same email.
 - Playwright: checkout with box checked, complete Stripe test payment, read the WELCOME token via a test-only `GET /__test/buyer-token?email=` route enabled when `NODE_ENV=test` (no mail capture exists today; `backend/tests/setup.js` only stubs `RESEND_API_KEY`), follow link, land on account page with the order visible; repeat with box unchecked and confirm no account link in email.
 
-**Exit criteria**: buyer can complete scenario 2 and 3 from the spec end to end on the Jump domain.
+**Status (2026-09-13)**: implemented on branch `worktree-plan-tenant-identity`. Deviations from the sketch above: per-email rate limiting is a count over `BuyerLoginToken` rows (3 LOGIN tokens per 15 min), per-IP is `express-rate-limit` (20/hour) with `trust proxy = 1` in production; `GET /buyer/me` added for the account page; `getMyOrders`/`getMyTickets` were refactored into shared `listOrders`/`listTickets` helpers rather than removed (removal is phase 4). Tests: `tests/unit/buyerAuthService.test.js` (14) and `tests/contract/buyerAuth.test.js` (17) green, the latter driving the real webhook completion path and reading the welcome token out of the mocked Resend payload. The cookie round-trip through the Next route handlers and both pages were smoke-tested in a browser against a seeded DB (verify link → account page with orders/tickets; checkout shows account box pre-checked and marketing unchecked). No Playwright spec was added; the existing Playwright harness has pre-existing type errors.
+
+**Exit criteria**: buyer can complete scenario 2 and 3 from the spec end to end on the Jump domain — met.
 
 ### Phase 3 — Custom domains
 

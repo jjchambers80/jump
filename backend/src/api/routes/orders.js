@@ -22,7 +22,7 @@ const router = express.Router();
  */
 router.post('/', validateCreateOrder, async (req, res, next) => {
   try {
-    const { eventId, items, priceTierId, quantity, contact } = req.body;
+    const { eventId, items, priceTierId, quantity, contact, createAccount, emailSubscribed } = req.body;
 
     // Check if user is authenticated (optional)
     let userId = null;
@@ -46,6 +46,8 @@ router.post('/', validateCreateOrder, async (req, res, next) => {
       items: items ?? [{ priceTierId, quantity: parseInt(quantity) }],
       contact,
       userId,
+      createAccount: createAccount === true,
+      emailSubscribed: emailSubscribed === true,
     });
 
     res.status(201).json(result);

@@ -232,10 +232,30 @@ model Contact {
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   orders    Order[]
   tickets   Ticket[]
+  loginTokens BuyerLoginToken[]
 
   @@unique([organizationId, email])
   @@index([userId])
   @@index([email])
+}
+
+// Single-use, hashed magic-link token for passwordless buyer sign-in.
+// WELCOME tokens are issued at purchase when the buyer opted into an account;
+// LOGIN tokens are requested from the storefront. Raw token is never stored.
+model BuyerLoginToken {
+  id             String            @id @default(cuid())
+  contactId      String
+  organizationId String
+  tokenHash      String            @unique
+  purpose        BuyerTokenPurpose
+  expiresAt      DateTime
+  usedAt         DateTime?
+  createdAt      DateTime          @default(now())
+
+  contact        Contact           @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([contactId])
+  @@index([expiresAt])
 }
 
 model Event {
@@ -447,6 +467,11 @@ enum UserRole {
 enum MemberRole {
   ORGANIZER
   ADMIN
+}
+
+enum BuyerTokenPurpose {
+  WELCOME
+  LOGIN
 }
 
 enum OrganizationStatus {

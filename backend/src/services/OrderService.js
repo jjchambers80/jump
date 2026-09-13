@@ -60,9 +60,11 @@ class OrderService {
    * @param {{priceTierId: string, quantity: number}[]} params.items
    * @param {Object} params.contact - { email, firstName, lastName }
    * @param {string|null} params.userId - Authenticated user ID (if logged in)
+   * @param {boolean} [params.createAccount] - Buyer opted into a login-enabled account at this org
+   * @param {boolean} [params.emailSubscribed] - Buyer opted into marketing email from this org
    * @returns {Promise<{ orderId, orderRef, stripeCheckoutUrl }>}
    */
-  async createOrder({ eventId, items, contact, userId = null }) {
+  async createOrder({ eventId, items, contact, userId = null, createAccount = false, emailSubscribed = false }) {
     // Generate order ref outside transaction to avoid retry collisions
     let orderRef = this._generateOrderRef();
 
@@ -145,12 +147,23 @@ class OrderService {
       // The same email buying from two organizations is two Contact rows.
       const organizationId = event.venue.organizationId;
       const email = contact.email.toLowerCase();
+      // Opt-ins only ever turn on here. Turning marketing off is the
+      // unsubscribe flow, and an account is never revoked by a later guest checkout.
+      const existing = await tx.contact.findUnique({
+        where: { organizationId_email: { organizationId, email } },
+        select: { accountCreatedAt: true },
+      });
+      const optIns = {
+        ...(createAccount && !existing?.accountCreatedAt && { accountCreatedAt: new Date() }),
+        ...(emailSubscribed && { emailSubscribed: true }),
+      };
       const contactRecord = await tx.contact.upsert({
         where: { organizationId_email: { organizationId, email } },
         update: {
           firstName: contact.firstName,
           lastName: contact.lastName,
           ...(userId && { userId }),
+          ...optIns,
         },
         create: {
           organizationId,
@@ -158,6 +171,7 @@ class OrderService {
           firstName: contact.firstName,
           lastName: contact.lastName,
           ...(userId && { userId }),
+          ...optIns,
         },
       });
 
@@ -314,7 +328,7 @@ class OrderService {
                 id: true,
                 name: true,
                 address: true,
-                organization: { select: { name: true, logoUrl: true, brandColor: true, themeMode: true } },
+                organization: { select: { id: true, name: true, logoUrl: true, brandColor: true, themeMode: true } },
               },
             },
           },
@@ -350,12 +364,28 @@ class OrderService {
    * @param {Object} pagination
    * @returns {Promise<{ data: OrderSummary[], pagination }>}
    */
-  async getMyOrders(email, { page = 1, limit = 20 } = {}) {
+  async getMyOrders(email, pagination = {}) {
     // Contacts are per organization (spec 007); a verified email may own
     // several Contact rows, so match on the relation rather than one row.
-    // Replaced by buyer sessions in phase 2.
-    const where = { contact: { email: email.toLowerCase() } };
+    // Staff-only path; buyers use getOrdersForContact via /buyer/me/orders.
+    return this.listOrders({ contact: { email: email.toLowerCase() } }, pagination);
+  }
 
+  /**
+   * Orders owned by one org-scoped Contact (buyer session).
+   * @param {string} contactId
+   * @param {Object} pagination
+   */
+  async getOrdersForContact(contactId, pagination = {}) {
+    return this.listOrders({ contactId }, pagination);
+  }
+
+  /**
+   * Shared paginated order summary listing.
+   * @param {Object} where - Prisma Order where clause
+   * @param {Object} pagination - { page, limit }
+   */
+  async listOrders(where, { page = 1, limit = 20 } = {}) {
     const [orders, total] = await Promise.all([
       prisma.order.findMany({
         where,
@@ -403,7 +433,7 @@ class OrderService {
                 id: true,
                 name: true,
                 address: true,
-                organization: { select: { name: true, logoUrl: true, brandColor: true, themeMode: true } },
+                organization: { select: { id: true, name: true, logoUrl: true, brandColor: true, themeMode: true } },
               },
             },
           },
@@ -753,6 +783,7 @@ class OrderService {
         date: order.event.date,
         logoUrl: order.event.logoUrl ?? null,
         // Org branding so checkout/confirmation pages can render inside a BrandScope
+        organizationId: order.event.venue?.organization?.id || null,
         organizationName: order.event.venue?.organization?.name || null,
         organizationLogoUrl: order.event.venue?.organization?.logoUrl || null,
         organizationBrandColor: order.event.venue?.organization?.brandColor || null,

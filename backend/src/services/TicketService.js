@@ -162,9 +162,25 @@ class TicketService {
   async getMyTickets(email) {
     // Contacts are per organization (spec 007); a verified email may own
     // several Contact rows, so match on the relation rather than one row.
-    // Replaced by buyer sessions in phase 2.
+    // Staff-only path; buyers use getTicketsForContact via /buyer/me/tickets.
+    return this.listTickets({ contact: { email: email.toLowerCase() } });
+  }
+
+  /**
+   * Tickets owned by one org-scoped Contact (buyer session).
+   * @param {string} contactId
+   */
+  async getTicketsForContact(contactId) {
+    return this.listTickets({ contactId });
+  }
+
+  /**
+   * Shared ticket listing + formatting for the two owner lookups above.
+   * @param {Object} where - Prisma Ticket where clause
+   */
+  async listTickets(where) {
     const tickets = await prisma.ticket.findMany({
-      where: { contact: { email: email.toLowerCase() } },
+      where,
       include: {
         event: {
           include: {

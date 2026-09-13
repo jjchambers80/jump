@@ -31,6 +31,11 @@ export const requireAuth = async (req, res, next) => {
       algorithms: ['HS256'],
     });
 
+    // Buyer sessions (spec 007) share the secret but are a different principal
+    if (decoded.typ === 'buyer') {
+      throw new AuthenticationError('Buyer sessions cannot access staff routes');
+    }
+
     // Attach user info to request
     req.user = {
       id: decoded.sub,
@@ -66,6 +71,7 @@ export const optionalAuth = async (req, res, next) => {
         const decoded = jwt.verify(token, AUTH_SECRET, {
           algorithms: ['HS256'],
         });
+        if (decoded.typ === 'buyer') throw new Error('buyer session');
         req.user = {
           id: decoded.sub,
           email: decoded.email,

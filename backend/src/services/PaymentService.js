@@ -10,6 +10,8 @@
 import { prisma } from '@jump/db';
 import OrderService from './OrderService.js';
 import TicketService from './TicketService.js';
+import BuyerAuthService from './BuyerAuthService.js';
+import { buyerVerifyUrl } from '../utils/storefrontUrl.js';
 import EmailService from './EmailService.js';
 import { recordPaymentStatus } from '../utils/metrics.js';
 import logger from '../utils/logger.js';
@@ -81,13 +83,39 @@ class PaymentService {
     // Send confirmation email (fire-and-forget)
     try {
       const fullOrder = await OrderService.getOrderById(order.id);
-      await EmailService.sendOrderConfirmation(fullOrder, tickets);
+      const manageTicketsUrl = await this._welcomeLinkForOrder(order.id);
+      await EmailService.sendOrderConfirmation(fullOrder, tickets, { manageTicketsUrl });
     } catch (emailError) {
       logger.error('Failed to send order confirmation email', {
         orderId: order.id,
         error: emailError.message,
       });
       // Don't fail the webhook — email is non-critical
+    }
+  }
+
+  /**
+   * Buyer-account welcome link for the confirmation email (spec 007 phase 2).
+   * Issued only when the buyer opted into an account at checkout. The webhook
+   * is already idempotent on order status, so this runs once per completion.
+   * Never throws: a failed link must not block the confirmation email.
+   *
+   * @param {string} orderId
+   * @returns {Promise<string|null>}
+   */
+  async _welcomeLinkForOrder(orderId) {
+    try {
+      const row = await prisma.order.findUnique({
+        where: { id: orderId },
+        select: { contact: { select: { id: true, organizationId: true, accountCreatedAt: true } } },
+      });
+      if (!row?.contact?.accountCreatedAt) return null;
+
+      const { rawToken } = await BuyerAuthService.issueToken(row.contact, 'WELCOME');
+      return buyerVerifyUrl(row.contact.organizationId, rawToken);
+    } catch (error) {
+      logger.error('Failed to issue buyer welcome link', { orderId, error: error.message });
+      return null;
     }
   }
 
