@@ -8,6 +8,7 @@ import { prisma } from '@jump/db';
 import jwt from 'jsonwebtoken';
 import Credentials from 'next-auth/providers/credentials';
 import authConfig from './auth.config';
+import { applyUserClaims, shouldRefreshClaims, type UserClaims } from '@/lib/sessionClaims';
 
 const AUTH_SECRET = process.env.AUTH_SECRET!;
 
@@ -33,6 +34,32 @@ if (process.env.NODE_ENV === 'development') {
   );
 }
 
+/** Snapshot of the User row that becomes JWT claims; null when the account is gone. */
+async function loadUserClaims(userId: string): Promise<UserClaims | null> {
+  const dbUser = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      role: true,
+      name: true,
+      email: true,
+      deletedAt: true,
+      // Active org = oldest membership; the admin org switcher overrides via X-Jump-Org (spec 007)
+      memberships: {
+        orderBy: { createdAt: 'asc' },
+        take: 1,
+        select: { organizationId: true },
+      },
+    },
+  });
+  if (!dbUser || dbUser.deletedAt) return null;
+  return {
+    role: dbUser.role,
+    name: dbUser.name,
+    email: dbUser.email,
+    organizationId: dbUser.memberships[0]?.organizationId ?? null,
+  };
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   providers,
@@ -40,30 +67,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: 'jwt' },
   callbacks: {
     async jwt({ token, user }) {
-      // On initial sign-in, populate token with user data from DB
-      if (user?.id) {
-        const dbUser = await prisma.user.findUnique({
-          where: { id: user.id },
-          select: {
-            role: true,
-            name: true,
-            email: true,
-            // Active org = oldest membership until an org switcher exists (spec 007)
-            memberships: {
-              orderBy: { createdAt: 'asc' },
-              take: 1,
-              select: { organizationId: true },
-            },
-          },
-        });
-        if (dbUser) {
-          token.role = dbUser.role;
-          token.name = dbUser.name;
-          token.email = dbUser.email;
-          token.organizationId = dbUser.memberships[0]?.organizationId ?? null;
-        }
-      }
-      return token;
+      // Role and active org live in the JWT so the backend can trust them without a
+      // DB hit per request. Re-read them on sign-in and whenever the snapshot is
+      // older than CLAIMS_REFRESH_MS so role changes and new memberships take effect
+      // without a re-login. A missing or soft-deleted user invalidates the session.
+      const now = Date.now();
+      const userId = user?.id ?? token.sub;
+      if (!userId) return token;
+      if (!user?.id && !shouldRefreshClaims(token, now)) return token;
+
+      const claims = await loadUserClaims(userId);
+      if (!claims) return null;
+      return applyUserClaims(token, claims, now);
     },
     async session({ session, token }) {
       // Expose role, userId, and raw JWT accessToken in session
