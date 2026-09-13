@@ -43,6 +43,8 @@ interface OrderDetail {
     name: string;
     date: string;
     logoUrl?: string | null;
+    organizationName?: string | null;
+    organizationLogoUrl?: string | null;
     organizationBrandColor?: string | null;
     organizationThemeMode?: ThemeMode | null;
     venue: {
@@ -245,6 +247,17 @@ function ConfirmationContent() {
     >
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg dark:shadow-lg dark:shadow-black/20 p-8 mb-8">
+          {/* Organization logo */}
+          {order.event.organizationLogoUrl && (
+            <div className="flex justify-center mb-8">
+              <img
+                src={resolveAssetUrl(order.event.organizationLogoUrl) || undefined}
+                alt={order.event.organizationName || 'Organizer logo'}
+                className="max-h-20 w-auto max-w-[240px] object-contain"
+              />
+            </div>
+          )}
+
           {/* Success / Pending Header */}
           <div className="text-center mb-8">
             {isCompleted ? (
