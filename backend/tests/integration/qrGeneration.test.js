@@ -243,7 +243,7 @@ describe('Ticket Redemption Integration Flow', () => {
     const qrPayload = jwt.sign(payload, AUTH_SECRET, { algorithm: 'HS256', expiresIn });
 
     // Scan
-    const res = await request(app).post('/tickets/redeem').send({ qrPayload });
+    const res = await request(app).post('/tickets/redeem').set('Authorization', `Bearer ${adminToken}`).send({ qrPayload });
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('REDEEMED');
@@ -266,7 +266,7 @@ describe('Ticket Redemption Integration Flow', () => {
     const payload = { sub: ticketA_id, eventId: testEventId, barcode: ticketA_barcode };
     const qrPayload = jwt.sign(payload, AUTH_SECRET, { algorithm: 'HS256', expiresIn: '1h' });
 
-    const res = await request(app).post('/tickets/redeem').send({ qrPayload });
+    const res = await request(app).post('/tickets/redeem').set('Authorization', `Bearer ${adminToken}`).send({ qrPayload });
 
     expect(res.status).toBe(409);
     expect(res.body.status).toBe('ALREADY_REDEEMED');
@@ -291,7 +291,7 @@ describe('Ticket Redemption Integration Flow', () => {
     const payload = { sub: ticketB_id, eventId: expiredEventId, barcode: ticketB_barcode };
     const qrPayload = jwt.sign(payload, AUTH_SECRET, { algorithm: 'HS256', expiresIn: '365d' });
 
-    const res = await request(app).post('/tickets/redeem').send({ qrPayload });
+    const res = await request(app).post('/tickets/redeem').set('Authorization', `Bearer ${adminToken}`).send({ qrPayload });
 
     expect(res.status).toBe(410);
     expect(res.body.status).toBe('EXPIRED');
@@ -311,7 +311,7 @@ describe('Ticket Redemption Integration Flow', () => {
       expiresIn: '1h',
     });
 
-    const res = await request(app).post('/tickets/redeem').send({ qrPayload: forgedQR });
+    const res = await request(app).post('/tickets/redeem').set('Authorization', `Bearer ${adminToken}`).send({ qrPayload: forgedQR });
 
     expect(res.status).toBe(400);
     expect(res.body.status).toBe('INVALID');

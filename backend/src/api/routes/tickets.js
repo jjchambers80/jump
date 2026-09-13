@@ -8,6 +8,7 @@ import express from 'express';
 import ticketService from '../../services/TicketService.js';
 import refundService from '../../services/RefundService.js';
 import qrService from '../../services/QRService.js';
+import { requireScannerOrStaff } from '../../middleware/scannerAuth.js';
 
 const router = express.Router();
 
@@ -33,12 +34,12 @@ function handleRedemptionError(error, res, next) {
  * POST /tickets/scan
  * Preview ticket info from a QR payload without redeeming.
  * Supports both jump:// query-string and legacy JWT formats.
- * Public endpoint.
+ * Requires a staff session or X-Scanner-Key (see middleware/scannerAuth.js).
  *
  * Body: { payload: string }
  * 200 → ticket preview info
  */
-router.post('/scan', async (req, res, next) => {
+router.post('/scan', requireScannerOrStaff, async (req, res, next) => {
   try {
     const { payload } = req.body;
 
@@ -92,7 +93,7 @@ router.post('/scan', async (req, res, next) => {
  * POST /tickets/redeem
  * Redeem a ticket by scanning its QR code.
  * Supports both jump:// query-string and legacy JWT formats.
- * Public endpoint (door attendant may not need full auth, just the QR payload).
+ * Requires a staff session or X-Scanner-Key (see middleware/scannerAuth.js).
  *
  * Body: { qrPayload: string, eventId?: string, barcode?: string }
  * 200 → RedemptionResult (REDEEMED)
@@ -101,7 +102,7 @@ router.post('/scan', async (req, res, next) => {
  * 409 → already redeemed / voided
  * 410 → expired
  */
-router.post('/redeem', async (req, res, next) => {
+router.post('/redeem', requireScannerOrStaff, async (req, res, next) => {
   try {
     const { qrPayload, barcode, eventId } = req.body;
 
