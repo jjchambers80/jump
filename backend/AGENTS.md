@@ -20,7 +20,8 @@ Loads when agent touches `backend/` files. For root-level commands and env vars,
 
 - Buyers sign in without passwords. `BuyerAuthService` issues single-use hashed tokens (`BuyerLoginToken`: LOGIN 15 min, WELCOME 7 days) and mints a separate HS256 JWT with `typ: 'buyer'`. `middleware/auth.js` rejects buyer tokens; `middleware/buyerAuth.js` (`requireBuyer`) rejects staff tokens.
 - Routes live in `api/routes/buyerAuth.js` under `/buyer`. `POST /buyer/auth/request` always returns 202. The frontend calls these only through `frontend/src/app/api/buyer/*` route handlers, which hold the session in the httpOnly `jump_buyer` cookie.
-- Checkout opt-ins: `POST /orders` accepts `createAccount` and `emailSubscribed` booleans. Both only ever turn on from checkout; `PaymentService` issues the WELCOME link into the confirmation email when `Contact.accountCreatedAt` is set.
+- Checkout opt-ins: `POST /orders` accepts `createAccount` and `emailSubscribed` booleans, stored on `Order.optInAccount`/`optInMarketing`. `PaymentService.handleCheckoutCompleted` applies them to the Contact (only ever turning on) and issues the WELCOME link. Never set `accountCreatedAt` or `emailSubscribed` from an unpaid checkout.
+- Rate limiting behind the Next proxy: key on `clientIpForRateLimit(req)` (signed `X-Jump-Client-Ip`), not `req.ip`.
 - Storefront URLs in emails come from `utils/storefrontUrl.js` (first `FRONTEND_URL` entry).
 
 ## Payment Flow (WHY: Stripe is source of truth, not the client)

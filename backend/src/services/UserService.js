@@ -73,23 +73,20 @@ class UserService {
 
     // Org assignment is a membership row, not a column. Passing organizationId
     // replaces the user's memberships with that single org (null clears them).
-    // The membership role mirrors the staff role; anything other than ADMIN
-    // becomes ORGANIZER because MemberRole has no other values.
+    // Only ADMIN/ORGANIZER hold memberships: SYSTEM_ADMIN is unscoped and
+    // CUSTOMER is not staff, so those roles never get (or keep) one.
+    const effectiveRole = data.role ?? user.role;
+    const isStaffRole = effectiveRole === 'ADMIN' || effectiveRole === 'ORGANIZER';
     const updated = await prisma.$transaction(async (tx) => {
-      if (data.organizationId !== undefined) {
+      if (data.organizationId !== undefined || !isStaffRole) {
         await tx.organizationMember.deleteMany({ where: { userId } });
-        if (data.organizationId) {
-          const effectiveRole = data.role ?? user.role;
+        if (data.organizationId && isStaffRole) {
           await tx.organizationMember.create({
-            data: {
-              userId,
-              organizationId: data.organizationId,
-              role: effectiveRole === 'ADMIN' ? 'ADMIN' : 'ORGANIZER',
-            },
+            data: { userId, organizationId: data.organizationId, role: effectiveRole },
           });
         }
-      } else if (data.role === 'ADMIN' || data.role === 'ORGANIZER') {
-        // Role change without reassignment: keep existing memberships in step.
+      } else if (data.role !== undefined) {
+        // Staff role change without reassignment: keep existing memberships in step.
         await tx.organizationMember.updateMany({ where: { userId }, data: { role: data.role } });
       }
 

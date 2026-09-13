@@ -189,7 +189,7 @@ ${manageTicketsHtml}
     await resend.emails.send(msg);
     logger.info('Buyer login email sent', {
       event: 'buyer_login_email_sent',
-      email: contact.email,
+      contactId: contact.id,
       organizationId: contact.organizationId,
     });
   }

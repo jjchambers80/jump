@@ -116,23 +116,27 @@ class BuyerAuthService {
     }
 
     const now = new Date();
-    // updateMany with the validity predicate makes the single-use check atomic:
-    // two concurrent verifies cannot both win.
-    const claimed = await prisma.buyerLoginToken.updateMany({
-      where: { tokenHash: hashToken(rawToken), usedAt: null, expiresAt: { gt: now } },
-      data: { usedAt: now },
+    const tokenHash = hashToken(rawToken);
+    // Claim and load inside one transaction: the updateMany predicate makes
+    // single use atomic (two concurrent verifies cannot both win), and a
+    // failure loading the contact rolls the claim back so the link stays usable.
+    const token = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.buyerLoginToken.updateMany({
+        where: { tokenHash, usedAt: null, expiresAt: { gt: now } },
+        data: { usedAt: now },
+      });
+      if (claimed.count !== 1) return null;
+      return tx.buyerLoginToken.findUnique({
+        where: { tokenHash },
+        select: {
+          purpose: true,
+          contact: { select: { id: true, organizationId: true, email: true } },
+        },
+      });
     });
-    if (claimed.count !== 1) {
+    if (!token) {
       throw new AuthenticationError('This sign-in link is invalid or has expired');
     }
-
-    const token = await prisma.buyerLoginToken.findUnique({
-      where: { tokenHash: hashToken(rawToken) },
-      select: {
-        purpose: true,
-        contact: { select: { id: true, organizationId: true, email: true } },
-      },
-    });
 
     return {
       contactId: token.contact.id,

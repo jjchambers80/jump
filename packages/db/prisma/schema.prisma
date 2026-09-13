@@ -348,6 +348,11 @@ model Order {
   currency        String      @default("usd")
   quantity        Int
   status          OrderStatus @default(PENDING)
+  // Checkout opt-ins (spec 007). Recorded here and applied to the Contact only
+  // once payment completes, so an abandoned or forged checkout can never
+  // create an account or consent for someone else's email.
+  optInAccount    Boolean     @default(false)
+  optInMarketing  Boolean     @default(false)
 
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt

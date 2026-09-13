@@ -681,13 +681,23 @@ class TicketService {
     const data = {};
     if (firstName !== undefined) data.firstName = firstName;
     if (lastName !== undefined) data.lastName = lastName;
-    if (email !== undefined) data.email = email;
+    // Contact email is the buyer's sign-in identity at this org (spec 007):
+    // normalize like checkout does, and surface a per-org collision as 409.
+    if (email !== undefined) data.email = String(email).trim().toLowerCase();
 
-    const updated = await prisma.contact.update({
-      where: { id: ticket.contactId },
-      data,
-      select: { id: true, firstName: true, lastName: true, email: true },
-    });
+    let updated;
+    try {
+      updated = await prisma.contact.update({
+        where: { id: ticket.contactId },
+        data,
+        select: { id: true, firstName: true, lastName: true, email: true },
+      });
+    } catch (error) {
+      if (error.code === 'P2002') {
+        throw new ConflictError('Another customer at this organization already uses that email');
+      }
+      throw error;
+    }
 
     logger.info('Ticket attendee updated', { ticketId, contactId: updated.id });
     return updated;

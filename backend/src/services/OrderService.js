@@ -147,23 +147,14 @@ class OrderService {
       // The same email buying from two organizations is two Contact rows.
       const organizationId = event.venue.organizationId;
       const email = contact.email.toLowerCase();
-      // Opt-ins only ever turn on here. Turning marketing off is the
-      // unsubscribe flow, and an account is never revoked by a later guest checkout.
-      const existing = await tx.contact.findUnique({
-        where: { organizationId_email: { organizationId, email } },
-        select: { accountCreatedAt: true },
-      });
-      const optIns = {
-        ...(createAccount && !existing?.accountCreatedAt && { accountCreatedAt: new Date() }),
-        ...(emailSubscribed && { emailSubscribed: true }),
-      };
+      // Opt-ins are recorded on the Order (below) and applied to the Contact
+      // by PaymentService once the payment completes, never here.
       const contactRecord = await tx.contact.upsert({
         where: { organizationId_email: { organizationId, email } },
         update: {
           firstName: contact.firstName,
           lastName: contact.lastName,
           ...(userId && { userId }),
-          ...optIns,
         },
         create: {
           organizationId,
@@ -171,7 +162,6 @@ class OrderService {
           firstName: contact.firstName,
           lastName: contact.lastName,
           ...(userId && { userId }),
-          ...optIns,
         },
       });
 
@@ -204,6 +194,8 @@ class OrderService {
           currency: 'usd',
           quantity,
           status: 'PENDING',
+          optInAccount: createAccount === true,
+          optInMarketing: emailSubscribed === true,
           items: {
             create: items.map((item, idx) => ({
               priceTierId: item.priceTierId,

@@ -72,6 +72,9 @@ class PaymentService {
     // Mark order COMPLETED
     await OrderService.completeOrder(order.id);
 
+    // Apply checkout opt-ins now that the payment (and so the email) is real
+    await this._applyOptIns(order);
+
     recordPaymentStatus('succeeded');
 
     logger.info('Checkout completed — tickets issued', {
@@ -91,6 +94,39 @@ class PaymentService {
         error: emailError.message,
       });
       // Don't fail the webhook — email is non-critical
+    }
+  }
+
+  /**
+   * Apply the checkout opt-ins recorded on the order to its Contact.
+   * Both only ever turn on: an account is never revoked by a later guest
+   * checkout, and turning marketing off is the unsubscribe flow.
+   * Never throws: opt-ins must not block ticket issuance.
+   *
+   * @param {{ id: string, contactId: string, optInAccount?: boolean, optInMarketing?: boolean }} order
+   */
+  async _applyOptIns(order) {
+    if (!order.optInAccount && !order.optInMarketing) return;
+    try {
+      const contact = await prisma.contact.findUnique({
+        where: { id: order.contactId },
+        select: { accountCreatedAt: true, emailSubscribed: true },
+      });
+      if (!contact) return;
+      const data = {
+        ...(order.optInAccount && !contact.accountCreatedAt && { accountCreatedAt: new Date() }),
+        ...(order.optInMarketing && !contact.emailSubscribed && { emailSubscribed: true }),
+      };
+      if (Object.keys(data).length === 0) return;
+      await prisma.contact.update({ where: { id: order.contactId }, data });
+      logger.info('Checkout opt-ins applied', {
+        event: 'buyer_opt_ins_applied',
+        orderId: order.id,
+        contactId: order.contactId,
+        ...data,
+      });
+    } catch (error) {
+      logger.error('Failed to apply checkout opt-ins', { orderId: order.id, error: error.message });
     }
   }
 

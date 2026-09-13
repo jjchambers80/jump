@@ -669,6 +669,10 @@ router.post('/tickets/scan-order', async (req, res, next) => {
 router.get('/customers', async (req, res, next) => {
   try {
     const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
+    if (!isUnscoped(scope) && !scope.organizationId) {
+      // Staff with no membership see no customers rather than every org's
+      return res.json({ data: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } });
+    }
     const { page, limit, search } = req.query;
     const result = await customerService.getCustomersByOrganization(scope.organizationId, {
       page,
@@ -685,6 +689,9 @@ router.get('/customers', async (req, res, next) => {
 router.get('/customers/:contactId', async (req, res, next) => {
   try {
     const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
+    if (!isUnscoped(scope) && !scope.organizationId) {
+      throw new NotFoundError('Customer not found');
+    }
     const result = await customerService.getCustomerById(req.params.contactId, scope.organizationId);
     res.json(result);
   } catch (error) {
@@ -696,6 +703,9 @@ router.get('/customers/:contactId', async (req, res, next) => {
 router.patch('/customers/:contactId', async (req, res, next) => {
   try {
     const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
+    if (!isUnscoped(scope) && !scope.organizationId) {
+      throw new NotFoundError('Customer not found');
+    }
     const { note, location, emailSubscribed } = req.body;
     const updated = await customerService.updateCustomer(req.params.contactId, scope.organizationId, {
       note,

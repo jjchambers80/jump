@@ -101,6 +101,15 @@ describe('Buyer auth contract (spec 007 phase 2)', () => {
   });
 
   describe('checkout opt-ins', () => {
+    const complete = async (orderId) => {
+      const order = await prisma.order.findUnique({ where: { id: orderId } });
+      await paymentService.handleCheckoutCompleted(order.stripeSessionId);
+    };
+    const contactAt = (fixture, email) =>
+      prisma.contact.findUnique({
+        where: { organizationId_email: { organizationId: fixture.org.id, email } },
+      });
+
     it('rejects non-boolean opt-in fields', async () => {
       const res = await request(app).post('/orders').send({
         eventId: A.event.id,
@@ -111,47 +120,44 @@ describe('Buyer auth contract (spec 007 phase 2)', () => {
       expect(res.status).toBe(400);
     });
 
-    it('guest checkout leaves accountCreatedAt null and emailSubscribed false', async () => {
-      await checkout(A, guestEmail, { createAccount: false, emailSubscribed: false });
-      const c = await prisma.contact.findUnique({
-        where: { organizationId_email: { organizationId: A.org.id, email: guestEmail } },
-      });
+    it('records opt-ins on the order but does not touch the contact until payment completes', async () => {
+      const { orderId } = await checkout(A, optInEmail, { createAccount: true, emailSubscribed: true });
+      const order = await prisma.order.findUnique({ where: { id: orderId } });
+      expect(order.optInAccount).toBe(true);
+      expect(order.optInMarketing).toBe(true);
+
+      // Abandoned / unpaid checkout: no account, no consent for this email
+      const pending = await contactAt(A, optInEmail);
+      expect(pending.accountCreatedAt).toBeNull();
+      expect(pending.emailSubscribed).toBe(false);
+
+      await complete(orderId);
+      const paid = await contactAt(A, optInEmail);
+      expect(paid.accountCreatedAt).toBeInstanceOf(Date);
+      expect(paid.emailSubscribed).toBe(true);
+    });
+
+    it('guest checkout leaves accountCreatedAt null and emailSubscribed false after completion', async () => {
+      const { orderId } = await checkout(A, guestEmail, { createAccount: false, emailSubscribed: false });
+      await complete(orderId);
+      const c = await contactAt(A, guestEmail);
       expect(c.accountCreatedAt).toBeNull();
       expect(c.emailSubscribed).toBe(false);
     });
 
-    it('createAccount marks the org-scoped contact login-enabled; marketing stays independent', async () => {
-      await checkout(A, optInEmail, { createAccount: true });
-      const c = await prisma.contact.findUnique({
-        where: { organizationId_email: { organizationId: A.org.id, email: optInEmail } },
-      });
-      expect(c.accountCreatedAt).toBeInstanceOf(Date);
-      expect(c.emailSubscribed).toBe(false);
-    });
-
-    it('a later guest checkout does not revoke the account, and emailSubscribed only turns on', async () => {
-      const before = await prisma.contact.findUnique({
-        where: { organizationId_email: { organizationId: A.org.id, email: optInEmail } },
-      });
-      await checkout(A, optInEmail, { createAccount: false, emailSubscribed: true });
-      const after = await prisma.contact.findUnique({
-        where: { organizationId_email: { organizationId: A.org.id, email: optInEmail } },
-      });
+    it('a later completed guest checkout never revokes the account or flips consent off', async () => {
+      const before = await contactAt(A, optInEmail);
+      const { orderId } = await checkout(A, optInEmail, { createAccount: false, emailSubscribed: false });
+      await complete(orderId);
+      const after = await contactAt(A, optInEmail);
       expect(after.accountCreatedAt.getTime()).toBe(before.accountCreatedAt.getTime());
       expect(after.emailSubscribed).toBe(true);
-
-      await checkout(A, optInEmail, { emailSubscribed: false });
-      const again = await prisma.contact.findUnique({
-        where: { organizationId_email: { organizationId: A.org.id, email: optInEmail } },
-      });
-      expect(again.emailSubscribed).toBe(true);
     });
 
     it('account at org A does not create one at org B for the same email', async () => {
-      await checkout(B, optInEmail, { createAccount: false });
-      const b = await prisma.contact.findUnique({
-        where: { organizationId_email: { organizationId: B.org.id, email: optInEmail } },
-      });
+      const { orderId } = await checkout(B, optInEmail, { createAccount: false });
+      await complete(orderId);
+      const b = await contactAt(B, optInEmail);
       expect(b.accountCreatedAt).toBeNull();
     });
   });

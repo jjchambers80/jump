@@ -11,15 +11,18 @@ const mockTokenFindUnique = jest.fn();
 const mockTokenCount = jest.fn();
 const mockContactFindUnique = jest.fn();
 
+const tokenModel = {
+  create: mockTokenCreate,
+  updateMany: mockTokenUpdateMany,
+  findUnique: mockTokenFindUnique,
+  count: mockTokenCount,
+};
 jest.unstable_mockModule('@jump/db', () => ({
   prisma: {
-    buyerLoginToken: {
-      create: mockTokenCreate,
-      updateMany: mockTokenUpdateMany,
-      findUnique: mockTokenFindUnique,
-      count: mockTokenCount,
-    },
+    buyerLoginToken: tokenModel,
     contact: { findUnique: mockContactFindUnique },
+    // Interactive transaction: hand the callback a client with the same mocks
+    $transaction: (fn) => fn({ buyerLoginToken: tokenModel }),
   },
 }));
 jest.unstable_mockModule('../../src/utils/logger.js', () => ({

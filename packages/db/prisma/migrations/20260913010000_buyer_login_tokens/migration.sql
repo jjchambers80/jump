@@ -1,4 +1,10 @@
--- Spec 007 phase 2: passwordless buyer sign-in tokens.
+-- Spec 007 phase 2: passwordless buyer sign-in tokens + checkout opt-in flags.
+
+-- Opt-ins are stored on the Order and applied to the Contact on payment
+-- completion, never at order creation.
+ALTER TABLE "Order"
+    ADD COLUMN "optInAccount" BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN "optInMarketing" BOOLEAN NOT NULL DEFAULT false;
 
 CREATE TYPE "BuyerTokenPurpose" AS ENUM ('WELCOME', 'LOGIN');
 

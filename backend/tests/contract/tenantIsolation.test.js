@@ -266,6 +266,33 @@ describe('Tenant isolation contract (spec 007 phase 1)', () => {
       expect(bogus.body.data.map((c) => c.id)).toEqual([a.contact.id]);
     });
 
+    it('gives staff with no membership no customers at all (not every org)', async () => {
+      const orphan = await prisma.user.create({ data: { email: `orphan@${TAG}.test`, role: 'ADMIN' } });
+      try {
+        const list = await request(app)
+          .get('/admin/customers')
+          .set('Authorization', `Bearer ${tokenFor(orphan)}`)
+          .query({ search: SHARED_EMAIL });
+        expect(list.status).toBe(200);
+        expect(list.body.data).toEqual([]);
+
+        const detail = await request(app)
+          .get(`/admin/customers/${a.contact.id}`)
+          .set('Authorization', `Bearer ${tokenFor(orphan)}`);
+        expect(detail.status).toBe(404);
+
+        const patch = await request(app)
+          .patch(`/admin/customers/${a.contact.id}`)
+          .set('Authorization', `Bearer ${tokenFor(orphan)}`)
+          .send({ note: 'leaked' });
+        expect(patch.status).toBe(404);
+        const row = await prisma.contact.findUnique({ where: { id: a.contact.id } });
+        expect(row.note).toBe('A-private');
+      } finally {
+        await prisma.user.delete({ where: { id: orphan.id } });
+      }
+    });
+
     it('ignores the legacy User.organizationId column', async () => {
       // Membership says A; legacy column says B. Membership must win.
       await prisma.user.update({ where: { id: adminA.id }, data: { organizationId: b.org.id } });
