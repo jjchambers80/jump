@@ -1,7 +1,7 @@
 // Unit tests for PriceTier validators — new fields
 // Tests saleStartDate, saleEndDate, visibility, isRefundable validation
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, jest } from '@jest/globals';
 import {
   validateCreatePriceTier,
   validateUpdatePriceTier,
@@ -10,7 +10,7 @@ import {
 function validate(validator, body) {
   const req = { body };
   const res = {};
-  const next = vi.fn();
+  const next = jest.fn();
 
   validator(req, res, next);
 

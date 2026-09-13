@@ -58,6 +58,14 @@ total = subtotal + platformFee + processingFee + tax
 - tax = subtotal × taxRate (venue-based, via Stripe Tax API)
 ```
 
+## Tests
+
+- `npm test` is self-sufficient: `tests/globalSetup.js` derives the test DB from `backend/.env` `DATABASE_URL` (database renamed to `jump_test`), creates it if missing and runs `prisma migrate deploy`. Override with `TEST_DATABASE_URL`; skip provisioning with `SKIP_TEST_DB_SETUP=1`.
+- Suites run in parallel against one database. Every suite must use its own email/orderRef/barcode namespace and clean up in `afterAll` in dependency order — `Contact` before `Organization` (RESTRICT FK).
+- Staff fixtures: `tests/helpers/staff.js` — `staffToken({ email, role })` creates a real `User`, `joinOrgByToken(token, orgId, role)` adds the `OrganizationMember`. Never sign a JWT for a user that does not exist: org-scoped routes resolve access through memberships and will 403.
+- Non-staff (`UNASSIGNED`) tokens may still be fabricated; they only exercise 403 paths.
+- Mock `@jump/db`, never `@prisma/client`; use `@jest/globals`, never `vitest`, in `backend/tests`.
+
 ## File Layout
 
 ```

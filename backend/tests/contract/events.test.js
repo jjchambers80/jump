@@ -9,6 +9,7 @@ import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import app from '../../src/api/server.js';
 import { prisma } from '@jump/db';
+import { staffToken, joinOrgByToken } from '../helpers/staff.js';
 
 const AUTH_SECRET = process.env.AUTH_SECRET;
 
@@ -32,8 +33,8 @@ describe('Events API Contract Tests', () => {
   let draftEventId;
 
   beforeAll(async () => {
-    adminToken = generateToken({ role: 'ADMIN', email: 'admin@events-test.com' });
-    organizerToken = generateToken({ role: 'ORGANIZER', email: 'organizer@events-test.com' });
+    adminToken = await staffToken({ role: 'ADMIN', email: 'admin@events-test.com' });
+    organizerToken = await staffToken({ role: 'ORGANIZER', email: 'organizer@events-test.com' });
     customerToken = generateToken({ role: 'UNASSIGNED', email: 'customer@events-test.com' });
 
     // Create test organization
@@ -42,6 +43,8 @@ describe('Events API Contract Tests', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Events Test Org' });
     testOrgId = orgRes.body.id;
+    await joinOrgByToken(adminToken, testOrgId, 'ADMIN');
+    await joinOrgByToken(organizerToken, testOrgId, 'ORGANIZER');
 
     // Create test venue
     const venueRes = await request(app)

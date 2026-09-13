@@ -13,6 +13,11 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
+import { staffToken, joinOrgByToken } from '../helpers/staff.js';
+
+// Ticket numbers are unique per event; fixtures just need distinct values.
+let ticketSeq = Math.floor(Math.random() * 100000);
+const nextTicketNumber = () => (ticketSeq += 1);
 
 const AUTH_SECRET = process.env.AUTH_SECRET;
 
@@ -76,8 +81,7 @@ describe('Ticket Redemption API Contract Tests — POST /tickets/redeem', () => 
   const pastDate = new Date('2024-01-01T20:00:00Z');
 
   beforeAll(async () => {
-    adminToken = generateToken({
-      id: 'admin-redeem-id',
+    adminToken = await staffToken({
       role: 'ADMIN',
       email: 'admin@redeem-test.com',
     });
@@ -88,6 +92,7 @@ describe('Ticket Redemption API Contract Tests — POST /tickets/redeem', () => 
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Redemption Test Org' });
     testOrgId = orgRes.body.id;
+    await joinOrgByToken(adminToken, testOrgId, 'ADMIN');
 
     // Create venue
     const venueRes = await request(app)
@@ -196,6 +201,7 @@ describe('Ticket Redemption API Contract Tests — POST /tickets/redeem', () => 
       data: {
         orderId: testOrderId,
         eventId: testEventId,
+        ticketNumber: nextTicketNumber(),
         priceTierId: testTierId,
         contactId: testContactId,
         pricePaid: 2500,
@@ -211,6 +217,7 @@ describe('Ticket Redemption API Contract Tests — POST /tickets/redeem', () => 
       data: {
         orderId: testOrderId,
         eventId: testEventId,
+        ticketNumber: nextTicketNumber(),
         priceTierId: testTierId,
         contactId: testContactId,
         pricePaid: 2500,
@@ -227,6 +234,7 @@ describe('Ticket Redemption API Contract Tests — POST /tickets/redeem', () => 
       data: {
         orderId: testOrderId,
         eventId: testEventId,
+        ticketNumber: nextTicketNumber(),
         priceTierId: testTierId,
         contactId: testContactId,
         pricePaid: 2500,
@@ -242,6 +250,7 @@ describe('Ticket Redemption API Contract Tests — POST /tickets/redeem', () => 
       data: {
         orderId: expiredOrderId,
         eventId: expiredEventId,
+        ticketNumber: nextTicketNumber(),
         priceTierId: expTier.id,
         contactId: testContactId,
         pricePaid: 2500,
@@ -264,6 +273,7 @@ describe('Ticket Redemption API Contract Tests — POST /tickets/redeem', () => 
       await prisma.event.deleteMany({ where: { id: { in: eventIds } } });
     }
     if (testVenueId) await prisma.venue.deleteMany({ where: { id: testVenueId } });
+    if (testOrgId) await prisma.contact.deleteMany({ where: { organizationId: testOrgId } });
     if (testOrgId) await prisma.organization.deleteMany({ where: { id: testOrgId } });
   });
 

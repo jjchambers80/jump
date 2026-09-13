@@ -6,6 +6,8 @@ export default {
     '^@jump/db$': '<rootDir>/../packages/db/src/index.js',
   },
   testMatch: ['**/*.test.js'],
+  // Suites share one database; unique fixture emails/tags keep them independent
+  maxWorkers: '50%',
   collectCoverageFrom: ['src/**/*.js', '!src/**/*.test.js', '!src/database/seeds/**'],
   coverageThreshold: {
     global: {
@@ -15,6 +17,7 @@ export default {
       statements: 70,
     },
   },
+  globalSetup: '<rootDir>/tests/globalSetup.js',
   setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
   testTimeout: 30000,
 };

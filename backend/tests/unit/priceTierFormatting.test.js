@@ -1,7 +1,7 @@
 // Unit tests for PriceTier formatting — sale status computation
 // Tests _formatTier saleStatus/isOnSale/visibility output
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from '@jest/globals';
 
 // We test the formatting logic directly since _formatTier is on the service instance.
 // Import the singleton and call its private method.

@@ -5,6 +5,11 @@
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import { jest } from '@jest/globals';
+import { staffToken, joinOrgByToken } from '../helpers/staff.js';
+
+// Ticket numbers are unique per event; fixtures just need distinct values.
+let ticketSeq = Math.floor(Math.random() * 100000);
+const nextTicketNumber = () => (ticketSeq += 1);
 
 // Mock Stripe before importing app
 jest.unstable_mockModule('stripe', () => ({
@@ -40,8 +45,8 @@ describe('Event Analytics API Contract Tests', () => {
   let testTierGaId;
 
   beforeAll(async () => {
-    adminToken = generateToken({ role: 'ADMIN', email: 'admin@analytics-test.com' });
-    organizerToken = generateToken({ role: 'ORGANIZER', email: 'organizer@analytics-test.com' });
+    adminToken = await staffToken({ role: 'ADMIN', email: 'admin@analytics-test.com' });
+    organizerToken = await staffToken({ role: 'ORGANIZER', email: 'organizer@analytics-test.com' });
     customerToken = generateToken({ role: 'UNASSIGNED', email: 'customer@analytics-test.com' });
 
     // Create test organization
@@ -50,6 +55,8 @@ describe('Event Analytics API Contract Tests', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Analytics Test Org' });
     testOrgId = orgRes.body.id;
+    await joinOrgByToken(adminToken, testOrgId, 'ADMIN');
+    await joinOrgByToken(organizerToken, testOrgId, 'ORGANIZER');
 
     // Create venue
     const venueRes = await request(app)
@@ -116,6 +123,7 @@ describe('Event Analytics API Contract Tests', () => {
         data: {
           orderId: vipOrder.id,
           eventId: testEventId,
+          ticketNumber: nextTicketNumber(),
           priceTierId: testTierVipId,
           contactId: contact.id,
           pricePaid: 10000,
@@ -146,6 +154,7 @@ describe('Event Analytics API Contract Tests', () => {
         data: {
           orderId: gaOrder.id,
           eventId: testEventId,
+          ticketNumber: nextTicketNumber(),
           priceTierId: testTierGaId,
           contactId: contact.id,
           pricePaid: 3500,

@@ -8,18 +8,45 @@ const mockFindMany = jest.fn();
 const mockCount = jest.fn();
 const mockFindUnique = jest.fn();
 
-jest.unstable_mockModule('@prisma/client', () => ({
-  PrismaClient: jest.fn().mockImplementation(() => ({
+jest.unstable_mockModule('@jump/db', () => ({
+  prisma: {
     event: {
       findMany: mockFindMany,
       count: mockCount,
       findUnique: mockFindUnique,
     },
-  })),
+  },
 }));
 
 // Import after mocking
 const { default: EventService } = await import('../../src/services/EventService.js');
+
+// Current model: availability and price come from per-tier inventory, not a
+// single ticketPrice / _count on the event.
+const tier = (price, total, sold = 0, reserved = 0, extra = {}) => ({
+  id: `tier-${price}`,
+  name: `Tier ${price}`,
+  price,
+  quantityTotal: total,
+  quantitySold: sold,
+  quantityReserved: reserved,
+  isActive: true,
+  displayOrder: 0,
+  ...extra,
+});
+const venue = { id: 'ven-1', name: 'Arena', address: '1 Main St', timezone: 'UTC', organization: { id: 'org-1', name: 'Events Inc', brandColor: null, themeMode: 'SYSTEM' } };
+const publishedEvent = (id, priceTiers) => ({
+  id,
+  name: `Event ${id}`,
+  date: new Date('2026-06-15'),
+  status: 'PUBLISHED',
+  category: 'music',
+  capacity: 100,
+  taxRate: null,
+  venue,
+  priceTiers,
+  createdAt: new Date(),
+});
 
 describe('EventService', () => {
   beforeEach(() => {
@@ -27,53 +54,28 @@ describe('EventService', () => {
   });
 
   describe('listPublishedEvents', () => {
-    it('should return paginated published events with availability', async () => {
-      const mockEvents = [
-        {
-          id: 'evt-1',
-          name: 'Concert',
-          date: new Date('2026-06-15'),
-          venue: 'Arena',
-          capacity: 100,
-          ticketPrice: 50.0,
-          status: 'PUBLISHED',
-          createdAt: new Date(),
-          _count: { tickets: 30 },
-        },
-        {
-          id: 'evt-2',
-          name: 'Festival',
-          date: new Date('2026-07-20'),
-          venue: 'Park',
-          capacity: 500,
-          ticketPrice: 75.0,
-          status: 'PUBLISHED',
-          createdAt: new Date(),
-          _count: { tickets: 200 },
-        },
-      ];
-
-      mockFindMany.mockResolvedValue(mockEvents);
+    it('should return paginated published events with per-tier availability and price range', async () => {
+      mockFindMany.mockResolvedValue([
+        publishedEvent('evt-1', [tier(50, 100, 30), tier(80, 20, 5, 5)]),
+        publishedEvent('evt-2', [tier(75, 500, 200)]),
+      ]);
       mockCount.mockResolvedValue(2);
 
-      const result = await EventService.listPublishedEvents(1, 20);
+      const result = await EventService.listPublishedEvents({ page: 1, limit: 20 });
 
       expect(result.events).toHaveLength(2);
-      expect(result.events[0].soldTickets).toBe(30);
-      expect(result.events[0].availableTickets).toBe(70);
-      expect(result.events[1].soldTickets).toBe(200);
+      expect(result.events[0].availableTickets).toBe(70 + 10);
+      expect(result.events[0].priceRange).toEqual({ min: 50, max: 80 });
       expect(result.events[1].availableTickets).toBe(300);
-      expect(result.total).toBe(2);
-      expect(result.page).toBe(1);
-      expect(result.limit).toBe(20);
-      expect(result.totalPages).toBe(1);
+      expect(result.events[1].priceRange).toEqual({ min: 75, max: 75 });
+      expect(result.pagination).toMatchObject({ page: 1, limit: 20, total: 2, totalPages: 1 });
     });
 
     it('should enforce pagination limits', async () => {
       mockFindMany.mockResolvedValue([]);
       mockCount.mockResolvedValue(0);
 
-      await EventService.listPublishedEvents(1, 200);
+      await EventService.listPublishedEvents({ page: 1, limit: 200 });
 
       expect(mockFindMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -100,7 +102,7 @@ describe('EventService', () => {
       mockFindMany.mockResolvedValue([]);
       mockCount.mockResolvedValue(0);
 
-      await EventService.listPublishedEvents(-5, 10);
+      await EventService.listPublishedEvents({ page: -5, limit: 10 });
 
       expect(mockFindMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -128,61 +130,35 @@ describe('EventService', () => {
     });
 
     it('should calculate totalPages correctly', async () => {
-      mockFindMany.mockResolvedValue([]);
-      mockCount.mockResolvedValue(55);
+      mockFindMany.mockResolvedValue([publishedEvent('evt-1', [])]);
+      mockCount.mockResolvedValue(45);
 
-      const result = await EventService.listPublishedEvents(1, 20);
-
-      expect(result.totalPages).toBe(3);
+      const result = await EventService.listPublishedEvents({ page: 1, limit: 20 });
+      expect(result.pagination.totalPages).toBe(3);
     });
 
-    it('should remove _count from response events', async () => {
-      const mockEvents = [
-        {
-          id: 'evt-1',
-          name: 'Concert',
-          date: new Date(),
-          venue: 'Arena',
-          capacity: 100,
-          ticketPrice: 50.0,
-          status: 'PUBLISHED',
-          createdAt: new Date(),
-          _count: { tickets: 10 },
-        },
-      ];
-
-      mockFindMany.mockResolvedValue(mockEvents);
+    it('should return the summary shape only (no raw tier rows, null priceRange without tiers)', async () => {
+      mockFindMany.mockResolvedValue([publishedEvent('evt-1', [])]);
       mockCount.mockResolvedValue(1);
 
-      const result = await EventService.listPublishedEvents();
-
-      expect(result.events[0]._count).toBeUndefined();
+      const result = await EventService.listPublishedEvents({});
+      expect(result.events[0]).toMatchObject({ id: 'evt-1', availableTickets: 0, priceRange: null });
+      expect(result.events[0].priceTiers).toBeUndefined();
     });
   });
 
   describe('getEventById', () => {
-    it('should return event with availability details', async () => {
-      const mockEvent = {
-        id: 'evt-1',
-        name: 'Concert',
-        date: new Date('2026-06-15'),
-        venue: 'Arena',
-        capacity: 100,
-        ticketPrice: 50.0,
-        status: 'PUBLISHED',
-        organizer: { name: 'John', organization: 'Events Inc' },
-        _count: { tickets: 40 },
-      };
-
-      mockFindUnique.mockResolvedValue(mockEvent);
+    it('should return event detail with organization and per-tier availability', async () => {
+      mockFindUnique.mockResolvedValue(publishedEvent('evt-1', [tier(50, 100, 40)]));
 
       const result = await EventService.getEventById('evt-1');
 
-      expect(result.event.id).toBe('evt-1');
-      expect(result.event.soldTickets).toBe(40);
-      expect(result.event.availableTickets).toBe(60);
-      expect(result.event.isSoldOut).toBe(false);
-      expect(result.event.organizer).toEqual({ name: 'John', organization: 'Events Inc' });
+      expect(result.id).toBe('evt-1');
+      expect(result.organizationId).toBe('org-1');
+      expect(result.organizationName).toBe('Events Inc');
+      expect(result.venue).toMatchObject({ id: 'ven-1', name: 'Arena' });
+      expect(result.priceTiers).toHaveLength(1);
+      expect(result.priceTiers[0]).toMatchObject({ quantityAvailable: 60, price: 50 });
     });
 
     it('should throw NotFoundError for non-existent event', async () => {
@@ -201,25 +177,11 @@ describe('EventService', () => {
       await expect(EventService.getEventById('evt-1')).rejects.toThrow('Event not found');
     });
 
-    it('should mark event as sold out when no available tickets', async () => {
-      const mockEvent = {
-        id: 'evt-1',
-        name: 'Concert',
-        date: new Date(),
-        venue: 'Arena',
-        capacity: 100,
-        ticketPrice: 50.0,
-        status: 'PUBLISHED',
-        organizer: { name: 'John', organization: 'Events Inc' },
-        _count: { tickets: 100 },
-      };
-
-      mockFindUnique.mockResolvedValue(mockEvent);
+    it('should report zero availability when every tier is sold out', async () => {
+      mockFindUnique.mockResolvedValue(publishedEvent('evt-1', [tier(50, 100, 100), tier(80, 10, 8, 2)]));
 
       const result = await EventService.getEventById('evt-1');
-
-      expect(result.event.isSoldOut).toBe(true);
-      expect(result.event.availableTickets).toBe(0);
+      expect(result.priceTiers.every((t) => t.quantityAvailable === 0)).toBe(true);
     });
   });
 

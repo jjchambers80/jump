@@ -6,6 +6,7 @@ import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import app from '../../src/api/server.js';
 import { prisma } from '@jump/db';
+import { staffToken, joinOrgByToken } from '../helpers/staff.js';
 
 const AUTH_SECRET = process.env.AUTH_SECRET;
 
@@ -31,8 +32,8 @@ describe('Venue Contract Tests', () => {
   let inactiveOrgId;
 
   beforeAll(async () => {
-    adminToken = generateToken({ role: 'ADMIN', email: 'admin@test.com' });
-    organizerToken = generateToken({ role: 'ORGANIZER', email: 'organizer@test.com' });
+    adminToken = await staffToken({ role: 'ADMIN', email: 'admin@venues-test.com' });
+    organizerToken = await staffToken({ role: 'ORGANIZER', email: 'organizer@venues-test.com' });
     customerToken = generateToken({ role: 'UNASSIGNED', email: 'customer@test.com' });
 
     // Create a test organization for venue tests
@@ -42,6 +43,10 @@ describe('Venue Contract Tests', () => {
       .send({ name: 'Venue Test Org' });
 
     testOrgId = orgRes.body.id;
+
+    await joinOrgByToken(adminToken, testOrgId, 'ADMIN');
+
+    await joinOrgByToken(organizerToken, testOrgId, 'ORGANIZER');
 
     const publicVenue = await prisma.venue.create({
       data: {
@@ -387,7 +392,7 @@ describe('Venue Contract Tests', () => {
         .patch(`/organizations/${inactiveOrgId}/venues/${publicVenueId}`)
         .set('Authorization', `Bearer ${organizerToken}`)
         .send({ name: 'Cross Organization Rename' });
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(403);
     });
   });
 
@@ -403,7 +408,8 @@ describe('Venue Contract Tests', () => {
         .set('Authorization', `Bearer ${organizerToken}`)
         .attach('logo', png, { filename: 'venue.png', contentType: 'image/png' });
       expect(upload.status).toBe(200);
-      expect(upload.body.logoUrl).toMatch(/^\/uploads\/logos\/[a-f0-9-]+\.png$/);
+      // Content-addressed image pipeline: served through the backend proxy route
+      expect(upload.body.logoUrl).toMatch(/^\/images\/[a-z0-9]+\/[a-f0-9]{64}\/original$/);
 
       const replacement = await request(app)
         .post(`/organizations/${testOrgId}/venues/${emptyVenueId}/logo`)
@@ -440,12 +446,12 @@ describe('Venue Contract Tests', () => {
         .post(`/organizations/${inactiveOrgId}/venues/${emptyVenueId}/logo`)
         .set('Authorization', `Bearer ${organizerToken}`)
         .attach('logo', png, { filename: 'venue.png', contentType: 'image/png' });
-      expect(upload.status).toBe(404);
+      expect(upload.status).toBe(403);
 
       const removal = await request(app)
         .delete(`/organizations/${inactiveOrgId}/venues/${emptyVenueId}/logo`)
         .set('Authorization', `Bearer ${organizerToken}`);
-      expect(removal.status).toBe(404);
+      expect(removal.status).toBe(403);
     });
   });
 
@@ -479,7 +485,7 @@ describe('Venue Contract Tests', () => {
       const res = await request(app)
         .delete(`/organizations/${inactiveOrgId}/venues/${emptyVenueId}`)
         .set('Authorization', `Bearer ${organizerToken}`);
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(403);
     });
   });
 });

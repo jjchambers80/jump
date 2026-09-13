@@ -1,5 +1,5 @@
 // Unit tests for FeeService — all-in pricing fee computation
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from '@jest/globals';
 
 // Direct import of FeeService
 import feeService from '../../src/services/FeeService.js';
