@@ -5,7 +5,6 @@ import { prisma } from '@jump/db';
 import logger from '../utils/logger.js';
 import { NotFoundError } from '../middleware/errorHandler.js';
 import { formatEventSummary } from '../utils/eventSummary.js';
-import { resolveActiveMembership } from '../middleware/orgScope.js';
 
 export const serializeBusinessDetails = (organization) => {
   const { ein, ...businessDetails } = organization;
@@ -112,25 +111,19 @@ class OrganizationService {
     return organization;
   }
 
-  /** Return masked business details for the user's active organization. */
-  async getBusinessDetailsForUser(userId) {
-    const membership = await resolveActiveMembership(userId);
-    if (!membership) return null;
-
+  /** Return masked business details for one organization. */
+  async getBusinessDetails(organizationId) {
     const organization = await prisma.organization.findUnique({
-      where: { id: membership.organizationId },
+      where: { id: organizationId },
     });
 
     return organization ? serializeBusinessDetails(organization) : null;
   }
 
-  /** Update only the user's active organization and return a masked response. */
-  async updateBusinessDetailsForUser(userId, data) {
-    const membership = await resolveActiveMembership(userId);
-    if (!membership) return null;
-
+  /** Update one organization's business details and return a masked response. */
+  async updateBusinessDetails(organizationId, data) {
     const organization = await prisma.organization.update({
-      where: { id: membership.organizationId },
+      where: { id: organizationId },
       data,
     });
 
