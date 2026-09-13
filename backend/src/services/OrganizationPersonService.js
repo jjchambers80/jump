@@ -1,7 +1,6 @@
 import { prisma } from '@jump/db';
 import { ConflictError } from '../middleware/errorHandler.js';
 import logger from '../utils/logger.js';
-import { resolveActiveMembership } from '../middleware/orgScope.js';
 
 const SUMMARY_SELECT = {
   id: true,
@@ -20,15 +19,7 @@ export function serializeOrganizationPerson(person) {
 }
 
 class OrganizationPersonService {
-  async getOrganizationIdForUser(userId) {
-    const membership = await resolveActiveMembership(userId);
-    return membership?.organizationId || null;
-  }
-
-  async listPeopleForUser(userId) {
-    const organizationId = await this.getOrganizationIdForUser(userId);
-    if (!organizationId) return null;
-
+  async listPeople(organizationId) {
     const people = await prisma.organizationPerson.findMany({
       where: { organizationId },
       orderBy: [{ isAccountRepresentative: 'desc' }, { createdAt: 'asc' }],
@@ -38,10 +29,7 @@ class OrganizationPersonService {
     return people.map(serializeOrganizationPerson);
   }
 
-  async createPersonForUser(userId, data) {
-    const organizationId = await this.getOrganizationIdForUser(userId);
-    if (!organizationId) return null;
-
+  async createPerson(actorId, organizationId, data) {
     const createArgs = {
       data: { organizationId, ...data },
       select: SUMMARY_SELECT,
@@ -69,7 +57,7 @@ class OrganizationPersonService {
 
     logger.info('Organization person changed', {
       event: 'organization_person_changed',
-      actorId: userId,
+      actorId,
       organizationId,
       personId: person.id,
       action: 'created',
@@ -78,10 +66,7 @@ class OrganizationPersonService {
     return serializeOrganizationPerson(person);
   }
 
-  async deletePersonForUser(userId, personId) {
-    const organizationId = await this.getOrganizationIdForUser(userId);
-    if (!organizationId) return null;
-
+  async deletePerson(actorId, organizationId, personId) {
     const result = await prisma.organizationPerson.deleteMany({
       where: { id: personId, organizationId },
     });
@@ -89,7 +74,7 @@ class OrganizationPersonService {
 
     logger.info('Organization person changed', {
       event: 'organization_person_changed',
-      actorId: userId,
+      actorId,
       organizationId,
       personId,
       action: 'deleted',

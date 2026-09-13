@@ -27,11 +27,26 @@ const router = express.Router();
 router.use(requireAuth);
 router.use(requireOrganizer);
 
+/**
+ * Organization the Settings pages act on. Members: the org the switcher sent
+ * as X-Jump-Org when they belong to it, else their first membership.
+ * SYSTEM_ADMIN has no memberships, so honor the switcher header, then an
+ * explicit ?organizationId= / body.organizationId.
+ */
+async function activeOrgFor(req) {
+  const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
+  const orgId = isUnscoped(scope)
+    ? req.user.organizationId || req.query.organizationId || req.body?.organizationId
+    : scope.organizationId;
+  if (!orgId) throw new NotFoundError('No organization is assigned to this user');
+  return orgId;
+}
+
 /** GET /admin/settings/business-details — current user's assigned organization. */
 router.get('/settings/business-details', async (req, res, next) => {
   try {
-    const businessDetails = await organizationService.getBusinessDetailsForUser(req.user.id);
-    if (!businessDetails) throw new NotFoundError('No organization is assigned to this user');
+    const businessDetails = await organizationService.getBusinessDetails(await activeOrgFor(req));
+    if (!businessDetails) throw new NotFoundError('Organization not found');
     res.json(businessDetails);
   } catch (error) {
     next(error);
@@ -44,11 +59,10 @@ router.patch(
   validateUpdateBusinessDetails,
   async (req, res, next) => {
     try {
-      const businessDetails = await organizationService.updateBusinessDetailsForUser(
-        req.user.id,
+      const businessDetails = await organizationService.updateBusinessDetails(
+        await activeOrgFor(req),
         req.body
       );
-      if (!businessDetails) throw new NotFoundError('No organization is assigned to this user');
       res.json(businessDetails);
     } catch (error) {
       next(error);
@@ -59,8 +73,7 @@ router.patch(
 /** GET /admin/settings/people — list people in the current user's organization. */
 router.get('/settings/people', async (req, res, next) => {
   try {
-    const people = await organizationPersonService.listPeopleForUser(req.user.id);
-    if (people === null) throw new NotFoundError('No organization is assigned to this user');
+    const people = await organizationPersonService.listPeople(await activeOrgFor(req));
     res.json({ people });
   } catch (error) {
     next(error);
@@ -73,8 +86,11 @@ router.post(
   validateCreateOrganizationPerson,
   async (req, res, next) => {
     try {
-      const person = await organizationPersonService.createPersonForUser(req.user.id, req.body);
-      if (person === null) throw new NotFoundError('No organization is assigned to this user');
+      const person = await organizationPersonService.createPerson(
+        req.user.id,
+        await activeOrgFor(req),
+        req.body
+      );
       res.status(201).json(person);
     } catch (error) {
       next(error);
@@ -85,8 +101,9 @@ router.post(
 /** DELETE /admin/settings/people/:personId — remove only a same-organization person. */
 router.delete('/settings/people/:personId', async (req, res, next) => {
   try {
-    const deleted = await organizationPersonService.deletePersonForUser(
+    const deleted = await organizationPersonService.deletePerson(
       req.user.id,
+      await activeOrgFor(req),
       req.params.personId
     );
     if (!deleted) throw new NotFoundError('Organization person not found');
@@ -98,20 +115,13 @@ router.delete('/settings/people/:personId', async (req, res, next) => {
 
 // ---------------------------------------------------------------------------
 // Settings > Domains (spec 007 phase 3). Scoped to the caller's active org;
-// SYSTEM_ADMIN must pass ?organizationId= (no org means nothing to manage).
+// SYSTEM_ADMIN must pass ?organizationId= or pick one in the switcher.
 // ---------------------------------------------------------------------------
-
-async function domainOrgFor(req) {
-  const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
-  const orgId = isUnscoped(scope) ? req.query.organizationId || req.body?.organizationId : scope.organizationId;
-  if (!orgId) throw new NotFoundError('No organization is assigned to this user');
-  return orgId;
-}
 
 /** GET /admin/settings/domains — list this organization's storefront domains. */
 router.get('/settings/domains', async (req, res, next) => {
   try {
-    const organizationId = await domainOrgFor(req);
+    const organizationId = await activeOrgFor(req);
     res.json({
       domains: await domainService.listForOrganization(organizationId),
       platformUrl: domainService.platformUrlFor(organizationId),
@@ -124,7 +134,7 @@ router.get('/settings/domains', async (req, res, next) => {
 /** GET /admin/settings/domains/:id — one domain with its DNS records and last check (setup page). */
 router.get('/settings/domains/:id', async (req, res, next) => {
   try {
-    const organizationId = await domainOrgFor(req);
+    const organizationId = await activeOrgFor(req);
     res.json(await domainService.getForOrganization(organizationId, req.params.id));
   } catch (error) {
     next(error);
@@ -134,7 +144,7 @@ router.get('/settings/domains/:id', async (req, res, next) => {
 /** POST /admin/settings/domains { hostname } — register a hostname and return its DNS records. */
 router.post('/settings/domains', async (req, res, next) => {
   try {
-    const organizationId = await domainOrgFor(req);
+    const organizationId = await activeOrgFor(req);
     const domain = await domainService.addDomain(organizationId, req.body?.hostname);
     res.status(201).json(domain);
   } catch (error) {
@@ -145,7 +155,7 @@ router.post('/settings/domains', async (req, res, next) => {
 /** POST /admin/settings/domains/:id/verify — re-check DNS now. */
 router.post('/settings/domains/:id/verify', async (req, res, next) => {
   try {
-    const organizationId = await domainOrgFor(req);
+    const organizationId = await activeOrgFor(req);
     res.json(await domainService.verifyDomain(organizationId, req.params.id));
   } catch (error) {
     next(error);
@@ -155,7 +165,7 @@ router.post('/settings/domains/:id/verify', async (req, res, next) => {
 /** POST /admin/settings/domains/:id/primary — make this the primary storefront host. */
 router.post('/settings/domains/:id/primary', async (req, res, next) => {
   try {
-    const organizationId = await domainOrgFor(req);
+    const organizationId = await activeOrgFor(req);
     res.json(await domainService.setPrimary(organizationId, req.params.id));
   } catch (error) {
     next(error);
@@ -165,7 +175,7 @@ router.post('/settings/domains/:id/primary', async (req, res, next) => {
 /** DELETE /admin/settings/domains/:id */
 router.delete('/settings/domains/:id', async (req, res, next) => {
   try {
-    const organizationId = await domainOrgFor(req);
+    const organizationId = await activeOrgFor(req);
     await domainService.removeDomain(organizationId, req.params.id);
     res.status(204).send();
   } catch (error) {

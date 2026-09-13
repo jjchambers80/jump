@@ -1,6 +1,5 @@
 import { jest } from '@jest/globals';
 
-const mockMemberFindMany = jest.fn();
 const mockPersonFindMany = jest.fn();
 const mockPersonCreate = jest.fn();
 const mockPersonDeleteMany = jest.fn();
@@ -9,7 +8,6 @@ const mockLoggerInfo = jest.fn();
 
 jest.unstable_mockModule('@jump/db', () => ({
   prisma: {
-    organizationMember: { findMany: mockMemberFindMany },
     organizationPerson: {
       findMany: mockPersonFindMany,
       create: mockPersonCreate,
@@ -47,31 +45,15 @@ const safePerson = {
   isAccountRepresentative: false,
 };
 
-// Org affiliation comes from OrganizationMember (spec 007); first membership is active.
-function assignOrganization(organizationId = 'org-1') {
-  mockMemberFindMany.mockResolvedValue([{ organizationId, role: 'ADMIN' }]);
-}
-
 describe('OrganizationPersonService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('resolves the organization from userId and returns null when none is assigned', async () => {
-    mockMemberFindMany.mockResolvedValue([]);
-
-    await expect(organizationPersonService.listPeopleForUser('user-1')).resolves.toBeNull();
-    expect(mockMemberFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { userId: 'user-1' } })
-    );
-    expect(mockPersonFindMany).not.toHaveBeenCalled();
-  });
-
   it('lists only safe DTO fields scoped to the resolved organization in stable order', async () => {
-    assignOrganization();
     mockPersonFindMany.mockResolvedValue([storedPerson]);
 
-    const people = await organizationPersonService.listPeopleForUser('user-1');
+    const people = await organizationPersonService.listPeople('org-1');
 
     expect(mockPersonFindMany).toHaveBeenCalledWith({
       where: { organizationId: 'org-1' },
@@ -89,10 +71,9 @@ describe('OrganizationPersonService', () => {
   });
 
   it('creates an ordinary person directly in the resolved organization', async () => {
-    assignOrganization();
     mockPersonCreate.mockResolvedValue(storedPerson);
 
-    const person = await organizationPersonService.createPersonForUser('user-1', personInput);
+    const person = await organizationPersonService.createPerson('user-1', 'org-1', personInput);
 
     expect(mockTransaction).not.toHaveBeenCalled();
     expect(mockPersonCreate).toHaveBeenCalledWith({
@@ -108,7 +89,6 @@ describe('OrganizationPersonService', () => {
   });
 
   it('atomically replaces the representative only within the resolved organization', async () => {
-    assignOrganization();
     const representativeInput = { ...personInput, isAccountRepresentative: true };
     const representative = { ...storedPerson, isAccountRepresentative: true };
     const txUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
@@ -117,8 +97,9 @@ describe('OrganizationPersonService', () => {
       callback({ organizationPerson: { updateMany: txUpdateMany, create: txCreate } })
     );
 
-    const person = await organizationPersonService.createPersonForUser(
+    const person = await organizationPersonService.createPerson(
       'user-1',
+      'org-1',
       representativeInput
     );
 
@@ -139,11 +120,10 @@ describe('OrganizationPersonService', () => {
   });
 
   it('translates a concurrent representative uniqueness conflict to a stable 409', async () => {
-    assignOrganization();
     mockTransaction.mockRejectedValue(Object.assign(new Error('database details'), { code: 'P2002' }));
 
     await expect(
-      organizationPersonService.createPersonForUser('user-1', {
+      organizationPersonService.createPerson('user-1', 'org-1', {
         ...personInput,
         isAccountRepresentative: true,
       })
@@ -154,33 +134,22 @@ describe('OrganizationPersonService', () => {
   });
 
   it('deletes by both personId and resolved organizationId without revealing other tenants', async () => {
-    assignOrganization();
     mockPersonDeleteMany.mockResolvedValue({ count: 0 });
 
     await expect(
-      organizationPersonService.deletePersonForUser('user-1', 'other-tenant-person')
+      organizationPersonService.deletePerson('user-1', 'org-1', 'other-tenant-person')
     ).resolves.toBe(false);
     expect(mockPersonDeleteMany).toHaveBeenCalledWith({
       where: { id: 'other-tenant-person', organizationId: 'org-1' },
     });
   });
 
-  it('returns null for delete when the actor has no organization', async () => {
-    mockMemberFindMany.mockResolvedValue([]);
-
-    await expect(
-      organizationPersonService.deletePersonForUser('user-1', 'person-1')
-    ).resolves.toBeNull();
-    expect(mockPersonDeleteMany).not.toHaveBeenCalled();
-  });
-
   it('logs only privacy-safe identifiers and action metadata after changes', async () => {
-    assignOrganization();
     mockPersonCreate.mockResolvedValue(storedPerson);
     mockPersonDeleteMany.mockResolvedValue({ count: 1 });
 
-    await organizationPersonService.createPersonForUser('user-1', personInput);
-    await organizationPersonService.deletePersonForUser('user-1', 'person-1');
+    await organizationPersonService.createPerson('user-1', 'org-1', personInput);
+    await organizationPersonService.deletePerson('user-1', 'org-1', 'person-1');
 
     expect(mockLoggerInfo).toHaveBeenNthCalledWith(1, 'Organization person changed', {
       event: 'organization_person_changed',

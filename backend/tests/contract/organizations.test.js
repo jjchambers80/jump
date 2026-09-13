@@ -405,6 +405,50 @@ describe('Organization Contract Tests', () => {
       expect(res.status).toBe(404);
     });
 
+    it('ignores X-Jump-Org for an org the member does not belong to', async () => {
+      const token = generateToken({ id: noOrgUser.id, email: settingsEmails[3], role: 'ADMIN' });
+
+      const res = await request(app)
+        .get('/admin/settings/business-details')
+        .set('Authorization', `Bearer ${token}`)
+        .set('X-Jump-Org', settingsOrganization.id);
+
+      expect(res.status).toBe(404);
+    });
+
+    it('lets SYSTEM_ADMIN read the org chosen in the switcher (X-Jump-Org)', async () => {
+      const token = generateToken({ id: 'sysadmin-settings', email: 'sysadmin@test.com', role: 'SYSTEM_ADMIN' });
+
+      const res = await request(app)
+        .get('/admin/settings/business-details')
+        .set('Authorization', `Bearer ${token}`)
+        .set('X-Jump-Org', settingsOrganization.id);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ id: settingsOrganization.id, name: 'Settings Company LLC' });
+    });
+
+    it('lets SYSTEM_ADMIN fall back to ?organizationId=', async () => {
+      const token = generateToken({ id: 'sysadmin-settings', email: 'sysadmin@test.com', role: 'SYSTEM_ADMIN' });
+
+      const res = await request(app)
+        .get(`/admin/settings/business-details?organizationId=${settingsOrganization.id}`)
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.id).toBe(settingsOrganization.id);
+    });
+
+    it('returns 404 for SYSTEM_ADMIN with no org selected', async () => {
+      const token = generateToken({ id: 'sysadmin-settings', email: 'sysadmin@test.com', role: 'SYSTEM_ADMIN' });
+
+      const res = await request(app)
+        .get('/admin/settings/business-details')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(404);
+    });
+
     it('updates and normalizes the assigned organization without exposing EIN', async () => {
       const token = generateToken({ id: settingsUser.id, email: settingsEmails[0], role: 'ADMIN' });
 
