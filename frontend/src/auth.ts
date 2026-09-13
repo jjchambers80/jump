@@ -88,33 +88,4 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return session;
     },
   },
-  jwt: {
-    // Custom HS256 encode/decode so Express backend can verify with jsonwebtoken
-    encode: async ({ token }) => {
-      if (!token) return '';
-      return jwt.sign(
-        {
-          sub: token.sub,
-          email: token.email,
-          role: token.role,
-          name: token.name,
-          organizationId: token.organizationId ?? null,
-          iat: Math.floor(Date.now() / 1000),
-        },
-        AUTH_SECRET,
-        { algorithm: 'HS256', expiresIn: '30d' }
-      );
-    },
-    decode: async ({ token: tokenStr }) => {
-      if (!tokenStr) return null;
-      try {
-        const decoded = jwt.verify(tokenStr, AUTH_SECRET, {
-          algorithms: ['HS256'],
-        });
-        return decoded as any;
-      } catch {
-        return null;
-      }
-    },
-  },
 });

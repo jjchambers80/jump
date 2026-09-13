@@ -16,6 +16,7 @@
     "@jump/db": "*",
     "@stripe/stripe-js": "^2.4.0",
     "html5-qrcode": "^2.3.8",
+    "jose": "^6.2.12",
     "jsonwebtoken": "^9.0.3",
     "next": "14.2.21",
     "next-auth": "^5.0.0-beta.30",

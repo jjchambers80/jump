@@ -34,6 +34,9 @@ Auth.js v5 (next-auth 5.0.0-beta.30) handles authentication on the frontend usin
 
 ## Gotchas
 
+- **Cookie codec lives in `auth.config.ts`** (`lib/authJwt.ts`, `jose` HS256) so `src/middleware.ts` can decode sessions on the edge and redirect unauthenticated `/admin*`. `auth.ts` only adds the Prisma adapter, the dev credentials provider, and the backend `accessToken`. Tokens are interchangeable with `jsonwebtoken`-signed ones (same alg, claims, secret bytes), so existing sessions survived the switch.
+- **Middleware must not include the email provider.** It requires an adapter; on the edge `Auth()` throws `MissingAdapter` and the protection silently no-ops. `src/middleware.ts` filters it out.
+
 - **Auth.js is staff-only.** Buyers sign in with single-use emailed links and a separate `jump_buyer` cookie (`typ: 'buyer'` JWT) — see [Buyer Accounts](buyer-accounts.md). `middleware/auth.js` rejects buyer tokens and `requireBuyer` rejects staff tokens even though both use `AUTH_SECRET`.
 - **JWT carries `organizationId`** (first `OrganizationMember`, set at sign-in). The backend treats it as a preference and re-verifies it against memberships in `resolveOrgScope`.
 
