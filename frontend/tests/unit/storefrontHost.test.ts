@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isPlatformHost, normalizeHost, platformHostsFromEnv, routeForTenantHost } from '@/lib/storefrontHost';
+import { isPlatformHost, normalizeHost, platformHostsFromEnv, routeForTenantHost, tenantResourceFor } from '@/lib/storefrontHost';
 
 describe('normalizeHost', () => {
   it('lowercases and strips port and trailing dot', () => {
@@ -58,5 +58,26 @@ describe('routeForTenantHost', () => {
     for (const p of ['/admin', '/admin/events', '/auth/signin', '/dashboard', '/my-tickets', '/orders', '/orders/lookup', '/unknown']) {
       expect(route(p)).toEqual({ kind: 'notFound' });
     }
+  });
+});
+
+describe('tenantResourceFor', () => {
+  const sp = (q = '') => new URLSearchParams(q);
+  it('extracts events, checkout, orders and venues by path', () => {
+    expect(tenantResourceFor('/events/ev_1', sp())).toEqual({ kind: 'event', id: 'ev_1' });
+    expect(tenantResourceFor('/checkout/ev_1', sp('items=x'))).toEqual({ kind: 'event', id: 'ev_1' });
+    expect(tenantResourceFor('/orders/or_1/', sp())).toEqual({ kind: 'order', id: 'or_1' });
+    expect(tenantResourceFor('/venues/ve_1', sp())).toEqual({ kind: 'venue', id: 've_1' });
+  });
+  it('extracts the confirmation order from the query string', () => {
+    expect(tenantResourceFor('/confirmation', sp('orderId=or_9&status=success'))).toEqual({ kind: 'order', id: 'or_9' });
+    expect(tenantResourceFor('/confirmation', sp())).toBeNull();
+  });
+  it('returns null for unrelated paths and malformed ids', () => {
+    expect(tenantResourceFor('/', sp())).toBeNull();
+    expect(tenantResourceFor('/account', sp())).toBeNull();
+    expect(tenantResourceFor('/organizations/org_1', sp())).toBeNull();
+    expect(tenantResourceFor('/events/not%20an%20id', sp())).toBeNull();
+    expect(tenantResourceFor('/events/a/b', sp())).toBeNull();
   });
 });

@@ -49,6 +49,7 @@ An organization can point a subdomain it owns (for example `tickets.venue.com`) 
    - `/organizations/<orgId>/…` (same org), `/events/*`, `/checkout/*`, `/confirmation`, `/orders/:id`, `/tickets/*`, `/venues/*` → pass
    - `/organizations/<other>`, `/admin*`, `/auth*`, `/dashboard*`, `/my-tickets`, `/orders` (list), `/orders/lookup`, anything else → 404
    Pages receive the same `params.orgId` as on the platform host, so no page is host-aware. `/api/*` is excluded by the matcher, so `/api/buyer/*` works unchanged and the `jump_buyer` cookie is first-party on the tenant host.
+   Resource paths are then ownership-checked: for `/events/:id`, `/checkout/:id`, `/orders/:id`, `/venues/:id` and `/confirmation?orderId=` the middleware asks `GET /domains/owner?eventId=|orderId=|venueId=` (5-minute cache) and 404s unless the owner is this host's organization. Unreachable backend fails closed.
 6. **Cross-origin API calls.** Storefront pages call the backend at `NEXT_PUBLIC_API_URL` from the tenant origin; `server.js` CORS allows the static `FRONTEND_URL` list first, then any ACTIVE hostname (`DomainService.isActiveOrigin`, https only in production).
 7. **Links.** `storefrontFor(organizationId)` returns `https://<primary ACTIVE host>` or the platform URL. `orderUrl`, `confirmationUrl`, `eventUrl`, `buyerAccountUrl`, `buyerVerifyUrl`, `orgPageUrl` build on it, so confirmation emails, welcome/sign-in links and Stripe `success_url`/`cancel_url` follow the domain automatically. A primary domain that is not yet ACTIVE is ignored until it is.
 
@@ -62,6 +63,7 @@ An organization can point a subdomain it owns (for example `tickets.venue.com`) 
 | POST | `/admin/settings/domains/:id/primary` | Organizer/Admin | Make primary |
 | DELETE | `/admin/settings/domains/:id` | Organizer/Admin | Remove (also from Railway when managed); promotes the oldest remaining domain to primary |
 | GET | `/domains/resolve?host=` | None | `{ organizationId }` for an ACTIVE host; 404 otherwise; `Cache-Control: public, max-age=60` |
+| GET | `/domains/owner?eventId=\|orderId=\|venueId=` | None | `{ organizationId }` that owns the resource; 404 unknown, 400 malformed; `max-age=300` |
 
 ## Database
 
@@ -76,7 +78,6 @@ An organization can point a subdomain it owns (for example `tickets.venue.com`) 
 - **72 h grace.** An ACTIVE domain whose records disappear keeps serving for three days, with `lastError` set, before it is marked FAILED and links fall back to the platform URL.
 - **Local testing.** Spoof the host: `curl -H 'Host: tickets.example.test' http://localhost:3001/`. Insert an ACTIVE `OrganizationDomain` row directly for the org; `localhost` itself is always a platform host.
 - **The sweep runs on every backend instance** (in-process timer). With several replicas the same domain is re-checked by each; the work is idempotent and cheap, but a distributed lock would be needed before scaling out significantly.
-- **Cross-org public pages.** `tickets.a.com/events/<org-b-event-id>` renders org B's public event page if the id is known. It is public on the platform host too; a per-host organization check on event/checkout pages is a follow-up.
 - **Per-organization sending domain is not implemented.** Emails are still sent from `RESEND_FROM_EMAIL`; only the links change.
 
 ## Related Features
