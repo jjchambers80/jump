@@ -1,15 +1,30 @@
 // frontend/src/middleware.ts
-// Edge middleware: tenant-host routing for white-label storefronts (spec 007
-// phase 3). Lives in src/ because this project uses the src/ layout; a
+// Edge middleware. Lives in src/ because this project uses the src/ layout; a
 // middleware.ts at the package root is ignored by Next.
 //
-// Staff route protection is intentionally not done here. auth.config.ts has no
-// custom HS256 JWT decode (that lives in auth.ts), so an edge auth() cannot
-// read the session cookie; admin pages guard themselves client-side.
+// 1. Tenant-host routing for white-label storefronts (spec 007 phase 3).
+// 2. Staff route protection on platform hosts: /admin requires an Auth.js
+//    session. auth.config.ts decodes the HS256 cookie with jose, which runs
+//    on the edge; pages still keep their client-side guards as a second layer.
 
+import NextAuth from 'next-auth';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import authConfig from './auth.config';
 import { isPlatformHost, normalizeHost, platformHostsFromEnv, routeForTenantHost } from './lib/storefrontHost';
+
+// The email (Resend) provider requires a database adapter, which does not
+// exist on the edge; Auth() would throw MissingAdapter and skip the check.
+// Session decoding needs no providers, so keep only adapter-free ones here.
+const { auth } = NextAuth({
+  ...authConfig,
+  providers: authConfig.providers.filter((provider) => {
+    const resolved = typeof provider === 'function' ? (provider as () => { type: string })() : provider;
+    return resolved.type !== 'email';
+  }),
+});
+
+const STAFF_ONLY_PREFIXES = ['/admin'];
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
 const PLATFORM_HOSTS = platformHostsFromEnv(process.env as Record<string, string | undefined>);
@@ -40,9 +55,19 @@ function notFound(req: NextRequest) {
   return NextResponse.rewrite(new URL('/__storefront-not-found', req.url), { status: 404 });
 }
 
-export async function middleware(req: NextRequest) {
+export default auth(async (req: NextRequest & { auth: unknown }) => {
   const host = normalizeHost(req.headers.get('host'));
-  if (isPlatformHost(host, PLATFORM_HOSTS)) return NextResponse.next();
+
+  if (isPlatformHost(host, PLATFORM_HOSTS)) {
+    const { pathname } = req.nextUrl;
+    const staffOnly = STAFF_ONLY_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+    if (staffOnly && !req.auth) {
+      const signInUrl = new URL('/auth/signin', req.nextUrl);
+      signInUrl.searchParams.set('callbackUrl', pathname + req.nextUrl.search);
+      return NextResponse.redirect(signInUrl);
+    }
+    return NextResponse.next();
+  }
 
   // Tenant (custom) host: one organization's storefront, no staff surface
   const orgId = await resolveTenantHost(host);
@@ -60,7 +85,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.rewrite(url, { request: { headers } });
   }
   return NextResponse.next({ request: { headers } });
-}
+});
 
 export const config = {
   // Everything except API routes, Next internals and static files.

@@ -20,7 +20,7 @@ app/
 
 ## Key Files
 
-- `auth.ts` — Auth.js v5 config (Google OAuth + magic link, JWT strategy)
+- `auth.ts` — Auth.js v5 config (Google OAuth + magic link, JWT strategy, Prisma adapter). `auth.config.ts` is the edge-safe subset (providers, `trustHost`, HS256 cookie codec from `lib/authJwt.ts`) that `src/middleware.ts` also uses
 - `services/api.ts` — All backend API calls go through here
 - `components/` — Shared React components
 - `lib/` — Utilities and helpers (`lib/color.ts` — WCAG contrast + brand CSS vars; `lib/fees.ts` — all-in fee math mirroring backend `FeeService`; `lib/buyerSession.ts` — server-only buyer cookie + backend proxy, signs the client IP for the backend rate limiter)
@@ -29,7 +29,7 @@ app/
 
 - **Server vs Client**: Default to server components. Add `'use client'` only when needed for interactivity
 - **Data fetching**: Server components fetch directly; client components call `services/api.ts`
-- **Admin pages**: Must check session server-side and add to sidebar navigation
+- **Admin pages**: `src/middleware.ts` redirects unauthenticated `/admin*` to `/auth/signin?callbackUrl=…` on the edge; pages keep `AdminRoute`/`ProtectedRoute` as the second layer. Add new admin pages to the sidebar navigation
 - **Search params**: Always wrap `useSearchParams()` consumers in `<Suspense fallback={...}>`
 - **Tenant hosts**: `src/middleware.ts` rewrites requests on an organization's custom domain (`/` → org page, `/account` → buyer account, admin/auth → 404) using `lib/storefrontHost.ts`. Pages receive the same `params.orgId` as on the platform host, so no page needs host awareness. Platform hosts come from `NEXT_PUBLIC_PLATFORM_HOSTS` / `AUTH_URL`
 - **Buyer auth**: never call `/buyer/*` on the backend from the browser and never use Auth.js for buyers. Go through `app/api/buyer/*` route handlers so the session stays in the httpOnly cookie. There is no `/my-tickets`; buyers self-serve on `/organizations/[orgId]/account`. See `docs/wiki/features/buyer-accounts.md`
