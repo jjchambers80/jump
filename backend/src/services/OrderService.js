@@ -310,7 +310,7 @@ class OrderService {
                 id: true,
                 name: true,
                 address: true,
-                organization: { select: { brandColor: true, themeMode: true } },
+                organization: { select: { name: true, logoUrl: true, brandColor: true, themeMode: true } },
               },
             },
           },
@@ -404,7 +404,7 @@ class OrderService {
                 id: true,
                 name: true,
                 address: true,
-                organization: { select: { brandColor: true, themeMode: true } },
+                organization: { select: { name: true, logoUrl: true, brandColor: true, themeMode: true } },
               },
             },
           },
@@ -754,6 +754,8 @@ class OrderService {
         date: order.event.date,
         logoUrl: order.event.logoUrl ?? null,
         // Org branding so checkout/confirmation pages can render inside a BrandScope
+        organizationName: order.event.venue?.organization?.name || null,
+        organizationLogoUrl: order.event.venue?.organization?.logoUrl || null,
         organizationBrandColor: order.event.venue?.organization?.brandColor || null,
         organizationThemeMode: order.event.venue?.organization?.themeMode || 'SYSTEM',
         venue: order.event.venue
