@@ -10,6 +10,8 @@ import { api } from '../../../services/api';
 import CartLineItem from '../../../components/CartLineItem';
 import ExpandCollapseAll from '../../../components/ExpandCollapseAll';
 import { computeOrderFees, formatPrice } from '../../../lib/fees';
+import BrandScope from '../../../components/BrandScope';
+import type { ThemeMode } from '../../../lib/theme';
 
 interface EventVenue {
   id: string;
@@ -33,6 +35,8 @@ interface Event {
   taxRate: number;
   venue: EventVenue | null;
   priceTiers: PriceTier[];
+  organizationBrandColor?: string | null;
+  organizationThemeMode?: ThemeMode | null;
 }
 
 interface CreateOrderResponse {
@@ -278,11 +282,15 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 py-12">
+    <BrandScope
+      color={event.organizationBrandColor}
+      themeMode={event.organizationThemeMode}
+      className="min-h-screen bg-gray-50 dark:bg-slate-900 py-12"
+    >
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
         <button
           onClick={() => router.push(`/events/${params.eventId}`)}
-          className="mb-6 text-blue-600 dark:text-indigo-400 hover:text-blue-800 dark:hover:text-indigo-300 font-semibold flex items-center transition-colors duration-200"
+          className="mb-6 text-brand-link hover:opacity-80 font-semibold flex items-center transition-opacity duration-200"
         >
           <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
@@ -400,7 +408,7 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
                     setFirstName(e.target.value);
                     if (formErrors.firstName) setFormErrors((prev) => ({ ...prev, firstName: '' }));
                   }}
-                  className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100 dark:placeholder-slate-500 ${
+                  className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100 dark:placeholder-slate-500 ${
                     formErrors.firstName
                       ? 'border-red-500'
                       : 'border-gray-300 dark:border-slate-600'
@@ -431,7 +439,7 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
                     setLastName(e.target.value);
                     if (formErrors.lastName) setFormErrors((prev) => ({ ...prev, lastName: '' }));
                   }}
-                  className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100 dark:placeholder-slate-500 ${
+                  className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100 dark:placeholder-slate-500 ${
                     formErrors.lastName ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'
                   }`}
                   placeholder="Doe"
@@ -461,7 +469,7 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
                   setEmail(e.target.value);
                   if (formErrors.email) setFormErrors((prev) => ({ ...prev, email: '' }));
                 }}
-                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100 dark:placeholder-slate-500 ${
+                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100 dark:placeholder-slate-500 ${
                   formErrors.email ? 'border-red-500' : 'border-gray-300 dark:border-slate-600'
                 }`}
                 placeholder="your.email@example.com"
@@ -479,7 +487,7 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-6">
               <div className="flex items-start">
                 <svg
-                  className="w-5 h-5 text-blue-600 dark:text-indigo-400 mr-2 flex-shrink-0 mt-0.5"
+                  className="w-5 h-5 text-brand-link mr-2 flex-shrink-0 mt-0.5"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -507,10 +515,10 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
             <button
               type="submit"
               disabled={processing}
-              className={`w-full py-3 px-6 rounded-lg font-bold text-white transition-colors duration-200 text-lg ${
+              className={`w-full py-3 px-6 rounded-lg font-bold transition-colors duration-200 text-lg ${
                 processing
-                  ? 'bg-gray-400 dark:bg-slate-600 cursor-not-allowed'
-                  : 'bg-blue-600 hover:bg-blue-700 dark:bg-indigo-600 dark:hover:bg-indigo-700'
+                  ? 'bg-gray-400 dark:bg-slate-600 text-white cursor-not-allowed'
+                  : 'bg-brand hover:bg-brand-hover text-brand-fg'
               }`}
             >
               {processing ? (
@@ -545,17 +553,17 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
             {/* Terms */}
             <p className="mt-4 text-xs text-gray-500 dark:text-slate-500 text-center">
               By completing this purchase, you agree to our{' '}
-              <a href="/terms" className="text-blue-600 dark:text-indigo-400 hover:underline">
+              <a href="/terms" className="text-brand-link hover:underline">
                 Terms of Service
               </a>{' '}
               and{' '}
-              <a href="/privacy" className="text-blue-600 dark:text-indigo-400 hover:underline">
+              <a href="/privacy" className="text-brand-link hover:underline">
                 Privacy Policy
               </a>
             </p>
           </form>
         </div>
       </div>
-    </div>
+    </BrandScope>
   );
 }

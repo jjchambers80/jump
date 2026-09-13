@@ -10,6 +10,8 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { api } from '../../services/api';
 import { resolveAssetUrl } from '../../lib/assets';
+import BrandScope from '../../components/BrandScope';
+import type { ThemeMode } from '../../lib/theme';
 
 interface TicketInfo {
   id: string;
@@ -41,6 +43,8 @@ interface OrderDetail {
     name: string;
     date: string;
     logoUrl?: string | null;
+    organizationBrandColor?: string | null;
+    organizationThemeMode?: ThemeMode | null;
     venue: {
       name: string;
       address: string;
@@ -234,7 +238,11 @@ function ConfirmationContent() {
   const isPending = order.status === 'PENDING';
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 py-12">
+    <BrandScope
+      color={order.event.organizationBrandColor}
+      themeMode={order.event.organizationThemeMode}
+      className="min-h-screen bg-gray-50 dark:bg-slate-900 py-12"
+    >
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg dark:shadow-lg dark:shadow-black/20 p-8 mb-8">
           {/* Success / Pending Header */}
@@ -316,12 +324,12 @@ function ConfirmationContent() {
           </div>
 
           {/* Order Reference */}
-          <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg p-4 mb-6 text-center">
-            <p className="text-sm text-indigo-700 dark:text-indigo-300 mb-1">Order Reference</p>
-            <p className="text-2xl font-mono font-bold text-indigo-900 dark:text-indigo-200 tracking-wider">
+          <div className="bg-gray-50 dark:bg-slate-900/40 border border-brand-link rounded-lg p-4 mb-6 text-center">
+            <p className="text-sm text-brand-link mb-1">Order Reference</p>
+            <p className="text-2xl font-mono font-bold text-gray-900 dark:text-slate-100 tracking-wider">
               {order.orderRef}
             </p>
-            <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-1">
+            <p className="text-xs text-brand-link mt-1">
               Save this reference to look up your order later
             </p>
           </div>
@@ -379,7 +387,7 @@ function ConfirmationContent() {
                 <div className="border-t border-gray-200 dark:border-slate-700 pt-3">
                   <div className="flex justify-between">
                     <span className="text-lg font-bold text-gray-900 dark:text-slate-100">Total</span>
-                    <span className="text-lg font-bold text-blue-600 dark:text-indigo-400">
+                    <span className="text-lg font-bold text-brand-link">
                       {formatPrice(order.totalAmount)}
                     </span>
                   </div>
@@ -435,7 +443,7 @@ function ConfirmationContent() {
               <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-slate-600 rounded-lg p-4 mb-6">
                 <div className="flex items-start">
                   <svg
-                    className="w-5 h-5 text-blue-600 dark:text-indigo-400 mt-0.5 mr-3"
+                    className="w-5 h-5 text-brand-link mt-0.5 mr-3"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -472,14 +480,14 @@ function ConfirmationContent() {
           <div className="text-center mt-6">
             <Link
               href="/events"
-              className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg transition-colors duration-200"
+              className="inline-block bg-brand hover:bg-brand-hover text-brand-fg font-bold py-3 px-8 rounded-lg transition-colors duration-200"
             >
               Browse More Events
             </Link>
           </div>
         </div>
       </div>
-    </div>
+    </BrandScope>
   );
 }
 
