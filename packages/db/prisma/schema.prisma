@@ -26,8 +26,7 @@ model User {
   // Custom fields (ignored by Auth.js adapter)
   firstName       String?
   lastName        String?
-  role            UserRole  @default(CUSTOMER)
-  organizationId  String?
+  role            UserRole  @default(UNASSIGNED)
   isActive        Boolean   @default(true)
   deletedAt       DateTime?
 
@@ -37,14 +36,10 @@ model User {
   // Auth.js relations
   accounts        Account[]
 
-  // Domain relations
-  // organizationId is legacy (phase 1 of spec 007). Org affiliation now lives in
-  // OrganizationMember; this column is no longer read or written and is dropped in phase 4.
-  organization    Organization? @relation(fields: [organizationId], references: [id])
+  // Domain relations. Staff belong to organizations via OrganizationMember;
+  // buyers are Contact rows and never link here (spec 007).
   memberships     OrganizationMember[]
-  contacts        Contact[]
 
-  @@index([organizationId])
   @@index([role])
   @@index([email])
 }
@@ -148,7 +143,6 @@ model Organization {
   logoImage   Image? @relation("OrgLogo", fields: [logoImageId], references: [id])
   coverImage  Image? @relation("OrgCover", fields: [coverImageId], references: [id])
   venues      Venue[]
-  users       User[]
   members     OrganizationMember[]
   contacts    Contact[]
   domains     OrganizationDomain[]
@@ -250,19 +244,15 @@ model Contact {
   emailSubscribed  Boolean   @default(false)
   accountCreatedAt DateTime? // null = guest checkout; set = login-enabled buyer account
 
-  userId    String?
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id])
-  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   orders    Order[]
   tickets   Ticket[]
   loginTokens BuyerLoginToken[]
 
   @@unique([organizationId, email])
-  @@index([userId])
   @@index([email])
 }
 
@@ -489,8 +479,10 @@ model Refund {
 // Enums
 // ──────────────────────────────────────────────
 
+// Staff roles. UNASSIGNED is the default for a freshly signed-in User with no
+// OrganizationMember row yet; it grants nothing. Buyers are not Users.
 enum UserRole {
-  CUSTOMER
+  UNASSIGNED
   ORGANIZER
   ADMIN
   SYSTEM_ADMIN

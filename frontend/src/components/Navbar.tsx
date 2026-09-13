@@ -46,23 +46,8 @@ export default function Navbar() {
               Events
             </Link>
 
-            {/* Customer links — hidden for admin/organizer */}
-            {!loading && isAuthenticated && !isAdminOrOrganizer && (
-              <>
-                <Link
-                  href="/my-tickets"
-                  className="text-sm font-medium text-gray-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
-                >
-                  My Tickets
-                </Link>
-                <Link
-                  href="/orders"
-                  className="text-sm font-medium text-gray-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
-                >
-                  Orders
-                </Link>
-              </>
-            )}
+            {/* Buyers are not Users (spec 007): ticket/order self-service lives on each
+                organization's /account page, so signed-in non-staff get no extra links. */}
 
             {/* Single Admin link — replaces 6 individual links (R6) */}
             {!loading && isAuthenticated && isAdminOrOrganizer && (

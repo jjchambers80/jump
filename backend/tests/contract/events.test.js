@@ -34,7 +34,7 @@ describe('Events API Contract Tests', () => {
   beforeAll(async () => {
     adminToken = generateToken({ role: 'ADMIN', email: 'admin@events-test.com' });
     organizerToken = generateToken({ role: 'ORGANIZER', email: 'organizer@events-test.com' });
-    customerToken = generateToken({ role: 'CUSTOMER', email: 'customer@events-test.com' });
+    customerToken = generateToken({ role: 'UNASSIGNED', email: 'customer@events-test.com' });
 
     // Create test organization
     const orgRes = await request(app)

@@ -267,6 +267,10 @@ Tests: `tests/unit/domainService.test.js` (15), `tests/contract/domains.test.js`
 
 ### Phase 4 — Cleanup
 
+**Status (2026-09-13)**: implemented on branch `feat/007-phase4-cleanup`. `User.organizationId` and `Contact.userId` dropped; `UserRole.CUSTOMER` renamed to `UNASSIGNED` rather than removed (Auth.js creates a User per sign-in with the default role, so a non-staff value must exist). Removed: `GET /orders/my`, `GET /tickets/my`, `POST /tickets/:id/request-refund`, `/my-tickets`, `/tickets/[ticketId]`, the `/orders` list page, the Navbar buyer links, `ticketService.getMyTickets/getTicketById`, the Auth.js `signIn` contact-linking callback. Added: `POST /buyer/me/tickets/:id/refund` + account-page button; `GET /organizations` scoped to memberships (organizers allowed) so the existing switcher lists the right orgs; `X-Jump-Org` header from `services/api.ts` selects the active org (validated against memberships in `resolveOrgScope`) instead of a new `POST /auth/switch-org`. Wiki: `custom-domains.md` added, `tenant-identity.md`/`buyer-accounts.md` updated. Tests: `tests/contract/tenantCleanup.test.js` (8). Rehearsed on a fresh prod dump (`~/Backups/jump/jump-prod-pre-007p4-20260913-0047.sql.gz`).
+
+Original checklist:
+
 - Drop `User.organizationId`, `Contact.userId`, and the `CUSTOMER` value from `UserRole` (after confirming no `User` rows depend on it).
 - Remove `getMyOrders(email)` and `/my-orders`; staff who buy tickets use the buyer flow like everyone else.
 - Org switcher in the admin shell if not already shipped; `activeOrgId` persisted in the Auth.js JWT via a `POST /auth/switch-org` route.

@@ -270,7 +270,7 @@ describe('AuthService', () => {
           data: expect.objectContaining({
             adminId: null,
             customerId: 'cust-1',
-            userType: 'CUSTOMER',
+            userType: 'UNASSIGNED',
           }),
         })
       );
@@ -284,7 +284,7 @@ describe('AuthService', () => {
         token: 'valid-token',
         adminId: null,
         customerId: 'cust-1',
-        userType: 'CUSTOMER',
+        userType: 'UNASSIGNED',
       });
       mockSessionDelete.mockResolvedValue({});
 
@@ -335,7 +335,7 @@ describe('AuthService', () => {
       mockSessionFindUnique.mockResolvedValue({
         id: 'sess-1',
         token: 'valid-token',
-        userType: 'CUSTOMER',
+        userType: 'UNASSIGNED',
         expiresAt: futureDate,
         admin: null,
         customer: {
@@ -357,7 +357,7 @@ describe('AuthService', () => {
       mockSessionFindUnique.mockResolvedValue({
         id: 'sess-1',
         token: 'valid-token',
-        userType: 'CUSTOMER',
+        userType: 'UNASSIGNED',
         expiresAt: futureDate,
         admin: null,
         customer: { id: 'cust-1', email: 'user@test.com', name: 'User' },
@@ -381,7 +381,7 @@ describe('AuthService', () => {
       mockSessionFindUnique.mockResolvedValue({
         id: 'sess-1',
         token: 'expired-token',
-        userType: 'CUSTOMER',
+        userType: 'UNASSIGNED',
         expiresAt: pastDate,
         admin: null,
         customer: { id: 'cust-1', email: 'user@test.com', name: 'User' },
@@ -396,7 +396,7 @@ describe('AuthService', () => {
       mockSessionFindUnique.mockResolvedValue({
         id: 'sess-1',
         token: 'expired-token',
-        userType: 'CUSTOMER',
+        userType: 'UNASSIGNED',
         expiresAt: pastDate,
         admin: null,
         customer: null,

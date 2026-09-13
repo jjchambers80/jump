@@ -106,7 +106,7 @@ async function main() {
       name: "Alice Customer",
       firstName: "Alice",
       lastName: "Customer",
-      role: UserRole.CUSTOMER,
+      role: UserRole.UNASSIGNED,
       emailVerified: new Date(),
     },
   });
@@ -117,7 +117,7 @@ async function main() {
       name: "Bob Customer",
       firstName: "Bob",
       lastName: "Customer",
-      role: UserRole.CUSTOMER,
+      role: UserRole.UNASSIGNED,
       emailVerified: new Date(),
     },
   });
@@ -251,7 +251,6 @@ async function main() {
       email: "alice@example.com",
       firstName: "Alice",
       lastName: "Customer",
-      userId: customer1.id,
     },
   });
 

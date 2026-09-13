@@ -1,6 +1,6 @@
 // Role-based access control middleware
 // Uses req.user.role from JWT claims (set by auth.js middleware)
-// Supports: CUSTOMER, ORGANIZER, ADMIN, SYSTEM_ADMIN roles per UserRole enum
+// Supports: UNASSIGNED, ORGANIZER, ADMIN, SYSTEM_ADMIN roles per UserRole enum
 
 import { ForbiddenError, AuthenticationError } from './errorHandler.js';
 

@@ -1,6 +1,6 @@
 # Tenant Identity (Per-Organization Buyers, Staff Memberships)
 
-**Status**: Implemented (spec 007 phase 1, shipped 2026-09-13)
+**Status**: Implemented (spec 007 phases 1 + 4, shipped 2026-09-13)
 **Last Updated**: 2026-09-13
 
 ## Overview
@@ -31,8 +31,8 @@ No new environment variables.
 ## How It Works
 
 1. **Buyer = org-scoped Contact.** `Contact.organizationId` is required and `(organizationId, email)` is unique. Checkout (`OrderService.createOrder`) takes the organization from `event.venue.organizationId` and upserts by that composite key. `Contact.note`, `emailSubscribed`, and `accountCreatedAt` are therefore per organization by construction.
-2. **Staff = User + memberships.** `OrganizationMember(userId, organizationId, role)` with `role` in `MemberRole` (`ADMIN | ORGANIZER`). `User.role` still carries `SYSTEM_ADMIN` (unscoped) and `CUSTOMER`; ADMIN/ORGANIZER semantics for a given org live on the membership. `User.organizationId` still exists but is never read or written (dropped in phase 4).
-3. **Active organization.** `resolveActiveMembership(userId, preferredOrgId)` returns the membership matching `preferredOrgId` if the user really has it, else the oldest membership. `resolveOrgScope(userId, role, preferredOrgId)` wraps that into the `{ organizationId, venueFilter }` shape the admin routes already used; SYSTEM_ADMIN returns the unscoped shape. `preferredOrgId` comes from the JWT `organizationId` claim (`req.user.organizationId`), which Auth.js sets from the first membership at sign-in.
+2. **Staff = User + memberships.** `OrganizationMember(userId, organizationId, role)` with `role` in `MemberRole` (`ADMIN | ORGANIZER`). `User.role` carries `SYSTEM_ADMIN` (unscoped) or the staff tier; per-org ADMIN/ORGANIZER semantics live on the membership. `User.organizationId` and `Contact.userId` were dropped in phase 4 (`20260913130000_drop_legacy_identity_columns`).
+3. **Active organization.** `resolveActiveMembership(userId, preferredOrgId)` returns the membership matching `preferredOrgId` if the user really has it, else the oldest membership. `resolveOrgScope(userId, role, preferredOrgId)` wraps that into the `{ organizationId, venueFilter }` shape the admin routes already used; SYSTEM_ADMIN returns the unscoped shape. `preferredOrgId` is the `X-Jump-Org` request header when present (sent by `services/api.ts` from the admin org switcher via `setActiveOrganizationId`), else the JWT `organizationId` claim set at sign-in. `GET /organizations` returns only the caller's memberships (everything for SYSTEM_ADMIN), which is what the switcher lists.
 4. **Route guards.** `requireOrgMembership('orgId')` (or `'id'`) replaces the three duplicated `verifyOrgOwnership` helpers: SYSTEM_ADMIN passes, otherwise a membership row for `req.params[param]` must exist; sets `req.membership`.
 5. **No membership = no data.** Admin routes that resolve scope check `!isUnscoped(scope) && !scope.organizationId` and return empty/404 rather than falling through to the unscoped path. `/admin/customers*` included.
 6. **Backfill (one-time, in the migration).** For each contact: distinct organizations across all orders (any status) via `order → event → venue`; primary = earliest order, existing row keeps its id; one clone per additional org; orders and tickets repointed by org; zero-order contacts deleted (nothing references them); a `DO $$` guard raises and rolls back if any contact is unscoped or any order/ticket points at a contact of another org. Global `Contact_email_key` dropped, `Contact_organizationId_email_key` added. `emailSubscribed` default flipped to `false` (existing rows untouched).
@@ -45,9 +45,8 @@ No new endpoints. Behavior changes:
 |--------|------|------|--------|
 | GET | `/admin/customers` | Organizer/Admin | Returns only the caller's active org's contacts; `note`/`emailSubscribed` are that org's values; empty for staff with no membership |
 | GET/PATCH | `/admin/customers/:contactId` | Organizer/Admin | 404 for another org's contact or for staff with no membership |
-| PATCH | `/users/:id` | Admin | `organizationId` replaces the user's memberships (null clears); memberships only exist for ADMIN/ORGANIZER; demotion to CUSTOMER/SYSTEM_ADMIN clears them |
+| PATCH | `/users/:id` | Admin | `organizationId` replaces the user's memberships (null clears); memberships only exist for ADMIN/ORGANIZER; demotion to UNASSIGNED/SYSTEM_ADMIN clears them. `UserRole` is now `UNASSIGNED | ORGANIZER | ADMIN | SYSTEM_ADMIN`; `UNASSIGNED` is the default for a freshly signed-in User and grants nothing |
 | GET | `/users` | Admin | `organizationId` filter matches memberships; response adds `organizations: [{ id, name, role }]` |
-| GET | `/orders/my`, `/tickets/my` | Auth | Match on `contact.email` relation (an email may own several Contact rows); staff-only legacy path, removed in phase 4 |
 
 ## Database
 
@@ -61,7 +60,7 @@ See [Database Architecture](database-architecture.md).
 ## Gotchas
 
 - **Never look a Contact up by email alone.** Use `organizationId_email`. `prisma.contact.findUnique({ where: { email } })` no longer compiles.
-- **`User.organizationId` is dead.** It still has data for old rows but nothing reads it; the tenant isolation test asserts that a mismatched legacy value is ignored. Write memberships instead.
+- **`User.organizationId` no longer exists.** Write memberships. `PATCH /users/:id { organizationId }` is the API for that; it creates memberships only for ADMIN/ORGANIZER.
 - **Seed and test fixtures** must create contacts with `organizationId` and staff with `memberships: { create: … }`. Several older contract suites sign JWTs for users that do not exist in the DB and were already failing before this work; they are not a signal.
 - **`_count.users` on organization responses** is now `_count.members` mapped back to the `users` key so the admin UI shape is unchanged.
 - **Migration is all-or-nothing.** Railway runs `prisma migrate deploy` at boot. If it ever raises, the DB is unchanged; run `prisma migrate resolve --rolled-back 20260913000000_contact_per_org_and_membership` to clear P3009. Pre-deploy backup for the 2026-09-13 run: `~/Backups/jump/jump-prod-pre-007-20260912-2317.sql.gz` on JJ's machine.

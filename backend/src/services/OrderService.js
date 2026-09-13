@@ -351,20 +351,6 @@ class OrderService {
   }
 
   /**
-   * Get orders for a contact by email (authenticated user's orders).
-   *
-   * @param {string} email - User email
-   * @param {Object} pagination
-   * @returns {Promise<{ data: OrderSummary[], pagination }>}
-   */
-  async getMyOrders(email, pagination = {}) {
-    // Contacts are per organization (spec 007); a verified email may own
-    // several Contact rows, so match on the relation rather than one row.
-    // Staff-only path; buyers use getOrdersForContact via /buyer/me/orders.
-    return this.listOrders({ contact: { email: email.toLowerCase() } }, pagination);
-  }
-
-  /**
    * Orders owned by one org-scoped Contact (buyer session).
    * @param {string} contactId
    * @param {Object} pagination

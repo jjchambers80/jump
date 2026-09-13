@@ -4,7 +4,7 @@
 // Fetches orgs once, shares selectedOrgId across all admin routes.
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import api from '@/services/api';
+import api, { setActiveOrganizationId } from '@/services/api';
 
 export interface Organization {
   id: string;
@@ -67,6 +67,10 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
       current.map((org) => (org.id === id ? { ...org, ...patch } : org))
     );
   }, []);
+
+  useEffect(() => {
+    setActiveOrganizationId(selectedOrgId);
+  }, [selectedOrgId]);
 
   const selectedOrg = organizations.find((o) => o.id === selectedOrgId) ?? null;
 

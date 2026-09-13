@@ -76,23 +76,6 @@ class TicketService {
   async confirmPurchase(sessionId: string): Promise<ConfirmResponse> {
     return api.get<ConfirmResponse>(`/tickets/confirm?session_id=${sessionId}`);
   }
-
-  /**
-   * Get customer's ticket history
-   * @returns Promise with array of tickets
-   */
-  async getMyTickets(): Promise<{ tickets: Ticket[] }> {
-    return api.get<{ tickets: Ticket[] }>('/tickets/my');
-  }
-
-  /**
-   * Get single ticket details by ID
-   * @param ticketId - Ticket UUID
-   * @returns Promise with ticket details
-   */
-  async getTicketById(ticketId: string): Promise<Ticket> {
-    return api.get<Ticket>(`/tickets/${ticketId}`);
-  }
 }
 
 export default new TicketService();

@@ -4,7 +4,7 @@
 
 import { Router } from 'express';
 import { requireAuth } from '../../middleware/auth.js';
-import { requireAdmin } from '../../middleware/rbac.js';
+import { requireAdmin, requireOrganizer } from '../../middleware/rbac.js';
 import { requireOrgMembership } from '../../middleware/orgScope.js';
 import {
   validateCreateOrganization,
@@ -36,9 +36,14 @@ router.post('/', requireAuth, requireAdmin, validateCreateOrganization, async (r
  * GET /organizations
  * List all organizations (admin only)
  */
-router.get('/', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/', requireAuth, requireOrganizer, async (req, res, next) => {
   try {
-    const organizations = await organizationService.listOrganizations();
+    // SYSTEM_ADMIN: every organization. Staff: only the ones they belong to
+    // (this list feeds the admin org switcher).
+    const organizations =
+      req.user.role === 'SYSTEM_ADMIN'
+        ? await organizationService.listOrganizations()
+        : await organizationService.listOrganizationsForUser(req.user.id);
     res.json(organizations);
   } catch (error) {
     next(error);

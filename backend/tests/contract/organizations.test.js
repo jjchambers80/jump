@@ -28,7 +28,7 @@ describe('Organization Contract Tests', () => {
   beforeAll(() => {
     adminToken = generateToken({ role: 'ADMIN' });
     organizerToken = generateToken({ role: 'ORGANIZER', email: 'organizer@test.com' });
-    customerToken = generateToken({ role: 'CUSTOMER', email: 'customer@test.com' });
+    customerToken = generateToken({ role: 'UNASSIGNED', email: 'customer@test.com' });
   });
 
   describe('POST /organizations', () => {
@@ -331,7 +331,7 @@ describe('Organization Contract Tests', () => {
         },
       });
       customerUser = await prisma.user.create({
-        data: { email: settingsEmails[2], role: 'CUSTOMER' },
+        data: { email: settingsEmails[2], role: 'UNASSIGNED' },
       });
       noOrgUser = await prisma.user.create({
         data: { email: settingsEmails[3], role: 'ADMIN' },
@@ -385,7 +385,7 @@ describe('Organization Contract Tests', () => {
       const token = generateToken({
         id: customerUser.id,
         email: settingsEmails[2],
-        role: 'CUSTOMER',
+        role: 'UNASSIGNED',
       });
 
       const res = await request(app)

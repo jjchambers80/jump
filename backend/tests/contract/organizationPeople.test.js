@@ -46,7 +46,7 @@ describe('Organization people contract', () => {
         data: { email: emails[1], role: 'ORGANIZER', memberships: { create: { organizationId: organization.id, role: 'ORGANIZER' } } },
       }),
       prisma.user.create({
-        data: { email: emails[2], role: 'CUSTOMER' },
+        data: { email: emails[2], role: 'UNASSIGNED' },
       }),
       prisma.user.create({ data: { email: emails[3], role: 'ADMIN' } }),
     ]);

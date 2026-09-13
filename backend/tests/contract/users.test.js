@@ -52,7 +52,7 @@ describe('User Management Contract Tests', () => {
     });
     customerToken = generateToken({
       id: 'cust-user-test',
-      role: 'CUSTOMER',
+      role: 'UNASSIGNED',
       email: 'customer@user-contract.com',
     });
 
@@ -70,7 +70,7 @@ describe('User Management Contract Tests', () => {
         name: 'Test Subject',
         firstName: 'Test',
         lastName: 'Subject',
-        role: 'CUSTOMER',
+        role: 'UNASSIGNED',
         isActive: true,
       },
     });
@@ -106,11 +106,11 @@ describe('User Management Contract Tests', () => {
 
     test('200: filter by role', async () => {
       const res = await request(app)
-        .get('/users?role=CUSTOMER')
+        .get('/users?role=UNASSIGNED')
         .set('Authorization', `Bearer ${adminToken}`);
 
       expect(res.status).toBe(200);
-      res.body.users.forEach((u) => expect(u.role).toBe('CUSTOMER'));
+      res.body.users.forEach((u) => expect(u.role).toBe('UNASSIGNED'));
     });
 
     test('401: no auth token → rejected', async () => {

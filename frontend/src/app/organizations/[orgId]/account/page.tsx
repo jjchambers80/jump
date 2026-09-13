@@ -47,6 +47,7 @@ interface BuyerTicket {
   venue: string;
   priceTierName?: string;
   status: string;
+  isRefundable?: boolean;
 }
 
 function formatDate(value?: string) {
@@ -136,6 +137,26 @@ export default function BuyerAccountPage({ params }: { params: { orgId: string }
       setFormError(err.message);
     } finally {
       setSending(false);
+    }
+  };
+
+  const [refundingId, setRefundingId] = useState<string | null>(null);
+  const [refundMessage, setRefundMessage] = useState<string | null>(null);
+
+  const requestRefund = async (t: BuyerTicket) => {
+    if (!window.confirm(`Refund ticket #${t.ticketNumber} for ${t.eventName}? This cannot be undone.`)) return;
+    setRefundingId(t.id);
+    setRefundMessage(null);
+    try {
+      const res = await fetch(`/api/buyer/me/tickets/${t.id}/refund`, { method: 'POST' });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || body.error || 'Refund failed');
+      setRefundMessage(`Ticket #${t.ticketNumber} refunded. The amount returns to your original payment method.`);
+      await loadSession();
+    } catch (err: any) {
+      setRefundMessage(err.message);
+    } finally {
+      setRefundingId(null);
     }
   };
 
@@ -274,6 +295,9 @@ export default function BuyerAccountPage({ params }: { params: { orgId: string }
 
             <section>
               <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-3">Tickets</h2>
+              {refundMessage && (
+                <p role="status" className="mb-3 text-sm text-gray-700 dark:text-slate-300">{refundMessage}</p>
+              )}
               {tickets.length === 0 ? (
                 <p className="text-gray-600 dark:text-slate-400">No tickets yet.</p>
               ) : (
@@ -289,15 +313,27 @@ export default function BuyerAccountPage({ params }: { params: { orgId: string }
                           {t.priceTierName ? ` · ${t.priceTierName}` : ''}
                         </p>
                       </div>
-                      <span
-                        className={`text-xs font-semibold px-2 py-1 rounded ${
-                          t.status === 'VALID'
-                            ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-                            : 'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-300'
-                        }`}
-                      >
-                        {t.status}
-                      </span>
+                      <div className="flex items-center gap-3">
+                        {t.isRefundable && t.status === 'VALID' && (
+                          <button
+                            type="button"
+                            onClick={() => requestRefund(t)}
+                            disabled={refundingId === t.id}
+                            className="text-xs font-semibold text-brand-link hover:underline disabled:opacity-60"
+                          >
+                            {refundingId === t.id ? 'Refunding…' : 'Request refund'}
+                          </button>
+                        )}
+                        <span
+                          className={`text-xs font-semibold px-2 py-1 rounded ${
+                            t.status === 'VALID'
+                              ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                              : 'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-300'
+                          }`}
+                        >
+                          {t.status}
+                        </span>
+                      </div>
                     </li>
                   ))}
                 </ul>

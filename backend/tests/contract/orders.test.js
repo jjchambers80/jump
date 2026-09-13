@@ -80,12 +80,12 @@ describe('Orders API Contract Tests', () => {
     });
     customerToken = generateToken({
       id: 'cust-orders-id',
-      role: 'CUSTOMER',
+      role: 'UNASSIGNED',
       email: 'customer@orders-test.com',
     });
     customer2Token = generateToken({
       id: 'cust2-orders-id',
-      role: 'CUSTOMER',
+      role: 'UNASSIGNED',
       email: 'customer2@orders-test.com',
     });
 

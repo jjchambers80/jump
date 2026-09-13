@@ -19,9 +19,9 @@ Loads when agent touches `packages/db/` files. For root-level commands, see [`..
 
 Core chain: Organization → Venue → Event → PriceTier → OrderItem → Ticket
 Supporting: User, OrganizationMember, OrganizationDomain, Account, VerificationToken, Contact, BuyerLoginToken, Order, PaymentTransaction, Refund, OrganizationPerson, TierPreset, File, Image
-Enums: UserRole, MemberRole (ADMIN/ORGANIZER, per-org staff role), BuyerTokenPurpose (WELCOME/LOGIN), DomainStatus (PENDING/VERIFIED/ACTIVE/FAILED), OrganizationStatus, ThemeMode (LIGHT/DARK/SYSTEM, org public-page enforcement), EventStatus, OrderStatus, TierVisibility, TicketStatus, PaymentStatus, RefundStatus
+Enums: UserRole (UNASSIGNED/ORGANIZER/ADMIN/SYSTEM_ADMIN), MemberRole (ADMIN/ORGANIZER, per-org staff role), BuyerTokenPurpose (WELCOME/LOGIN), DomainStatus (PENDING/VERIFIED/ACTIVE/FAILED), OrganizationStatus, ThemeMode (LIGHT/DARK/SYSTEM, org public-page enforcement), EventStatus, OrderStatus, TierVisibility, TicketStatus, PaymentStatus, RefundStatus
 
-Tenancy: `Contact` is unique on `(organizationId, email)`; `OrganizationMember` replaces the legacy `User.organizationId` (still present, unread, dropped in spec 007 phase 4). Migration `20260913000000_contact_per_org_and_membership` backfills both in one transaction.
+Tenancy: `Contact` is unique on `(organizationId, email)`; `OrganizationMember` holds staff affiliation. `User.organizationId` and `Contact.userId` were dropped in `20260913130000_drop_legacy_identity_columns` (which also renamed `UserRole.CUSTOMER` to `UNASSIGNED`). `20260913000000_contact_per_org_and_membership` did the original backfill in one transaction.
 
 ## Seed Data
 

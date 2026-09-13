@@ -3,7 +3,7 @@
 
 import { ValidationError } from '../../middleware/errorHandler.js';
 
-const VALID_ROLES = ['CUSTOMER', 'ORGANIZER', 'ADMIN', 'SYSTEM_ADMIN'];
+const VALID_ROLES = ['UNASSIGNED', 'ORGANIZER', 'ADMIN', 'SYSTEM_ADMIN'];
 
 /**
  * Validate PATCH /users/:id body

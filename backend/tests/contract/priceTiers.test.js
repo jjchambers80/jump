@@ -31,7 +31,7 @@ describe('Price Tier Contract Tests', () => {
   beforeAll(async () => {
     adminToken = generateToken({ role: 'ADMIN', email: 'admin@tiers-test.com' });
     organizerToken = generateToken({ role: 'ORGANIZER', email: 'organizer@tiers-test.com' });
-    customerToken = generateToken({ role: 'CUSTOMER', email: 'customer@tiers-test.com' });
+    customerToken = generateToken({ role: 'UNASSIGNED', email: 'customer@tiers-test.com' });
 
     // Create test organization
     const orgRes = await request(app)

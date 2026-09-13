@@ -87,25 +87,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       );
       return session;
     },
-    async signIn({ user }) {
-      // Contact↔User linking: when a user signs in, link any existing Contact with matching email
-      if (user?.email) {
-        try {
-          await prisma.contact.updateMany({
-            where: {
-              email: user.email,
-              userId: null,
-            },
-            data: {
-              userId: user.id!,
-            },
-          });
-        } catch {
-          // Non-fatal — contact linking is best-effort
-        }
-      }
-      return true;
-    },
   },
   jwt: {
     // Custom HS256 encode/decode so Express backend can verify with jsonwebtoken

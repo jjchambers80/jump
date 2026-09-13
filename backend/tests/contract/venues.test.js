@@ -33,7 +33,7 @@ describe('Venue Contract Tests', () => {
   beforeAll(async () => {
     adminToken = generateToken({ role: 'ADMIN', email: 'admin@test.com' });
     organizerToken = generateToken({ role: 'ORGANIZER', email: 'organizer@test.com' });
-    customerToken = generateToken({ role: 'CUSTOMER', email: 'customer@test.com' });
+    customerToken = generateToken({ role: 'UNASSIGNED', email: 'customer@test.com' });
 
     // Create a test organization for venue tests
     const orgRes = await request(app)
