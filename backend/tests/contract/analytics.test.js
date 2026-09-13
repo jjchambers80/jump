@@ -42,7 +42,7 @@ describe('Event Analytics API Contract Tests', () => {
   beforeAll(async () => {
     adminToken = generateToken({ role: 'ADMIN', email: 'admin@analytics-test.com' });
     organizerToken = generateToken({ role: 'ORGANIZER', email: 'organizer@analytics-test.com' });
-    customerToken = generateToken({ role: 'CUSTOMER', email: 'customer@analytics-test.com' });
+    customerToken = generateToken({ role: 'UNASSIGNED', email: 'customer@analytics-test.com' });
 
     // Create test organization
     const orgRes = await request(app)

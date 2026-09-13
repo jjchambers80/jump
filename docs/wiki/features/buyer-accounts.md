@@ -1,6 +1,6 @@
 # Buyer Accounts (Checkout Opt-In + Passwordless Sign-In)
 
-**Status**: Implemented (spec 007 phase 2, shipped 2026-09-13)
+**Status**: Implemented (spec 007 phases 2 + 4, shipped 2026-09-13)
 **Last Updated**: 2026-09-13
 
 ## Overview
@@ -60,8 +60,9 @@ No new variables. In production the backend sets `app.set('trust proxy', 1)`.
 | GET | `/buyer/me` | Buyer | Profile + `organization { id, name, logoUrl, brandColor, themeMode }` |
 | GET | `/buyer/me/orders` | Buyer | Paginated order summaries for this contact (`?page&limit`, limit ≤ 100) |
 | GET | `/buyer/me/tickets` | Buyer | `{ data: Ticket[] }` for this contact |
+| POST | `/buyer/me/tickets/:ticketId/refund` | Buyer | Self-service refund of a refundable, VALID ticket owned by this contact (403 otherwise); runs `RefundService.refundTicket` |
 
-Frontend route handlers (same origin, cookie-based): `POST /api/buyer/request`, `POST /api/buyer/verify`, `POST /api/buyer/logout`, `GET /api/buyer/me`, `GET /api/buyer/me/orders`, `GET /api/buyer/me/tickets`.
+Frontend route handlers (same origin, cookie-based): `POST /api/buyer/request`, `POST /api/buyer/verify`, `POST /api/buyer/logout`, `GET /api/buyer/me`, `GET /api/buyer/me/orders`, `GET /api/buyer/me/tickets`, `POST /api/buyer/me/tickets/:ticketId/refund`.
 
 ## Database
 
@@ -82,8 +83,8 @@ See [Database Architecture](database-architecture.md).
 - **Buyer cookie is per host, session is per org.** On the shared Jump domain, signing in at org B replaces org A's session; the account page for org A then shows the email form. Expected until custom domains (phase 3).
 - **`onboarding@resend.dev`** as `RESEND_FROM_EMAIL` only delivers to the Resend account owner's address. Use a verified sending domain before real buyers rely on sign-in emails.
 - **Stripe webhook is the trigger.** Locally there is no `stripe listen` by default, so orders stay PENDING and no confirmation/welcome email fires. Contract tests call `PaymentService.handleCheckoutCompleted` directly.
-- **`/orders/my` and `/tickets/my` (Auth.js) still exist** for staff who also buy tickets; they match every Contact row with that email. They are removed in phase 4.
-- **`Contact.userId` is no longer written by checkout.** A staff session in the browser (cookies ignore ports, so a `localhost:3001` session reaches `localhost:3101`) used to be written onto the buyer record and failed the FK when that user was absent.
+- **The Auth.js buyer surface is gone** (phase 4): `/my-tickets`, `/tickets/[ticketId]`, the `/orders` list page, `GET /orders/my`, `GET /tickets/my`, `POST /tickets/:id/request-refund`, and `Contact.userId`. Staff who buy tickets use the organization's `/account` page like any buyer. `/orders/:id` accepts a buyer session and falls back to the staff gate.
+- **Refunds from the account page** go through `/api/buyer/me/tickets/:id/refund`; the button shows only for `isRefundable && status === 'VALID'`.
 
 ## Related Features
 

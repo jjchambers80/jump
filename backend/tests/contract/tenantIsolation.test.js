@@ -3,7 +3,7 @@
 // The same buyer email at two organizations is two Contact rows. Staff of one
 // organization must never see the other organization's row, note, consent
 // flag, or orders. Staff scoping comes from OrganizationMember, not
-// User.organizationId.
+// User.organizationId (dropped in phase 4).
 
 import { jest } from '@jest/globals';
 import request from 'supertest';
@@ -293,15 +293,6 @@ describe('Tenant isolation contract (spec 007 phase 1)', () => {
       }
     });
 
-    it('ignores the legacy User.organizationId column', async () => {
-      // Membership says A; legacy column says B. Membership must win.
-      await prisma.user.update({ where: { id: adminA.id }, data: { organizationId: b.org.id } });
-      const res = await request(app)
-        .get(`/organizations/${b.org.id}/venues`)
-        .set('Authorization', `Bearer ${tokenFor(adminA)}`);
-      expect(res.status).toBe(403);
-      await prisma.user.update({ where: { id: adminA.id }, data: { organizationId: null } });
-    });
   });
 
   describe('checkout upsert', () => {

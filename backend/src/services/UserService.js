@@ -74,7 +74,7 @@ class UserService {
     // Org assignment is a membership row, not a column. Passing organizationId
     // replaces the user's memberships with that single org (null clears them).
     // Only ADMIN/ORGANIZER hold memberships: SYSTEM_ADMIN is unscoped and
-    // CUSTOMER is not staff, so those roles never get (or keep) one.
+    // UNASSIGNED is not staff, so those roles never get (or keep) one.
     const effectiveRole = data.role ?? user.role;
     const isStaffRole = effectiveRole === 'ADMIN' || effectiveRole === 'ORGANIZER';
     const updated = await prisma.$transaction(async (tx) => {

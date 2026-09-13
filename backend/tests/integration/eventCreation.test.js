@@ -152,7 +152,7 @@ describe('Event Creation Workflow Integration', () => {
       .expect(403);
 
     // Clean up
-    await prisma.session.deleteMany({ where: { userType: 'CUSTOMER' } });
+    await prisma.session.deleteMany({ where: { userType: 'UNASSIGNED' } });
     await prisma.customer.deleteMany({ where: { email: customerEmail } });
   });
 

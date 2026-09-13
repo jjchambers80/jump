@@ -73,6 +73,19 @@ class OrganizationService {
   }
 
   /**
+   * Organizations a user belongs to (via OrganizationMember), oldest membership first.
+   * @param {string} userId
+   */
+  async listOrganizationsForUser(userId) {
+    const memberships = await prisma.organizationMember.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'asc' },
+      include: { organization: { include: { _count: { select: { venues: true, members: true } } } } },
+    });
+    return memberships.map((m) => withUserCount(m.organization));
+  }
+
+  /**
    * Update an organization
    * @param {string} id - Organization ID
    * @param {Object} data - Fields to update { name?, status?, brandColor?, themeMode? }

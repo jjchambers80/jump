@@ -39,24 +39,6 @@ router.post('/', validateCreateOrder, async (req, res, next) => {
 });
 
 /**
- * GET /orders/my
- * Get current user's orders (authenticated).
- * Must be defined BEFORE /:orderId to avoid route conflict.
- */
-router.get('/my', requireAuth, async (req, res, next) => {
-  try {
-    const { page, limit } = req.query;
-    const result = await orderService.getMyOrders(req.user.email, {
-      page: page ? parseInt(page) : 1,
-      limit: limit ? parseInt(limit) : 20,
-    });
-    res.json(result);
-  } catch (error) {
-    next(error);
-  }
-});
-
-/**
  * POST /orders/lookup
  * Guest order lookup by email + orderRef (public, no auth).
  */

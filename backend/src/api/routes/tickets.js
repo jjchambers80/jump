@@ -141,63 +141,6 @@ router.post('/redeem', async (req, res, next) => {
 });
 
 /**
- * GET /tickets/my
- * Get all tickets belonging to the authenticated user.
- * Returns tickets grouped with event info for the My Tickets page.
- */
-router.get('/my', requireAuth, async (req, res, next) => {
-  try {
-    const tickets = await ticketService.getMyTickets(req.user.email);
-    res.json({ tickets });
-  } catch (error) {
-    next(error);
-  }
-});
-
-/**
- * POST /tickets/:ticketId/request-refund
- * Customer self-service refund for a refundable, VALID ticket they own.
- */
-router.post('/:ticketId/request-refund', requireAuth, async (req, res, next) => {
-  try {
-    const ticket = await ticketService.getTicketById(req.params.ticketId);
-
-    // Must own the ticket
-    if (ticket.contact?.email !== req.user.email) {
-      return res.status(403).json({
-        error: 'ForbiddenError',
-        message: 'You do not have access to this ticket',
-      });
-    }
-
-    // Must be refundable
-    if (!ticket.isRefundable) {
-      return res.status(400).json({
-        error: 'ValidationError',
-        message: 'This ticket is not eligible for refund',
-      });
-    }
-
-    // Must be VALID (not redeemed, expired, or voided)
-    if (ticket.status !== 'VALID') {
-      return res.status(400).json({
-        error: 'ValidationError',
-        message: `Cannot refund a ticket with status: ${ticket.status}`,
-      });
-    }
-
-    const result = await refundService.refundTicket(req.params.ticketId, {
-      reason: 'Customer requested refund',
-      initiatedBy: null,
-    });
-
-    res.json(result);
-  } catch (error) {
-    next(error);
-  }
-});
-
-/**
  * GET /tickets/:ticketId
  * Get single ticket details (requires authentication).
  */

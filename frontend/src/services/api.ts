@@ -5,6 +5,12 @@ import { getSession } from 'next-auth/react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
 
+let activeOrganizationId: string | null = null;
+/** Set by OrgContext whenever the admin org switcher changes. */
+export function setActiveOrganizationId(id: string | null) {
+  activeOrganizationId = id;
+}
+
 interface RequestOptions extends RequestInit {
   headers?: Record<string, string>;
 }
@@ -24,6 +30,12 @@ class ApiClient {
       'Content-Type': 'application/json',
       ...options.headers,
     };
+
+    // Active organization chosen in the admin org switcher (spec 007 phase 4).
+    // The backend honors it only when the user is a member of that organization.
+    if (activeOrganizationId && !headers['X-Jump-Org']) {
+      headers['X-Jump-Org'] = activeOrganizationId;
+    }
 
     if (typeof window !== 'undefined' && !headers['Authorization']) {
       try {

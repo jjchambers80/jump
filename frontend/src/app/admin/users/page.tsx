@@ -110,8 +110,8 @@ function UsersContent() {
   }
 
   const roles = userRole === 'SYSTEM_ADMIN'
-    ? ['CUSTOMER', 'ORGANIZER', 'ADMIN', 'SYSTEM_ADMIN']
-    : ['CUSTOMER', 'ORGANIZER', 'ADMIN'];
+    ? ['UNASSIGNED', 'ORGANIZER', 'ADMIN', 'SYSTEM_ADMIN']
+    : ['UNASSIGNED', 'ORGANIZER', 'ADMIN'];
 
   return (
     <div className="max-w-6xl mx-auto py-8 px-4">

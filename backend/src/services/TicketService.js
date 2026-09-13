@@ -154,19 +154,6 @@ class TicketService {
   }
 
   /**
-   * Get all tickets for a user by their contact email.
-   *
-   * @param {string} email - User's email address
-   * @returns {Promise<Object[]>} Formatted ticket list
-   */
-  async getMyTickets(email) {
-    // Contacts are per organization (spec 007); a verified email may own
-    // several Contact rows, so match on the relation rather than one row.
-    // Staff-only path; buyers use getTicketsForContact via /buyer/me/tickets.
-    return this.listTickets({ contact: { email: email.toLowerCase() } });
-  }
-
-  /**
    * Tickets owned by one org-scoped Contact (buyer session).
    * @param {string} contactId
    */
@@ -873,6 +860,7 @@ class TicketService {
         venue: venueStr,
       },
       venue: venueStr,
+      contactId: ticket.contactId,
       contact: ticket.contact,
       orderRef: ticket.order?.orderRef,
       priceBreakdown: ticket.order ? {

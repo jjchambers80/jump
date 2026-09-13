@@ -7,6 +7,12 @@ import { AuthenticationError } from './errorHandler.js';
 
 const AUTH_SECRET = process.env.AUTH_SECRET;
 
+function activeOrgFrom(req, decoded) {
+  const header = req.get('x-jump-org');
+  if (header && /^[A-Za-z0-9_-]{1,64}$/.test(header)) return header;
+  return decoded.organizationId ?? null;
+}
+
 /**
  * Middleware that requires a valid Auth.js JWT token.
  * Extracts token from Authorization: Bearer <token> header.
@@ -42,7 +48,9 @@ export const requireAuth = async (req, res, next) => {
       email: decoded.email,
       role: decoded.role,
       name: decoded.name,
-      organizationId: decoded.organizationId ?? null, // preferred active org (spec 007)
+      // Preferred active org (spec 007): the admin org switcher sends X-Jump-Org;
+      // otherwise the sign-in claim. resolveOrgScope only honors real memberships.
+      organizationId: activeOrgFrom(req, decoded),
     };
 
     next();
@@ -77,7 +85,7 @@ export const optionalAuth = async (req, res, next) => {
           email: decoded.email,
           role: decoded.role,
           name: decoded.name,
-          organizationId: decoded.organizationId ?? null,
+          organizationId: activeOrgFrom(req, decoded),
         };
       } catch {
         // Token invalid — proceed without user

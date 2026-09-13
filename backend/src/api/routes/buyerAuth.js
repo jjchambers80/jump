@@ -6,6 +6,7 @@
 //   GET  /buyer/me                                        -> profile + org branding
 //   GET  /buyer/me/orders                                 -> this org's orders only
 //   GET  /buyer/me/tickets                                -> this org's tickets only
+//   POST /buyer/me/tickets/:ticketId/refund               -> self-service refund of an owned ticket
 //
 // The frontend proxies these through Next route handlers so the session lives
 // in a first-party httpOnly cookie; browsers never hold the bearer token.
@@ -16,9 +17,10 @@ import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import buyerAuthService from '../../services/BuyerAuthService.js';
 import orderService from '../../services/OrderService.js';
 import ticketService from '../../services/TicketService.js';
+import refundService from '../../services/RefundService.js';
 import emailService from '../../services/EmailService.js';
 import { requireBuyer } from '../../middleware/buyerAuth.js';
-import { ValidationError } from '../../middleware/errorHandler.js';
+import { ForbiddenError, ValidationError } from '../../middleware/errorHandler.js';
 import { buyerVerifyUrl } from '../../utils/storefrontUrl.js';
 import logger from '../../utils/logger.js';
 
@@ -141,6 +143,29 @@ router.get('/me/tickets', requireBuyer, async (req, res, next) => {
   try {
     const tickets = await ticketService.getTicketsForContact(req.buyer.contactId);
     res.json({ data: tickets });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** POST /buyer/me/tickets/:ticketId/refund — refund a refundable, VALID ticket this buyer owns. */
+router.post('/me/tickets/:ticketId/refund', requireBuyer, async (req, res, next) => {
+  try {
+    const ticket = await ticketService.getTicketById(req.params.ticketId);
+    if (ticket.contactId !== req.buyer.contactId) {
+      throw new ForbiddenError('You do not have access to this ticket');
+    }
+    if (!ticket.isRefundable) {
+      throw new ValidationError('This ticket is not eligible for refund');
+    }
+    if (ticket.status !== 'VALID') {
+      throw new ValidationError(`Cannot refund a ticket with status: ${ticket.status}`);
+    }
+    const result = await refundService.refundTicket(ticket.id, {
+      reason: 'Customer requested refund',
+      initiatedBy: null,
+    });
+    res.json(result);
   } catch (error) {
     next(error);
   }

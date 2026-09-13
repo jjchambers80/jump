@@ -11,9 +11,7 @@ app/
 ├── auth/            # Sign-in page
 ├── checkout/        # Cart + payment flow
 ├── confirmation/    # Post-purchase confirmation
-├── my-tickets/      # Customer ticket list
-├── orders/          # Order history
-├── tickets/         # Individual ticket view (QR code)
+├── orders/          # [orderId] detail (buyer session or staff) + lookup
 ├── venues/          # Venue pages
 ├── organizations/   # Public org page + [orgId]/account (buyer sign-in, orders, tickets)
 ├── api/auth/        # Auth.js API route handler (staff)
@@ -34,7 +32,8 @@ app/
 - **Admin pages**: Must check session server-side and add to sidebar navigation
 - **Search params**: Always wrap `useSearchParams()` consumers in `<Suspense fallback={...}>`
 - **Tenant hosts**: `src/middleware.ts` rewrites requests on an organization's custom domain (`/` → org page, `/account` → buyer account, admin/auth → 404) using `lib/storefrontHost.ts`. Pages receive the same `params.orgId` as on the platform host, so no page needs host awareness. Platform hosts come from `NEXT_PUBLIC_PLATFORM_HOSTS` / `AUTH_URL`
-- **Buyer auth**: never call `/buyer/*` on the backend from the browser and never use Auth.js for buyers. Go through `app/api/buyer/*` route handlers so the session stays in the httpOnly cookie. See `docs/wiki/features/buyer-accounts.md`
+- **Buyer auth**: never call `/buyer/*` on the backend from the browser and never use Auth.js for buyers. Go through `app/api/buyer/*` route handlers so the session stays in the httpOnly cookie. There is no `/my-tickets`; buyers self-serve on `/organizations/[orgId]/account`. See `docs/wiki/features/buyer-accounts.md`
+- **Org switcher**: `OrgContext` publishes the selection with `setActiveOrganizationId`; `services/api.ts` sends it as `X-Jump-Org` so admin data follows the switcher for multi-org staff
 - **Brand colors**: On public organization/venue/event pages and `EventCard`, use the `brand` tokens (`bg-brand`, `hover:bg-brand-hover`, `text-brand-fg`, `text-brand-link`) instead of raw `blue-600`/`indigo-400` classes. Wrap the page root in `<BrandScope color={…} themeMode={…}>`. Color math lives in `lib/color.ts`; see `docs/wiki/features/organization-branding.md`
 - **Settings editors**: Settings › General is read-only summary rows (`app/admin/settings/SummaryRow.tsx`) that open modals built on `app/admin/settings/SettingsDialog.tsx` (focus trap, Escape/backdrop, discard confirm, Cancel/Save header). New settings sections should reuse both rather than inline forms; each dialog PATCHes only its own fields. See `docs/wiki/features/organization-settings.md`
 - **Public org logo**: `components/LogoBox.tsx` (square box, blurred backdrop for non-square logos) is only for the mobile cover on `/organizations/[orgId]`; desktop uses a plain `<img>`. Both are in the DOM at once, so tests assert visibility, not count. See `docs/wiki/features/organization-logo-box.md`
