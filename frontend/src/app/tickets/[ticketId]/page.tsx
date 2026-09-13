@@ -8,6 +8,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import ProtectedRoute from '../../../components/ProtectedRoute';
 import ticketService, { Ticket } from '../../../services/ticketService';
+import WalletButtons from '../../../components/WalletButtons';
 import api from '../../../services/api';
 
 function formatDate(dateStr: string): string {
@@ -320,6 +321,10 @@ function TicketDetailContent() {
                 </svg>
                 Download QR Code
               </button>
+            )}
+
+            {!isExpired && ticket.status === 'VALID' && (
+              <WalletButtons wallet={ticket.wallet} className="mt-4 justify-center" />
             )}
           </div>
 

@@ -27,6 +27,8 @@ import venuesRouter, { orgVenuesRouter } from './routes/venues.js';
 import ordersRouter, { eventOrdersRouter } from './routes/orders.js';
 import usersRouter from './routes/users.js';
 import imagesRouter from './routes/images.js';
+import walletRouter from './routes/wallet.js';
+import { logWalletStatus } from '../config/wallet.js';
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -120,6 +122,7 @@ app.use('/tickets', ticketsRouter);
 app.use('/users', usersRouter);
 app.use('/images', imagesRouter);
 app.use('/webhooks', webhooksRouter);
+app.use('/wallet', walletRouter);
 
 // Error handling (must be last)
 app.use(errorHandler);
@@ -128,6 +131,7 @@ app.use(errorHandler);
 if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, () => {
     logger.info(`Server started on port ${PORT}`);
+    logWalletStatus();
     console.log(`🚀 Jump Backend API running on http://localhost:${PORT}`);
     console.log(`📊 Metrics available at http://localhost:${PORT}/metrics`);
     console.log(`💚 Health check at http://localhost:${PORT}/health`);

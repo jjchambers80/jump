@@ -4,6 +4,7 @@
 
 import resend from '../config/resend.js';
 import logger from '../utils/logger.js';
+import walletTokenService from './wallet/WalletTokenService.js';
 
 /**
  * Public base URL of this backend, used to make relative asset URLs
@@ -38,6 +39,41 @@ function orgLogoHtml(logoUrl, orgName) {
   const src = absoluteAssetUrl(logoUrl);
   if (!src) return '';
   return `<img src="${src}" alt="${escapeHtml(orgName || 'Organizer')}" style="display: block; margin: 0 auto 16px; max-height: 60px; max-width: 240px; width: auto; height: auto;" />`;
+}
+
+/**
+ * "Add to Apple Wallet" / "Add to Google Wallet" buttons for every ticket in
+ * an order. Empty string when neither wallet provider is configured, so the
+ * email renders exactly as before. Table-based markup for email clients.
+ */
+function walletSectionHtml(tickets) {
+  const rows = tickets
+    .map((ticket, index) => {
+      const links = walletTokenService.links({ id: ticket.id, status: ticket.status || 'VALID' });
+      if (!links.apple && !links.google) return '';
+      const label = `Ticket ${index + 1}${ticket.priceTier?.name ? ' · ' + escapeHtml(ticket.priceTier.name) : ''}`;
+      const apple = links.apple
+        ? `<a href="${links.apple}" style="display: inline-block; background: #000; color: #fff; font-size: 13px; font-weight: 600; padding: 9px 14px; border-radius: 6px; text-decoration: none; margin: 4px 6px 4px 0;">&#63743; Add to Apple Wallet</a>`
+        : '';
+      const google = links.google
+        ? `<a href="${links.google}" style="display: inline-block; background: #fff; color: #1f1f1f; border: 1px solid #747775; font-size: 13px; font-weight: 600; padding: 8px 14px; border-radius: 6px; text-decoration: none; margin: 4px 0;">Add to Google Wallet</a>`
+        : '';
+      return `
+        <tr>
+          <td style="padding: 8px 0; border-top: 1px solid #e5e7eb; font-size: 14px; color: #111827;">
+            <div style="margin-bottom: 4px;"><strong>${label}</strong> <span style="color: #6b7280; font-family: monospace; font-size: 12px;">${escapeHtml(ticket.barcode || '')}</span></div>
+            ${apple}${google}
+          </td>
+        </tr>`;
+    })
+    .join('');
+  if (!rows) return '';
+  return `
+    <div style="background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 24px 0;">
+      <h3 style="margin: 0 0 4px;">Add to your wallet</h3>
+      <p style="margin: 0 0 8px; color: #666; font-size: 13px;">Save each ticket to your phone for tap-and-go entry.</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse;">${rows}</table>
+    </div>`;
 }
 
 class EmailService {
@@ -94,6 +130,8 @@ class EmailService {
                   <div style="text-align: center; margin: 32px 0;">
                     <a href="${viewTicketsUrl}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 16px; font-weight: bold; padding: 14px 32px; border-radius: 8px; text-decoration: none;">View Tickets</a>
                   </div>
+
+                  ${walletSectionHtml(tickets)}
 
                   <p style="color: #666; font-size: 14px;">Your QR codes for event entry are available on the tickets page. Present them at the venue entrance — each ticket is valid for one entry.</p>
                   <p style="color: #666; font-size: 12px; margin-top: 16px;">Order reference: ${order.orderRef}</p>

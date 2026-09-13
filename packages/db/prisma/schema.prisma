@@ -223,6 +223,9 @@ model Event {
   category    String?
   status      EventStatus @default(DRAFT)
   taxRate     Decimal?    @db.Decimal(6, 5)
+  // Google Wallet EventTicketClass sync state
+  googleClassId       String?
+  googleClassSyncedAt DateTime?
 
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
@@ -348,6 +351,10 @@ model Ticket {
   qrCodeJwt    String?
   status       TicketStatus @default(VALID)
   redeemedAt   DateTime?
+  // Wallet passes (Apple Wallet / Google Wallet)
+  nfcToken      String?   @unique            // opaque NFC redemption value (base64url, 43 chars)
+  passUpdatedAt DateTime  @default(now())    // bumped whenever an installed pass must refresh
+  googleObjectId String?                     // "<issuerId>.ticket-<id>" once created via Wallet REST API
 
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt

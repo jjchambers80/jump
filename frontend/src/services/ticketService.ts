@@ -22,6 +22,7 @@ export interface Ticket {
   ticketNumber: number;
   qrCode: string;
   qrCodeJwt: string;
+  wallet?: { apple: string | null; google: string | null };
   purchaseDate: string;
   purchaseTime: string;
   pricePaid: number;
