@@ -10,6 +10,8 @@
 import { prisma } from '@jump/db';
 import OrderService from './OrderService.js';
 import TicketService from './TicketService.js';
+import BuyerAuthService from './BuyerAuthService.js';
+import { buyerVerifyUrl } from '../utils/storefrontUrl.js';
 import EmailService from './EmailService.js';
 import { recordPaymentStatus } from '../utils/metrics.js';
 import logger from '../utils/logger.js';
@@ -70,6 +72,9 @@ class PaymentService {
     // Mark order COMPLETED
     await OrderService.completeOrder(order.id);
 
+    // Apply checkout opt-ins now that the payment (and so the email) is real
+    await this._applyOptIns(order);
+
     recordPaymentStatus('succeeded');
 
     logger.info('Checkout completed — tickets issued', {
@@ -81,13 +86,72 @@ class PaymentService {
     // Send confirmation email (fire-and-forget)
     try {
       const fullOrder = await OrderService.getOrderById(order.id);
-      await EmailService.sendOrderConfirmation(fullOrder, tickets);
+      const manageTicketsUrl = await this._welcomeLinkForOrder(order.id);
+      await EmailService.sendOrderConfirmation(fullOrder, tickets, { manageTicketsUrl });
     } catch (emailError) {
       logger.error('Failed to send order confirmation email', {
         orderId: order.id,
         error: emailError.message,
       });
       // Don't fail the webhook — email is non-critical
+    }
+  }
+
+  /**
+   * Apply the checkout opt-ins recorded on the order to its Contact.
+   * Both only ever turn on: an account is never revoked by a later guest
+   * checkout, and turning marketing off is the unsubscribe flow.
+   * Never throws: opt-ins must not block ticket issuance.
+   *
+   * @param {{ id: string, contactId: string, optInAccount?: boolean, optInMarketing?: boolean }} order
+   */
+  async _applyOptIns(order) {
+    if (!order.optInAccount && !order.optInMarketing) return;
+    try {
+      const contact = await prisma.contact.findUnique({
+        where: { id: order.contactId },
+        select: { accountCreatedAt: true, emailSubscribed: true },
+      });
+      if (!contact) return;
+      const data = {
+        ...(order.optInAccount && !contact.accountCreatedAt && { accountCreatedAt: new Date() }),
+        ...(order.optInMarketing && !contact.emailSubscribed && { emailSubscribed: true }),
+      };
+      if (Object.keys(data).length === 0) return;
+      await prisma.contact.update({ where: { id: order.contactId }, data });
+      logger.info('Checkout opt-ins applied', {
+        event: 'buyer_opt_ins_applied',
+        orderId: order.id,
+        contactId: order.contactId,
+        ...data,
+      });
+    } catch (error) {
+      logger.error('Failed to apply checkout opt-ins', { orderId: order.id, error: error.message });
+    }
+  }
+
+  /**
+   * Buyer-account welcome link for the confirmation email (spec 007 phase 2).
+   * Issued only when the buyer opted into an account at checkout. The webhook
+   * is already idempotent on order status, so this runs once per completion.
+   * Never throws: a failed link must not block the confirmation email.
+   *
+   * @param {string} orderId
+   * @returns {Promise<string|null>}
+   */
+  async _welcomeLinkForOrder(orderId) {
+    try {
+      const row = await prisma.order.findUnique({
+        where: { id: orderId },
+        select: { contact: { select: { id: true, organizationId: true, accountCreatedAt: true } } },
+      });
+      if (!row?.contact?.accountCreatedAt) return null;
+
+      const { rawToken } = await BuyerAuthService.issueToken(row.contact, 'WELCOME');
+      return buyerVerifyUrl(row.contact.organizationId, rawToken);
+    } catch (error) {
+      logger.error('Failed to issue buyer welcome link', { orderId, error: error.message });
+      return null;
     }
   }
 

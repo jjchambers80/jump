@@ -27,9 +27,16 @@ import venuesRouter, { orgVenuesRouter } from './routes/venues.js';
 import ordersRouter, { eventOrdersRouter } from './routes/orders.js';
 import usersRouter from './routes/users.js';
 import imagesRouter from './routes/images.js';
+import buyerRouter from './routes/buyerAuth.js';
 
 const app = express();
 const PORT = process.env.PORT || 3002;
+
+// Railway terminates TLS one hop in front of us. Trusting that hop gives
+// req.ip the client address (needed for the per-IP buyer sign-in rate limit).
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
 
 // CORS: FRONTEND_URL may list several origins (comma-separated). Outside
 // production any localhost/127.0.0.1 port is also allowed so a second dev
@@ -117,6 +124,7 @@ app.use('/organizations/:orgId/tier-presets', tierPresetsRouter);
 app.use('/orders', ordersRouter);
 app.use('/organizations/:orgId/events/:eventId/orders', eventOrdersRouter);
 app.use('/tickets', ticketsRouter);
+app.use('/buyer', buyerRouter);
 app.use('/users', usersRouter);
 app.use('/images', imagesRouter);
 app.use('/webhooks', webhooksRouter);

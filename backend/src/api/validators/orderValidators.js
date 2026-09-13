@@ -68,6 +68,13 @@ export const validateCreateOrder = (req, res, next) => {
     }
   }
 
+  // Checkout opt-ins (spec 007): optional, must be booleans when present
+  for (const field of ['createAccount', 'emailSubscribed']) {
+    if (req.body[field] !== undefined && typeof req.body[field] !== 'boolean') {
+      errors.push({ field, message: `${field} must be a boolean` });
+    }
+  }
+
   if (errors.length > 0) {
     return next(new ValidationError('Validation failed', errors));
   }

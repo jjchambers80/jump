@@ -160,16 +160,27 @@ class TicketService {
    * @returns {Promise<Object[]>} Formatted ticket list
    */
   async getMyTickets(email) {
-    const contact = await prisma.contact.findUnique({
-      where: { email: email.toLowerCase() },
-    });
+    // Contacts are per organization (spec 007); a verified email may own
+    // several Contact rows, so match on the relation rather than one row.
+    // Staff-only path; buyers use getTicketsForContact via /buyer/me/tickets.
+    return this.listTickets({ contact: { email: email.toLowerCase() } });
+  }
 
-    if (!contact) {
-      return [];
-    }
+  /**
+   * Tickets owned by one org-scoped Contact (buyer session).
+   * @param {string} contactId
+   */
+  async getTicketsForContact(contactId) {
+    return this.listTickets({ contactId });
+  }
 
+  /**
+   * Shared ticket listing + formatting for the two owner lookups above.
+   * @param {Object} where - Prisma Ticket where clause
+   */
+  async listTickets(where) {
     const tickets = await prisma.ticket.findMany({
-      where: { contactId: contact.id },
+      where,
       include: {
         event: {
           include: {
@@ -670,13 +681,23 @@ class TicketService {
     const data = {};
     if (firstName !== undefined) data.firstName = firstName;
     if (lastName !== undefined) data.lastName = lastName;
-    if (email !== undefined) data.email = email;
+    // Contact email is the buyer's sign-in identity at this org (spec 007):
+    // normalize like checkout does, and surface a per-org collision as 409.
+    if (email !== undefined) data.email = String(email).trim().toLowerCase();
 
-    const updated = await prisma.contact.update({
-      where: { id: ticket.contactId },
-      data,
-      select: { id: true, firstName: true, lastName: true, email: true },
-    });
+    let updated;
+    try {
+      updated = await prisma.contact.update({
+        where: { id: ticket.contactId },
+        data,
+        select: { id: true, firstName: true, lastName: true, email: true },
+      });
+    } catch (error) {
+      if (error.code === 'P2002') {
+        throw new ConflictError('Another customer at this organization already uses that email');
+      }
+      throw error;
+    }
 
     logger.info('Ticket attendee updated', { ticketId, contactId: updated.id });
     return updated;

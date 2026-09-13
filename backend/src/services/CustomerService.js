@@ -16,12 +16,11 @@ class CustomerService {
     page = parseInt(page) || 1;
     limit = parseInt(limit) || 20;
 
-    const orgFilter = organizationId
-      ? { some: { status: 'COMPLETED', event: { venue: { organizationId } } } }
-      : { some: { status: 'COMPLETED' } };
-
+    // Contacts are rows of their own organization (spec 007), so the org filter
+    // is a column match. Orders are still narrowed to COMPLETED for the summary.
     const where = {
-      orders: orgFilter,
+      ...(organizationId && { organizationId }),
+      orders: { some: { status: 'COMPLETED' } },
       ...(search && {
         OR: [
           { email: { contains: search.toLowerCase(), mode: 'insensitive' } },
@@ -36,10 +35,7 @@ class CustomerService {
         where,
         include: {
           orders: {
-            where: {
-              status: 'COMPLETED',
-              ...(organizationId && { event: { venue: { organizationId } } }),
-            },
+            where: { status: 'COMPLETED' },
             select: {
               id: true,
               totalAmount: true,
@@ -84,15 +80,11 @@ class CustomerService {
    * @returns {Promise<Object>}
    */
   async getCustomerById(contactId, organizationId) {
-    const orgFilter = organizationId
-      ? { status: 'COMPLETED', event: { venue: { organizationId } } }
-      : { status: 'COMPLETED' };
-
-    const contact = await prisma.contact.findUnique({
-      where: { id: contactId },
+    const contact = await prisma.contact.findFirst({
+      where: { id: contactId, ...(organizationId && { organizationId }) },
       include: {
         orders: {
-          where: orgFilter,
+          where: { status: 'COMPLETED' },
           include: {
             event: {
               select: { id: true, name: true, date: true, logoUrl: true },
@@ -150,17 +142,9 @@ class CustomerService {
    * @returns {Promise<Contact>}
    */
   async updateCustomer(contactId, organizationId, updates) {
-    // Verify contact belongs to this org via completed orders
+    // organizationId null = SYSTEM_ADMIN (unscoped); otherwise the row must be this org's
     const contact = await prisma.contact.findFirst({
-      where: {
-        id: contactId,
-        orders: {
-          some: {
-            status: 'COMPLETED',
-            event: { venue: { organizationId } },
-          },
-        },
-      },
+      where: { id: contactId, ...(organizationId && { organizationId }) },
     });
     if (!contact) {
       throw new NotFoundError('Customer not found');

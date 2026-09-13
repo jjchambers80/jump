@@ -4,6 +4,7 @@
 
 import resend from '../config/resend.js';
 import logger from '../utils/logger.js';
+import { orderUrl } from '../utils/storefrontUrl.js';
 
 /**
  * Public base URL of this backend, used to make relative asset URLs
@@ -46,14 +47,27 @@ class EmailService {
    * Fire-and-forget with async retry — does not block order completion.
    * @param {Object} order - Order object with contact, event, tickets
    * @param {Array} tickets - Ticket objects with barcode, pricePaid
+   * @param {Object} [options]
+   * @param {string|null} [options.manageTicketsUrl] - Buyer account magic link (spec 007);
+   *   present only when the buyer opted into an account at checkout
    */
-  async sendOrderConfirmation(order, tickets) {
+  async sendOrderConfirmation(order, tickets, { manageTicketsUrl = null } = {}) {
     const maxRetries = 3;
     let attempt = 0;
     let lastError;
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    const viewTicketsUrl = `${frontendUrl}/orders/${order.id}`;
+    const viewTicketsUrl = orderUrl(order.id);
+    const orgName = order.event?.organizationName || 'the organizer';
+    const manageTicketsHtml = manageTicketsUrl
+      ? `
+                  <div style="background: #f8f9fa; border-radius: 8px; padding: 16px 20px; margin: 0 0 24px;">
+                    <p style="margin: 0 0 12px; color: #333; font-size: 14px;"><strong>Your account with ${escapeHtml(orgName)} is ready.</strong> No password needed — use the button below to sign in and manage your tickets any time.</p>
+                    <div style="text-align: center;">
+                      <a href="${manageTicketsUrl}" style="display: inline-block; background-color: #111827; color: #ffffff; font-size: 14px; font-weight: bold; padding: 10px 24px; border-radius: 8px; text-decoration: none;">Manage your tickets</a>
+                    </div>
+                    <p style="margin: 12px 0 0; color: #666; font-size: 12px;">This sign-in link works once and expires in 7 days. You can request a new one from the ${escapeHtml(orgName)} page whenever you need it.</p>
+                  </div>`
+      : '';
 
     // Build a simple tier summary (e.g. "2x VIP, 1x General")
     const tierCounts = {};
@@ -96,6 +110,7 @@ class EmailService {
                   </div>
 
                   <p style="color: #666; font-size: 14px;">Your QR codes for event entry are available on the tickets page. Present them at the venue entrance — each ticket is valid for one entry.</p>
+${manageTicketsHtml}
                   <p style="color: #666; font-size: 12px; margin-top: 16px;">Order reference: ${order.orderRef}</p>
                 </div>
               </body>
@@ -134,6 +149,49 @@ class EmailService {
       error: lastError?.message,
     });
     // Don't throw — email failure must not break the order flow
+  }
+
+  /**
+   * Send a passwordless sign-in link to a buyer (spec 007 phase 2).
+   * Single attempt: the buyer can request another link if this one is lost.
+   *
+   * @param {Object} params
+   * @param {{ email: string, firstName?: string, organizationId: string }} params.contact
+   * @param {string} params.loginUrl - Single-use verify URL
+   * @param {{ name?: string, logoUrl?: string }} [params.organization]
+   */
+  async sendBuyerLoginEmail({ contact, loginUrl, organization = {} }) {
+    const orgName = organization.name || 'Jump';
+    const msg = {
+      to: [contact.email],
+      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      subject: `Your sign-in link for ${orgName}`,
+      html: `
+        <html>
+          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+            <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
+              ${orgLogoHtml(organization.logoUrl, orgName)}
+              <h1 style="color: #333; font-size: 22px;">Sign in to ${escapeHtml(orgName)}</h1>
+            </div>
+            <div style="padding: 20px;">
+              <p>Hi ${escapeHtml(contact.firstName || 'there')},</p>
+              <p>Use the button below to sign in and see your tickets and orders with ${escapeHtml(orgName)}.</p>
+              <div style="text-align: center; margin: 32px 0;">
+                <a href="${loginUrl}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 16px; font-weight: bold; padding: 14px 32px; border-radius: 8px; text-decoration: none;">Sign in</a>
+              </div>
+              <p style="color: #666; font-size: 13px;">This link works once and expires in 15 minutes. If you did not request it, you can ignore this email — nothing changes until the link is used.</p>
+            </div>
+          </body>
+        </html>
+      `,
+    };
+
+    await resend.emails.send(msg);
+    logger.info('Buyer login email sent', {
+      event: 'buyer_login_email_sent',
+      contactId: contact.id,
+      organizationId: contact.organizationId,
+    });
   }
 
   /**

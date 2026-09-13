@@ -146,10 +146,10 @@ describe('Organization Contract Tests', () => {
       otherOrgId = otherOrg.id;
 
       const orgAdmin = await prisma.user.create({
-        data: { email: patchEmails[0], role: 'ADMIN', organizationId: orgId },
+        data: { email: patchEmails[0], role: 'ADMIN', memberships: { create: { organizationId: orgId, role: 'ADMIN' } } },
       });
       const otherAdmin = await prisma.user.create({
-        data: { email: patchEmails[1], role: 'ADMIN', organizationId: otherOrgId },
+        data: { email: patchEmails[1], role: 'ADMIN', memberships: { create: { organizationId: otherOrgId, role: 'ADMIN' } } },
       });
 
       orgAdminToken = generateToken({ id: orgAdmin.id, email: orgAdmin.email, role: 'ADMIN' });
@@ -320,14 +320,14 @@ describe('Organization Contract Tests', () => {
         data: {
           email: settingsEmails[0],
           role: 'ADMIN',
-          organizationId: settingsOrganization.id,
+          memberships: { create: { organizationId: settingsOrganization.id, role: 'ADMIN' } },
         },
       });
       organizerUser = await prisma.user.create({
         data: {
           email: settingsEmails[1],
           role: 'ORGANIZER',
-          organizationId: settingsOrganization.id,
+          memberships: { create: { organizationId: settingsOrganization.id, role: 'ORGANIZER' } },
         },
       });
       customerUser = await prisma.user.create({

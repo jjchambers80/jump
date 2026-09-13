@@ -35,6 +35,8 @@ interface Event {
   taxRate: number;
   venue: EventVenue | null;
   priceTiers: PriceTier[];
+  organizationId?: string | null;
+  organizationName?: string | null;
   organizationBrandColor?: string | null;
   organizationThemeMode?: ThemeMode | null;
 }
@@ -90,6 +92,10 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
+  // Spec 007: account opt-in is pre-checked (contract basis for a purchased
+  // ticket); marketing consent is never pre-checked (GDPR / ePrivacy / CASL).
+  const [createAccount, setCreateAccount] = useState(true);
+  const [emailSubscribed, setEmailSubscribed] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [openLines, setOpenLines] = useState<Record<string, boolean>>({});
 
@@ -159,6 +165,8 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
           lastName: lastName.trim(),
           email: email.trim().toLowerCase(),
         },
+        createAccount,
+        emailSubscribed,
       });
 
       // Redirect to Stripe Checkout
@@ -481,6 +489,41 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
               <p className="mt-2 text-sm text-gray-500 dark:text-slate-500">
                 Your tickets and order confirmation will be sent to this email address.
               </p>
+            </div>
+
+            {/* Account + marketing opt-ins — independent; neither implies the other */}
+            <div className="mb-6 space-y-3">
+              <label htmlFor="createAccount" className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  id="createAccount"
+                  checked={createAccount}
+                  onChange={(e) => setCreateAccount(e.target.checked)}
+                  disabled={processing}
+                  className="mt-1 h-4 w-4 rounded border-gray-300 dark:border-slate-600 text-brand focus:ring-brand"
+                />
+                <span className="text-sm text-gray-700 dark:text-slate-300">
+                  <span className="font-semibold">
+                    Create an account with {event.organizationName || 'the organizer'} to manage your tickets
+                  </span>
+                  <span className="block text-gray-500 dark:text-slate-500">
+                    No password. We&apos;ll email you a sign-in link.
+                  </span>
+                </span>
+              </label>
+              <label htmlFor="emailSubscribed" className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  id="emailSubscribed"
+                  checked={emailSubscribed}
+                  onChange={(e) => setEmailSubscribed(e.target.checked)}
+                  disabled={processing}
+                  className="mt-1 h-4 w-4 rounded border-gray-300 dark:border-slate-600 text-brand focus:ring-brand"
+                />
+                <span className="text-sm text-gray-700 dark:text-slate-300">
+                  Email me about future events from {event.organizationName || 'the organizer'}
+                </span>
+              </label>
             </div>
 
             {/* Payment Notice */}

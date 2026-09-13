@@ -5,6 +5,7 @@
 import {
   PrismaClient,
   UserRole,
+  MemberRole,
   EventStatus,
   OrderStatus,
   TicketStatus,
@@ -24,6 +25,7 @@ async function main() {
   await prisma.event.deleteMany();
   await prisma.contact.deleteMany();
   await prisma.venue.deleteMany();
+  await prisma.organizationMember.deleteMany();
   await prisma.account.deleteMany();
   await prisma.verificationToken.deleteMany();
   await prisma.user.deleteMany();
@@ -69,7 +71,7 @@ async function main() {
       firstName: "Admin",
       lastName: "User",
       role: UserRole.ADMIN,
-      organizationId: org.id,
+      memberships: { create: { organizationId: org.id, role: MemberRole.ADMIN } },
       emailVerified: new Date(),
     },
   });
@@ -81,7 +83,7 @@ async function main() {
       firstName: "Sarah",
       lastName: "Organizer",
       role: UserRole.ORGANIZER,
-      organizationId: org.id,
+      memberships: { create: { organizationId: org.id, role: MemberRole.ORGANIZER } },
       emailVerified: new Date(),
     },
   });
@@ -93,7 +95,7 @@ async function main() {
       firstName: "Mike",
       lastName: "Organizer",
       role: UserRole.ORGANIZER,
-      organizationId: org.id,
+      memberships: { create: { organizationId: org.id, role: MemberRole.ORGANIZER } },
       emailVerified: new Date(),
     },
   });
@@ -245,6 +247,7 @@ async function main() {
   // 5. Contacts
   const contact1 = await prisma.contact.create({
     data: {
+      organizationId: org.id,
       email: "alice@example.com",
       firstName: "Alice",
       lastName: "Customer",
@@ -254,6 +257,7 @@ async function main() {
 
   const contact2 = await prisma.contact.create({
     data: {
+      organizationId: org.id,
       email: "guest@example.com",
       firstName: "Guest",
       lastName: "Buyer",

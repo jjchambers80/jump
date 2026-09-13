@@ -89,6 +89,7 @@ describe('Event Analytics API Contract Tests', () => {
     // Contact for orders
     const contact = await prisma.contact.create({
       data: {
+        organizationId: testOrgId,
         email: 'buyer@analytics-test.com',
         firstName: 'Analytics',
         lastName: 'Buyer',

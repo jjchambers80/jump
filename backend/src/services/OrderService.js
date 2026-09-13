@@ -59,10 +59,11 @@ class OrderService {
    * @param {string} params.eventId
    * @param {{priceTierId: string, quantity: number}[]} params.items
    * @param {Object} params.contact - { email, firstName, lastName }
-   * @param {string|null} params.userId - Authenticated user ID (if logged in)
+   * @param {boolean} [params.createAccount] - Buyer opted into a login-enabled account at this org
+   * @param {boolean} [params.emailSubscribed] - Buyer opted into marketing email from this org
    * @returns {Promise<{ orderId, orderRef, stripeCheckoutUrl }>}
    */
-  async createOrder({ eventId, items, contact, userId = null }) {
+  async createOrder({ eventId, items, contact, createAccount = false, emailSubscribed = false }) {
     // Generate order ref outside transaction to avoid retry collisions
     let orderRef = this._generateOrderRef();
 
@@ -141,19 +142,25 @@ class OrderService {
         }
       }
 
-      // 3. Upsert contact
+      // 3. Upsert contact — scoped to the event's organization (spec 007).
+      // The same email buying from two organizations is two Contact rows.
+      const organizationId = event.venue.organizationId;
+      const email = contact.email.toLowerCase();
+      // Opt-ins are recorded on the Order (below) and applied to the Contact
+      // by PaymentService once the payment completes, never here.
+      // Buyers are never linked to User (spec 007 D1); a staff session in the
+      // browser must not attach itself to the buyer record.
       const contactRecord = await tx.contact.upsert({
-        where: { email: contact.email.toLowerCase() },
+        where: { organizationId_email: { organizationId, email } },
         update: {
           firstName: contact.firstName,
           lastName: contact.lastName,
-          ...(userId && { userId }),
         },
         create: {
-          email: contact.email.toLowerCase(),
+          organizationId,
+          email,
           firstName: contact.firstName,
           lastName: contact.lastName,
-          ...(userId && { userId }),
         },
       });
 
@@ -186,6 +193,8 @@ class OrderService {
           currency: 'usd',
           quantity,
           status: 'PENDING',
+          optInAccount: createAccount === true,
+          optInMarketing: emailSubscribed === true,
           items: {
             create: items.map((item, idx) => ({
               priceTierId: item.priceTierId,
@@ -310,7 +319,7 @@ class OrderService {
                 id: true,
                 name: true,
                 address: true,
-                organization: { select: { name: true, logoUrl: true, brandColor: true, themeMode: true } },
+                organization: { select: { id: true, name: true, logoUrl: true, brandColor: true, themeMode: true } },
               },
             },
           },
@@ -346,18 +355,31 @@ class OrderService {
    * @param {Object} pagination
    * @returns {Promise<{ data: OrderSummary[], pagination }>}
    */
-  async getMyOrders(email, { page = 1, limit = 20 } = {}) {
-    const contact = await prisma.contact.findUnique({
-      where: { email: email.toLowerCase() },
-    });
+  async getMyOrders(email, pagination = {}) {
+    // Contacts are per organization (spec 007); a verified email may own
+    // several Contact rows, so match on the relation rather than one row.
+    // Staff-only path; buyers use getOrdersForContact via /buyer/me/orders.
+    return this.listOrders({ contact: { email: email.toLowerCase() } }, pagination);
+  }
 
-    if (!contact) {
-      return { data: [], pagination: { page, limit, total: 0, totalPages: 0 } };
-    }
+  /**
+   * Orders owned by one org-scoped Contact (buyer session).
+   * @param {string} contactId
+   * @param {Object} pagination
+   */
+  async getOrdersForContact(contactId, pagination = {}) {
+    return this.listOrders({ contactId }, pagination);
+  }
 
+  /**
+   * Shared paginated order summary listing.
+   * @param {Object} where - Prisma Order where clause
+   * @param {Object} pagination - { page, limit }
+   */
+  async listOrders(where, { page = 1, limit = 20 } = {}) {
     const [orders, total] = await Promise.all([
       prisma.order.findMany({
-        where: { contactId: contact.id },
+        where,
         include: {
           event: {
             select: { name: true, date: true },
@@ -367,9 +389,7 @@ class OrderService {
         skip: (page - 1) * limit,
         take: limit,
       }),
-      prisma.order.count({
-        where: { contactId: contact.id },
-      }),
+      prisma.order.count({ where }),
     ]);
 
     return {
@@ -404,7 +424,7 @@ class OrderService {
                 id: true,
                 name: true,
                 address: true,
-                organization: { select: { name: true, logoUrl: true, brandColor: true, themeMode: true } },
+                organization: { select: { id: true, name: true, logoUrl: true, brandColor: true, themeMode: true } },
               },
             },
           },
@@ -754,6 +774,7 @@ class OrderService {
         date: order.event.date,
         logoUrl: order.event.logoUrl ?? null,
         // Org branding so checkout/confirmation pages can render inside a BrandScope
+        organizationId: order.event.venue?.organization?.id || null,
         organizationName: order.event.venue?.organization?.name || null,
         organizationLogoUrl: order.event.venue?.organization?.logoUrl || null,
         organizationBrandColor: order.event.venue?.organization?.brandColor || null,

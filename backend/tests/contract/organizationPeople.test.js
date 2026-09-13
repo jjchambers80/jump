@@ -40,13 +40,13 @@ describe('Organization people contract', () => {
     otherOrganization = await prisma.organization.create({ data: { name: 'Other People Org' } });
     [admin, organizer, customer, noOrgAdmin] = await Promise.all([
       prisma.user.create({
-        data: { email: emails[0], role: 'ADMIN', organizationId: organization.id },
+        data: { email: emails[0], role: 'ADMIN', memberships: { create: { organizationId: organization.id, role: 'ADMIN' } } },
       }),
       prisma.user.create({
-        data: { email: emails[1], role: 'ORGANIZER', organizationId: organization.id },
+        data: { email: emails[1], role: 'ORGANIZER', memberships: { create: { organizationId: organization.id, role: 'ORGANIZER' } } },
       }),
       prisma.user.create({
-        data: { email: emails[2], role: 'CUSTOMER', organizationId: organization.id },
+        data: { email: emails[2], role: 'CUSTOMER' },
       }),
       prisma.user.create({ data: { email: emails[3], role: 'ADMIN' } }),
     ]);

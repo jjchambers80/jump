@@ -38,7 +38,10 @@ model User {
   accounts        Account[]
 
   // Domain relations
+  // organizationId is legacy (phase 1 of spec 007). Org affiliation now lives in
+  // OrganizationMember; this column is no longer read or written and is dropped in phase 4.
   organization    Organization? @relation(fields: [organizationId], references: [id])
+  memberships     OrganizationMember[]
   contacts        Contact[]
 
   @@index([organizationId])
@@ -146,8 +149,26 @@ model Organization {
   coverImage  Image? @relation("OrgCover", fields: [coverImageId], references: [id])
   venues      Venue[]
   users       User[]
+  members     OrganizationMember[]
+  contacts    Contact[]
   people      OrganizationPerson[]
   tierPresets TierPreset[]
+}
+
+// Staff membership: which organizations a User can administer, and in what role.
+// Replaces User.organizationId so one person can belong to several organizations.
+model OrganizationMember {
+  id             String       @id @default(cuid())
+  userId         String
+  organizationId String
+  role           MemberRole
+  createdAt      DateTime     @default(now())
+
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
 }
 
 model OrganizationPerson {
@@ -189,26 +210,52 @@ model Venue {
   @@index([organizationId])
 }
 
+// Buyer record, scoped per organization. The same email at two organizations is
+// two rows with separate notes, consent, and order history. Buyers never live in User.
 model Contact {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  firstName       String
-  lastName        String
-  location        String?
-  note            String?
-  emailSubscribed Boolean  @default(true)
+  id               String    @id @default(cuid())
+  organizationId   String
+  email            String
+  firstName        String
+  lastName         String
+  location         String?
+  note             String?
+  emailSubscribed  Boolean   @default(false)
+  accountCreatedAt DateTime? // null = guest checkout; set = login-enabled buyer account
 
   userId    String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  organization Organization @relation(fields: [organizationId], references: [id])
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   orders    Order[]
   tickets   Ticket[]
+  loginTokens BuyerLoginToken[]
 
+  @@unique([organizationId, email])
   @@index([userId])
   @@index([email])
+}
+
+// Single-use, hashed magic-link token for passwordless buyer sign-in.
+// WELCOME tokens are issued at purchase when the buyer opted into an account;
+// LOGIN tokens are requested from the storefront. Raw token is never stored.
+model BuyerLoginToken {
+  id             String            @id @default(cuid())
+  contactId      String
+  organizationId String
+  tokenHash      String            @unique
+  purpose        BuyerTokenPurpose
+  expiresAt      DateTime
+  usedAt         DateTime?
+  createdAt      DateTime          @default(now())
+
+  contact        Contact           @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([contactId])
+  @@index([expiresAt])
 }
 
 model Event {
@@ -301,6 +348,11 @@ model Order {
   currency        String      @default("usd")
   quantity        Int
   status          OrderStatus @default(PENDING)
+  // Checkout opt-ins (spec 007). Recorded here and applied to the Contact only
+  // once payment completes, so an abandoned or forged checkout can never
+  // create an account or consent for someone else's email.
+  optInAccount    Boolean     @default(false)
+  optInMarketing  Boolean     @default(false)
 
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
@@ -415,6 +467,16 @@ enum UserRole {
   ORGANIZER
   ADMIN
   SYSTEM_ADMIN
+}
+
+enum MemberRole {
+  ORGANIZER
+  ADMIN
+}
+
+enum BuyerTokenPurpose {
+  WELCOME
+  LOGIN
 }
 
 enum OrganizationStatus {

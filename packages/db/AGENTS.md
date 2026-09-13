@@ -15,12 +15,14 @@ Loads when agent touches `packages/db/` files. For root-level commands, see [`..
 3. `npm run db:generate` from repo root (regenerates client types)
 4. Postinstall hook runs generate automatically on `npm install`
 
-## Models (17 models, 9 enums)
+## Models (19 models, 11 enums)
 
 Core chain: Organization → Venue → Event → PriceTier → OrderItem → Ticket
-Supporting: User, Account, VerificationToken, Contact, Order, PaymentTransaction, Refund, OrganizationPerson, TierPreset, File, Image
-Enums: UserRole, OrganizationStatus, ThemeMode (LIGHT/DARK/SYSTEM, org public-page enforcement), EventStatus, OrderStatus, TierVisibility, TicketStatus, PaymentStatus, RefundStatus
+Supporting: User, OrganizationMember, Account, VerificationToken, Contact, BuyerLoginToken, Order, PaymentTransaction, Refund, OrganizationPerson, TierPreset, File, Image
+Enums: UserRole, MemberRole (ADMIN/ORGANIZER, per-org staff role), BuyerTokenPurpose (WELCOME/LOGIN), OrganizationStatus, ThemeMode (LIGHT/DARK/SYSTEM, org public-page enforcement), EventStatus, OrderStatus, TierVisibility, TicketStatus, PaymentStatus, RefundStatus
+
+Tenancy: `Contact` is unique on `(organizationId, email)`; `OrganizationMember` replaces the legacy `User.organizationId` (still present, unread, dropped in spec 007 phase 4). Migration `20260913000000_contact_per_org_and_membership` backfills both in one transaction.
 
 ## Seed Data
 
-`prisma/seed.js` — Run via `npm run db:seed`. Update when adding required fields.
+`prisma/seed.ts` — Run via `npm run db:seed`. Update when adding required fields.

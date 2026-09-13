@@ -101,7 +101,7 @@ router.delete('/settings/people/:personId', async (req, res, next) => {
  */
 router.get('/dashboard/stats', async (req, res, next) => {
   try {
-    const scope = await resolveOrgScope(req.user.id, req.user.role);
+    const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
 
     if (!isUnscoped(scope) && !scope.organizationId) {
       // No org linked — return zeros
@@ -179,7 +179,7 @@ router.get('/dashboard/stats', async (req, res, next) => {
  */
 router.get('/events', async (req, res, next) => {
   try {
-    const scope = await resolveOrgScope(req.user.id, req.user.role);
+    const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
 
     if (!isUnscoped(scope) && !scope.organizationId) {
       return res.json({ events: [] });
@@ -242,7 +242,7 @@ router.get('/events', async (req, res, next) => {
  */
 router.get('/orders', async (req, res, next) => {
   try {
-    const scope = await resolveOrgScope(req.user.id, req.user.role);
+    const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
 
     if (!isUnscoped(scope) && !scope.organizationId) {
       return res.json({ data: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } });
@@ -270,7 +270,7 @@ router.get('/orders', async (req, res, next) => {
  */
 router.get('/tickets', async (req, res, next) => {
   try {
-    const scope = await resolveOrgScope(req.user.id, req.user.role);
+    const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
 
     if (!isUnscoped(scope) && !scope.organizationId) {
       return res.json({ data: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } });
@@ -297,7 +297,7 @@ router.get('/tickets', async (req, res, next) => {
  */
 router.get('/tickets/:ticketId', async (req, res, next) => {
   try {
-    const scope = await resolveOrgScope(req.user.id, req.user.role);
+    const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
 
     if (!isUnscoped(scope) && !scope.organizationId) throw new NotFoundError('Ticket not found');
 
@@ -327,7 +327,7 @@ router.get('/tickets/:ticketId', async (req, res, next) => {
  */
 router.patch('/tickets/:ticketId/attendee', validateUpdateAttendee, async (req, res, next) => {
   try {
-    const scope = await resolveOrgScope(req.user.id, req.user.role);
+    const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
 
     if (!isUnscoped(scope) && !scope.organizationId) throw new NotFoundError('Ticket not found');
 
@@ -362,7 +362,7 @@ router.patch('/tickets/:ticketId/attendee', validateUpdateAttendee, async (req, 
  */
 router.post('/tickets/:ticketId/check-in', async (req, res, next) => {
   try {
-    const scope = await resolveOrgScope(req.user.id, req.user.role);
+    const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
 
     if (!isUnscoped(scope) && !scope.organizationId) throw new NotFoundError('Ticket not found');
 
@@ -390,7 +390,7 @@ router.post('/tickets/:ticketId/check-in', async (req, res, next) => {
  */
 router.post('/tickets/:ticketId/undo-check-in', async (req, res, next) => {
   try {
-    const scope = await resolveOrgScope(req.user.id, req.user.role);
+    const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
 
     if (!isUnscoped(scope) && !scope.organizationId) throw new NotFoundError('Ticket not found');
 
@@ -418,7 +418,7 @@ router.post('/tickets/:ticketId/undo-check-in', async (req, res, next) => {
  */
 router.get('/orders/:orderId', async (req, res, next) => {
   try {
-    const scope = await resolveOrgScope(req.user.id, req.user.role);
+    const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
 
     if (!isUnscoped(scope) && !scope.organizationId) {
       throw new NotFoundError('Order not found');
@@ -450,7 +450,7 @@ router.get('/orders/:orderId', async (req, res, next) => {
  */
 router.post('/orders/:orderId/resend-confirmation', async (req, res, next) => {
   try {
-    const scope = await resolveOrgScope(req.user.id, req.user.role);
+    const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
 
     if (!isUnscoped(scope) && !scope.organizationId) {
       throw new NotFoundError('Order not found');
@@ -496,7 +496,7 @@ router.post('/orders/:orderId/resend-confirmation', async (req, res, next) => {
  */
 router.post('/orders/:orderId/refund', async (req, res, next) => {
   try {
-    const scope = await resolveOrgScope(req.user.id, req.user.role);
+    const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
 
     if (!isUnscoped(scope) && !scope.organizationId) {
       throw new NotFoundError('Order not found');
@@ -533,7 +533,7 @@ router.post('/orders/:orderId/refund', async (req, res, next) => {
  */
 router.post('/tickets/:ticketId/refund', async (req, res, next) => {
   try {
-    const scope = await resolveOrgScope(req.user.id, req.user.role);
+    const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
 
     if (!isUnscoped(scope) && !scope.organizationId) {
       throw new NotFoundError('Ticket not found');
@@ -567,7 +567,7 @@ router.post('/tickets/:ticketId/refund', async (req, res, next) => {
  */
 router.get('/orders/:orderId/refunds', async (req, res, next) => {
   try {
-    const scope = await resolveOrgScope(req.user.id, req.user.role);
+    const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
 
     if (!isUnscoped(scope) && !scope.organizationId) {
       throw new NotFoundError('Order not found');
@@ -645,7 +645,7 @@ router.post('/tickets/scan-order', async (req, res, next) => {
     const result = await ticketService.scanOrderByBarcode(barcode);
 
     // Org-scope check: ensure scanned ticket belongs to caller's organization
-    const scope = await resolveOrgScope(req.user.id, req.user.role);
+    const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
     if (!isUnscoped(scope)) {
       if (!scope.organizationId) throw new NotFoundError('Ticket not found');
 
@@ -668,7 +668,11 @@ router.post('/tickets/scan-order', async (req, res, next) => {
 /** GET /admin/customers — list customers with search + pagination */
 router.get('/customers', async (req, res, next) => {
   try {
-    const scope = await resolveOrgScope(req.user.id, req.user.role);
+    const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
+    if (!isUnscoped(scope) && !scope.organizationId) {
+      // Staff with no membership see no customers rather than every org's
+      return res.json({ data: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } });
+    }
     const { page, limit, search } = req.query;
     const result = await customerService.getCustomersByOrganization(scope.organizationId, {
       page,
@@ -684,7 +688,10 @@ router.get('/customers', async (req, res, next) => {
 /** GET /admin/customers/:contactId — single customer detail with order history */
 router.get('/customers/:contactId', async (req, res, next) => {
   try {
-    const scope = await resolveOrgScope(req.user.id, req.user.role);
+    const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
+    if (!isUnscoped(scope) && !scope.organizationId) {
+      throw new NotFoundError('Customer not found');
+    }
     const result = await customerService.getCustomerById(req.params.contactId, scope.organizationId);
     res.json(result);
   } catch (error) {
@@ -695,7 +702,10 @@ router.get('/customers/:contactId', async (req, res, next) => {
 /** PATCH /admin/customers/:contactId — update note, location, emailSubscribed */
 router.patch('/customers/:contactId', async (req, res, next) => {
   try {
-    const scope = await resolveOrgScope(req.user.id, req.user.role);
+    const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
+    if (!isUnscoped(scope) && !scope.organizationId) {
+      throw new NotFoundError('Customer not found');
+    }
     const { note, location, emailSubscribed } = req.body;
     const updated = await customerService.updateCustomer(req.params.contactId, scope.organizationId, {
       note,

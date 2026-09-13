@@ -3,11 +3,10 @@
 // All endpoints org-scoped (requireAuth + requireOrganizer)
 
 import express from 'express';
-import { prisma } from '@jump/db';
 import tierPresetService from '../../services/TierPresetService.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireOrganizer } from '../../middleware/rbac.js';
-import { ForbiddenError } from '../../middleware/errorHandler.js';
+import { requireOrgMembership } from '../../middleware/orgScope.js';
 import {
   validateCreateTierPreset,
   validateUpdateTierPreset,
@@ -15,21 +14,7 @@ import {
 
 const router = express.Router({ mergeParams: true });
 
-const verifyOrgOwnership = async (req, res, next) => {
-  try {
-    if (req.user.role === 'SYSTEM_ADMIN') return next();
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: { organizationId: true },
-    });
-    if (!user?.organizationId || user.organizationId !== req.params.orgId) {
-      throw new ForbiddenError('Access denied to this organization');
-    }
-    next();
-  } catch (error) {
-    next(error);
-  }
-};
+const verifyOrgOwnership = requireOrgMembership('orgId');
 
 /**
  * GET /organizations/:orgId/tier-presets

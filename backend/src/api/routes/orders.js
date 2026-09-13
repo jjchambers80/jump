@@ -22,30 +22,14 @@ const router = express.Router();
  */
 router.post('/', validateCreateOrder, async (req, res, next) => {
   try {
-    const { eventId, items, priceTierId, quantity, contact } = req.body;
-
-    // Check if user is authenticated (optional)
-    let userId = null;
-    try {
-      // Try to extract user from token if present
-      const authHeader = req.headers.authorization;
-      if (authHeader && authHeader.startsWith('Bearer ')) {
-        const jwt = await import('jsonwebtoken');
-        const token = authHeader.slice(7);
-        const decoded = jwt.default.verify(token, process.env.AUTH_SECRET, {
-          algorithms: ['HS256'],
-        });
-        userId = decoded.sub;
-      }
-    } catch {
-      // No valid auth — proceed as guest
-    }
+    const { eventId, items, priceTierId, quantity, contact, createAccount, emailSubscribed } = req.body;
 
     const result = await orderService.createOrder({
       eventId,
       items: items ?? [{ priceTierId, quantity: parseInt(quantity) }],
       contact,
-      userId,
+      createAccount: createAccount === true,
+      emailSubscribed: emailSubscribed === true,
     });
 
     res.status(201).json(result);

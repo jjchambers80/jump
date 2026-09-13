@@ -8,7 +8,21 @@ Loads when agent touches `backend/` files. For root-level commands and env vars,
 2. JWT callback injects `accessToken` into session
 3. Frontend sends `Authorization: Bearer <token>` to backend
 4. `middleware/auth.js` verifies JWT with shared `AUTH_SECRET` (HS256)
-5. `req.user` populated: `{sub, email, role, name}`
+5. `req.user` populated: `{id, email, role, name, organizationId}` — `organizationId` is the preferred active org claim; scoping still verifies it against `OrganizationMember`
+
+## Tenancy (spec 007)
+
+- Buyers = `Contact`, one row per `(organizationId, email)`. Checkout upserts by `organizationId_email` with the event's venue org.
+- Staff = `User` + `OrganizationMember(userId, organizationId, role)`. `resolveOrgScope(userId, role, preferredOrgId)` picks the active org; `requireOrgMembership(param)` guards `/organizations/:orgId/*` routes. SYSTEM_ADMIN bypasses both.
+- Customer admin queries filter `Contact.organizationId` directly; never scope contacts through orders.
+
+## Buyer Auth (spec 007 phase 2)
+
+- Buyers sign in without passwords. `BuyerAuthService` issues single-use hashed tokens (`BuyerLoginToken`: LOGIN 15 min, WELCOME 7 days) and mints a separate HS256 JWT with `typ: 'buyer'`. `middleware/auth.js` rejects buyer tokens; `middleware/buyerAuth.js` (`requireBuyer`) rejects staff tokens.
+- Routes live in `api/routes/buyerAuth.js` under `/buyer`. `POST /buyer/auth/request` always returns 202. The frontend calls these only through `frontend/src/app/api/buyer/*` route handlers, which hold the session in the httpOnly `jump_buyer` cookie.
+- Checkout opt-ins: `POST /orders` accepts `createAccount` and `emailSubscribed` booleans, stored on `Order.optInAccount`/`optInMarketing`. `PaymentService.handleCheckoutCompleted` applies them to the Contact (only ever turning on) and issues the WELCOME link. Never set `accountCreatedAt` or `emailSubscribed` from an unpaid checkout.
+- Rate limiting behind the Next proxy: key on `clientIpForRateLimit(req)` (signed `X-Jump-Client-Ip`), not `req.ip`.
+- Storefront URLs in emails come from `utils/storefrontUrl.js` (first `FRONTEND_URL` entry).
 
 ## Payment Flow (WHY: Stripe is source of truth, not the client)
 

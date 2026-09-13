@@ -158,9 +158,9 @@ describe('Ticket Redemption API Contract Tests — POST /tickets/redeem', () => 
 
     // Create a contact
     const contact = await prisma.contact.upsert({
-      where: { email: 'scanner@redeem-test.com' },
+      where: { organizationId_email: { organizationId: testOrgId, email: 'scanner@redeem-test.com' } },
       update: {},
-      create: { email: 'scanner@redeem-test.com', firstName: 'Scanner', lastName: 'Tester' },
+      create: { organizationId: testOrgId, email: 'scanner@redeem-test.com', firstName: 'Scanner', lastName: 'Tester' },
     });
     testContactId = contact.id;
 

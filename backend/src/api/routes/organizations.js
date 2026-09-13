@@ -5,38 +5,19 @@
 import { Router } from 'express';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireAdmin } from '../../middleware/rbac.js';
+import { requireOrgMembership } from '../../middleware/orgScope.js';
 import {
   validateCreateOrganization,
   validateUpdateOrganization,
 } from '../validators/organizationValidators.js';
 import organizationService from '../../services/OrganizationService.js';
-import { NotFoundError, ForbiddenError } from '../../middleware/errorHandler.js';
+import { NotFoundError } from '../../middleware/errorHandler.js';
 import { uploadImage } from '../../middleware/imageUpload.js';
 import imageService from '../../services/ImageService.js';
-import { prisma } from '@jump/db';
 
 const router = Router();
 
-/**
- * Verifies the authenticated user belongs to the org in :id.
- * Must run after requireAuth.
- */
-const verifyOrgOwnership = async (req, res, next) => {
-  try {
-    if (req.user.role === 'SYSTEM_ADMIN') return next();
-
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: { organizationId: true },
-    });
-    if (!user?.organizationId || user.organizationId !== req.params.id) {
-      throw new ForbiddenError('Access denied to this organization');
-    }
-    next();
-  } catch (error) {
-    next(error);
-  }
-};
+const verifyOrgOwnership = requireOrgMembership('id');
 
 /**
  * POST /organizations
