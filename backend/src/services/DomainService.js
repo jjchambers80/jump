@@ -1,9 +1,14 @@
-// Domain Service (spec 007 phase 3)
+// Domain Service (spec 007 phase 3, setup page data in spec 008)
 // White-label storefront hostnames: add, verify by DNS, activate, resolve.
 //
 // Verification contract shown to the organization:
-//   CNAME  <hostname>               -> <cnameTarget>
-//   TXT    _jump-verify.<hostname>  -> "jump-verify=<verificationToken>"
+//   CNAME  <hostname>                        -> <cnameTarget>
+//   TXT    <verificationHost>.<hostname>     -> <verificationToken>
+// Without Railway: verificationHost is "_jump-verify" and the token is
+// "jump-verify=<hex>". With Railway configured, Railway's own record
+// ("_railway-verify" / "railway-verify=<token>") is stored instead, so the
+// organization publishes two records, not three, and Railway's ownership
+// check and ours can never disagree.
 //
 // Lifecycle: PENDING -> VERIFIED (DNS proven) -> ACTIVE (TLS ready, or DNS
 // proven when Railway integration is not configured) -> FAILED (72h of
@@ -16,12 +21,22 @@ import { prisma } from '@jump/db';
 import logger from '../utils/logger.js';
 import { ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import * as railway from '../lib/railwayDomains.js';
+import { detectDnsProvider, providerInfo } from '../lib/dnsProvider.js';
 
 const HOSTNAME_RE = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
-const TXT_PREFIX = 'jump-verify=';
+const JUMP_TXT_HOST = '_jump-verify';
+const JUMP_TXT_PREFIX = 'jump-verify=';
 const FAIL_GRACE_MS = 72 * 60 * 60 * 1000;
 const RECHECK_ACTIVE_MS = 24 * 60 * 60 * 1000;
 const CACHE_TTL_MS = 60 * 1000;
+// Second-level labels under which the registrable zone has three labels (example.co.uk).
+const SECOND_LEVEL = new Set(['co', 'com', 'net', 'org', 'gov', 'edu', 'ac', 'or', 'ne', 'go']);
+
+/** User-initiated re-checks closer together than this return the last result (the sweep is exempt). */
+function verifyCooldownMs() {
+  const raw = process.env.DOMAIN_VERIFY_COOLDOWN_MS;
+  return raw === undefined ? 15 * 1000 : Math.max(0, Number(raw) || 0);
+}
 
 /** Hostnames that belong to the platform itself and can never be claimed. */
 function platformHosts() {
@@ -33,11 +48,16 @@ function platformHosts() {
   return new Set([...fromEnv, ...fromUrls, 'localhost']);
 }
 
+/** Public platform base URL (first FRONTEND_URL), for the "Jump URL" row. */
+function platformBaseUrl() {
+  return (process.env.FRONTEND_URL || 'http://localhost:3001').split(',')[0].trim().replace(/\/$/, '');
+}
+
 /** Default CNAME target: explicit env, else the host of the first FRONTEND_URL. */
 function defaultCnameTarget() {
   if (process.env.STOREFRONT_CNAME_TARGET) return process.env.STOREFRONT_CNAME_TARGET.trim().toLowerCase();
   try {
-    return new URL((process.env.FRONTEND_URL || 'http://localhost:3001').split(',')[0].trim()).hostname;
+    return new URL(platformBaseUrl()).hostname;
   } catch {
     return 'localhost';
   }
@@ -63,6 +83,30 @@ export function normalizeHostname(input) {
   return host;
 }
 
+/** Registrable zone of a hostname (example.com, example.co.uk). Naive public-suffix rule. */
+export function zoneOf(hostname) {
+  const labels = String(hostname).toLowerCase().split('.');
+  if (labels.length <= 2) return labels.join('.');
+  const n = labels[labels.length - 1].length === 2 && SECOND_LEVEL.has(labels[labels.length - 2]) ? 3 : 2;
+  return labels.slice(-n).join('.');
+}
+
+/**
+ * Reduce a DNS host label as returned by Railway to the prefix that goes in
+ * front of our hostname. Accepts a FQDN ("_railway-verify.tickets.example.com"),
+ * a zone-relative name ("_railway-verify.tickets") or a bare prefix.
+ */
+export function txtPrefixFor(hostlabel, hostname) {
+  const h = stripDot(hostlabel);
+  if (h.endsWith(`.${hostname}`)) return h.slice(0, -(hostname.length + 1));
+  const hl = h.split('.');
+  const nl = hostname.split('.');
+  for (let k = Math.min(hl.length - 1, nl.length); k > 0; k--) {
+    if (hl.slice(-k).join('.') === nl.slice(0, k).join('.')) return hl.slice(0, -k).join('.');
+  }
+  return h;
+}
+
 function stripDot(v) {
   return String(v).toLowerCase().replace(/\.$/, '');
 }
@@ -80,21 +124,39 @@ class DomainService {
   }
 
   serialize(d) {
+    const snapshot = d.lastDnsSnapshot || {};
+    const record = (key, type, name, value) => ({
+      key,
+      type,
+      name,
+      value,
+      currentValue: snapshot[key]?.currentValue ?? null,
+      status: snapshot[key]?.status ?? 'pending',
+    });
     return {
       id: d.id,
       hostname: d.hostname,
+      zone: zoneOf(d.hostname),
       status: d.status,
       isPrimary: d.isPrimary,
       verifiedAt: d.verifiedAt,
       lastCheckedAt: d.lastCheckedAt,
+      failingSince: d.failingSince ?? null,
       lastError: d.lastError,
       createdAt: d.createdAt,
       dnsRecords: [
-        { type: 'CNAME', name: d.hostname, value: d.cnameTarget },
-        { type: 'TXT', name: `_jump-verify.${d.hostname}`, value: `${TXT_PREFIX}${d.verificationToken}` },
+        record('cname', 'CNAME', d.hostname, d.cnameTarget),
+        record('txt', 'TXT', `${d.verificationHost || JUMP_TXT_HOST}.${d.hostname}`, d.verificationToken),
       ],
       tlsManagedByRailway: Boolean(d.railwayDomainId),
+      certificateStatus: d.railwayDomainId ? d.certificateStatus || 'PENDING' : null,
+      dnsProvider: providerInfo(d.dnsProvider),
     };
+  }
+
+  /** Platform storefront URL for an organization (the row that is always "connected"). */
+  platformUrlFor(organizationId) {
+    return `${platformBaseUrl()}/organizations/${organizationId}`;
   }
 
   async listForOrganization(organizationId) {
@@ -103,6 +165,10 @@ class DomainService {
       orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
     });
     return rows.map((d) => this.serialize(d));
+  }
+
+  async getForOrganization(organizationId, id) {
+    return this.serialize(await this._ownedDomain(organizationId, id));
   }
 
   async _ownedDomain(organizationId, id) {
@@ -119,24 +185,44 @@ class DomainService {
 
     let cnameTarget = defaultCnameTarget();
     let railwayDomainId = null;
+    let verificationHost = JUMP_TXT_HOST;
+    let verificationToken = `${JUMP_TXT_PREFIX}${randomBytes(16).toString('hex')}`;
     if (railway.isConfigured()) {
-      const created = await railway.createCustomDomain(hostname);
+      let created;
+      try {
+        created = await railway.createCustomDomain(hostname);
+      } catch (error) {
+        // Plan limits (Hobby: 2 domains per service) and invalid hosts come back here
+        logger.warn('Railway custom domain create failed', { hostname, error: error.message });
+        throw new ValidationError(`Could not register the domain with the hosting provider: ${error.message.replace(/^Railway API: /, '')}`);
+      }
       railwayDomainId = created.id;
       if (created.cnameTarget) cnameTarget = stripDot(created.cnameTarget);
+      if (created.txtHost && created.txtValue) {
+        verificationHost = txtPrefixFor(created.txtHost, hostname);
+        verificationToken = created.txtValue.trim();
+      } else {
+        logger.warn('Railway returned no TXT record; falling back to _jump-verify (Railway may 404 until its TXT is added)', { hostname });
+      }
     }
+
+    // Resolver is swapped in tests and may not implement resolveNs; detection is optional.
+    const dnsProvider = typeof this._dns.resolveNs === 'function' ? await detectDnsProvider(hostname, this._dns) : null;
 
     const count = await prisma.organizationDomain.count({ where: { organizationId } });
     const d = await prisma.organizationDomain.create({
       data: {
         organizationId,
         hostname,
-        verificationToken: randomBytes(16).toString('hex'),
+        verificationHost,
+        verificationToken,
         cnameTarget,
         railwayDomainId,
+        dnsProvider,
         isPrimary: count === 0,
       },
     });
-    logger.info('Storefront domain added', { event: 'domain_added', organizationId, hostname, railwayDomainId });
+    logger.info('Storefront domain added', { event: 'domain_added', organizationId, hostname, railwayDomainId, dnsProvider });
     return this.serialize(d);
   }
 
@@ -167,37 +253,59 @@ class DomainService {
     return this.serialize(await prisma.organizationDomain.findUnique({ where: { id: d.id } }));
   }
 
-  /** DNS proof: TXT token present and CNAME points at the target. */
+  /**
+   * DNS proof: TXT token present and CNAME points at the target.
+   * @returns {{ problems: string[], snapshot: { txt: object, cname: object } }}
+   */
   async _checkDns(d) {
     const problems = [];
+    const txtName = `${d.verificationHost || JUMP_TXT_HOST}.${d.hostname}`;
+    const snapshot = { txt: { currentValue: null, status: 'missing' }, cname: { currentValue: null, status: 'missing' } };
+
     try {
-      const txt = (await this._dns.resolveTxt(`_jump-verify.${d.hostname}`)).map((chunks) => chunks.join(''));
-      if (!txt.some((v) => v.trim() === `${TXT_PREFIX}${d.verificationToken}`)) {
-        problems.push(`TXT _jump-verify.${d.hostname} does not contain ${TXT_PREFIX}${d.verificationToken}`);
+      const txt = (await this._dns.resolveTxt(txtName)).map((chunks) => chunks.join(''));
+      const match = txt.find((v) => v.trim() === d.verificationToken);
+      snapshot.txt.currentValue = match ?? txt[0] ?? null;
+      if (match) {
+        snapshot.txt.status = 'valid';
+      } else {
+        snapshot.txt.status = txt.length ? 'invalid' : 'missing';
+        problems.push(`TXT ${txtName} does not contain ${d.verificationToken}`);
       }
     } catch (error) {
-      problems.push(`TXT _jump-verify.${d.hostname} not found (${error.code || error.message})`);
+      problems.push(`TXT ${txtName} not found (${error.code || error.message})`);
     }
+
     try {
       const cnames = (await this._dns.resolveCname(d.hostname)).map(stripDot);
-      if (!cnames.includes(stripDot(d.cnameTarget))) {
+      snapshot.cname.currentValue = cnames[0] ?? null;
+      if (cnames.includes(stripDot(d.cnameTarget))) {
+        snapshot.cname.status = 'valid';
+      } else {
+        snapshot.cname.status = cnames.length ? 'invalid' : 'missing';
         problems.push(`CNAME ${d.hostname} points to ${cnames.join(', ') || 'nothing'}; expected ${d.cnameTarget}`);
       }
     } catch (error) {
       problems.push(`CNAME ${d.hostname} not found (${error.code || error.message})`);
     }
-    return problems;
+    return { problems, snapshot };
   }
 
   /**
-   * Re-check one domain and persist the resulting status.
+   * Re-check one domain and persist the resulting status. User-initiated
+   * checks (organizationId given) inside the cooldown window return the
+   * stored row unchanged; the background sweep passes null and always checks.
    * @returns {Promise<object>} serialized domain
    */
   async verifyDomain(organizationId, id) {
     const d = await this._ownedDomain(organizationId, id);
     const now = new Date();
-    const problems = await this._checkDns(d);
-    const data = { lastCheckedAt: now };
+    if (organizationId && d.lastCheckedAt && now - d.lastCheckedAt < verifyCooldownMs()) {
+      return this.serialize(d);
+    }
+
+    const { problems, snapshot } = await this._checkDns(d);
+    const data = { lastCheckedAt: now, lastDnsSnapshot: snapshot };
 
     if (problems.length === 0) {
       data.lastError = null;
@@ -208,8 +316,13 @@ class DomainService {
           logger.warn('Railway status check failed', { hostname: d.hostname, error: error.message });
           return null;
         });
+        if (rs) data.certificateStatus = rs.certificateStatus;
         data.status = rs?.certificateReady ? 'ACTIVE' : 'VERIFIED';
-        if (rs && !rs.certificateReady) data.lastError = 'DNS verified; waiting for Railway to issue the certificate';
+        if (rs && !rs.certificateReady) {
+          data.lastError = rs.certificateStatus === 'FAILED'
+            ? 'DNS verified, but the certificate could not be issued. Check that the hostname is not proxied and try again.'
+            : 'DNS verified; waiting for Railway to issue the certificate';
+        }
       } else {
         // No Railway integration: DNS proof is all we can check. TLS must be
         // attached in the Railway dashboard by the operator.

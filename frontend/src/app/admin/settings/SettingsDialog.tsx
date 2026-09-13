@@ -11,6 +11,9 @@ interface SettingsDialogProps {
   saving: boolean;
   /** Disable Save beyond the dirty/saving checks (e.g. a required field is empty). */
   saveDisabled?: boolean;
+  /** Submit button text (default "Save"; "Next" for multi-step flows). */
+  submitLabel?: string;
+  savingLabel?: string;
   /** A nested dialog is open; this shell stops handling keys and hides from AT. */
   childActive?: boolean;
   /** Focused when the dialog opens. Falls back to the first field. */
@@ -33,6 +36,8 @@ export default function SettingsDialog({
   dirty,
   saving,
   saveDisabled = false,
+  submitLabel = 'Save',
+  savingLabel = 'Saving…',
   childActive = false,
   initialFocusRef,
   returnFocusRef,
@@ -130,7 +135,7 @@ export default function SettingsDialog({
                 disabled={saving || !dirty || saveDisabled}
                 className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {saving ? 'Saving…' : 'Save'}
+                {saving ? savingLabel : submitLabel}
               </button>
             </div>
           </header>

@@ -22,14 +22,18 @@ jest.unstable_mockModule('../../src/utils/logger.js', () => ({
 const railway = { isConfigured: jest.fn(() => false), createCustomDomain: jest.fn(), getCustomDomainStatus: jest.fn(), deleteCustomDomain: jest.fn() };
 jest.unstable_mockModule('../../src/lib/railwayDomains.js', () => railway);
 
-const { default: service, normalizeHostname } = await import('../../src/services/DomainService.js');
+const { default: service, normalizeHostname, txtPrefixFor, zoneOf } = await import('../../src/services/DomainService.js');
 
 const base = {
   id: 'dom-1',
   organizationId: 'org-1',
   hostname: 'tickets.example.com',
   status: 'PENDING',
-  verificationToken: 'abc123',
+  verificationHost: '_jump-verify',
+  verificationToken: 'jump-verify=abc123',
+  certificateStatus: null,
+  dnsProvider: null,
+  lastDnsSnapshot: null,
   cnameTarget: 'frontend-production.up.railway.app',
   isPrimary: true,
   railwayDomainId: null,
@@ -75,6 +79,7 @@ describe('DomainService', () => {
     jest.clearAllMocks();
     service._invalidate();
     railway.isConfigured.mockReturnValue(false);
+    service._dns = {}; // no network: provider detection is skipped unless a test installs resolveNs
     db.update.mockImplementation(async ({ data }) => ({ ...base, ...data }));
   });
 
@@ -86,12 +91,25 @@ describe('DomainService', () => {
       const out = await service.addDomain('org-1', 'Tickets.Example.com');
       const data = db.create.mock.calls[0][0].data;
       expect(data.hostname).toBe('tickets.example.com');
-      expect(data.verificationToken).toMatch(/^[0-9a-f]{32}$/);
+      expect(data.verificationToken).toMatch(/^jump-verify=[0-9a-f]{32}$/);
+      expect(data.verificationHost).toBe('_jump-verify');
       expect(data.isPrimary).toBe(true);
       expect(out.dnsRecords).toEqual([
-        { type: 'CNAME', name: 'tickets.example.com', value: data.cnameTarget },
-        { type: 'TXT', name: '_jump-verify.tickets.example.com', value: `jump-verify=${data.verificationToken}` },
+        { key: 'cname', type: 'CNAME', name: 'tickets.example.com', value: data.cnameTarget, currentValue: null, status: 'pending' },
+        { key: 'txt', type: 'TXT', name: '_jump-verify.tickets.example.com', value: data.verificationToken, currentValue: null, status: 'pending' },
       ]);
+      expect(out.zone).toBe('example.com');
+      expect(out.certificateStatus).toBeNull();
+      expect(out.dnsProvider).toBeNull();
+    });
+    it('records the detected DNS provider when the resolver supports NS lookups', async () => {
+      db.findUnique.mockResolvedValue(null);
+      db.count.mockResolvedValue(0);
+      db.create.mockImplementation(async ({ data }) => ({ ...base, ...data }));
+      service._dns = { resolveNs: jest.fn().mockResolvedValue(['kim.ns.cloudflare.com', 'rob.ns.cloudflare.com']) };
+      const out = await service.addDomain('org-1', 'tickets.example.com');
+      expect(db.create.mock.calls[0][0].data.dnsProvider).toBe('cloudflare');
+      expect(out.dnsProvider).toMatchObject({ key: 'cloudflare', name: 'Cloudflare' });
     });
     it('is not primary when the org already has a domain', async () => {
       db.findUnique.mockResolvedValue(null);
@@ -104,16 +122,60 @@ describe('DomainService', () => {
       db.findUnique.mockResolvedValue(base);
       await expect(service.addDomain('org-2', 'tickets.example.com')).rejects.toMatchObject({ statusCode: 409 });
     });
-    it('uses Railway CNAME target and stores the Railway id when configured', async () => {
+    it('uses Railway CNAME target and TXT record and stores the Railway id when configured', async () => {
       railway.isConfigured.mockReturnValue(true);
-      railway.createCustomDomain.mockResolvedValue({ id: 'rw-1', cnameTarget: 'Abc.Up.Railway.App.' });
+      railway.createCustomDomain.mockResolvedValue({
+        id: 'rw-1',
+        cnameTarget: 'Abc.Up.Railway.App.',
+        txtHost: '_railway-verify.tickets',
+        txtValue: 'railway-verify=deadbeef',
+      });
+      db.findUnique.mockResolvedValue(null);
+      db.count.mockResolvedValue(0);
+      db.create.mockImplementation(async ({ data }) => ({ ...base, ...data }));
+      const out = await service.addDomain('org-1', 'tickets.example.com');
+      const data = db.create.mock.calls[0][0].data;
+      expect(data.railwayDomainId).toBe('rw-1');
+      expect(data.cnameTarget).toBe('abc.up.railway.app');
+      expect(data.verificationHost).toBe('_railway-verify');
+      expect(data.verificationToken).toBe('railway-verify=deadbeef');
+      expect(out.dnsRecords[1]).toMatchObject({ type: 'TXT', name: '_railway-verify.tickets.example.com', value: 'railway-verify=deadbeef' });
+      expect(out.certificateStatus).toBe('PENDING');
+    });
+    it('falls back to _jump-verify when Railway returns no TXT record', async () => {
+      railway.isConfigured.mockReturnValue(true);
+      railway.createCustomDomain.mockResolvedValue({ id: 'rw-2', cnameTarget: 'abc.up.railway.app', txtHost: null, txtValue: null });
       db.findUnique.mockResolvedValue(null);
       db.count.mockResolvedValue(0);
       db.create.mockImplementation(async ({ data }) => ({ ...base, ...data }));
       await service.addDomain('org-1', 'tickets.example.com');
       const data = db.create.mock.calls[0][0].data;
-      expect(data.railwayDomainId).toBe('rw-1');
-      expect(data.cnameTarget).toBe('abc.up.railway.app');
+      expect(data.verificationHost).toBe('_jump-verify');
+      expect(data.verificationToken).toMatch(/^jump-verify=/);
+    });
+    it('surfaces a Railway rejection (plan limit, invalid host) as a 400 with its message', async () => {
+      railway.isConfigured.mockReturnValue(true);
+      railway.createCustomDomain.mockRejectedValue(new Error('Railway API: Custom domain limit reached'));
+      db.findUnique.mockResolvedValue(null);
+      await expect(service.addDomain('org-1', 'tickets.example.com')).rejects.toMatchObject({
+        statusCode: 400,
+        message: expect.stringContaining('Custom domain limit reached'),
+      });
+      expect(db.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('txtPrefixFor / zoneOf', () => {
+    it('reduces Railway host labels of any shape to the prefix before the hostname', () => {
+      expect(txtPrefixFor('_railway-verify.tickets.example.com', 'tickets.example.com')).toBe('_railway-verify');
+      expect(txtPrefixFor('_railway-verify.tickets', 'tickets.example.com')).toBe('_railway-verify');
+      expect(txtPrefixFor('_railway-verify', 'tickets.example.com')).toBe('_railway-verify');
+      expect(txtPrefixFor('_railway-verify.shop.tickets', 'shop.tickets.example.com')).toBe('_railway-verify');
+    });
+    it('derives the registrable zone', () => {
+      expect(zoneOf('tickets.example.com')).toBe('example.com');
+      expect(zoneOf('a.b.example.co.uk')).toBe('example.co.uk');
+      expect(zoneOf('example.com')).toBe('example.com');
     });
   });
 
@@ -133,6 +195,55 @@ describe('DomainService', () => {
       dnsWith({ txt: [['jump-veri', 'fy=abc123']], cname: ['frontend-production.up.railway.app'] });
       await service.verifyDomain('org-1', 'dom-1');
       expect(db.update.mock.calls[0][0].data.status).toBe('ACTIVE');
+    });
+    it('persists a per-record snapshot (current value + status) for the setup page', async () => {
+      db.findFirst.mockResolvedValue(base);
+      dnsWith({ txt: [['jump-verify=stale']], cname: nxdomain() });
+      const out = await service.verifyDomain('org-1', 'dom-1');
+      const data = db.update.mock.calls[0][0].data;
+      expect(data.lastDnsSnapshot).toEqual({
+        txt: { currentValue: 'jump-verify=stale', status: 'invalid' },
+        cname: { currentValue: null, status: 'missing' },
+      });
+      expect(out.dnsRecords).toEqual([
+        expect.objectContaining({ key: 'cname', currentValue: null, status: 'missing' }),
+        expect.objectContaining({ key: 'txt', currentValue: 'jump-verify=stale', status: 'invalid' }),
+      ]);
+    });
+    it('verifies the TXT at the stored verification host (Railway record)', async () => {
+      db.findFirst.mockResolvedValue({ ...base, verificationHost: '_railway-verify', verificationToken: 'railway-verify=xyz' });
+      dnsWith({ txt: [['railway-verify=xyz']], cname: ['frontend-production.up.railway.app'] });
+      await service.verifyDomain('org-1', 'dom-1');
+      expect(service._dns.resolveTxt).toHaveBeenCalledWith('_railway-verify.tickets.example.com');
+      expect(db.update.mock.calls[0][0].data.status).toBe('ACTIVE');
+    });
+    it('returns the stored row without resolving inside the user cooldown; the sweep always checks', async () => {
+      const OLD = process.env.DOMAIN_VERIFY_COOLDOWN_MS;
+      process.env.DOMAIN_VERIFY_COOLDOWN_MS = '15000';
+      try {
+        db.findFirst.mockResolvedValue({ ...base, lastCheckedAt: new Date(Date.now() - 2000) });
+        dnsWith({ txt: [['jump-verify=abc123']], cname: ['frontend-production.up.railway.app'] });
+        const out = await service.verifyDomain('org-1', 'dom-1');
+        expect(service._dns.resolveTxt).not.toHaveBeenCalled();
+        expect(db.update).not.toHaveBeenCalled();
+        expect(out.status).toBe('PENDING');
+        await service.verifyDomain(null, 'dom-1');
+        expect(service._dns.resolveTxt).toHaveBeenCalled();
+      } finally {
+        process.env.DOMAIN_VERIFY_COOLDOWN_MS = OLD;
+      }
+    });
+    it('stores the Railway certificate status and explains a failed issuance', async () => {
+      railway.getCustomDomainStatus.mockResolvedValue({ certificateStatus: 'FAILED', certificateReady: false, dnsOk: true });
+      db.findFirst.mockResolvedValue({ ...base, railwayDomainId: 'rw-1' });
+      db.update.mockImplementation(async ({ data }) => ({ ...base, railwayDomainId: 'rw-1', ...data }));
+      dnsWith({ txt: [['jump-verify=abc123']], cname: ['frontend-production.up.railway.app'] });
+      const out = await service.verifyDomain('org-1', 'dom-1');
+      const data = db.update.mock.calls[0][0].data;
+      expect(data.certificateStatus).toBe('FAILED');
+      expect(data.status).toBe('VERIFIED');
+      expect(data.lastError).toMatch(/certificate could not be issued/);
+      expect(out.certificateStatus).toBe('FAILED');
     });
     it('stays PENDING with a readable error when records are missing or wrong', async () => {
       db.findFirst.mockResolvedValue(base);

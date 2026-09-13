@@ -69,6 +69,18 @@ describe('Storefront domains contract (spec 007 phase 3)', () => {
     expect(domain.dnsRecords.map((r) => r.type)).toEqual(['CNAME', 'TXT']);
     expect(domain.dnsRecords[1].name).toBe(`_jump-verify.${host}`);
     expect(domain.dnsRecords[1].value).toMatch(/^jump-verify=[0-9a-f]{32}$/);
+    expect(domain.dnsRecords.map((r) => r.status)).toEqual(['pending', 'pending']);
+    expect(domain.zone).toBe(`${TAG}.example`);
+    expect(domain.certificateStatus).toBeNull();
+  });
+
+  it('GET /admin/settings/domains/:id returns the domain to its organization only', async () => {
+    const mine = await request(app).get(`/admin/settings/domains/${domain.id}`).set('Authorization', `Bearer ${tokenFor(adminA)}`);
+    expect(mine.status).toBe(200);
+    expect(mine.body).toMatchObject({ id: domain.id, hostname: host, status: 'PENDING' });
+    expect(mine.body.dnsRecords).toHaveLength(2);
+    const theirs = await request(app).get(`/admin/settings/domains/${domain.id}`).set('Authorization', `Bearer ${tokenFor(adminB)}`);
+    expect(theirs.status).toBe(404);
   });
 
   it('rejects invalid, apex, platform, and duplicate hostnames', async () => {
@@ -86,6 +98,7 @@ describe('Storefront domains contract (spec 007 phase 3)', () => {
     const b = await request(app).get('/admin/settings/domains').set('Authorization', `Bearer ${tokenFor(adminB)}`);
     expect(a.status).toBe(200);
     expect(a.body.domains.map((d) => d.id)).toEqual([domain.id]);
+    expect(a.body.platformUrl).toMatch(new RegExp(`/organizations/${orgA.id}$`));
     expect(b.body.domains).toEqual([]);
   });
 
@@ -112,6 +125,7 @@ describe('Storefront domains contract (spec 007 phase 3)', () => {
     expect(res.body.status).toBe('PENDING');
     expect(res.body.lastError).toMatch(/TXT/);
     expect(res.body.lastCheckedAt).toBeTruthy();
+    expect(res.body.dnsRecords.map((r) => r.status)).toEqual(['missing', 'missing']);
 
     // unresolved hosts do not resolve publicly
     expect((await request(app).get('/domains/resolve').query({ host })).status).toBe(404);
@@ -127,6 +141,10 @@ describe('Storefront domains contract (spec 007 phase 3)', () => {
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('ACTIVE');
     expect(res.body.verifiedAt).toBeTruthy();
+    expect(res.body.dnsRecords).toEqual([
+      expect.objectContaining({ type: 'CNAME', currentValue: domain.dnsRecords[0].value, status: 'valid' }),
+      expect.objectContaining({ type: 'TXT', currentValue: token, status: 'valid' }),
+    ]);
 
     const resolve = await request(app).get('/domains/resolve').query({ host: host.toUpperCase() });
     expect(resolve.status).toBe(200);

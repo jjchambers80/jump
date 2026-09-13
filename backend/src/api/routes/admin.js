@@ -112,7 +112,20 @@ async function domainOrgFor(req) {
 router.get('/settings/domains', async (req, res, next) => {
   try {
     const organizationId = await domainOrgFor(req);
-    res.json({ domains: await domainService.listForOrganization(organizationId) });
+    res.json({
+      domains: await domainService.listForOrganization(organizationId),
+      platformUrl: domainService.platformUrlFor(organizationId),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** GET /admin/settings/domains/:id — one domain with its DNS records and last check (setup page). */
+router.get('/settings/domains/:id', async (req, res, next) => {
+  try {
+    const organizationId = await domainOrgFor(req);
+    res.json(await domainService.getForOrganization(organizationId, req.params.id));
   } catch (error) {
     next(error);
   }
