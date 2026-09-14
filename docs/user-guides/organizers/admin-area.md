@@ -26,8 +26,7 @@ The sidebar appears on the left side of every admin page and provides quick navi
 | Events        | `/admin/events`        | Manage events and create new ones  | Admin, Organizer |
 | Analytics     | `/admin/analytics`     | View ticket sales and revenue data | Admin, Organizer |
 | Scan          | `/admin/scan`          | Scan and validate tickets at entry | Admin, Organizer |
-| Users         | `/admin/users`         | Manage user accounts and roles     | **Admin only**   |
-| Settings      | `/admin/settings`      | Manage company business details    | Admin, Organizer |
+| Settings      | `/admin/settings`      | Business details, domains, and (admins) user accounts | Admin, Organizer |
 
 ### Pinned Settings Link
 
@@ -49,8 +48,8 @@ The current page is highlighted in the sidebar with an indigo background, making
 ### Organizer Role
 
 - Access to all admin sections **except User Management**
-- The "Users" link is hidden from the sidebar
-- Attempting to navigate directly to `/admin/users` shows an "Access Denied" message
+- The "Users" section is hidden from the Settings section list
+- Attempting to navigate directly to `/admin/settings/users` shows an "Access Denied" message
 
 ### Customer Role
 
@@ -120,9 +119,9 @@ Ticket validation for event entry:
 - View ticket details for valid scans
 - See rejection reason for invalid/redeemed tickets
 
-### Users (`/admin/users`) — Admin Only
+### Settings › Users (`/admin/settings/users`) — Admin Only
 
-User account management:
+User account management, found in the **Users** section of Settings (the old `/admin/users` address redirects here):
 
 - View all registered users with pagination
 - Filter by role (Customer, Organizer, Admin)

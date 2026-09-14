@@ -1,6 +1,7 @@
 // Admin Sidebar navigation component (T003, T018, T024)
-// Links per FR-005 (Dashboard, Orgs, Venues, Events, Analytics)
-// FR-006 (Users — ADMIN only), with Settings pinned to the footer
+// Links per FR-005 (Dashboard, Orgs, Venues, Events, Analytics), with
+// Settings pinned to the footer. Users (FR-006, ADMIN only) lives under
+// Settings › Users rather than in the main list.
 // Active state via usePathname(), mobile-responsive with toggle
 
 'use client';
@@ -26,7 +27,6 @@ const navItems: NavItem[] = [
   { label: 'Customers', href: '/admin/customers' },
   { label: 'Check In', href: '/admin/orders/scan' },
   { label: 'Analytics', href: '/admin/analytics' },
-  { label: 'Users', href: '/admin/users', roles: ['ADMIN', 'SYSTEM_ADMIN'] },
 ];
 
 interface AdminSidebarProps {
