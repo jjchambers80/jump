@@ -4,6 +4,14 @@
 
 Things a human has to do or decide before Jump takes real money. Code and tests are done for every item here; each needs an account setting, a business decision, or a data review that no deploy can perform. Tick items off in place and date them.
 
+## Go-live todos
+
+Blocking items, in the order to do them. Details in the sections below.
+
+- [ ] **Set the statement descriptor prefix on the Stripe account** (added 2026-09-14) — Stripe Dashboard › Settings › Business › Public details › Statement descriptor. Use something short like `JUMP` so organizations keep 16 characters for their own name. Until this is set, buyers see the raw account name on their card statement and Settings › Payments cannot save a statement name. See [Stripe payments](#stripe-payments).
+- [ ] Live `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` on Railway; activate the account. See [Stripe payments](#stripe-payments).
+- [ ] Decide NY and CA tax regions; activate Stripe Tax or keep manual rates. See [Stripe Tax](#stripe-tax-settings--tax-spec-009).
+
 ## Stripe Tax (Settings › Tax, spec 009)
 
 Found during production verification on 2026-09-14: the platform Stripe account has **Stripe Tax not activated** (`tax.settings.status = pending`, zero registrations). Every region set to *Stripe Tax* therefore errors (`Stripe Tax isn't active for this account…`) and new events in those states start at **0%**. Existing events keep their cached rate (PR #38), so nothing regressed, but nothing new gets a rate either.
