@@ -31,7 +31,7 @@ function businessSummary(details: BusinessDetails) {
 }
 
 export default function SettingsPage() {
-  const { selectedOrgId, selectedOrg, updateOrganization, refresh } = useOrg();
+  const { selectedOrgId, loading: orgLoading, updateOrganization, refresh } = useOrg();
   const [details, setDetails] = useState<BusinessDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -61,14 +61,17 @@ export default function SettingsPage() {
     }
   }, []);
 
+  // The backend scopes this page to the org the header switcher selected
+  // (sent as X-Jump-Org by the api client). Wait for the switcher to resolve
+  // before the first fetch and refetch when the selection changes — but not
+  // when the switcher merely refreshes its list (e.g. after a rename here).
+  const loadedForOrg = useRef<string | null | undefined>(undefined);
   useEffect(() => {
+    if (orgLoading && !selectedOrgId) return;
+    if (loadedForOrg.current === selectedOrgId) return;
+    loadedForOrg.current = selectedOrgId;
     loadBusinessDetails();
-  }, [loadBusinessDetails]);
-
-  // Settings edits the signed-in user's assigned org; the header switcher can
-  // point at a different org for ADMIN users. Flag that so a renamed store
-  // showing up unchanged in the header is not a surprise.
-  const editingOtherOrg = Boolean(details && selectedOrgId && selectedOrgId !== details.id);
+  }, [orgLoading, selectedOrgId, loadBusinessDetails]);
 
   const openEditor = (next: Exclude<Editor, null>) => {
     setSavedMessage('');
@@ -139,12 +142,6 @@ export default function SettingsPage() {
 
           {!loading && details && (
             <div className="mt-4 space-y-4">
-              {editingOtherOrg && (
-                <div role="note" className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
-                  You are editing <strong>{details.name}</strong>, but <strong>{selectedOrg?.name}</strong> is selected in the header. Changes here apply to {details.name}.
-                </div>
-              )}
-
               <div className={cardClass}>
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Business details</h3>
                 <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">
