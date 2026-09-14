@@ -151,3 +151,34 @@ export function WarningIcon({ className = 'h-4 w-4' }: IconProps) {
     </svg>
   );
 }
+
+/** Credit card — Settings › Payments. */
+export function CardIcon({ className = 'h-5 w-5' }: IconProps) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <rect x="2.5" y="4.5" width="15" height="11" rx="1.5" />
+      <path d="M2.5 8.5h15" />
+      <path d="M5.5 12.5h3" />
+    </svg>
+  );
+}
+
+/** Receipt — statement descriptor / rates. */
+export function ReceiptIcon({ className = 'h-5 w-5' }: IconProps) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M5 2.5h10v15l-1.7-1.2-1.6 1.2-1.7-1.2-1.7 1.2-1.6-1.2L5 17.5v-15z" />
+      <path d="M7.5 7h5M7.5 10h5M7.5 13h3" />
+    </svg>
+  );
+}
+
+/** Shield — fraud prevention. */
+export function ShieldIcon({ className = 'h-5 w-5' }: IconProps) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M10 2.5 4 4.8v4.7c0 3.6 2.6 6.5 6 7.5 3.4-1 6-3.9 6-7.5V4.8L10 2.5z" />
+      <path d="m7.5 10 1.8 1.8L12.8 8" />
+    </svg>
+  );
+}

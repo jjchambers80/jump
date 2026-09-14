@@ -25,6 +25,8 @@ Found during production verification on 2026-09-14: the platform Stripe account 
 ## Stripe payments
 
 - [ ] Live `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` on the backend service; webhook endpoint `POST /webhooks/stripe` registered on the live account — see [Stripe Setup](stripe-setup.md).
+- [ ] **Set a statement descriptor prefix** on the live Stripe account (Dashboard › Settings › Business › Public details, "Statement descriptor" → shortened descriptor / prefix). Keep it short (e.g. `JUMP`, 4 characters): organizations get `22 − prefix − 2` characters for their own name on Settings › Payments. Until it is set, no per-organization statement name is sent and the dialog is disabled — see [Payments Settings](../features/payments-settings.md).
+- [ ] **Confirm capabilities** for the optional payment methods organizations may enable (`link_payments`, `cashapp_payments`; BNPL later per spec 010 §5.6). Methods without an active capability show as *Unavailable*.
 
 ## Related
 
