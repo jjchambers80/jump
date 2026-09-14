@@ -1,6 +1,6 @@
 # Tax Calculation
 
-**Status:** Implemented (spec 009 phases 1–2)
+**Status:** Implemented (spec 009 phases 1–3)
 **Last Updated:** 2026-09-14
 
 ## Overview
@@ -66,8 +66,29 @@ Regions are *derived* from venues: the page lists every state the organization h
 | GET | `/admin/settings/tax` | organizer+ | `{ service, regions[], needsAddress[], canEdit }`; scoped by `activeOrgFor(req)` (X-Jump-Org / `?organizationId=` for SYSTEM_ADMIN) |
 | PUT | `/admin/settings/tax/regions/:country/:region` | admin+ | `{ collecting, source?, manualRate? }` → `{ region, recalculatedEvents }`. `manualRate` is a fraction 0–0.5, required for MANUAL, rejected otherwise |
 | POST | `/admin/settings/tax/regions/:country/:region/recalculate` | admin+ | Re-runs the lookup for the region's upcoming events with the saved setting ("Recalculate now"); 404 when the region has no row |
+| PATCH | `/admin/settings/tax` | admin+ | `{ taxInclusivePricing }` — organization-level options (phase 3) |
+| GET | `/admin/settings/tax/report?from&to&format=json\|csv` | organizer+ | Tax collected per region for orders placed in the range (default: calendar year to date, max 3 years). CSV sets `Content-Disposition` (phase 3) |
 
 Region rows carry `upcomingEventCount` (DRAFT/PUBLISHED, future date) so the dialog can say what a save will touch. Event payloads (`_formatEventDetail`) include `tax: { rate, source, region }`; the admin event edit page renders it as `Tax: 8.25% · Stripe Tax · NC` under the venue picker with a link to Settings › Tax.
+
+## Tax-inclusive pricing (phase 3)
+
+`Organization.taxInclusivePricing` (default `false`). When on, the listed tier price already contains tax:
+
+```
+net   = listed / (1 + rate)          (= subtotal, the ex-tax base)
+tax   = listed − net
+fees  = platformFee(net) + processingFee(net + platformFee)
+total = net + fees + tax = listed + fees
+```
+
+`FeeService.computeOrderFees(items, rate, { taxInclusive })` and `frontend/src/lib/fees.ts` implement this identically (fixtures: $50 at 8.25% → net 46.19, tax 3.81, platform 2.31, processing 1.71, total 54.02). The invariant `total = subtotal + platformFee + processingFee + tax` holds in both modes, so `Order` columns, the cart breakdown and `OrderTotals` need no special cases; only labels change (`incl. $3.81 tax`, `Tax (included)`). `OrderService` reads the flag from the event's organization at checkout; public event payloads carry `taxInclusivePricing` for the storefront. Flipping the setting does not touch cached event rates or placed orders.
+
+Fees are charged on the **net** amount (plan §5 decision 2, recommendation adopted; revisit if product decides fees should apply to the listed price).
+
+## Collected tax report (phase 3)
+
+`TaxService.collectedReport(orgId, { from, to })` groups COMPLETED / PARTIALLY_REFUNDED / REFUNDED orders by the venue's state: orders, taxable sales (`subtotalAmount`), tax collected (`taxAmount`), tax refunded and tax net. Refunded tax is **estimated** as `refund ÷ order total × order tax` because `Refund` stores only an amount. Page: `/admin/settings/tax/report` (date range, table, totals, client-side CSV with the same columns as the API's `format=csv`).
 
 ## Configuration
 
@@ -90,8 +111,9 @@ Region rows carry `upcomingEventCount` (DRAFT/PUBLISHED, future date) so the dia
 ## Tests
 
 - `backend/tests/unit/taxService.test.js` — region resolution, every source path, Stripe failure / `not_collecting`, status cache, list and upsert.
-- `backend/tests/contract/tax.test.js` — routes, RBAC, validation, org isolation, event recalculation, venue state normalisation.
-- `frontend/e2e/admin-tax-settings.spec.ts` — page, banner, dialog round-trip, focus return, read-only for ORGANIZER, pending-service warning, Recalculate now (success + lookup error).
+- `backend/tests/unit/feeService.test.js` — exclusive and inclusive fee math; `frontend/tests/unit/fees.test.ts` mirrors the same fixtures.
+- `backend/tests/contract/tax.test.js` — routes, RBAC, validation, org isolation, event recalculation, venue state normalisation, settings PATCH, inclusive checkout amounts, report JSON + CSV.
+- `frontend/e2e/admin-tax-settings.spec.ts` — page, banner, dialog round-trip, focus return, read-only for ORGANIZER, pending-service warning, Recalculate now (success + lookup error), inclusive-pricing confirm dialog, report page + CSV download.
 
 ## Related Features
 

@@ -49,6 +49,8 @@ interface Event {
   category?: string;
   status: string;
   taxRate: number;
+  /** Listed tier prices already include tax (spec 009 phase 3). */
+  taxInclusivePricing?: boolean;
   organizationId?: string | null;
   organizationName?: string | null;
   organizationBrandColor?: string | null;
@@ -204,7 +206,8 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
   const cartTiers = activeTiers.filter((tier) => (quantities[tier.id] ?? 0) > 0);
   const cartFees = computeOrderFees(
     cartTiers.map((tier) => ({ price: tier.price, quantity: quantities[tier.id] ?? 0 })),
-    event?.taxRate ?? 0
+    event?.taxRate ?? 0,
+    event?.taxInclusivePricing === true
   );
   const totalAmount = cartTiers.length > 0 ? cartFees.total : 0;
 
@@ -440,16 +443,23 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                             </p>
                           )}
                           {(() => {
-                            const fees = computeTierAllInPrice(tier.price, event?.taxRate ?? 0);
+                            const fees = computeTierAllInPrice(tier.price, event?.taxRate ?? 0, event?.taxInclusivePricing === true);
                             return (
                               <div className="mt-1">
                                 <span className="text-lg font-bold text-brand-link">
                                   {formatPrice(fees.total)}
                                 </span>
                                 <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">
-                                  Base: {formatPrice(fees.basePrice)}
+                                  {fees.taxInclusive ? (
+                                    <>
+                                      Price: {formatPrice(fees.listedPrice)}
+                                      {fees.tax > 0 && <> (incl. {formatPrice(fees.tax)} tax)</>}
+                                    </>
+                                  ) : (
+                                    <>Base: {formatPrice(fees.basePrice)}</>
+                                  )}
                                   {fees.fees > 0 && <> + Fees: {formatPrice(fees.fees)}</>}
-                                  {fees.tax > 0 && <> + Tax: {formatPrice(fees.tax)}</>}
+                                  {!fees.taxInclusive && fees.tax > 0 && <> + Tax: {formatPrice(fees.tax)}</>}
                                 </p>
                               </div>
                             );

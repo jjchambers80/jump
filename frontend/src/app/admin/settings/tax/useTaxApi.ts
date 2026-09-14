@@ -7,7 +7,7 @@
 import { useMemo } from 'react';
 import api from '@/services/api';
 import { useOrg } from '@/components/OrgContext';
-import type { TaxSettingsResponse, UpsertTaxRegionBody, UpsertTaxRegionResponse } from './types';
+import type { TaxReport, TaxSettings, TaxSettingsResponse, UpsertTaxRegionBody, UpsertTaxRegionResponse } from './types';
 
 export function useTaxApi() {
   const { selectedOrgId } = useOrg();
@@ -20,6 +20,9 @@ export function useTaxApi() {
         api.put<UpsertTaxRegionResponse>(`/admin/settings/tax/regions/${country}/${region}${qs}`, body),
       recalculateRegion: (country: string, region: string) =>
         api.post<UpsertTaxRegionResponse>(`/admin/settings/tax/regions/${country}/${region}/recalculate${qs}`, {}),
+      updateSettings: (body: TaxSettings) => api.patch<TaxSettings>(`/admin/settings/tax${qs}`, body),
+      report: (from: string, to: string) =>
+        api.get<TaxReport>(`/admin/settings/tax/report${qs ? `${qs}&` : '?'}from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
     }),
     [qs]
   );

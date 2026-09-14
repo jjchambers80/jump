@@ -361,7 +361,7 @@ class EventService {
     const event = await prisma.event.findUnique({
       where: { id: eventId },
       include: {
-        venue: { include: { organization: { select: { id: true, name: true, brandColor: true, themeMode: true } } } },
+        venue: { include: { organization: { select: { id: true, name: true, brandColor: true, themeMode: true, taxInclusivePricing: true } } } },
         priceTiers: { orderBy: { displayOrder: 'asc' } },
       },
     });
@@ -549,6 +549,8 @@ class EventService {
       organizationName: event.venue?.organization?.name || null,
       organizationBrandColor: event.venue?.organization?.brandColor || null,
       organizationThemeMode: event.venue?.organization?.themeMode || 'SYSTEM',
+      // Listed tier prices already include tax (spec 009 phase 3); customers see "incl. tax".
+      taxInclusivePricing: event.venue?.organization?.taxInclusivePricing === true,
       venue: event.venue
         ? {
             id: event.venue.id,

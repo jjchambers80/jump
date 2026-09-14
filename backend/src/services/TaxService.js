@@ -170,6 +170,100 @@ class TaxService {
   }
 
   // ---------------------------------------------------------------------------
+  // Organization-level settings and the collected tax report (phase 3)
+  // ---------------------------------------------------------------------------
+
+  async getTaxSettings(orgId) {
+    const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { taxInclusivePricing: true } });
+    if (!org) throw new NotFoundError('Organization not found');
+    return { taxInclusivePricing: org.taxInclusivePricing };
+  }
+
+  /**
+   * Flip tax-inclusive pricing. Cached event rates do not change — only how
+   * FeeService applies them at checkout — so nothing needs recalculating.
+   */
+  async updateTaxSettings(orgId, { taxInclusivePricing }) {
+    const org = await prisma.organization.update({
+      where: { id: orgId },
+      data: { taxInclusivePricing: Boolean(taxInclusivePricing) },
+      select: { taxInclusivePricing: true },
+    });
+    logger.info('Tax settings updated', { event: 'tax_settings_updated', orgId, taxInclusivePricing: org.taxInclusivePricing });
+    return { taxInclusivePricing: org.taxInclusivePricing };
+  }
+
+  /**
+   * Tax collected per region for orders placed in [from, to]. Refunded tax is
+   * estimated proportionally (refund ÷ order total × order tax) because
+   * refunds do not store a tax split.
+   *
+   * @returns {Promise<{ from: string, to: string, rows: Array, totals: Object }>}
+   */
+  async collectedReport(orgId, { from, to }) {
+    const orders = await prisma.order.findMany({
+      where: {
+        status: { in: ['COMPLETED', 'PARTIALLY_REFUNDED', 'REFUNDED'] },
+        createdAt: { gte: from, lte: to },
+        event: { venue: { organizationId: orgId } },
+      },
+      select: {
+        id: true,
+        subtotalAmount: true,
+        taxAmount: true,
+        totalAmount: true,
+        event: { select: { venue: { select: { state: true } } } },
+        refunds: { where: { status: 'SUCCEEDED' }, select: { amount: true } },
+      },
+    });
+
+    const byRegion = new Map();
+    for (const order of orders) {
+      const region = this.resolveRegionForVenue(order.event.venue)?.region || null;
+      const key = region || '—';
+      if (!byRegion.has(key)) {
+        byRegion.set(key, { region, name: region ? stateName(region) : 'No state', orders: 0, taxableSales: 0, taxCollected: 0, taxRefunded: 0 });
+      }
+      const row = byRegion.get(key);
+      const total = Number(order.totalAmount);
+      const tax = Number(order.taxAmount);
+      const refunded = order.refunds.reduce((sum, r) => sum + Number(r.amount), 0);
+      row.orders += 1;
+      row.taxableSales += Number(order.subtotalAmount);
+      row.taxCollected += tax;
+      row.taxRefunded += total > 0 ? (refunded / total) * tax : 0;
+    }
+
+    const round = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+    const rows = [...byRegion.values()]
+      .map((r) => ({ ...r, taxableSales: round(r.taxableSales), taxCollected: round(r.taxCollected), taxRefunded: round(r.taxRefunded), taxNet: round(r.taxCollected - r.taxRefunded) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const totals = rows.reduce(
+      (t, r) => ({
+        orders: t.orders + r.orders,
+        taxableSales: round(t.taxableSales + r.taxableSales),
+        taxCollected: round(t.taxCollected + r.taxCollected),
+        taxRefunded: round(t.taxRefunded + r.taxRefunded),
+        taxNet: round(t.taxNet + r.taxNet),
+      }),
+      { orders: 0, taxableSales: 0, taxCollected: 0, taxRefunded: 0, taxNet: 0 }
+    );
+    return { from: from.toISOString(), to: to.toISOString(), rows, totals };
+  }
+
+  /** CSV rendering of collectedReport() for download. */
+  reportToCsv(report) {
+    const esc = (v) => `"${String(v).replace(/"/g, '""')}"`;
+    const lines = [['Region', 'State', 'Orders', 'Taxable sales', 'Tax collected', 'Tax refunded (est.)', 'Tax net'].map(esc).join(',')];
+    for (const r of report.rows) {
+      lines.push([r.name, r.region || '', r.orders, r.taxableSales.toFixed(2), r.taxCollected.toFixed(2), r.taxRefunded.toFixed(2), r.taxNet.toFixed(2)].map(esc).join(','));
+    }
+    const t = report.totals;
+    lines.push(['Total', '', t.orders, t.taxableSales.toFixed(2), t.taxCollected.toFixed(2), t.taxRefunded.toFixed(2), t.taxNet.toFixed(2)].map(esc).join(','));
+    return lines.join('\n') + '\n';
+  }
+
+  // ---------------------------------------------------------------------------
   // Rate resolution
   // ---------------------------------------------------------------------------
 

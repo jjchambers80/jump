@@ -28,7 +28,7 @@ export default function OrderTotals({ fees, totalLabel = 'Total', className = ''
           <dd className="font-medium text-gray-900 dark:text-slate-100">{formatPrice(subtotal)}</dd>
         </div>
         <div className="flex justify-between">
-          <dt className="text-gray-600 dark:text-slate-400">Tax</dt>
+          <dt className="text-gray-600 dark:text-slate-400">{fees.taxInclusive ? 'Tax (included)' : 'Tax'}</dt>
           <dd className="font-medium text-gray-900 dark:text-slate-100">{formatPrice(fees.tax)}</dd>
         </div>
         <div className="flex justify-between">

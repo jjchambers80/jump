@@ -10,7 +10,7 @@ import { resolveOrgScope, isUnscoped } from '../../middleware/orgScope.js';
 import { validateUpdateAttendee } from '../validators/adminValidators.js';
 import { validateUpdateBusinessDetails } from '../validators/organizationValidators.js';
 import { validateCreateOrganizationPerson } from '../validators/organizationPersonValidators.js';
-import { validateTaxRegionParams, validateUpsertTaxRegion } from '../validators/taxValidators.js';
+import { validateTaxRegionParams, validateUpsertTaxRegion, validateUpdateTaxSettings, validateTaxReportQuery } from '../validators/taxValidators.js';
 import organizationService from '../../services/OrganizationService.js';
 import organizationPersonService from '../../services/OrganizationPersonService.js';
 import orderService from '../../services/OrderService.js';
@@ -194,9 +194,10 @@ router.delete('/settings/domains/:id', async (req, res, next) => {
 router.get('/settings/tax', async (req, res, next) => {
   try {
     const organizationId = await activeOrgFor(req);
-    const [service, { regions, needsAddress }] = await Promise.all([
+    const [service, { regions, needsAddress }, settings] = await Promise.all([
       taxService.getServiceStatus(),
       taxService.listRegions(organizationId),
+      taxService.getTaxSettings(organizationId),
     ]);
     // The Stripe dashboard link is only useful to whoever owns the platform account.
     const { manageUrl, ...serviceForRole } = service;
@@ -204,6 +205,7 @@ router.get('/settings/tax', async (req, res, next) => {
       service: req.user.role === 'SYSTEM_ADMIN' ? service : serviceForRole,
       regions,
       needsAddress,
+      settings,
       canEdit: ['ADMIN', 'SYSTEM_ADMIN'].includes(req.user.role),
     });
   } catch (error) {
@@ -227,6 +229,34 @@ router.put(
     }
   }
 );
+
+/** PATCH /admin/settings/tax { taxInclusivePricing } — organization-level tax options. */
+router.patch('/settings/tax', requireAdmin, validateUpdateTaxSettings, async (req, res, next) => {
+  try {
+    const organizationId = await activeOrgFor(req);
+    res.json(await taxService.updateTaxSettings(organizationId, req.body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** GET /admin/settings/tax/report?from&to&format=json|csv — tax collected per region. */
+router.get('/settings/tax/report', validateTaxReportQuery, async (req, res, next) => {
+  try {
+    const organizationId = await activeOrgFor(req);
+    const report = await taxService.collectedReport(organizationId, req.taxReport);
+    if (req.taxReport.format === 'csv') {
+      const stamp = `${report.from.slice(0, 10)}_${report.to.slice(0, 10)}`;
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="tax-collected-${stamp}.csv"`);
+      res.send(taxService.reportToCsv(report));
+      return;
+    }
+    res.json(report);
+  } catch (error) {
+    next(error);
+  }
+});
 
 /** POST /admin/settings/tax/regions/:country/:region/recalculate — re-run lookups for upcoming events there. */
 router.post(

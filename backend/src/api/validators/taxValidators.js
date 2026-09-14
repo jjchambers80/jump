@@ -56,3 +56,43 @@ export const validateUpsertTaxRegion = (req, res, next) => {
 
   next();
 };
+
+/** PATCH /admin/settings/tax { taxInclusivePricing } */
+export const validateUpdateTaxSettings = (req, res, next) => {
+  const body = req.body || {};
+  const unknown = Object.keys(body).filter((f) => f !== 'taxInclusivePricing');
+  if (unknown.length > 0) return next(new ValidationError(`Unknown field(s): ${unknown.join(', ')}`));
+  if (typeof body.taxInclusivePricing !== 'boolean') {
+    return next(new ValidationError('taxInclusivePricing must be a boolean'));
+  }
+  next();
+};
+
+const MAX_REPORT_DAYS = 366 * 3;
+
+/**
+ * GET /admin/settings/tax/report?from&to&format — ISO dates (YYYY-MM-DD or
+ * full timestamps). Defaults to the current calendar year to date. `to` is
+ * inclusive to the end of its day when given as a date.
+ */
+export const validateTaxReportQuery = (req, res, next) => {
+  const now = new Date();
+  const parse = (value, endOfDay) => {
+    if (value === undefined) return null;
+    if (typeof value !== 'string') return NaN;
+    const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+    const d = new Date(dateOnly ? `${value}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}Z` : value);
+    return d;
+  };
+  const from = parse(req.query.from, false) ?? new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
+  const to = parse(req.query.to, true) ?? now;
+  if (Number.isNaN(from?.getTime?.()) || Number.isNaN(to?.getTime?.())) {
+    return next(new ValidationError('from and to must be ISO dates'));
+  }
+  if (from > to) return next(new ValidationError('from must be on or before to'));
+  if ((to - from) / 86400000 > MAX_REPORT_DAYS) return next(new ValidationError('Report range cannot exceed three years'));
+  const format = req.query.format === undefined ? 'json' : String(req.query.format).toLowerCase();
+  if (!['json', 'csv'].includes(format)) return next(new ValidationError('format must be json or csv'));
+  req.taxReport = { from, to, format };
+  next();
+};

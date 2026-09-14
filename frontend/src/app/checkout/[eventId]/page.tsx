@@ -33,6 +33,8 @@ interface Event {
   description?: string;
   date: string;
   taxRate: number;
+  /** Listed tier prices already include tax (spec 009 phase 3). */
+  taxInclusivePricing?: boolean;
   venue: EventVenue | null;
   priceTiers: PriceTier[];
   organizationId?: string | null;
@@ -278,7 +280,7 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
 
   const totalQuantity = selectedItems.reduce((sum, item) => sum + item.quantity, 0);
   const feeItems = selectedItems.map((item) => ({ price: item.tier.price, quantity: item.quantity }));
-  const fees = computeOrderFees(feeItems, event?.taxRate ?? 0);
+  const fees = computeOrderFees(feeItems, event?.taxRate ?? 0, event?.taxInclusivePricing === true);
   const totalAmount = fees.total;
 
   const allLinesOpen = selectedItems.every((item) => openLines[item.priceTierId]);
@@ -362,7 +364,7 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
                   Includes Base Price: {formatPrice(fees.subtotal)}
                   {fees.platformFee > 0 && <>, Service Fee: {formatPrice(fees.platformFee)}</>}
                   {fees.processingFee > 0 && <>, Processing: {formatPrice(fees.processingFee)}</>}
-                  {fees.tax > 0 && <>, Tax: {formatPrice(fees.tax)}</>}
+                  {fees.tax > 0 && <>, Tax{fees.taxInclusive ? ' (included in price)' : ''}: {formatPrice(fees.tax)}</>}
                 </p>
               </div>
             </div>

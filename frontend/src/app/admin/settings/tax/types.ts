@@ -34,11 +34,35 @@ export interface TaxRegionRow {
   lastError: string | null;
 }
 
+export interface TaxSettings {
+  /** Listed tier prices already include sales tax; tax is backed out at checkout. */
+  taxInclusivePricing: boolean;
+}
+
 export interface TaxSettingsResponse {
   service: TaxServiceStatus;
   regions: TaxRegionRow[];
   needsAddress: Array<{ id: string; name: string }>;
+  settings: TaxSettings;
   canEdit: boolean;
+}
+
+export interface TaxReportRow {
+  region: string | null;
+  name: string;
+  orders: number;
+  taxableSales: number;
+  taxCollected: number;
+  /** Estimated: refund ÷ order total × order tax. */
+  taxRefunded: number;
+  taxNet: number;
+}
+
+export interface TaxReport {
+  from: string;
+  to: string;
+  rows: TaxReportRow[];
+  totals: Omit<TaxReportRow, 'region' | 'name'>;
 }
 
 export interface UpsertTaxRegionBody {
@@ -79,4 +103,17 @@ export function parsePercent(input: string): number | null {
   const value = Number(trimmed);
   if (!Number.isFinite(value)) return null;
   return Math.round(value * 1000) / 100000;
+}
+
+/** Same columns as the backend's CSV export (TaxService.reportToCsv). */
+export function reportToCsv(report: TaxReport): string {
+  const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
+  const money = (n: number) => n.toFixed(2);
+  const lines = [['Region', 'State', 'Orders', 'Taxable sales', 'Tax collected', 'Tax refunded (est.)', 'Tax net'].map(esc).join(',')];
+  for (const r of report.rows) {
+    lines.push([r.name, r.region ?? '', r.orders, money(r.taxableSales), money(r.taxCollected), money(r.taxRefunded), money(r.taxNet)].map(esc).join(','));
+  }
+  const t = report.totals;
+  lines.push(['Total', '', t.orders, money(t.taxableSales), money(t.taxCollected), money(t.taxRefunded), money(t.taxNet)].map(esc).join(','));
+  return lines.join('\n') + '\n';
 }

@@ -9,9 +9,11 @@ import jwt from 'jsonwebtoken';
 const { default: app } = await import('../../src/api/server.js');
 const { prisma } = await import('@jump/db');
 const { default: taxService } = await import('../../src/services/TaxService.js');
+const { default: stripe } = await import('../../src/config/stripe.js');
 
 const AUTH_SECRET = process.env.AUTH_SECRET;
 const TAG = 'tax-ct';
+const RUN = Date.now().toString(36).slice(-5).toUpperCase();
 
 function tokenFor(user) {
   return jwt.sign({ sub: user.id, email: user.email, role: user.role, name: 'Tax Test' }, AUTH_SECRET, {
@@ -43,6 +45,21 @@ describe('Settings › Tax contract (spec 009)', () => {
   let event;
 
   beforeAll(async () => {
+    const stale = await prisma.organization.findMany({ where: { name: { startsWith: `${TAG} ` } }, select: { id: true } });
+    if (stale.length) {
+      const ids = stale.map((o) => o.id);
+      const orderWhere = { event: { venue: { organizationId: { in: ids } } } };
+      await prisma.refund.deleteMany({ where: { order: orderWhere } }).catch(() => {});
+      await prisma.ticket.deleteMany({ where: { order: orderWhere } }).catch(() => {});
+      await prisma.orderItem.deleteMany({ where: { order: orderWhere } }).catch(() => {});
+      await prisma.order.deleteMany({ where: orderWhere }).catch(() => {});
+      await prisma.priceTier.deleteMany({ where: { event: { venue: { organizationId: { in: ids } } } } }).catch(() => {});
+      await prisma.event.deleteMany({ where: { venue: { organizationId: { in: ids } } } }).catch(() => {});
+      await prisma.contact.deleteMany({ where: { organizationId: { in: ids } } }).catch(() => {});
+      await prisma.venue.deleteMany({ where: { organizationId: { in: ids } } }).catch(() => {});
+      await prisma.user.deleteMany({ where: { email: { endsWith: `@${TAG}.test` } } }).catch(() => {});
+      await prisma.organization.deleteMany({ where: { id: { in: ids } } }).catch(() => {});
+    }
     orgA = await prisma.organization.create({ data: { name: `${TAG} A` } });
     orgB = await prisma.organization.create({ data: { name: `${TAG} B` } });
     [adminA, organizerA, adminB, sysAdmin] = await Promise.all([
@@ -61,7 +78,14 @@ describe('Settings › Tax contract (spec 009)', () => {
   });
 
   afterAll(async () => {
+    const orderWhere = { event: { venue: { organizationId: { in: [orgA.id, orgB.id] } } } };
+    await prisma.refund.deleteMany({ where: { order: orderWhere } }).catch(() => {});
+    await prisma.ticket.deleteMany({ where: { order: orderWhere } }).catch(() => {});
+    await prisma.orderItem.deleteMany({ where: { order: orderWhere } }).catch(() => {});
+    await prisma.order.deleteMany({ where: orderWhere }).catch(() => {});
+    await prisma.priceTier.deleteMany({ where: { event: { venue: { organizationId: { in: [orgA.id, orgB.id] } } } } }).catch(() => {});
     await prisma.event.deleteMany({ where: { venue: { organizationId: { in: [orgA.id, orgB.id] } } } }).catch(() => {});
+    await prisma.contact.deleteMany({ where: { organizationId: { in: [orgA.id, orgB.id] } } }).catch(() => {});
     await prisma.venue.deleteMany({ where: { organizationId: { in: [orgA.id, orgB.id] } } }).catch(() => {});
     await prisma.user.deleteMany({ where: { email: { endsWith: `@${TAG}.test` } } }).catch(() => {});
     await prisma.organization.deleteMany({ where: { id: { in: [orgA.id, orgB.id] } } }).catch(() => {});
@@ -185,6 +209,94 @@ describe('Settings › Tax contract (spec 009)', () => {
     expect(missing.status).toBe(404);
     const forbidden = await request(app).post('/admin/settings/tax/regions/US/TX/recalculate').set('Authorization', `Bearer ${tokenFor(organizerA)}`);
     expect(forbidden.status).toBe(403);
+  });
+
+  it('PATCH /admin/settings/tax toggles tax-inclusive pricing and GET reports it', async () => {
+    const before = await request(app).get('/admin/settings/tax').set('Authorization', `Bearer ${tokenFor(adminA)}`);
+    expect(before.body.settings).toEqual({ taxInclusivePricing: false });
+
+    const bad = await request(app).patch('/admin/settings/tax').set('Authorization', `Bearer ${tokenFor(adminA)}`).send({ taxInclusivePricing: 'yes' });
+    expect(bad.status).toBe(400);
+    const forbidden = await request(app).patch('/admin/settings/tax').set('Authorization', `Bearer ${tokenFor(organizerA)}`).send({ taxInclusivePricing: true });
+    expect(forbidden.status).toBe(403);
+
+    const on = await request(app).patch('/admin/settings/tax').set('Authorization', `Bearer ${tokenFor(adminA)}`).send({ taxInclusivePricing: true });
+    expect(on.status).toBe(200);
+    expect(on.body).toEqual({ taxInclusivePricing: true });
+    const after = await request(app).get('/admin/settings/tax').set('Authorization', `Bearer ${tokenFor(adminA)}`);
+    expect(after.body.settings).toEqual({ taxInclusivePricing: true });
+
+    // Public event payload carries the flag so the storefront can label prices "incl. tax".
+    const pub = await request(app).get(`/events/${event.id}`);
+    expect(pub.status).toBe(200);
+    expect(pub.body.taxInclusivePricing).toBe(true);
+  });
+
+  it('checkout backs tax out of the listed price when the org is tax-inclusive', async () => {
+    // TX collects a manual 6.25% (set above); make sure the event carries it.
+    await request(app).put('/admin/settings/tax/regions/US/TX').set('Authorization', `Bearer ${tokenFor(adminA)}`).send({ collecting: true, source: 'MANUAL', manualRate: 0.0625 });
+    const tier = await prisma.priceTier.create({ data: { eventId: event.id, name: `${TAG} GA`, price: 50, quantityTotal: 10, displayOrder: 0, isActive: true } });
+    const sessions = jest.spyOn(stripe.checkout.sessions, 'create').mockResolvedValue({ id: `cs_${TAG}_${RUN}`, url: 'https://checkout.stripe.com/pay/x', payment_intent: null });
+    try {
+      const res = await request(app)
+        .post('/orders')
+        .send({ eventId: event.id, priceTierId: tier.id, quantity: 1, contact: { email: `buyer@${TAG}.test`, firstName: 'Tax', lastName: 'Buyer' } });
+      expect(res.status).toBe(201);
+      const order = await prisma.order.findUnique({ where: { id: res.body.orderId } });
+      // $50 incl. 6.25%: net 47.06, tax 2.94; fees on the net; total = 50 + fees
+      expect(Number(order.subtotalAmount)).toBe(47.06);
+      expect(Number(order.taxAmount)).toBe(2.94);
+      expect(Number(order.platformFeeAmount)).toBe(2.35);
+      expect(Number(order.processingFeeAmount)).toBe(1.73);
+      expect(Number(order.totalAmount)).toBe(54.08);
+      expect(sessions.mock.calls[0][0].line_items[0].price_data.unit_amount).toBe(5408);
+    } finally {
+      sessions.mockRestore();
+    }
+  });
+
+  it('GET /admin/settings/tax/report groups collected tax by region with estimated refunds', async () => {
+    const ncTier = await prisma.priceTier.create({ data: { eventId: event.id, name: `${TAG} report`, price: 10, quantityTotal: 10, displayOrder: 1, isActive: true } });
+    const contact = await prisma.contact.create({ data: { organizationId: orgA.id, email: `report@${TAG}.test`, firstName: 'R', lastName: 'P' } });
+    const mk = (ref, status, amounts, refunds = []) =>
+      prisma.order.create({
+        data: {
+          orderRef: ref,
+          eventId: event.id,
+          contactId: contact.id,
+          status,
+          quantity: 1,
+          currency: 'usd',
+          ...amounts,
+          items: { create: [{ priceTierId: ncTier.id, quantity: 1, unitPrice: 10 }] },
+          refunds: { create: refunds.map((amount) => ({ amount, status: 'SUCCEEDED' })) },
+        },
+      });
+    await mk(`JMP-${RUN}1`, 'COMPLETED', { subtotalAmount: 100, platformFeeAmount: 5, processingFeeAmount: 3.35, taxAmount: 8, totalAmount: 116.35 });
+    await mk(`JMP-${RUN}2`, 'PARTIALLY_REFUNDED', { subtotalAmount: 200, platformFeeAmount: 10, processingFeeAmount: 6.39, taxAmount: 16, totalAmount: 232.39 }, [116.195]);
+    await mk(`JMP-${RUN}3`, 'PENDING', { subtotalAmount: 999, platformFeeAmount: 0, processingFeeAmount: 0, taxAmount: 99, totalAmount: 1098 });
+
+    const res = await request(app).get('/admin/settings/tax/report').set('Authorization', `Bearer ${tokenFor(organizerA)}`);
+    expect(res.status).toBe(200);
+    const tx = res.body.rows.find((r) => r.region === 'TX');
+    expect(tx).toMatchObject({ name: 'Texas', orders: expect.any(Number) });
+    expect(tx.orders).toBeGreaterThanOrEqual(2);
+    expect(tx.taxCollected).toBeGreaterThanOrEqual(24);
+    expect(tx.taxRefunded).toBeCloseTo(8, 2);
+    expect(res.body.totals.taxNet).toBeCloseTo(res.body.totals.taxCollected - res.body.totals.taxRefunded, 2);
+    expect(res.body.rows.some((r) => r.taxCollected === 99)).toBe(false); // PENDING excluded
+
+    const csv = await request(app).get('/admin/settings/tax/report?format=csv&from=2026-01-01').set('Authorization', `Bearer ${tokenFor(adminA)}`);
+    expect(csv.status).toBe(200);
+    expect(csv.headers['content-type']).toMatch(/text\/csv/);
+    expect(csv.headers['content-disposition']).toMatch(/tax-collected-2026-01-01_/);
+    expect(csv.text.split('\n')[0]).toBe('"Region","State","Orders","Taxable sales","Tax collected","Tax refunded (est.)","Tax net"');
+    expect(csv.text).toMatch(/"Total"/);
+
+    const badRange = await request(app).get('/admin/settings/tax/report?from=2026-05-01&to=2026-01-01').set('Authorization', `Bearer ${tokenFor(adminA)}`);
+    expect(badRange.status).toBe(400);
+    const other = await request(app).get('/admin/settings/tax/report').set('Authorization', `Bearer ${tokenFor(adminB)}`);
+    expect(other.body.rows).toEqual([]);
   });
 
   it('is isolated per organization and honours X-Jump-Org / ?organizationId= for SYSTEM_ADMIN', async () => {

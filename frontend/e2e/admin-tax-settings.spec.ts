@@ -74,18 +74,22 @@ interface MockOptions {
   saveError?: string;
   /** What a recalculate returns for lastRate / lastError. */
   recalc?: { lastRate: number | null; lastError: string | null };
+  taxInclusivePricing?: boolean;
+  report?: { rows: Array<{ region: string | null; name: string; orders: number; taxableSales: number; taxCollected: number; taxRefunded: number; taxNet: number }> };
 }
 
 async function mockTaxApi(page: Page, regions: MockRegion[], options: MockOptions = {}) {
   const rows = new Map(regions.map((r) => [r.region, r]));
-  const calls: { method: string; path: string; body?: unknown }[] = [];
+  const calls: { method: string; path: string; body?: unknown; query?: Record<string, string> }[] = [];
   const json = (body: unknown, status = 200) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
+  const settings = { taxInclusivePricing: options.taxInclusivePricing ?? false };
 
   await page.route(`${API}/admin/settings/tax**`, async (route) => {
     const req = route.request();
-    const path = new URL(req.url()).pathname.replace('/admin/settings/tax', '');
+    const url = new URL(req.url());
+    const path = url.pathname.replace('/admin/settings/tax', '');
     const method = req.method();
-    calls.push({ method, path, body: method === 'PUT' ? req.postDataJSON() : undefined });
+    calls.push({ method, path, body: ['PUT', 'PATCH'].includes(method) ? req.postDataJSON() : undefined, query: Object.fromEntries(url.searchParams) });
 
     if (method === 'GET' && path === '') {
       return route.fulfill(
@@ -93,9 +97,22 @@ async function mockTaxApi(page: Page, regions: MockRegion[], options: MockOption
           service: options.service ?? activeService,
           regions: [...rows.values()].sort((a, b) => a.name.localeCompare(b.name)),
           needsAddress: options.needsAddress ?? [],
+          settings,
           canEdit: options.canEdit ?? true,
         })
       );
+    }
+    if (method === 'PATCH' && path === '') {
+      settings.taxInclusivePricing = (req.postDataJSON() as { taxInclusivePricing: boolean }).taxInclusivePricing;
+      return route.fulfill(json(settings));
+    }
+    if (method === 'GET' && path === '/report') {
+      const rowsOut = options.report?.rows ?? [];
+      const totals = rowsOut.reduce(
+        (t, r) => ({ orders: t.orders + r.orders, taxableSales: t.taxableSales + r.taxableSales, taxCollected: t.taxCollected + r.taxCollected, taxRefunded: t.taxRefunded + r.taxRefunded, taxNet: t.taxNet + r.taxNet }),
+        { orders: 0, taxableSales: 0, taxCollected: 0, taxRefunded: 0, taxNet: 0 }
+      );
+      return route.fulfill(json({ from: `${url.searchParams.get('from')}T00:00:00.000Z`, to: `${url.searchParams.get('to')}T23:59:59.999Z`, rows: rowsOut, totals }));
     }
     const recalc = path.match(/^\/regions\/US\/([A-Z]{2})\/recalculate$/);
     if (method === 'POST' && recalc) {
@@ -201,7 +218,7 @@ test('editing a region: toggle collecting, choose a manual rate, save, row updat
   await dialog.getByRole('button', { name: 'Save' }).click();
 
   await expect(dialog).toBeHidden();
-  expect(api.calls.find((c) => c.method === 'PUT')).toEqual({ method: 'PUT', path: '/regions/US/TX', body: { collecting: true, source: 'MANUAL', manualRate: 0.0625 } });
+  expect(api.calls.find((c) => c.method === 'PUT')).toMatchObject({ method: 'PUT', path: '/regions/US/TX', body: { collecting: true, source: 'MANUAL', manualRate: 0.0625 } });
   await expect(page.getByRole('status').filter({ hasText: 'Texas saved' })).toContainText('recalculated on 3 upcoming events');
   await expect(page.getByTestId('tax-action-needed')).toHaveCount(0);
   const tx = page.getByTestId('tax-region-TX');
@@ -314,4 +331,81 @@ test('pending Stripe Tax shows the warning, and SYSTEM_ADMIN gets the Manage lin
   await expect(service).toContainText('not activated on the platform account');
   await expect(service.getByRole('link', { name: 'Manage' })).toHaveAttribute('href', 'https://dashboard.stripe.com/settings/tax');
   await expect(page.getByTestId('tax-region-NC')).toContainText('Stripe Tax inactive');
+});
+
+test('Include sales tax in ticket prices asks for confirmation with a worked example, then saves', async ({ page, baseURL }) => {
+  await mockSession(page, baseURL!);
+  const api = await mockTaxApi(page, [region('NC', 'North Carolina', { configured: true, collecting: true, source: 'MANUAL', manualRate: 0.0825, lastRate: 0.0825, lastSource: 'MANUAL' })]);
+  await page.goto('/admin/settings/tax');
+
+  const box = page.getByRole('checkbox', { name: 'Include sales tax in ticket prices' });
+  await expect(box).not.toBeChecked();
+  await box.click();
+
+  const dialog = page.getByRole('dialog', { name: 'Include sales tax in ticket prices?' });
+  await expect(dialog).toBeVisible();
+  const example = dialog.getByTestId('tax-inclusive-example');
+  await expect(example).toContainText('Example: a $50.00 tier at 8.25%');
+  await expect(example).toContainText('$50.00 incl. $3.81 tax');
+  await expect(example).toContainText('$54.02');
+  await expect(example).toContainText('Today the same tier costs $58.45');
+
+  // Cancel leaves it off
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(box).not.toBeChecked();
+  await expect(box).toBeFocused();
+  expect(api.calls.some((c) => c.method === 'PATCH')).toBe(false);
+
+  await box.click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Include tax in prices' }).click();
+  await expect(page.getByRole('dialog')).toBeHidden();
+  expect(api.calls.find((c) => c.method === 'PATCH')?.body).toEqual({ taxInclusivePricing: true });
+  await expect(box).toBeChecked();
+  await expect(page.getByRole('status').filter({ hasText: 'Ticket prices now include sales tax.' })).toBeVisible();
+});
+
+test('Collected tax report lists regions with totals and downloads a CSV', async ({ page, baseURL }) => {
+  await mockSession(page, baseURL!);
+  const api = await mockTaxApi(page, [], {
+    report: {
+      rows: [
+        { region: 'NC', name: 'North Carolina', orders: 12, taxableSales: 1200, taxCollected: 87, taxRefunded: 7.25, taxNet: 79.75 },
+        { region: 'TX', name: 'Texas', orders: 3, taxableSales: 300, taxCollected: 18.75, taxRefunded: 0, taxNet: 18.75 },
+      ],
+    },
+  });
+  await page.goto('/admin/settings/tax');
+  await page.getByRole('link', { name: 'Collected tax report' }).click();
+  await expect(page).toHaveURL(/\/admin\/settings\/tax\/report$/);
+  await expect(page.getByRole('heading', { name: 'Collected tax report' })).toBeVisible();
+
+  const nc = page.getByTestId('tax-report-NC');
+  await expect(nc).toContainText('North Carolina');
+  await expect(nc).toContainText('$1,200.00'.replace(',', '')); // formatPrice has no thousands separator
+  await expect(nc).toContainText('$87.00');
+  await expect(nc).toContainText('$7.25');
+  await expect(nc).toContainText('$79.75');
+  const totals = page.getByTestId('tax-report-totals');
+  await expect(totals).toContainText('15');
+  await expect(totals).toContainText('$105.75');
+  await expect(totals).toContainText('$98.50');
+
+  // Re-run with a custom range sends it to the API
+  await page.getByLabel('From').fill('2026-03-01');
+  await page.getByLabel('To').fill('2026-03-31');
+  await page.getByRole('button', { name: 'Run report' }).click();
+  await expect.poll(() => api.calls.filter((c) => c.path === '/report').at(-1)?.query).toMatchObject({ from: '2026-03-01', to: '2026-03-31' });
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download CSV' }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe('tax-collected-2026-03-01_2026-03-31.csv');
+  const text = await (await download.createReadStream()).toArray().then((chunks) => Buffer.concat(chunks as Buffer[]).toString('utf8'));
+  expect(text.split('\n')[0]).toBe('"Region","State","Orders","Taxable sales","Tax collected","Tax refunded (est.)","Tax net"');
+  expect(text).toContain('"North Carolina","NC","12","1200.00","87.00","7.25","79.75"');
+  expect(text).toContain('"Total","","15"');
+
+  const a11y = await new AxeBuilder({ page }).include('main').analyze();
+  expect(a11y.violations).toEqual([]);
 });

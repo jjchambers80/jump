@@ -56,7 +56,7 @@ SELECT * FROM "PriceTier" WHERE id = ? FOR UPDATE  -- row-level lock
 total = subtotal + platformFee + processingFee + tax
 - platformFee = subtotal × 0.05
 - processingFee = (subtotal + platformFee) × stripeRate + fixedFee
-- tax = subtotal × taxRate (venue-based; `Event.taxRate` is resolved from the organization's `TaxRegion` for the venue's state — not collecting → 0, MANUAL → flat rate, STRIPE → Stripe Tax lookup by postal code. See `docs/wiki/features/tax-calculation.md`)
+- tax = subtotal × taxRate, or backed out of the listed price when `Organization.taxInclusivePricing` (then subtotal = listed ÷ (1 + rate)) (venue-based; `Event.taxRate` is resolved from the organization's `TaxRegion` for the venue's state — not collecting → 0, MANUAL → flat rate, STRIPE → Stripe Tax lookup by postal code. See `docs/wiki/features/tax-calculation.md`)
 ```
 
 ## Tests

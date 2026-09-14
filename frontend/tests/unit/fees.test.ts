@@ -112,6 +112,55 @@ describe('computeTierAllInPrice', () => {
   });
 });
 
+describe('tax-inclusive pricing (spec 009 phase 3)', () => {
+  // Fixtures generated from backend/tests/unit/feeService.test.js — keep in sync.
+  it('backs tax out of the listed price and charges fees on the net, like FeeService', () => {
+    const fees = computeOrderFees([{ price: 50, quantity: 1 }], 0.0825, true);
+    expect(fees.taxInclusive).toBe(true);
+    expect(fees.subtotal).toBe(46.19);
+    expect(fees.tax).toBe(3.81);
+    expect(fees.platformFee).toBe(2.31);
+    expect(fees.processingFee).toBe(1.71);
+    expect(fees.total).toBe(54.02);
+    expect(fees.lines[0]).toMatchObject({ unitPrice: 50, base: 46.19, tax: 3.81, total: 54.02 });
+  });
+
+  it('tier card: listed price is the base plus tax; total is listed plus fees', () => {
+    const tier = computeTierAllInPrice(50, 0.0825, true);
+    expect(tier.listedPrice).toBe(50);
+    expect(tier.basePrice).toBe(46.19);
+    expect(tier.tax).toBe(3.81);
+    expect(tier.fees).toBe(4.02);
+    expect(tier.total).toBe(54.02);
+    expect(tier.total).toBe(sumBy([tier.listedPrice, tier.fees], (v) => v));
+  });
+
+  it('multi-line: components and line totals reconcile, each line charges listed + fee share', () => {
+    const fees = computeOrderFees(
+      [
+        { price: 25, quantity: 2 },
+        { price: 99.99, quantity: 1 },
+      ],
+      0.07,
+      true
+    );
+    expect(sumBy(fees.lines, (l) => l.platformFee)).toBe(fees.platformFee);
+    expect(sumBy(fees.lines, (l) => l.processingFee)).toBe(fees.processingFee);
+    expect(sumBy(fees.lines, (l) => l.tax)).toBe(fees.tax);
+    expect(sumBy(fees.lines, (l) => l.base)).toBe(fees.subtotal);
+    expect(sumBy(fees.lines, (l) => l.total)).toBe(fees.total);
+    for (const line of fees.lines) {
+      expect(line.total).toBe(sumBy([line.unitPrice * line.quantity, line.platformFee, line.processingFee], (v) => v));
+    }
+  });
+
+  it('is identical to the exclusive model at a 0% rate', () => {
+    const inclusive = computeOrderFees([{ price: 20, quantity: 2 }], 0, true);
+    const exclusive = computeOrderFees([{ price: 20, quantity: 2 }], 0, false);
+    expect({ ...inclusive, taxInclusive: false }).toEqual({ ...exclusive, taxInclusive: false });
+  });
+});
+
 describe('formatPrice', () => {
   it('formats to two decimals with a dollar sign', () => {
     expect(formatPrice(5)).toBe('$5.00');

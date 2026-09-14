@@ -84,4 +84,55 @@ describe('FeeService.computeOrderFees', () => {
     expect(result.total).toEqual(expect.any(Number));
     expect(Number(result.total.toFixed(2))).toBe(result.total);
   });
+
+  describe('tax-inclusive pricing (spec 009 phase 3)', () => {
+    it('backs tax out of the listed price and charges fees on the net amount', () => {
+      // $50 listed at 8.25% inclusive: net 46.19, tax 3.81
+      const result = feeService.computeOrderFees([{ unitPrice: 50, quantity: 1 }], 0.0825, { taxInclusive: true });
+      expect(result.taxInclusive).toBe(true);
+      expect(result.subtotal).toBe(46.19);
+      expect(result.tax).toBe(3.81);
+      // platformFee = 46.19 × 5% = 2.3095 → 2.31; processing = (46.19 + 2.31) × 2.9% + 0.30 = 1.7065 → 1.71
+      expect(result.platformFee).toBe(2.31);
+      expect(result.processingFee).toBe(1.71);
+      // total = listed + fees, and subtotal + fees + tax
+      expect(result.total).toBe(54.02);
+      expect(result.total).toBe(feeService._round(result.subtotal + result.platformFee + result.processingFee + result.tax));
+      expect(result.total).toBe(feeService._round(50 + result.platformFee + result.processingFee));
+      expect(result.itemBreakdowns[0]).toMatchObject({ unitPrice: 50, quantity: 1, tax: 3.81, lineTotal: 54.02 });
+    });
+
+    it('is the exclusive model with the same total when the rate is 0', () => {
+      const inclusive = feeService.computeOrderFees([{ unitPrice: 20, quantity: 2 }], 0, { taxInclusive: true });
+      const exclusive = feeService.computeOrderFees([{ unitPrice: 20, quantity: 2 }], 0);
+      expect({ ...inclusive, taxInclusive: false }).toEqual({ ...exclusive, taxInclusive: false });
+    });
+
+    it('allocates tax and fees per line so the lines sum to the total', () => {
+      const result = feeService.computeOrderFees(
+        [
+          { unitPrice: 25, quantity: 2 },
+          { unitPrice: 99.99, quantity: 1 },
+        ],
+        0.07,
+        { taxInclusive: true }
+      );
+      const sum = (pick) => feeService._round(result.itemBreakdowns.reduce((s, b) => s + pick(b), 0));
+      expect(sum((b) => b.platformFee)).toBe(result.platformFee);
+      expect(sum((b) => b.processingFee)).toBe(result.processingFee);
+      expect(sum((b) => b.tax)).toBe(result.tax);
+      expect(sum((b) => b.lineTotal)).toBe(result.total);
+      // Each line's charge is its listed value plus its fee share (tax is inside the listed price)
+      for (const line of result.itemBreakdowns) {
+        expect(line.lineTotal).toBe(feeService._round(line.unitPrice * line.quantity + line.platformFee + line.processingFee));
+      }
+    });
+
+    it('defaults to tax added on top', () => {
+      const result = feeService.computeOrderFees([{ unitPrice: 50, quantity: 1 }], 0.0825);
+      expect(result.taxInclusive).toBe(false);
+      expect(result.subtotal).toBe(50);
+      expect(result.tax).toBe(4.13);
+    });
+  });
 });

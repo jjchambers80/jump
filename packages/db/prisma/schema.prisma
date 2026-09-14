@@ -136,6 +136,9 @@ model Organization {
   coverImageId     String?
   brandColor       String?
   themeMode        ThemeMode          @default(SYSTEM)
+  // Spec 009 phase 3: listed tier prices already include sales tax; tax is
+  // backed out at the event's rate instead of added on top.
+  taxInclusivePricing Boolean         @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
