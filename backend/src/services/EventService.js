@@ -606,15 +606,16 @@ class EventService {
     if (!venue) return;
 
     try {
-      const { rate, source, error } = await taxService.rateForVenue(venue.organizationId, venue);
-      if (error && source === 'STRIPE' && event.taxRate != null && Number(event.taxRate) > 0) {
+      const result = await taxService.rateForVenue(venue.organizationId, venue);
+      if (taxService.shouldKeepCachedRate(event, result)) {
         logger.warn('Tax rate lookup failed; keeping cached rate', {
           event: 'tax_rate_refresh_kept_previous',
           eventId: event.id,
-          error,
+          error: result.error,
         });
         return;
       }
+      const { rate, source } = result;
       await prisma.event.update({
         where: { id: event.id },
         data: { taxRate: rate, taxRateSource: source },

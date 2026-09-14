@@ -252,6 +252,38 @@ describe('TaxService', () => {
       await expect(service.recalculateRegion('org-1', 'US', 'TX')).rejects.toThrow('not configured');
     });
 
+    it('recalculateEvents keeps a good cached rate when the Stripe lookup fails', async () => {
+      activeStatus();
+      taxRegion.findUnique.mockResolvedValue(row());
+      venue.count.mockResolvedValue(1);
+      event.findMany.mockResolvedValue([
+        { id: 'evt-cached', taxRate: '0.07250', venue: ncVenue },
+        { id: 'evt-fresh', taxRate: null, venue: ncVenue },
+      ]);
+      event.update.mockResolvedValue({});
+      stripe.tax.calculations.create.mockRejectedValue(new Error('Stripe Tax isn’t active for this account.'));
+
+      const result = await service.recalculateRegion('org-1', 'US', 'NC');
+      // The cached 7.25% survives; the event with no rate records 0 + STRIPE (error shown on the region row).
+      expect(event.update).toHaveBeenCalledTimes(1);
+      expect(event.update).toHaveBeenCalledWith({ where: { id: 'evt-fresh' }, data: { taxRate: 0, taxRateSource: 'STRIPE' } });
+      expect(result.recalculatedEvents).toBe(1);
+      expect(result.keptEvents).toBe(1);
+      expect(taxRegion.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ lastError: expect.stringContaining('Stripe Tax isn’t active') }) })
+      );
+    });
+
+    it('recalculateEvents applies not-collecting and manual outcomes even over a cached rate', async () => {
+      activeStatus();
+      taxRegion.findUnique.mockResolvedValue(row({ collecting: false }));
+      venue.count.mockResolvedValue(1);
+      event.findMany.mockResolvedValue([{ id: 'evt-cached', taxRate: '0.07250', venue: ncVenue }]);
+      event.update.mockResolvedValue({});
+      await service.recalculateRegion('org-1', 'US', 'NC');
+      expect(event.update).toHaveBeenCalledWith({ where: { id: 'evt-cached' }, data: { taxRate: 0, taxRateSource: null } });
+    });
+
     it('rejects non-US or unknown regions', async () => {
       await expect(service.upsertRegion('org-1', 'CA', 'ON', { collecting: true })).rejects.toThrow('Only US regions');
       await expect(service.upsertRegion('org-1', 'US', 'ZZ', { collecting: true })).rejects.toThrow('two-letter US state');
