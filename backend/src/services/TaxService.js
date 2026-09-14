@@ -116,8 +116,8 @@ class TaxService {
       manualRate: row.manualRate ? Number(row.manualRate) : null,
     });
 
-    const recalculatedEvents = await this.recalculateEvents(orgId, country, region);
-    return { region: await this._regionResponse(orgId, row.id, country, region), recalculatedEvents };
+    const { updated, kept } = await this.recalculateEvents(orgId, country, region);
+    return { region: await this._regionResponse(orgId, row.id, country, region), recalculatedEvents: updated, keptEvents: kept };
   }
 
   /**
@@ -129,9 +129,9 @@ class TaxService {
       where: { organizationId_country_region: { organizationId: orgId, country, region } },
     });
     if (!row) throw new NotFoundError('Tax region is not configured');
-    const recalculatedEvents = await this.recalculateEvents(orgId, country, region);
-    logger.info('Tax region recalculated', { event: 'tax_region_recalculated', orgId, country, region, recalculatedEvents });
-    return { region: await this._regionResponse(orgId, row.id, country, region), recalculatedEvents };
+    const { updated, kept } = await this.recalculateEvents(orgId, country, region);
+    logger.info('Tax region recalculated', { event: 'tax_region_recalculated', orgId, country, region, recalculatedEvents: updated, keptEvents: kept });
+    return { region: await this._regionResponse(orgId, row.id, country, region), recalculatedEvents: updated, keptEvents: kept };
   }
 
   /** Fresh region row for a write response (after lookups may have updated it). */
@@ -149,7 +149,7 @@ class TaxService {
   /**
    * Re-run the rate lookup for every upcoming DRAFT/PUBLISHED event whose venue
    * is in the region. Orders already placed keep the amounts they were charged.
-   * @returns {Promise<number>} events updated
+   * @returns {Promise<{ updated: number, kept: number }>} events written / left on their cached rate
    */
   async recalculateEvents(orgId, country, region) {
     const events = await prisma.event.findMany({
@@ -161,12 +161,31 @@ class TaxService {
       include: { venue: true },
     });
     let updated = 0;
+    let kept = 0;
     for (const event of events) {
-      const { rate, source } = await this.rateForVenue(orgId, event.venue);
-      await prisma.event.update({ where: { id: event.id }, data: { taxRate: rate, taxRateSource: source } });
+      const result = await this.rateForVenue(orgId, event.venue);
+      if (this.shouldKeepCachedRate(event, result)) {
+        logger.warn('Tax rate lookup failed; keeping cached rate', {
+          event: 'tax_rate_refresh_kept_previous',
+          eventId: event.id,
+          error: result.error,
+        });
+        kept += 1;
+        continue;
+      }
+      await prisma.event.update({ where: { id: event.id }, data: { taxRate: result.rate, taxRateSource: result.source } });
       updated += 1;
     }
-    return updated;
+    return { updated, kept };
+  }
+
+  /**
+   * A Stripe lookup failure must not turn a good cached rate into 0 — the
+   * region row records the error for the settings page instead. Not-collecting
+   * and manual outcomes always apply.
+   */
+  shouldKeepCachedRate(event, { source, error }) {
+    return Boolean(error) && source === 'STRIPE' && event.taxRate != null && Number(event.taxRate) > 0;
   }
 
   // ---------------------------------------------------------------------------

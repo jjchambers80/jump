@@ -120,7 +120,8 @@ async function mockTaxApi(page: Page, regions: MockRegion[], options: MockOption
       const outcome = options.recalc ?? { lastRate: 0.0725, lastError: null };
       const updated: MockRegion = { ...existing, ...outcome, lastSource: existing.source, lastCheckedAt: '2026-09-14T00:00:00.000Z' };
       rows.set(recalc[1], updated);
-      return route.fulfill(json({ region: updated, recalculatedEvents: existing.upcomingEventCount }));
+      const failed = Boolean(outcome.lastError);
+      return route.fulfill(json({ region: updated, recalculatedEvents: failed ? 0 : existing.upcomingEventCount, keptEvents: failed ? existing.upcomingEventCount : 0 }));
     }
     const put = path.match(/^\/regions\/US\/([A-Z]{2})$/);
     if (method === 'PUT' && put) {
@@ -273,7 +274,7 @@ test('Recalculate now surfaces a lookup error from Stripe', async ({ page, baseU
   await page.getByRole('button', { name: 'Edit tax region North Carolina' }).click();
   const dialog = page.getByRole('dialog', { name: 'Edit tax region — North Carolina' });
   await dialog.getByRole('button', { name: 'Recalculate now' }).click();
-  await expect(dialog.getByRole('status')).toContainText('Lookup ran on 1 upcoming event: No Stripe Tax registration for North Carolina');
+  await expect(dialog.getByRole('status')).toContainText('Lookup failed; kept the current rate on 1 event: No Stripe Tax registration for North Carolina');
   await expect(dialog).toContainText('Last lookup on');
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(page.getByTestId('tax-region-NC')).toContainText('Lookup failed');

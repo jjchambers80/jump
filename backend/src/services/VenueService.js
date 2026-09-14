@@ -219,14 +219,25 @@ class VenueService {
     try {
       const events = await prisma.event.findMany({
         where: { venueId: venue.id, status: { in: ['DRAFT', 'PUBLISHED'] }, date: { gte: new Date() } },
-        select: { id: true },
+        select: { id: true, taxRate: true },
       });
       if (events.length === 0) return;
       // One lookup — every event at this venue shares the same location.
-      const { rate, source } = await taxService.rateForVenue(venue.organizationId, venue);
+      const result = await taxService.rateForVenue(venue.organizationId, venue);
+      // A failed Stripe lookup keeps any good cached rate (same rule as EventService).
+      const targets = events.filter((e) => !taxService.shouldKeepCachedRate(e, result));
+      if (targets.length < events.length) {
+        logger.warn('Tax rate lookup failed; keeping cached rates', {
+          event: 'tax_rate_refresh_kept_previous',
+          venueId: venue.id,
+          kept: events.length - targets.length,
+          error: result.error,
+        });
+      }
+      if (targets.length === 0) return;
       await prisma.event.updateMany({
-        where: { id: { in: events.map((e) => e.id) } },
-        data: { taxRate: rate, taxRateSource: source },
+        where: { id: { in: targets.map((e) => e.id) } },
+        data: { taxRate: result.rate, taxRateSource: result.source },
       });
     } catch (error) {
       logger.error('Failed to refresh event tax rates after venue change', {

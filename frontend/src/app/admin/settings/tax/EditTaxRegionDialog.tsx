@@ -79,9 +79,10 @@ export default function EditTaxRegionDialog({ region, service, canEdit, returnFo
       const result = await taxApi.recalculateRegion(region.country, region.region);
       onRecalculated(result);
       const events = result.recalculatedEvents === 1 ? '1 upcoming event' : `${result.recalculatedEvents} upcoming events`;
+      const kept = result.keptEvents ?? 0;
       setRecalcMessage(
         result.region.lastError
-          ? `Lookup ran on ${events}: ${result.region.lastError}`
+          ? `Lookup failed${kept > 0 ? `; kept the current rate on ${kept === 1 ? '1 event' : `${kept} events`}` : ''}: ${result.region.lastError}`
           : `Recalculated ${events} at ${formatRate(result.region.lastRate)}.`
       );
     } catch (err) {

@@ -170,6 +170,24 @@ describe('Settings › Tax contract (spec 009)', () => {
     expect(updated.taxRateSource).toBe('STRIPE');
   });
 
+  it('a failed Stripe lookup keeps the event\'s cached rate and records the error on the region', async () => {
+    stripeLookup.mockRejectedValue(new (await import('../../src/services/TaxService.js')).StripeTaxError('Stripe Tax lookup failed: Stripe Tax isn’t active for this account.', { reason: 'stripe_error' }));
+    const res = await request(app).post('/admin/settings/tax/regions/US/TX/recalculate').set('Authorization', `Bearer ${tokenFor(adminA)}`);
+    expect(res.status).toBe(200);
+    expect(res.body.recalculatedEvents).toBe(0);
+    expect(res.body.keptEvents).toBe(1);
+    expect(res.body.region.lastError).toMatch(/isn’t active/);
+    const kept = await prisma.event.findUnique({ where: { id: event.id } });
+    expect(Number(kept.taxRate)).toBe(0.0825); // from the previous test
+    expect(kept.taxRateSource).toBe('STRIPE');
+
+    // Venue location edits follow the same rule.
+    const venueRes = await request(app).patch(`/organizations/${orgA.id}/venues/${txVenue.id}`).set('Authorization', `Bearer ${tokenFor(adminA)}`).send({ postalCode: '75001' });
+    expect(venueRes.status).toBe(200);
+    const stillKept = await prisma.event.findUnique({ where: { id: event.id } });
+    expect(Number(stillKept.taxRate)).toBe(0.0825);
+  });
+
   it('turning collecting off zeroes upcoming events in the region', async () => {
     const res = await request(app)
       .put('/admin/settings/tax/regions/US/TX')

@@ -74,6 +74,8 @@ export interface UpsertTaxRegionBody {
 export interface UpsertTaxRegionResponse {
   region: TaxRegionRow;
   recalculatedEvents: number;
+  /** Events left on their cached rate because the Stripe lookup failed. */
+  keptEvents?: number;
 }
 
 export const SERVICE_LABEL: Record<TaxServiceState, string> = {
