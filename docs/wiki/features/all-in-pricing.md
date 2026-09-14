@@ -32,6 +32,7 @@ Jump displays FTC-compliant all-in pricing to customers. The price shown on even
 
 - Tax rate is venue-based, not customer-based. It is 0 unless the organization has set the venue's state to Collecting on Settings › Tax
 - Fee breakdown is stored at purchase time — rate changes don't affect existing orders
+- Organizations can list prices tax-inclusive (Settings › Tax › Additional configuration); tax is then backed out of the listed price and fees are charged on the net — see [Tax Calculation](tax-calculation.md)
 - All-in price display is a frontend concern; backend always returns fee components separately
 
 ## Related Features

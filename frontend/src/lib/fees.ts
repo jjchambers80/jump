@@ -2,6 +2,11 @@
 // Mirrors backend/src/services/FeeService.js exactly — including the proportional
 // per-line allocation and the rounding-drift correction — so what the cart shows
 // is what the order will charge. No React here.
+//
+// Tax-inclusive pricing (spec 009 phase 3): when `taxInclusive` is set the listed
+// tier price already contains tax. Tax is backed out (net = listed / (1 + rate)),
+// fees are computed on the net, and the customer total is listed + fees.
+// `subtotal` / `base` are always the ex-tax amounts in both modes.
 
 /** Must match backend/src/config/fees.js. */
 export const FEE_CONFIG = {
@@ -19,7 +24,7 @@ export interface FeeItem {
 export interface LineBreakdown {
   unitPrice: number;
   quantity: number;
-  /** unitPrice × quantity */
+  /** Ex-tax line amount: unitPrice × quantity, minus the line's tax when tax-inclusive */
   base: number;
   platformFee: number;
   processingFee: number;
@@ -34,6 +39,8 @@ export interface OrderFees {
   processingFee: number;
   tax: number;
   total: number;
+  /** Listed prices already include tax (backed out into `tax`). */
+  taxInclusive: boolean;
   /** One entry per input item, same order. Line totals sum to `total`. */
   lines: LineBreakdown[];
 }
@@ -49,17 +56,19 @@ export function formatPrice(dollars: number): string {
 /**
  * All-in price for a single ticket of a tier, as if it were the whole order.
  * Used on tier cards where the customer has not built a cart yet.
+ * `basePrice` is the ex-tax amount (the listed price unless tax-inclusive).
  */
-export function computeTierAllInPrice(basePrice: number, taxRate: number = 0) {
+export function computeTierAllInPrice(listedPrice: number, taxRate: number = 0, taxInclusive: boolean = false) {
+  const basePrice = taxInclusive ? roundCurrency(listedPrice / (1 + taxRate)) : roundCurrency(listedPrice);
+  const tax = taxInclusive ? roundCurrency(listedPrice - basePrice) : roundCurrency(basePrice * taxRate);
   const platformFee = roundCurrency(basePrice * FEE_CONFIG.platformFeePercent);
   const processingFee = roundCurrency(
     (basePrice + platformFee) * FEE_CONFIG.stripeFeePercent + FEE_CONFIG.stripeFeeFixed
   );
-  const tax = roundCurrency(basePrice * taxRate);
   /** platformFee + processingFee — the single "Fees" figure shown on tier cards. */
   const fees = roundCurrency(platformFee + processingFee);
   const total = roundCurrency(basePrice + fees + tax);
-  return { basePrice, platformFee, processingFee, fees, tax, total };
+  return { listedPrice, basePrice, platformFee, processingFee, fees, tax, total, taxInclusive };
 }
 
 /**
@@ -68,21 +77,23 @@ export function computeTierAllInPrice(basePrice: number, taxRate: number = 0) {
  * lines proportionally by line value; any cent of rounding drift lands on the largest
  * line so the lines always add up to the order total.
  */
-export function computeOrderFees(items: FeeItem[], taxRate: number = 0): OrderFees {
-  const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+export function computeOrderFees(items: FeeItem[], taxRate: number = 0, taxInclusive: boolean = false): OrderFees {
+  const listed = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const subtotal = taxInclusive ? roundCurrency(listed / (1 + taxRate)) : roundCurrency(listed);
+  const tax = taxInclusive ? roundCurrency(listed - subtotal) : roundCurrency(subtotal * taxRate);
   const platformFee = roundCurrency(subtotal * FEE_CONFIG.platformFeePercent);
   const processingFee = roundCurrency(
     (subtotal + platformFee) * FEE_CONFIG.stripeFeePercent + FEE_CONFIG.stripeFeeFixed
   );
-  const tax = roundCurrency(subtotal * taxRate);
   const total = roundCurrency(subtotal + platformFee + processingFee + tax);
 
   const lines: LineBreakdown[] = items.map((item) => {
-    const base = roundCurrency(item.price * item.quantity);
-    const proportion = subtotal > 0 ? base / subtotal : 0;
+    const lineListed = roundCurrency(item.price * item.quantity);
+    const proportion = listed > 0 ? lineListed / listed : 0;
     const linePlatform = roundCurrency(platformFee * proportion);
     const lineProcessing = roundCurrency(processingFee * proportion);
     const lineTax = roundCurrency(tax * proportion);
+    const base = taxInclusive ? roundCurrency(lineListed - lineTax) : lineListed;
     return {
       unitPrice: item.price,
       quantity: item.quantity,
@@ -95,7 +106,10 @@ export function computeOrderFees(items: FeeItem[], taxRate: number = 0): OrderFe
   });
 
   if (lines.length > 1) {
-    const largest = lines.reduce((max, line, i) => (line.base > lines[max].base ? i : max), 0);
+    const largest = lines.reduce(
+      (max, line, i) => (line.unitPrice * line.quantity > lines[max].unitPrice * lines[max].quantity ? i : max),
+      0
+    );
     const platformDrift = roundCurrency(platformFee - lines.reduce((s, l) => s + l.platformFee, 0));
     const processingDrift = roundCurrency(
       processingFee - lines.reduce((s, l) => s + l.processingFee, 0)
@@ -105,8 +119,10 @@ export function computeOrderFees(items: FeeItem[], taxRate: number = 0): OrderFe
     target.platformFee = roundCurrency(target.platformFee + platformDrift);
     target.processingFee = roundCurrency(target.processingFee + processingDrift);
     target.tax = roundCurrency(target.tax + taxDrift);
+    // Inside a listed price, tax drift moves net vs tax, not what is charged.
+    if (taxInclusive) target.base = roundCurrency(target.base - taxDrift);
     target.total = roundCurrency(target.base + target.platformFee + target.processingFee + target.tax);
   }
 
-  return { subtotal: roundCurrency(subtotal), platformFee, processingFee, tax, total, lines };
+  return { subtotal, platformFee, processingFee, tax, total, taxInclusive, lines };
 }

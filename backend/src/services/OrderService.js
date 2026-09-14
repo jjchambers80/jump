@@ -73,7 +73,7 @@ class OrderService {
       const event = await tx.event.findUnique({
         where: { id: eventId },
         include: {
-          venue: true,
+          venue: { include: { organization: { select: { taxInclusivePricing: true } } } },
         },
       });
 
@@ -171,7 +171,9 @@ class OrderService {
         unitPrice: Number(tierById.get(item.priceTierId).price),
         quantity: item.quantity,
       }));
-      const fees = feeService.computeOrderFees(feeItems, Number(event.taxRate || 0));
+      const fees = feeService.computeOrderFees(feeItems, Number(event.taxRate || 0), {
+        taxInclusive: event.venue.organization?.taxInclusivePricing === true,
+      });
 
       // Ensure unique orderRef
       let existingRef = await tx.order.findUnique({ where: { orderRef } });

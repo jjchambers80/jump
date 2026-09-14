@@ -5,11 +5,13 @@
 // organization's venues — tax is venue-based, not customer-based.
 'use client';
 
+import Link from 'next/link';
 import { createRef, RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useOrg } from '@/components/OrgContext';
 import SettingsNav from '../SettingsNav';
-import { BoltIcon, ExternalLinkIcon, TaxIcon, WarningIcon } from '../icons';
+import { BoltIcon, ChevronRightIcon, ExternalLinkIcon, TaxIcon, WarningIcon } from '../icons';
 import EditTaxRegionDialog from './EditTaxRegionDialog';
+import TaxInclusiveConfirmDialog from './TaxInclusiveConfirmDialog';
 import TaxRegionsTable from './TaxRegionsTable';
 import { describeError, useTaxApi } from './useTaxApi';
 import { SERVICE_LABEL, SERVICE_STYLE, type TaxRegionRow, type TaxSettingsResponse, type UpsertTaxRegionResponse } from './types';
@@ -25,7 +27,10 @@ export default function TaxSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<TaxRegionRow | null>(null);
   const [savedMessage, setSavedMessage] = useState('');
+  const [confirmInclusive, setConfirmInclusive] = useState<boolean | null>(null);
+  const [savingSettings, setSavingSettings] = useState(false);
   const rowRefs = useRef(new Map<string, RefObject<HTMLButtonElement>>());
+  const inclusiveRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -75,6 +80,23 @@ export default function TaxSettingsPage() {
   };
 
   const service = data?.service;
+
+  // Changing tax-inclusive pricing changes every customer-visible price, so the
+  // checkbox asks for confirmation before saving.
+  const saveInclusive = async (next: boolean) => {
+    setSavingSettings(true);
+    setError(null);
+    try {
+      const settings = await taxApi.updateSettings({ taxInclusivePricing: next });
+      setData((prev) => (prev ? { ...prev, settings } : prev));
+      setSavedMessage(next ? 'Ticket prices now include sales tax.' : 'Sales tax is now added on top of ticket prices.');
+      setConfirmInclusive(null);
+    } catch (err) {
+      setError(describeError(err, 'Could not save tax settings'));
+    } finally {
+      setSavingSettings(false);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
@@ -167,9 +189,51 @@ export default function TaxSettingsPage() {
                 <TaxRegionsTable regions={data.regions} needsAddress={data.needsAddress} service={data.service} rowRefs={refsFor} onEdit={(r) => { setSavedMessage(''); setEditing(r); }} />
               ) : null}
             </div>
+
+            <Link
+              href="/admin/settings/tax/report"
+              className="mt-4 flex items-center gap-3 rounded-lg border border-gray-200 px-4 py-3 text-sm font-medium text-gray-900 transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-700 dark:text-white dark:hover:bg-slate-700/40"
+            >
+              <TaxIcon className="h-5 w-5 text-gray-500 dark:text-slate-400" />
+              <span className="flex-1">Collected tax report</span>
+              <ChevronRightIcon className="h-4 w-4 text-gray-400 dark:text-slate-500" />
+            </Link>
+          </div>
+
+          {/* Additional configuration */}
+          <div className={cardClass} data-testid="tax-additional-card">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white">Additional configuration</h3>
+            <label className="mt-3 flex items-start gap-3">
+              <input
+                ref={inclusiveRef}
+                type="checkbox"
+                checked={data?.settings.taxInclusivePricing === true}
+                disabled={!data || !data.canEdit || savingSettings}
+                onChange={(e) => setConfirmInclusive(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800"
+              />
+              <span>
+                <span className="block text-sm font-medium text-gray-900 dark:text-white">Include sales tax in ticket prices</span>
+                <span className="mt-1 block text-sm text-gray-600 dark:text-slate-400">
+                  Listed tier prices are treated as final; tax is backed out at the region&apos;s rate and service fees are charged on the
+                  price before tax. Off: tax is added on top of the listed price.
+                </span>
+              </span>
+            </label>
           </div>
         </section>
       </div>
+
+      {confirmInclusive !== null && data && (
+        <TaxInclusiveConfirmDialog
+          enabling={confirmInclusive}
+          sampleRate={data.regions.find((r) => r.collecting && (r.lastRate ?? r.manualRate) != null)?.lastRate ?? data.regions.find((r) => r.manualRate != null)?.manualRate ?? 0.0825}
+          saving={savingSettings}
+          returnFocusRef={inclusiveRef}
+          onClose={() => setConfirmInclusive(null)}
+          onConfirm={() => saveInclusive(confirmInclusive)}
+        />
+      )}
 
       {editing && data && editingRef && (
         <EditTaxRegionDialog
