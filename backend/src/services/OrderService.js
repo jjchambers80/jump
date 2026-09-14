@@ -9,6 +9,7 @@ import logger from '../utils/logger.js';
 import { NotFoundError, ConflictError, ValidationError } from '../middleware/errorHandler.js';
 import qrService from './QRService.js';
 import feeService from './FeeService.js';
+import PaymentSettingsService from './PaymentSettingsService.js';
 import { confirmationUrl, eventUrl } from '../utils/storefrontUrl.js';
 
 class OrderService {
@@ -73,7 +74,13 @@ class OrderService {
       const event = await tx.event.findUnique({
         where: { id: eventId },
         include: {
-          venue: { include: { organization: { select: { taxInclusivePricing: true } } } },
+          venue: {
+            include: {
+              organization: {
+                select: { id: true, name: true, taxInclusivePricing: true, statementDescriptorSuffix: true, enabledPaymentMethods: true },
+              },
+            },
+          },
         },
       });
 
@@ -218,12 +225,15 @@ class OrderService {
     const { order, event, tiers, contactRecord, fees } = result;
     const itemByTierId = new Map(items.map((item, idx) => [item.priceTierId, { ...item, feeIdx: idx }]));
 
-    // 7. Create Stripe Checkout session (outside transaction — external call)
+    // 7. Create Stripe Checkout session (outside transaction — external call).
+    // Payment methods and the statement descriptor come from the organization's
+    // Settings › Payments (spec 010); defaults to cards only.
+    const checkoutOptions = await PaymentSettingsService.checkoutOptionsFor(event.venue.organization);
     let stripeSession;
     try {
       stripeSession = await stripe.checkout.sessions.create({
         mode: 'payment',
-        payment_method_types: ['card'],
+        ...checkoutOptions,
         customer_email: contactRecord.email,
         line_items: tiers.map((tier) => {
           const itemWithIdx = itemByTierId.get(tier.id);

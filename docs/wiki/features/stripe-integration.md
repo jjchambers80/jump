@@ -1,7 +1,7 @@
 # Stripe Integration
 
 **Status:** Active
-**Last Updated:** 2026-09-07
+**Last Updated:** 2026-09-14
 
 ## Overview
 
@@ -15,6 +15,7 @@ Jump uses Stripe SDK v17 (API version `2024-11-20.acacia`) for payment processin
 | `backend/src/services/PaymentService.js` | Webhook processing: checkout completed/failed flows |
 | `backend/src/services/OrderService.js` | Checkout Session creation, order management |
 | `backend/src/services/TaxService.js` | Tax rate lookup via Stripe Tax Calculations API |
+| `backend/src/services/PaymentSettingsService.js` | Per-organization checkout options (payment methods, statement descriptor suffix); platform account status |
 | `backend/src/api/routes/webhooks.js` | Webhook endpoint with signature verification |
 
 ## Configuration
@@ -30,7 +31,7 @@ Jump uses Stripe SDK v17 (API version `2024-11-20.acacia`) for payment processin
 ### Checkout Session Creation (OrderService)
 
 1. After order and inventory reservation, `stripe.checkout.sessions.create` is called with:
-   - `mode: 'payment'`, `payment_method_types: ['card']`
+   - `mode: 'payment'`, plus `PaymentSettingsService.checkoutOptionsFor(organization)` — `payment_method_types` (`card` + the organization's enabled optional methods) and `payment_intent_data.statement_descriptor_suffix` (see [Payments Settings](payments-settings.md))
    - `customer_email` from Contact
    - `line_items` with all-in unit pricing per tier
    - `metadata: { orderId, orderRef, eventId }`
@@ -91,3 +92,4 @@ Jump uses Stripe SDK v17 (API version `2024-11-20.acacia`) for payment processin
 - [Ticket Issuance](ticket-issuance.md) -- tickets created on checkout.session.completed
 - [Tax Calculation](tax-calculation.md) -- venue tax rates via Stripe Tax API
 - [Fee Calculation](fee-calculation.md) -- fee breakdown in Stripe line items
+- [Payments Settings](payments-settings.md) -- Settings › Payments: statement descriptor, optional payment methods

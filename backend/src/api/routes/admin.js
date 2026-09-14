@@ -11,6 +11,7 @@ import { validateUpdateAttendee } from '../validators/adminValidators.js';
 import { validateUpdateBusinessDetails } from '../validators/organizationValidators.js';
 import { validateCreateOrganizationPerson } from '../validators/organizationPersonValidators.js';
 import { validateTaxRegionParams, validateUpsertTaxRegion, validateUpdateTaxSettings, validateTaxReportQuery } from '../validators/taxValidators.js';
+import { validateUpdatePaymentSettings } from '../validators/paymentValidators.js';
 import organizationService from '../../services/OrganizationService.js';
 import organizationPersonService from '../../services/OrganizationPersonService.js';
 import orderService from '../../services/OrderService.js';
@@ -19,6 +20,7 @@ import refundService from '../../services/RefundService.js';
 import customerService from '../../services/CustomerService.js';
 import domainService from '../../services/DomainService.js';
 import taxService from '../../services/TaxService.js';
+import paymentSettingsService from '../../services/PaymentSettingsService.js';
 import imageService from '../../services/ImageService.js';
 import emailService from '../../services/EmailService.js';
 import qrService from '../../services/QRService.js';
@@ -272,6 +274,46 @@ router.post(
     }
   }
 );
+
+// ---------------------------------------------------------------------------
+// Settings › Payments (spec 010 phase 1). Every staff role can read; ADMIN and
+// SYSTEM_ADMIN can change the statement descriptor and enabled methods.
+// ---------------------------------------------------------------------------
+
+/** Stripe dashboard links only help whoever owns the platform account. */
+function providerForRole(provider, role) {
+  if (role === 'SYSTEM_ADMIN') return provider;
+  const { manageUrl, radarUrl, ...rest } = provider;
+  return rest;
+}
+
+/** GET /admin/settings/payments — platform Stripe status + this organization's settings. */
+router.get('/settings/payments', async (req, res, next) => {
+  try {
+    const organizationId = await activeOrgFor(req);
+    const [provider, settings] = await Promise.all([
+      paymentSettingsService.getProviderStatus(),
+      paymentSettingsService.getSettings(organizationId),
+    ]);
+    res.json({
+      provider: providerForRole(provider, req.user.role),
+      settings,
+      canEdit: ['ADMIN', 'SYSTEM_ADMIN'].includes(req.user.role),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** PATCH /admin/settings/payments { statementDescriptorSuffix?, enabledPaymentMethods? } */
+router.patch('/settings/payments', requireAdmin, validateUpdatePaymentSettings, async (req, res, next) => {
+  try {
+    const organizationId = await activeOrgFor(req);
+    res.json(await paymentSettingsService.updateSettings(organizationId, req.body));
+  } catch (error) {
+    next(error);
+  }
+});
 
 /**
  * GET /admin/dashboard/stats

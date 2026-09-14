@@ -1,6 +1,6 @@
 # Implementation Plan: Settings › Payments (Shopify-style payment configuration)
 
-**Status**: Plan drafted 2026-09-14. Nothing implemented. Phase 2 (Stripe Connect payouts) is gated on the §5 decisions.
+**Status**: Plan merged 2026-09-14 (PR #42). Phase 1 implemented 2026-09-14 on `feat/010-payments-phase-1` (Payments nav + page, statement descriptor dialog, payment methods sub-page, `PaymentSettingsService`, `checkoutOptionsFor` wired into `OrderService`, migration, unit/contract/e2e tests, docs). Phase 2 (Stripe Connect payouts) not started — gated on the §5 decisions; §5.5 (platform prefix) is an ops item on the launch checklist.
 **Input**: "Do some research about the existing Stripe payments service that we have in our system and under the Settings menu create a new menu item called Payments. On the page have a similar configuration as seen on these Shopify screens. Determine whether these are settings and features we need in our system; if not exclude, if so include, and put together a proper implementation plan."
 **Reference screens** (10 screenshots, Shopify Settings › Payments for "Roman Skin Care"):
 1. *Payments* — `Shopify Payments` card (`● Accepting payments` / `● Receiving payouts`, `Manage`), `Payment methods` row (card-brand icons, `+4`), `Payouts` row (`Shopify Balance ****** 3544`), plan-upgrade rate note; `Additional payment providers` (`Add provider`); `Payment configuration` list: `Payment capture method`, `Manual payment methods`, `Payment method customizations`, `Gift card expiration`, `Apple Wallet passes`.

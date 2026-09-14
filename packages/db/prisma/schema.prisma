@@ -139,6 +139,12 @@ model Organization {
   // Spec 009 phase 3: listed tier prices already include sales tax; tax is
   // backed out at the event's rate instead of added on top.
   taxInclusivePricing Boolean         @default(false)
+  // Spec 010 phase 1: what buyers see on their card statement (suffix after the
+  // platform prefix; null = derived from name) and which optional Stripe payment
+  // methods this organization offers at checkout (subset of the allowlist).
+  statementDescriptorSuffix String?
+  enabledPaymentMethods     String[]  @default([])
+  paymentSettingsUpdatedAt  DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
