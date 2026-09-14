@@ -95,12 +95,15 @@ class PaymentSettingsService {
       for (const method of PAYMENT_METHOD_ALLOWLIST) {
         capabilities[method.type] = account.capabilities?.[method.capability] ?? null;
       }
+      // A test key accepts test charges before the account is activated, so
+      // charges_enabled only gates live mode.
+      const chargesOk = account.charges_enabled || base.mode === 'test';
       value = {
         ...base,
-        charges: account.charges_enabled ? 'active' : 'unavailable',
+        charges: chargesOk ? 'active' : 'unavailable',
         statementDescriptorPrefix: account.settings?.card_payments?.statement_descriptor_prefix || null,
         capabilities,
-        error: account.charges_enabled ? null : 'Charges are not enabled on the Stripe account',
+        error: chargesOk ? null : 'Charges are not enabled on the Stripe account',
       };
     } catch (error) {
       logger.warn('Stripe account status unavailable', { event: 'payment_provider_unavailable', error: error.message });
