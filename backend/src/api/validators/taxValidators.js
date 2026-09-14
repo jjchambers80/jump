@@ -9,18 +9,22 @@ const SOURCES = new Set(['STRIPE', 'MANUAL']);
 // Highest combined US sales tax is ~12%; 50% leaves room without accepting typos like 825.
 const MAX_MANUAL_RATE = 0.5;
 
-/**
- * Validate the region path params and body. Normalises `manualRate` to a
- * number with at most 5 decimals (matches Decimal(6,5)).
- */
-export const validateUpsertTaxRegion = (req, res, next) => {
+/** Validate and upper-case the :country/:region path params. */
+export const validateTaxRegionParams = (req, res, next) => {
   const country = String(req.params.country || '').toUpperCase();
   const region = String(req.params.region || '').toUpperCase();
   if (country !== 'US') return next(new ValidationError('Only US tax regions are supported'));
   if (!US_STATES[region]) return next(new ValidationError('Region must be a two-letter US state code'));
   req.params.country = country;
   req.params.region = region;
+  next();
+};
 
+/**
+ * Validate the region body. Normalises `manualRate` to a number with at most
+ * 5 decimals (matches Decimal(6,5)). Use after validateTaxRegionParams.
+ */
+export const validateUpsertTaxRegion = (req, res, next) => {
   const body = req.body || {};
   const unknown = Object.keys(body).filter((f) => !REGION_FIELDS.has(f));
   if (unknown.length > 0) return next(new ValidationError(`Unknown field(s): ${unknown.join(', ')}`));

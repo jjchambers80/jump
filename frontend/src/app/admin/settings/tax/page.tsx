@@ -60,12 +60,15 @@ export default function TaxSettingsPage() {
   const editingRef = editing ? refsFor.get(`${editing.country}/${editing.region}`) : undefined;
   const unset = data?.regions.filter((r) => !r.configured && r.venueCount > 0) ?? [];
 
-  const handleSaved = ({ region, recalculatedEvents }: UpsertTaxRegionResponse) => {
+  const replaceRegion = (region: TaxRegionRow) =>
     setData((prev) =>
       prev
         ? { ...prev, regions: prev.regions.map((r) => (r.region === region.region && r.country === region.country ? region : r)) }
         : prev
     );
+
+  const handleSaved = ({ region, recalculatedEvents }: UpsertTaxRegionResponse) => {
+    replaceRegion(region);
     setEditing(null);
     const events = recalculatedEvents === 1 ? '1 upcoming event' : `${recalculatedEvents} upcoming events`;
     setSavedMessage(`${region.name} saved. Tax rate recalculated on ${events}.`);
@@ -176,6 +179,10 @@ export default function TaxSettingsPage() {
           returnFocusRef={editingRef}
           onClose={() => setEditing(null)}
           onSaved={handleSaved}
+          onRecalculated={({ region }) => {
+            replaceRegion(region);
+            setEditing(region);
+          }}
         />
       )}
     </div>

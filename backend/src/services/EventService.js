@@ -539,6 +539,12 @@ class EventService {
       category: event.category,
       status: event.status,
       taxRate: event.taxRate ? Number(event.taxRate) : 0,
+      // Where the cached rate came from (spec 009) so admins can see why it is what it is.
+      tax: {
+        rate: event.taxRate ? Number(event.taxRate) : 0,
+        source: event.taxRateSource || null,
+        region: taxService.resolveRegionForVenue(event.venue)?.region || null,
+      },
       organizationId: event.venue?.organization?.id || null,
       organizationName: event.venue?.organization?.name || null,
       organizationBrandColor: event.venue?.organization?.brandColor || null,

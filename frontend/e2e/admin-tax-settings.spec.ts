@@ -14,6 +14,7 @@ interface MockRegion {
   region: string;
   name: string;
   venueCount: number;
+  upcomingEventCount: number;
   configured: boolean;
   collecting: boolean;
   source: Source | null;
@@ -31,6 +32,7 @@ function region(code: string, name: string, overrides: Partial<MockRegion> = {})
     region: code,
     name,
     venueCount: 1,
+    upcomingEventCount: 3,
     configured: false,
     collecting: false,
     source: null,
@@ -70,6 +72,8 @@ interface MockOptions {
   canEdit?: boolean;
   /** Reject the PUT with this message. */
   saveError?: string;
+  /** What a recalculate returns for lastRate / lastError. */
+  recalc?: { lastRate: number | null; lastError: string | null };
 }
 
 async function mockTaxApi(page: Page, regions: MockRegion[], options: MockOptions = {}) {
@@ -92,6 +96,14 @@ async function mockTaxApi(page: Page, regions: MockRegion[], options: MockOption
           canEdit: options.canEdit ?? true,
         })
       );
+    }
+    const recalc = path.match(/^\/regions\/US\/([A-Z]{2})\/recalculate$/);
+    if (method === 'POST' && recalc) {
+      const existing = rows.get(recalc[1])!;
+      const outcome = options.recalc ?? { lastRate: 0.0725, lastError: null };
+      const updated: MockRegion = { ...existing, ...outcome, lastSource: existing.source, lastCheckedAt: '2026-09-14T00:00:00.000Z' };
+      rows.set(recalc[1], updated);
+      return route.fulfill(json({ region: updated, recalculatedEvents: existing.upcomingEventCount }));
     }
     const put = path.match(/^\/regions\/US\/([A-Z]{2})$/);
     if (method === 'PUT' && put) {
@@ -196,6 +208,58 @@ test('editing a region: toggle collecting, choose a manual rate, save, row updat
   await expect(tx).toContainText('Collecting');
   await expect(tx).toContainText('Manual · 6.25%');
   await expect(row).toBeFocused();
+});
+
+test('Recalculate now re-runs the lookup for a saved region and reports the outcome', async ({ page, baseURL }) => {
+  await mockSession(page, baseURL!);
+  const api = await mockTaxApi(page, [
+    region('NC', 'North Carolina', { configured: true, collecting: true, source: 'STRIPE', registrationFound: true, upcomingEventCount: 2, lastRate: 0.07, lastSource: 'STRIPE', lastCheckedAt: '2026-09-01T00:00:00.000Z' }),
+    region('TX', 'Texas'),
+  ]);
+  await page.goto('/admin/settings/tax');
+
+  // Unconfigured regions have nothing to recalculate.
+  await page.getByRole('button', { name: 'Edit tax region Texas' }).click();
+  const txDialog = page.getByRole('dialog', { name: 'Edit tax region — Texas' });
+  await expect(txDialog).toContainText('3 upcoming events use this region');
+  await expect(txDialog.getByRole('button', { name: /Recalculate/ })).toHaveCount(0);
+  await txDialog.getByRole('button', { name: 'Cancel' }).click();
+
+  await page.getByRole('button', { name: 'Edit tax region North Carolina' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Edit tax region — North Carolina' });
+  await expect(dialog).toContainText('Last lookup: 7% via Stripe Tax');
+  await expect(dialog).toContainText('2 upcoming events use this region');
+  const recalc = dialog.getByRole('button', { name: 'Recalculate now' });
+  await expect(recalc).toBeEnabled();
+
+  // Unsaved edits disable it — the lookup uses the saved setting.
+  await dialog.getByRole('checkbox', { name: /Collect sales tax/ }).uncheck();
+  await expect(recalc).toBeDisabled();
+  await dialog.getByRole('checkbox', { name: /Collect sales tax/ }).check();
+  await expect(recalc).toBeEnabled();
+
+  await recalc.click();
+  await expect(dialog.getByRole('status')).toContainText('Recalculated 2 upcoming events at 7.25%.');
+  await expect(dialog).toContainText('Last lookup: 7.25% via Stripe Tax');
+  expect(api.calls.find((c) => c.method === 'POST')).toMatchObject({ method: 'POST', path: '/regions/US/NC/recalculate' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByTestId('tax-region-NC')).toContainText('7.25%');
+});
+
+test('Recalculate now surfaces a lookup error from Stripe', async ({ page, baseURL }) => {
+  await mockSession(page, baseURL!);
+  await mockTaxApi(page, [region('NC', 'North Carolina', { configured: true, collecting: true, source: 'STRIPE', registrationFound: true, upcomingEventCount: 1 })], {
+    recalc: { lastRate: null, lastError: 'No Stripe Tax registration for North Carolina' },
+  });
+  await page.goto('/admin/settings/tax');
+  await page.getByRole('button', { name: 'Edit tax region North Carolina' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Edit tax region — North Carolina' });
+  await dialog.getByRole('button', { name: 'Recalculate now' }).click();
+  await expect(dialog.getByRole('status')).toContainText('Lookup ran on 1 upcoming event: No Stripe Tax registration for North Carolina');
+  await expect(dialog).toContainText('Last lookup on');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByTestId('tax-region-NC')).toContainText('Lookup failed');
 });
 
 test('turning collecting off sends STRIPE with no rate and the row shows Not collecting', async ({ page, baseURL }) => {
