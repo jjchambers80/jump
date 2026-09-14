@@ -30,7 +30,7 @@ Loads when agent touches `backend/` files. For root-level commands and env vars,
 
 - `OrganizationDomain` rows: PENDING → VERIFIED → ACTIVE → FAILED. `DomainService.verifyDomain` checks `TXT _jump-verify.<host>` and the CNAME; with `lib/railwayDomains.js` configured it also waits for the certificate, otherwise DNS proof activates. `server.js` sweeps every 10 min (active domains daily) with an unref'd timer.
 - `GET /domains/resolve?host=` (public, cached 60s) is what `frontend/src/middleware.ts` calls to map a tenant host to an organization. Only ACTIVE hosts resolve.
-- Admin routes: `/admin/settings/domains` (GET/POST), `/:id/verify`, `/:id/primary`, `DELETE`. Scoped via `resolveOrgScope`; SYSTEM_ADMIN passes `?organizationId=`.
+- Admin routes: `/admin/settings/domains` (GET/POST), `/:id/verify`, `/:id/primary`, `DELETE`. Scoped via `activeOrgFor(req)` in `routes/admin.js` (same helper as `/admin/settings/business-details` and `/people`): members get `X-Jump-Org` if they belong to it else first membership; SYSTEM_ADMIN gets `X-Jump-Org`, then `?organizationId=`. Services take the resolved `organizationId` — do not add `*ForUser(userId)` methods, they ignore the switcher and 404 for SYSTEM_ADMIN.
 - Hostnames must be subdomains (no apex), never platform hosts. `normalizeHostname` is the single validator.
 
 ## Payment Flow (WHY: Stripe is source of truth, not the client)
