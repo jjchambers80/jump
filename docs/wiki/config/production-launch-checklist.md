@@ -13,7 +13,8 @@ Found during production verification on 2026-09-14: the platform Stripe account 
 - [x] **Or**, per organization, switch those regions to a **manual rate** on Settings › Tax. Done 2026-09-14: North Carolina set to *Manual · 7.25%* (`lastError` cleared, 1 upcoming event recalculated at 7.25%). Manual rates need no Stripe Tax activation; the two items above remain if Stripe Tax is wanted later.
 - [x] After either, confirm the row shows a rate, not *Lookup failed* — NC shows `7.25% via manual rate` (2026-09-14).
 - [ ] **Review the backfill**: migration `20260914010000_tax_regions` marked every existing organization/state as *Collecting via Stripe Tax* to preserve behaviour. Confirm each organization is actually registered to collect there; set *Not collecting* where it is not.
-- [ ] **Fix venues without a state**: Settings › Tax lists them under *Needs address* (today: Madison Square Garden, The Fillmore). Events at those venues collect no tax until `state` is a two-letter US code.
+- [x] **Fix venues without a state** — done 2026-09-14: Madison Square Garden → New York, NY 10001; The Fillmore → San Francisco, CA 94115. *Needs address* is now empty.
+- [ ] **Decide NY and CA**: those venues created two new regions that default to *Not set* (3 upcoming events collect no tax). Set each to *Collecting* with a manual rate (NYC combined 8.875%; San Francisco combined 8.625% — verify with a tax professional) or *Not collecting*.
 
 ## Tax product decisions (spec 009 plan §5)
 
