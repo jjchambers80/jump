@@ -53,6 +53,7 @@ Generated and maintained by running `/doc-feature` after completing feature work
 ## Configuration Reference
 - [Environment Variables](config/environment-variables.md)
 - [Stripe Setup](config/stripe-setup.md)
+- [Production Launch Checklist](config/production-launch-checklist.md) — Human steps before taking real money: Stripe Tax activation/registrations, tax backfill review, open tax decisions, live Stripe keys
 - [Database Setup](config/database-setup.md)
 
 ## Contributing
