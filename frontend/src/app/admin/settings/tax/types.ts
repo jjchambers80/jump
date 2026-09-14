@@ -18,6 +18,8 @@ export interface TaxRegionRow {
   region: string;
   name: string;
   venueCount: number;
+  /** DRAFT/PUBLISHED events in this state with a future date — what a save recalculates. */
+  upcomingEventCount: number;
   /** A TaxRegion row exists; false means "Not set" and no tax is collected. */
   configured: boolean;
   collecting: boolean;

@@ -10,7 +10,7 @@ import { resolveOrgScope, isUnscoped } from '../../middleware/orgScope.js';
 import { validateUpdateAttendee } from '../validators/adminValidators.js';
 import { validateUpdateBusinessDetails } from '../validators/organizationValidators.js';
 import { validateCreateOrganizationPerson } from '../validators/organizationPersonValidators.js';
-import { validateUpsertTaxRegion } from '../validators/taxValidators.js';
+import { validateTaxRegionParams, validateUpsertTaxRegion } from '../validators/taxValidators.js';
 import organizationService from '../../services/OrganizationService.js';
 import organizationPersonService from '../../services/OrganizationPersonService.js';
 import orderService from '../../services/OrderService.js';
@@ -215,12 +215,28 @@ router.get('/settings/tax', async (req, res, next) => {
 router.put(
   '/settings/tax/regions/:country/:region',
   requireAdmin,
+  validateTaxRegionParams,
   validateUpsertTaxRegion,
   async (req, res, next) => {
     try {
       const organizationId = await activeOrgFor(req);
       const result = await taxService.upsertRegion(organizationId, req.params.country, req.params.region, req.body);
       res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/** POST /admin/settings/tax/regions/:country/:region/recalculate — re-run lookups for upcoming events there. */
+router.post(
+  '/settings/tax/regions/:country/:region/recalculate',
+  requireAdmin,
+  validateTaxRegionParams,
+  async (req, res, next) => {
+    try {
+      const organizationId = await activeOrgFor(req);
+      res.json(await taxService.recalculateRegion(organizationId, req.params.country, req.params.region));
     } catch (error) {
       next(error);
     }

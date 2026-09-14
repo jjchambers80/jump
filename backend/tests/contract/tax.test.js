@@ -158,6 +158,35 @@ describe('Settings › Tax contract (spec 009)', () => {
     expect(updated.taxRateSource).toBeNull();
   });
 
+  it('POST …/recalculate re-runs lookups on demand and 404s for an unconfigured region', async () => {
+    stripeLookup.mockResolvedValue(0.07);
+    await request(app)
+      .put('/admin/settings/tax/regions/US/TX')
+      .set('Authorization', `Bearer ${tokenFor(adminA)}`)
+      .send({ collecting: true, source: 'STRIPE' });
+    stripeLookup.mockReset();
+    stripeLookup.mockResolvedValue(0.0725);
+
+    const res = await request(app)
+      .post('/admin/settings/tax/regions/US/TX/recalculate')
+      .set('Authorization', `Bearer ${tokenFor(adminA)}`);
+    expect(res.status).toBe(200);
+    expect(res.body.recalculatedEvents).toBe(1);
+    expect(res.body.region).toMatchObject({ region: 'TX', upcomingEventCount: 1, lastRate: 0.0725, lastSource: 'STRIPE' });
+    const updated = await prisma.event.findUnique({ where: { id: event.id } });
+    expect(Number(updated.taxRate)).toBe(0.0725);
+
+    // The admin event payload explains where the rate came from.
+    const detail = await request(app).get(`/organizations/${orgA.id}/events?limit=100`).set('Authorization', `Bearer ${tokenFor(adminA)}`);
+    expect(detail.status).toBe(200);
+    expect(detail.body.events.find((e) => e.id === event.id).tax).toEqual({ rate: 0.0725, source: 'STRIPE', region: 'TX' });
+
+    const missing = await request(app).post('/admin/settings/tax/regions/US/NC/recalculate').set('Authorization', `Bearer ${tokenFor(adminA)}`);
+    expect(missing.status).toBe(404);
+    const forbidden = await request(app).post('/admin/settings/tax/regions/US/TX/recalculate').set('Authorization', `Bearer ${tokenFor(organizerA)}`);
+    expect(forbidden.status).toBe(403);
+  });
+
   it('is isolated per organization and honours X-Jump-Org / ?organizationId= for SYSTEM_ADMIN', async () => {
     const other = await request(app).get('/admin/settings/tax').set('Authorization', `Bearer ${tokenFor(adminB)}`);
     expect(other.status).toBe(200);

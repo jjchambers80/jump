@@ -1,6 +1,6 @@
 # Tax Calculation
 
-**Status:** Implemented (spec 009 phase 1)
+**Status:** Implemented (spec 009 phases 1–2)
 **Last Updated:** 2026-09-14
 
 ## Overview
@@ -65,6 +65,9 @@ Regions are *derived* from venues: the page lists every state the organization h
 |--------|------|------|-------|
 | GET | `/admin/settings/tax` | organizer+ | `{ service, regions[], needsAddress[], canEdit }`; scoped by `activeOrgFor(req)` (X-Jump-Org / `?organizationId=` for SYSTEM_ADMIN) |
 | PUT | `/admin/settings/tax/regions/:country/:region` | admin+ | `{ collecting, source?, manualRate? }` → `{ region, recalculatedEvents }`. `manualRate` is a fraction 0–0.5, required for MANUAL, rejected otherwise |
+| POST | `/admin/settings/tax/regions/:country/:region/recalculate` | admin+ | Re-runs the lookup for the region's upcoming events with the saved setting ("Recalculate now"); 404 when the region has no row |
+
+Region rows carry `upcomingEventCount` (DRAFT/PUBLISHED, future date) so the dialog can say what a save will touch. Event payloads (`_formatEventDetail`) include `tax: { rate, source, region }`; the admin event edit page renders it as `Tax: 8.25% · Stripe Tax · NC` under the venue picker with a link to Settings › Tax.
 
 ## Configuration
 
@@ -88,7 +91,7 @@ Regions are *derived* from venues: the page lists every state the organization h
 
 - `backend/tests/unit/taxService.test.js` — region resolution, every source path, Stripe failure / `not_collecting`, status cache, list and upsert.
 - `backend/tests/contract/tax.test.js` — routes, RBAC, validation, org isolation, event recalculation, venue state normalisation.
-- `frontend/e2e/admin-tax-settings.spec.ts` — page, banner, dialog round-trip, focus return, read-only for ORGANIZER, pending-service warning.
+- `frontend/e2e/admin-tax-settings.spec.ts` — page, banner, dialog round-trip, focus return, read-only for ORGANIZER, pending-service warning, Recalculate now (success + lookup error).
 
 ## Related Features
 

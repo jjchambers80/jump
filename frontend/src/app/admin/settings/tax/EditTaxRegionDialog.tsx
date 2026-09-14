@@ -16,6 +16,8 @@ interface EditTaxRegionDialogProps {
   returnFocusRef: RefObject<HTMLButtonElement>;
   onClose: () => void;
   onSaved: (result: UpsertTaxRegionResponse) => void;
+  /** Recalculate now succeeded; the dialog stays open with the fresh row. */
+  onRecalculated: (result: UpsertTaxRegionResponse) => void;
 }
 
 const fieldLabel = 'block text-sm font-medium text-gray-900 dark:text-white';
@@ -28,7 +30,10 @@ function formatChecked(iso: string | null) {
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-export default function EditTaxRegionDialog({ region, service, canEdit, returnFocusRef, onClose, onSaved }: EditTaxRegionDialogProps) {
+const secondaryBtn =
+  'rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
+
+export default function EditTaxRegionDialog({ region, service, canEdit, returnFocusRef, onClose, onSaved, onRecalculated }: EditTaxRegionDialogProps) {
   const taxApi = useTaxApi();
   const initialSource: TaxSource = region.source ?? 'STRIPE';
   const initialRate = region.manualRate != null ? (region.manualRate * 100).toFixed(3).replace(/\.?0+$/, '') : '';
@@ -37,6 +42,8 @@ export default function EditTaxRegionDialog({ region, service, canEdit, returnFo
   const [source, setSource] = useState<TaxSource>(initialSource);
   const [rateText, setRateText] = useState(initialRate);
   const [saving, setSaving] = useState(false);
+  const [recalculating, setRecalculating] = useState(false);
+  const [recalcMessage, setRecalcMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const toggleRef = useRef<HTMLInputElement>(null);
 
@@ -62,8 +69,32 @@ export default function EditTaxRegionDialog({ region, service, canEdit, returnFo
     }
   };
 
+  // Re-run the lookup with the saved setting (not the unsaved form state).
+  const handleRecalculate = async () => {
+    if (!canEdit || recalculating || saving) return;
+    setRecalculating(true);
+    setError(null);
+    setRecalcMessage(null);
+    try {
+      const result = await taxApi.recalculateRegion(region.country, region.region);
+      onRecalculated(result);
+      const events = result.recalculatedEvents === 1 ? '1 upcoming event' : `${result.recalculatedEvents} upcoming events`;
+      setRecalcMessage(
+        result.region.lastError
+          ? `Lookup ran on ${events}: ${result.region.lastError}`
+          : `Recalculated ${events} at ${formatRate(result.region.lastRate)}.`
+      );
+    } catch (err) {
+      setError(describeError(err, 'Could not recalculate this region'));
+    } finally {
+      setRecalculating(false);
+    }
+  };
+
   const stripeUnavailable = service.status !== 'active';
   const lastChecked = formatChecked(region.lastCheckedAt);
+  const canRecalculate = canEdit && region.configured && region.collecting && !dirty;
+  const upcoming = region.upcomingEventCount === 1 ? '1 upcoming event uses' : `${region.upcomingEventCount} upcoming events use`;
 
   return (
     <SettingsDialog
@@ -165,21 +196,38 @@ export default function EditTaxRegionDialog({ region, service, canEdit, returnFo
           </label>
         </fieldset>
 
-        {(region.lastCheckedAt || region.lastError) && (
-          <div className="text-sm text-gray-600 dark:text-slate-400">
+        <div className="flex flex-wrap items-start justify-between gap-3 text-sm text-gray-600 dark:text-slate-400" data-testid="tax-region-lookup">
+          <div className="min-w-0 space-y-1">
             {region.lastError ? (
               <span className="flex items-start gap-1.5 text-amber-700 dark:text-amber-300">
                 <WarningIcon className="mt-0.5 h-4 w-4 shrink-0" />
                 Last lookup{lastChecked ? ` on ${lastChecked}` : ''}: {region.lastError}
               </span>
-            ) : (
-              <span>
+            ) : region.lastCheckedAt ? (
+              <span className="block">
                 Last lookup: {formatRate(region.lastRate)} via {region.lastSource === 'MANUAL' ? 'manual rate' : 'Stripe Tax'}
                 {lastChecked ? ` on ${lastChecked}` : ''}
               </span>
+            ) : null}
+            <span className="block">{upcoming} this region.</span>
+            {recalcMessage && (
+              <span role="status" className="block text-gray-900 dark:text-white">
+                {recalcMessage}
+              </span>
             )}
           </div>
-        )}
+          {region.configured && region.collecting && (
+            <button
+              type="button"
+              className={secondaryBtn}
+              onClick={handleRecalculate}
+              disabled={!canRecalculate || recalculating}
+              title={dirty ? 'Save your changes first' : undefined}
+            >
+              {recalculating ? 'Recalculating…' : 'Recalculate now'}
+            </button>
+          )}
+        </div>
 
         <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900 dark:border-blue-900/50 dark:bg-blue-900/20 dark:text-blue-200">
           Saving recalculates the tax rate on upcoming events in {region.name}. Orders already placed are not changed.

@@ -6,6 +6,7 @@
 
 import React, { useEffect, useState, useCallback, Suspense } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import api from '@/services/api';
 import { resolveAssetUrl } from '@/lib/assets';
 import ImageUploader from '@/components/ImageUploader';
@@ -121,7 +122,32 @@ interface EventDetail {
     name: string;
     address: string;
   } | null;
+  /** Cached sales tax for this event and where it came from (Settings › Tax). */
+  tax?: { rate: number; source: 'STRIPE' | 'MANUAL' | null; region: string | null };
   priceTiers: PriceTier[];
+}
+
+function formatTaxRate(rate: number): string {
+  return `${(rate * 100).toFixed(3).replace(/\.?0+$/, '')}%`;
+}
+
+/** "Tax: 8.25% · Stripe Tax · NC" with a link to Settings › Tax. */
+function EventTaxSummary({ tax }: { tax: NonNullable<EventDetail['tax']> }) {
+  const parts = [formatTaxRate(tax.rate)];
+  if (tax.source === 'STRIPE') parts.push('Stripe Tax');
+  else if (tax.source === 'MANUAL') parts.push('Manual rate');
+  else parts.push('Not collecting');
+  if (tax.region) parts.push(tax.region);
+  return (
+    <p className="mt-1 text-xs text-gray-600 dark:text-slate-400" data-testid="event-tax-summary">
+      Tax: {parts.join(' · ')}
+      {' · '}
+      <Link href="/admin/settings/tax" className="font-medium text-indigo-600 hover:underline dark:text-indigo-300">
+        Settings › Tax
+      </Link>
+      {!tax.region && ' — set the venue\'s state to collect tax'}
+    </p>
+  );
 }
 
 function toDatetimeLocal(iso: string): string {
@@ -564,6 +590,7 @@ function EditEventContent() {
                   ))}
                 </select>
               )}
+              {eventData?.tax && venueId === eventData.venue?.id && <EventTaxSummary tax={eventData.tax} />}
             </div>
 
             <div>

@@ -48,7 +48,7 @@ class TaxService {
    * to its TaxRegion row (or "not set"), plus venues that cannot be placed.
    */
   async listRegions(orgId) {
-    const [venues, rows, service] = await Promise.all([
+    const [venues, rows, service, upcoming] = await Promise.all([
       prisma.venue.findMany({
         where: { organizationId: orgId },
         select: { id: true, name: true, state: true, postalCode: true },
@@ -56,6 +56,7 @@ class TaxService {
       }),
       prisma.taxRegion.findMany({ where: { organizationId: orgId } }),
       this.getServiceStatus(),
+      this._upcomingEventsByState(orgId),
     ]);
 
     const byKey = new Map(rows.map((r) => [`${r.country}/${r.region}`, r]));
@@ -79,7 +80,7 @@ class TaxService {
       .map(([k, regionVenues]) => {
         const [country, region] = k.split('/');
         const row = byKey.get(k) || null;
-        return this._formatRegion(country, region, row, regionVenues.length, registered.has(k));
+        return this._formatRegion(country, region, row, regionVenues.length, registered.has(k), upcoming.get(region) || 0);
       })
       .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -116,13 +117,33 @@ class TaxService {
     });
 
     const recalculatedEvents = await this.recalculateEvents(orgId, country, region);
-    const [fresh, service, venueCount] = await Promise.all([
-      prisma.taxRegion.findUnique({ where: { id: row.id } }),
+    return { region: await this._regionResponse(orgId, row.id, country, region), recalculatedEvents };
+  }
+
+  /**
+   * Re-run the rate lookup for a configured region's upcoming events on demand
+   * ("Recalculate now" on Settings › Tax). Phase 2.
+   */
+  async recalculateRegion(orgId, country, region) {
+    const row = await prisma.taxRegion.findUnique({
+      where: { organizationId_country_region: { organizationId: orgId, country, region } },
+    });
+    if (!row) throw new NotFoundError('Tax region is not configured');
+    const recalculatedEvents = await this.recalculateEvents(orgId, country, region);
+    logger.info('Tax region recalculated', { event: 'tax_region_recalculated', orgId, country, region, recalculatedEvents });
+    return { region: await this._regionResponse(orgId, row.id, country, region), recalculatedEvents };
+  }
+
+  /** Fresh region row for a write response (after lookups may have updated it). */
+  async _regionResponse(orgId, rowId, country, region) {
+    const [fresh, service, venueCount, upcoming] = await Promise.all([
+      prisma.taxRegion.findUnique({ where: { id: rowId } }),
       this.getServiceStatus(),
       prisma.venue.count({ where: { organizationId: orgId, state: region } }),
+      this._upcomingEventsByState(orgId),
     ]);
     const registered = service.registrations.some((r) => r.country === country && r.region === region);
-    return { region: this._formatRegion(country, region, fresh, venueCount, registered), recalculatedEvents };
+    return this._formatRegion(country, region, fresh, venueCount, registered, upcoming.get(region) || 0);
   }
 
   /**
@@ -301,12 +322,27 @@ class TaxService {
     }
   }
 
-  _formatRegion(country, region, row, venueCount, registrationFound) {
+  /** Upcoming DRAFT/PUBLISHED events per venue state — what a region save would recalculate. */
+  async _upcomingEventsByState(orgId) {
+    const events = await prisma.event.findMany({
+      where: { status: { in: ['DRAFT', 'PUBLISHED'] }, date: { gte: new Date() }, venue: { organizationId: orgId } },
+      select: { venue: { select: { state: true } } },
+    });
+    const counts = new Map();
+    for (const e of events) {
+      const key = this.resolveRegionForVenue(e.venue)?.region;
+      if (key) counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    return counts;
+  }
+
+  _formatRegion(country, region, row, venueCount, registrationFound, upcomingEventCount = 0) {
     return {
       country,
       region,
       name: stateName(region),
       venueCount,
+      upcomingEventCount,
       configured: Boolean(row),
       collecting: row ? row.collecting : false,
       source: row ? row.source : null,

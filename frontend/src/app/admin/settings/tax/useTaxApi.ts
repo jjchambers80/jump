@@ -18,6 +18,8 @@ export function useTaxApi() {
       get: () => api.get<TaxSettingsResponse>(`/admin/settings/tax${qs}`),
       saveRegion: (country: string, region: string, body: UpsertTaxRegionBody) =>
         api.put<UpsertTaxRegionResponse>(`/admin/settings/tax/regions/${country}/${region}${qs}`, body),
+      recalculateRegion: (country: string, region: string) =>
+        api.post<UpsertTaxRegionResponse>(`/admin/settings/tax/regions/${country}/${region}/recalculate${qs}`, {}),
     }),
     [qs]
   );

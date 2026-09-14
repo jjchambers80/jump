@@ -184,13 +184,14 @@ describe('TaxService', () => {
         row(),
         row({ id: 'reg-2', region: 'VA', source: 'MANUAL', manualRate: '0.05300', lastRate: '0.05300', lastSource: 'MANUAL', lastCheckedAt: new Date('2026-09-12T00:00:00Z') }),
       ]);
+      event.findMany.mockResolvedValue([{ venue: { state: 'NC' } }, { venue: { state: 'NC' } }, { venue: { state: 'TX' } }, { venue: { state: null } }]);
 
       const { regions, needsAddress } = await service.listRegions('org-1');
 
       expect(regions.map((r) => r.region)).toEqual(['NC', 'TX', 'VA']);
-      expect(regions[0]).toMatchObject({ name: 'North Carolina', venueCount: 2, configured: true, collecting: true, source: 'STRIPE', registrationFound: true });
-      expect(regions[1]).toMatchObject({ name: 'Texas', venueCount: 1, configured: false, collecting: false, source: null, registrationFound: false });
-      expect(regions[2]).toMatchObject({ name: 'Virginia', venueCount: 0, configured: true, source: 'MANUAL', manualRate: 0.053, lastRate: 0.053, lastCheckedAt: '2026-09-12T00:00:00.000Z' });
+      expect(regions[0]).toMatchObject({ name: 'North Carolina', venueCount: 2, upcomingEventCount: 2, configured: true, collecting: true, source: 'STRIPE', registrationFound: true });
+      expect(regions[1]).toMatchObject({ name: 'Texas', venueCount: 1, upcomingEventCount: 1, configured: false, collecting: false, source: null, registrationFound: false });
+      expect(regions[2]).toMatchObject({ name: 'Virginia', venueCount: 0, upcomingEventCount: 0, configured: true, source: 'MANUAL', manualRate: 0.053, lastRate: 0.053, lastCheckedAt: '2026-09-12T00:00:00.000Z' });
       expect(needsAddress).toEqual([{ id: 'v4', name: 'Garden' }]);
     });
   });
@@ -221,7 +222,7 @@ describe('TaxService', () => {
       expect(event.update).toHaveBeenCalledTimes(2);
       expect(event.update).toHaveBeenCalledWith({ where: { id: 'evt-1' }, data: { taxRate: 0.05, taxRateSource: 'MANUAL' } });
       expect(result.recalculatedEvents).toBe(2);
-      expect(result.region).toMatchObject({ region: 'NC', venueCount: 2, source: 'MANUAL', manualRate: 0.05, registrationFound: true });
+      expect(result.region).toMatchObject({ region: 'NC', venueCount: 2, upcomingEventCount: 2, source: 'MANUAL', manualRate: 0.05, registrationFound: true });
     });
 
     it('clears the manual rate when switching back to Stripe Tax', async () => {
@@ -232,6 +233,23 @@ describe('TaxService', () => {
       event.findMany.mockResolvedValue([]);
       await service.upsertRegion('org-1', 'US', 'NC', { collecting: true, source: 'STRIPE', manualRate: 0.05 });
       expect(taxRegion.upsert).toHaveBeenCalledWith(expect.objectContaining({ update: { collecting: true, source: 'STRIPE', manualRate: null } }));
+    });
+
+    it('recalculateRegion re-runs lookups for a configured region and 404s otherwise', async () => {
+      activeStatus();
+      taxRegion.findUnique.mockResolvedValue(row());
+      venue.count.mockResolvedValue(1);
+      event.findMany.mockResolvedValue([{ id: 'evt-1', venue: ncVenue }]);
+      event.update.mockResolvedValue({});
+      stripe.tax.calculations.create.mockResolvedValue(calculation(700));
+
+      const result = await service.recalculateRegion('org-1', 'US', 'NC');
+      expect(result.recalculatedEvents).toBe(1);
+      expect(event.update).toHaveBeenCalledWith({ where: { id: 'evt-1' }, data: { taxRate: 0.07, taxRateSource: 'STRIPE' } });
+      expect(taxRegion.upsert).not.toHaveBeenCalled();
+
+      taxRegion.findUnique.mockResolvedValue(null);
+      await expect(service.recalculateRegion('org-1', 'US', 'TX')).rejects.toThrow('not configured');
     });
 
     it('rejects non-US or unknown regions', async () => {
