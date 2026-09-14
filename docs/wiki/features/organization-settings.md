@@ -1,11 +1,11 @@
 # Organization Settings
 
 **Status:** Implemented
-**Last Updated:** 2026-09-12
+**Last Updated:** 2026-09-13
 
 ## Overview
 
-Settings › General lets an organizer or admin manage the organization assigned to their account. The page is read-only by default: a **Business details** card (legal entity row with an `…` affordance) and a **Store contact details** card (two chevron rows: store name/email/phone and store address). Clicking a row opens a modal dialog with the editable fields; Save closes it and the row re-renders with the new values. Every dialog saves through the same partial `PATCH /admin/settings/business-details` endpoint, sending only its own fields.
+Settings › General lets an organizer or admin manage the organization selected in the header switcher (see [Org Switcher](org-switcher.md)). The page is read-only by default: a **Business details** card (legal entity row with an `…` affordance) and a **Store contact details** card (two chevron rows: store name/email/phone and store address). Clicking a row opens a modal dialog with the editable fields; Save closes it and the row re-renders with the new values. Every dialog saves through the same partial `PATCH /admin/settings/business-details` endpoint, sending only its own fields.
 
 Saving the store name also updates the organization switcher in the admin header immediately, because `name` is the same column the switcher, public pages, and emails display.
 
@@ -15,9 +15,9 @@ Saving the store name also updates the organization switcher in the admin header
 |------|---------|
 | `backend/src/api/routes/admin.js` | `GET/PATCH /admin/settings/business-details`, `/admin/settings/people` routes |
 | `backend/src/api/validators/organizationValidators.js` | `validateUpdateBusinessDetails` — partial-update validator with field whitelist |
-| `backend/src/services/OrganizationService.js` | `getBusinessDetailsForUser`, `updateBusinessDetailsForUser`, `serializeBusinessDetails` (masks EIN) |
+| `backend/src/services/OrganizationService.js` | `getBusinessDetails(orgId)`, `updateBusinessDetails(orgId, data)`, `serializeBusinessDetails` (masks EIN) |
 | `backend/src/services/OrganizationPersonService.js` | People management and account representative designation |
-| `frontend/src/app/admin/settings/page.tsx` | Summary cards, which dialog is open, org-switcher sync, mismatch notice |
+| `frontend/src/app/admin/settings/page.tsx` | Summary cards, which dialog is open; waits for the switcher and refetches when the selected org changes |
 | `frontend/src/app/admin/settings/SummaryRow.tsx` | Read-only row button (icon, primary/secondary text, chevron or `…`) |
 | `frontend/src/app/admin/settings/SettingsDialog.tsx` | Shared modal shell: focus trap, Escape/backdrop close, discard confirm, Cancel/Save header |
 | `frontend/src/app/admin/settings/StoreContactDialog.tsx` | Store name / email / phone form |
@@ -52,19 +52,19 @@ Empty values show an "Add …" prompt instead.
 
 ## How It Works
 
-1. `page.tsx` loads `GET /admin/settings/business-details` for the signed-in user's `organizationId` (not the header's selected org).
+1. `page.tsx` waits for `OrgContext` to resolve, then loads `GET /admin/settings/business-details`. The api client sends the selected org as `X-Jump-Org`; the backend's `activeOrgFor(req)` resolves it (members: an org they belong to, `SYSTEM_ADMIN`: whatever the switcher selected). The fetch is ref-gated to the selected id so a background `refresh()` does not remount the page.
 2. Each row is a single `<button>` (the whole row is clickable). `page.tsx` tracks which editor is open (`'contact' | 'address' | 'business' | null`) and renders the matching dialog.
 3. Each dialog owns its form state, dirty tracking, and inline errors inside the shared `SettingsDialog` shell. Save is disabled until the form is dirty; Cancel, Escape, or a backdrop click prompt "Discard unsaved changes?" when dirty.
 4. On submit the dialog PATCHes only its fields. The validator checks the keys that are present, normalizes them, and rejects unknown keys and empty bodies; the service passes the body straight to `prisma.organization.update`.
 5. The response is the full serialized record; the page stores it, closes the dialog, announces "… saved." via a visually hidden `role="status"`, and returns focus to the row that opened the dialog.
 6. When the Store contact dialog saves, the page calls `updateOrganization(id, { name })` on `OrgContext` (optimistic in-memory patch) and then `refresh()` in the background. The switcher trigger and list re-render from context immediately.
-7. If an ADMIN has a different org selected in the header than the one Settings edits, the page shows a notice naming both orgs. Scoping Settings to the selected org is a follow-up.
+7. Switching organizations in the header refetches the page for the new org.
 
 ## API Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/admin/settings/business-details` | Business details for the current user's organization (EIN masked) |
+| GET | `/admin/settings/business-details` | Business details for the active organization (`X-Jump-Org`; EIN masked) |
 | PATCH | `/admin/settings/business-details` | Partial update; any subset of the whitelisted fields |
 | GET | `/admin/settings/people` | List people in the organization (no date of birth) |
 | POST | `/admin/settings/people` | Add a person; may replace the account representative |
@@ -84,7 +84,7 @@ Whitelisted fields: `name`, `companyName`, `email`, `businessType`, `nickname`, 
 - **Partial semantics** — the validator is the first partial-update validator in the codebase. Do not reintroduce required-field checks for absent keys; each dialog depends on being able to save independently.
 - `SettingsDialog` runs its focus/keyboard effect once per mount and reads `dirty`/`saving`/`childActive` through refs. Passing inline callbacks is fine; the effect does not re-run on re-render.
 - `BusinessDetailsDialog` nests `AddPersonDialog`; it sets `childActive` so the shell stops handling Escape/Tab and marks itself `aria-hidden` while the child is open.
-- The Settings page edits the JWT user's organization; the header switcher lists all orgs for ADMIN users. The two can disagree — the page warns but does not block.
+- The page edits the switcher's org, never "the user's first membership". `SYSTEM_ADMIN` has no memberships, so any route resolving from memberships alone returns 404 for them — use `activeOrgFor(req)`.
 - `email` and `phoneNumber` are not part of `getPublicOrganization`'s explicit `select`; keep it that way unless a public contact feature is designed.
 - EIN is masked on read — the full value is never returned from the API. Sending `ein: null` clears it; omitting it preserves it.
 - DOB is stored for people but never returned by list or create responses, nor logged.
@@ -96,3 +96,4 @@ Whitelisted fields: `name`, `companyName`, `email`, `businessType`, `nickname`, 
 
 - [RBAC](rbac.md) — organizer role required for settings access.
 - [Admin Dashboard](admin-dashboard.md) — org context shared with dashboard.
+- [Org Switcher](org-switcher.md) — how the active organization reaches these routes.

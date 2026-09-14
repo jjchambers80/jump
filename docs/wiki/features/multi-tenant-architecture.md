@@ -1,7 +1,7 @@
 # Multi-Tenant Architecture
 
 **Status:** Active
-**Last Updated:** 2026-09-07
+**Last Updated:** 2026-09-13
 
 ## Overview
 
@@ -24,7 +24,7 @@ Organizations are the top-level tenant boundary in Jump. Each Organization owns 
 3. **Events** are created under an org but linked to a Venue (`event.venueId`). Org ownership is resolved transitively: `event.venue.organizationId`.
 4. **OrganizationPerson** records track business reps. When `isAccountRepresentative` is set, a transaction first clears the flag on all existing reps, then creates the new one. A Prisma `P2002` error (unique constraint) on concurrent writes throws `ConflictError`.
 5. **Business details** (EIN) are serialized with masking: only last 4 digits exposed via `einMasked` field (`--***XXXX`).
-6. **User-org binding**: staff belong to organizations through `OrganizationMember(userId, organizationId, role)`; one user can hold several. `resolveActiveMembership` picks the active one (JWT `organizationId` claim if it is a real membership, else the oldest). `getBusinessDetailsForUser` / `updateBusinessDetailsForUser` operate through that. `User.organizationId` is legacy and unread. Buyers are `Contact` rows scoped per organization — see [Tenant Identity](tenant-identity.md).
+6. **User-org binding**: staff belong to organizations through `OrganizationMember(userId, organizationId, role)`; one user can hold several. `resolveActiveMembership` picks the active one (`X-Jump-Org` header from the admin org switcher, else the JWT `organizationId` claim, if either is a real membership; else the oldest). Settings routes resolve a concrete org with `activeOrgFor(req)` in `routes/admin.js` and pass it to the services — see [Org Switcher](org-switcher.md). `User.organizationId` was dropped in migration `20260913130000`. Buyers are `Contact` rows scoped per organization — see [Tenant Identity](tenant-identity.md).
 
 ## API Endpoints
 

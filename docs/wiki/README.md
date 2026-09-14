@@ -42,7 +42,7 @@ Generated and maintained by running `/doc-feature` after completing feature work
 
 ### Frontend
 - [Theme System](features/theme-system.md) — Light/dark/auto modes, localStorage persistence
-- [Org Switcher](features/org-switcher.md) — Global organization context in admin header
+- [Org Switcher](features/org-switcher.md) — Global organization context in the admin header; `X-Jump-Org` header, backend `activeOrgFor(req)`, JWT claim refresh
 
 ### Infrastructure
 - [Observability](features/observability.md) — Winston logging, Prometheus metrics, correlation IDs
