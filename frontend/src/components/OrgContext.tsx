@@ -3,7 +3,7 @@
 // Global organization context for admin pages.
 // Fetches orgs once, shares selectedOrgId across all admin routes.
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import api, { setActiveOrganizationId } from '@/services/api';
 
 export interface Organization {
@@ -34,9 +34,19 @@ const OrgContext = createContext<OrgContextValue | null>(null);
 
 export function OrgProvider({ children }: { children: React.ReactNode }) {
   const [organizations, setOrganizations] = useState<Organization[]>([]);
-  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
+  const [selectedOrgId, setSelectedOrgIdState] = useState<string | null>(null);
+  const selectedOrgIdRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Publish the selection to the api client *before* React commits it. Child
+  // effects run before this provider's effects, so a page that fetches as soon
+  // as it sees the new selectedOrgId would otherwise send no X-Jump-Org header.
+  const setSelectedOrgId = useCallback((id: string | null) => {
+    selectedOrgIdRef.current = id;
+    setActiveOrganizationId(id);
+    setSelectedOrgIdState(id);
+  }, []);
 
   const fetchOrgs = useCallback(async () => {
     try {
@@ -46,10 +56,8 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
       setOrganizations(data);
       // Auto-select first org if none selected or current selection no longer exists
       if (data.length > 0) {
-        setSelectedOrgId((prev) => {
-          if (prev && data.some((o) => o.id === prev)) return prev;
-          return data[0].id;
-        });
+        const prev = selectedOrgIdRef.current;
+        setSelectedOrgId(prev && data.some((o) => o.id === prev) ? prev : data[0].id);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to load organizations');
@@ -67,10 +75,6 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
       current.map((org) => (org.id === id ? { ...org, ...patch } : org))
     );
   }, []);
-
-  useEffect(() => {
-    setActiveOrganizationId(selectedOrgId);
-  }, [selectedOrgId]);
 
   const selectedOrg = organizations.find((o) => o.id === selectedOrgId) ?? null;
 
