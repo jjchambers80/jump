@@ -15,13 +15,15 @@ Loads when agent touches `packages/db/` files. For root-level commands, see [`..
 3. `npm run db:generate` from repo root (regenerates client types)
 4. Postinstall hook runs generate automatically on `npm install`
 
-## Models (20 models, 12 enums)
+## Models (21 models, 13 enums)
 
 Core chain: Organization → Venue → Event → PriceTier → OrderItem → Ticket
-Supporting: User, OrganizationMember, OrganizationDomain, Account, VerificationToken, Contact, BuyerLoginToken, Order, PaymentTransaction, Refund, OrganizationPerson, TierPreset, File, Image
-Enums: UserRole (UNASSIGNED/ORGANIZER/ADMIN/SYSTEM_ADMIN), MemberRole (ADMIN/ORGANIZER, per-org staff role), BuyerTokenPurpose (WELCOME/LOGIN), DomainStatus (PENDING/VERIFIED/ACTIVE/FAILED), OrganizationStatus, ThemeMode (LIGHT/DARK/SYSTEM, org public-page enforcement), EventStatus, OrderStatus, TierVisibility, TicketStatus, PaymentStatus, RefundStatus
+Supporting: User, OrganizationMember, OrganizationDomain, Account, VerificationToken, Contact, BuyerLoginToken, Order, PaymentTransaction, Refund, OrganizationPerson, TierPreset, TaxRegion, File, Image
+Enums: UserRole (UNASSIGNED/ORGANIZER/ADMIN/SYSTEM_ADMIN), MemberRole (ADMIN/ORGANIZER, per-org staff role), BuyerTokenPurpose (WELCOME/LOGIN), DomainStatus (PENDING/VERIFIED/ACTIVE/FAILED), OrganizationStatus, ThemeMode (LIGHT/DARK/SYSTEM, org public-page enforcement), EventStatus, OrderStatus, TierVisibility, TicketStatus, PaymentStatus, RefundStatus, TaxSource (STRIPE/MANUAL)
 
 Tenancy: `Contact` is unique on `(organizationId, email)`; `OrganizationMember` holds staff affiliation. `User.organizationId` and `Contact.userId` were dropped in `20260913130000_drop_legacy_identity_columns` (which also renamed `UserRole.CUSTOMER` to `UNASSIGNED`). `20260913000000_contact_per_org_and_membership` did the original backfill in one transaction.
+
+Tax (spec 009): `TaxRegion` is unique on `(organizationId, country, region)` and keyed by `Venue.state` (two-letter US code, enforced by the venue validator). `Event.taxRate` / `taxRateSource` cache the resolved rate; `Organization.taxInclusivePricing` switches the fee math. `20260914010000_tax_regions` backfilled `collecting = true, source = STRIPE` for every existing organization/state. See `docs/wiki/features/tax-settings.md`.
 
 ## Seed Data
 
