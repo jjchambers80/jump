@@ -1,6 +1,6 @@
 # Implementation Plan: Settings › Tax (Shopify-style tax configuration)
 
-**Status**: Planned 2026-09-13. Not started.
+**Status**: Phase 1 implemented 2026-09-14 on branch `feat/009-tax-settings` (service card, regions table, edit dialog, backend + migration, tests, docs). Stripe Tax field names pinned against `stripe@17` types (§2.1). Phases 2–3 open; §5 decisions still unanswered.
 **Input**: "Do some research about the existing tax service that we have in our system and under the Settings menu create a new menu item called Tax. On the page have a similar configuration as seen on this Shopify example. Determine whether these are settings/features we need; if not exclude, if so include, and put together a proper implementation plan."
 **Reference screen**: Shopify Settings › Taxes and duties — a `Tax service` card (`Shopify tax services • Active`, `Manage`), a `Tax regions` table (Region | Collecting | Tax service, with Shopify Tax / Basic Tax / Manual Tax per region and a `Global collected tax report` link), a `Duties and import taxes` card (collect at checkout, Customs information: country of origin, HS codes), and `Additional configuration` checkboxes (include sales tax in product price, charge sales tax on shipping, charge VAT on digital goods).
 **Builds on**: spec 001 fee/tax model, spec 007 tenant identity (`activeOrgFor` scoping), spec 008 Settings UI patterns.

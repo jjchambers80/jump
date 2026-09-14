@@ -14,6 +14,7 @@ interface Section {
 const SECTIONS: Section[] = [
   { href: '/admin/settings', label: 'General' },
   { href: '/admin/settings/domains', label: 'Domains' },
+  { href: '/admin/settings/tax', label: 'Tax' },
   { href: '/admin/settings/users', label: 'Users', roles: ['ADMIN', 'SYSTEM_ADMIN'] },
 ];
 

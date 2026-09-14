@@ -94,7 +94,7 @@ class EventService {
       eventName: event.name,
     });
 
-    // Compute tax rate from venue postal code (non-blocking — event exists even if this fails)
+    // Compute tax rate from the org's region setting (non-blocking — event exists even if this fails)
     await this._refreshTaxRate(event);
 
     return this._formatEventDetail(event);
@@ -588,20 +588,31 @@ class EventService {
     };
   }
   /**
-   * Compute and persist tax rate for an event based on its venue postal code.
-   * Fails silently — taxRate stays null/0 if lookup fails.
+   * Compute and persist the tax rate for an event from its organization's
+   * region setting (spec 009). Never throws — the event exists even if the
+   * lookup fails. On a Stripe lookup error the previously cached rate is kept
+   * so a Stripe blip cannot drop a good rate to 0.
    */
   async _refreshTaxRate(event) {
-    const postalCode = event.venue?.postalCode;
-    if (!postalCode) return;
+    const venue = event.venue;
+    if (!venue) return;
 
     try {
-      const taxRate = await taxService.getTaxRateForVenue(postalCode);
+      const { rate, source, error } = await taxService.rateForVenue(venue.organizationId, venue);
+      if (error && source === 'STRIPE' && event.taxRate != null && Number(event.taxRate) > 0) {
+        logger.warn('Tax rate lookup failed; keeping cached rate', {
+          event: 'tax_rate_refresh_kept_previous',
+          eventId: event.id,
+          error,
+        });
+        return;
+      }
       await prisma.event.update({
         where: { id: event.id },
-        data: { taxRate },
+        data: { taxRate: rate, taxRateSource: source },
       });
-      event.taxRate = taxRate;
+      event.taxRate = rate;
+      event.taxRateSource = source;
     } catch (error) {
       logger.error('Failed to refresh tax rate', {
         event: 'tax_rate_refresh_failed',

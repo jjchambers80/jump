@@ -5,6 +5,7 @@ import { prisma } from '@jump/db';
 import logger from '../utils/logger.js';
 import { ConflictError, NotFoundError } from '../middleware/errorHandler.js';
 import { formatEventSummary } from '../utils/eventSummary.js';
+import taxService from './TaxService.js';
 
 class VenueService {
   /** Create a new venue within an organization. */
@@ -150,6 +151,12 @@ class VenueService {
       changes: Object.keys(updateData),
     });
 
+    // Tax rates are cached per event from the venue's state + postal code
+    // (spec 009); a location change must refresh upcoming events.
+    if (updateData.state !== undefined || updateData.postalCode !== undefined) {
+      await this._refreshEventTaxRates(venue);
+    }
+
     return venue;
   }
 
@@ -205,6 +212,29 @@ class VenueService {
       venueId: id,
       organizationId: orgId,
     });
+  }
+
+  /** Recompute the cached tax rate on the venue's upcoming events. Never throws. */
+  async _refreshEventTaxRates(venue) {
+    try {
+      const events = await prisma.event.findMany({
+        where: { venueId: venue.id, status: { in: ['DRAFT', 'PUBLISHED'] }, date: { gte: new Date() } },
+        select: { id: true },
+      });
+      if (events.length === 0) return;
+      // One lookup — every event at this venue shares the same location.
+      const { rate, source } = await taxService.rateForVenue(venue.organizationId, venue);
+      await prisma.event.updateMany({
+        where: { id: { in: events.map((e) => e.id) } },
+        data: { taxRate: rate, taxRateSource: source },
+      });
+    } catch (error) {
+      logger.error('Failed to refresh event tax rates after venue change', {
+        event: 'venue_tax_refresh_failed',
+        venueId: venue.id,
+        error: error.message,
+      });
+    }
   }
 }
 

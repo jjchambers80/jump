@@ -4,12 +4,13 @@
 import express from 'express';
 import { prisma } from '@jump/db';
 import { requireAuth } from '../../middleware/auth.js';
-import { requireOrganizer } from '../../middleware/rbac.js';
+import { requireOrganizer, requireAdmin } from '../../middleware/rbac.js';
 import { NotFoundError, ValidationError } from '../../middleware/errorHandler.js';
 import { resolveOrgScope, isUnscoped } from '../../middleware/orgScope.js';
 import { validateUpdateAttendee } from '../validators/adminValidators.js';
 import { validateUpdateBusinessDetails } from '../validators/organizationValidators.js';
 import { validateCreateOrganizationPerson } from '../validators/organizationPersonValidators.js';
+import { validateUpsertTaxRegion } from '../validators/taxValidators.js';
 import organizationService from '../../services/OrganizationService.js';
 import organizationPersonService from '../../services/OrganizationPersonService.js';
 import orderService from '../../services/OrderService.js';
@@ -17,6 +18,7 @@ import ticketService from '../../services/TicketService.js';
 import refundService from '../../services/RefundService.js';
 import customerService from '../../services/CustomerService.js';
 import domainService from '../../services/DomainService.js';
+import taxService from '../../services/TaxService.js';
 import imageService from '../../services/ImageService.js';
 import emailService from '../../services/EmailService.js';
 import qrService from '../../services/QRService.js';
@@ -182,6 +184,48 @@ router.delete('/settings/domains/:id', async (req, res, next) => {
     next(error);
   }
 });
+
+// ---------------------------------------------------------------------------
+// Settings > Tax (spec 009). Regions derive from the org's venues; every staff
+// role can read, ADMIN/SYSTEM_ADMIN can change what is collected.
+// ---------------------------------------------------------------------------
+
+/** GET /admin/settings/tax — Stripe Tax status, per-region settings, venues without a state. */
+router.get('/settings/tax', async (req, res, next) => {
+  try {
+    const organizationId = await activeOrgFor(req);
+    const [service, { regions, needsAddress }] = await Promise.all([
+      taxService.getServiceStatus(),
+      taxService.listRegions(organizationId),
+    ]);
+    // The Stripe dashboard link is only useful to whoever owns the platform account.
+    const { manageUrl, ...serviceForRole } = service;
+    res.json({
+      service: req.user.role === 'SYSTEM_ADMIN' ? service : serviceForRole,
+      regions,
+      needsAddress,
+      canEdit: ['ADMIN', 'SYSTEM_ADMIN'].includes(req.user.role),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** PUT /admin/settings/tax/regions/:country/:region { collecting, source, manualRate } */
+router.put(
+  '/settings/tax/regions/:country/:region',
+  requireAdmin,
+  validateUpsertTaxRegion,
+  async (req, res, next) => {
+    try {
+      const organizationId = await activeOrgFor(req);
+      const result = await taxService.upsertRegion(organizationId, req.params.country, req.params.region, req.body);
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 /**
  * GET /admin/dashboard/stats

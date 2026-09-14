@@ -18,7 +18,7 @@ Generated and maintained by running `/doc-feature` after completing feature work
 ### Payments & Pricing
 - [Stripe Integration](features/stripe-integration.md) — Payment processing, webhooks, Checkout Sessions
 - [Fee Calculation](features/fee-calculation.md) — Platform fees, processing fees, pass-through pricing
-- [Tax Calculation](features/tax-calculation.md) — Venue-based tax rates via Stripe Tax API
+- [Tax Calculation](features/tax-calculation.md) — Settings › Tax: per-organization tax regions (collect / not, Stripe Tax or manual rate), venue-based rates cached per event
 - [All-In Pricing](features/all-in-pricing.md) — FTC-compliant price display with fees included
 - [Cart Line-Item Breakdown](features/cart-line-item-breakdown.md) — Per-line fee accordion in the cart (dotted-underline price, caret) with Expand all / Collapse all; shared `lib/fees.ts`
 

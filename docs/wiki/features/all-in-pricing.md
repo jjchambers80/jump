@@ -24,19 +24,19 @@ Jump displays FTC-compliant all-in pricing to customers. The price shown on even
    - **Subtotal**: tier base price × quantity
    - **Platform fee**: percentage of subtotal (configurable)
    - **Processing fee**: Stripe rate × (subtotal + platform fee) + fixed per-transaction
-   - **Tax**: subtotal × venue tax rate (cached from Stripe Tax API)
+   - **Tax**: subtotal × venue tax rate (resolved from the organization's Settings › Tax region for the venue's state; cached on the event)
 3. Customer sees total including all fees
 4. Fee breakdown stored per OrderItem (unitPrice, unitPlatformFee, unitProcessingFee, unitTax)
 
 ## Gotchas
 
-- Tax rate is venue-based, not customer-based
+- Tax rate is venue-based, not customer-based. It is 0 unless the organization has set the venue's state to Collecting on Settings › Tax
 - Fee breakdown is stored at purchase time — rate changes don't affect existing orders
 - All-in price display is a frontend concern; backend always returns fee components separately
 
 ## Related Features
 
 - [Fee Calculation](fee-calculation.md) — Detailed fee math
-- [Tax Calculation](tax-calculation.md) — Stripe Tax API integration
+- [Tax Calculation](tax-calculation.md) — Tax regions, Stripe Tax / manual rates
 - [Price Tiers](price-tiers.md) — Base pricing configuration
 - [Cart Line-Item Breakdown](cart-line-item-breakdown.md) — Per-line accordion showing these components in the cart
