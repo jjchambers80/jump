@@ -86,6 +86,12 @@ describe('getProviderStatus', () => {
     });
   });
 
+  test('test mode reports active charges even before the account is activated', async () => {
+    mockAccountsRetrieve.mockResolvedValueOnce(account({ charges: false }));
+    const status = await service.getProviderStatus();
+    expect(status).toMatchObject({ mode: 'test', charges: 'active', error: null });
+  });
+
   test('never throws: API failure reports unavailable', async () => {
     mockAccountsRetrieve.mockRejectedValueOnce(new Error('boom'));
     const status = await service.getProviderStatus();

@@ -24,6 +24,8 @@ Found during production verification on 2026-09-14: the platform Stripe account 
 
 ## Stripe payments
 
+Verified 2026-09-14 (read-only `accounts.retrieve()` with the backend's Railway env, after spec 010 phase 1 deployed): production runs a **test** `STRIPE_SECRET_KEY` (`charges_enabled: false`, account not activated), **no** `STRIPE_WEBHOOK_SECRET` variable is set (webhook signatures are not verified), **no statement descriptor prefix**, and no optional payment-method capabilities. Settings › Payments therefore shows *Test mode*, statement name *Not available*, and every optional method *Unavailable* — accurate, not a bug. Checkout behaviour is unchanged (`card` only, no suffix).
+
 - [ ] Live `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` on the backend service; webhook endpoint `POST /webhooks/stripe` registered on the live account — see [Stripe Setup](stripe-setup.md).
 - [ ] **Set a statement descriptor prefix** on the live Stripe account (Dashboard › Settings › Business › Public details, "Statement descriptor" → shortened descriptor / prefix). Keep it short (e.g. `JUMP`, 4 characters): organizations get `22 − prefix − 2` characters for their own name on Settings › Payments. Until it is set, no per-organization statement name is sent and the dialog is disabled — see [Payments Settings](../features/payments-settings.md).
 - [ ] **Confirm capabilities** for the optional payment methods organizations may enable (`link_payments`, `cashapp_payments`; BNPL later per spec 010 §5.6). Methods without an active capability show as *Unavailable*.
