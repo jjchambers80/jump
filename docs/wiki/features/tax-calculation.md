@@ -1,122 +1,95 @@
 # Tax Calculation
 
-**Status:** Implemented (spec 009 phases 1–3)
-**Last Updated:** 2026-09-14
+**Status**: Implemented (spec 009)
+**Last Updated**: 2026-09-14
 
 ## Overview
 
-Sales tax is venue-based: it depends on where the event happens, not where the buyer lives. Each organization decides, per US state it has a venue in, whether it collects tax there and by which source — an automatic Stripe Tax lookup or a flat manual rate. The effective rate is computed once per event, cached on `Event.taxRate`, and applied per ticket in the fee breakdown. Organizations manage this on **Settings › Tax** (`/admin/settings/tax`), a page modelled on Shopify's Taxes and duties screen.
+Sales tax is venue-based: it depends on where the event happens, not where the buyer lives. The organization's setting for the venue's state (see [Tax Settings](tax-settings.md)) decides whether tax is collected and by which source; the effective rate is computed once per event, cached on `Event.taxRate`, and applied per ticket by `FeeService` — added on top of the listed price, or backed out of it when the organization prices tax-inclusive.
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `backend/src/services/TaxService.js` | Region resolution, rate resolution by source, Stripe Tax lookup, service status |
-| `backend/src/services/EventService.js` | `_refreshTaxRate()` on create / venue change / publish |
-| `backend/src/services/VenueService.js` | Refreshes upcoming events when a venue's state or postal code changes |
-| `backend/src/services/FeeService.js` | Applies the cached rate (`tax = subtotal × taxRate`) |
-| `backend/src/api/routes/admin.js` | `GET /admin/settings/tax`, `PUT /admin/settings/tax/regions/:country/:region` |
-| `backend/src/api/validators/taxValidators.js` | Region / body validation |
-| `backend/src/utils/usStates.js` | State code ↔ name, input normalisation |
-| `packages/db/prisma/schema.prisma` | `TaxRegion`, `TaxSource`, `Event.taxRateSource` |
-| `frontend/src/app/admin/settings/tax/` | Page, regions table, edit dialog, API hook |
-
-## Data Model
-
-```
-TaxRegion (unique per organizationId + country + region)
-  collecting   Boolean   — false = no tax in this state
-  source       STRIPE | MANUAL
-  manualRate   Decimal   — fraction (0.0825), only when MANUAL
-  lastRate / lastSource / lastCheckedAt / lastError — outcome of the last lookup, shown on the page
-
-Event.taxRate        Decimal — cached effective rate
-Event.taxRateSource  STRIPE | MANUAL | null — which path produced it (null = not collecting / legacy)
-```
-
-Regions are *derived* from venues: the page lists every state the organization has a venue in, joined to its `TaxRegion` row. A state with venues but no row is **Not set** and collects nothing until an admin configures it. Venues without a two-letter `state` cannot be placed in a region and appear under **Needs address**.
-
-## How It Works
-
-1. `EventService._refreshTaxRate(event)` calls `TaxService.rateForVenue(orgId, venue)`.
-2. `rateForVenue` finds the `TaxRegion` for `(US, venue.state)`:
-   - no row or `collecting = false` → `{ rate: 0, source: null }`
-   - `MANUAL` → `{ rate: manualRate, source: 'MANUAL' }`
-   - `STRIPE` → `getTaxRateForVenue(postalCode)`: one `stripe.tax.calculations.create` with a $100 reference line, tax code `txcd_20060057` (event admissions), `address_source: 'shipping'`; rate = `tax_amount_exclusive / 10000`.
-3. The outcome (rate or error) is written to the region's `last*` columns so the settings page can show it.
-4. The rate is stored on the event with `taxRateSource`; `FeeService` uses it for every order at that event.
-5. Saving a region on Settings › Tax recalculates every upcoming DRAFT/PUBLISHED event in that state (`recalculateEvents`). Orders already placed keep the amounts they were charged.
-
-### Failure handling
-
-`getTaxRateForVenue` **throws** `StripeTaxError` instead of returning 0. Callers decide what 0 means:
-
-- A Stripe error on an event that already has a rate keeps the previous rate (`tax_rate_refresh_kept_previous`) rather than dropping to 0.
-- A calculation whose `tax_breakdown[].taxability_reason` includes `not_collecting` (the platform Stripe account has no registration for that state) is recorded as `lastError: "No Stripe Tax registration for <State>"`; the region row shows a **No registration** badge and the dialog suggests a manual rate.
-- A missing postal code is an error (`Venue has no postal code`), not a silent 0.
-
-### Stripe Tax service status
-
-`getServiceStatus()` calls `stripe.tax.settings.retrieve()` (`active` | `pending`) and `stripe.tax.registrations.list({ status: 'active' })`, cached in-process for 5 minutes, and never throws (`unavailable` on error). The page shows the pill and, for SYSTEM_ADMIN only, a **Manage** link to the Stripe dashboard.
-
-## API
-
-| Method | Path | Role | Notes |
-|--------|------|------|-------|
-| GET | `/admin/settings/tax` | organizer+ | `{ service, regions[], needsAddress[], canEdit }`; scoped by `activeOrgFor(req)` (X-Jump-Org / `?organizationId=` for SYSTEM_ADMIN) |
-| PUT | `/admin/settings/tax/regions/:country/:region` | admin+ | `{ collecting, source?, manualRate? }` → `{ region, recalculatedEvents }`. `manualRate` is a fraction 0–0.5, required for MANUAL, rejected otherwise |
-| POST | `/admin/settings/tax/regions/:country/:region/recalculate` | admin+ | Re-runs the lookup for the region's upcoming events with the saved setting ("Recalculate now"); 404 when the region has no row |
-| PATCH | `/admin/settings/tax` | admin+ | `{ taxInclusivePricing }` — organization-level options (phase 3) |
-| GET | `/admin/settings/tax/report?from&to&format=json\|csv` | organizer+ | Tax collected per region for orders placed in the range (default: calendar year to date, max 3 years). CSV sets `Content-Disposition` (phase 3) |
-
-Region rows carry `upcomingEventCount` (DRAFT/PUBLISHED, future date) so the dialog can say what a save will touch. Event payloads (`_formatEventDetail`) include `tax: { rate, source, region }`; the admin event edit page renders it as `Tax: 8.25% · Stripe Tax · NC` under the venue picker with a link to Settings › Tax.
-
-## Tax-inclusive pricing (phase 3)
-
-`Organization.taxInclusivePricing` (default `false`). When on, the listed tier price already contains tax:
-
-```
-net   = listed / (1 + rate)          (= subtotal, the ex-tax base)
-tax   = listed − net
-fees  = platformFee(net) + processingFee(net + platformFee)
-total = net + fees + tax = listed + fees
-```
-
-`FeeService.computeOrderFees(items, rate, { taxInclusive })` and `frontend/src/lib/fees.ts` implement this identically (fixtures: $50 at 8.25% → net 46.19, tax 3.81, platform 2.31, processing 1.71, total 54.02). The invariant `total = subtotal + platformFee + processingFee + tax` holds in both modes, so `Order` columns, the cart breakdown and `OrderTotals` need no special cases; only labels change (`incl. $3.81 tax`, `Tax (included)`). `OrderService` reads the flag from the event's organization at checkout; public event payloads carry `taxInclusivePricing` for the storefront. Flipping the setting does not touch cached event rates or placed orders.
-
-Fees are charged on the **net** amount (plan §5 decision 2, recommendation adopted; revisit if product decides fees should apply to the listed price).
-
-## Collected tax report (phase 3)
-
-`TaxService.collectedReport(orgId, { from, to })` groups COMPLETED / PARTIALLY_REFUNDED / REFUNDED orders by the venue's state: orders, taxable sales (`subtotalAmount`), tax collected (`taxAmount`), tax refunded and tax net. Refunded tax is **estimated** as `refund ÷ order total × order tax` because `Refund` stores only an amount. Page: `/admin/settings/tax/report` (date range, table, totals, client-side CSV with the same columns as the API's `format=csv`).
+| `backend/src/services/TaxService.js` | `resolveRegionForVenue`, `rateForVenue` (by source), `getTaxRateForVenue` (Stripe Tax call), `getServiceStatus`, `recalculateEvents` |
+| `backend/src/services/EventService.js` | `_refreshTaxRate()` on create / venue change / publish; `tax: { rate, source, region }` on event payloads |
+| `backend/src/services/VenueService.js` | `_refreshEventTaxRates()` when a venue's state or postal code changes |
+| `backend/src/services/FeeService.js` | Applies the cached rate; exclusive and inclusive modes |
+| `frontend/src/lib/fees.ts` | Byte-for-byte mirror of `FeeService` for the storefront cart |
+| `backend/src/services/OrderService.js` | Passes `event.taxRate` and the org's `taxInclusivePricing` to `FeeService` at checkout |
 
 ## Configuration
 
-| Variable | Description |
-|----------|-------------|
-| `STRIPE_SECRET_KEY` | Platform Stripe key (payments and Stripe Tax). Stripe Tax must be activated and registered per state on this account for the STRIPE source to return a non-zero rate |
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `STRIPE_SECRET_KEY` | Yes | Same platform key as payments. Stripe Tax must be activated and registered per state on this account for the `STRIPE` source to return a non-zero rate |
 
-## Migration notes
+## How It Works
 
-`20260914010000_tax_regions` backfilled one `TaxRegion` per existing (organization, state) with `collecting = true, source = STRIPE`, so behaviour did not change for existing organizations. It also normalised full state names in `Venue.state` to two-letter codes; the venue validator now enforces codes (full names are accepted and converted).
+### Rate resolution
+
+1. `EventService._refreshTaxRate(event)` (create, venue change, publish) and `TaxService.recalculateEvents` (region save, Recalculate now, venue location change) call `TaxService.rateForVenue(orgId, venue)`.
+2. `rateForVenue` finds the `TaxRegion` for `(US, venue.state)`:
+   - no row, or `collecting = false` → `{ rate: 0, source: null }`
+   - `MANUAL` → `{ rate: manualRate, source: 'MANUAL' }`
+   - `STRIPE` → `getTaxRateForVenue(postalCode)`
+3. The outcome (rate or error) is recorded on the region (`lastRate`, `lastSource`, `lastCheckedAt`, `lastError`) for the settings page.
+4. The rate and `taxRateSource` are stored on the event; every order at that event uses them.
+
+### Stripe Tax lookup
+
+`getTaxRateForVenue(postalCode, country = 'US')` creates one `stripe.tax.calculations.create` with a $100 reference line (`amount: 10000`, `tax_behavior: 'exclusive'`, tax code `txcd_20060057` — event admissions) and `customer_details.address_source: 'shipping'` (the venue is where the service is delivered). Rate = `tax_amount_exclusive / 10000`. One call per event lookup, never per order (Stripe bills per calculation).
+
+### Failure handling
+
+`getTaxRateForVenue` **throws** `StripeTaxError` instead of returning 0; callers decide what 0 means:
+
+- Missing postal code → `Venue has no postal code` (error, not 0%).
+- Stripe error → recorded as `lastError`; an event that already has a rate keeps it (`tax_rate_refresh_kept_previous`) rather than dropping to 0.
+- A 0% calculation whose `tax_breakdown[].taxability_reason` includes `not_collecting` (the platform account has no registration for that state) → `No Stripe Tax registration for <State>`. A genuine 0% (`not_subject_to_tax` etc.) is a successful lookup.
+
+`getServiceStatus()` reads `stripe.tax.settings.retrieve()` (`active` | `pending`) and `stripe.tax.registrations.list({ status: 'active' })`, caches 5 minutes, and never throws (`unavailable` on error).
+
+### Fee math
+
+Exclusive (default):
+
+```
+subtotal      = Σ listed × qty
+tax           = subtotal × rate
+platformFee   = subtotal × 5%
+processingFee = (subtotal + platformFee) × 2.9% + $0.30
+total         = subtotal + platformFee + processingFee + tax
+```
+
+Tax-inclusive (`Organization.taxInclusivePricing`):
+
+```
+listed   = Σ listed × qty
+subtotal = listed ÷ (1 + rate)       ← ex-tax base
+tax      = listed − subtotal
+fees     = as above, on subtotal
+total    = subtotal + fees + tax  = listed + fees
+```
+
+The invariant `total = subtotal + platformFee + processingFee + tax` holds in both modes, so `Order` columns, the cart breakdown and `OrderTotals` need no special cases — only labels change (`$50.00 incl. $3.81 tax`, `Tax (included)`). Fees and tax are allocated per line by listed value; rounding drift lands on the largest line (inside a listed price, tax drift moves net vs tax, not what is charged). Shared fixture: $50 at 8.25% inclusive → net 46.19, tax 3.81, platform 2.31, processing 1.71, total 54.02.
+
+Fees on the **net** amount follows `specs/009-tax-settings/plan.md` §5.2 (recommendation adopted). Platform and processing fees are not themselves taxed — §5.1 is an open product decision.
+
+## Database
+
+`Event.taxRate Decimal(6,5)`, `Event.taxRateSource TaxSource?`, `TaxRegion` (per organization + state), `Organization.taxInclusivePricing`. See [Tax Settings](tax-settings.md) and [Database Architecture](database-architecture.md).
 
 ## Gotchas
 
-- Stripe Tax registrations belong to the **platform** account, not the organization. An organization that is registered in a state the platform is not must use a manual rate.
-- New regions (a venue in a state the organization had none in) default to **Not set** — an amber banner on the page until an admin decides.
-- Rates are cached per event; region saves and venue location changes refresh upcoming events only. Past events and placed orders are untouched.
-- Platform and processing fees are not taxed (`tax = subtotal × rate`). Whether service charges should be taxable is an open decision in `specs/009-tax-settings/plan.md` §5.
-- One Stripe Tax calculation per event lookup (billed per calculation) — never per order.
-
-## Tests
-
-- `backend/tests/unit/taxService.test.js` — region resolution, every source path, Stripe failure / `not_collecting`, status cache, list and upsert.
-- `backend/tests/unit/feeService.test.js` — exclusive and inclusive fee math; `frontend/tests/unit/fees.test.ts` mirrors the same fixtures.
-- `backend/tests/contract/tax.test.js` — routes, RBAC, validation, org isolation, event recalculation, venue state normalisation, settings PATCH, inclusive checkout amounts, report JSON + CSV.
-- `frontend/e2e/admin-tax-settings.spec.ts` — page, banner, dialog round-trip, focus return, read-only for ORGANIZER, pending-service warning, Recalculate now (success + lookup error), inclusive-pricing confirm dialog, report page + CSV download.
+- Tax rate is determined by venue location, not customer location.
+- Rates are cached per event; they refresh on create / venue change / publish, on region saves and Recalculate now, and when the venue's `state` or `postalCode` change. Placed orders keep the amounts they were charged.
+- A venue without a two-letter `state` has no region and collects no tax (`Venue has no US state`).
+- Stripe Tax registrations are the **platform's**; organizations registered elsewhere use a manual rate.
+- `frontend/src/lib/fees.ts` must stay identical to `FeeService.js` — change both and both fixture files together.
 
 ## Related Features
 
-- [Fee Calculation](fee-calculation.md) — consumes the tax rate for all-in pricing.
-- [All-In Pricing](all-in-pricing.md)
-- [Org Switcher](org-switcher.md) — how Settings pages are scoped to the active organization.
+- [Tax Settings](tax-settings.md) — the Settings › Tax page, regions, report, inclusive-pricing switch
+- [Fee Calculation](fee-calculation.md) — consumes the tax rate for all-in pricing
+- [All-In Pricing](all-in-pricing.md), [Cart Line-Item Breakdown](cart-line-item-breakdown.md)

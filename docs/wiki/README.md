@@ -18,7 +18,7 @@ Generated and maintained by running `/doc-feature` after completing feature work
 ### Payments & Pricing
 - [Stripe Integration](features/stripe-integration.md) — Payment processing, webhooks, Checkout Sessions
 - [Fee Calculation](features/fee-calculation.md) — Platform fees, processing fees, pass-through pricing
-- [Tax Calculation](features/tax-calculation.md) — Settings › Tax: per-organization tax regions (collect / not, Stripe Tax or manual rate), venue-based rates cached per event
+- [Tax Calculation](features/tax-calculation.md) — Venue-based rate resolution (region setting → Stripe Tax lookup or manual rate), failure handling, exclusive vs tax-inclusive fee math
 - [All-In Pricing](features/all-in-pricing.md) — FTC-compliant price display with fees included
 - [Cart Line-Item Breakdown](features/cart-line-item-breakdown.md) — Per-line fee accordion in the cart (dotted-underline price, caret) with Expand all / Collapse all; shared `lib/fees.ts`
 
@@ -34,6 +34,7 @@ Generated and maintained by running `/doc-feature` after completing feature work
 ### Admin & Organizer
 - [Admin Dashboard](features/admin-dashboard.md) — Stats, event management, analytics
 - [Organization Settings](features/organization-settings.md) — Settings › General: read-only summary cards with edit dialogs (store contact, address, business details), people (OrganizationPerson)
+- [Tax Settings](features/tax-settings.md) — Settings › Tax: Stripe Tax status, per-state tax regions (collect / not, Stripe Tax or manual rate, Recalculate now), collected tax report, tax-inclusive pricing
 - [Organization Branding](features/organization-branding.md) — Logo, cover image, brand color with WCAG AA contrast checker
 - [Organization Theme Mode](features/organization-theme-mode.md) — Per-org light/dark/system enforcement on public org pages
 - [Organization Logo Box](features/organization-logo-box.md) — Public org page logo: square box straddling the mobile cover, plain logo on desktop, blurred backdrop for non-square logos
