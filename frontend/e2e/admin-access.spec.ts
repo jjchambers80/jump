@@ -37,8 +37,10 @@ test.describe('US1 - Admin accesses the admin area', () => {
       'Events',
       'Analytics',
       'Scan',
-      'Users',
+      'Settings',
     ];
+    // Users lives under Settings › Users, not the main list.
+    await expect(sidebar.getByRole('link', { name: 'Users' })).toHaveCount(0);
     for (const linkText of expectedLinks) {
       await expect(sidebar.getByRole('link', { name: linkText })).toBeVisible();
     }
@@ -58,7 +60,7 @@ test.describe('US1 - Admin accesses the admin area', () => {
       { name: 'Events', url: '/admin/events' },
       { name: 'Analytics', url: '/admin/analytics' },
       { name: 'Scan', url: '/admin/scan' },
-      { name: 'Users', url: '/admin/users' },
+      { name: 'Settings', url: '/admin/settings' },
     ];
 
     for (const link of sidebarLinks) {
@@ -100,8 +102,8 @@ test.describe('US1 - Admin accesses the admin area', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('US2 - Organizer accesses the admin area', () => {
-  // T103: ORGANIZER sidebar shows all links except Users
-  test('T103: ORGANIZER sidebar shows all links except Users', async ({ page }) => {
+  // T103: ORGANIZER sees the sidebar but not the Settings › Users section
+  test('T103: ORGANIZER sidebar shows all links; Settings hides Users section', async ({ page }) => {
     // Log in as ORGANIZER
     await page.goto('/admin');
 
@@ -116,15 +118,19 @@ test.describe('US2 - Organizer accesses the admin area', () => {
       await expect(sidebar.getByRole('link', { name: linkText })).toBeVisible();
     }
 
-    // Users link should NOT be visible
-    await expect(sidebar.getByRole('link', { name: 'Users' })).not.toBeVisible();
+    // Users section should NOT be listed under Settings
+    await sidebar.getByRole('link', { name: 'Settings' }).click();
+    await expect(page).toHaveURL(/\/admin\/settings/);
+    const sections = page.getByRole('navigation', { name: 'Settings sections' });
+    await expect(sections.getByRole('link', { name: 'General' })).toBeVisible();
+    await expect(sections.getByRole('link', { name: 'Users' })).toHaveCount(0);
   });
 
-  // T104: ORGANIZER navigates to /admin/users, sees access denied
-  test('T104: ORGANIZER navigates directly to /admin/users, sees access denied', async ({
+  // T104: ORGANIZER navigates to /admin/settings/users, sees access denied
+  test('T104: ORGANIZER navigates directly to /admin/settings/users, sees access denied', async ({
     page,
   }) => {
-    await page.goto('/admin/users');
+    await page.goto('/admin/settings/users');
 
     // Should see an access denied message
     await expect(page.getByText(/access denied/i)).toBeVisible();

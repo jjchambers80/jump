@@ -512,3 +512,67 @@ test('stacks without horizontal overflow on mobile', async ({ page }) => {
     await page.evaluate(() => document.documentElement.clientWidth)
   );
 });
+
+// Users moved out of the main admin menu into Settings › Users.
+
+async function mockUsersApi(page: Page) {
+  await page.route('http://localhost:3002/users?**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        users: [
+          {
+            id: 'user-1',
+            email: 'jordan@test.com',
+            name: 'Jordan Lee',
+            firstName: 'Jordan',
+            lastName: 'Lee',
+            role: 'ORGANIZER',
+            organizationId: 'org-settings',
+            organizationName: 'Roman Skin Care LLC',
+            isActive: true,
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+      }),
+    });
+  });
+}
+
+test('lists Users under Settings instead of the main sidebar and redirects the old URL', async ({ page }) => {
+  await mockSettingsApi(page);
+  await mockUsersApi(page);
+  await page.goto('/admin/settings');
+
+  const sidebar = page.locator('aside');
+  await expect(sidebar.getByRole('link', { name: 'Settings' })).toBeVisible();
+  await expect(sidebar.getByRole('link', { name: 'Users' })).toHaveCount(0);
+
+  const sections = page.getByRole('navigation', { name: 'Settings sections' });
+  await sections.getByRole('link', { name: 'Users' }).click();
+  await expect(page).toHaveURL(/\/admin\/settings\/users$/);
+  await expect(sections.getByRole('link', { name: 'Users' })).toHaveAttribute('aria-current', 'page');
+  await expect(sidebar.getByRole('link', { name: 'Settings' })).toHaveClass(/bg-indigo/);
+  await expect(page.getByRole('heading', { name: 'Users', exact: true })).toBeVisible();
+  await expect(page.getByText('jordan@test.com')).toBeVisible();
+
+  await page.goto('/admin/users');
+  await expect(page).toHaveURL(/\/admin\/settings\/users$/);
+});
+
+test('hides the Users section from ORGANIZER and denies direct access', async ({ page, baseURL }) => {
+  await signInAsStaff(page, { id: 'settings-organizer', email: 'organizer@test.com', role: 'ORGANIZER' }, baseURL!);
+  await mockSettingsApi(page);
+  await mockUsersApi(page);
+  await page.goto('/admin/settings');
+
+  const sections = page.getByRole('navigation', { name: 'Settings sections' });
+  await expect(sections.getByRole('link', { name: 'General' })).toBeVisible();
+  await expect(sections.getByRole('link', { name: 'Users' })).toHaveCount(0);
+
+  await page.goto('/admin/settings/users');
+  await expect(page.getByText(/access denied/i)).toBeVisible();
+  await expect(page.getByText(/admin role required/i)).toBeVisible();
+});

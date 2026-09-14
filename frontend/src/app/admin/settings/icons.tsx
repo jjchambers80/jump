@@ -110,3 +110,13 @@ export function ChevronDownIcon({ className = 'h-4 w-4' }: IconProps) {
     </svg>
   );
 }
+
+export function UsersIcon({ className = 'h-5 w-5' }: IconProps) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <circle cx="7.5" cy="6.5" r="2.75" />
+      <path d="M2.5 16.5v-1a4 4 0 0 1 4-4h2a4 4 0 0 1 4 4v1" />
+      <path d="M13 4.3a2.75 2.75 0 0 1 0 4.4M14.5 11.6a4 4 0 0 1 3 3.9v1" />
+    </svg>
+  );
+}

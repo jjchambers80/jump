@@ -1,13 +1,30 @@
-// User Management page — admin area (T014, T019)
-// Moved from dashboard/users/page.tsx
-// AdminRoute wrapper removed — layout.tsx handles auth guard
-// ADMIN-only access enforced by role check within page (T019)
+// Settings › Users — user account management (T014, T019)
+// Lives under Settings alongside General and Domains; /admin/users redirects
+// here (next.config.mjs). AdminRoute wrapper not needed — layout.tsx handles
+// the auth guard. ADMIN/SYSTEM_ADMIN-only access enforced by role check within
+// the page (T019); SettingsNav hides the section link for other roles.
 
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import api from '@/services/api';
+import SettingsNav from '../SettingsNav';
+import { UsersIcon } from '../icons';
+
+function SettingsShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Settings</h1>
+      <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">Manage your organization and business information.</p>
+
+      <div className="mt-8 flex min-w-0 flex-col gap-6 md:flex-row md:items-start">
+        <SettingsNav />
+        {children}
+      </div>
+    </div>
+  );
+}
 
 interface UserSummary {
   id: string;
@@ -36,15 +53,21 @@ export default function UsersPage() {
   // T019: ADMIN/SYSTEM_ADMIN-only guard — ORGANIZER sees access denied
   if (status === 'authenticated' && !['ADMIN', 'SYSTEM_ADMIN'].includes(userRole)) {
     return (
-      <div className="max-w-md mx-auto py-16 px-4 text-center">
-        <div className="text-6xl mb-4">🔒</div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Access Denied</h1>
-        <p className="text-gray-600 dark:text-slate-400">Admin role required to manage users.</p>
-      </div>
+      <SettingsShell>
+        <section className="min-w-0 flex-1 py-16 px-4 text-center">
+          <div className="text-6xl mb-4">🔒</div>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Access Denied</h2>
+          <p className="text-gray-600 dark:text-slate-400">Admin role required to manage users.</p>
+        </section>
+      </SettingsShell>
     );
   }
 
-  return <UsersContent />;
+  return (
+    <SettingsShell>
+      <UsersContent />
+    </SettingsShell>
+  );
 }
 
 function UsersContent() {
@@ -114,10 +137,13 @@ function UsersContent() {
     : ['UNASSIGNED', 'ORGANIZER', 'ADMIN'];
 
   return (
-    <div className="max-w-6xl mx-auto py-8 px-4">
-      <div className="flex items-center justify-between mb-6">
+    <section aria-labelledby="users-heading" className="min-w-0 flex-1">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">User Management</h1>
+          <h2 id="users-heading" className="flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white">
+            <UsersIcon className="h-5 w-5 text-gray-500 dark:text-slate-400" />
+            Users
+          </h2>
           <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
             {pagination ? `${pagination.total} users total` : 'Loading...'}
           </p>
@@ -153,7 +179,7 @@ function UsersContent() {
         </div>
       ) : (
         <>
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow overflow-hidden">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
               <thead className="bg-gray-50 dark:bg-slate-900">
                 <tr>
@@ -248,6 +274,6 @@ function UsersContent() {
           )}
         </>
       )}
-    </div>
+    </section>
   );
 }
