@@ -120,3 +120,34 @@ export function UsersIcon({ className = 'h-5 w-5' }: IconProps) {
     </svg>
   );
 }
+
+/** Receipt with a percent sign — Settings › Tax. */
+export function TaxIcon({ className = 'h-5 w-5' }: IconProps) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M5 2.5h10v15l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5v-15z" />
+      <path d="M7.5 12.5l5-5" />
+      <circle cx="8" cy="8" r="1" />
+      <circle cx="12" cy="12" r="1" />
+    </svg>
+  );
+}
+
+/** Lightning bolt — automatic (Stripe Tax) source. */
+export function BoltIcon({ className = 'h-4 w-4' }: IconProps) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M11 2.5 4.5 11H10l-1 6.5L15.5 9H10l1-6.5z" />
+    </svg>
+  );
+}
+
+/** Triangle warning glyph. */
+export function WarningIcon({ className = 'h-4 w-4' }: IconProps) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M10 3 2.5 16h15L10 3z" />
+      <path d="M10 8v4M10 14.2v.3" />
+    </svg>
+  );
+}

@@ -148,6 +148,7 @@ model Organization {
   domains     OrganizationDomain[]
   people      OrganizationPerson[]
   tierPresets TierPreset[]
+  taxRegions  TaxRegion[]
 }
 
 // White-label storefront hostname owned by an organization (spec 007 phase 3).
@@ -291,6 +292,7 @@ model Event {
   category    String?
   status      EventStatus @default(DRAFT)
   taxRate     Decimal?    @db.Decimal(6, 5)
+  taxRateSource TaxSource?
 
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
@@ -333,6 +335,31 @@ model PriceTier {
 
   @@index([eventId])
   @@index([eventId, isActive])
+}
+
+// Spec 009: per-organization tax collection by region (US state).
+// Rows are created when an organization configures a region on Settings › Tax;
+// a region with venues but no row is "not set" and collects no tax.
+model TaxRegion {
+  id             String     @id @default(cuid())
+  organizationId String
+  country        String     @default("US")
+  region         String
+  collecting     Boolean    @default(false)
+  source         TaxSource  @default(STRIPE)
+  manualRate     Decimal?   @db.Decimal(6, 5)
+  lastRate       Decimal?   @db.Decimal(6, 5)
+  lastSource     TaxSource?
+  lastCheckedAt  DateTime?
+  lastError      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, country, region])
+  @@index([organizationId])
 }
 
 model TierPreset {
@@ -515,6 +542,11 @@ enum OrganizationStatus {
 }
 
 // Light/dark mode enforced on an organization's public pages. SYSTEM follows the visitor's OS.
+enum TaxSource {
+  STRIPE
+  MANUAL
+}
+
 enum ThemeMode {
   LIGHT
   DARK

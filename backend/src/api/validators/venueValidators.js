@@ -2,10 +2,28 @@
 // Input validation for venue endpoints per FR-049
 
 import { ValidationError } from '../../middleware/errorHandler.js';
+import { normalizeStateCode } from '../../utils/usStates.js';
 
 // Common IANA timezone patterns (basic validation)
 const IANA_TZ_REGEX = /^[A-Za-z]+\/[A-Za-z_]+$/;
 const VENUE_FIELDS = new Set(['name', 'address', 'city', 'state', 'postalCode', 'timezone', 'isPublic']);
+
+/**
+ * Venue.state keys the organization's tax regions (spec 009), so it must be a
+ * two-letter US state code. Full names are accepted and normalised; blank
+ * clears the field. Returns an error message or null and writes the code back.
+ */
+function normalizeState(body) {
+  if (body.state === undefined) return null;
+  if (body.state === null || (typeof body.state === 'string' && body.state.trim() === '')) {
+    body.state = null;
+    return null;
+  }
+  const code = normalizeStateCode(body.state);
+  if (!code) return 'State must be a two-letter US state code (e.g., NC)';
+  body.state = code;
+  return null;
+}
 
 function rejectUnknownFields(body, next) {
   const unknownFields = Object.keys(body).filter((field) => !VENUE_FIELDS.has(field));
@@ -51,6 +69,9 @@ export const validateCreateVenue = (req, res, next) => {
     return next(new ValidationError('isPublic must be a boolean'));
   }
 
+  const stateError = normalizeState(req.body);
+  if (stateError) return next(new ValidationError(stateError));
+
   // Normalize
   req.body.name = name.trim();
   req.body.address = address.trim();
@@ -94,6 +115,9 @@ export const validateUpdateVenue = (req, res, next) => {
   if (isPublic !== undefined && typeof isPublic !== 'boolean') {
     return next(new ValidationError('isPublic must be a boolean'));
   }
+
+  const stateError = normalizeState(req.body);
+  if (stateError) return next(new ValidationError(stateError));
 
   next();
 };
