@@ -58,7 +58,7 @@ Use any future expiry date and any 3-digit CVC.
 
 ### Tax Configuration
 
-Tax rates are fetched automatically via Stripe Tax API using venue postal codes. Tax code `txcd_20060057` (event admissions) is used. No manual tax configuration needed.
+Tax rates are fetched via the Stripe Tax API using venue postal codes (tax code `txcd_20060057`, event admissions) for regions an organization sets to *Stripe Tax* on Settings › Tax. **Stripe Tax must be activated on the platform account and registered per state**, otherwise lookups fail and new events get 0% (existing cached rates are kept). Organizations can use a manual rate per state instead. See [Production Launch Checklist](production-launch-checklist.md) and [Tax Settings](../features/tax-settings.md).
 
 ## Webhook Events Handled
 
