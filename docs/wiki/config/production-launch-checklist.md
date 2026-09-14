@@ -10,8 +10,8 @@ Found during production verification on 2026-09-14: the platform Stripe account 
 
 - [ ] **Activate Stripe Tax** on the platform account — Stripe Dashboard › Settings › Tax (`https://dashboard.stripe.com/settings/tax`). Settings › Tax shows the pill as *Active* once done (5-minute cache).
 - [ ] **Add a tax registration for every state where an organization collects** (today: North Carolina). Registrations are per Stripe account, i.e. the platform's, not the organization's — see the open decision below.
-- [ ] **Or**, per organization, switch those regions to a **manual rate** on Settings › Tax (NC combined rate at the current venue: 7.25%). Manual rates need no Stripe Tax activation.
-- [ ] After either, open Settings › Tax › *North Carolina* › **Recalculate now** and confirm the row shows a rate, not *Lookup failed*.
+- [x] **Or**, per organization, switch those regions to a **manual rate** on Settings › Tax. Done 2026-09-14: North Carolina set to *Manual · 7.25%* (`lastError` cleared, 1 upcoming event recalculated at 7.25%). Manual rates need no Stripe Tax activation; the two items above remain if Stripe Tax is wanted later.
+- [x] After either, confirm the row shows a rate, not *Lookup failed* — NC shows `7.25% via manual rate` (2026-09-14).
 - [ ] **Review the backfill**: migration `20260914010000_tax_regions` marked every existing organization/state as *Collecting via Stripe Tax* to preserve behaviour. Confirm each organization is actually registered to collect there; set *Not collecting* where it is not.
 - [ ] **Fix venues without a state**: Settings › Tax lists them under *Needs address* (today: Madison Square Garden, The Fillmore). Events at those venues collect no tax until `state` is a two-letter US code.
 
