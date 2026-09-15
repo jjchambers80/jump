@@ -2,7 +2,8 @@
 
 **Feature Branch**: `005-create-event-rbac`  
 **Created**: 2026-02-16  
-**Status**: Draft  
+**Status**: Proposed — planning phase; not implemented
+**Note**: Code uses `SYSTEM_ADMIN`, not `SUPER_ADMIN` as specified.
 **Input**: User description: "Plan Create Event Flow + Admin RBAC (Organization, Venue, Event) — Design the end-to-end 'Create Events' flow and the admin experience for organization-hosted venues/events, including onboarding wizard, one-org-per-account constraint, and Super Admin cross-org access for Jump employees."
 
 ## User Scenarios & Testing *(mandatory)*

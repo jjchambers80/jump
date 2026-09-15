@@ -2,7 +2,7 @@
 
 **Feature Branch**: `002-theme-modes`  
 **Created**: 2026-02-07  
-**Status**: Draft  
+**Status**: Implemented
 **Input**: User description: "dark, light and auto (device settings) modes"
 
 ## User Scenarios & Testing _(mandatory)_
