@@ -82,13 +82,13 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
       >
         <div className="flex flex-col h-full">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-4 border-b border-gray-200 dark:border-slate-700">
+          <div className="flex items-center justify-between px-4 py-4">
             <Link
               href="/admin/dashboard"
               className="text-lg font-bold text-gray-900 dark:text-white"
               onClick={onClose}
             >
-              Admin
+              Eventimus
             </Link>
             {/* Mobile close button */}
             <button

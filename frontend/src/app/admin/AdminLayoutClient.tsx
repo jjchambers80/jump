@@ -38,7 +38,7 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
                     />
                   </svg>
                 </button>
-                <span className="md:hidden text-lg font-bold text-gray-900 dark:text-white">Admin</span>
+                <span className="md:hidden text-lg font-bold text-gray-900 dark:text-white">Eventimus</span>
               </div>
               <OrgSwitcher />
             </div>
