@@ -55,6 +55,7 @@ packages/db/dist/
 
 .history/*
 .specify/*
-.github/
+.github/*
+!.github/workflows/
 .claude/scheduled_tasks.lock
 graphify-out/
