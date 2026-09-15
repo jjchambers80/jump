@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-online-ticket-purchase`  
 **Created**: 2026-02-04  
-**Status**: Draft  
+**Status**: Superseded — replaced by 003-schema-redesign
 **Input**: User description: "online ticket purchase and QR code generation"
 
 ## User Scenarios & Testing _(mandatory)_

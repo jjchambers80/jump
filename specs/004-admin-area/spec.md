@@ -2,7 +2,8 @@
 
 **Feature Branch**: `004-admin-area`  
 **Created**: 2026-02-15  
-**Status**: Draft  
+**Status**: Implemented — deployment-verified
+**Post-spec changes**: Users moved to `/admin/settings/users`. Settings added General, People, Payments, Domains, and Tax sub-pages.
 **Input**: User description: "Create an admin area. Use route /admin to access. Only Organizer and Admin roles can access. Remove the admin links from the front end."
 
 ## User Scenarios & Testing _(mandatory)_
