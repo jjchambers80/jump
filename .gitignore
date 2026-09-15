@@ -59,3 +59,5 @@ packages/db/dist/
 !.github/workflows/
 .claude/scheduled_tasks.lock
 graphify-out/
+# Git worktrees created by Claude Code (each has its own checkout)
+.claude/worktrees/
