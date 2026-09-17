@@ -11,7 +11,7 @@ import { validateUpdateAttendee } from '../validators/adminValidators.js';
 import { validateUpdateBusinessDetails } from '../validators/organizationValidators.js';
 import { validateCreateOrganizationPerson } from '../validators/organizationPersonValidators.js';
 import { validateTaxRegionParams, validateUpsertTaxRegion, validateUpdateTaxSettings, validateTaxReportQuery } from '../validators/taxValidators.js';
-import { validateFormBody, validateTierBody, validateQuestionBody, validateDecisionBody, validateBulkBody, validateTemplateBody, validateRefundBody } from '../validators/applicationValidators.js';
+import { validateFormBody, validateTierBody, validateQuestionBody, validateDecisionBody, validateBulkBody, validateTemplateBody, validateRefundBody, validateAddOnLinesBody, validateTierAddOnsBody } from '../validators/applicationValidators.js';
 import { validateUpdatePaymentSettings, validateUpdatePayoutSettings } from '../validators/paymentValidators.js';
 import organizationService from '../../services/OrganizationService.js';
 import organizationPersonService from '../../services/OrganizationPersonService.js';
@@ -387,6 +387,12 @@ router.delete('/events/:eventId/application-forms/:formId/questions/:questionId'
   res.json(await applicationFormService.removeQuestion(req.params.eventId, req.params.formId, req.params.questionId, await scopedOrgFor(req)));
 }));
 
+// Spec 012: which restricted add-ons a tier offers (ADMIN)
+router.put('/events/:eventId/application-forms/:formId/tiers/:tierId/add-ons', requireAdmin, validateTierAddOnsBody, wrap(async (req, res) => {
+  const { eventId, formId, tierId } = req.params;
+  res.json(await applicationFormService.setTierAddOns(eventId, formId, tierId, await scopedOrgFor(req), req.body.addOnIds));
+}));
+
 // Applications
 router.get('/events/:eventId/applications', wrap(async (req, res) => {
   res.json(await applicationService.list(req.params.eventId, await scopedOrgFor(req), req.query));
@@ -423,6 +429,11 @@ router.post('/events/:eventId/applications/:applicationId/charge', wrap(async (r
 }));
 router.post('/events/:eventId/applications/:applicationId/refund', requireAdmin, validateRefundBody, wrap(async (req, res) => {
   res.json(await applicationService.refund(req.params.eventId, req.params.applicationId, await scopedOrgFor(req), { ...req.body, initiatedBy: req.user.id }));
+}));
+// Spec 012: replace the add-on lines before payment (organizer+)
+router.patch('/events/:eventId/applications/:applicationId/add-ons', validateAddOnLinesBody, wrap(async (req, res) => {
+  const { eventId, applicationId } = req.params;
+  res.json(await applicationService.updateAddOns(eventId, applicationId, await scopedOrgFor(req), req.body.addOns, { byUserId: req.user.id, sendEmail: req.body.sendEmail }));
 }));
 
 // Templates (Settings › Applications)

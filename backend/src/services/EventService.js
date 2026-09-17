@@ -157,10 +157,10 @@ class EventService {
         },
         include: { venue: true, priceTiers: { orderBy: { displayOrder: 'asc' } } },
       });
-      const copied = await applicationFormService.copyForms(source.id, created.id, tx);
+      const { copied, tierIdMap: applicationTierIdMap } = await applicationFormService.copyForms(source.id, created.id, tx);
       // Tiers were created in source order, so index i of each list is the same tier.
       const tierIdMap = new Map(source.priceTiers.map((tier, i) => [tier.id, created.priceTiers[i]?.id]));
-      await addOnService.copyForEvent(tx, source.id, created.id, { priceTierIdMap: tierIdMap });
+      await addOnService.copyForEvent(tx, source.id, created.id, { priceTierIdMap: tierIdMap, applicationTierIdMap });
       return { event: created, forms: copied };
     });
 

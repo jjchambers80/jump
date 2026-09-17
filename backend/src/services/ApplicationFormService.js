@@ -33,18 +33,31 @@ export function slugify(name) {
 }
 
 /**
- * What the applicant pays and what the organization receives for a tier under
- * a form's fee mode. PASS: fees on top of the listed price. ABSORB: the listed
- * price is the total; fees come out of the organization's share.
- * Tax follows the event only when the form is taxable.
+ * What the applicant pays and what the organization receives for a set of
+ * lines (the tier plus any add-ons, spec 012) under a form's fee mode.
+ * PASS: fees on top of the listed prices. ABSORB: the listed prices are the
+ * total; fees come out of the organization's share. Tax follows the event
+ * only for taxable lines: the tier line is taxable when the form is, each
+ * add-on carries its own flag.
+ *
+ * @param {Array<{ price: number, quantity: number, taxable: boolean, addOnId?: string }>} lines
+ * @returns {{ subtotal, platformFee, processingFee, tax, applicantPays, orgReceives, feeMode, lines: Array<{ applicantPays }> }}
  */
-export function tierAmounts(price, form, event, organization) {
-  const listed = Number(price);
-  const taxRate = form.taxable ? Number(event?.taxRate || 0) : 0;
+export function applicationAmounts(lines, form, event, organization) {
+  const taxRate = Number(event?.taxRate || 0);
   const taxInclusive = organization?.taxInclusivePricing === true;
-  const fees = feeService.computeOrderFees([{ unitPrice: listed, quantity: 1 }], taxRate, { taxInclusive });
+  const items = lines.map((l) => ({ unitPrice: Number(l.price), quantity: l.quantity, taxable: l.taxable !== false }));
+  const fees = feeService.computeOrderFees(items, taxRate, { taxInclusive });
   const round = (v) => Math.round((v + Number.EPSILON) * 100) / 100;
-  if (form.feeMode === 'ABSORB') {
+  const absorb = form.feeMode === 'ABSORB';
+  const perLine = fees.itemBreakdowns.map((b, i) => {
+    const listed = round(b.unitPrice * b.quantity);
+    // ABSORB: the applicant pays the listed price (plus tax on top unless it
+    // is already inside the price); PASS: the allocated all-in line total.
+    const applicantPays = absorb ? round(listed + (taxInclusive ? 0 : b.tax)) : b.lineTotal;
+    return { ...lines[i], applicantPays };
+  });
+  if (absorb) {
     return {
       subtotal: fees.subtotal,
       platformFee: fees.platformFee,
@@ -53,6 +66,7 @@ export function tierAmounts(price, form, event, organization) {
       applicantPays: round(fees.subtotal + fees.tax),
       orgReceives: round(fees.subtotal - fees.platformFee - fees.processingFee),
       feeMode: 'ABSORB',
+      lines: perLine,
     };
   }
   return {
@@ -63,11 +77,26 @@ export function tierAmounts(price, form, event, organization) {
     applicantPays: fees.total,
     orgReceives: fees.subtotal,
     feeMode: 'PASS',
+    lines: perLine,
   };
 }
 
+/** Amounts for a bare tier (no add-ons). */
+export function tierAmounts(price, form, event, organization) {
+  const { lines: _lines, ...amounts } = applicationAmounts([{ price, quantity: 1, taxable: form.taxable }], form, event, organization);
+  return amounts;
+}
+
+/** Lines for `applicationAmounts`: the tier first, then add-ons in display order. */
+export function applicationLines(tier, form, addOnLines = []) {
+  return [
+    { price: Number(tier.price), quantity: 1, taxable: form.taxable },
+    ...addOnLines.map((l) => ({ addOnId: l.addOn.id, price: Number(l.addOn.price), quantity: l.quantity, taxable: l.addOn.taxable })),
+  ];
+}
+
 const FORM_INCLUDE = {
-  tiers: { orderBy: { displayOrder: 'asc' } },
+  tiers: { orderBy: { displayOrder: 'asc' }, include: { addOns: { select: { addOnId: true } } } },
   questions: { where: { archivedAt: null }, orderBy: { displayOrder: 'asc' } },
   _count: { select: { applications: true } },
 };
@@ -100,14 +129,15 @@ class ApplicationFormService {
       include: FORM_INCLUDE,
       orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
     });
-    return forms.map((f) => this._serializeForm(f, event));
+    const addOns = await this._addOnsForEvent(eventId);
+    return forms.map((f) => this._serializeForm(f, event, addOns));
   }
 
   async getForm(eventId, formId, organizationId) {
     const event = await this.requireEvent(eventId, organizationId);
     const form = await prisma.applicationForm.findFirst({ where: { id: formId, eventId }, include: FORM_INCLUDE });
     if (!form) throw new NotFoundError('Application form not found');
-    return this._serializeForm(form, event);
+    return this._serializeForm(form, event, await this._addOnsForEvent(eventId));
   }
 
   async createForm(eventId, organizationId, body) {
@@ -124,14 +154,15 @@ class ApplicationFormService {
     }
     const form = await prisma.applicationForm.create({ data, include: FORM_INCLUDE });
     logger.info('Application form created', { event: 'application_form_created', eventId, formId: form.id, kind: form.kind });
-    return this._serializeForm(form, event);
+    return this._serializeForm(form, event, await this._addOnsForEvent(eventId));
   }
 
   /**
    * Copy every form on `fromEventId` to `toEventId` (event duplication, spec
    * 011 phase 3). Copies land as DRAFT with no open/close window; tiers keep
    * price and quantity but start empty; archived questions are skipped.
-   * Runs inside the caller's transaction.
+   * Runs inside the caller's transaction. Returns the count and a map of
+   * source tier id → copied tier id so add-on attachments can follow (spec 012).
    */
   async copyForms(fromEventId, toEventId, tx = prisma) {
     const forms = await tx.applicationForm.findMany({
@@ -143,8 +174,9 @@ class ApplicationFormService {
       orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
     });
     let copied = 0;
+    const tierIdMap = new Map();
     for (const f of forms) {
-      await tx.applicationForm.create({
+      const created = await tx.applicationForm.create({
         data: {
           eventId: toEventId,
           kind: f.kind,
@@ -181,10 +213,13 @@ class ApplicationFormService {
             })),
           },
         },
+        include: { tiers: { orderBy: { displayOrder: 'asc' } } },
       });
+      // Tiers were created in source order, so index i of each list is the same tier.
+      f.tiers.forEach((t, i) => tierIdMap.set(t.id, created.tiers[i]?.id));
       copied += 1;
     }
-    return copied;
+    return { copied, tierIdMap };
   }
 
   async updateForm(eventId, formId, organizationId, body) {
@@ -196,7 +231,7 @@ class ApplicationFormService {
     if (body.slug !== undefined) data.slug = await this._uniqueSlug(eventId, body.slug, formId);
     if (data.status === 'OPEN') this._assertCanOpen({ ...existing, ...data });
     const form = await prisma.applicationForm.update({ where: { id: formId }, data, include: FORM_INCLUDE });
-    return this._serializeForm(form, event);
+    return this._serializeForm(form, event, await this._addOnsForEvent(eventId));
   }
 
   async deleteForm(eventId, formId, organizationId) {
@@ -216,8 +251,8 @@ class ApplicationFormService {
     const form = await this._requireForm(eventId, formId);
     if (form.kind !== 'PAID') throw new ValidationError('Only PAID forms have tiers');
     const count = await prisma.applicationTier.count({ where: { formId } });
-    const tier = await prisma.applicationTier.create({ data: { formId, ...this._validateTier(body, count) } });
-    return this._serializeTier(tier, form, event);
+    const tier = await prisma.applicationTier.create({ data: { formId, ...this._validateTier(body, count) }, include: { addOns: { select: { addOnId: true } } } });
+    return this._serializeTier(tier, form, event, await this._addOnsForEvent(eventId));
   }
 
   async updateTier(eventId, formId, tierId, organizationId, body) {
@@ -229,8 +264,31 @@ class ApplicationFormService {
     if (data.quantityTotal < existing.quantityApproved + existing.quantityReserved) {
       throw new ValidationError(`quantityTotal cannot be below the ${existing.quantityApproved + existing.quantityReserved} slots already taken`);
     }
-    const tier = await prisma.applicationTier.update({ where: { id: tierId }, data });
-    return this._serializeTier(tier, form, event);
+    const tier = await prisma.applicationTier.update({ where: { id: tierId }, data, include: { addOns: { select: { addOnId: true } } } });
+    return this._serializeTier(tier, form, event, await this._addOnsForEvent(eventId));
+  }
+
+  /**
+   * Which restricted add-ons a tier offers (spec 012 phase 2). `allTiers`
+   * add-ons are offered everywhere and cannot be toggled here; ids of those
+   * are ignored. ADMIN.
+   */
+  async setTierAddOns(eventId, formId, tierId, organizationId, addOnIds) {
+    const event = await this.requireEvent(eventId, organizationId);
+    const form = await this._requireForm(eventId, formId);
+    const existing = await prisma.applicationTier.findFirst({ where: { id: tierId, formId } });
+    if (!existing) throw new NotFoundError('Tier not found');
+    if (!Array.isArray(addOnIds) || addOnIds.some((id) => typeof id !== 'string')) throw new ValidationError('addOnIds must be an array of ids');
+    const ids = [...new Set(addOnIds)];
+    const known = await prisma.addOn.findMany({ where: { id: { in: ids }, eventId, scope: { in: ['APPLICATION', 'BOTH'] } }, select: { id: true, allTiers: true } });
+    if (known.length !== ids.length) throw new ValidationError('addOnIds must be application add-ons of this event');
+    const restricted = known.filter((a) => !a.allTiers).map((a) => a.id);
+    const tier = await prisma.$transaction(async (tx) => {
+      await tx.applicationTierAddOn.deleteMany({ where: { applicationTierId: tierId } });
+      if (restricted.length) await tx.applicationTierAddOn.createMany({ data: restricted.map((addOnId) => ({ applicationTierId: tierId, addOnId })) });
+      return tx.applicationTier.findUnique({ where: { id: tierId }, include: { addOns: { select: { addOnId: true } } } });
+    });
+    return this._serializeTier(tier, form, event, await this._addOnsForEvent(eventId));
   }
 
   async deleteTier(eventId, formId, tierId, organizationId) {
@@ -302,7 +360,8 @@ class ApplicationFormService {
       include: FORM_INCLUDE,
       orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
     });
-    return forms.map((f) => this._serializePublicForm(f, event));
+    const addOns = await this._addOnsForEvent(eventId, { activeOnly: true });
+    return forms.map((f) => this._serializePublicForm(f, event, addOns));
   }
 
   async publicForm(eventId, slug) {
@@ -310,7 +369,7 @@ class ApplicationFormService {
     if (event.status !== 'PUBLISHED') throw new NotFoundError('Event not found');
     const form = await prisma.applicationForm.findFirst({ where: { eventId, slug, status: { in: ['OPEN', 'CLOSED'] } }, include: FORM_INCLUDE });
     if (!form) throw new NotFoundError('Application form not found');
-    return this._serializePublicForm(form, event);
+    return this._serializePublicForm(form, event, await this._addOnsForEvent(eventId, { activeOnly: true }));
   }
 
   /** Whether the form accepts submissions right now; reason when not. */
@@ -325,6 +384,20 @@ class ApplicationFormService {
   // ---------------------------------------------------------------------------
   // Internals
   // ---------------------------------------------------------------------------
+
+  /** Add-ons an application tier may offer (scope APPLICATION or BOTH), spec 012. */
+  async _addOnsForEvent(eventId, { activeOnly = false } = {}) {
+    return prisma.addOn.findMany({
+      where: { eventId, scope: { in: ['APPLICATION', 'BOTH'] }, ...(activeOnly && { isActive: true }) },
+      orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
+    });
+  }
+
+  /** Add-ons offered on one tier: every `allTiers` add-on plus the ones attached to it. */
+  _offeredOnTier(tier, addOns) {
+    const attached = new Set((tier.addOns || []).map((a) => a.addOnId));
+    return (addOns || []).filter((a) => a.allTiers || attached.has(a.id));
+  }
 
   async _requireForm(eventId, formId) {
     const form = await prisma.applicationForm.findFirst({ where: { id: formId, eventId } });
@@ -456,7 +529,7 @@ class ApplicationFormService {
     return data;
   }
 
-  _serializeTier(tier, form, event) {
+  _serializeTier(tier, form, event, addOns = []) {
     const amounts = tierAmounts(tier.price, form, event, event.venue.organization);
     return {
       id: tier.id,
@@ -470,6 +543,8 @@ class ApplicationFormService {
       displayOrder: tier.displayOrder,
       isActive: tier.isActive,
       amounts,
+      // Spec 012: add-ons this tier offers (`allTiers` ones implicitly), priced per unit like the public form.
+      addOns: this._offeredOnTier(tier, addOns).map((a) => ({ ...this._serializePublicAddOn(a, form, event, event.venue.organization), allTiers: a.allTiers, isActive: a.isActive })),
     };
   }
 
@@ -485,7 +560,7 @@ class ApplicationFormService {
     };
   }
 
-  _serializeForm(form, event) {
+  _serializeForm(form, event, addOns = []) {
     return {
       id: form.id,
       eventId: form.eventId,
@@ -505,15 +580,18 @@ class ApplicationFormService {
       acceptance: this.acceptance(form),
       paymentsEnabled: paymentsEnabled(),
       applicationCount: form._count?.applications ?? 0,
-      tiers: (form.tiers || []).map((t) => this._serializeTier(t, form, event)),
+      tiers: (form.tiers || []).map((t) => this._serializeTier(t, form, event, addOns)),
       questions: (form.questions || []).map((q) => this._serializeQuestion(q)),
+      // Spec 012: every application add-on of the event, so the tier dialog can offer restricted ones.
+      addOns: addOns.map((a) => ({ id: a.id, name: a.name, price: Number(a.price), allTiers: a.allTiers, isActive: a.isActive, scope: a.scope })),
       createdAt: form.createdAt,
       updatedAt: form.updatedAt,
     };
   }
 
   /** Applicant-facing: no internal counters, only the applicant price and availability. */
-  _serializePublicForm(form, event) {
+  _serializePublicForm(form, event, addOns = []) {
+    const organization = event.venue.organization;
     return {
       id: form.id,
       kind: form.kind,
@@ -526,7 +604,7 @@ class ApplicationFormService {
       tiers: (form.tiers || [])
         .filter((t) => t.isActive)
         .map((t) => {
-          const amounts = tierAmounts(t.price, form, event, event.venue.organization);
+          const amounts = tierAmounts(t.price, form, event, organization);
           return {
             id: t.id,
             name: t.name,
@@ -536,9 +614,32 @@ class ApplicationFormService {
             feesIncluded: amounts.feeMode === 'PASS' ? Math.round((amounts.applicantPays - amounts.subtotal - amounts.tax) * 100) / 100 : 0,
             tax: amounts.tax,
             soldOut: t.quantityTotal - t.quantityApproved - t.quantityReserved <= 0,
+            // Spec 012: optional extras with the per-unit applicant price under this form's fee mode.
+            addOns: this._offeredOnTier(t, addOns).map((a) => this._serializePublicAddOn(a, form, event, organization)),
           };
         }),
       questions: (form.questions || []).map((q) => this._serializeQuestion(q)),
+    };
+  }
+
+  /**
+   * Per-unit applicant price of an add-on as if it were the only line: the
+   * figure the picker shows before a tier is chosen. The submission snapshot
+   * allocates fees across the real lines, so totals can differ by cents.
+   */
+  _serializePublicAddOn(a, form, event, organization) {
+    const unit = applicationAmounts([{ price: a.price, quantity: 1, taxable: a.taxable }], form, event, organization);
+    const remaining = a.quantityTotal == null ? null : Math.max(0, a.quantityTotal - a.quantitySold - a.quantityReserved);
+    return {
+      id: a.id,
+      name: a.name,
+      description: a.description || null,
+      price: Number(a.price),
+      taxable: a.taxable,
+      applicantPays: unit.applicantPays,
+      maxPerOrder: a.maxPerOrder,
+      remaining,
+      soldOut: remaining === 0,
     };
   }
 }
