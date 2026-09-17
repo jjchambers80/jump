@@ -957,6 +957,38 @@ router.post('/tickets/:ticketId/refund', async (req, res, next) => {
 });
 
 /**
+ * POST /admin/orders/:orderId/add-ons/:orderAddOnId/refund
+ * Refund one add-on line (spec 012): all-in line amount, quantity released,
+ * tickets untouched. Body: { reason?: string }
+ */
+router.post('/orders/:orderId/add-ons/:orderAddOnId/refund', async (req, res, next) => {
+  try {
+    const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
+
+    if (!isUnscoped(scope) && !scope.organizationId) {
+      throw new NotFoundError('Order not found');
+    }
+
+    const line = await prisma.orderAddOn.findFirst({
+      where: { id: req.params.orderAddOnId, orderId: req.params.orderId },
+      include: { order: { include: { event: { include: { venue: { select: { organizationId: true } } } } } } },
+    });
+    if (!line || (!isUnscoped(scope) && line.order.event.venue.organizationId !== scope.organizationId)) {
+      throw new NotFoundError('Order not found');
+    }
+
+    const result = await refundService.refundAddOnLine(line.id, {
+      reason: req.body?.reason || null,
+      initiatedBy: req.user.id,
+    });
+
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * GET /admin/orders/:orderId/refunds
  * Get refund history for an order.
  */

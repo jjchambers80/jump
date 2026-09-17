@@ -22,11 +22,12 @@ const router = express.Router();
  */
 router.post('/', validateCreateOrder, async (req, res, next) => {
   try {
-    const { eventId, items, priceTierId, quantity, contact, createAccount, emailSubscribed } = req.body;
+    const { eventId, items, priceTierId, quantity, contact, createAccount, emailSubscribed, addOns } = req.body;
 
     const result = await orderService.createOrder({
       eventId,
       items: items ?? [{ priceTierId, quantity: parseInt(quantity) }],
+      addOns: addOns ?? [],
       contact,
       createAccount: createAccount === true,
       emailSubscribed: emailSubscribed === true,
