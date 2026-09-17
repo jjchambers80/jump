@@ -182,3 +182,11 @@ export function ShieldIcon({ className = 'h-5 w-5' }: IconProps) {
     </svg>
   );
 }
+
+export function BankIcon({ className = 'h-5 w-5' }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M5 10v8m4-8v8m6-8v8m4-8v8M3 21h18M12 3l9 5H3l9-5z" />
+    </svg>
+  );
+}
