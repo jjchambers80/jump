@@ -64,7 +64,7 @@ Auth.js v5 (JWT HS256) · Resend email · Redis caching · Railway deployment
 
 1. AUTH_SECRET mismatch → silent JWT verification failure
 2. Prisma client not regenerated after schema change → stale types
-3. Stripe webhooks locally need: `stripe listen --forward-to localhost:3000/webhooks/stripe`
+3. Stripe webhooks locally need: `stripe listen --forward-to localhost:3000/webhooks/stripe` (add `--forward-connect-to localhost:3000/webhooks/stripe/connect` when `STRIPE_CONNECT_ENABLED=true`)
 4. Capacity is per-tier, not per-event
 5. Railway services need explicit PORT env var
 6. Public org/venue/event pages use `brand` Tailwind tokens (CSS vars set by `BrandScope`), not raw blue classes — see `docs/wiki/features/organization-branding.md`
