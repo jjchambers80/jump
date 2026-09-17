@@ -22,6 +22,7 @@ import applicationTemplateService from './ApplicationTemplateService.js';
 import applicationPaymentService from './ApplicationPaymentService.js';
 import { hashToken, statusToken, statusUrlFor, verifyStatusToken } from './applicationLinks.js';
 import imageService from './ImageService.js';
+import { absoluteAssetUrl } from '../utils/publicUrl.js';
 import logger from '../utils/logger.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -50,13 +51,14 @@ const DETAIL_INCLUDE = {
   contact: { select: { id: true, organizationId: true, email: true, firstName: true, lastName: true, accountCreatedAt: true, stripeCustomerId: true } },
   profile: { include: { images: { include: { image: { include: { file: true } } }, orderBy: { displayOrder: 'asc' } } } },
   tier: true,
-  form: { select: { id: true, name: true, slug: true, kind: true, chargeTiming: true, feeMode: true, paymentDueDays: true, overduePolicy: true } },
+  form: { select: { id: true, name: true, slug: true, kind: true, chargeTiming: true, feeMode: true, taxable: true, paymentDueDays: true, overduePolicy: true } },
   event: {
     select: {
       id: true,
       name: true,
       date: true,
-      venue: { select: { organizationId: true, organization: { select: { id: true, name: true, logoUrl: true, statementDescriptorSuffix: true, enabledPaymentMethods: true } } } },
+      taxRate: true,
+      venue: { select: { organizationId: true, organization: { select: { id: true, name: true, logoUrl: true, taxInclusivePricing: true, statementDescriptorSuffix: true, enabledPaymentMethods: true } } } },
     },
   },
   answers: { include: { question: true, image: { include: { file: true } } } },
@@ -513,7 +515,7 @@ class ApplicationService {
       where,
       include: {
         contact: { select: { email: true, firstName: true, lastName: true } },
-        profile: { select: { businessName: true, website: true, description: true, socials: true } },
+        profile: { select: { businessName: true, website: true, description: true, socials: true, images: { include: { image: { include: { file: true } } }, orderBy: { displayOrder: 'asc' } } } },
         tier: { select: { name: true } },
         form: { select: { name: true, kind: true } },
         answers: { include: { question: { select: { id: true, label: true, type: true } }, image: { include: { file: true } } } },
@@ -525,7 +527,7 @@ class ApplicationService {
     const qList = [...questions.values()];
     const header = [
       'applicationId', 'form', 'status', 'paymentStatus', 'submittedAt', 'decidedAt', 'tier', 'businessName', 'firstName', 'lastName', 'email',
-      'website', 'description', 'socials', 'applicantPays', 'orgReceives', 'boothLabel', 'internalNote', 'stripePaymentIntentId',
+      'website', 'description', 'socials', 'profilePhotos', 'applicantPays', 'orgReceives', 'boothLabel', 'internalNote', 'stripePaymentIntentId',
       ...qList.map((q) => q.label),
     ];
     const lines = [header.map(csvCell).join(',')];
@@ -535,6 +537,7 @@ class ApplicationService {
         a.id, a.form.name, a.status, a.paymentStatus, a.submittedAt?.toISOString() ?? '', a.decidedAt?.toISOString() ?? '', a.tier?.name ?? '',
         a.profile.businessName, a.contact.firstName, a.contact.lastName, a.contact.email, a.profile.website ?? '', a.profile.description ?? '',
         a.profile.socials ? Object.entries(a.profile.socials).map(([k, v]) => `${k}: ${v}`).join('; ') : '',
+        (a.profile.images || []).map((pi) => absoluteAssetUrl(imageService.formatImageResponse(pi.image).urls.original)).join('; '),
         Number(a.applicantPays).toFixed(2), Number(a.orgReceives).toFixed(2), a.boothLabel ?? '', a.internalNote ?? '', a.stripePaymentIntentId ?? '',
         ...qList.map((q) => this._answerText(byQ.get(q.id))),
       ];
@@ -722,7 +725,7 @@ class ApplicationService {
 
   _answerText(answer) {
     if (!answer) return '';
-    if (answer.imageId) return answer.image ? imageService.formatImageResponse(answer.image).urls.original : answer.imageId;
+    if (answer.imageId) return answer.image ? absoluteAssetUrl(imageService.formatImageResponse(answer.image).urls.original) : answer.imageId;
     if (answer.valueJson) return Array.isArray(answer.valueJson) ? answer.valueJson.join('; ') : JSON.stringify(answer.valueJson);
     return answer.valueText ?? '';
   }
@@ -751,6 +754,23 @@ class ApplicationService {
       orgReceives: Number(a.orgReceives),
       feeMode: a.feeMode,
       currency: a.currency,
+    };
+  }
+
+  /**
+   * What the tier would cost if the applicant applied today versus the
+   * snapshot taken at submission. The snapshot is the only amount ever
+   * charged; this lets the organizer see the delta after a price, fee-mode
+   * or tax edit (spec 011 phase 3).
+   */
+  _pricing(a) {
+    if (!a.tier || a.form?.kind !== 'PAID') return null;
+    const now = tierAmounts(a.tier.price, a.form, a.event, a.event?.venue?.organization);
+    const snapshot = Number(a.applicantPays);
+    return {
+      currentApplicantPays: now.applicantPays,
+      currentOrgReceives: now.orgReceives,
+      changed: Math.abs(now.applicantPays - snapshot) >= 0.005,
     };
   }
 
@@ -795,6 +815,7 @@ class ApplicationService {
       profile: applicantProfileService.serialize(a.profile),
       tier: a.tier ? { id: a.tier.id, name: a.tier.name, price: Number(a.tier.price) } : null,
       amounts: this._amounts(a),
+      pricing: this._pricing(a),
       payment: {
         stripePaymentIntentId: a.stripePaymentIntentId,
         stripePaymentMethodId: a.stripePaymentMethodId ? 'on_file' : null,

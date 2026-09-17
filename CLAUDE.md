@@ -56,7 +56,7 @@ cd frontend && npm run test:unit    # Vitest unit tests (lib/color.ts)
 | `DOMAIN_SWEEP_INTERVAL_MS` | backend | Optional. Custom-domain re-check interval (default 10 min) |
 | `DOMAIN_VERIFY_COOLDOWN_MS` | backend | Optional. Minimum gap between user-initiated "I updated DNS records" checks (default 15 s; tests use 0) |
 | `APPLICATIONS_PAYMENTS_ENABLED` | backend | Optional. `true` lets PAID application forms open: card on file at submission, off-session charge at approval, pay-now, refunds (spec 011 phase 2). Default off: only FREE forms (press, panels) run |
-| `APPLICATION_SWEEP_INTERVAL_MS` | backend | Optional. Overdue pay-now sweep interval (default 1 h) |
+| `APPLICATION_SWEEP_INTERVAL_MS` | backend | Optional. Application sweep interval (default 1 h): overdue pay-now check + organizer daily digest (spec 011 phase 3) |
 | `STRIPE_CONNECT_ENABLED` | backend | Optional. `true` routes charges for organizations with an active Stripe Connect account as destination charges (spec 010 phase 2). Default off; code deploys dark |
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | backend | Optional. Signing secret for `POST /webhooks/stripe/connect` (connected-account events). Separate from `STRIPE_WEBHOOK_SECRET` |
 | `SCANNER_API_KEY` | backend | Optional. Shared key for hardware ticket readers calling `POST /tickets/scan` / `/redeem` via `X-Scanner-Key`. Unset: only staff sessions can scan |

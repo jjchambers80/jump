@@ -196,6 +196,8 @@ export interface AdminApplication {
   profile: ApplicantProfile;
   tier: { id: string; name: string; price: number } | null;
   amounts: TierAmounts & { currency: string };
+  /** What the tier costs today vs the snapshot quoted at submission (PAID only; phase 3). */
+  pricing: { currentApplicantPays: number; currentOrgReceives: number; changed: boolean } | null;
   payment: {
     stripePaymentIntentId: string | null;
     stripePaymentMethodId: 'on_file' | null;

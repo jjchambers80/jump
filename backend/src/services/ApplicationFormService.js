@@ -127,6 +127,66 @@ class ApplicationFormService {
     return this._serializeForm(form, event);
   }
 
+  /**
+   * Copy every form on `fromEventId` to `toEventId` (event duplication, spec
+   * 011 phase 3). Copies land as DRAFT with no open/close window; tiers keep
+   * price and quantity but start empty; archived questions are skipped.
+   * Runs inside the caller's transaction.
+   */
+  async copyForms(fromEventId, toEventId, tx = prisma) {
+    const forms = await tx.applicationForm.findMany({
+      where: { eventId: fromEventId },
+      include: {
+        tiers: { orderBy: { displayOrder: 'asc' } },
+        questions: { where: { archivedAt: null }, orderBy: { displayOrder: 'asc' } },
+      },
+      orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
+    });
+    let copied = 0;
+    for (const f of forms) {
+      await tx.applicationForm.create({
+        data: {
+          eventId: toEventId,
+          kind: f.kind,
+          name: f.name,
+          slug: f.slug,
+          intro: f.intro,
+          status: 'DRAFT',
+          opensAt: null,
+          closesAt: null,
+          chargeTiming: f.chargeTiming,
+          feeMode: f.feeMode,
+          taxable: f.taxable,
+          paymentDueDays: f.paymentDueDays,
+          overduePolicy: f.overduePolicy,
+          displayOrder: f.displayOrder,
+          tiers: {
+            create: f.tiers.map((t) => ({
+              name: t.name,
+              description: t.description,
+              price: t.price,
+              quantityTotal: t.quantityTotal,
+              displayOrder: t.displayOrder,
+              isActive: t.isActive,
+            })),
+          },
+          questions: {
+            create: f.questions.map((q) => ({
+              label: q.label,
+              helpText: q.helpText,
+              type: q.type,
+              required: q.required,
+              options: q.options,
+              displayOrder: q.displayOrder,
+            })),
+          },
+        },
+      });
+      copied += 1;
+    }
+    return copied;
+  }
+
   async updateForm(eventId, formId, organizationId, body) {
     const event = await this.requireEvent(eventId, organizationId);
     const existing = await prisma.applicationForm.findFirst({ where: { id: formId, eventId }, include: { tiers: true } });

@@ -5,23 +5,7 @@
 import resend from '../config/resend.js';
 import logger from '../utils/logger.js';
 import { orderUrl } from '../utils/storefrontUrl.js';
-
-/**
- * Public base URL of this backend, used to make relative asset URLs
- * (e.g. /images/:id/:hash/:variant) absolute inside emails.
- * BACKEND_URL wins; Railway exposes RAILWAY_PUBLIC_DOMAIN automatically.
- */
-function backendPublicUrl() {
-  if (process.env.BACKEND_URL) return process.env.BACKEND_URL.replace(/\/$/, '');
-  if (process.env.RAILWAY_PUBLIC_DOMAIN) return `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
-  return `http://localhost:${process.env.PORT || 3000}`;
-}
-
-function absoluteAssetUrl(url) {
-  if (!url) return null;
-  if (/^https?:\/\//i.test(url)) return url;
-  return `${backendPublicUrl()}/${url.replace(/^\//, '')}`;
-}
+import { absoluteAssetUrl } from '../utils/publicUrl.js';
 
 function escapeHtml(value) {
   return String(value)

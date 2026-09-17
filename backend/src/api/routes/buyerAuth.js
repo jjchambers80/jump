@@ -12,6 +12,7 @@
 // in a first-party httpOnly cookie; browsers never hold the bearer token.
 
 import express from 'express';
+import multer from 'multer';
 import { createHmac, timingSafeEqual } from 'crypto';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import buyerAuthService from '../../services/BuyerAuthService.js';
@@ -24,6 +25,7 @@ import applicantProfileService from '../../services/ApplicantProfileService.js';
 import { requireBuyer } from '../../middleware/buyerAuth.js';
 import { ForbiddenError, ValidationError } from '../../middleware/errorHandler.js';
 import { buyerVerifyUrl } from '../../utils/storefrontUrl.js';
+import { MAX_PHOTO_MB, MAX_PROFILE_PHOTOS } from '../../config/applications.js';
 import logger from '../../utils/logger.js';
 
 const router = express.Router();
@@ -169,6 +171,31 @@ router.patch('/me/applicant-profile', requireBuyer, async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+});
+
+const PHOTO_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+const photoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_PHOTO_MB * 1024 * 1024, files: MAX_PROFILE_PHOTOS },
+  fileFilter: (_req, file, cb) => {
+    if (PHOTO_TYPES.has(file.mimetype)) cb(null, true);
+    else cb(new ValidationError('Only JPG, PNG, GIF, and WebP images are allowed'));
+  },
+});
+
+/** POST /buyer/me/applicant-profile/photos — multipart `photos`, appended up to the cap (spec 011 phase 3). */
+router.post('/me/applicant-profile/photos', requireBuyer, (req, res, next) => {
+  photoUpload.array('photos')(req, res, (error) => {
+    if (error instanceof multer.MulterError) {
+      const msg = error.code === 'LIMIT_FILE_SIZE' ? `Each photo must be ${MAX_PHOTO_MB} MB or smaller` : error.code === 'LIMIT_FILE_COUNT' ? `At most ${MAX_PROFILE_PHOTOS} profile photos` : error.message;
+      return next(new ValidationError(msg));
+    }
+    if (error) return next(error);
+    applicantProfileService
+      .addPhotosForContact(req.buyer.organizationId, req.buyer.contactId, req.files || [])
+      .then((profile) => res.json(profile))
+      .catch(next);
+  });
 });
 
 /** DELETE /buyer/me/applicant-profile/photos/:imageId */

@@ -24,6 +24,31 @@ import ApplicationsHeader from './ApplicationsHeader';
 import { describeError, useApplicationsApi, type ListQuery } from './useApplicationsApi';
 
 const STATUS_ORDER: ApplicationStatus[] = ['SUBMITTED', 'WAITLISTED', 'APPROVED', 'REJECTED', 'WITHDRAWN'];
+
+// Saved views (phase 3): named filter sets kept per event in this browser.
+// The URL stays the shareable form; a view is a shortcut to one.
+interface SavedView {
+  name: string;
+  query: Omit<ListQuery, 'page'>;
+}
+const savedViewsKey = (eventId: string) => `jump.applications.views.${eventId}`;
+function readSavedViews(eventId: string): SavedView[] {
+  try {
+    const raw = window.localStorage.getItem(savedViewsKey(eventId));
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((v) => v && typeof v.name === 'string' && v.query && typeof v.query === 'object') : [];
+  } catch {
+    return [];
+  }
+}
+function writeSavedViews(eventId: string, views: SavedView[]) {
+  try {
+    window.localStorage.setItem(savedViewsKey(eventId), JSON.stringify(views));
+  } catch {
+    // Private mode or quota: views are a convenience, the URL still works.
+  }
+}
+const viewKey = (q: Omit<ListQuery, 'page'>) => JSON.stringify({ form: q.form || '', status: q.status || '', payment: q.payment || '', q: q.q || '', sort: q.sort || '' });
 const select = 'rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100';
 const btn = 'rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
 
@@ -54,7 +79,6 @@ function ApplicationsListContent({ eventId }: { eventId: string }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState(query.q || '');
-
   const setQuery = useCallback(
     (patch: Partial<ListQuery>) => {
       // Read the live URL, not the render-time params: two quick changes
@@ -68,6 +92,34 @@ function ApplicationsListContent({ eventId }: { eventId: string }) {
     },
     [router, pathname, searchParams]
   );
+
+  const [views, setViews] = useState<SavedView[]>([]);
+  useEffect(() => {
+    setViews(readSavedViews(eventId));
+  }, [eventId]);
+  const { page: _page, ...currentFilters } = query;
+  const activeView = views.find((v) => viewKey(v.query) === viewKey(currentFilters));
+  const hasFilters = Boolean(currentFilters.form || currentFilters.status || currentFilters.payment || currentFilters.q || currentFilters.sort);
+
+  const saveView = () => {
+    const name = window.prompt('Name this view', activeView?.name || '')?.trim();
+    if (!name) return;
+    const next = [...views.filter((v) => v.name !== name), { name, query: currentFilters }];
+    setViews(next);
+    writeSavedViews(eventId, next);
+  };
+  const deleteView = () => {
+    if (!activeView || !window.confirm(`Delete the "${activeView.name}" view?`)) return;
+    const next = views.filter((v) => v.name !== activeView.name);
+    setViews(next);
+    writeSavedViews(eventId, next);
+  };
+  const applyView = (name: string) => {
+    const v = views.find((x) => x.name === name);
+    if (!v) return;
+    setSearch(v.query.q || '');
+    setQuery({ form: v.query.form, status: v.query.status, payment: v.query.payment, q: v.query.q, sort: v.query.sort, page: 1 });
+  };
 
   const load = useCallback(async () => {
     setError(null);
@@ -126,6 +178,7 @@ function ApplicationsListContent({ eventId }: { eventId: string }) {
     URL.revokeObjectURL(a.href);
   };
 
+  const selectedPaid = (list?.data ?? []).some((r) => selected.has(r.id) && r.formKind === 'PAID');
   const summary = list?.summary ?? {};
   const totalPages = list ? Math.max(1, Math.ceil(list.total / list.pageSize)) : 1;
 
@@ -180,6 +233,26 @@ function ApplicationsListContent({ eventId }: { eventId: string }) {
           Search
         </button>
         <span className="flex-1" />
+        {views.length > 0 && (
+          <select aria-label="Saved views" value={activeView?.name ?? ''} onChange={(e) => applyView(e.target.value)} className={select} data-testid="applications-saved-views">
+            <option value="">Saved views…</option>
+            {views.map((v) => (
+              <option key={v.name} value={v.name}>
+                {v.name}
+              </option>
+            ))}
+          </select>
+        )}
+        {hasFilters && !activeView && (
+          <button type="button" onClick={saveView} className={btn} data-testid="applications-save-view">
+            Save view
+          </button>
+        )}
+        {activeView && (
+          <button type="button" onClick={deleteView} className={btn} title={`Delete the "${activeView.name}" view`}>
+            Delete view
+          </button>
+        )}
         <button type="button" onClick={exportCsv} className={btn} data-testid="applications-export">
           Export CSV
         </button>
@@ -199,11 +272,15 @@ function ApplicationsListContent({ eventId }: { eventId: string }) {
       {selected.size > 0 && (
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-indigo-50 px-4 py-2 text-sm dark:bg-indigo-900/20" data-testid="applications-bulk-bar">
           <span className="font-semibold text-indigo-900 dark:text-indigo-200">{selected.size} selected</span>
-          {(['APPROVE', 'WAITLIST', 'REJECT'] as Decision[]).map((d) => (
-            <button key={d} type="button" disabled={busy} onClick={() => bulk(d)} className={btn}>
-              {DECISION_LABEL[d]}
-            </button>
-          ))}
+          {(['APPROVE', 'WAITLIST', 'REJECT'] as Decision[]).map((d) => {
+            const paidApprove = d === 'APPROVE' && selectedPaid;
+            return (
+              <button key={d} type="button" disabled={busy || paidApprove} title={paidApprove ? 'Paid applications are approved one at a time — each approval charges the saved card' : undefined} onClick={() => bulk(d)} className={btn}>
+                {DECISION_LABEL[d]}
+              </button>
+            );
+          })}
+          {selectedPaid && <span className="text-xs text-indigo-800 dark:text-indigo-300">Approve paid applications from their detail page.</span>}
           <button type="button" onClick={() => toggleAll(false)} className="text-indigo-700 hover:underline dark:text-indigo-300">
             Clear
           </button>

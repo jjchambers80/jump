@@ -111,6 +111,7 @@ function adminApp(status = 'SUBMITTED', decisions: unknown[] = []) {
 const rows = [
   { id: APP_ID, formId: 'form-press', formName: 'Press & Media', formKind: 'FREE', status: 'SUBMITTED', paymentStatus: 'NOT_REQUIRED', businessName: 'Retro Weekly', contact: { email: 'pat@retroweekly.example', firstName: 'Pat', lastName: 'Press' }, tier: null, applicantPays: 0, submittedAt: '2026-09-16T14:00:00.000Z', decidedAt: null, paymentDueAt: null, overdue: false, boothLabel: null },
   { id: 'app-2', formId: 'form-press', formName: 'Press & Media', formKind: 'FREE', status: 'APPROVED', paymentStatus: 'NOT_REQUIRED', businessName: 'Pia Talks', contact: { email: 'pia@example.com', firstName: 'Pia', lastName: 'Panel' }, tier: null, applicantPays: 0, submittedAt: '2026-09-15T10:00:00.000Z', decidedAt: '2026-09-16T09:00:00.000Z', paymentDueAt: null, overdue: false, boothLabel: 'Media row 3' },
+  { id: 'app-3', formId: 'form-vendor', formName: 'Vendor Space', formKind: 'PAID', status: 'SUBMITTED', paymentStatus: 'CARD_ON_FILE', businessName: 'Pixel Pins', contact: { email: 'pins@example.com', firstName: 'Pix', lastName: 'Pins' }, tier: { id: 't1', name: '10x10' }, applicantPays: 303.3, submittedAt: '2026-09-16T12:00:00.000Z', decidedAt: null, paymentDueAt: null, overdue: false, boothLabel: null },
 ];
 
 const json = (body: unknown, status = 200) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
@@ -161,7 +162,7 @@ async function mockAdmin(page: Page, baseURL: string, role: 'ADMIN' | 'ORGANIZER
   );
   await page.route(`${API}/events/${EVENT_ID}`, (route) => route.fulfill(json(event)));
 
-  const state = { app: adminApp(), forms: [adminPress], templates: [{ action: 'APPROVED', subject: 'You are approved for {{event.name}}', body: 'Hi {{applicant.firstName}},\n\nGood news.', isDefault: true, updatedAt: null }] };
+  const state = { app: adminApp(), forms: [adminPress], templates: [{ action: 'APPROVED', subject: 'You are approved for {{event.name}}', body: 'Hi {{applicant.firstName}},\n\nGood news.', isDefault: true, updatedAt: null }], digest: { enabled: true, lastRunAt: null as string | null } };
   const calls: { method: string; path: string; body?: unknown }[] = [];
 
   await page.route(`${API}/admin/**`, async (route) => {
@@ -176,7 +177,7 @@ async function mockAdmin(page: Page, baseURL: string, role: 'ADMIN' | 'ORGANIZER
       const status = url.searchParams.get('status');
       const q = url.searchParams.get('q')?.toLowerCase();
       const data = rows.filter((r) => (!status || r.status === status) && (!q || r.businessName.toLowerCase().includes(q)));
-      return route.fulfill(json({ data, total: data.length, page: 1, pageSize: 50, summary: { SUBMITTED: 1, APPROVED: 1 } }));
+      return route.fulfill(json({ data, total: data.length, page: 1, pageSize: 50, summary: { SUBMITTED: 2, APPROVED: 1 } }));
     }
     if (path === `/admin/events/${EVENT_ID}/application-forms` && method === 'GET') return route.fulfill(json({ data: state.forms }));
     if (path === `/admin/events/${EVENT_ID}/application-forms` && method === 'POST') {
@@ -213,6 +214,11 @@ async function mockAdmin(page: Page, baseURL: string, role: 'ADMIN' | 'ORGANIZER
     if (path === '/admin/settings/application-templates/APPROVED' && method === 'PUT') {
       state.templates = [{ action: 'APPROVED', ...body, isDefault: false, updatedAt: '2026-09-16T15:00:00.000Z' }];
       return route.fulfill(json(state.templates[0]));
+    }
+    if (path === '/admin/settings/application-digest' && method === 'GET') return route.fulfill(json(state.digest));
+    if (path === '/admin/settings/application-digest' && method === 'PATCH') {
+      state.digest = { ...state.digest, enabled: body.enabled };
+      return route.fulfill(json(state.digest));
     }
     return route.fulfill(json({ error: 'NotFoundError', message: `unmocked ${method} ${path}` }, 404));
   });
@@ -283,7 +289,7 @@ test('admin list: summary, status filter, search, bulk bar', async ({ page, base
   await mockAdmin(page, baseURL!);
   await page.goto(`/admin/events/${EVENT_ID}/applications`);
   await expect(page.getByRole('heading', { name: 'Applications' })).toBeVisible();
-  await expect(page.getByTestId('applications-summary')).toContainText('All 2');
+  await expect(page.getByTestId('applications-summary')).toContainText('All 3');
   await expect(page.getByTestId('applications-table')).toContainText('Retro Weekly');
   await expect(page.getByTestId('applications-table')).toContainText('Pia Talks');
 
@@ -391,3 +397,92 @@ test('settings: application email templates edit and save', async ({ page, baseU
   await expect(card).toContainText('Customised');
   expect(api.calls.find((c) => c.method === 'PUT')?.body).toEqual({ subject: 'Approved: {{event.name}}', body: 'Hi {{applicant.firstName}},\n\nGood news.' });
 });
+
+// ─── Phase 3 ─────────────────────────────────────────────────────────────────
+
+test('admin list: saved views round-trip through localStorage; bulk approve blocked with a PAID row selected', async ({ page, baseURL }) => {
+  await mockAdmin(page, baseURL!);
+  await page.goto(`/admin/events/${EVENT_ID}/applications`);
+  await expect(page.getByTestId('applications-table')).toContainText('Pixel Pins');
+  await expect(page.getByTestId('applications-save-view')).toHaveCount(0);
+
+  await page.getByRole('button', { name: /^Submitted/ }).click();
+  await expect(page).toHaveURL(/status=SUBMITTED/);
+  page.once('dialog', (d) => d.accept('Needs review'));
+  await page.getByTestId('applications-save-view').click();
+  await expect(page.getByTestId('applications-saved-views')).toHaveValue('Needs review');
+  await expect(page.getByRole('button', { name: 'Delete view' })).toBeVisible();
+
+  await page.getByRole('button', { name: /^All/ }).click();
+  await expect(page).not.toHaveURL(/status=/);
+  await page.getByTestId('applications-saved-views').selectOption('Needs review');
+  await expect(page).toHaveURL(/status=SUBMITTED/);
+  await expect(page.getByTestId('applications-table')).not.toContainText('Pia Talks');
+  expect(JSON.parse(await page.evaluate((k) => window.localStorage.getItem(k) || '[]', `jump.applications.views.${EVENT_ID}`))).toEqual([{ name: 'Needs review', query: { status: 'SUBMITTED' } }]);
+
+  await page.getByRole('checkbox', { name: 'Select Pixel Pins' }).check();
+  const bar = page.getByTestId('applications-bulk-bar');
+  await expect(bar).toContainText('1 selected');
+  await expect(bar.getByRole('button', { name: 'Approve' })).toBeDisabled();
+  await expect(bar.getByRole('button', { name: 'Waitlist' })).toBeEnabled();
+  await page.getByRole('checkbox', { name: 'Select Pixel Pins' }).uncheck();
+  await page.getByRole('checkbox', { name: 'Select Retro Weekly' }).check();
+  await expect(bar.getByRole('button', { name: 'Approve' })).toBeEnabled();
+});
+
+test('admin detail shows the price-changed note for a PAID application', async ({ page, baseURL }) => {
+  const api = await mockAdmin(page, baseURL!);
+  api.state.app = {
+    ...adminApp(),
+    form: { id: 'form-vendor', name: 'Vendor Space', slug: 'vendor-space', kind: 'PAID', chargeTiming: 'APPROVAL', feeMode: 'PASS' },
+    paymentStatus: 'CARD_ON_FILE',
+    tier: { id: 't1', name: '10x10', price: 300 },
+    amounts: { ...amounts, subtotal: 275, platformFee: 13.75, processingFee: 14.55, applicantPays: 303.3, orgReceives: 275 },
+    pricing: { currentApplicantPays: 330.55, currentOrgReceives: 300, changed: true },
+  } as typeof api.state.app;
+  await page.goto(`/admin/events/${EVENT_ID}/applications/${APP_ID}`);
+  const note = page.getByTestId('application-price-changed');
+  await expect(note).toContainText('Price changed since submission');
+  await expect(note).toContainText('$330.55');
+  await expect(note).toContainText('keeps the $303.30');
+});
+
+test('settings: daily digest toggle', async ({ page, baseURL }) => {
+  const api = await mockAdmin(page, baseURL!);
+  await page.goto('/admin/settings/applications');
+  const card = page.getByTestId('application-digest');
+  await expect(card).toContainText('Daily digest');
+  const toggle = card.getByRole('checkbox');
+  await expect(toggle).toBeChecked();
+  await toggle.uncheck();
+  await expect(page.getByRole('status')).toContainText('Daily digest off');
+  expect(api.calls.find((c) => c.method === 'PATCH' && c.path === '/admin/settings/application-digest')?.body).toEqual({ enabled: false });
+  await expect(card).toContainText('Off');
+});
+
+test('admin events: duplicate dialog creates a draft copy with forms', async ({ page, baseURL }) => {
+  await mockAdmin(page, baseURL!);
+  const listed = { ...event, priceTiers: [] };
+  const calls: unknown[] = [];
+  await page.route(`${API}/organizations/${ORG_ID}/events**`, async (route) => {
+    const req = route.request();
+    const path = new URL(req.url()).pathname;
+    if (req.method() === 'GET') return route.fulfill(json({ events: [listed], pagination: { page: 1, limit: 20, total: 1, totalPages: 1 } }));
+    if (path === `/organizations/${ORG_ID}/events/${EVENT_ID}/duplicate` && req.method() === 'POST') {
+      calls.push(req.postDataJSON());
+      return route.fulfill(json({ ...listed, id: 'evt-copy', name: 'Gaming Geek Expo 2028', status: 'DRAFT', copiedForms: 2 }, 201));
+    }
+    return route.fallback();
+  });
+  await page.goto('/admin/events');
+  await page.getByTestId(`event-duplicate-${EVENT_ID}`).click();
+  const dialog = page.getByTestId('duplicate-event-dialog');
+  await expect(dialog.getByLabel('Name')).toHaveValue('Copy of Gaming Geek Expo 2027');
+  await dialog.getByLabel('Name').fill('Gaming Geek Expo 2028');
+  await dialog.getByLabel('Date and time').fill('2028-09-16T10:00');
+  await dialog.getByRole('button', { name: 'Duplicate' }).click();
+  await expect(page.getByRole('status')).toContainText('Created draft "Gaming Geek Expo 2028" with 2 application forms');
+  expect(calls[0]).toMatchObject({ name: 'Gaming Geek Expo 2028' });
+  expect((calls[0] as { date: string }).date).toMatch(/^2028-09-16T/);
+});
+

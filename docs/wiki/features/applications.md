@@ -1,6 +1,6 @@
 # Applications
 
-**Status**: Implemented — phase 1 (FREE forms end to end) and phase 2 (card on file at submission, off-session charge at approval, pay-now, refunds, overdue sweep) 2026-09-17. Paid forms run behind `APPLICATIONS_PAYMENTS_ENABLED`. Spec: `specs/011-applications/`.
+**Status**: Implemented — phase 1 (FREE forms end to end), phase 2 (card on file at submission, off-session charge at approval, pay-now, refunds, overdue sweep) and phase 3 (CSV photo URLs, saved views, bulk waitlist/reject on PAID, applicant profile self-service, price-changed notice, organizer daily digest, event duplication) 2026-09-17. Paid forms run behind `APPLICATIONS_PAYMENTS_ENABLED`. Spec: `specs/011-applications/`.
 **Last Updated**: 2026-09-17
 
 ## Overview
@@ -21,22 +21,27 @@ Derived from the 2026-09-15 Eventeny organizer interview (`docs/research/`).
 | `backend/src/services/ApplicationService.js` | Submit (JSON or multipart), applicant views, resume / pay-now, organizer list/summary/detail/notes/preview/decide/retry charge/refund/bulk/export, capacity |
 | `backend/src/services/ApplicationPaymentService.js` | Stripe: customer per contact, setup / payment / update-card Checkout sessions, off-session charge at approval (Connect routing via `checkoutOptionsFor`), webhook handlers, refunds, overdue sweep |
 | `backend/src/services/applicationLinks.js` | Derived guest status token (HMAC of the id under `AUTH_SECRET`) + `statusUrlFor` |
+| `backend/src/services/ApplicationDigestService.js` | Organizer daily digest: once-a-day window per organization (`Organization.applicationDigestAt`), members emailed through `sendApplicationMessage`; settings `GET/PATCH /admin/settings/application-digest` |
+| `backend/src/services/EventService.js` `duplicateEvent` + `ApplicationFormService.copyForms` | `POST /organizations/:orgId/events/:eventId/duplicate` — DRAFT copy with tiers and forms |
+| `backend/src/utils/publicUrl.js` | `backendPublicUrl` / `absoluteAssetUrl` (moved out of `EmailService`) for absolute image links in emails and CSV |
 | `backend/src/services/stripeRefund.js` | `createStripeRefund` shared by `RefundService` (orders) and applications |
 | `backend/src/api/routes/applications.js` | Public routes (forms, submit, status, resume, pay) |
 | `backend/src/api/routes/webhooks.js` | `POST /webhooks/stripe` dispatches events with `metadata.applicationId` to `ApplicationPaymentService.handleEvent` before the order switch |
 | `backend/src/api/routes/admin.js` (Applications block), `routes/buyerAuth.js` (Applications block), `validators/applicationValidators.js` | Admin + buyer routes |
 | `frontend/src/lib/applications.ts` | Shared types, labels, helpers |
 | `frontend/src/app/events/[eventId]/apply/*` | Public index, form, status page; `GetInvolved.tsx` on the event page |
-| `frontend/src/app/organizations/[orgId]/account/ApplicationsSection.tsx` + `frontend/src/app/api/buyer/me/applications*`, `applicant-profile` | Applicant account view (proxied through Next route handlers) |
-| `frontend/src/app/admin/events/[eventId]/applications/*` | Admin list, detail (payment card, retry charge, `RefundDialog`, Stripe link), `DecisionDialog`, forms list, form editor, `useApplicationsApi` |
-| `frontend/src/app/admin/settings/applications/page.tsx` | Settings › Applications (email templates) |
+| `frontend/src/app/organizations/[orgId]/account/ApplicationsSection.tsx`, `ApplicantProfileSection.tsx` + `frontend/src/app/api/buyer/me/applications*`, `applicant-profile[/photos]` | Applicant account view and business-profile editor (proxied through Next route handlers; the photo upload route forwards multipart) |
+| `frontend/src/app/admin/events/[eventId]/applications/*` | Admin list (saved views in `localStorage`, bulk bar), detail (payment card with price-changed note, retry charge, `RefundDialog`, Stripe link), `DecisionDialog`, forms list, form editor, `useApplicationsApi` |
+| `frontend/src/app/admin/settings/applications/page.tsx` | Settings › Applications (daily digest toggle, email templates) |
+| `frontend/src/app/admin/events/DuplicateEventDialog.tsx` | Duplicate button on the admin events list |
 
 ## Configuration
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `APPLICATIONS_PAYMENTS_ENABLED` | No (default off) | `true` lets PAID forms OPEN and accept submissions. Off: PAID forms stay configurable but `PATCH status=OPEN` → 409 and submissions → 409 |
-| `APPLICATION_SWEEP_INTERVAL_MS` | No (default 1 h) | How often `sweepOverdue` runs (first run 30 s after boot) |
+| `APPLICATION_SWEEP_INTERVAL_MS` | No (default 1 h) | How often the application sweep runs (first run 30 s after boot): `sweepOverdue`, then `ApplicationDigestService.sendDue` |
+| `BACKEND_URL` | No | Makes photo URLs in the CSV export and emails absolute (falls back to `https://$RAILWAY_PUBLIC_DOMAIN`, then `http://localhost:$PORT`) |
 | `STRIPE_WEBHOOK_SECRET` | With Stripe | Same platform endpoint as orders; add `checkout.session.completed`, `payment_intent.succeeded`, `payment_intent.payment_failed`, `payment_intent.canceled`, `charge.refunded` to the endpoint's events |
 
 Application charges use the organization's Settings › Payments as-is (statement descriptor suffix, Connect destination when active) — nothing extra to configure.
@@ -87,6 +92,16 @@ Per organization per action (`RECEIVED`, `APPROVED`, `REJECTED`, `WAITLISTED`, `
 
 Guest: `GET /applications/:id/status?token=` (+ `POST …/resume`, `POST …/pay`). The status page reads `?checkout=submitted|paid|card_updated|cancelled` on return from Stripe and polls briefly until the webhook lands. Signed in (buyer magic link, spec 007): `GET /buyer/me/applications[/:id]`, `POST …/withdraw` (SUBMITTED/WAITLISTED only), `POST …/pay`, `POST …/update-card`, `GET/PATCH /buyer/me/applicant-profile`, `DELETE …/photos/:imageId`. Applicant payloads carry `canWithdraw`, `canResume`, `canPay`, `canUpdateCard`, `refundedTotal`.
 
+### Phase 3 — scale and polish
+
+- **CSV export** adds a `profilePhotos` column (`; `-joined absolute URLs, original variant) and makes PHOTO answers absolute via `absoluteAssetUrl` — a spreadsheet link works without the app.
+- **Saved views** on the admin list are named filter sets (`form,status,payment,q,sort`) stored in `localStorage` under `jump.applications.views.<eventId>`; the URL remains the shareable form. "Save view" appears when filters are set and no view matches; picking a view rewrites the URL.
+- **Bulk on PAID**: WAITLIST and REJECT run in bulk on any form; APPROVE stays per application on PAID forms (each approval charges the saved card). The bulk bar disables Approve when the selection includes a PAID row.
+- **Applicant profile self-service**: `ApplicantProfileSection` on the account page edits name / description / website / socials (`PATCH /buyer/me/applicant-profile`), adds photos (`POST …/photos`, multipart `photos`, cap 6) and removes them. Changes apply to future applications only — submitted answers are not rewritten.
+- **Price-changed notice**: `_serializeAdmin` adds `pricing: { currentApplicantPays, currentOrgReceives, changed }` by recomputing `tierAmounts` with today's tier price, fee mode and tax; the detail page shows an amber note while the snapshot stays the only amount charged.
+- **Daily digest**: the hourly sweep calls `ApplicationDigestService.sendDue`. An organization is due when `applicationDigestAt` is null or ≥ 23 h old; the window is `(applicationDigestAt ?? now − 24 h, now]`, claimed with a conditional `updateMany` before reading so two backend instances never double-send. Submissions in the window are grouped by event → form (25 rows per form, then "…and N more") and mailed to every `OrganizationMember` (ORGANIZER and ADMIN) with a link to `/admin/events/:id/applications?status=SUBMITTED`. Quiet windows still advance. Off switch: Settings › Applications → Daily digest (`applicationDigestEnabled`).
+- **Event duplicate**: `POST /organizations/:orgId/events/:eventId/duplicate { date, name? }` (ORGANIZER+, `requireOrgMembership`) creates a DRAFT with the source's venue, description, image, capacity, category, cached tax rate and price tiers (inventory 0, sale windows cleared), then `copyForms` copies every form as DRAFT with no open/close window, tiers at full quantity, non-archived questions. Orders, tickets and applications are never copied. Response is the event detail plus `copiedForms`.
+
 ### Roles
 
 ORGANIZER+ views forms/applications and decides; ADMIN/SYSTEM_ADMIN configures forms, tiers, questions, templates. Members are scoped through `resolveOrgScope` → `requireEvent(eventId, orgId)` (404 for another org's event); SYSTEM_ADMIN passes `null`.
@@ -98,7 +113,7 @@ ORGANIZER+ views forms/applications and decides; ADMIN/SYSTEM_ADMIN configures f
 | GET | `/events/:eventId/applications/forms`, `/forms/:slug` | public |
 | POST | `/events/:eventId/applications` | public, rate-limited (30/h per client IP) |
 | GET | `/applications/:id/status?token=`; POST `…/resume`, `…/pay` (rate-limited) | token |
-| GET/PATCH | `/buyer/me/applicant-profile`; DELETE `…/photos/:imageId` | buyer |
+| GET/PATCH | `/buyer/me/applicant-profile`; POST `…/photos` (multipart `photos`), DELETE `…/photos/:imageId` | buyer |
 | GET | `/buyer/me/applications`, `/buyer/me/applications/:id`; POST `…/withdraw`, `…/pay`, `…/update-card` | buyer |
 | GET/POST | `/admin/events/:eventId/application-forms` | organizer+ / admin |
 | GET/PATCH/DELETE | `…/application-forms/:formId` | organizer+ / admin / admin |
@@ -110,13 +125,16 @@ ORGANIZER+ views forms/applications and decides; ADMIN/SYSTEM_ADMIN configures f
 | POST | `…/applications/:id/refund` `{ amount?, reason? }` | admin |
 | POST | `/webhooks/stripe` — events whose `metadata.applicationId` is set (Checkout, SetupIntent, PaymentIntent) and `charge.refunded` for a known intent | Stripe |
 | GET/PUT/DELETE | `/admin/settings/application-templates[/:action]` | organizer+ / admin / admin |
+| GET/PATCH | `/admin/settings/application-digest` `{ enabled }` | organizer+ / admin |
+| POST | `/organizations/:orgId/events/:eventId/duplicate` `{ date, name? }` | organizer+ (member of the org) |
 
 ## Testing
 
 - `backend/tests/contract/applications.test.js` — 21 cases: forms RBAC + validation, PAID cannot open, tier/question edits, tenant 404s, public read, submit validation, multipart submit with a real PNG, duplicates, status token, decisions + state machine, 3 concurrent approvals on a 1-slot tier, bulk, CSV, templates, buyer views.
 - `backend/tests/contract/applicationPayments.test.js` — 16 cases with Stripe mocked: PAID form opens, setup-mode session + customer, resume / DRAFT replacement, setup webhook → CARD_ON_FILE + RECEIVED, approve → PaymentIntent params + idempotency key → PAID, decline → PAYMENT_DUE + email + due date, pay-now session + paid webhook, retry charge + outage path, 2 concurrent approvals on a 1-slot tier, SUBMIT timing, refunds (RBAC, partial/full, Stripe flags, `charge.refunded` idempotent), Connect destination + fee + `reverse_transfer`, ticket sessions never dispatched to applications, `payment_failed` idempotent + withdraw releases the slot, overdue sweep WITHDRAW/HOLD, buyer pay / update-card.
+- `backend/tests/contract/applicationsPhase3.test.js` — 11 cases: CSV profile/answer photo URLs absolute under `BACKEND_URL`, `pricing.changed` after a tier price edit (snapshot untouched) and null for FREE, bulk WAITLIST/REJECT on PAID + APPROVE still refused, buyer profile PATCH/validation, photo upload/type rejection/removal/401, digest once per window + grouped body + quiet re-run + window advance, digest settings RBAC/validation/disabled skip, duplicate copies tiers + forms + questions into a DRAFT, duplicate validation/name/403/404.
 - `backend/tests/unit/applicationFormService.test.js`, `applicationTemplates.test.js`, `applicationPayments.test.js` — fee modes, slug, acceptance, template rendering, derived token, `applicationFeeCents` identity per fee mode, webhook dispatch predicate.
-- `frontend/e2e/applications.spec.ts` — event page strip, apply index, full press application → status page, bad token, admin list filters/search/bulk bar, detail + notes + waitlist with edited email + history, forms create/edit/add question, ORGANIZER read-only, templates save; axe clean.
+- `frontend/e2e/applications.spec.ts` — event page strip, apply index, full press application → status page, bad token, admin list filters/search/bulk bar, detail + notes + waitlist with edited email + history, forms create/edit/add question, ORGANIZER read-only, templates save; axe clean. Phase 3: saved views round-trip through `localStorage` + Approve disabled with a PAID row selected, price-changed note, daily digest toggle, Duplicate dialog on the events list.
 - `frontend/e2e/applications-payments.spec.ts` — status page pay-now → `checkout=paid` notice, resume an abandoned checkout, ADMIN partial + full refund from the payment card, ORGANIZER retry charge and no refund button.
 
 ## Gotchas
@@ -131,6 +149,9 @@ ORGANIZER+ views forms/applications and decides; ADMIN/SYSTEM_ADMIN configures f
 - **Photos inside the submit transaction**: `ImageService.processUpload` uses its own transaction, so a failed submission can leave an unreferenced `Image`; `POST /admin/images/cleanup` (existing) removes orphans.
 - **Status token is single-purpose and derived from `AUTH_SECRET`**: it reads the applicant view and drives resume / pay-now; withdrawing, updating the card or editing the profile needs the buyer session. Rotating `AUTH_SECRET` invalidates every emailed status link.
 - **Storefront hosts**: `/events/:id/apply/*` passes through the tenant-host middleware like the event page; the buyer account section works on `/account` there.
+- **Digest cadence is anchored to the first run**, not a wall-clock hour: with the default hourly sweep it settles on the hour of the first send after deploy. `applicationDigestAt` is set even for quiet windows, so "Last checked" in Settings is the window end, not the last email.
+- **Duplicate keeps the image row shared** (`imageId` copied, no new upload) — deleting the image from one event affects both. Sale windows on price tiers are cleared because they would be in the past; re-set them on the copy.
+- **`requireOrgMembership` guards only the duplicate route** in `routes/events.js`; the older org event routes still rely on service-level `venue.organizationId` scoping. Worth aligning when those routes are next touched.
 - Frontend `e2e` runs of unrelated specs (`theme-modes`, `admin-access`, `wcag-contrast`) fail on a clean tree in this environment too — not related to this feature.
 
 ## Related Features

@@ -451,6 +451,15 @@ Deliverable: press / panel / creator applications usable end to end; paid forms 
 
 CSV export with photos as URLs, saved filters, bulk waitlist/reject for PAID, applicant profile edit from the account page, "price changed since submission" notice, organizer daily digest of new submissions, event duplicate copies forms. Hand-offs: add-ons (spec 012), messaging segments (013), booth assignment + public directory/map (014).
 
+Built 2026-09-17 (`feat/011-applications-phase-3`). Decisions taken while building:
+
+- Saved filters live in the browser (`localStorage`, per event) — the URL already carries the shareable form; no server table.
+- Bulk WAITLIST / REJECT on PAID forms needed no backend change (only APPROVE was guarded); the UI now disables Approve when a PAID row is selected and the contract test pins the behaviour.
+- The digest is a per-organization 24 h window claimed with a conditional update (`applicationDigestAt`), sent from the existing hourly application sweep to every member; opt-out toggle under Settings › Applications. No new env var.
+- Event duplication did not exist; `POST /organizations/:orgId/events/:eventId/duplicate` was added (DRAFT copy with tiers + forms; membership-guarded) with a Duplicate button on the admin events list.
+- The price-changed notice recomputes today's `tierAmounts` (price, fee mode, tax) and compares `applicantPays` with the snapshot — so a fee-mode or tax edit also surfaces, not only a price edit.
+- Profile self-service edits future applications only; a buyer photo upload route (`POST /buyer/me/applicant-profile/photos`) was added since submissions were the only upload path.
+
 ### Explicitly out of scope
 
 Bank debit / ACH for applications, invoices as a standalone product (pay-now covers the failed-charge case; general invoicing is a later spec), multi-event applications, applicant-to-applicant visibility, contracts/e-signature, scheduling of panels, badge printing.

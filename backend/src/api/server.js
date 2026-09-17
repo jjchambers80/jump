@@ -32,6 +32,7 @@ import buyerRouter from './routes/buyerAuth.js';
 import domainsRouter from './routes/domains.js';
 import domainService from '../services/DomainService.js';
 import applicationPaymentService from '../services/ApplicationPaymentService.js';
+import applicationDigestService from '../services/ApplicationDigestService.js';
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -176,8 +177,14 @@ if (process.env.NODE_ENV !== 'test') {
   // Application overdue sweep (spec 011 phase 2): approved applications whose
   // pay-now deadline passed are withdrawn (WITHDRAW policy) or flagged (HOLD).
   const APPLICATION_SWEEP_MS = Number(process.env.APPLICATION_SWEEP_INTERVAL_MS) || 60 * 60 * 1000;
-  setTimeout(() => applicationPaymentService.sweepOverdue().catch(() => {}), 30 * 1000).unref();
-  setInterval(() => applicationPaymentService.sweepOverdue().catch(() => {}), APPLICATION_SWEEP_MS).unref();
+  // The same tick sends organizer daily digests of new submissions (phase 3);
+  // ApplicationDigestService only sends once a ~day per organization.
+  const applicationSweep = async () => {
+    await applicationPaymentService.sweepOverdue().catch(() => {});
+    await applicationDigestService.sendDue().catch(() => {});
+  };
+  setTimeout(applicationSweep, 30 * 1000).unref();
+  setInterval(applicationSweep, APPLICATION_SWEEP_MS).unref();
 }
 
 export default app;
