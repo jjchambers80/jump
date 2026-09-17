@@ -7,7 +7,7 @@
 import { useMemo } from 'react';
 import api from '@/services/api';
 import { useOrg } from '@/components/OrgContext';
-import type { PaymentSettings, PaymentSettingsResponse, UpdatePaymentSettingsBody } from './types';
+import type { ConnectState, PaymentSettings, PaymentSettingsResponse, UpdatePaymentSettingsBody, UpdatePayoutSettingsBody } from './types';
 
 export function usePaymentsApi() {
   const { selectedOrgId } = useOrg();
@@ -17,6 +17,11 @@ export function usePaymentsApi() {
     () => ({
       get: () => api.get<PaymentSettingsResponse>(`/admin/settings/payments${qs}`),
       update: (body: UpdatePaymentSettingsBody) => api.patch<PaymentSettings>(`/admin/settings/payments${qs}`, body),
+      // Stripe Connect (spec 010 phase 2)
+      onboard: () => api.post<{ url: string }>(`/admin/settings/payments/connect/onboard${qs}`, {}),
+      loginLink: () => api.post<{ url: string }>(`/admin/settings/payments/connect/login-link${qs}`, {}),
+      sync: () => api.post<{ connect: ConnectState }>(`/admin/settings/payments/connect/sync${qs}`, {}),
+      updatePayouts: (body: UpdatePayoutSettingsBody) => api.patch<{ connect: ConnectState }>(`/admin/settings/payments/connect/payouts${qs}`, body),
     }),
     [qs]
   );

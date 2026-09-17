@@ -22,3 +22,27 @@ export const validateUpdatePaymentSettings = (req, res, next) => {
   }
   next();
 };
+
+// PATCH /admin/settings/payments/connect/payouts (spec 010 phase 2) — shape only;
+// ConnectService validates interval/anchor combinations and the descriptor.
+const PAYOUT_FIELDS = new Set(['interval', 'anchor', 'statementDescriptor']);
+
+export const validateUpdatePayoutSettings = (req, res, next) => {
+  const body = req.body || {};
+  const keys = Object.keys(body);
+  const unknown = keys.filter((f) => !PAYOUT_FIELDS.has(f));
+  if (unknown.length > 0) return next(new ValidationError(`Unknown field(s): ${unknown.join(', ')}`));
+  if (body.interval === undefined && body.statementDescriptor === undefined) {
+    return next(new ValidationError('Provide interval or statementDescriptor'));
+  }
+  if (body.interval !== undefined && typeof body.interval !== 'string') {
+    return next(new ValidationError('interval must be a string'));
+  }
+  if (body.anchor !== undefined && body.anchor !== null && !['string', 'number'].includes(typeof body.anchor)) {
+    return next(new ValidationError('anchor must be a string or number'));
+  }
+  if (body.statementDescriptor !== undefined && typeof body.statementDescriptor !== 'string') {
+    return next(new ValidationError('statementDescriptor must be a string'));
+  }
+  next();
+};

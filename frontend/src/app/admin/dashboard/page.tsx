@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import adminService, { AdminEvent, DashboardStats } from '@/services/adminService';
+import PayoutsBanner from './PayoutsBanner';
 
 function DashboardContent() {
   const router = useRouter();
@@ -72,6 +73,7 @@ function DashboardContent() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">Dashboard</h1>
           <p className="text-sm text-gray-500 dark:text-slate-500">Welcome, {user?.name}</p>
         </div>
+        <PayoutsBanner />
         {error && (
           <div className="mb-6 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-slate-700 text-red-700 dark:text-red-400 px-4 py-3 rounded-md">
             {error}

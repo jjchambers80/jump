@@ -12,6 +12,10 @@ import { staffToken, joinOrgByToken, cleanupStaff } from '../helpers/staff.js';
 
 const mockSessionsCreate = jest.fn();
 const mockAccountsRetrieve = jest.fn();
+const mockAccountsCreate = jest.fn();
+const mockAccountsUpdate = jest.fn();
+const mockCreateLoginLink = jest.fn();
+const mockAccountLinksCreate = jest.fn();
 const mockConstructEvent = jest.fn();
 
 jest.unstable_mockModule('../../src/config/stripe.js', () => {
@@ -23,7 +27,8 @@ jest.unstable_mockModule('../../src/config/stripe.js', () => {
   return {
     default: {
       checkout: { sessions: { create: mockSessionsCreate, retrieve: jest.fn() } },
-      accounts: { retrieve: mockAccountsRetrieve },
+      accounts: { retrieve: mockAccountsRetrieve, create: mockAccountsCreate, update: mockAccountsUpdate, createLoginLink: mockCreateLoginLink },
+      accountLinks: { create: mockAccountLinksCreate },
       webhooks: { constructEvent: mockConstructEvent },
     },
   };
@@ -136,6 +141,134 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
     const tx = await prisma.paymentTransaction.findUnique({ where: { orderId: order.body.orderId } });
     expect(tx.stripeAccountId).toBeNull();
     expect(tx.applicationFee).toBeNull();
+  });
+
+  describe('admin routes', () => {
+    let organizerToken;
+    let adminBToken;
+    let orgB;
+
+    beforeAll(async () => {
+      emails.push(`organizer@${TAG}.test`, `admin-b@${TAG}.test`);
+      organizerToken = await staffToken({ email: `organizer@${TAG}.test`, role: 'ORGANIZER' });
+      await joinOrgByToken(organizerToken, org.id, 'ORGANIZER');
+      orgB = await prisma.organization.create({ data: { name: `${TAG} Org B` } });
+      adminBToken = await staffToken({ email: `admin-b@${TAG}.test`, role: 'ADMIN' });
+      await joinOrgByToken(adminBToken, orgB.id, 'ADMIN');
+    });
+
+    afterAll(async () => {
+      await prisma.organizationStripeAccount.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
+      await prisma.organization.deleteMany({ where: { id: orgB.id } }).catch(() => {});
+    });
+
+    it('404 for every Connect route while the flag is off', async () => {
+      process.env.STRIPE_CONNECT_ENABLED = 'false';
+      const auth = ['Authorization', `Bearer ${adminToken}`];
+      for (const call of [
+        request(app).post('/admin/settings/payments/connect/onboard').set(...auth),
+        request(app).post('/admin/settings/payments/connect/login-link').set(...auth),
+        request(app).post('/admin/settings/payments/connect/sync').set(...auth),
+        request(app).patch('/admin/settings/payments/connect/payouts').set(...auth).send({ interval: 'daily' }),
+      ]) {
+        expect((await call).status).toBe(404);
+      }
+    });
+
+    it('ORGANIZER is refused (403) on every Connect route', async () => {
+      const auth = ['Authorization', `Bearer ${organizerToken}`];
+      expect((await request(app).post('/admin/settings/payments/connect/onboard').set(...auth)).status).toBe(403);
+      expect((await request(app).post('/admin/settings/payments/connect/login-link').set(...auth)).status).toBe(403);
+      expect((await request(app).post('/admin/settings/payments/connect/sync').set(...auth)).status).toBe(403);
+      expect((await request(app).patch('/admin/settings/payments/connect/payouts').set(...auth).send({ interval: 'daily' })).status).toBe(403);
+    });
+
+    it('onboard creates the account once and returns a fresh Account Link each time', async () => {
+      mockAccountsCreate.mockResolvedValueOnce(stripeAccount({ id: 'acct_onboard_ct', details_submitted: false, capabilities: { transfers: 'pending' } }));
+      mockAccountLinksCreate.mockResolvedValue({ url: 'https://connect.stripe.com/setup/e/acct_onboard_ct/link' });
+      const auth = ['Authorization', `Bearer ${adminToken}`];
+
+      const first = await request(app).post('/admin/settings/payments/connect/onboard').set(...auth);
+      expect(first.status).toBe(200);
+      expect(first.body).toEqual({ url: 'https://connect.stripe.com/setup/e/acct_onboard_ct/link' });
+      expect(mockAccountsCreate).toHaveBeenCalledTimes(1);
+      expect(mockAccountsCreate.mock.calls[0][0]).toMatchObject({
+        controller: { stripe_dashboard: { type: 'express' } },
+        metadata: { organizationId: org.id, mode: 'test' },
+      });
+
+      const second = await request(app).post('/admin/settings/payments/connect/onboard').set(...auth);
+      expect(second.status).toBe(200);
+      expect(mockAccountsCreate).toHaveBeenCalledTimes(1);
+      expect(mockAccountLinksCreate).toHaveBeenCalledTimes(2);
+
+      const status = await request(app).get('/admin/settings/payments').set(...auth);
+      expect(status.body.connect).toMatchObject({ enabled: true, status: 'onboarding', account: { stripeAccountId: 'acct_onboard_ct' } });
+
+      // Before onboarding completes: no login link, no payout settings
+      expect((await request(app).post('/admin/settings/payments/connect/login-link').set(...auth)).status).toBe(409);
+      expect((await request(app).patch('/admin/settings/payments/connect/payouts').set(...auth).send({ interval: 'daily' })).status).toBe(409);
+    });
+
+    it('sync pulls the account from Stripe; login link and payout settings work once details are submitted', async () => {
+      const auth = ['Authorization', `Bearer ${adminToken}`];
+      mockAccountsRetrieve.mockResolvedValueOnce(stripeAccount({ id: 'acct_onboard_ct' }));
+      const synced = await request(app).post('/admin/settings/payments/connect/sync').set(...auth);
+      expect(synced.status).toBe(200);
+      expect(synced.body.connect.status).toBe('active');
+      expect(synced.body.connect.account.bank).toEqual({ name: 'Wells Fargo', last4: '3544', currency: 'usd' });
+
+      mockCreateLoginLink.mockResolvedValueOnce({ url: 'https://connect.stripe.com/express/acct_onboard_ct/login' });
+      const login = await request(app).post('/admin/settings/payments/connect/login-link').set(...auth);
+      expect(login.status).toBe(200);
+      expect(login.body).toEqual({ url: 'https://connect.stripe.com/express/acct_onboard_ct/login' });
+      expect(mockCreateLoginLink).toHaveBeenCalledWith('acct_onboard_ct');
+
+      mockAccountsUpdate.mockImplementationOnce((id, params) =>
+        Promise.resolve(stripeAccount({ id, settings: { payouts: { ...params.settings.payouts } } }))
+      );
+      const payouts = await request(app)
+        .patch('/admin/settings/payments/connect/payouts')
+        .set(...auth)
+        .send({ interval: 'weekly', anchor: 'friday', statementDescriptor: 'connect ct' });
+      expect(payouts.status).toBe(200);
+      expect(mockAccountsUpdate).toHaveBeenCalledWith('acct_onboard_ct', {
+        settings: { payouts: { schedule: { interval: 'weekly', weekly_anchor: 'friday' }, statement_descriptor: 'CONNECT CT' } },
+      });
+      expect(payouts.body.connect.account.payouts).toMatchObject({ interval: 'weekly', anchor: 'friday', statementDescriptor: 'CONNECT CT' });
+    });
+
+    it('PATCH payouts validates the shape and the values', async () => {
+      const auth = ['Authorization', `Bearer ${adminToken}`];
+      const cases = [
+        [{}, /Provide interval or statementDescriptor/],
+        [{ bogus: 1 }, /Unknown field/],
+        [{ interval: 7 }, /interval must be a string/],
+        [{ interval: 'weekly', anchor: {} }, /anchor must be a string or number/],
+        [{ statementDescriptor: null }, /statementDescriptor must be a string/],
+        [{ interval: 'hourly' }, /daily, weekly or monthly/],
+        [{ interval: 'monthly', anchor: 40 }, /day of month/],
+        [{ statementDescriptor: 'A*B' }, /letters, numbers and spaces/],
+      ];
+      for (const [body, message] of cases) {
+        const res = await request(app).patch('/admin/settings/payments/connect/payouts').set(...auth).send(body);
+        expect(res.status).toBe(400);
+        expect(res.body.message).toMatch(message);
+      }
+      expect(mockAccountsUpdate).toHaveBeenCalledTimes(1); // only the earlier valid call
+    });
+
+    it('members are scoped to their own organization even with a foreign X-Jump-Org', async () => {
+      const res = await request(app)
+        .post('/admin/settings/payments/connect/sync')
+        .set('Authorization', `Bearer ${adminBToken}`)
+        .set('X-Jump-Org', org.id);
+      // Org B has no account → 404, never org A's account
+      expect(res.status).toBe(404);
+      expect(res.body.message).toMatch(/No Stripe Connect account/);
+      const status = await request(app).get('/admin/settings/payments').set('Authorization', `Bearer ${adminBToken}`).set('X-Jump-Org', org.id);
+      expect(status.body.connect.status).toBe('not_started');
+    });
   });
 
   it('Connect webhook account.updated creates nothing for an unknown account', async () => {
