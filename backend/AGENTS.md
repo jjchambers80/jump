@@ -41,6 +41,7 @@ Loads when agent touches `backend/` files. For root-level commands and env vars,
 4. `POST /webhooks/stripe` receives `checkout.session.completed`
 5. PaymentService: marks order COMPLETED → creates tickets → sends email
 6. **Never** update payment status from client requests — only from webhook
+7. Spec 010 phase 2: with `STRIPE_CONNECT_ENABLED=true` and an active `OrganizationStripeAccount` (`transfersEnabled`, current `mode`, not disconnected), the session is a **destination charge** — `transfer_data.destination` + `application_fee_amount` = total cents − subtotal cents, so the organization receives exactly the ex-tax subtotal. Routing is decided only in `PaymentSettingsService.checkoutOptionsFor`; `PaymentTransaction.stripeAccountId` / `applicationFee` record it. Refunds on those orders pass `reverse_transfer` + `refund_application_fee`. Connected-account events arrive on `POST /webhooks/stripe/connect` (`STRIPE_CONNECT_WEBHOOK_SECRET`), never on the platform endpoint
 
 ## Capacity Enforcement (WHY: prevents overselling under concurrent load)
 

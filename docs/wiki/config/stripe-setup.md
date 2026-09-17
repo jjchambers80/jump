@@ -37,6 +37,15 @@ Copy the `whsec_...` output to `STRIPE_WEBHOOK_SECRET` in `backend/.env`.
 
 Keep this terminal running while developing.
 
+Testing Stripe Connect (spec 010 phase 2) locally also needs connected-account events:
+
+```bash
+stripe listen --forward-to localhost:3000/webhooks/stripe \
+  --forward-connect-to localhost:3000/webhooks/stripe/connect
+```
+
+and `STRIPE_CONNECT_ENABLED=true` in `backend/.env`. The CLI signs both streams with the same `whsec_...`; set it as `STRIPE_CONNECT_WEBHOOK_SECRET` too (or leave it unset locally to skip verification).
+
 ### 3. Test Cards
 
 | Card Number | Scenario |
@@ -55,6 +64,17 @@ Use any future expiry date and any 3-digit CVC.
 2. Add endpoint: `https://your-backend-domain.up.railway.app/webhooks/stripe`
 3. Select events: `checkout.session.completed`, `checkout.session.expired`
 4. Copy the signing secret to `STRIPE_WEBHOOK_SECRET` on Railway
+
+### Connect Webhook Configuration (spec 010 phase 2)
+
+Only when `STRIPE_CONNECT_ENABLED=true`. Connected-account events arrive on a second endpoint with its own secret:
+
+1. Stripe Dashboard → Developers → Webhooks → Add endpoint, choose **Listen to events on Connected accounts**
+2. Endpoint: `https://your-backend-domain.up.railway.app/webhooks/stripe/connect`
+3. Events: `account.updated`, `capability.updated`, `account.application.deauthorized`, `account.external_account.created`, `account.external_account.updated`, `account.external_account.deleted`, `payout.paid`, `payout.failed`
+4. Copy the signing secret to `STRIPE_CONNECT_WEBHOOK_SECRET` on Railway
+
+Destination-charge events (`checkout.session.*`, `charge.refunded`) keep arriving on the platform endpoint above; do not add them here. The backend logs which secrets are configured at startup (`Stripe webhook configuration`).
 
 ### Tax Configuration
 

@@ -21,6 +21,7 @@ import customerService from '../../services/CustomerService.js';
 import domainService from '../../services/DomainService.js';
 import taxService from '../../services/TaxService.js';
 import paymentSettingsService from '../../services/PaymentSettingsService.js';
+import connectService from '../../services/ConnectService.js';
 import imageService from '../../services/ImageService.js';
 import emailService from '../../services/EmailService.js';
 import qrService from '../../services/QRService.js';
@@ -291,13 +292,16 @@ function providerForRole(provider, role) {
 router.get('/settings/payments', async (req, res, next) => {
   try {
     const organizationId = await activeOrgFor(req);
-    const [provider, settings] = await Promise.all([
+    const [provider, settings, connect] = await Promise.all([
       paymentSettingsService.getProviderStatus(),
       paymentSettingsService.getSettings(organizationId),
+      connectService.statusFor(organizationId),
     ]);
     res.json({
       provider: providerForRole(provider, req.user.role),
       settings,
+      // Spec 010 phase 2: `{ enabled: false }` until STRIPE_CONNECT_ENABLED is on
+      connect,
       canEdit: ['ADMIN', 'SYSTEM_ADMIN'].includes(req.user.role),
     });
   } catch (error) {

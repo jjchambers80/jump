@@ -158,6 +158,42 @@ model Organization {
   people      OrganizationPerson[]
   tierPresets TierPreset[]
   taxRegions  TaxRegion[]
+  stripeAccounts OrganizationStripeAccount[]
+}
+
+// Spec 010 phase 2: the organization's Stripe Connect (Express) account that
+// receives destination-charge transfers and pays out to its bank. One row per
+// organization per Stripe mode (test/live); rows for the other mode are ignored.
+// State is written only from Stripe Account objects (sync + Connect webhook).
+model OrganizationStripeAccount {
+  id                String    @id @default(cuid())
+  organizationId    String
+  mode              String                    // 'test' | 'live' — stripeMode() when created
+  stripeAccountId   String    @unique         // acct_…
+  chargesEnabled    Boolean   @default(false)
+  transfersEnabled  Boolean   @default(false) // capabilities.transfers === 'active' — the routing gate
+  payoutsEnabled    Boolean   @default(false)
+  detailsSubmitted  Boolean   @default(false)
+  disabledReason    String?                   // requirements.disabled_reason
+  currentlyDue      String[]  @default([])    // requirements.currently_due (field names only)
+  bankName          String?                   // display snapshot from external_accounts (default_for_currency)
+  bankLast4         String?
+  currency          String?
+  payoutInterval    String?                   // daily | weekly | monthly | manual
+  payoutAnchor      String?                   // weekly_anchor or monthly_anchor
+  payoutDelayDays   Int?
+  payoutDescriptor  String?                   // settings.payouts.statement_descriptor
+  lastPayoutAt      DateTime?
+  lastPayoutFailure String?
+  disconnectedAt    DateTime?
+  lastSyncedAt      DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, mode])
+  @@index([stripeAccountId])
 }
 
 // White-label storefront hostname owned by an organization (spec 007 phase 3).
@@ -484,6 +520,10 @@ model PaymentTransaction {
   currency              String        @default("usd")
   status                PaymentStatus @default(PENDING)
   failureReason         String?
+  // Spec 010 phase 2: destination charge routing, set at creation only.
+  // null stripeAccountId = charged on the platform account (every pre-Connect order).
+  stripeAccountId       String?
+  applicationFee        Decimal?      @db.Decimal(10, 2) // dollars kept by the platform (fees + tax)
 
   createdAt             DateTime      @default(now())
   // NO updatedAt — append-only per constitution

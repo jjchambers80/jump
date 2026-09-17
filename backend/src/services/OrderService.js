@@ -226,36 +226,46 @@ class OrderService {
     const itemByTierId = new Map(items.map((item, idx) => [item.priceTierId, { ...item, feeIdx: idx }]));
 
     // 7. Create Stripe Checkout session (outside transaction — external call).
+    const lineItems = tiers.map((tier) => {
+      const itemWithIdx = itemByTierId.get(tier.id);
+      const breakdown = fees.itemBreakdowns[itemWithIdx.feeIdx];
+      // All-in unit price: base + proportional fees per ticket
+      const allInUnitCents = Math.round((breakdown.lineTotal / breakdown.quantity) * 100);
+      return {
+        price_data: {
+          currency: 'usd',
+          product_data: {
+            name: `${event.name} — ${tier.name}`,
+            description: `Tickets for ${event.name} at ${event.venue.name}`,
+          },
+          unit_amount: allInUnitCents,
+        },
+        quantity: itemWithIdx.quantity,
+      };
+    });
+
     // Payment methods and the statement descriptor come from the organization's
-    // Settings › Payments (spec 010); defaults to cards only.
-    const checkoutOptions = await PaymentSettingsService.checkoutOptionsFor(event.venue.organization);
+    // Settings › Payments (spec 010); defaults to cards only. With an active
+    // Connect account (phase 2) the same call turns this into a destination
+    // charge; the routing outcome is read back below for the ledger.
+    const checkoutOptions = await PaymentSettingsService.checkoutOptionsFor(event.venue.organization, {
+      fees,
+      lineItems,
+    });
+    const routedTo = checkoutOptions.payment_intent_data?.transfer_data?.destination || null;
+    const applicationFeeCents = checkoutOptions.payment_intent_data?.application_fee_amount;
     let stripeSession;
     try {
       stripeSession = await stripe.checkout.sessions.create({
         mode: 'payment',
         ...checkoutOptions,
         customer_email: contactRecord.email,
-        line_items: tiers.map((tier) => {
-          const itemWithIdx = itemByTierId.get(tier.id);
-          const breakdown = fees.itemBreakdowns[itemWithIdx.feeIdx];
-          // All-in unit price: base + proportional fees per ticket
-          const allInUnitCents = Math.round((breakdown.lineTotal / breakdown.quantity) * 100);
-          return {
-            price_data: {
-              currency: 'usd',
-              product_data: {
-                name: `${event.name} — ${tier.name}`,
-                description: `Tickets for ${event.name} at ${event.venue.name}`,
-              },
-              unit_amount: allInUnitCents,
-            },
-            quantity: itemWithIdx.quantity,
-          };
-        }),
+        line_items: lineItems,
         metadata: {
           orderId: order.id,
           orderRef: order.orderRef,
           eventId: event.id,
+          ...(routedTo && { stripeAccountId: routedTo }),
         },
         // Return the buyer to the storefront they started on (custom domain when active)
         success_url: await confirmationUrl(order.id, event.venue.organizationId),
@@ -297,8 +307,20 @@ class OrderService {
         amount: order.totalAmount,
         currency: order.currency,
         status: 'PENDING',
+        stripeAccountId: routedTo,
+        applicationFee: routedTo ? applicationFeeCents / 100 : null,
       },
     });
+
+    if (routedTo) {
+      logger.info('Order charge routed to connected account', {
+        event: 'connect_charge_routed',
+        orderId: order.id,
+        stripeAccountId: routedTo,
+        applicationFee: applicationFeeCents / 100,
+        subtotal: fees.subtotal,
+      });
+    }
 
     logger.info('Order created', {
       orderId: order.id,
