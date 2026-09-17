@@ -20,6 +20,7 @@ import priceTiersRouter from './routes/priceTiers.js';
 import tierPresetsRouter from './routes/tierPresets.js';
 import ticketsRouter from './routes/tickets.js';
 import webhooksRouter from './routes/webhooks.js';
+import { eventApplicationsRouter, applicationStatusRouter } from './routes/applications.js';
 import adminRouter from './routes/admin.js';
 import customersRouter from './routes/customers.js';
 import organizationsRouter from './routes/organizations.js';
@@ -124,6 +125,8 @@ app.get('/metrics', metricsHandler);
 // API routes
 app.use('/admin', adminRouter);
 app.use('/customers', customersRouter);
+app.use('/events/:eventId/applications', eventApplicationsRouter);
+app.use('/applications', applicationStatusRouter);
 app.use('/events', eventsRouter);
 app.use('/venues', venuesRouter);
 app.use('/organizations', organizationsRouter);

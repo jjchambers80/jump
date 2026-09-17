@@ -18,6 +18,7 @@ Complete reference for all environment variables used by the Jump platform.
 | `AUTH_SECRET` | Yes | JWT signing secret (HS256). **Must match frontend value exactly** |
 | `STRIPE_SECRET_KEY` | Yes | Stripe API secret key (`sk_test_...` or `sk_live_...`) |
 | `STRIPE_WEBHOOK_SECRET` | Yes | Stripe webhook signing secret (`whsec_...`). Get from `stripe listen` CLI output locally |
+| `APPLICATIONS_PAYMENTS_ENABLED` | No | `true` lets PAID application forms (vendor / sponsor tiers) open and take card-on-file submissions (spec 011 phase 2). Default off: FREE forms only |
 | `RESEND_API_KEY` | Yes | Resend email API key (`re_...`) |
 | `PORT` | No | Server port. Default: 3000. Must be set explicitly on Railway |
 | `NODE_ENV` | No | `development` or `production`. Default: development |

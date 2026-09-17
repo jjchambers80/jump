@@ -19,6 +19,8 @@ import orderService from '../../services/OrderService.js';
 import ticketService from '../../services/TicketService.js';
 import refundService from '../../services/RefundService.js';
 import emailService from '../../services/EmailService.js';
+import applicationService from '../../services/ApplicationService.js';
+import applicantProfileService from '../../services/ApplicantProfileService.js';
 import { requireBuyer } from '../../middleware/buyerAuth.js';
 import { ForbiddenError, ValidationError } from '../../middleware/errorHandler.js';
 import { buyerVerifyUrl } from '../../utils/storefrontUrl.js';
@@ -143,6 +145,62 @@ router.get('/me/tickets', requireBuyer, async (req, res, next) => {
   try {
     const tickets = await ticketService.getTicketsForContact(req.buyer.contactId);
     res.json({ data: tickets });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ─── Applications (spec 011) ──────────────────────────────────────────────
+
+/** GET /buyer/me/applicant-profile — business profile at this organization (null when none). */
+router.get('/me/applicant-profile', requireBuyer, async (req, res, next) => {
+  try {
+    res.json(await applicantProfileService.getForContact(req.buyer.organizationId, req.buyer.contactId));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** PATCH /buyer/me/applicant-profile — update business name, description, website, socials. */
+router.patch('/me/applicant-profile', requireBuyer, async (req, res, next) => {
+  try {
+    await applicantProfileService.upsert(req.buyer.organizationId, req.buyer.contactId, req.body || {});
+    res.json(await applicantProfileService.getForContact(req.buyer.organizationId, req.buyer.contactId));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** DELETE /buyer/me/applicant-profile/photos/:imageId */
+router.delete('/me/applicant-profile/photos/:imageId', requireBuyer, async (req, res, next) => {
+  try {
+    res.json(await applicantProfileService.removePhoto(req.buyer.organizationId, req.buyer.contactId, req.params.imageId));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** GET /buyer/me/applications — this buyer's applications at this organization. */
+router.get('/me/applications', requireBuyer, async (req, res, next) => {
+  try {
+    res.json({ data: await applicationService.listForContact(req.buyer.organizationId, req.buyer.contactId) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/me/applications/:id', requireBuyer, async (req, res, next) => {
+  try {
+    res.json(await applicationService.getForContact(req.buyer.organizationId, req.buyer.contactId, req.params.id));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** POST /buyer/me/applications/:id/withdraw — while SUBMITTED or WAITLISTED. */
+router.post('/me/applications/:id/withdraw', requireBuyer, async (req, res, next) => {
+  try {
+    res.json(await applicationService.withdrawByApplicant(req.buyer.organizationId, req.buyer.contactId, req.params.id));
   } catch (error) {
     next(error);
   }
