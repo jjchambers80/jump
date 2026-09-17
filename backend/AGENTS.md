@@ -56,6 +56,17 @@ Vendor / sponsor / press forms per event — a second money path next to orders.
 
 See `docs/wiki/features/applications.md`.
 
+## Add-ons (spec 012)
+
+Products sold alongside a ticket tier (phase 1) or an application tier (phase 2): `AddOnService`, routes `/organizations/:orgId/events/:eventId/add-ons` (ADMIN writes, member reads).
+
+1. **Lines live on their own tables** (`OrderAddOn`, later `ApplicationAddOn`), never on `OrderItem`. `Order.quantity` stays the ticket count; `TicketService.createTicketsForOrder` and analytics never see add-on lines.
+2. **Same money rule as tiers**: add-on lines are extra items in the one `FeeService.computeOrderFees` call with `taxable: addOn.taxable`; tax is computed on taxable listed value only, fees on the whole subtotal. Fee mode is inherited (tickets PASS). `frontend/src/lib/fees.ts` mirrors the per-item `taxable` rule — change both plus both fixture files.
+3. **Capacity**: `AddOn.quantityTotal` null = unlimited, otherwise the same conditional `UPDATE … RETURNING` as `PriceTier` via `AddOnService.reserve` (called after the tier reservations in `OrderService.createOrder`), `release` (Stripe failure, `failOrder`), `commit` (`OrderService.completeOrder`), `unsell` (refunds). Every path that decrements tier reservations must also call `release`.
+4. **Offers**: `scope` TICKET / APPLICATION / BOTH; `allTiers` or explicit `PriceTierAddOn` / `ApplicationTierAddOn` rows. `validateOrderLines` re-checks scope, attachment to a cart tier, `isActive` and `maxPerOrder` server-side; the public event payload (`GET /events/:id` → `addOns[]`) carries `priceTierIds` for the storefront picker.
+5. **Refunds**: `RefundService.refundAddOnLine` refunds the line's all-in amount (`Refund.orderAddOnId`) and releases quantity; `refundOrder` marks open lines refunded. Order status is REFUNDED only when no VALID/REDEEMED ticket and no open add-on line remain.
+6. Add-ons with any line cannot be deleted (409) — deactivate. Event duplicate copies add-ons with remapped tier attachments.
+
 ## Capacity Enforcement (WHY: prevents overselling under concurrent load)
 
 ```sql
