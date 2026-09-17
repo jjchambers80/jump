@@ -72,7 +72,9 @@ app.use(
   })
 );
 
-app.use(express.json());
+// Stripe webhooks verify the signature over the raw bytes; the JSON parser
+// must not touch them (routes/webhooks.js applies express.raw itself).
+app.use((req, res, next) => (req.path.startsWith('/webhooks/') ? next() : express.json()(req, res, next)));
 app.use(cookieParser());
 
 // Serve uploaded files statically
@@ -150,6 +152,14 @@ app.use(errorHandler);
 if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, () => {
     logger.info(`Server started on port ${PORT}`);
+    // Which Stripe endpoints are verified — the platform and Connect secrets
+    // are easy to swap, and a wrong one shows up here before it shows up as
+    // "account status never updates" (spec 010 phase 2).
+    logger.info('Stripe webhook configuration', {
+      platformSecret: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
+      connectSecret: Boolean(process.env.STRIPE_CONNECT_WEBHOOK_SECRET),
+      connectEnabled: String(process.env.STRIPE_CONNECT_ENABLED || '').toLowerCase() === 'true',
+    });
     console.log(`🚀 Jump Backend API running on http://localhost:${PORT}`);
     console.log(`📊 Metrics available at http://localhost:${PORT}/metrics`);
     console.log(`💚 Health check at http://localhost:${PORT}/health`);

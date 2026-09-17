@@ -11,8 +11,8 @@ import { validateUpdateAttendee } from '../validators/adminValidators.js';
 import { validateUpdateBusinessDetails } from '../validators/organizationValidators.js';
 import { validateCreateOrganizationPerson } from '../validators/organizationPersonValidators.js';
 import { validateTaxRegionParams, validateUpsertTaxRegion, validateUpdateTaxSettings, validateTaxReportQuery } from '../validators/taxValidators.js';
-import { validateUpdatePaymentSettings } from '../validators/paymentValidators.js';
 import { validateFormBody, validateTierBody, validateQuestionBody, validateDecisionBody, validateBulkBody, validateTemplateBody } from '../validators/applicationValidators.js';
+import { validateUpdatePaymentSettings, validateUpdatePayoutSettings } from '../validators/paymentValidators.js';
 import organizationService from '../../services/OrganizationService.js';
 import organizationPersonService from '../../services/OrganizationPersonService.js';
 import orderService from '../../services/OrderService.js';
@@ -22,6 +22,7 @@ import customerService from '../../services/CustomerService.js';
 import domainService from '../../services/DomainService.js';
 import taxService from '../../services/TaxService.js';
 import paymentSettingsService from '../../services/PaymentSettingsService.js';
+import connectService from '../../services/ConnectService.js';
 import imageService from '../../services/ImageService.js';
 import emailService from '../../services/EmailService.js';
 import qrService from '../../services/QRService.js';
@@ -295,13 +296,16 @@ function providerForRole(provider, role) {
 router.get('/settings/payments', async (req, res, next) => {
   try {
     const organizationId = await activeOrgFor(req);
-    const [provider, settings] = await Promise.all([
+    const [provider, settings, connect] = await Promise.all([
       paymentSettingsService.getProviderStatus(),
       paymentSettingsService.getSettings(organizationId),
+      connectService.statusFor(organizationId),
     ]);
     res.json({
       provider: providerForRole(provider, req.user.role),
       settings,
+      // Spec 010 phase 2: `{ enabled: false }` until STRIPE_CONNECT_ENABLED is on
+      connect,
       canEdit: ['ADMIN', 'SYSTEM_ADMIN'].includes(req.user.role),
     });
   } catch (error) {
@@ -424,6 +428,50 @@ router.put('/settings/application-templates/:action', requireAdmin, validateTemp
 router.delete('/settings/application-templates/:action', requireAdmin, wrap(async (req, res) => {
   res.json(await applicationTemplateService.resetTemplate(await activeOrgFor(req), req.params.action));
 }));
+// ─── Stripe Connect (spec 010 phase 2) ────────────────────────────────────
+// All 404 while STRIPE_CONNECT_ENABLED is off (ConnectService._assertEnabled).
+
+/** POST /admin/settings/payments/connect/onboard → { url } Account Link (create account on first call). */
+router.post('/settings/payments/connect/onboard', requireAdmin, async (req, res, next) => {
+  try {
+    const organizationId = await activeOrgFor(req);
+    res.json(await connectService.startOnboarding(organizationId, { actorId: req.user.id }));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** POST /admin/settings/payments/connect/login-link → { url } Express dashboard (after onboarding). */
+router.post('/settings/payments/connect/login-link', requireAdmin, async (req, res, next) => {
+  try {
+    const organizationId = await activeOrgFor(req);
+    res.json(await connectService.loginLink(organizationId));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** POST /admin/settings/payments/connect/sync → { connect } pull account state from Stripe now. */
+router.post('/settings/payments/connect/sync', requireAdmin, async (req, res, next) => {
+  try {
+    const organizationId = await activeOrgFor(req);
+    await connectService.syncAccount(organizationId);
+    res.json({ connect: await connectService.statusFor(organizationId) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** PATCH /admin/settings/payments/connect/payouts { interval?, anchor?, statementDescriptor? } → { connect } */
+router.patch('/settings/payments/connect/payouts', requireAdmin, validateUpdatePayoutSettings, async (req, res, next) => {
+  try {
+    const organizationId = await activeOrgFor(req);
+    await connectService.updatePayoutSettings(organizationId, req.body);
+    res.json({ connect: await connectService.statusFor(organizationId) });
+  } catch (error) {
+    next(error);
+  }
+});
 
 /**
  * GET /admin/dashboard/stats
