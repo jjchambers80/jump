@@ -23,18 +23,22 @@ Saving the store name also updates the organization switcher in the admin header
 | `frontend/src/app/admin/settings/StoreContactDialog.tsx` | Store name / email / phone form |
 | `frontend/src/app/admin/settings/StoreAddressDialog.tsx` | Company name / country / address form |
 | `frontend/src/app/admin/settings/BusinessDetailsDialog.tsx` | Type of business, nickname, EIN, nested People section |
+| `frontend/src/app/admin/settings/PeopleSection.tsx` | Lists organization people; load/remove endpoints; Add button state |
+| `frontend/src/app/admin/settings/AddPersonDialog.tsx` | Nested modal with name/DOB/representative form; `POST /admin/settings/people` |
 | `frontend/src/app/admin/settings/formShared.ts` | Shared field classes, validators (ZIP, phone, email), `formatPhone`, `formatAddress` |
 | `frontend/src/app/admin/settings/icons.tsx` | Inline SVG icons for the rows (no icon library in the frontend) |
 | `frontend/src/components/OrgContext.tsx` | `OrgProvider` with `refresh()` and `updateOrganization(id, patch)` |
 
 ## Field Mapping
 
+All column names reference fields on the `Organization` model.
+
 | UI label | Dialog | Column | Notes |
 |---|---|---|---|
-| Store name | Store contact details | `Organization.name` | Required. Display name used by the switcher, public pages, emails |
-| Store email | Store contact details | `Organization.email` | Optional. Trimmed, lowercased, loose RFC check. Not exposed publicly |
+| Store name | Store contact details | `name` | Required. Display name used by the switcher, public pages, emails |
+| Store email | Store contact details | `email` | Optional. Trimmed, lowercased, loose RFC check. Not exposed publicly |
 | Store phone number | Store contact details | `phoneNumber` + `phoneCountryCode` | Optional. Normalized to 10 digits; country code fixed to `+1` |
-| Company name | Store address | `Organization.companyName` | Optional legal entity name; distinct from the display name |
+| Company name | Store address | `companyName` | Optional legal entity name; distinct from the display name |
 | Country/region | Store address | `countryCode` | Single-option select; server enforces `US` |
 | Address / Apartment, suite | Store address | `addressLine1` / `addressLine2` | Line 1 required |
 | City / State / ZIP | Store address | `city` / `state` / `postalCode` | State must be a US state/territory code; ZIP is 5-digit or ZIP+4 |
@@ -66,9 +70,9 @@ Empty values show an "Add …" prompt instead.
 |--------|------|-------------|
 | GET | `/admin/settings/business-details` | Business details for the current user's organization (EIN masked) |
 | PATCH | `/admin/settings/business-details` | Partial update; any subset of the whitelisted fields |
-| GET | `/admin/settings/people` | List people in the organization (no date of birth) |
-| POST | `/admin/settings/people` | Add a person; may replace the account representative |
-| DELETE | `/admin/settings/people/:personId` | Remove a person |
+| GET | `/admin/settings/people` | List people in the current user's organization (no date of birth). Response: `{ people: [...] }` |
+| POST | `/admin/settings/people` | Add a person; may replace the account representative. Returns 201 with the serialized person. |
+| DELETE | `/admin/settings/people/:personId` | Remove a person. Returns 204 on success. |
 
 ### PATCH contract
 

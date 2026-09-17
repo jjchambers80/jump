@@ -1,8 +1,11 @@
-# Quick Start: Online Ticket Purchase and QR Code Generation
+# Quick Start — HISTORICAL
 
-**Feature**: 001-online-ticket-purchase  
-**Branch**: `001-online-ticket-purchase`  
-**Tech Stack**: Node.js 20, Express.js 4, Next.js 14, PostgreSQL 15, Redis 7, Prisma 5
+**This quickstart describes the pre-monorepo setup as of 2026-02.**
+**Setup steps (SendGrid, Redis, pre-monorepo directory layout, and test credentials) are all obsolete.**
+
+See [docs/roadmap.md](../../docs/roadmap.md) for current development setup references.
+
+The original quickstart follows for historical reference only.
 
 ## Prerequisites
 
