@@ -1,8 +1,10 @@
 // Admin › Event › Application detail (spec 011): profile, photos, answers,
-// payment state, decision history, notes and the decision actions.
+// payment state, decision history, notes and the decision actions. Phase 2
+// adds the payment timeline, retry charge, refunds and the Stripe link.
 'use client';
 
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   decisionsFor,
@@ -18,6 +20,7 @@ import {
 } from '@/lib/applications';
 import ApplicationsHeader from '../ApplicationsHeader';
 import DecisionDialog from '../DecisionDialog';
+import RefundDialog from '../RefundDialog';
 import { describeError, useApplicationsApi } from '../useApplicationsApi';
 
 const card = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
@@ -33,16 +36,29 @@ function answerText(value: string | string[] | null): string {
   return value ?? '—';
 }
 
+const PAYMENT_HINT: Partial<Record<AdminApplication['paymentStatus'], string>> = {
+  AWAITING_CARD: 'The applicant has not finished saving a card; they cannot be approved yet.',
+  CARD_ON_FILE: 'Approving charges this card off-session.',
+  PROCESSING: 'Charge in flight — confirming with Stripe.',
+  PAYMENT_DUE: 'The card on file was declined. The applicant has a pay-now link; you can retry the card after they update it.',
+};
+
 export default function ApplicationDetailPage({ params }: { params: { eventId: string; applicationId: string } }) {
   const api = useApplicationsApi(params.eventId);
+  const { data: session } = useSession();
+  const role = (session?.user as { role?: string } | undefined)?.role;
+  const isAdmin = role === 'ADMIN' || role === 'SYSTEM_ADMIN';
   const [app, setApp] = useState<AdminApplication | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [decision, setDecision] = useState<Decision | null>(null);
+  const [refunding, setRefunding] = useState(false);
+  const [charging, setCharging] = useState(false);
   const [booth, setBooth] = useState('');
   const [note, setNote] = useState('');
   const [savingNotes, setSavingNotes] = useState(false);
   const decisionBtnRef = useRef<HTMLButtonElement>(null);
+  const refundBtnRef = useRef<HTMLButtonElement>(null);
 
   const load = useCallback(async () => {
     try {
@@ -58,6 +74,29 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
   useEffect(() => {
     load();
   }, [load]);
+
+  // A charge that came back `processing` settles by webhook; poll until it does.
+  useEffect(() => {
+    if (app?.paymentStatus !== 'PROCESSING') return;
+    const id = setTimeout(load, 3000);
+    return () => clearTimeout(id);
+  }, [app?.paymentStatus, app?.updatedAt, load]);
+
+  const retryCharge = async () => {
+    if (!app || charging) return;
+    setCharging(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const next = await api.retryCharge(app.id);
+      setApp(next);
+      setNotice(next.paymentStatus === 'PAID' ? 'Payment collected.' : next.paymentStatus === 'PROCESSING' ? 'Charge submitted; confirming with Stripe.' : 'The card was declined again. The applicant can pay from their status page.');
+    } catch (err) {
+      setError(describeError(err, 'Could not charge the card'));
+    } finally {
+      setCharging(false);
+    }
+  };
 
   const saveNotes = async () => {
     if (!app || savingNotes) return;
@@ -243,19 +282,67 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
                   {app.payment.paymentDueAt && (
                     <div className="flex justify-between">
                       <dt className="text-gray-600 dark:text-slate-400">Due</dt>
-                      <dd className={app.payment.overdue ? 'font-semibold text-red-700 dark:text-red-300' : 'text-gray-700 dark:text-slate-300'}>{formatDate(app.payment.paymentDueAt)}</dd>
+                      <dd className={app.payment.overdue ? 'font-semibold text-red-700 dark:text-red-300' : 'text-gray-700 dark:text-slate-300'}>
+                        {formatDate(app.payment.paymentDueAt)}
+                        {app.payment.overdue ? ' · overdue' : ''}
+                      </dd>
+                    </div>
+                  )}
+                  {app.payment.refundedTotal > 0 && (
+                    <div className="flex justify-between">
+                      <dt className="text-gray-600 dark:text-slate-400">Refunded</dt>
+                      <dd className="text-gray-700 dark:text-slate-300">{money(app.payment.refundedTotal)}</dd>
+                    </div>
+                  )}
+                  {app.payment.stripeAccountId && (
+                    <div className="flex justify-between">
+                      <dt className="text-gray-600 dark:text-slate-400">Routed to</dt>
+                      <dd className="text-gray-700 dark:text-slate-300">
+                        Connected account{app.payment.applicationFee != null ? ` · ${money(app.payment.applicationFee)} platform fee` : ''}
+                      </dd>
                     </div>
                   )}
                 </dl>
-                {app.payment.stripePaymentIntentId && (
-                  <a
-                    href={`https://dashboard.stripe.com/payments/${app.payment.stripePaymentIntentId}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-3 inline-block text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300"
-                  >
-                    View in Stripe ↗
-                  </a>
+                {PAYMENT_HINT[app.paymentStatus] && <p className="mt-3 text-xs text-gray-600 dark:text-slate-400">{PAYMENT_HINT[app.paymentStatus]}</p>}
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {app.payment.canRetryCharge && (
+                    <button type="button" onClick={retryCharge} disabled={charging} className={primary} data-testid="application-retry-charge">
+                      {charging ? 'Charging…' : `Retry card (${app.payment.chargeAttempts} so far)`}
+                    </button>
+                  )}
+                  {app.payment.canRefund && isAdmin && (
+                    <button
+                      ref={refundBtnRef}
+                      type="button"
+                      onClick={() => {
+                        setNotice(null);
+                        setRefunding(true);
+                      }}
+                      className={btn}
+                      data-testid="application-refund"
+                    >
+                      Refund…
+                    </button>
+                  )}
+                  {app.payment.stripeDashboardUrl && (
+                    <a href={app.payment.stripeDashboardUrl} target="_blank" rel="noreferrer" className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300">
+                      View in Stripe ↗
+                    </a>
+                  )}
+                </div>
+                {app.refunds.length > 0 && (
+                  <ul className="mt-3 space-y-1 border-t border-gray-200 pt-3 text-xs text-gray-600 dark:border-slate-700 dark:text-slate-400" data-testid="application-refunds">
+                    {app.refunds.map((r) => (
+                      <li key={r.id} className="flex justify-between gap-2">
+                        <span>
+                          {money(r.amount)} {r.status.toLowerCase()}
+                          {r.reason ? ` — ${r.reason}` : ''}
+                          {!r.initiatedBy && r.stripeRefundId ? ' (from Stripe)' : ''}
+                        </span>
+                        <span>{formatDate(r.createdAt, true)}</span>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
             )}
@@ -304,6 +391,20 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
         </div>
       )}
 
+      {refunding && app && (
+        <RefundDialog
+          eventId={params.eventId}
+          application={app}
+          returnFocusRef={refundBtnRef}
+          onClose={() => setRefunding(false)}
+          onRefunded={(next) => {
+            setApp(next);
+            setRefunding(false);
+            setNotice(`Refunded. ${PAYMENT_LABEL[next.paymentStatus]}.`);
+          }}
+        />
+      )}
+
       {decision && app && (
         <DecisionDialog
           eventId={params.eventId}
@@ -314,7 +415,16 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
           onDecided={(next) => {
             setApp(next);
             setDecision(null);
-            setNotice(`${STATUS_LABEL[next.status]}.`);
+            const paid = next.form.kind === 'PAID' && next.status === 'APPROVED';
+            setNotice(
+              paid && next.paymentStatus === 'PAID'
+                ? 'Approved and paid.'
+                : paid && next.paymentStatus === 'PAYMENT_DUE'
+                  ? 'Approved, but the card was declined — the applicant has been sent a pay-now link.'
+                  : paid && next.paymentStatus === 'PROCESSING'
+                    ? 'Approved; confirming the payment with Stripe…'
+                    : `${STATUS_LABEL[next.status]}.`
+            );
           }}
         />
       )}

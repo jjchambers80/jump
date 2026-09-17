@@ -1,7 +1,8 @@
 'use client';
 
 // Applications section of the buyer account page (spec 011): this
-// organization's applications with status, payment state and withdraw.
+// organization's applications with status, payment state, withdraw, and
+// (phase 2) pay-now for an outstanding balance or replacing the saved card.
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
@@ -43,6 +44,20 @@ export default function ApplicationsSection() {
     }
   };
 
+  const checkout = async (app: ApplicantApplication, action: 'pay' | 'update-card') => {
+    setBusyId(app.id);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/buyer/me/applications/${app.id}/${action}`, { method: 'POST' });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body.url) throw new Error(body.message || body.error || 'Could not open checkout');
+      window.location.assign(body.url);
+    } catch (err) {
+      setMessage((err as Error).message);
+      setBusyId(null);
+    }
+  };
+
   if (!apps || apps.length === 0) return null;
 
   return (
@@ -60,11 +75,21 @@ export default function ApplicationsSection() {
               </p>
               <p className="text-sm text-gray-600 dark:text-slate-400">
                 {formatDate(a.event.date)} · {a.profile.businessName}
-                {a.form.kind === 'PAID' ? ` · ${PAYMENT_LABEL[a.paymentStatus]}${a.amounts.applicantPays > 0 ? ` ${money(a.amounts.applicantPays)}` : ''}` : ''}
+                {a.form.kind === 'PAID' ? ` · ${PAYMENT_LABEL[a.paymentStatus]}${a.amounts.applicantPays > 0 ? ` ${money(a.amounts.applicantPays)}` : ''}${a.paymentStatus === 'PAYMENT_DUE' && a.paymentDueAt ? ` by ${formatDate(a.paymentDueAt)}` : ''}` : ''}
                 {a.boothLabel ? ` · ${a.boothLabel}` : ''}
               </p>
             </div>
             <div className="flex items-center gap-3 shrink-0">
+              {a.canPay && (
+                <button type="button" onClick={() => checkout(a, 'pay')} disabled={busyId === a.id} data-testid="account-application-pay" className="rounded-md bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-60">
+                  {busyId === a.id ? 'Opening…' : `Pay ${money(a.amounts.applicantPays)}`}
+                </button>
+              )}
+              {a.canUpdateCard && (
+                <button type="button" onClick={() => checkout(a, 'update-card')} disabled={busyId === a.id} data-testid="account-application-update-card" className="text-xs font-semibold text-brand-link hover:underline disabled:opacity-60">
+                  Update card
+                </button>
+              )}
               {a.canWithdraw && (
                 <button type="button" onClick={() => withdraw(a)} disabled={busyId === a.id} className="text-xs font-semibold text-brand-link hover:underline disabled:opacity-60">
                   {busyId === a.id ? 'Withdrawing…' : 'Withdraw'}

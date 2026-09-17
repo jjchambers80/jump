@@ -59,3 +59,4 @@ packages/db/dist/
 !.github/workflows/
 .claude/scheduled_tasks.lock
 graphify-out/
+.claude/worktrees/

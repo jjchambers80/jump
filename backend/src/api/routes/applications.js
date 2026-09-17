@@ -4,6 +4,8 @@
 //   GET  /events/:eventId/applications/forms/:slug   one form with tiers + questions
 //   POST /events/:eventId/applications               submit (JSON, or multipart with `payload` + photos)
 //   GET  /applications/:id/status?token=             guest status page
+//   POST /applications/:id/resume?token=             new Checkout URL for an unfinished paid application
+//   POST /applications/:id/pay?token=                pay-now Checkout URL (approved, payment due)
 //
 // Unauthenticated. Submission is rate-limited per client IP (the storefront
 // proxies through Next, so the signed X-Jump-Client-Ip header is honoured).
@@ -97,6 +99,22 @@ eventApplicationsRouter.post('/', submitLimiter, parseSubmission, async (req, re
 applicationStatusRouter.get('/:id/status', async (req, res, next) => {
   try {
     res.json(await applicationService.statusView(req.params.id, req.query.token));
+  } catch (error) {
+    next(error);
+  }
+});
+
+applicationStatusRouter.post('/:id/resume', submitLimiter, async (req, res, next) => {
+  try {
+    res.json(await applicationService.resumeCheckout(req.params.id, req.query.token));
+  } catch (error) {
+    next(error);
+  }
+});
+
+applicationStatusRouter.post('/:id/pay', submitLimiter, async (req, res, next) => {
+  try {
+    res.json(await applicationService.payNow(req.params.id, req.query.token));
   } catch (error) {
     next(error);
   }

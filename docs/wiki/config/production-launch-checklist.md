@@ -39,6 +39,14 @@ Verified 2026-09-14 (read-only `accounts.retrieve()` with the backend's Railway 
 - [ ] **Set a statement descriptor prefix** on the live Stripe account (Dashboard › Settings › Business › Public details, "Statement descriptor" → shortened descriptor / prefix). Keep it short (e.g. `JUMP`, 4 characters): organizations get `22 − prefix − 2` characters for their own name on Settings › Payments. Until it is set, no per-organization statement name is sent and the dialog is disabled — see [Payments Settings](../features/payments-settings.md).
 - [ ] **Confirm capabilities** for the optional payment methods organizations may enable (`link_payments`, `cashapp_payments`; BNPL later per spec 010 §5.6). Methods without an active capability show as *Unavailable*.
 
+## Application payments (spec 011 phase 2)
+
+Vendor / sponsor application charges use the same Stripe account, statement descriptor and Connect routing as ticket orders — nothing new to configure in Stripe beyond the webhook events. Off by default.
+
+- [ ] **Platform webhook events** — add `payment_intent.succeeded`, `payment_intent.payment_failed`, `payment_intent.canceled` and `charge.refunded` to the existing `POST /webhooks/stripe` endpoint (Developers › Webhooks). Off-session charges that Stripe returns as `processing` and every pay-now / card-on-file Checkout return depend on them.
+- [ ] Set `APPLICATIONS_PAYMENTS_ENABLED=true` on the backend service and redeploy. Optional `APPLICATION_SWEEP_INTERVAL_MS` (default 1 h) for the overdue pay-now sweep.
+- [ ] **Verify with one internal organization**: create a PAID form (charge at approval), open it, apply with a test card (`4242…`) → *Card on file* → approve → *Paid* and the tier's approved count moves; apply again with `4000 0000 0000 0341` (attaches, then declines) → approve → *Payment due* email with a working pay-now link → pay → *Paid*; refund part of one from the admin detail and confirm the Stripe refund (with `reverse_transfer` when the organization is connected).
+
 ## Stripe Connect (spec 010 phase 2)
 
 Code and tests shipped 2026-09-16 behind `STRIPE_CONNECT_ENABLED` (default off). Until it is on, nothing routes and the Payments page renders as phase 1. Do these **after** the live `STRIPE_SECRET_KEY` is in place — connected accounts are per Stripe mode, so anything onboarded under the test key is void live. Details: [Connect Payouts](../features/connect-payouts.md), `specs/010-payments-settings/plan-phase-2.md` §8.

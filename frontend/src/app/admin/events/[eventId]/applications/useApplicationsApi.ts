@@ -38,6 +38,8 @@ export function useApplicationsApi(eventId: string) {
       bulk: (body: { ids: string[]; decision: Decision; note?: string }) =>
         api.post<{ results: { id: string; ok: boolean; error?: string }[]; succeeded: number; failed: number }>(`${base}/applications/bulk`, body),
       updateNotes: (id: string, body: { boothLabel?: string | null; internalNote?: string | null }) => api.patch<AdminApplication>(`${base}/applications/${id}`, body),
+      retryCharge: (id: string) => api.post<AdminApplication>(`${base}/applications/${id}/charge`, {}),
+      refund: (id: string, body: { amount?: number | null; reason?: string | null }) => api.post<AdminApplication>(`${base}/applications/${id}/refund`, body),
       exportUrl: (query: ListQuery) => `${base}/applications/export.csv${qs(query)}`,
       forms: () => api.get<{ data: AdminForm[] }>(`${base}/application-forms`),
       form: (formId: string) => api.get<AdminForm>(`${base}/application-forms/${formId}`),

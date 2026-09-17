@@ -15,7 +15,7 @@ Generated and maintained by running `/doc-feature` after completing feature work
 - [Buyer Accounts](features/buyer-accounts.md) — Checkout account opt-in (pre-checked) + marketing consent (unchecked), passwordless magic-link sign-in, org-scoped account page with self-service refunds
 - [Custom Domains](features/custom-domains.md) — White-label storefront on an organization's own subdomain: CNAME + TXT verification, tenant-host middleware, per-org email/Stripe links
 
-- [Applications](features/applications.md) — Per-event vendor / sponsor (PAID tiers, capacity on approval) and press / panel (FREE) forms: applicant profiles + photos, questions, approve / reject / waitlist / withdraw with templated emails, bulk, CSV; payments phase 2 behind `APPLICATIONS_PAYMENTS_ENABLED` (spec 011)
+- [Applications](features/applications.md) — Per-event vendor / sponsor (PAID tiers, capacity on approval) and press / panel (FREE) forms: applicant profiles + photos, questions, approve / reject / waitlist / withdraw with templated emails, bulk, CSV; card on file at submission, off-session charge at approval, pay-now, refunds, overdue sweep behind `APPLICATIONS_PAYMENTS_ENABLED` (spec 011)
 
 ### Payments & Pricing
 - [Stripe Integration](features/stripe-integration.md) — Payment processing, webhooks, Checkout Sessions

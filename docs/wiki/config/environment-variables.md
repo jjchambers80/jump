@@ -18,7 +18,8 @@ Complete reference for all environment variables used by the Jump platform.
 | `AUTH_SECRET` | Yes | JWT signing secret (HS256). **Must match frontend value exactly** |
 | `STRIPE_SECRET_KEY` | Yes | Stripe API secret key (`sk_test_...` or `sk_live_...`) |
 | `STRIPE_WEBHOOK_SECRET` | Yes | Stripe webhook signing secret (`whsec_...`). Get from `stripe listen` CLI output locally |
-| `APPLICATIONS_PAYMENTS_ENABLED` | No | `true` lets PAID application forms (vendor / sponsor tiers) open and take card-on-file submissions (spec 011 phase 2). Default off: FREE forms only |
+| `APPLICATIONS_PAYMENTS_ENABLED` | No | `true` lets PAID application forms (vendor / sponsor tiers) open: card on file at submission, off-session charge at approval, pay-now, refunds (spec 011 phase 2). Default off: FREE forms only |
+| `APPLICATION_SWEEP_INTERVAL_MS` | No | Interval for the overdue pay-now sweep (default 1 h; first run 30 s after boot) |
 | `STRIPE_CONNECT_ENABLED` | No | `true` turns on Stripe Connect payouts (spec 010 phase 2): organizations with an active connected account receive destination charges. Default off — the migration and code deploy dark |
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | With Connect | Signing secret for the *Connect* webhook endpoint (`POST /webhooks/stripe/connect`, "listen to events on connected accounts"). Different from `STRIPE_WEBHOOK_SECRET`; unset = unverified (dev/test only) |
 | `RESEND_API_KEY` | Yes | Resend email API key (`re_...`) |

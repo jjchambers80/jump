@@ -84,3 +84,18 @@ export const validateTemplateBody = (req, res, next) => {
     next(error);
   }
 };
+
+/** Phase 2: { amount?: number (dollars, omit for the remaining balance), reason?: string } */
+export const validateRefundBody = (req, res, next) => {
+  try {
+    const body = req.body || {};
+    onlyFields(body, new Set(['amount', 'reason']), 'refund');
+    if (body.amount !== undefined && body.amount !== null && (typeof body.amount !== 'number' || !Number.isFinite(body.amount) || body.amount <= 0)) {
+      throw new ValidationError('amount must be a positive number');
+    }
+    if (body.reason !== undefined && body.reason !== null && typeof body.reason !== 'string') throw new ValidationError('reason must be a string');
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
