@@ -62,6 +62,10 @@ class EmailService {
     const tierSummary = Object.entries(tierCounts)
       .map(([name, count]) => `${count}x ${name}`)
       .join(', ');
+    // Add-on lines (spec 012) — bought with the tickets, no QR code of their own
+    const addOnSummary = (order.addOns || [])
+      .map((line) => `${line.quantity}x ${escapeHtml(line.name || 'Add-on')}`)
+      .join(', ');
 
     while (attempt < maxRetries) {
       try {
@@ -85,6 +89,7 @@ class EmailService {
                   <div style="background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 24px 0;">
                     <h3 style="margin: 0 0 12px;">${order.event?.name || 'Event'}</h3>
                     <p style="margin: 4px 0; color: #666; font-size: 14px;"><strong>Tickets:</strong> ${tierSummary}</p>
+                    ${addOnSummary ? `<p style="margin: 4px 0; color: #666; font-size: 14px;"><strong>Add-ons:</strong> ${addOnSummary}</p>` : ''}
                     <p style="margin: 4px 0; color: #666; font-size: 14px;"><strong>Total:</strong> $${Number(order.totalAmount).toFixed(2)}</p>
                     <p style="margin: 4px 0; color: #666; font-size: 14px;"><strong>Order Ref:</strong> ${order.orderRef}</p>
                   </div>

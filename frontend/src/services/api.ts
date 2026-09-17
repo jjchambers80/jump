@@ -2,6 +2,7 @@
 // Error handling and Authorization header injection
 
 import { getSession } from 'next-auth/react';
+import type { OrderAddOnLine } from '@/lib/addOns';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
 
@@ -203,6 +204,8 @@ export interface OrderDetail {
   currency: string;
   status: string;
   tickets: OrderTicket[];
+  /** Add-on lines bought with the tickets (spec 012). */
+  addOns?: OrderAddOnLine[];
   payment: {
     id: string;
     amount: number;
@@ -279,6 +282,8 @@ export interface OrderScanResult {
   eventDate: string;
   eventId: string;
   totalTickets: number;
+  /** Add-ons bought with the order (spec 012), for hand-over at the door */
+  addOns?: { name: string; quantity: number }[];
   tickets: OrderTicketPreview[];
 }
 

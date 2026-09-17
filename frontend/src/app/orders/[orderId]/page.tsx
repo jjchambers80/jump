@@ -26,11 +26,12 @@ function formatTime(dateStr: string): string {
   });
 }
 
-function formatCurrency(amountCents: number, currency = 'usd'): string {
+// Amounts from the API are dollars (Decimal(10,2)), not cents.
+function formatCurrency(amount: number, currency = 'usd'): string {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: currency.toUpperCase(),
-  }).format(amountCents / 100);
+  }).format(amount);
 }
 
 function isUpcoming(dateStr: string): boolean {
@@ -343,6 +344,28 @@ function OrderDetailContent() {
             ))}
           </div>
         </div>
+
+        {/* Add-ons (spec 012) — bought with the tickets, no QR code of their own */}
+        {order.addOns && order.addOns.length > 0 && (
+          <div className="mb-6" data-testid="order-add-ons">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-3">Add-ons</h2>
+            <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 divide-y divide-gray-100 dark:divide-slate-700">
+              {order.addOns.map((line) => (
+                <div key={line.id} className="flex items-center justify-between px-4 py-3 text-sm">
+                  <span className="text-gray-900 dark:text-slate-100">
+                    {line.quantity} × {line.name ?? 'Add-on'}
+                    {line.refundedAt && (
+                      <span className="ml-2 text-xs font-medium text-gray-500 dark:text-slate-400">Refunded</span>
+                    )}
+                  </span>
+                  <span className={line.refundedAt ? 'line-through text-gray-400' : 'text-gray-900 dark:text-slate-100'}>
+                    {formatCurrency(line.lineTotal, order.currency)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Payment info */}
         {order.payment && (

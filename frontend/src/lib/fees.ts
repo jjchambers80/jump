@@ -18,12 +18,15 @@ export const FEE_CONFIG = {
 export interface FeeItem {
   price: number;
   quantity: number;
+  /** `false` excludes the line from tax (untaxed add-ons, spec 012). Tiers are always taxable. */
+  taxable?: boolean;
 }
 
 /** Cost components that make up one cart line's price. */
 export interface LineBreakdown {
   unitPrice: number;
   quantity: number;
+  taxable: boolean;
   /** Ex-tax line amount: unitPrice × quantity, minus the line's tax when tax-inclusive */
   base: number;
   platformFee: number;
@@ -79,8 +82,12 @@ export function computeTierAllInPrice(listedPrice: number, taxRate: number = 0, 
  */
 export function computeOrderFees(items: FeeItem[], taxRate: number = 0, taxInclusive: boolean = false): OrderFees {
   const listed = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const subtotal = taxInclusive ? roundCurrency(listed / (1 + taxRate)) : roundCurrency(listed);
-  const tax = taxInclusive ? roundCurrency(listed - subtotal) : roundCurrency(subtotal * taxRate);
+  // Tax on the taxable listed value only; fees on the whole ex-tax subtotal.
+  const isTaxable = (item: FeeItem) => item.taxable !== false;
+  const taxableListed = items.reduce((sum, item) => sum + (isTaxable(item) ? item.price * item.quantity : 0), 0);
+  const taxableNet = taxInclusive ? roundCurrency(taxableListed / (1 + taxRate)) : roundCurrency(taxableListed);
+  const tax = taxInclusive ? roundCurrency(taxableListed - taxableNet) : roundCurrency(taxableNet * taxRate);
+  const subtotal = roundCurrency(listed - (taxInclusive ? tax : 0));
   const platformFee = roundCurrency(subtotal * FEE_CONFIG.platformFeePercent);
   const processingFee = roundCurrency(
     (subtotal + platformFee) * FEE_CONFIG.stripeFeePercent + FEE_CONFIG.stripeFeeFixed
@@ -90,13 +97,15 @@ export function computeOrderFees(items: FeeItem[], taxRate: number = 0, taxInclu
   const lines: LineBreakdown[] = items.map((item) => {
     const lineListed = roundCurrency(item.price * item.quantity);
     const proportion = listed > 0 ? lineListed / listed : 0;
+    const taxProportion = isTaxable(item) && taxableListed > 0 ? lineListed / taxableListed : 0;
     const linePlatform = roundCurrency(platformFee * proportion);
     const lineProcessing = roundCurrency(processingFee * proportion);
-    const lineTax = roundCurrency(tax * proportion);
+    const lineTax = roundCurrency(tax * taxProportion);
     const base = taxInclusive ? roundCurrency(lineListed - lineTax) : lineListed;
     return {
       unitPrice: item.price,
       quantity: item.quantity,
+      taxable: isTaxable(item),
       base,
       platformFee: linePlatform,
       processingFee: lineProcessing,
@@ -106,9 +115,12 @@ export function computeOrderFees(items: FeeItem[], taxRate: number = 0, taxInclu
   });
 
   if (lines.length > 1) {
-    const largest = lines.reduce(
-      (max, line, i) => (line.unitPrice * line.quantity > lines[max].unitPrice * lines[max].quantity ? i : max),
-      0
+    const value = (line: LineBreakdown) => line.unitPrice * line.quantity;
+    const largest = lines.reduce((max, line, i) => (value(line) > value(lines[max]) ? i : max), 0);
+    // Tax drift lands on the largest taxable line, never on an untaxed one.
+    const largestTaxable = lines.reduce(
+      (max, line, i) => (line.taxable && (max === -1 || value(line) > value(lines[max])) ? i : max),
+      -1
     );
     const platformDrift = roundCurrency(platformFee - lines.reduce((s, l) => s + l.platformFee, 0));
     const processingDrift = roundCurrency(
@@ -118,10 +130,14 @@ export function computeOrderFees(items: FeeItem[], taxRate: number = 0, taxInclu
     const target = lines[largest];
     target.platformFee = roundCurrency(target.platformFee + platformDrift);
     target.processingFee = roundCurrency(target.processingFee + processingDrift);
-    target.tax = roundCurrency(target.tax + taxDrift);
-    // Inside a listed price, tax drift moves net vs tax, not what is charged.
-    if (taxInclusive) target.base = roundCurrency(target.base - taxDrift);
     target.total = roundCurrency(target.base + target.platformFee + target.processingFee + target.tax);
+    if (largestTaxable !== -1) {
+      const taxTarget = lines[largestTaxable];
+      taxTarget.tax = roundCurrency(taxTarget.tax + taxDrift);
+      // Inside a listed price, tax drift moves net vs tax, not what is charged.
+      if (taxInclusive) taxTarget.base = roundCurrency(taxTarget.base - taxDrift);
+      taxTarget.total = roundCurrency(taxTarget.base + taxTarget.platformFee + taxTarget.processingFee + taxTarget.tax);
+    }
   }
 
   return { subtotal, platformFee, processingFee, tax, total, taxInclusive, lines };

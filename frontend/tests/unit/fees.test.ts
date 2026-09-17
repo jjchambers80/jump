@@ -167,3 +167,41 @@ describe('formatPrice', () => {
     expect(formatPrice(12.345)).toBe('$12.35');
   });
 });
+
+// Mixed taxable lines (spec 012 add-ons). Same fixture as backend/tests/unit/feeService.test.js.
+describe('computeOrderFees with untaxed add-on lines', () => {
+  it('taxes only taxable lines, fees on the whole subtotal', () => {
+    const fees = computeOrderFees(
+      [
+        { price: 100, quantity: 1 },
+        { price: 20, quantity: 2, taxable: false },
+      ],
+      0.1
+    );
+    expect(fees.subtotal).toBe(140);
+    expect(fees.tax).toBe(10);
+    expect(fees.platformFee).toBe(7);
+    expect(fees.processingFee).toBe(4.56);
+    expect(fees.total).toBe(161.56);
+    expect(fees.lines[0].tax).toBe(10);
+    expect(fees.lines[1].tax).toBe(0);
+    expect(fees.lines[1].taxable).toBe(false);
+    expect(sumBy(fees.lines, (l) => l.total)).toBe(fees.total);
+  });
+
+  it('backs tax out of taxable lines only when tax-inclusive', () => {
+    const fees = computeOrderFees(
+      [
+        { price: 110, quantity: 1 },
+        { price: 25, quantity: 1, taxable: false },
+      ],
+      0.1,
+      true
+    );
+    expect(fees.subtotal).toBe(125);
+    expect(fees.tax).toBe(10);
+    expect(fees.lines[1].tax).toBe(0);
+    expect(fees.lines[1].base).toBe(25);
+    expect(sumBy(fees.lines, (l) => l.total)).toBe(fees.total);
+  });
+});

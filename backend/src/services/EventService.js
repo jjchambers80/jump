@@ -8,6 +8,7 @@ import logger from '../utils/logger.js';
 import { formatEventSummary } from '../utils/eventSummary.js';
 import taxService from './TaxService.js';
 import applicationFormService from './ApplicationFormService.js';
+import addOnService from './AddOnService.js';
 
 class EventService {
   /**
@@ -157,6 +158,9 @@ class EventService {
         include: { venue: true, priceTiers: { orderBy: { displayOrder: 'asc' } } },
       });
       const copied = await applicationFormService.copyForms(source.id, created.id, tx);
+      // Tiers were created in source order, so index i of each list is the same tier.
+      const tierIdMap = new Map(source.priceTiers.map((tier, i) => [tier.id, created.priceTiers[i]?.id]));
+      await addOnService.copyForEvent(tx, source.id, created.id, { priceTierIdMap: tierIdMap });
       return { event: created, forms: copied };
     });
 
@@ -434,6 +438,13 @@ class EventService {
       include: {
         venue: { include: { organization: { select: { id: true, name: true, brandColor: true, themeMode: true, taxInclusivePricing: true } } } },
         priceTiers: { orderBy: { displayOrder: 'asc' } },
+        // Add-ons a ticket checkout may offer (spec 012); the storefront picks
+        // per cart tier via `allTiers` / `priceTierIds`.
+        addOns: {
+          where: { isActive: true, scope: { in: ['TICKET', 'BOTH'] } },
+          include: { priceTiers: { select: { priceTierId: true } } },
+          orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
+        },
       },
     });
 
@@ -662,6 +673,7 @@ class EventService {
           updatedAt: t.updatedAt,
         };
       }),
+      ...(event.addOns && { addOns: event.addOns.map((a) => addOnService.serializePublic(a)) }),
       createdAt: event.createdAt,
       updatedAt: event.updatedAt,
     };

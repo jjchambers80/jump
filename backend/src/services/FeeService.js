@@ -16,7 +16,7 @@ class FeeService {
   /**
    * Compute fee breakdown for a set of order items.
    *
-   * @param {Array<{unitPrice: number, quantity: number}>} items - Line items with listed price and quantity
+   * @param {Array<{unitPrice: number, quantity: number, taxable?: boolean}>} items - Line items with listed price and quantity; `taxable: false` excludes a line from tax (add-ons, spec 012)
    * @param {number} [taxRate=0] - Effective tax rate as a decimal
    * @param {{ taxInclusive?: boolean }} [options]
    * @returns {{
@@ -31,10 +31,15 @@ class FeeService {
    */
   computeOrderFees(items, taxRate = 0, { taxInclusive = false } = {}) {
     const listed = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+    // Add-ons (spec 012) may be untaxed; tiers are always taxable. Tax is
+    // computed on the taxable listed value only, fees on the whole subtotal.
+    const isTaxable = (item) => item.taxable !== false;
+    const taxableListed = items.reduce((sum, item) => sum + (isTaxable(item) ? item.unitPrice * item.quantity : 0), 0);
 
     // Ex-tax base and tax: added on top, or backed out of the listed price
-    const subtotal = taxInclusive ? this._round(listed / (1 + taxRate)) : this._round(listed);
-    const tax = taxInclusive ? this._round(listed - subtotal) : this._round(subtotal * taxRate);
+    const taxableNet = taxInclusive ? this._round(taxableListed / (1 + taxRate)) : this._round(taxableListed);
+    const tax = taxInclusive ? this._round(taxableListed - taxableNet) : this._round(taxableNet * taxRate);
+    const subtotal = this._round(listed - (taxInclusive ? tax : 0));
 
     // Platform fee on the ex-tax base price
     const platformFee = this._round(subtotal * FEE_CONFIG.platformFeePercent);
@@ -46,16 +51,19 @@ class FeeService {
 
     const total = this._round(subtotal + platformFee + processingFee + tax);
 
-    // Proportionally allocate fees and tax across items by listed value
+    // Proportionally allocate fees across items by listed value, tax across
+    // taxable items only
     const itemBreakdowns = items.map((item) => {
       const lineListed = item.unitPrice * item.quantity;
       const proportion = listed > 0 ? lineListed / listed : 0;
-      const lineTax = this._round(tax * proportion);
+      const taxProportion = isTaxable(item) && taxableListed > 0 ? lineListed / taxableListed : 0;
+      const lineTax = this._round(tax * taxProportion);
       const lineNet = taxInclusive ? this._round(lineListed - lineTax) : this._round(lineListed);
 
       return {
         unitPrice: item.unitPrice,
         quantity: item.quantity,
+        taxable: isTaxable(item),
         platformFee: this._round(platformFee * proportion),
         processingFee: this._round(processingFee * proportion),
         tax: lineTax,
@@ -68,8 +76,12 @@ class FeeService {
       const allocatedPlatform = itemBreakdowns.reduce((s, b) => s + b.platformFee, 0);
       const allocatedProcessing = itemBreakdowns.reduce((s, b) => s + b.processingFee, 0);
       const allocatedTax = itemBreakdowns.reduce((s, b) => s + b.tax, 0);
-      const largest = itemBreakdowns.reduce((max, b, i) =>
-        b.unitPrice * b.quantity > (itemBreakdowns[max]?.unitPrice ?? 0) * (itemBreakdowns[max]?.quantity ?? 0) ? i : max, 0
+      const value = (b) => b.unitPrice * b.quantity;
+      const largest = itemBreakdowns.reduce((max, b, i) => (value(b) > value(itemBreakdowns[max]) ? i : max), 0);
+      // Tax drift lands on the largest taxable line, never on an untaxed one
+      const largestTaxable = itemBreakdowns.reduce(
+        (max, b, i) => (b.taxable && (max === -1 || value(b) > value(itemBreakdowns[max])) ? i : max),
+        -1
       );
 
       const platformDrift = this._round(platformFee - allocatedPlatform);
@@ -78,12 +90,15 @@ class FeeService {
 
       itemBreakdowns[largest].platformFee = this._round(itemBreakdowns[largest].platformFee + platformDrift);
       itemBreakdowns[largest].processingFee = this._round(itemBreakdowns[largest].processingFee + processingDrift);
-      itemBreakdowns[largest].tax = this._round(itemBreakdowns[largest].tax + taxDrift);
-      // Tax drift only moves the line total when tax is added on top; inside a
-      // listed price it shifts net vs tax without changing what is charged.
-      itemBreakdowns[largest].lineTotal = this._round(
-        itemBreakdowns[largest].lineTotal + platformDrift + processingDrift + (taxInclusive ? 0 : taxDrift)
-      );
+      itemBreakdowns[largest].lineTotal = this._round(itemBreakdowns[largest].lineTotal + platformDrift + processingDrift);
+      if (largestTaxable !== -1) {
+        itemBreakdowns[largestTaxable].tax = this._round(itemBreakdowns[largestTaxable].tax + taxDrift);
+        // Tax drift only moves the line total when tax is added on top; inside a
+        // listed price it shifts net vs tax without changing what is charged.
+        if (!taxInclusive) {
+          itemBreakdowns[largestTaxable].lineTotal = this._round(itemBreakdowns[largestTaxable].lineTotal + taxDrift);
+        }
+      }
     }
 
     return {
