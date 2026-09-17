@@ -38,7 +38,7 @@ Candidate specs surfaced by the 2026-09-15 Eventeny organizer interview ([analys
 | Candidate | Scope | Why |
 |---|---|---|
 | ~~011 applications~~ | Shipped 2026-09-17 (see specs table) | — |
-| 012 add-ons | Add-on products on ticket tiers and application tiers (power, badges) | Organizer's biggest operational regret; fees on after-the-fact invoices |
+| 012 add-ons | **Planned 2026-09-17** — `specs/012-add-ons/` | Organizer's biggest operational regret; fees on after-the-fact invoices |
 | fee modes | Per-product absorb / pass / split with buyer-price preview | "$275 booth costs $303" is the headline complaint |
 | 013 messaging | Segment sends from the org's verified domain, per-recipient delivery status, export, event-relative automations | Eventeny mail goes to spam; organizer runs Gmail mail-merge instead |
 | check-in role | `SCANNER` role, kiosk mode, unlimited free scanner seats, PII masking | Owner dashboard exposed on volunteer iPads; 10-seat cap |
