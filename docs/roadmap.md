@@ -1,6 +1,6 @@
 # Jump Platform — Roadmap
 
-**Generated**: 2026-09-14
+**Generated**: 2026-09-14 · **Updated**: 2026-09-16
 
 This page aggregates the project's fragmented roadmap sources into one place.
 There is no single "roadmap.md" — the actual direction is carried by the sources below.
@@ -25,6 +25,24 @@ See [specs/STATUS.md](../specs/STATUS.md) for verified lifecycle states.
 | 008 | branch: `feat/008-domains-ui` (+ `plan/008-domains-ui`) | Shopify-style Settings > Domains connect flow |
 | 009 | branch: `feat/009-tax-settings` (+ phases 2-3) | Settings > Tax — per-org tax regions, recalculate, collected tax report |
 | 010 | branch: `feat/010-payments-phase-1` (+ `plan/010-payments-settings`) | Settings > Payments — statement descriptor, payment methods, Stripe status |
+
+---
+
+## Discovery research (roadmap inputs)
+
+`docs/research/` holds customer interviews and competitor notes. See [docs/research/README.md](./research/README.md).
+
+Candidate specs surfaced by the 2026-09-15 Eventeny organizer interview ([analysis](./research/2026-09-15-eventeny-organizer-interview.md)), in suggested order:
+
+| Candidate | Scope | Why |
+|---|---|---|
+| 011 applications | Vendor / sponsor / press / panel applications: tiers, custom questions, approve / reject / waitlist / withdraw, charge-on-approval, invoices, correct pending-vs-paid state | Required to replace Eventeny for a convention; the $900 failed-ACH incident |
+| 012 add-ons | Add-on products on ticket tiers and application tiers (power, badges) | Organizer's biggest operational regret; fees on after-the-fact invoices |
+| fee modes | Per-product absorb / pass / split with buyer-price preview | "$275 booth costs $303" is the headline complaint |
+| 013 messaging | Segment sends from the org's verified domain, per-recipient delivery status, export, event-relative automations | Eventeny mail goes to spam; organizer runs Gmail mail-merge instead |
+| check-in role | `SCANNER` role, kiosk mode, unlimited free scanner seats, PII masking | Owner dashboard exposed on volunteer iPads; 10-seat cap |
+| 014 floor map | Builder with snapping and row duplication, booth ↔ vendor assignment, public map with profiles, vector PDF export, cache invalidation on write | Eventeny's map is the $360/mo tier driver and serves stale assignments |
+| 015 pages | Simple CMS pages, org landing page, day-of mobile page on the custom domain | Organizer runs WordPress only to link out to the platform |
 
 ---
 
