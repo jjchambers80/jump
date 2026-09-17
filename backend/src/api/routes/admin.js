@@ -11,7 +11,7 @@ import { validateUpdateAttendee } from '../validators/adminValidators.js';
 import { validateUpdateBusinessDetails } from '../validators/organizationValidators.js';
 import { validateCreateOrganizationPerson } from '../validators/organizationPersonValidators.js';
 import { validateTaxRegionParams, validateUpsertTaxRegion, validateUpdateTaxSettings, validateTaxReportQuery } from '../validators/taxValidators.js';
-import { validateUpdatePaymentSettings } from '../validators/paymentValidators.js';
+import { validateUpdatePaymentSettings, validateUpdatePayoutSettings } from '../validators/paymentValidators.js';
 import organizationService from '../../services/OrganizationService.js';
 import organizationPersonService from '../../services/OrganizationPersonService.js';
 import orderService from '../../services/OrderService.js';
@@ -314,6 +314,51 @@ router.patch('/settings/payments', requireAdmin, validateUpdatePaymentSettings, 
   try {
     const organizationId = await activeOrgFor(req);
     res.json(await paymentSettingsService.updateSettings(organizationId, req.body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ─── Stripe Connect (spec 010 phase 2) ────────────────────────────────────
+// All 404 while STRIPE_CONNECT_ENABLED is off (ConnectService._assertEnabled).
+
+/** POST /admin/settings/payments/connect/onboard → { url } Account Link (create account on first call). */
+router.post('/settings/payments/connect/onboard', requireAdmin, async (req, res, next) => {
+  try {
+    const organizationId = await activeOrgFor(req);
+    res.json(await connectService.startOnboarding(organizationId, { actorId: req.user.id }));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** POST /admin/settings/payments/connect/login-link → { url } Express dashboard (after onboarding). */
+router.post('/settings/payments/connect/login-link', requireAdmin, async (req, res, next) => {
+  try {
+    const organizationId = await activeOrgFor(req);
+    res.json(await connectService.loginLink(organizationId));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** POST /admin/settings/payments/connect/sync → { connect } pull account state from Stripe now. */
+router.post('/settings/payments/connect/sync', requireAdmin, async (req, res, next) => {
+  try {
+    const organizationId = await activeOrgFor(req);
+    await connectService.syncAccount(organizationId);
+    res.json({ connect: await connectService.statusFor(organizationId) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** PATCH /admin/settings/payments/connect/payouts { interval?, anchor?, statementDescriptor? } → { connect } */
+router.patch('/settings/payments/connect/payouts', requireAdmin, validateUpdatePayoutSettings, async (req, res, next) => {
+  try {
+    const organizationId = await activeOrgFor(req);
+    await connectService.updatePayoutSettings(organizationId, req.body);
+    res.json({ connect: await connectService.statusFor(organizationId) });
   } catch (error) {
     next(error);
   }
