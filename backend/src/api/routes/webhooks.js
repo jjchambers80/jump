@@ -7,6 +7,7 @@ import stripe from '../../config/stripe.js';
 import PaymentService from '../../services/PaymentService.js';
 import RefundService from '../../services/RefundService.js';
 import ConnectService from '../../services/ConnectService.js';
+import ApplicationPaymentService from '../../services/ApplicationPaymentService.js';
 import logger from '../../utils/logger.js';
 
 const router = express.Router();
@@ -58,6 +59,15 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
   }
 
   try {
+    // Application payments (spec 011 phase 2) share this endpoint. Dispatch
+    // strictly on metadata.applicationId (ticket sessions never carry it);
+    // charge.refunded needs a row lookup because the charge has no metadata
+    // of its own when the refund was made from the dashboard.
+    if (ApplicationPaymentService.isApplicationEvent(event) || (await ApplicationPaymentService.isApplicationRefundEvent(event))) {
+      await ApplicationPaymentService.handleEvent(event);
+      return res.json({ received: true });
+    }
+
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object;

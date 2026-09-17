@@ -31,6 +31,7 @@ import imagesRouter from './routes/images.js';
 import buyerRouter from './routes/buyerAuth.js';
 import domainsRouter from './routes/domains.js';
 import domainService from '../services/DomainService.js';
+import applicationPaymentService from '../services/ApplicationPaymentService.js';
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -171,6 +172,12 @@ if (process.env.NODE_ENV !== 'test') {
   const DOMAIN_SWEEP_MS = Number(process.env.DOMAIN_SWEEP_INTERVAL_MS) || 10 * 60 * 1000;
   setTimeout(() => domainService.checkAll().catch(() => {}), 15 * 1000).unref();
   setInterval(() => domainService.checkAll().catch(() => {}), DOMAIN_SWEEP_MS).unref();
+
+  // Application overdue sweep (spec 011 phase 2): approved applications whose
+  // pay-now deadline passed are withdrawn (WITHDRAW policy) or flagged (HOLD).
+  const APPLICATION_SWEEP_MS = Number(process.env.APPLICATION_SWEEP_INTERVAL_MS) || 60 * 60 * 1000;
+  setTimeout(() => applicationPaymentService.sweepOverdue().catch(() => {}), 30 * 1000).unref();
+  setInterval(() => applicationPaymentService.sweepOverdue().catch(() => {}), APPLICATION_SWEEP_MS).unref();
 }
 
 export default app;

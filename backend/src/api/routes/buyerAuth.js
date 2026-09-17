@@ -197,6 +197,24 @@ router.get('/me/applications/:id', requireBuyer, async (req, res, next) => {
   }
 });
 
+/** POST /buyer/me/applications/:id/pay → { url } pay-now Checkout for an approved application with a payment due. */
+router.post('/me/applications/:id/pay', requireBuyer, async (req, res, next) => {
+  try {
+    res.json(await applicationService.payNowForContact(req.buyer.organizationId, req.buyer.contactId, req.params.id));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** POST /buyer/me/applications/:id/update-card → { url } setup-mode Checkout to replace the saved card. */
+router.post('/me/applications/:id/update-card', requireBuyer, async (req, res, next) => {
+  try {
+    res.json(await applicationService.updateCardForContact(req.buyer.organizationId, req.buyer.contactId, req.params.id));
+  } catch (error) {
+    next(error);
+  }
+});
+
 /** POST /buyer/me/applications/:id/withdraw — while SUBMITTED or WAITLISTED. */
 router.post('/me/applications/:id/withdraw', requireBuyer, async (req, res, next) => {
   try {

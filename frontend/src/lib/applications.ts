@@ -138,7 +138,15 @@ export interface ApplicantApplication {
   boothLabel: string | null;
   submittedAt: string | null;
   decidedAt: string | null;
+  paidAt: string | null;
+  refundedTotal: number;
   canWithdraw: boolean;
+  /** DRAFT paid application: Checkout was abandoned; a new session can be minted. */
+  canResume: boolean;
+  /** APPROVED + PAYMENT_DUE: pay the snapshot amount on a hosted page. */
+  canPay: boolean;
+  /** Card on file can be replaced (buyer account only). */
+  canUpdateCard: boolean;
 }
 
 export interface ApplicationRow {
@@ -179,7 +187,7 @@ export interface DecisionRecord {
 
 export interface AdminApplication {
   id: string;
-  form: { id: string; name: string; slug: string; kind: FormKind; chargeTiming: string; feeMode: string };
+  form: { id: string; name: string; slug: string; kind: FormKind; chargeTiming: 'SUBMIT' | 'APPROVAL'; feeMode: string; paymentDueDays: number; overduePolicy: 'WITHDRAW' | 'HOLD' };
   event: { id: string; name: string; date: string };
   status: ApplicationStatus;
   paymentStatus: PaymentStatus;
@@ -197,10 +205,15 @@ export interface AdminApplication {
     paidAt: string | null;
     paymentDueAt: string | null;
     overdue: boolean;
+    refundedTotal: number;
+    refundable: number;
+    stripeDashboardUrl: string | null;
+    canRefund: boolean;
+    canRetryCharge: boolean;
   };
   answers: AnswerView[];
   decisions: DecisionRecord[];
-  refunds: { id: string; amount: number; status: string; reason: string | null; createdAt: string }[];
+  refunds: { id: string; amount: number; status: string; reason: string | null; stripeRefundId: string | null; initiatedBy: string | null; createdAt: string }[];
   submittedAt: string | null;
   decidedAt: string | null;
   decidedById: string | null;
@@ -208,6 +221,8 @@ export interface AdminApplication {
   withdrawReason: string | null;
   boothLabel: string | null;
   internalNote: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface MessageTemplate {

@@ -4,23 +4,24 @@
 // and the applicant's own views.
 //
 // Two independent columns: `status` (review) and `paymentStatus` (money).
-// Phase 1 handles FREE forms end to end; PAID forms compute their amount
-// snapshot here but cannot open until ApplicationPaymentService (phase 2)
-// ships behind APPLICATIONS_PAYMENTS_ENABLED.
+// FREE forms run end to end here. PAID forms (behind
+// APPLICATIONS_PAYMENTS_ENABLED) take their amount snapshot at submission and
+// hand Stripe work to ApplicationPaymentService: Checkout at submission, the
+// off-session charge at approval, pay-now, refunds.
 //
 // Capacity: submissions never consume a tier slot. Approval takes one with a
 // conditional UPDATE … RETURNING (the PriceTier pattern); withdrawing an
 // approved application releases it.
 
-import { createHash, randomBytes } from 'crypto';
 import { prisma } from '@jump/db';
 import { LIST_PAGE_SIZE, MAX_ANSWER_LENGTH, MAX_PROFILE_PHOTOS, STATUS_TOKEN_TTL_DAYS } from '../config/applications.js';
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import applicationFormService, { paymentsEnabled, tierAmounts } from './ApplicationFormService.js';
 import applicantProfileService from './ApplicantProfileService.js';
 import applicationTemplateService from './ApplicationTemplateService.js';
+import applicationPaymentService from './ApplicationPaymentService.js';
+import { hashToken, statusToken, statusUrlFor, verifyStatusToken } from './applicationLinks.js';
 import imageService from './ImageService.js';
-import { storefrontFor } from '../utils/storefrontUrl.js';
 import logger from '../utils/logger.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -37,9 +38,7 @@ export const DECISIONS = {
   WITHDRAW: { from: ['SUBMITTED', 'WAITLISTED', 'APPROVED'], to: 'WITHDRAWN', action: 'WITHDRAWN' },
 };
 
-export function hashToken(raw) {
-  return createHash('sha256').update(raw).digest('hex');
-}
+export { hashToken, statusToken };
 
 function csvCell(value) {
   if (value === null || value === undefined) return '';
@@ -48,11 +47,18 @@ function csvCell(value) {
 }
 
 const DETAIL_INCLUDE = {
-  contact: { select: { id: true, email: true, firstName: true, lastName: true, accountCreatedAt: true } },
+  contact: { select: { id: true, organizationId: true, email: true, firstName: true, lastName: true, accountCreatedAt: true, stripeCustomerId: true } },
   profile: { include: { images: { include: { image: { include: { file: true } } }, orderBy: { displayOrder: 'asc' } } } },
   tier: true,
-  form: { select: { id: true, name: true, slug: true, kind: true, chargeTiming: true, feeMode: true } },
-  event: { select: { id: true, name: true, date: true, venue: { select: { organizationId: true, organization: { select: { id: true, name: true, logoUrl: true } } } } } },
+  form: { select: { id: true, name: true, slug: true, kind: true, chargeTiming: true, feeMode: true, paymentDueDays: true, overduePolicy: true } },
+  event: {
+    select: {
+      id: true,
+      name: true,
+      date: true,
+      venue: { select: { organizationId: true, organization: { select: { id: true, name: true, logoUrl: true, statementDescriptorSuffix: true, enabledPaymentMethods: true } } } },
+    },
+  },
   answers: { include: { question: true, image: { include: { file: true } } } },
   decisions: { orderBy: { createdAt: 'asc' } },
   refunds: { orderBy: { createdAt: 'asc' } },
@@ -98,7 +104,6 @@ class ApplicationService {
     if ((files.profilePhotos || []).length > MAX_PROFILE_PHOTOS) throw new ValidationError(`At most ${MAX_PROFILE_PHOTOS} profile photos`);
     const answers = this._validateAnswers(form.questions, body.answers || {}, files.answerPhotos || {});
 
-    const rawToken = randomBytes(24).toString('hex');
     const amounts = tier ? tierAmounts(tier.price, form, event, event.venue.organization) : null;
 
     const application = await prisma.$transaction(async (tx) => {
@@ -112,7 +117,9 @@ class ApplicationService {
         where: { formId: form.id, contactId: contactRecord.id, status: { in: ACTIVE_STATUSES } },
         select: { id: true, status: true },
       });
-      if (dup) throw new ConflictError('You already have an application on this form', { applicationId: dup.id, status: dup.status });
+      if (dup && dup.status !== 'DRAFT') throw new ConflictError('You already have an application on this form', { applicationId: dup.id, status: dup.status });
+      // An abandoned checkout (DRAFT) is replaced by the new submission.
+      if (dup) await tx.application.delete({ where: { id: dup.id } });
 
       const profile = await applicantProfileService.upsert(organizationId, contactRecord.id, profileData, tx);
       await applicantProfileService.addPhotos(profile.id, files.profilePhotos, tx);
@@ -128,7 +135,7 @@ class ApplicationService {
       }
 
       const isFree = form.kind === 'FREE';
-      return tx.application.create({
+      const created = await tx.application.create({
         data: {
           formId: form.id,
           eventId,
@@ -139,7 +146,7 @@ class ApplicationService {
           status: isFree ? 'SUBMITTED' : 'DRAFT',
           paymentStatus: isFree ? 'NOT_REQUIRED' : form.chargeTiming === 'APPROVAL' ? 'AWAITING_CARD' : 'NOT_REQUIRED',
           submittedAt: isFree ? new Date() : null,
-          statusTokenHash: hashToken(rawToken),
+          statusTokenHash: `pending-${Date.now()}-${Math.random()}`,
           ...(amounts && {
             subtotal: amounts.subtotal,
             platformFee: amounts.platformFee,
@@ -151,11 +158,13 @@ class ApplicationService {
           }),
           answers: { create: answerRows },
         },
-        include: DETAIL_INCLUDE,
+        select: { id: true },
       });
+      // The status token is derived from the id (applicationLinks.js); store its hash.
+      return tx.application.update({ where: { id: created.id }, data: { statusTokenHash: hashToken(statusToken(created.id)) }, include: DETAIL_INCLUDE });
     });
 
-    const statusUrl = await this.statusUrl(application, rawToken);
+    const statusUrl = await statusUrlFor(application);
     logger.info('Application submitted', {
       event: 'application_submitted',
       applicationId: application.id,
@@ -168,24 +177,52 @@ class ApplicationService {
     if (application.status === 'SUBMITTED') {
       // send() never throws; a failed email is logged and must not fail the submission.
       await applicationTemplateService.send(organizationId, 'RECEIVED', { ...application, statusUrl });
+      return { applicationId: application.id, statusUrl, next: 'done' };
     }
 
-    return { applicationId: application.id, statusUrl, next: application.status === 'SUBMITTED' ? 'done' : 'checkout' };
+    // PAID: the applicant continues to Stripe Checkout (card on file, or pay
+    // now). A Stripe failure leaves the DRAFT resumable from the status page.
+    let checkoutUrl = null;
+    try {
+      checkoutUrl = await applicationPaymentService.checkoutForSubmission(application, statusUrl);
+    } catch (error) {
+      logger.error('Application checkout session failed', { applicationId: application.id, error: error.message });
+    }
+    return { applicationId: application.id, statusUrl, next: 'checkout', checkoutUrl };
   }
 
   /** Guest status page: token must match; returns the applicant-facing view. */
   async statusView(applicationId, rawToken) {
-    if (!rawToken) throw new ForbiddenError('Missing token');
-    const application = await prisma.application.findUnique({ where: { id: applicationId }, include: DETAIL_INCLUDE });
-    if (!application || application.statusTokenHash !== hashToken(String(rawToken))) throw new NotFoundError('Application not found');
-    const ageDays = (Date.now() - application.createdAt.getTime()) / 86_400_000;
-    if (ageDays > STATUS_TOKEN_TTL_DAYS) throw new ForbiddenError('This link has expired; sign in to see your application');
+    const application = await this._requireByToken(applicationId, rawToken);
     return this._serializeApplicant(application);
   }
 
-  async statusUrl(application, rawToken) {
-    const { base } = await storefrontFor(application.organizationId);
-    return `${base}/events/${application.eventId}/apply/status/${application.id}?token=${rawToken}`;
+  /** Guest: a fresh Checkout URL for an unfinished (DRAFT) paid application. */
+  async resumeCheckout(applicationId, rawToken) {
+    const application = await this._requireByToken(applicationId, rawToken);
+    if (application.status !== 'DRAFT') throw new ConflictError('This application has already been submitted');
+    if (!paymentsEnabled()) throw new ConflictError('Paid applications are not available yet');
+    const statusUrl = await statusUrlFor(application);
+    return { url: await applicationPaymentService.checkoutForSubmission(application, statusUrl) };
+  }
+
+  /** Guest: pay an outstanding balance (APPROVED + PAYMENT_DUE). */
+  async payNow(applicationId, rawToken) {
+    const application = await this._requireByToken(applicationId, rawToken);
+    return { url: await applicationPaymentService.payNowUrl(application, await statusUrlFor(application)) };
+  }
+
+  async statusUrl(application) {
+    return statusUrlFor(application);
+  }
+
+  async _requireByToken(applicationId, rawToken) {
+    if (!rawToken) throw new ForbiddenError('Missing token');
+    const application = await prisma.application.findUnique({ where: { id: applicationId }, include: DETAIL_INCLUDE });
+    if (!application || !verifyStatusToken(applicationId, rawToken)) throw new NotFoundError('Application not found');
+    const ageDays = (Date.now() - application.createdAt.getTime()) / 86_400_000;
+    if (ageDays > STATUS_TOKEN_TTL_DAYS) throw new ForbiddenError('This link has expired; sign in to see your application');
+    return application;
   }
 
   // ---------------------------------------------------------------------------
@@ -207,6 +244,20 @@ class ApplicationService {
     return this._serializeApplicant(application);
   }
 
+  /** Buyer: pay-now Checkout URL for an outstanding balance. */
+  async payNowForContact(organizationId, contactId, applicationId) {
+    const application = await prisma.application.findFirst({ where: { id: applicationId, organizationId, contactId }, include: DETAIL_INCLUDE });
+    if (!application || application.status === 'DRAFT') throw new NotFoundError('Application not found');
+    return { url: await applicationPaymentService.payNowUrl(application, await statusUrlFor(application)) };
+  }
+
+  /** Buyer: replace the card on file (setup-mode Checkout). */
+  async updateCardForContact(organizationId, contactId, applicationId) {
+    const application = await prisma.application.findFirst({ where: { id: applicationId, organizationId, contactId }, include: DETAIL_INCLUDE });
+    if (!application || application.status === 'DRAFT') throw new NotFoundError('Application not found');
+    return { url: await applicationPaymentService.updateCardUrl(application, await statusUrlFor(application)) };
+  }
+
   /** Applicants may withdraw while the organizer has not decided. */
   async withdrawByApplicant(organizationId, contactId, applicationId) {
     const application = await prisma.application.findFirst({ where: { id: applicationId, organizationId, contactId }, include: DETAIL_INCLUDE });
@@ -214,6 +265,7 @@ class ApplicationService {
     if (!['SUBMITTED', 'WAITLISTED'].includes(application.status)) {
       throw new ConflictError('Only submitted or waitlisted applications can be withdrawn; contact the organizer otherwise');
     }
+    if (application.paymentStatus === 'PROCESSING') throw new ConflictError('A payment is in progress; try again in a moment');
     const updated = await prisma.$transaction(async (tx) => {
       await this._releaseCapacity(tx, application);
       return tx.application.update({
@@ -305,7 +357,10 @@ class ApplicationService {
 
   /**
    * Organizer decision. Approving a tiered application takes a capacity slot
-   * atomically; a full tier returns 409 with a Waitlist suggestion.
+   * atomically; a full tier returns 409 with a Waitlist suggestion. Approving
+   * a card-on-file application reserves the slot, then charges the saved card
+   * off-session (phase 2): PAID confirms the slot, a decline leaves the
+   * application APPROVED + PAYMENT_DUE with a pay-now link.
    *
    * @param {{ decision: 'APPROVE'|'REJECT'|'WAITLIST'|'WITHDRAW', note?: string, message?: { subject: string, body: string }|null, sendEmail?: boolean, byUserId: string }} input
    */
@@ -316,17 +371,30 @@ class ApplicationService {
     const note = input.note ? String(input.note).slice(0, 5000) : null;
     const override = this._validateMessage(input.message);
 
-    const updated = await prisma.$transaction(async (tx) => {
+    const { updated, charge } = await prisma.$transaction(async (tx) => {
       const rows = await tx.$queryRaw`SELECT * FROM "Application" WHERE "id" = ${applicationId} AND "eventId" = ${eventId} FOR UPDATE`;
       const application = rows[0];
       if (!application || application.status === 'DRAFT') throw new NotFoundError('Application not found');
       if (!spec.from.includes(application.status)) {
         throw new ConflictError(`Cannot ${input.decision.toLowerCase()} an application that is ${application.status.toLowerCase()}`);
       }
+      if (application.paymentStatus === 'PROCESSING') throw new ConflictError('A payment is in progress for this application; try again in a moment');
 
       const data = { status: spec.to, decidedAt: new Date(), decidedById: input.byUserId };
+      let chargeNow = false;
       if (spec.to === 'APPROVED') {
-        if (application.tierId) {
+        if (application.paymentStatus === 'AWAITING_CARD') throw new ConflictError('The applicant has not saved a card yet');
+        if (application.paymentStatus === 'CARD_ON_FILE') {
+          if (!paymentsEnabled()) throw new ConflictError('Application payments are not enabled');
+          // Hold the slot while the charge is in flight; PAID moves it to approved.
+          if (application.tierId) {
+            await this._takeCapacity(tx, application.tierId, 'RESERVED');
+            data.capacitySlot = 'RESERVED';
+          }
+          data.paymentStatus = 'PROCESSING';
+          data.chargeAttempts = application.chargeAttempts + 1;
+          chargeNow = true;
+        } else if (application.tierId) {
           await this._takeCapacity(tx, application.tierId, 'APPROVED');
           data.capacitySlot = 'APPROVED';
         }
@@ -339,11 +407,12 @@ class ApplicationService {
         data.withdrawReason = note;
       }
 
-      return tx.application.update({
+      const row = await tx.application.update({
         where: { id: applicationId },
         data: { ...data, decisions: { create: { action: spec.action, byUserId: input.byUserId, note } } },
         include: DETAIL_INCLUDE,
       });
+      return { updated: row, charge: chargeNow };
     });
 
     logger.info('Application decided', {
@@ -354,13 +423,61 @@ class ApplicationService {
       byUserId: input.byUserId,
     });
 
-    if (input.sendEmail !== false) {
-      const sent = await applicationTemplateService.send(organizationId, spec.action, updated, { override });
+    let action = spec.action;
+    let payNowUrl = null;
+    if (charge) {
+      const outcome = await applicationPaymentService.chargeOnApproval(applicationId);
+      if (outcome === 'PAYMENT_DUE') {
+        action = 'PAYMENT_DUE';
+        payNowUrl = await statusUrlFor(updated);
+      } else if (outcome === 'PROCESSING') {
+        // Card charge still settling: the webhook sends the approval email.
+        action = null;
+      }
+    }
+
+    if (input.sendEmail !== false && action) {
+      const current = action === spec.action ? updated : await prisma.application.findUnique({ where: { id: applicationId }, include: DETAIL_INCLUDE });
+      const statusUrl = await statusUrlFor(current);
+      const sent = await applicationTemplateService.send(organizationId, action, { ...current, statusUrl }, { override: action === spec.action ? override : null, payNowUrl: payNowUrl || statusUrl });
       if (sent) {
         const decision = updated.decisions[updated.decisions.length - 1];
         await prisma.applicationDecision.update({ where: { id: decision.id }, data: { emailSubject: sent.subject, emailBody: sent.body } }).catch(() => {});
       }
     }
+    return this.get(eventId, applicationId, organizationId);
+  }
+
+  /**
+   * Organizer: retry the saved card for an APPROVED + PAYMENT_DUE application
+   * (after the applicant updated their card, for example).
+   */
+  async retryCharge(eventId, applicationId, organizationId) {
+    await applicationFormService.requireEvent(eventId, organizationId);
+    if (!paymentsEnabled()) throw new ConflictError('Application payments are not enabled');
+    await prisma.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw`SELECT * FROM "Application" WHERE "id" = ${applicationId} AND "eventId" = ${eventId} FOR UPDATE`;
+      const application = rows[0];
+      if (!application || application.status === 'DRAFT') throw new NotFoundError('Application not found');
+      if (application.status !== 'APPROVED' || application.paymentStatus !== 'PAYMENT_DUE') throw new ConflictError('Only approved applications with a payment due can be charged');
+      if (!application.stripePaymentMethodId) throw new ConflictError('No card on file; ask the applicant to pay from their status page');
+      await tx.application.update({ where: { id: applicationId }, data: { paymentStatus: 'PROCESSING', chargeAttempts: application.chargeAttempts + 1 } });
+    });
+    const outcome = await applicationPaymentService.chargeOnApproval(applicationId);
+    if (outcome === 'PAID') {
+      const current = await prisma.application.findUnique({ where: { id: applicationId }, include: DETAIL_INCLUDE });
+      await applicationTemplateService.send(organizationId, 'APPROVED', { ...current, statusUrl: await statusUrlFor(current) });
+    }
+    return this.get(eventId, applicationId, organizationId);
+  }
+
+  /** Organizer (ADMIN): refund a paid application, partially or in full. */
+  async refund(eventId, applicationId, organizationId, { amount = null, reason = null, initiatedBy = null } = {}) {
+    await applicationFormService.requireEvent(eventId, organizationId);
+    const application = await prisma.application.findFirst({ where: { id: applicationId, eventId }, include: DETAIL_INCLUDE });
+    if (!application || application.status === 'DRAFT') throw new NotFoundError('Application not found');
+    if (reason !== null && reason !== undefined && (typeof reason !== 'string' || reason.length > 500)) throw new ValidationError('reason must be 500 characters or fewer');
+    await applicationPaymentService.refund(application, { amount, reason: reason ? reason.trim() || null : null, initiatedBy });
     return this.get(eventId, applicationId, organizationId);
   }
 
@@ -657,7 +774,16 @@ class ApplicationService {
     };
   }
 
+  _contact(c) {
+    return c ? { id: c.id, email: c.email, firstName: c.firstName, lastName: c.lastName, accountCreatedAt: c.accountCreatedAt } : null;
+  }
+
+  _refundedTotal(a) {
+    return (a.refunds || []).filter((r) => r.status === 'SUCCEEDED').reduce((sum, r) => sum + Number(r.amount), 0);
+  }
+
   _serializeAdmin(a) {
+    const refunded = this._refundedTotal(a);
     return {
       id: a.id,
       form: a.form,
@@ -665,7 +791,7 @@ class ApplicationService {
       status: a.status,
       paymentStatus: a.paymentStatus,
       capacitySlot: a.capacitySlot,
-      contact: a.contact,
+      contact: this._contact(a.contact),
       profile: applicantProfileService.serialize(a.profile),
       tier: a.tier ? { id: a.tier.id, name: a.tier.name, price: Number(a.tier.price) } : null,
       amounts: this._amounts(a),
@@ -678,10 +804,15 @@ class ApplicationService {
         paidAt: a.paidAt,
         paymentDueAt: a.paymentDueAt,
         overdue: a.overdue,
+        refundedTotal: refunded,
+        refundable: Math.max(0, Math.round((Number(a.applicantPays) - refunded) * 100) / 100),
+        stripeDashboardUrl: applicationPaymentService.dashboardPaymentUrl(a.stripePaymentIntentId),
+        canRefund: ['PAID', 'PARTIALLY_REFUNDED'].includes(a.paymentStatus) && Boolean(a.stripePaymentIntentId),
+        canRetryCharge: a.status === 'APPROVED' && a.paymentStatus === 'PAYMENT_DUE' && Boolean(a.stripePaymentMethodId),
       },
       answers: this._serializeAnswers(a),
       decisions: (a.decisions || []).map((d) => ({ id: d.id, action: d.action, byUserId: d.byUserId, note: d.note, emailSubject: d.emailSubject, emailBody: d.emailBody, createdAt: d.createdAt })),
-      refunds: (a.refunds || []).map((r) => ({ id: r.id, amount: Number(r.amount), status: r.status, reason: r.reason, createdAt: r.createdAt })),
+      refunds: (a.refunds || []).map((r) => ({ id: r.id, amount: Number(r.amount), status: r.status, reason: r.reason, stripeRefundId: r.stripeRefundId, initiatedBy: r.initiatedBy, createdAt: r.createdAt })),
       submittedAt: a.submittedAt,
       decidedAt: a.decidedAt,
       decidedById: a.decidedById,
@@ -710,7 +841,12 @@ class ApplicationService {
       boothLabel: a.boothLabel,
       submittedAt: a.submittedAt,
       decidedAt: a.decidedAt,
-      canWithdraw: ['SUBMITTED', 'WAITLISTED'].includes(a.status),
+      paidAt: a.paidAt,
+      refundedTotal: this._refundedTotal(a),
+      canWithdraw: ['SUBMITTED', 'WAITLISTED'].includes(a.status) && a.paymentStatus !== 'PROCESSING',
+      canResume: a.status === 'DRAFT' && a.form.kind === 'PAID',
+      canPay: a.status === 'APPROVED' && a.paymentStatus === 'PAYMENT_DUE',
+      canUpdateCard: ['SUBMITTED', 'WAITLISTED', 'APPROVED'].includes(a.status) && ['CARD_ON_FILE', 'PAYMENT_DUE'].includes(a.paymentStatus),
     };
   }
 }

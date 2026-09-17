@@ -11,7 +11,7 @@ import { validateUpdateAttendee } from '../validators/adminValidators.js';
 import { validateUpdateBusinessDetails } from '../validators/organizationValidators.js';
 import { validateCreateOrganizationPerson } from '../validators/organizationPersonValidators.js';
 import { validateTaxRegionParams, validateUpsertTaxRegion, validateUpdateTaxSettings, validateTaxReportQuery } from '../validators/taxValidators.js';
-import { validateFormBody, validateTierBody, validateQuestionBody, validateDecisionBody, validateBulkBody, validateTemplateBody } from '../validators/applicationValidators.js';
+import { validateFormBody, validateTierBody, validateQuestionBody, validateDecisionBody, validateBulkBody, validateTemplateBody, validateRefundBody } from '../validators/applicationValidators.js';
 import { validateUpdatePaymentSettings, validateUpdatePayoutSettings } from '../validators/paymentValidators.js';
 import organizationService from '../../services/OrganizationService.js';
 import organizationPersonService from '../../services/OrganizationPersonService.js';
@@ -415,6 +415,13 @@ router.post('/events/:eventId/applications/:applicationId/preview', wrap(async (
 }));
 router.post('/events/:eventId/applications/:applicationId/decision', validateDecisionBody, wrap(async (req, res) => {
   res.json(await applicationService.decide(req.params.eventId, req.params.applicationId, await scopedOrgFor(req), { ...req.body, byUserId: req.user.id }));
+}));
+// Phase 2: retry the saved card (organizer+), refund (admin)
+router.post('/events/:eventId/applications/:applicationId/charge', wrap(async (req, res) => {
+  res.json(await applicationService.retryCharge(req.params.eventId, req.params.applicationId, await scopedOrgFor(req)));
+}));
+router.post('/events/:eventId/applications/:applicationId/refund', requireAdmin, validateRefundBody, wrap(async (req, res) => {
+  res.json(await applicationService.refund(req.params.eventId, req.params.applicationId, await scopedOrgFor(req), { ...req.body, initiatedBy: req.user.id }));
 }));
 
 // Templates (Settings › Applications)

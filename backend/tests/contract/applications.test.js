@@ -254,7 +254,7 @@ describe('Applications contract (spec 011 phase 1)', () => {
         .attach(`answer:${q['Press badge photo']}`, image, 'badge.png');
       expect(res.status).toBe(201);
       expect(res.body).toMatchObject({ next: 'done' });
-      expect(res.body.statusUrl).toMatch(new RegExp(`/events/${eventId}/apply/status/${res.body.applicationId}\\?token=[a-f0-9]{48}$`));
+      expect(res.body.statusUrl).toMatch(new RegExp(`/events/${eventId}/apply/status/${res.body.applicationId}\\?token=[a-f0-9]{64}$`));
       statusUrl = res.body.statusUrl;
       applicationId = res.body.applicationId;
 

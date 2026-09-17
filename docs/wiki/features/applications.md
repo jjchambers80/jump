@@ -1,11 +1,11 @@
 # Applications
 
-**Status**: Implemented — phase 1 (FREE forms end to end; PAID forms configurable but cannot open) 2026-09-17. Phase 2 (card on file, charge on approval, pay-now, refunds) pending behind `APPLICATIONS_PAYMENTS_ENABLED`. Spec: `specs/011-applications/`.
+**Status**: Implemented — phase 1 (FREE forms end to end) and phase 2 (card on file at submission, off-session charge at approval, pay-now, refunds, overdue sweep) 2026-09-17. Paid forms run behind `APPLICATIONS_PAYMENTS_ENABLED`. Spec: `specs/011-applications/`.
 **Last Updated**: 2026-09-17
 
 ## Overview
 
-Per-event **application forms** for people who are not ticket buyers: vendors and sponsors (PAID forms with priced, capacity-limited tiers) and press, content creators, panelists (FREE forms). Applicants fill in a business profile (reused across the organization's events), answer the organizer's questions (10 types incl. photo upload), and get a status page link by email. Organizers review in an admin list, **approve / reject / waitlist / withdraw** with a templated, editable email, keep notes and a booth label, bulk-act on free forms, and export CSV. Capacity on PAID tiers is consumed by **approval**, never by submission, so waitlisting works. Review `status` and `paymentStatus` are independent columns; money moves in phase 2.
+Per-event **application forms** for people who are not ticket buyers: vendors and sponsors (PAID forms with priced, capacity-limited tiers) and press, content creators, panelists (FREE forms). Applicants fill in a business profile (reused across the organization's events), answer the organizer's questions (10 types incl. photo upload), and get a status page link by email. Organizers review in an admin list, **approve / reject / waitlist / withdraw** with a templated, editable email, keep notes and a booth label, bulk-act on free forms, and export CSV. Capacity on PAID tiers is consumed by **approval**, never by submission, so waitlisting works. Review `status` and `paymentStatus` are independent columns. PAID forms save the applicant's card at submission (or take payment up front) and charge the saved card **only when approved**; a decline leaves the application approved with a pay-now link and a due date, and the slot is recycled if it lapses.
 
 Derived from the 2026-09-15 Eventeny organizer interview (`docs/research/`).
 
@@ -18,20 +18,28 @@ Derived from the 2026-09-15 Eventeny organizer interview (`docs/research/`).
 | `backend/src/services/ApplicationFormService.js` | Forms / tiers / questions CRUD with value validation, public read shape, `tierAmounts` (fee mode PASS/ABSORB), acceptance window, `paymentsEnabled()` |
 | `backend/src/services/ApplicantProfileService.js` | Profile upsert per org + contact, photos via `ImageService` (`usageType: applicant_profile`) |
 | `backend/src/services/ApplicationTemplateService.js` | Templates (defaults, edit, reset), `renderTemplate` (`{{field}}`, `{{#section}}…{{/section}}`), send via `EmailService.sendApplicationMessage` |
-| `backend/src/services/ApplicationService.js` | Submit (JSON or multipart), status token, applicant views, organizer list/summary/detail/notes/preview/decide/bulk/export, capacity |
-| `backend/src/api/routes/applications.js` | Public routes (forms, submit, status) |
+| `backend/src/services/ApplicationService.js` | Submit (JSON or multipart), applicant views, resume / pay-now, organizer list/summary/detail/notes/preview/decide/retry charge/refund/bulk/export, capacity |
+| `backend/src/services/ApplicationPaymentService.js` | Stripe: customer per contact, setup / payment / update-card Checkout sessions, off-session charge at approval (Connect routing via `checkoutOptionsFor`), webhook handlers, refunds, overdue sweep |
+| `backend/src/services/applicationLinks.js` | Derived guest status token (HMAC of the id under `AUTH_SECRET`) + `statusUrlFor` |
+| `backend/src/services/stripeRefund.js` | `createStripeRefund` shared by `RefundService` (orders) and applications |
+| `backend/src/api/routes/applications.js` | Public routes (forms, submit, status, resume, pay) |
+| `backend/src/api/routes/webhooks.js` | `POST /webhooks/stripe` dispatches events with `metadata.applicationId` to `ApplicationPaymentService.handleEvent` before the order switch |
 | `backend/src/api/routes/admin.js` (Applications block), `routes/buyerAuth.js` (Applications block), `validators/applicationValidators.js` | Admin + buyer routes |
 | `frontend/src/lib/applications.ts` | Shared types, labels, helpers |
 | `frontend/src/app/events/[eventId]/apply/*` | Public index, form, status page; `GetInvolved.tsx` on the event page |
 | `frontend/src/app/organizations/[orgId]/account/ApplicationsSection.tsx` + `frontend/src/app/api/buyer/me/applications*`, `applicant-profile` | Applicant account view (proxied through Next route handlers) |
-| `frontend/src/app/admin/events/[eventId]/applications/*` | Admin list, detail, `DecisionDialog`, forms list, form editor, `useApplicationsApi` |
+| `frontend/src/app/admin/events/[eventId]/applications/*` | Admin list, detail (payment card, retry charge, `RefundDialog`, Stripe link), `DecisionDialog`, forms list, form editor, `useApplicationsApi` |
 | `frontend/src/app/admin/settings/applications/page.tsx` | Settings › Applications (email templates) |
 
 ## Configuration
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `APPLICATIONS_PAYMENTS_ENABLED` | No (default off) | `true` lets PAID forms OPEN and accept card-on-file submissions (phase 2). Off: PAID forms stay configurable but `PATCH status=OPEN` → 409 and submissions → 409 |
+| `APPLICATIONS_PAYMENTS_ENABLED` | No (default off) | `true` lets PAID forms OPEN and accept submissions. Off: PAID forms stay configurable but `PATCH status=OPEN` → 409 and submissions → 409 |
+| `APPLICATION_SWEEP_INTERVAL_MS` | No (default 1 h) | How often `sweepOverdue` runs (first run 30 s after boot) |
+| `STRIPE_WEBHOOK_SECRET` | With Stripe | Same platform endpoint as orders; add `checkout.session.completed`, `payment_intent.succeeded`, `payment_intent.payment_failed`, `payment_intent.canceled`, `charge.refunded` to the endpoint's events |
+
+Application charges use the organization's Settings › Payments as-is (statement descriptor suffix, Connect destination when active) — nothing extra to configure.
 
 Photos use the existing image storage (bucket or local `uploads/`), max 6 profile photos + one per PHOTO question, 5 MB each, JPG/PNG/GIF/WebP.
 
@@ -46,7 +54,26 @@ Photos use the existing image storage (bucket or local `uploads/`), max 6 profil
 
 ### Submission
 
-`POST /events/:eventId/applications` — JSON, or multipart with `payload` (JSON string), `profilePhotos` (≤6) and `answer:<questionId>` files. Validates window, PAID flag, tier, contact, profile, every answer against its question type/options/required. In one transaction: `Contact` upsert (org + lowercased email, marketing opt-in), duplicate check (one active application per contact per form), profile upsert + photos, answers (PHOTO → `Image`), application row. FREE → `SUBMITTED` + RECEIVED email (awaited, never throws). PAID → `DRAFT` + `AWAITING_CARD` until phase 2 redirects to Stripe. Response `{ applicationId, statusUrl, next }`; `statusUrl` carries a random token whose sha256 is stored (`statusTokenHash`, 180-day TTL) for the guest status page.
+`POST /events/:eventId/applications` — JSON, or multipart with `payload` (JSON string), `profilePhotos` (≤6) and `answer:<questionId>` files. Validates window, PAID flag, tier, contact, profile, every answer against its question type/options/required. In one transaction: `Contact` upsert (org + lowercased email, marketing opt-in), duplicate check (one active application per contact per form), profile upsert + photos, answers (PHOTO → `Image`), application row. FREE → `SUBMITTED` + RECEIVED email (awaited, never throws). PAID → `DRAFT` + a Stripe Checkout URL (`next: 'checkout'`): **setup mode** for `chargeTiming: APPROVAL` (card saved, nothing charged), **payment mode** for `SUBMIT`. The response is `{ applicationId, statusUrl, next, checkoutUrl? }`. A new submission by the same contact replaces an abandoned DRAFT; `POST /applications/:id/resume?token=` mints a fresh session for one. The status token is **derived** — `HMAC-SHA256(AUTH_SECRET, "application-status:<id>")` — so every later email (decision, payment due) can carry a working link; `statusTokenHash` stores its sha256 and the page honours a 180-day TTL.
+
+### Card on file → charge at approval
+
+`checkout.session.completed` (mode `setup`) → `stripe.setupIntents.retrieve` → `stripePaymentMethodId` on the row, `Contact.stripeCustomerId`, `SUBMITTED` + `CARD_ON_FILE`, RECEIVED email. Approving such an application (inside the decision transaction) reserves the tier slot (`quantityReserved`), sets `PROCESSING`, bumps `chargeAttempts`, then after commit `ApplicationPaymentService.chargeOnApproval` creates a `PaymentIntent` — `off_session: true, confirm: true`, the saved customer + card, the snapshot `applicantPays` in cents, `statement_descriptor_suffix` / `transfer_data` / `application_fee_amount` from `PaymentSettingsService.checkoutOptionsFor(org, { fees: { subtotal: orgReceives }, lineItems })` (so the platform fee is exactly `applicantPays − orgReceives`), idempotency key `application:<id>:charge:<attempt>`. Outcomes:
+
+| Stripe result | Row | Email |
+|---|---|---|
+| `succeeded` | `PAID`, `paidAt`, slot reserved → approved | APPROVED (organizer's edited message honoured) |
+| `processing` | stays `PROCESSING`; UI polls | sent by the webhook (`payment_intent.succeeded` → APPROVED, `payment_failed` → PAYMENT_DUE) |
+| card error (`StripeCardError`, `authentication_required`) | `PAYMENT_DUE`, `paymentDueAt = now + form.paymentDueDays`, slot stays reserved | PAYMENT_DUE with the pay-now link |
+| other error (network) | back to `CARD_ON_FILE`, slot reserved, 400 to the organizer | none — retry |
+
+`POST …/applications/:id/charge` (organizer+) retries the saved card for an `APPROVED + PAYMENT_DUE` row (e.g. after the applicant updated the card). Pay-now (`POST /applications/:id/pay?token=`, `POST /buyer/me/applications/:id/pay`) opens a payment-mode Checkout for the snapshot amount; its `checkout.session.completed` marks `PAID` and confirms the slot. `POST /buyer/me/applications/:id/update-card` opens a setup-mode session that only replaces `stripePaymentMethodId`. Other decisions are refused (409) while a charge is `PROCESSING`.
+
+### Refunds and the overdue sweep
+
+`POST …/applications/:id/refund { amount?, reason? }` (ADMIN) — partial or the remaining balance, `ApplicationRefund` row, Stripe refund via `createStripeRefund` with `reverse_transfer` + `refund_application_fee` when the charge was routed to a connected account; `paymentStatus` becomes `PARTIALLY_REFUNDED` / `REFUNDED`, review status untouched (withdraw separately to free the slot). Refunds made in the Stripe dashboard arrive as `charge.refunded` and are reconciled by `stripeRefundId`.
+
+`sweepOverdue()` (hourly, `unref`) finds `APPROVED + PAYMENT_DUE` rows past `paymentDueAt`: form policy `WITHDRAW` → `WITHDRAWN` by `SYSTEM` (`payment_overdue`), slot released, WITHDRAWN email; `HOLD` → `overdue = true`, shown in red on the admin detail; organizer decides.
 
 ### Decisions
 
@@ -58,7 +85,7 @@ Per organization per action (`RECEIVED`, `APPROVED`, `REJECTED`, `WAITLISTED`, `
 
 ### Applicant views
 
-Guest: `GET /applications/:id/status?token=`. Signed in (buyer magic link, spec 007): `GET /buyer/me/applications[/:id]`, `POST …/withdraw` (SUBMITTED/WAITLISTED only), `GET/PATCH /buyer/me/applicant-profile`, `DELETE …/photos/:imageId`. The account page shows an Applications section above Orders when any exist.
+Guest: `GET /applications/:id/status?token=` (+ `POST …/resume`, `POST …/pay`). The status page reads `?checkout=submitted|paid|card_updated|cancelled` on return from Stripe and polls briefly until the webhook lands. Signed in (buyer magic link, spec 007): `GET /buyer/me/applications[/:id]`, `POST …/withdraw` (SUBMITTED/WAITLISTED only), `POST …/pay`, `POST …/update-card`, `GET/PATCH /buyer/me/applicant-profile`, `DELETE …/photos/:imageId`. Applicant payloads carry `canWithdraw`, `canResume`, `canPay`, `canUpdateCard`, `refundedTotal`.
 
 ### Roles
 
@@ -70,31 +97,39 @@ ORGANIZER+ views forms/applications and decides; ADMIN/SYSTEM_ADMIN configures f
 |--------|------|------|
 | GET | `/events/:eventId/applications/forms`, `/forms/:slug` | public |
 | POST | `/events/:eventId/applications` | public, rate-limited (30/h per client IP) |
-| GET | `/applications/:id/status?token=` | token |
+| GET | `/applications/:id/status?token=`; POST `…/resume`, `…/pay` (rate-limited) | token |
 | GET/PATCH | `/buyer/me/applicant-profile`; DELETE `…/photos/:imageId` | buyer |
-| GET | `/buyer/me/applications`, `/buyer/me/applications/:id`; POST `…/withdraw` | buyer |
+| GET | `/buyer/me/applications`, `/buyer/me/applications/:id`; POST `…/withdraw`, `…/pay`, `…/update-card` | buyer |
 | GET/POST | `/admin/events/:eventId/application-forms` | organizer+ / admin |
 | GET/PATCH/DELETE | `…/application-forms/:formId` | organizer+ / admin / admin |
 | POST/PATCH/DELETE | `…/application-forms/:formId/tiers[/:tierId]` | admin |
 | POST/PATCH/DELETE | `…/application-forms/:formId/questions[/:questionId]`, PATCH `…/questions/reorder` | admin |
 | GET | `/admin/events/:eventId/applications` (`form,status,payment,tier,q,sort,page,pageSize`), `…/summary`, `…/export.csv` | organizer+ |
 | GET/PATCH | `…/applications/:id` (PATCH `boothLabel`, `internalNote`) | organizer+ |
-| POST | `…/applications/:id/preview`, `…/applications/:id/decision`, `…/applications/bulk` | organizer+ |
+| POST | `…/applications/:id/preview`, `…/applications/:id/decision`, `…/applications/:id/charge`, `…/applications/bulk` | organizer+ |
+| POST | `…/applications/:id/refund` `{ amount?, reason? }` | admin |
+| POST | `/webhooks/stripe` — events whose `metadata.applicationId` is set (Checkout, SetupIntent, PaymentIntent) and `charge.refunded` for a known intent | Stripe |
 | GET/PUT/DELETE | `/admin/settings/application-templates[/:action]` | organizer+ / admin / admin |
 
 ## Testing
 
 - `backend/tests/contract/applications.test.js` — 21 cases: forms RBAC + validation, PAID cannot open, tier/question edits, tenant 404s, public read, submit validation, multipart submit with a real PNG, duplicates, status token, decisions + state machine, 3 concurrent approvals on a 1-slot tier, bulk, CSV, templates, buyer views.
-- `backend/tests/unit/applicationFormService.test.js`, `applicationTemplates.test.js` — fee modes, slug, acceptance, rendering of every default template.
+- `backend/tests/contract/applicationPayments.test.js` — 16 cases with Stripe mocked: PAID form opens, setup-mode session + customer, resume / DRAFT replacement, setup webhook → CARD_ON_FILE + RECEIVED, approve → PaymentIntent params + idempotency key → PAID, decline → PAYMENT_DUE + email + due date, pay-now session + paid webhook, retry charge + outage path, 2 concurrent approvals on a 1-slot tier, SUBMIT timing, refunds (RBAC, partial/full, Stripe flags, `charge.refunded` idempotent), Connect destination + fee + `reverse_transfer`, ticket sessions never dispatched to applications, `payment_failed` idempotent + withdraw releases the slot, overdue sweep WITHDRAW/HOLD, buyer pay / update-card.
+- `backend/tests/unit/applicationFormService.test.js`, `applicationTemplates.test.js`, `applicationPayments.test.js` — fee modes, slug, acceptance, template rendering, derived token, `applicationFeeCents` identity per fee mode, webhook dispatch predicate.
 - `frontend/e2e/applications.spec.ts` — event page strip, apply index, full press application → status page, bad token, admin list filters/search/bulk bar, detail + notes + waitlist with edited email + history, forms create/edit/add question, ORGANIZER read-only, templates save; axe clean.
+- `frontend/e2e/applications-payments.spec.ts` — status page pay-now → `checkout=paid` notice, resume an abandoned checkout, ADMIN partial + full refund from the payment card, ORGANIZER retry charge and no refund button.
 
 ## Gotchas
 
-- **PAID forms cannot open until phase 2** — the API returns 409 on `status: OPEN`; the editor shows the warning. Tiers, fee mode and questions can be prepared now.
+- **PAID forms need `APPLICATIONS_PAYMENTS_ENABLED=true`** — otherwise the API returns 409 on `status: OPEN` and the editor shows the warning. Tiers, fee mode and questions can be prepared before flipping it.
+- **Synchronous `succeeded` marks PAID immediately**; the later `payment_intent.succeeded` webhook is a no-op (guarded on `paymentStatus`). Without a webhook (local dev) only the `processing` path and Checkout returns need one — run `stripe listen --forward-to localhost:3000/webhooks/stripe`.
+- **Stripe Checkout `mode: setup` returns a SetupIntent id only**; the handler retrieves it for the payment method. In tests `setupIntents.retrieve` is mocked.
+- **Only cards are saved** (`payment_method_types: ['card']` on setup and the off-session charge); pay-now and pay-at-submission sessions use the organization's enabled methods like ticket checkout.
+- **A 3DS-required decline (`authentication_required`) becomes PAYMENT_DUE**; the hosted pay-now page handles the challenge.
 - **Submissions never take capacity.** `remaining` on a tier only drops on approval; the public form shows "Full — you can still apply for the waitlist".
 - **The RECEIVED email is awaited** in `submit` so tests and callers see it; `ApplicationTemplateService.send` swallows transport errors (logged as `application_email_failed`).
 - **Photos inside the submit transaction**: `ImageService.processUpload` uses its own transaction, so a failed submission can leave an unreferenced `Image`; `POST /admin/images/cleanup` (existing) removes orphans.
-- **Status token is single-purpose**: it only reads the applicant view; withdrawing or editing needs the buyer session.
+- **Status token is single-purpose and derived from `AUTH_SECRET`**: it reads the applicant view and drives resume / pay-now; withdrawing, updating the card or editing the profile needs the buyer session. Rotating `AUTH_SECRET` invalidates every emailed status link.
 - **Storefront hosts**: `/events/:id/apply/*` passes through the tenant-host middleware like the event page; the buyer account section works on `/account` there.
 - Frontend `e2e` runs of unrelated specs (`theme-modes`, `admin-access`, `wcag-contrast`) fail on a clean tree in this environment too — not related to this feature.
 
@@ -102,5 +137,7 @@ ORGANIZER+ views forms/applications and decides; ADMIN/SYSTEM_ADMIN configures f
 
 - [Buyer Accounts](buyer-accounts.md) — applicant sign-in and account page
 - [Fee Calculation](fee-calculation.md) — fee mode math
-- [Connect Payouts](connect-payouts.md) — where application charges route in phase 2
+- [Connect Payouts](connect-payouts.md) — application charges become destination charges the same way ticket orders do
+- [Payments Settings](payments-settings.md) — statement descriptor suffix and enabled methods apply to application checkouts
+- [Refunds](refunds.md) — order/ticket refunds share `stripeRefund.js`
 - [Email Notifications](email-notifications.md) — transport and branding shell

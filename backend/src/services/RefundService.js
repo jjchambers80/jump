@@ -3,7 +3,7 @@
 // Creates append-only Refund ledger records, voids tickets, restores inventory
 
 import { prisma } from '@jump/db';
-import stripe from '../config/stripe.js';
+import { createStripeRefund } from './stripeRefund.js';
 import logger from '../utils/logger.js';
 import { NotFoundError, ConflictError, ValidationError } from '../middleware/errorHandler.js';
 
@@ -431,22 +431,7 @@ class RefundService {
    *   buyer is made whole and the platform eats only Stripe's processing cost.
    */
   async _createStripeRefund(paymentIntentId, amount, reason, { connected = false } = {}) {
-    try {
-      return await stripe.refunds.create({
-        payment_intent: paymentIntentId,
-        amount: Math.round(amount * 100), // Stripe uses cents
-        ...(reason && { reason: 'requested_by_customer' }),
-        ...(connected && { reverse_transfer: true, refund_application_fee: true }),
-        metadata: { source: 'jump-platform' },
-      });
-    } catch (err) {
-      logger.error('Stripe refund failed', {
-        paymentIntentId,
-        amount,
-        error: err.message,
-      });
-      throw new ValidationError(`Stripe refund failed: ${err.message}`);
-    }
+    return createStripeRefund({ paymentIntentId, amount, reason, connected });
   }
 
   _formatRefund(refund, order) {

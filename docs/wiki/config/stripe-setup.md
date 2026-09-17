@@ -62,7 +62,7 @@ Use any future expiry date and any 3-digit CVC.
 
 1. Go to Stripe Dashboard → Developers → Webhooks
 2. Add endpoint: `https://your-backend-domain.up.railway.app/webhooks/stripe`
-3. Select events: `checkout.session.completed`, `checkout.session.expired`
+3. Select events: `checkout.session.completed`, `checkout.session.expired`, `charge.refunded`; with application payments (spec 011, `APPLICATIONS_PAYMENTS_ENABLED`) also `payment_intent.succeeded`, `payment_intent.payment_failed`, `payment_intent.canceled`
 4. Copy the signing secret to `STRIPE_WEBHOOK_SECRET` on Railway
 
 ### Connect Webhook Configuration (spec 010 phase 2)
@@ -84,8 +84,10 @@ Tax rates are fetched via the Stripe Tax API using venue postal codes (tax code 
 
 | Event | Action |
 |-------|--------|
-| `checkout.session.completed` | Mark order COMPLETED, create tickets, send confirmation email |
-| `checkout.session.expired` | Mark order FAILED, release reserved tier inventory |
+| `checkout.session.completed` | Mark order COMPLETED, create tickets, send confirmation email. With `metadata.applicationId`: card on file (setup mode) or application PAID (payment mode) — see [Applications](../features/applications.md) |
+| `checkout.session.expired` | Mark order FAILED, release reserved tier inventory (application DRAFTs stay resumable) |
+| `payment_intent.succeeded` / `payment_failed` / `canceled` | Application off-session charge outcome (`metadata.applicationId` only; ticket orders ignore these) |
+| `charge.refunded` | Reconcile refunds made in the dashboard — orders via `RefundService`, applications via `ApplicationPaymentService` |
 
 ## Key Files
 

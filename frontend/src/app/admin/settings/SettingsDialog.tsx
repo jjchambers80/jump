@@ -11,6 +11,8 @@ interface SettingsDialogProps {
   saving: boolean;
   /** Disable Save beyond the dirty/saving checks (e.g. a required field is empty). */
   saveDisabled?: boolean;
+  /** Allow Save with nothing changed (an action dialog whose defaults are the action, e.g. a full refund). */
+  submitWhenClean?: boolean;
   /** Submit button text (default "Save"; "Next" for multi-step flows). */
   submitLabel?: string;
   savingLabel?: string;
@@ -36,6 +38,7 @@ export default function SettingsDialog({
   dirty,
   saving,
   saveDisabled = false,
+  submitWhenClean = false,
   submitLabel = 'Save',
   savingLabel = 'Saving…',
   childActive = false,
@@ -132,7 +135,7 @@ export default function SettingsDialog({
               </button>
               <button
                 type="submit"
-                disabled={saving || !dirty || saveDisabled}
+                disabled={saving || (!dirty && !submitWhenClean) || saveDisabled}
                 className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {saving ? savingLabel : submitLabel}
