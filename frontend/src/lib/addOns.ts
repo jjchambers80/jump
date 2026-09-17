@@ -51,6 +51,28 @@ export interface OrderAddOnLine {
   refundedAt: string | null;
 }
 
+/** `GET /organizations/:orgId/events/:eventId/add-ons/sales` (spec 012 phase 3). */
+export interface AddOnSalesRow {
+  id: string;
+  name: string;
+  scope: 'TICKET' | 'APPLICATION' | 'BOTH';
+  price: number;
+  isActive: boolean;
+  quantityTotal: number | null;
+  sold: number;
+  reserved: number;
+  remaining: number | null;
+  /** Listed revenue (unit price × quantity) of sold lines, both sources. */
+  revenue: number;
+  orders: { quantity: number; revenue: number; lines: number };
+  applications: { quantity: number; revenue: number; lines: number; held: number; pending: number };
+}
+
+export interface AddOnSales {
+  addOns: AddOnSalesRow[];
+  totals: { sold: number; reserved: number; revenue: number };
+}
+
 export interface AddOnCartLine {
   addOnId: string;
   quantity: number;

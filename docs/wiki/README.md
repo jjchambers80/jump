@@ -16,6 +16,7 @@ Generated and maintained by running `/doc-feature` after completing feature work
 - [Custom Domains](features/custom-domains.md) — White-label storefront on an organization's own subdomain: CNAME + TXT verification, tenant-host middleware, per-org email/Stripe links
 
 - [Applications](features/applications.md) — Per-event vendor / sponsor (PAID tiers, capacity on approval) and press / panel (FREE) forms: applicant profiles + photos, questions, approve / reject / waitlist / withdraw with templated emails, bulk, CSV; card on file at submission, off-session charge at approval, pay-now, refunds, overdue sweep behind `APPLICATIONS_PAYMENTS_ENABLED`; saved views, CSV photo URLs, applicant profile self-service, price-changed note, organizer daily digest, event duplicate (spec 011)
+- [Add-ons](features/add-ons.md) — Optional products on ticket tiers (parking, VIP lounge) and application tiers (booth power, badges, tables): event-scoped `AddOn` with scope + tier attachments, per-item taxable fee math, PriceTier-style capacity, lines on `OrderAddOn` / `ApplicationAddOn`, approval reservation with sold-out 409, pre-payment line edits with `ADD_ONS_CHANGED` email, per-line refunds, scan hand-over, sales report + purchasers CSV on analytics (spec 012)
 
 ### Payments & Pricing
 - [Stripe Integration](features/stripe-integration.md) — Payment processing, webhooks, Checkout Sessions
