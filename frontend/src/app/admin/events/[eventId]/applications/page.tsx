@@ -8,6 +8,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import {
+  addOnSummary,
   DECISION_LABEL,
   formatDate,
   money,
@@ -48,7 +49,7 @@ function writeSavedViews(eventId: string, views: SavedView[]) {
     // Private mode or quota: views are a convenience, the URL still works.
   }
 }
-const viewKey = (q: Omit<ListQuery, 'page'>) => JSON.stringify({ form: q.form || '', status: q.status || '', payment: q.payment || '', q: q.q || '', sort: q.sort || '' });
+const viewKey = (q: Omit<ListQuery, 'page'>) => JSON.stringify({ form: q.form || '', status: q.status || '', payment: q.payment || '', addOn: q.addOn || '', q: q.q || '', sort: q.sort || '' });
 const select = 'rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100';
 const btn = 'rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
 
@@ -65,6 +66,7 @@ function ApplicationsListContent({ eventId }: { eventId: string }) {
       form: searchParams.get('form') || undefined,
       status: searchParams.get('status') || undefined,
       payment: searchParams.get('payment') || undefined,
+      addOn: searchParams.get('addOn') || undefined,
       q: searchParams.get('q') || undefined,
       sort: searchParams.get('sort') || undefined,
       page: Number(searchParams.get('page') || 1),
@@ -99,7 +101,7 @@ function ApplicationsListContent({ eventId }: { eventId: string }) {
   }, [eventId]);
   const { page: _page, ...currentFilters } = query;
   const activeView = views.find((v) => viewKey(v.query) === viewKey(currentFilters));
-  const hasFilters = Boolean(currentFilters.form || currentFilters.status || currentFilters.payment || currentFilters.q || currentFilters.sort);
+  const hasFilters = Boolean(currentFilters.form || currentFilters.status || currentFilters.payment || currentFilters.addOn || currentFilters.q || currentFilters.sort);
 
   const saveView = () => {
     const name = window.prompt('Name this view', activeView?.name || '')?.trim();
@@ -118,7 +120,7 @@ function ApplicationsListContent({ eventId }: { eventId: string }) {
     const v = views.find((x) => x.name === name);
     if (!v) return;
     setSearch(v.query.q || '');
-    setQuery({ form: v.query.form, status: v.query.status, payment: v.query.payment, q: v.query.q, sort: v.query.sort, page: 1 });
+    setQuery({ form: v.query.form, status: v.query.status, payment: v.query.payment, addOn: v.query.addOn, q: v.query.q, sort: v.query.sort, page: 1 });
   };
 
   const load = useCallback(async () => {
@@ -179,6 +181,12 @@ function ApplicationsListContent({ eventId }: { eventId: string }) {
   };
 
   const selectedPaid = (list?.data ?? []).some((r) => selected.has(r.id) && r.formKind === 'PAID');
+  // Application add-ons of the event (spec 012), deduped across forms, for the "has X" filter.
+  const addOnOptions = useMemo(() => {
+    const seen = new Map<string, { id: string; name: string }>();
+    for (const f of forms) for (const a of f.addOns ?? []) if (!seen.has(a.id)) seen.set(a.id, { id: a.id, name: a.name });
+    return [...seen.values()];
+  }, [forms]);
   const summary = list?.summary ?? {};
   const totalPages = list ? Math.max(1, Math.ceil(list.total / list.pageSize)) : 1;
 
@@ -222,6 +230,16 @@ function ApplicationsListContent({ eventId }: { eventId: string }) {
             </option>
           ))}
         </select>
+        {addOnOptions.length > 0 && (
+          <select aria-label="Add-on" value={query.addOn || ''} onChange={(e) => setQuery({ addOn: e.target.value || undefined })} className={select} data-testid="applications-add-on-filter">
+            <option value="">Any add-ons</option>
+            {addOnOptions.map((a) => (
+              <option key={a.id} value={a.id}>
+                Has {a.name}
+              </option>
+            ))}
+          </select>
+        )}
         <select aria-label="Sort" value={query.sort || ''} onChange={(e) => setQuery({ sort: e.target.value || undefined })} className={select}>
           <option value="">Newest first</option>
           <option value="submitted_asc">Oldest first</option>
@@ -298,6 +316,7 @@ function ApplicationsListContent({ eventId }: { eventId: string }) {
               <th className="px-3 py-2">Form</th>
               <th className="px-3 py-2">Status</th>
               <th className="px-3 py-2">Payment</th>
+              <th className="px-3 py-2">Add-ons</th>
               <th className="px-3 py-2">Submitted</th>
               <th className="px-3 py-2">Booth</th>
             </tr>
@@ -305,7 +324,7 @@ function ApplicationsListContent({ eventId }: { eventId: string }) {
           <tbody className="divide-y divide-gray-200 dark:divide-slate-700">
             {list?.data.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-gray-600 dark:text-slate-400">
+                <td colSpan={8} className="px-3 py-8 text-center text-gray-600 dark:text-slate-400">
                   No applications match. {forms.length === 0 && (
                     <Link href={`/admin/events/${eventId}/applications/forms`} className="text-indigo-600 hover:underline dark:text-indigo-300">
                       Create a form
@@ -344,6 +363,7 @@ function ApplicationsListContent({ eventId }: { eventId: string }) {
                     <span className="text-xs text-gray-500 dark:text-slate-400">—</span>
                   )}
                 </td>
+                <td className="px-3 py-2 text-xs text-gray-700 dark:text-slate-300" data-testid={`application-add-ons-${row.id}`}>{addOnSummary(row.addOns) || <span className="text-gray-400 dark:text-slate-500">—</span>}</td>
                 <td className="px-3 py-2 text-gray-700 dark:text-slate-300">{formatDate(row.submittedAt, true)}</td>
                 <td className="px-3 py-2 text-gray-700 dark:text-slate-300">{row.boothLabel ?? ''}</td>
               </tr>

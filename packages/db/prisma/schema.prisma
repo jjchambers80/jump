@@ -738,6 +738,7 @@ enum ApplicationAction {
   WAITLISTED
   WITHDRAWN
   PAYMENT_DUE
+  ADD_ONS_CHANGED // spec 012 phase 2: organizer edited the add-on lines before payment
 }
 
 enum WithdrawnBy {
@@ -1057,6 +1058,7 @@ model ApplicationAddOn {
   addOnId       String
   quantity      Int
   unitPrice     Decimal  @db.Decimal(10, 2) // listed price in the current snapshot
+  applicantPays Decimal  @default(0) @db.Decimal(10, 2) // this line's share of Application.applicantPays (fees + tax allocated)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

@@ -6,7 +6,7 @@
 
 import { useMemo } from 'react';
 import api from '@/services/api';
-import type { AdminApplication, AdminForm, ApplicationList, Decision, MessageTemplate, Question } from '@/lib/applications';
+import type { AddOnLineInput, AdminApplication, AdminForm, AdminTier, ApplicationList, Decision, MessageTemplate, Question } from '@/lib/applications';
 
 export interface DigestSettings {
   enabled: boolean;
@@ -18,6 +18,8 @@ export interface ListQuery {
   status?: string;
   payment?: string;
   tier?: string;
+  /** Spec 012: only applications with a line for this add-on. */
+  addOn?: string;
   q?: string;
   sort?: string;
   page?: number;
@@ -45,6 +47,7 @@ export function useApplicationsApi(eventId: string) {
       updateNotes: (id: string, body: { boothLabel?: string | null; internalNote?: string | null }) => api.patch<AdminApplication>(`${base}/applications/${id}`, body),
       retryCharge: (id: string) => api.post<AdminApplication>(`${base}/applications/${id}/charge`, {}),
       refund: (id: string, body: { amount?: number | null; reason?: string | null }) => api.post<AdminApplication>(`${base}/applications/${id}/refund`, body),
+      updateAddOns: (id: string, addOns: AddOnLineInput[]) => api.patch<AdminApplication>(`${base}/applications/${id}/add-ons`, { addOns }),
       exportUrl: (query: ListQuery) => `${base}/applications/export.csv${qs(query)}`,
       forms: () => api.get<{ data: AdminForm[] }>(`${base}/application-forms`),
       form: (formId: string) => api.get<AdminForm>(`${base}/application-forms/${formId}`),
@@ -54,6 +57,7 @@ export function useApplicationsApi(eventId: string) {
       addTier: (formId: string, body: Record<string, unknown>) => api.post(`${base}/application-forms/${formId}/tiers`, body),
       updateTier: (formId: string, tierId: string, body: Record<string, unknown>) => api.patch(`${base}/application-forms/${formId}/tiers/${tierId}`, body),
       deleteTier: (formId: string, tierId: string) => api.delete(`${base}/application-forms/${formId}/tiers/${tierId}`),
+      setTierAddOns: (formId: string, tierId: string, addOnIds: string[]) => api.put<AdminTier>(`${base}/application-forms/${formId}/tiers/${tierId}/add-ons`, { addOnIds }),
       addQuestion: (formId: string, body: Record<string, unknown>) => api.post<Question>(`${base}/application-forms/${formId}/questions`, body),
       updateQuestion: (formId: string, questionId: string, body: Record<string, unknown>) => api.patch<Question>(`${base}/application-forms/${formId}/questions/${questionId}`, body),
       removeQuestion: (formId: string, questionId: string) => api.delete<{ archived: boolean }>(`${base}/application-forms/${formId}/questions/${questionId}`),

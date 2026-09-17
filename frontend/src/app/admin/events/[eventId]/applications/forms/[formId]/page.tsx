@@ -1,6 +1,6 @@
 // Admin › Event › Applications › Form editor (spec 011): settings, tiers
-// (PAID) and questions. Each section saves on its own; the public preview
-// link opens the storefront form.
+// (PAID, with the add-ons each offers — spec 012) and questions. Each section
+// saves on its own; the public preview link opens the storefront form.
 'use client';
 
 import Link from 'next/link';
@@ -94,6 +94,7 @@ export default function FormEditorPage({ params }: { params: { eventId: string; 
               onAdd={(body) => run('Tier added.', () => api.addTier(form.id, body))}
               onUpdate={(tierId, body) => run('Tier saved.', () => api.updateTier(form.id, tierId, body))}
               onDelete={(tierId) => run('Tier deleted.', () => api.deleteTier(form.id, tierId))}
+              onSetAddOns={(tierId, addOnIds) => run('Add-ons saved.', () => api.setTierAddOns(form.id, tierId, addOnIds))}
             />
           )}
           <QuestionsCard
@@ -261,26 +262,44 @@ function TiersCard({
   onAdd,
   onUpdate,
   onDelete,
+  onSetAddOns,
 }: {
   form: AdminForm;
   canEdit: boolean;
   onAdd: (body: Record<string, unknown>) => Promise<void>;
   onUpdate: (tierId: string, body: Record<string, unknown>) => Promise<void>;
   onDelete: (tierId: string) => Promise<void>;
+  onSetAddOns: (tierId: string, addOnIds: string[]) => Promise<void>;
 }) {
   const [draft, setDraft] = useState({ name: '', price: '', quantityTotal: '' });
   const [editing, setEditing] = useState<string | null>(null);
   const [edit, setEdit] = useState({ name: '', description: '', price: '', quantityTotal: '', isActive: true });
+  const [editAddOnIds, setEditAddOnIds] = useState<string[]>([]);
+
+  // Spec 012: add-ons an organizer can toggle per tier are the restricted
+  // (non-allTiers) application add-ons; allTiers ones are shown as included.
+  const eventAddOns = form.addOns ?? [];
+  const restricted = eventAddOns.filter((a) => !a.allTiers);
+  const everywhere = eventAddOns.filter((a) => a.allTiers && a.isActive);
 
   const startEdit = (t: AdminTier) => {
     setEditing(t.id);
     setEdit({ name: t.name, description: t.description ?? '', price: String(t.price), quantityTotal: String(t.quantityTotal), isActive: t.isActive });
+    setEditAddOnIds((t.addOns ?? []).filter((a) => !a.allTiers).map((a) => a.id));
   };
 
   return (
     <div className={card} data-testid="form-tiers">
       <h2 className="text-base font-semibold text-gray-900 dark:text-white">Options and pricing</h2>
-      <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">Applicants pick one. Capacity is taken when you approve, so more people can apply than there are spots.</p>
+      <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">
+        Applicants pick one. Capacity is taken when you approve, so more people can apply than there are spots.
+        {eventAddOns.length === 0 && (
+          <>
+            {' '}Add-ons (power, badges, tables) are created on the{' '}
+            <Link href={`/admin/events/${form.eventId}/edit`} className="text-indigo-600 hover:underline dark:text-indigo-300">event page</Link>.
+          </>
+        )}
+      </p>
       <table className="mt-3 w-full text-sm">
         <thead className="text-left text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-400">
           <tr>
@@ -302,6 +321,8 @@ function TiersCard({
                     onSubmit={async (e) => {
                       e.preventDefault();
                       await onUpdate(t.id, { name: edit.name, description: edit.description || null, price: Number(edit.price), quantityTotal: Number(edit.quantityTotal), isActive: edit.isActive });
+                      const before = (t.addOns ?? []).filter((a) => !a.allTiers).map((a) => a.id).sort().join(',');
+                      if (restricted.length > 0 && before !== [...editAddOnIds].sort().join(',')) await onSetAddOns(t.id, editAddOnIds);
                       setEditing(null);
                     }}
                   >
@@ -316,6 +337,28 @@ function TiersCard({
                       <button type="submit" className={primary}>Save</button>
                       <button type="button" className={btn} onClick={() => setEditing(null)}>Cancel</button>
                     </div>
+                    {eventAddOns.length > 0 && (
+                      <fieldset className="sm:col-span-5" data-testid={`tier-add-ons-${t.id}`}>
+                        <legend className={labelClass}>Add-ons offered</legend>
+                        {everywhere.length > 0 && (
+                          <p className="text-xs text-gray-600 dark:text-slate-400">Included on every option: {everywhere.map((a) => a.name).join(', ')}</p>
+                        )}
+                        {restricted.length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+                            {restricted.map((a) => (
+                              <label key={a.id} className={`flex items-center gap-1 text-xs text-gray-700 dark:text-slate-300 ${a.isActive ? '' : 'opacity-60'}`}>
+                                <input
+                                  type="checkbox"
+                                  checked={editAddOnIds.includes(a.id)}
+                                  onChange={(e) => setEditAddOnIds(e.target.checked ? [...editAddOnIds, a.id] : editAddOnIds.filter((id) => id !== a.id))}
+                                />
+                                {a.name} ({money(a.price)}){!a.isActive && ' · inactive'}
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </fieldset>
+                    )}
                   </form>
                 </td>
               </tr>
@@ -325,6 +368,11 @@ function TiersCard({
                   {t.name}
                   {!t.isActive && <span className="ml-2 text-xs text-gray-500">inactive</span>}
                   {t.description && <div className="text-xs font-normal text-gray-600 dark:text-slate-400">{t.description}</div>}
+                  {(t.addOns ?? []).length > 0 && (
+                    <div className="text-xs font-normal text-gray-500 dark:text-slate-400" data-testid={`tier-add-ons-summary-${t.id}`}>
+                      Add-ons: {(t.addOns ?? []).map((a) => a.name).join(', ')}
+                    </div>
+                  )}
                 </td>
                 <td className="py-2 pr-3 text-gray-800 dark:text-slate-200">{money(t.price)}</td>
                 <td className="py-2 pr-3 text-gray-800 dark:text-slate-200">{money(t.amounts.applicantPays)}</td>

@@ -272,6 +272,68 @@ class AddOnService {
     return tierIds.some((id) => attached.has(id));
   }
 
+  /** True when `addOn` is offered on an application tier (application scope). */
+  offeredOnApplicationTier(addOn, tierId) {
+    if (addOn.allTiers) return true;
+    return (addOn.applicationTiers || []).some((p) => p.applicationTierId === tierId);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Application lines (spec 012 phase 2)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Validate requested `{ addOnId, quantity }` lines for an application
+   * against scope, attachment to the chosen tier, activity and the per-order
+   * maximum. Nothing is held: capacity is taken at approval (`reserve`).
+   * @returns {Promise<Array<{ addOn, quantity }>>} in the add-ons' display order
+   */
+  async validateApplicationLines(eventId, lines, tierId) {
+    if (lines === undefined || lines === null) return [];
+    if (!Array.isArray(lines)) throw new ValidationError('addOns must be an array of { addOnId, quantity }');
+    if (lines.length === 0) return [];
+    if (!tierId) throw new ValidationError('Add-ons need a tier');
+    const seen = new Set();
+    for (const line of lines) {
+      if (!line || typeof line.addOnId !== 'string') throw new ValidationError('addOns[].addOnId is required');
+      if (!Number.isInteger(line.quantity) || line.quantity < 1 || line.quantity > 100) throw new ValidationError('addOns[].quantity must be an integer from 1 to 100');
+      if (seen.has(line.addOnId)) throw new ValidationError('addOns must not repeat an add-on');
+      seen.add(line.addOnId);
+    }
+    const addOns = await prisma.addOn.findMany({
+      where: { id: { in: [...seen] }, eventId },
+      include: { applicationTiers: { select: { applicationTierId: true } } },
+      orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
+    });
+    const wanted = new Map(lines.map((l) => [l.addOnId, l.quantity]));
+    if (addOns.length !== wanted.size) throw new NotFoundError('Add-on not found for this event');
+    return addOns.map((addOn) => {
+      const quantity = wanted.get(addOn.id);
+      if (!addOn.isActive) throw new ValidationError(`${addOn.name} is not available`);
+      if (addOn.scope === 'TICKET') throw new ValidationError(`${addOn.name} is not sold with applications`);
+      if (!this.offeredOnApplicationTier(addOn, tierId)) throw new ValidationError(`${addOn.name} is not offered with the selected option`);
+      if (addOn.maxPerOrder && quantity > addOn.maxPerOrder) throw new ValidationError(`Maximum quantity for ${addOn.name} is ${addOn.maxPerOrder}`);
+      return { addOn, quantity };
+    });
+  }
+
+  /** Application line as shown to the applicant and the organizer. */
+  serializeApplicationLine(line) {
+    return {
+      id: line.id,
+      addOnId: line.addOnId,
+      name: line.addOn?.name ?? null,
+      quantity: line.quantity,
+      unitPrice: Number(line.unitPrice),
+      applicantPays: Number(line.applicantPays),
+    };
+  }
+
+  /** Compact "Power ×1, Badge ×2" for list rows, CSV cells and emails. */
+  summarizeLines(lines) {
+    return (lines || []).map((l) => `${l.addOn?.name ?? l.name} ×${l.quantity}`).join(', ');
+  }
+
   // ---------------------------------------------------------------------------
   // Order lines
   // ---------------------------------------------------------------------------

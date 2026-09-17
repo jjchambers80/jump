@@ -14,6 +14,7 @@
 import stripe from '../config/stripe.js';
 import { prisma } from '@jump/db';
 import { ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
+import addOnService from './AddOnService.js';
 import applicationTemplateService from './ApplicationTemplateService.js';
 import paymentSettingsService, { stripeMode } from './PaymentSettingsService.js';
 import { createStripeRefund } from './stripeRefund.js';
@@ -32,6 +33,7 @@ const PAYMENT_INCLUDE = {
   form: true,
   event: { select: { id: true, name: true, date: true, venue: { select: { organizationId: true, organization: true } } } },
   answers: { include: { question: true, image: { include: { file: true } } } },
+  addOns: { include: { addOn: true }, orderBy: { addOn: { displayOrder: 'asc' } } },
   decisions: { orderBy: { createdAt: 'asc' } },
   refunds: { orderBy: { createdAt: 'asc' } },
 };
@@ -129,24 +131,52 @@ class ApplicationPaymentService {
     });
   }
 
-  /** The spec 010 charge shape: one all-in line item, subtotal = what the organization receives. */
+  /**
+   * The spec 010 charge shape: all-in line items, subtotal = what the
+   * organization receives. The tier line carries whatever the add-on lines
+   * (spec 012) do not, so the Stripe page itemises exactly the snapshot total.
+   */
   _chargeFor(application) {
+    const currency = application.currency || 'usd';
+    const addOns = application.addOns || [];
+    const addOnTotal = addOns.reduce((sum, l) => sum + Number(l.applicantPays), 0);
+    const tierAmount = Math.round((Number(application.applicantPays) - addOnTotal) * 100) / 100;
+    const line = (name, amount, description) => ({
+      price_data: { currency, product_data: { name, ...(description && { description }) }, unit_amount: cents(amount) },
+      quantity: 1,
+    });
+    const lineItems = [
+      line(this._tierLabel(application), tierAmount, application.profile?.businessName || undefined),
+      ...addOns.map((l) => line(`${l.addOn?.name ?? 'Add-on'} ×${l.quantity}`, Number(l.applicantPays))),
+    ].filter((l) => l.price_data.unit_amount > 0);
     return {
       fees: { subtotal: Number(application.orgReceives) },
-      lineItems: [
-        {
-          price_data: {
-            currency: application.currency || 'usd',
-            product_data: {
-              name: `${application.event.name} — ${application.form.name}${application.tier ? ` (${application.tier.name})` : ''}`,
-              description: application.profile?.businessName || undefined,
-            },
-            unit_amount: cents(application.applicantPays),
-          },
-          quantity: 1,
-        },
-      ],
+      lineItems: lineItems.length ? lineItems : [line(this._tierLabel(application), Number(application.applicantPays))],
     };
+  }
+
+  _tierLabel(application) {
+    return `${application.event.name} — ${application.form.name}${application.tier ? ` (${application.tier.name})` : ''}`;
+  }
+
+  /** PaymentIntent description: the tier line plus a compact add-on summary. */
+  _chargeDescription(application) {
+    const summary = addOnService.summarizeLines(application.addOns);
+    return `${this._tierLabel(application)}${summary ? ` + ${summary}` : ''}`.slice(0, 1000);
+  }
+
+  /**
+   * Expire a pending Checkout session whose amount is stale (add-on lines
+   * changed, spec 012). Best effort: an already-completed or unknown session
+   * is ignored; the row's session id is cleared either way.
+   */
+  async expireSession(application, sessionId) {
+    try {
+      await stripe.checkout.sessions.expire(sessionId);
+    } catch (error) {
+      logger.info('Application checkout session not expired', { applicationId: application.id, sessionId, error: error.message });
+    }
+    await prisma.application.updateMany({ where: { id: application.id, stripeCheckoutSessionId: sessionId }, data: { stripeCheckoutSessionId: null } });
   }
 
   _returnUrl(statusUrl, checkout) {
@@ -186,7 +216,7 @@ class ApplicationPaymentService {
           off_session: true,
           confirm: true,
           payment_method_types: ['card'],
-          description: `${application.event.name} — ${application.form.name}${application.tier ? ` (${application.tier.name})` : ''}`,
+          description: this._chargeDescription(application),
           ...(routing.statement_descriptor_suffix && { statement_descriptor_suffix: routing.statement_descriptor_suffix }),
           ...(routing.transfer_data && { transfer_data: routing.transfer_data, application_fee_amount: routing.application_fee_amount }),
           metadata: { applicationId: application.id, organizationId: application.organizationId, purpose: 'approval' },
@@ -244,6 +274,9 @@ class ApplicationPaymentService {
       if (paymentIntentId && application.stripePaymentIntentId !== paymentIntentId) data.stripePaymentIntentId = paymentIntentId;
       if (application.tierId && application.capacitySlot === 'RESERVED') {
         await tx.$executeRaw`UPDATE "ApplicationTier" SET "quantityReserved" = GREATEST("quantityReserved" - 1, 0), "quantityApproved" = "quantityApproved" + 1 WHERE "id" = ${application.tierId}`;
+        // Add-on holds become sales with the slot (spec 012).
+        const lines = await tx.applicationAddOn.findMany({ where: { applicationId }, select: { addOnId: true, quantity: true } });
+        if (lines.length) await addOnService.commit(tx, lines);
         data.capacitySlot = 'APPROVED';
       }
       if (application.status === 'DRAFT') {
@@ -479,6 +512,8 @@ class ApplicationPaymentService {
             if (row.tierId && row.capacitySlot !== 'NONE') {
               const column = row.capacitySlot === 'APPROVED' ? 'quantityApproved' : 'quantityReserved';
               await tx.$executeRawUnsafe(`UPDATE "ApplicationTier" SET "${column}" = GREATEST("${column}" - 1, 0) WHERE "id" = $1`, row.tierId);
+              const lines = await tx.applicationAddOn.findMany({ where: { applicationId: row.id }, select: { addOnId: true, quantity: true } });
+              if (lines.length) await (row.capacitySlot === 'APPROVED' ? addOnService.unsell(tx, lines) : addOnService.release(tx, lines));
             }
             await tx.application.update({
               where: { id: row.id },

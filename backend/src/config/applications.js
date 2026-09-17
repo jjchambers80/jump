@@ -38,6 +38,7 @@ export const MERGE_FIELDS = [
   ['organization.name', 'Your organization name'],
   ['form.name', 'Application form name'],
   ['tier.name', 'Selected tier'],
+  ['addOns.summary', 'Add-ons chosen, e.g. "Booth power ×1 ($125.00), Extra badge ×2 ($20.00)" (empty when none)'],
   ['amount.applicantPays', 'Amount charged to the applicant'],
   ['payment.dueDate', 'Payment due date'],
   ['links.status', 'Link to the application status page'],
@@ -45,8 +46,8 @@ export const MERGE_FIELDS = [
   ['links.account', 'Link to the applicant account page'],
 ];
 
-/** Actions that have a template. PAYMENT_DUE is used from phase 2. */
-export const TEMPLATE_ACTIONS = ['RECEIVED', 'APPROVED', 'REJECTED', 'WAITLISTED', 'WITHDRAWN', 'PAYMENT_DUE'];
+/** Actions that have a template. PAYMENT_DUE is used from phase 2; ADD_ONS_CHANGED from spec 012. */
+export const TEMPLATE_ACTIONS = ['RECEIVED', 'APPROVED', 'REJECTED', 'WAITLISTED', 'WITHDRAWN', 'PAYMENT_DUE', 'ADD_ONS_CHANGED'];
 
 export const DEFAULT_TEMPLATES = {
   RECEIVED: {
@@ -54,7 +55,9 @@ export const DEFAULT_TEMPLATES = {
     body: `Hi {{applicant.firstName}},
 
 Thanks for applying to {{event.name}} as {{form.name}}{{#tier}} ({{tier.name}}){{/tier}}. We have your application and will review it soon.
-
+{{#addOns}}
+Add-ons: {{addOns.summary}}
+{{/addOns}}
 You can check its status any time: {{links.status}}
 
 {{organization.name}}`,
@@ -103,6 +106,19 @@ Your application for {{event.name}} ({{form.name}}) has been withdrawn. If this 
 {{profile.businessName}} is approved for {{event.name}}{{#tier}} ({{tier.name}}){{/tier}}, but we could not charge the card on file. Please pay {{amount.applicantPays}} by {{payment.dueDate}} to keep your spot:
 
 {{links.payNow}}
+
+{{organization.name}}`,
+  },
+  ADD_ONS_CHANGED: {
+    subject: 'Your {{event.name}} application was updated',
+    body: `Hi {{applicant.firstName}},
+
+We updated the add-ons on {{profile.businessName}}'s application for {{event.name}}{{#tier}} ({{tier.name}}){{/tier}}.
+
+Add-ons: {{addOns.summary}}
+New total: {{amount.applicantPays}}
+
+Your application: {{links.status}}
 
 {{organization.name}}`,
   },

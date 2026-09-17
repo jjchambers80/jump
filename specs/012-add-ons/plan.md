@@ -1,6 +1,6 @@
 # Implementation Plan: Add-ons (spec 012)
 
-**Status**: Planned 2026-09-17. Phase 1 built 2026-09-17 (`feat/012-add-ons-phase-1`). Phases 2–3 not started.
+**Status**: Planned 2026-09-17. Phase 1 built 2026-09-17 (`feat/012-add-ons-phase-1`). Phase 2 built 2026-09-17 (`feat/012-add-ons-phase-2`, stacked). Phase 3 not started.
 **Spec**: [spec.md](./spec.md). Depends on spec 011 (all phases on `main` 2026-09-17) and spec 010 phase 2 (Connect routing, on `main`, dark).
 
 ---
@@ -262,6 +262,15 @@ Built 2026-09-17. Decisions taken while building:
 ### Phase 2 — Applications
 
 Application tier attachments; public form payload; apply form picker + summary; submission lines + snapshot via `applicationAmounts`; approval reservation + 409; release paths; line edits before payment with `ADD_ONS_CHANGED` template; admin detail / list filter / CSV columns; status page and emails; price-changed note with lines; event duplicate copies add-ons. Tests: `applicationsAddOns.test.js` (snapshot math PASS/ABSORB with taxable mix, approval sold-out 409 rolls back the tier, edit rules per state, CSV columns, duplicate). e2e: apply with add-ons → approve → PAID with the itemised amount.
+
+Built 2026-09-17. Decisions taken while building:
+
+- `ApplicationAddOn` gained `applicantPays` (migration `20260919000000_add_ons_applications`, with `ApplicationAction.ADD_ONS_CHANGED`): the line's allocated share of the snapshot. Without it the Stripe Checkout / pay-now line items and the status page could not itemise exactly; the tier line is `applicantPays − Σ lines`. The off-session approval charge is one PaymentIntent whose `description` appends the add-on summary.
+- Tier attachments for applications are set from the form editor (`PUT /admin/events/:eventId/application-forms/:formId/tiers/:tierId/add-ons`, ADMIN) rather than only from the add-on dialog, because the form editor has no `orgId` in its URL. `allTiers` add-ons are shown as "included on every option". The admin form payload carries `addOns` (event-level) and each tier's `addOns` with per-unit `applicantPays`, which the edit-lines dialog reuses.
+- `capacitySlot` covers add-ons: RESERVED holds them (`quantityReserved`), APPROVED sells them; the same transitions that move the tier move the lines (`_takeCapacity`, `_releaseCapacity`, `_markPaid`, overdue sweep). A pay-at-submission (SUBMIT timing) application still reserves at approval, like its tier.
+- `updateAddOns` rejects a no-op with 400 ("Nothing changed"), refuses PAID / PROCESSING / REJECTED / WITHDRAWN with 409 and the reason (`addOnsEditable.reason` in the admin payload), and clears `stripeCheckoutSessionId` after `checkout.sessions.expire` so the status page mints a fresh pay-now session.
+- The `ADD_ONS_CHANGED` decision row stores the before → after summary and totals in `note`; the RECEIVED and ADD_ONS_CHANGED default templates use `{{#addOns}}…{{addOns.summary}}…{{/addOns}}`.
+- List rows carry `addOns: [{ addOnId, name, quantity }]`; the `addOn` query filter is `addOns.some`. CSV columns are `addon:<name>` for every active application add-on plus any that appears on a row.
 
 ### Phase 3 — Reporting and polish
 

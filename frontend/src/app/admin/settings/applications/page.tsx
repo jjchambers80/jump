@@ -20,6 +20,7 @@ const ACTION_LABEL: Record<TemplateAction, string> = {
   WAITLISTED: 'Waitlisted',
   WITHDRAWN: 'Withdrawn',
   PAYMENT_DUE: 'Payment due (paid forms)',
+  ADD_ONS_CHANGED: 'Add-ons changed (paid forms)',
 };
 
 export default function ApplicationTemplatesPage() {

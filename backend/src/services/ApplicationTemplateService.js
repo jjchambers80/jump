@@ -102,6 +102,10 @@ class ApplicationTemplateService {
       organization: { name: organization.name || '' },
       form: { name: application.form?.name || '' },
       tier: application.tier ? { name: application.tier.name } : null,
+      // Spec 012: null when there are no lines so {{#addOns}} sections hide.
+      addOns: application.addOns?.length
+        ? { summary: application.addOns.map((l) => `${l.addOn?.name ?? l.name} ×${l.quantity} (${formatMoney(l.applicantPays)})`).join(', '), count: application.addOns.length }
+        : null,
       amount: { applicantPays: formatMoney(application.applicantPays) },
       payment: { dueDate: formatDate(application.paymentDueAt) },
       links: {

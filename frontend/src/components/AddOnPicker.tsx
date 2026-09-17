@@ -6,16 +6,16 @@
 
 import React from 'react';
 import { formatPrice } from '../lib/fees';
-import { addOnAllInPrice, addOnMaxQuantity, type AddOn } from '../lib/addOns';
+import { addOnAllInPrice, addOnMaxQuantity, type PickableAddOn } from '../lib/addOns';
 
 interface AddOnPickerProps {
-  addOns: AddOn[];
+  addOns: PickableAddOn[];
   quantities: Record<string, number>;
   onChange: (addOnId: string, quantity: number) => void;
   taxRate?: number;
   taxInclusive?: boolean;
   /** Overrides the default all-in unit price (application forms pass the form's fee mode figure). */
-  unitPrice?: (addOn: AddOn) => number;
+  unitPrice?: (addOn: PickableAddOn) => number;
   title?: string;
   hint?: string;
 }

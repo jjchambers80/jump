@@ -99,3 +99,33 @@ export const validateRefundBody = (req, res, next) => {
     next(error);
   }
 };
+
+/** Spec 012: { addOns: [{ addOnId, quantity }], sendEmail?: boolean } — the full desired line set. */
+export const validateAddOnLinesBody = (req, res, next) => {
+  try {
+    const body = req.body || {};
+    onlyFields(body, new Set(['addOns', 'sendEmail']), 'add-ons');
+    if (!Array.isArray(body.addOns)) throw new ValidationError('addOns must be an array');
+    for (const line of body.addOns) {
+      if (!line || typeof line !== 'object') throw new ValidationError('addOns[] must be objects');
+      onlyFields(line, new Set(['addOnId', 'quantity']), 'add-on line');
+      if (typeof line.addOnId !== 'string') throw new ValidationError('addOns[].addOnId must be a string');
+      if (!Number.isInteger(line.quantity) || line.quantity < 1) throw new ValidationError('addOns[].quantity must be a positive integer');
+    }
+    if (body.sendEmail !== undefined && typeof body.sendEmail !== 'boolean') throw new ValidationError('sendEmail must be a boolean');
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
+/** Spec 012: { addOnIds: string[] } — restricted add-ons a tier offers. */
+export const validateTierAddOnsBody = (req, res, next) => {
+  try {
+    onlyFields(req.body, new Set(['addOnIds']), 'tier add-ons');
+    if (!Array.isArray(req.body?.addOnIds) || req.body.addOnIds.some((id) => typeof id !== 'string')) throw new ValidationError('addOnIds must be an array of ids');
+    next();
+  } catch (error) {
+    next(error);
+  }
+};

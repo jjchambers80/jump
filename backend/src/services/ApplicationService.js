@@ -11,12 +11,15 @@
 //
 // Capacity: submissions never consume a tier slot. Approval takes one with a
 // conditional UPDATE … RETURNING (the PriceTier pattern); withdrawing an
-// approved application releases it.
+// approved application releases it. Add-on lines (spec 012) follow the same
+// slot: reserved / sold / released together with the tier, tier first so two
+// concurrent approvals lock in one order.
 
 import { prisma } from '@jump/db';
 import { LIST_PAGE_SIZE, MAX_ANSWER_LENGTH, MAX_PROFILE_PHOTOS, STATUS_TOKEN_TTL_DAYS } from '../config/applications.js';
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
-import applicationFormService, { paymentsEnabled, tierAmounts } from './ApplicationFormService.js';
+import applicationFormService, { applicationAmounts, applicationLines, paymentsEnabled } from './ApplicationFormService.js';
+import addOnService from './AddOnService.js';
 import applicantProfileService from './ApplicantProfileService.js';
 import applicationTemplateService from './ApplicationTemplateService.js';
 import applicationPaymentService from './ApplicationPaymentService.js';
@@ -62,9 +65,21 @@ const DETAIL_INCLUDE = {
     },
   },
   answers: { include: { question: true, image: { include: { file: true } } } },
+  addOns: { include: { addOn: true }, orderBy: { addOn: { displayOrder: 'asc' } } },
   decisions: { orderBy: { createdAt: 'asc' } },
   refunds: { orderBy: { createdAt: 'asc' } },
 };
+
+/** Statuses in which the organizer may still change add-on lines (no money has moved). */
+function addOnsEditable(application) {
+  if (application.form?.kind !== 'PAID' || !application.tierId) return { allowed: false, reason: 'This form has no add-ons' };
+  if (['PAID', 'REFUNDED', 'PARTIALLY_REFUNDED'].includes(application.paymentStatus)) return { allowed: false, reason: 'Already paid — refund part of the amount instead' };
+  if (application.paymentStatus === 'PROCESSING') return { allowed: false, reason: 'A payment is in progress' };
+  if (['SUBMITTED', 'WAITLISTED'].includes(application.status)) return { allowed: true, reason: null };
+  if (application.status === 'APPROVED' && application.paymentStatus === 'PAYMENT_DUE') return { allowed: true, reason: null };
+  if (application.status === 'APPROVED') return { allowed: false, reason: 'Approved — the amount is locked once the charge starts' };
+  return { allowed: false, reason: `Cannot change add-ons on a ${application.status.toLowerCase()} application` };
+}
 
 class ApplicationService {
   // ---------------------------------------------------------------------------
@@ -106,7 +121,10 @@ class ApplicationService {
     if ((files.profilePhotos || []).length > MAX_PROFILE_PHOTOS) throw new ValidationError(`At most ${MAX_PROFILE_PHOTOS} profile photos`);
     const answers = this._validateAnswers(form.questions, body.answers || {}, files.answerPhotos || {});
 
-    const amounts = tier ? tierAmounts(tier.price, form, event, event.venue.organization) : null;
+    // Add-ons (spec 012): validated against the tier's offer; nothing is held until approval.
+    if (!tier && Array.isArray(body.addOns) && body.addOns.length > 0) throw new ValidationError('This form has no add-ons');
+    const addOnLines = tier ? await addOnService.validateApplicationLines(eventId, body.addOns, tier.id) : [];
+    const amounts = tier ? applicationAmounts(applicationLines(tier, form, addOnLines), form, event, event.venue.organization) : null;
 
     const application = await prisma.$transaction(async (tx) => {
       const contactRecord = await tx.contact.upsert({
@@ -159,6 +177,7 @@ class ApplicationService {
             feeMode: amounts.feeMode,
           }),
           answers: { create: answerRows },
+          addOns: { create: this._addOnRows(addOnLines, amounts) },
         },
         select: { id: true },
       });
@@ -298,6 +317,7 @@ class ApplicationService {
           profile: { select: { businessName: true } },
           tier: { select: { id: true, name: true } },
           form: { select: { id: true, name: true, kind: true } },
+          addOns: { include: { addOn: { select: { id: true, name: true, displayOrder: true } } }, orderBy: { addOn: { displayOrder: 'asc' } } },
         },
         orderBy,
         skip: (page - 1) * pageSize,
@@ -390,14 +410,14 @@ class ApplicationService {
           if (!paymentsEnabled()) throw new ConflictError('Application payments are not enabled');
           // Hold the slot while the charge is in flight; PAID moves it to approved.
           if (application.tierId) {
-            await this._takeCapacity(tx, application.tierId, 'RESERVED');
+            await this._takeCapacity(tx, application, 'RESERVED');
             data.capacitySlot = 'RESERVED';
           }
           data.paymentStatus = 'PROCESSING';
           data.chargeAttempts = application.chargeAttempts + 1;
           chargeNow = true;
         } else if (application.tierId) {
-          await this._takeCapacity(tx, application.tierId, 'APPROVED');
+          await this._takeCapacity(tx, application, 'APPROVED');
           data.capacitySlot = 'APPROVED';
         }
       } else if (application.capacitySlot !== 'NONE') {
@@ -484,6 +504,83 @@ class ApplicationService {
   }
 
   /**
+   * Organizer (ORGANIZER+): replace the add-on lines before any money moves
+   * (spec 012 §2.5). Allowed in SUBMITTED, WAITLISTED, and APPROVED +
+   * PAYMENT_DUE. The snapshot is recomputed at today's prices (tier included,
+   * so a price-changed note clears), reservations held for a PAYMENT_DUE
+   * application move to the new lines, an open pay-now session is expired so
+   * the next one carries the new amount, and the applicant is emailed the new
+   * total (template ADD_ONS_CHANGED).
+   *
+   * @param {Array<{ addOnId: string, quantity: number }>} lines the full desired set (empty removes all)
+   */
+  async updateAddOns(eventId, applicationId, organizationId, lines, { byUserId, sendEmail = true } = {}) {
+    await applicationFormService.requireEvent(eventId, organizationId);
+    if (!Array.isArray(lines)) throw new ValidationError('addOns must be an array of { addOnId, quantity }');
+
+    const { updated, before, after, sessionId } = await prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw`SELECT "id" FROM "Application" WHERE "id" = ${applicationId} AND "eventId" = ${eventId} FOR UPDATE`;
+      if (!locked[0]) throw new NotFoundError('Application not found');
+      const application = await tx.application.findUnique({ where: { id: applicationId }, include: DETAIL_INCLUDE });
+      if (!application || application.status === 'DRAFT') throw new NotFoundError('Application not found');
+      const editable = addOnsEditable(application);
+      if (!editable.allowed) throw new ConflictError(editable.reason);
+
+      const validated = await addOnService.validateApplicationLines(eventId, lines, application.tierId);
+      const oldLines = application.addOns.map((r) => ({ addOn: r.addOn, addOnId: r.addOnId, quantity: r.quantity }));
+      const unchanged =
+        validated.length === oldLines.length && validated.every((l) => oldLines.some((o) => o.addOnId === l.addOn.id && o.quantity === l.quantity));
+      if (unchanged) throw new ValidationError('Nothing changed');
+
+      // A PAYMENT_DUE application holds its lines: move the hold to the new set (409 if one is sold out).
+      if (application.capacitySlot === 'RESERVED') {
+        if (oldLines.length) await addOnService.release(tx, oldLines);
+        if (validated.length) await addOnService.reserve(tx, validated);
+      }
+
+      const amounts = applicationAmounts(applicationLines(application.tier, application.form, validated), application.form, application.event, application.event.venue.organization);
+      const beforeText = addOnService.summarizeLines(application.addOns) || 'none';
+      const afterText = addOnService.summarizeLines(validated.map((l) => ({ addOn: l.addOn, quantity: l.quantity }))) || 'none';
+      const note = `Add-ons: ${beforeText} → ${afterText}. Total $${Number(application.applicantPays).toFixed(2)} → $${amounts.applicantPays.toFixed(2)}.`;
+
+      await tx.applicationAddOn.deleteMany({ where: { applicationId } });
+      const row = await tx.application.update({
+        where: { id: applicationId },
+        data: {
+          subtotal: amounts.subtotal,
+          platformFee: amounts.platformFee,
+          processingFee: amounts.processingFee,
+          tax: amounts.tax,
+          applicantPays: amounts.applicantPays,
+          orgReceives: amounts.orgReceives,
+          feeMode: amounts.feeMode,
+          addOns: { create: this._addOnRows(validated, amounts) },
+          decisions: { create: { action: 'ADD_ONS_CHANGED', byUserId, note } },
+        },
+        include: DETAIL_INCLUDE,
+      });
+      return { updated: row, before: beforeText, after: afterText, sessionId: application.stripeCheckoutSessionId };
+    });
+
+    logger.info('Application add-ons changed', { event: 'application_add_ons_changed', applicationId, eventId, byUserId, before, after, applicantPays: Number(updated.applicantPays) });
+
+    // A pending pay-now session carries the old amount; expire it so the status page mints a fresh one.
+    if (sessionId && updated.status === 'APPROVED' && updated.paymentStatus === 'PAYMENT_DUE') {
+      await applicationPaymentService.expireSession(updated, sessionId);
+    }
+
+    if (sendEmail !== false) {
+      const statusUrl = await statusUrlFor(updated);
+      const sent = await applicationTemplateService.send(organizationId, 'ADD_ONS_CHANGED', { ...updated, statusUrl }, { payNowUrl: statusUrl });
+      if (sent) {
+        const decision = updated.decisions[updated.decisions.length - 1];
+        await prisma.applicationDecision.update({ where: { id: decision.id }, data: { emailSubject: sent.subject, emailBody: sent.body } }).catch(() => {});
+      }
+    }
+    return this.get(eventId, applicationId, organizationId);
+  }
+
+  /**
    * Bulk decision. APPROVE is limited to FREE forms (each paid approval is an
    * individual charge). Returns per-id outcomes; never throws for one failure.
    */
@@ -519,26 +616,36 @@ class ApplicationService {
         tier: { select: { name: true } },
         form: { select: { name: true, kind: true } },
         answers: { include: { question: { select: { id: true, label: true, type: true } }, image: { include: { file: true } } } },
+        addOns: { include: { addOn: { select: { id: true, name: true, displayOrder: true } } } },
       },
       orderBy: this._listOrder(query.sort),
     });
     const questions = new Map();
     for (const a of rows) for (const ans of a.answers) if (!questions.has(ans.question.id)) questions.set(ans.question.id, ans.question);
     const qList = [...questions.values()];
+    // One column per add-on that is active for applications or appears on any row (spec 012).
+    const addOns = new Map();
+    const active = await prisma.addOn.findMany({ where: { eventId, isActive: true, scope: { in: ['APPLICATION', 'BOTH'] } }, select: { id: true, name: true, displayOrder: true } });
+    for (const ad of active) addOns.set(ad.id, ad);
+    for (const a of rows) for (const l of a.addOns) if (!addOns.has(l.addOn.id)) addOns.set(l.addOn.id, l.addOn);
+    const addOnList = [...addOns.values()].sort((x, y) => x.displayOrder - y.displayOrder);
     const header = [
       'applicationId', 'form', 'status', 'paymentStatus', 'submittedAt', 'decidedAt', 'tier', 'businessName', 'firstName', 'lastName', 'email',
       'website', 'description', 'socials', 'profilePhotos', 'applicantPays', 'orgReceives', 'boothLabel', 'internalNote', 'stripePaymentIntentId',
+      ...addOnList.map((ad) => `addon:${ad.name}`),
       ...qList.map((q) => q.label),
     ];
     const lines = [header.map(csvCell).join(',')];
     for (const a of rows) {
       const byQ = new Map(a.answers.map((ans) => [ans.question.id, ans]));
+      const byAddOn = new Map(a.addOns.map((l) => [l.addOnId, l.quantity]));
       const cells = [
         a.id, a.form.name, a.status, a.paymentStatus, a.submittedAt?.toISOString() ?? '', a.decidedAt?.toISOString() ?? '', a.tier?.name ?? '',
         a.profile.businessName, a.contact.firstName, a.contact.lastName, a.contact.email, a.profile.website ?? '', a.profile.description ?? '',
         a.profile.socials ? Object.entries(a.profile.socials).map(([k, v]) => `${k}: ${v}`).join('; ') : '',
         (a.profile.images || []).map((pi) => absoluteAssetUrl(imageService.formatImageResponse(pi.image).urls.original)).join('; '),
         Number(a.applicantPays).toFixed(2), Number(a.orgReceives).toFixed(2), a.boothLabel ?? '', a.internalNote ?? '', a.stripePaymentIntentId ?? '',
+        ...addOnList.map((ad) => byAddOn.get(ad.id) ?? ''),
         ...qList.map((q) => this._answerText(byQ.get(q.id))),
       ];
       lines.push(cells.map(csvCell).join(','));
@@ -550,23 +657,62 @@ class ApplicationService {
   // Capacity
   // ---------------------------------------------------------------------------
 
-  async _takeCapacity(tx, tierId, slot) {
+  /** Add-on lines of an application in lock order, shaped for AddOnService.reserve / release / commit. */
+  async _addOnLines(tx, applicationId) {
+    const rows = await tx.applicationAddOn.findMany({ where: { applicationId }, include: { addOn: true }, orderBy: { addOn: { displayOrder: 'asc' } } });
+    return rows.map((r) => ({ addOn: r.addOn, addOnId: r.addOnId, quantity: r.quantity }));
+  }
+
+  /**
+   * Take the tier slot, then hold every add-on line (spec 012) in display
+   * order. A sold-out add-on throws 409 naming it; the transaction rolls the
+   * tier slot back. APPROVED (no charge to wait for) moves add-ons straight
+   * to sold.
+   */
+  async _takeCapacity(tx, application, slot) {
     const column = slot === 'APPROVED' ? 'quantityApproved' : 'quantityReserved';
     const rows = await tx.$queryRawUnsafe(
       `UPDATE "ApplicationTier" SET "${column}" = "${column}" + 1
        WHERE "id" = $1 AND ("quantityTotal" - "quantityApproved" - "quantityReserved") >= 1
        RETURNING "id"`,
-      tierId
+      application.tierId
     );
     if (!rows || rows.length === 0) {
-      throw new ConflictError('This tier is full. Waitlist the application or raise the tier quantity.', { tierId, suggestion: 'WAITLIST' });
+      throw new ConflictError('This tier is full. Waitlist the application or raise the tier quantity.', { tierId: application.tierId, suggestion: 'WAITLIST' });
     }
+    const lines = await this._addOnLines(tx, application.id);
+    if (lines.length === 0) return;
+    try {
+      await addOnService.reserve(tx, lines);
+    } catch (error) {
+      if (error instanceof ConflictError && error.details?.addOnId) {
+        const { name, remaining, requested } = error.details;
+        throw new ConflictError(`${name} is sold out: ${requested} requested, ${remaining} left. Raise its quantity or edit this application's add-ons.`, { ...error.details, suggestion: 'EDIT_ADD_ONS' });
+      }
+      throw error;
+    }
+    if (slot === 'APPROVED') await addOnService.commit(tx, lines);
   }
 
   async _releaseCapacity(tx, application) {
     if (!application.tierId || application.capacitySlot === 'NONE') return;
     const column = application.capacitySlot === 'APPROVED' ? 'quantityApproved' : 'quantityReserved';
     await tx.$executeRawUnsafe(`UPDATE "ApplicationTier" SET "${column}" = GREATEST("${column}" - 1, 0) WHERE "id" = $1`, application.tierId);
+    const lines = await this._addOnLines(tx, application.id);
+    if (lines.length === 0) return;
+    if (application.capacitySlot === 'APPROVED') await addOnService.unsell(tx, lines);
+    else await addOnService.release(tx, lines);
+  }
+
+  /** ApplicationAddOn rows for a validated line set and its amount snapshot. */
+  _addOnRows(addOnLines, amounts) {
+    // amounts.lines[0] is the tier; add-ons follow in the same order.
+    return addOnLines.map((l, i) => ({
+      addOnId: l.addOn.id,
+      quantity: l.quantity,
+      unitPrice: Number(l.addOn.price),
+      applicantPays: amounts.lines[i + 1].applicantPays,
+    }));
   }
 
   // ---------------------------------------------------------------------------
@@ -684,6 +830,7 @@ class ApplicationService {
     const where = { eventId, status: { not: 'DRAFT' } };
     if (query.form) where.formId = String(query.form);
     if (query.tier) where.tierId = String(query.tier);
+    if (query.addOn) where.addOns = { some: { addOnId: String(query.addOn) } };
     if (query.status) {
       const list = String(query.status).split(',').filter((s) => STATUSES.has(s) && s !== 'DRAFT');
       if (list.length) where.status = { in: list };
@@ -765,7 +912,8 @@ class ApplicationService {
    */
   _pricing(a) {
     if (!a.tier || a.form?.kind !== 'PAID') return null;
-    const now = tierAmounts(a.tier.price, a.form, a.event, a.event?.venue?.organization);
+    const lines = (a.addOns || []).map((l) => ({ addOn: l.addOn, quantity: l.quantity }));
+    const now = applicationAmounts(applicationLines(a.tier, a.form, lines), a.form, a.event, a.event?.venue?.organization);
     const snapshot = Number(a.applicantPays);
     return {
       currentApplicantPays: now.applicantPays,
@@ -786,6 +934,7 @@ class ApplicationService {
       contact: a.contact,
       tier: a.tier ? { id: a.tier.id, name: a.tier.name } : null,
       applicantPays: Number(a.applicantPays),
+      addOns: (a.addOns || []).map((l) => ({ addOnId: l.addOnId, name: l.addOn?.name ?? null, quantity: l.quantity })),
       submittedAt: a.submittedAt,
       decidedAt: a.decidedAt,
       paymentDueAt: a.paymentDueAt,
@@ -816,6 +965,8 @@ class ApplicationService {
       tier: a.tier ? { id: a.tier.id, name: a.tier.name, price: Number(a.tier.price) } : null,
       amounts: this._amounts(a),
       pricing: this._pricing(a),
+      addOns: (a.addOns || []).map((l) => addOnService.serializeApplicationLine(l)),
+      addOnsEditable: addOnsEditable(a),
       payment: {
         stripePaymentIntentId: a.stripePaymentIntentId,
         stripePaymentMethodId: a.stripePaymentMethodId ? 'on_file' : null,
@@ -856,6 +1007,7 @@ class ApplicationService {
       paymentStatus: a.paymentStatus,
       tier: a.tier ? { id: a.tier.id, name: a.tier.name } : null,
       amounts: this._amounts(a),
+      addOns: (a.addOns || []).map((l) => addOnService.serializeApplicationLine(l)),
       paymentDueAt: a.paymentDueAt,
       profile: applicantProfileService.serialize(a.profile),
       answers: this._serializeAnswers(a).filter((ans) => !ans.archived),
