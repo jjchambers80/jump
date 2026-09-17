@@ -71,7 +71,9 @@ app.use(
   })
 );
 
-app.use(express.json());
+// Stripe webhooks verify the signature over the raw bytes; the JSON parser
+// must not touch them (routes/webhooks.js applies express.raw itself).
+app.use((req, res, next) => (req.path.startsWith('/webhooks/') ? next() : express.json()(req, res, next)));
 app.use(cookieParser());
 
 // Serve uploaded files statically
