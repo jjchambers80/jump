@@ -22,6 +22,7 @@ app/
 
 - `auth.ts` — Auth.js v5 config (Google OAuth + magic link, JWT strategy, Prisma adapter). `auth.config.ts` is the edge-safe subset (providers, `trustHost`, HS256 cookie codec from `lib/authJwt.ts`) that `src/middleware.ts` also uses
 - `services/api.ts` — All backend API calls go through here
+- `lib/addOns.ts` — Add-on types and helpers (spec 012): `offeredAddOns` (which add-ons a cart's tiers offer), `addOnAllInPrice`, `parseAddOnLines`. `components/AddOnPicker.tsx` renders the steppers; the event page carries lines to checkout as `?addOns=[{addOnId,quantity}]`. Admin section: `app/admin/events/[eventId]/edit/AddOnsSection.tsx` (saves through the API immediately, outside the event form)
 - `lib/applications.ts` — Shared types, labels and helpers for spec 011; admin calls live in `app/admin/events/[eventId]/applications/useApplicationsApi.ts` (also `useTemplatesApi` for Settings › Applications). Admin list saved views are `localStorage` (`jump.applications.views.<eventId>`), never server state
 - `components/` — Shared React components
 - `lib/` — Utilities and helpers (`lib/color.ts` — WCAG contrast + brand CSS vars; `lib/fees.ts` — all-in fee math mirroring backend `FeeService`; `lib/buyerSession.ts` — server-only buyer cookie + backend proxy, signs the client IP for the backend rate limiter)

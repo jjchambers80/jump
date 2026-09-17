@@ -1,6 +1,6 @@
 # Implementation Plan: Add-ons (spec 012)
 
-**Status**: Planned 2026-09-17. Not started.
+**Status**: Planned 2026-09-17. Phase 1 built 2026-09-17 (`feat/012-add-ons-phase-1`). Phases 2–3 not started.
 **Spec**: [spec.md](./spec.md). Depends on spec 011 (all phases on `main` 2026-09-17) and spec 010 phase 2 (Connect routing, on `main`, dark).
 
 ---
@@ -249,6 +249,15 @@ No new events. `checkout.session.completed` → commit; `checkout.session.expire
 ### Phase 1 — Product + ticket checkout
 
 Schema + migration; `FeeService` per-item `taxable` (both libraries, fixtures); `AddOnService` CRUD, attachments, reserve/commit/release; admin add-ons section + dialog + presets; public event payload; `POST /orders` with add-ons, Stripe lines, confirmation page/email, admin order detail, per-line and full-order refund; scan result add-ons. Tests: `addOns.test.js` (CRUD, RBAC, attachments, public payload), `ordersAddOns.test.js` (fees with mixed taxable, reservation + concurrency `Promise.all`, expiry release, refunds), unit fixtures for fee math. Frontend e2e `add-ons.spec.ts` (create via UI, buy with a ticket, refund line).
+
+Built 2026-09-17. Decisions taken while building:
+
+- `AddOn.quantityReserved` is counted for unlimited add-ons too (the conditional update only gates when `quantityTotal` is set), so sales reports see in-flight checkouts either way.
+- Stripe line items keep the existing per-unit cent rounding (a ×2 line can drift a cent from the order total, as tiers already do); the order ledger is exact.
+- `refundOrder`'s `FOR UPDATE` on the `Order ⟕ PaymentTransaction` join was rejected by Postgres ("cannot be applied to the nullable side of an outer join"); it now locks `OF o` — a latent bug the full-refund contract test exposed.
+- The buyer order page formatted dollar amounts as cents (`/ 100`, from the pre-schema-redesign era); fixed while adding the add-on list.
+- Admin add-ons live in their own section under the event form and save immediately; the tier-attachment picker only lists saved tiers (unsaved tiers have no id yet).
+- Scan/redeem/scan-order responses carry `addOns: [{ name, quantity }]` for unrefunded lines; the admin scan page shows a "Hand over" box.
 
 ### Phase 2 — Applications
 

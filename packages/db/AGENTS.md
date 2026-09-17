@@ -20,7 +20,8 @@ Loads when agent touches `packages/db/` files. For root-level commands, see [`..
 Core chain: Organization → Venue → Event → PriceTier → OrderItem → Ticket
 Supporting: User, OrganizationMember, OrganizationDomain, OrganizationStripeAccount, Account, VerificationToken, Contact, BuyerLoginToken, Order, PaymentTransaction, Refund, OrganizationPerson, TierPreset, TaxRegion, File, Image
 Applications (spec 011): ApplicationForm → ApplicationTier / ApplicationQuestion; ApplicantProfile (+ ApplicantProfileImage) per organization + contact; Application → ApplicationAnswer / ApplicationDecision / ApplicationRefund; ApplicationMessageTemplate per organization
-Enums: UserRole (UNASSIGNED/ORGANIZER/ADMIN/SYSTEM_ADMIN), MemberRole (ADMIN/ORGANIZER, per-org staff role), BuyerTokenPurpose (WELCOME/LOGIN), DomainStatus (PENDING/VERIFIED/ACTIVE/FAILED), OrganizationStatus, ThemeMode (LIGHT/DARK/SYSTEM, org public-page enforcement), EventStatus, OrderStatus, TierVisibility, TicketStatus, PaymentStatus, RefundStatus, TaxSource (STRIPE/MANUAL)
+Add-ons (spec 012): AddOn per event (scope TICKET/APPLICATION/BOTH, `allTiers`) → PriceTierAddOn / ApplicationTierAddOn attachments; OrderAddOn lines on Order (immutable unitPrice + allocated fees/tax, `refundedAt`); ApplicationAddOn lines on Application (phase 2); Refund.orderAddOnId
+Enums: AddOnScope (TICKET/APPLICATION/BOTH), UserRole (UNASSIGNED/ORGANIZER/ADMIN/SYSTEM_ADMIN), MemberRole (ADMIN/ORGANIZER, per-org staff role), BuyerTokenPurpose (WELCOME/LOGIN), DomainStatus (PENDING/VERIFIED/ACTIVE/FAILED), OrganizationStatus, ThemeMode (LIGHT/DARK/SYSTEM, org public-page enforcement), EventStatus, OrderStatus, TierVisibility, TicketStatus, PaymentStatus, RefundStatus, TaxSource (STRIPE/MANUAL)
 
 Tenancy: `Contact` is unique on `(organizationId, email)`; `OrganizationMember` holds staff affiliation. `User.organizationId` and `Contact.userId` were dropped in `20260913130000_drop_legacy_identity_columns` (which also renamed `UserRole.CUSTOMER` to `UNASSIGNED`). `20260913000000_contact_per_org_and_membership` did the original backfill in one transaction.
 
@@ -31,3 +32,5 @@ Tax (spec 009): `TaxRegion` is unique on `(organizationId, country, region)` and
 ## Seed Data
 
 `prisma/seed.ts` — Run via `npm run db:seed`. Update when adding required fields.
+
+Add-ons (spec 012): `AddOn.quantityTotal` null = unlimited; `quantitySold` / `quantityReserved` move only through `AddOnService.reserve/commit/release/unsell` (conditional raw UPDATE). `OrderAddOn` is unique on `(orderId, addOnId)`; add-on lines are never `OrderItem`s. Migration `20260918000000_add_ons`.
