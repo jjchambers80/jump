@@ -8,6 +8,11 @@ import { useMemo } from 'react';
 import api from '@/services/api';
 import type { AdminApplication, AdminForm, ApplicationList, Decision, MessageTemplate, Question } from '@/lib/applications';
 
+export interface DigestSettings {
+  enabled: boolean;
+  lastRunAt: string | null;
+}
+
 export interface ListQuery {
   form?: string;
   status?: string;
@@ -63,6 +68,8 @@ export function useTemplatesApi() {
       list: () => api.get<{ data: MessageTemplate[]; mergeFields: { key: string; description: string }[] }>('/admin/settings/application-templates'),
       update: (action: string, body: { subject: string; body: string }) => api.put<MessageTemplate>(`/admin/settings/application-templates/${action}`, body),
       reset: (action: string) => api.delete<MessageTemplate>(`/admin/settings/application-templates/${action}`),
+      digest: () => api.get<DigestSettings>('/admin/settings/application-digest'),
+      updateDigest: (enabled: boolean) => api.patch<DigestSettings>('/admin/settings/application-digest', { enabled }),
     }),
     []
   );

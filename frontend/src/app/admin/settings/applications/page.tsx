@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import SettingsNav from '../SettingsNav';
 import { fieldClass, labelClass } from '../formShared';
-import { useTemplatesApi, describeError } from '@/app/admin/events/[eventId]/applications/useApplicationsApi';
+import { useTemplatesApi, describeError, type DigestSettings } from '@/app/admin/events/[eventId]/applications/useApplicationsApi';
 import type { MessageTemplate, TemplateAction } from '@/lib/applications';
 
 const card = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
@@ -33,17 +33,37 @@ export default function ApplicationTemplatesPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, { subject: string; body: string }>>({});
   const [saving, setSaving] = useState<string | null>(null);
+  const [digest, setDigest] = useState<DigestSettings | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const res = await api.list();
+      // Digest settings are additive (phase 3): a failure there must not hide the templates.
+      const [res, d] = await Promise.all([api.list(), api.digest().catch(() => null)]);
       setTemplates(res.data);
       setMergeFields(res.mergeFields);
       setDrafts(Object.fromEntries(res.data.map((t) => [t.action, { subject: t.subject, body: t.body }])));
+      setDigest(d);
     } catch (err) {
       setError(describeError(err, 'Could not load templates'));
     }
   }, [api]);
+
+  const toggleDigest = async (enabled: boolean) => {
+    const previous = digest;
+    setDigest((d) => (d ? { ...d, enabled } : d));
+    setSaving('digest');
+    setError(null);
+    setNotice(null);
+    try {
+      setDigest(await api.updateDigest(enabled));
+      setNotice(enabled ? 'Daily digest on.' : 'Daily digest off.');
+    } catch (err) {
+      setDigest(previous);
+      setError(describeError(err, 'Could not update the digest setting'));
+    } finally {
+      setSaving(null);
+    }
+  };
 
   useEffect(() => {
     load();
@@ -106,6 +126,23 @@ export default function ApplicationTemplatesPage() {
             <p role="status" className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-800 dark:bg-green-900/20 dark:text-green-300">
               {notice}
             </p>
+          )}
+          {digest && (
+            <div className={card} data-testid="application-digest">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold text-gray-900 dark:text-white">Daily digest</h3>
+                  <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">
+                    One email a day to every member of this organization listing new applications, grouped by event and form. Nothing is sent on days with no submissions.
+                    {digest.lastRunAt ? ` Last checked ${new Date(digest.lastRunAt).toLocaleString()}.` : ''}
+                  </p>
+                </div>
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-800 dark:text-slate-200">
+                  <input type="checkbox" checked={digest.enabled} disabled={!canEdit || saving === 'digest'} onChange={(e) => toggleDigest(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+                  {digest.enabled ? 'On' : 'Off'}
+                </label>
+              </div>
+            </div>
           )}
           {templates.map((t) => {
             const d = drafts[t.action] ?? { subject: t.subject, body: t.body };

@@ -29,6 +29,7 @@ import qrService from '../../services/QRService.js';
 import applicationFormService from '../../services/ApplicationFormService.js';
 import applicationService from '../../services/ApplicationService.js';
 import applicationTemplateService from '../../services/ApplicationTemplateService.js';
+import applicationDigestService from '../../services/ApplicationDigestService.js';
 
 const router = express.Router();
 
@@ -434,6 +435,15 @@ router.put('/settings/application-templates/:action', requireAdmin, validateTemp
 }));
 router.delete('/settings/application-templates/:action', requireAdmin, wrap(async (req, res) => {
   res.json(await applicationTemplateService.resetTemplate(await activeOrgFor(req), req.params.action));
+}));
+
+// Daily digest of new submissions (spec 011 phase 3)
+router.get('/settings/application-digest', wrap(async (req, res) => {
+  res.json(await applicationDigestService.getSettings(await activeOrgFor(req)));
+}));
+router.patch('/settings/application-digest', requireAdmin, wrap(async (req, res) => {
+  if (typeof req.body?.enabled !== 'boolean') throw new ValidationError('enabled must be a boolean');
+  res.json(await applicationDigestService.updateSettings(await activeOrgFor(req), { enabled: req.body.enabled }));
 }));
 // ─── Stripe Connect (spec 010 phase 2) ────────────────────────────────────
 // All 404 while STRIPE_CONNECT_ENABLED is off (ConnectService._assertEnabled).

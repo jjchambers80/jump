@@ -104,6 +104,15 @@ class ApplicantProfileService {
     }
   }
 
+  /** Account page: append photos to the buyer's own profile (spec 011 phase 3). */
+  async addPhotosForContact(organizationId, contactId, files) {
+    const profile = await prisma.applicantProfile.findUnique({ where: { organizationId_contactId: { organizationId, contactId } } });
+    if (!profile) throw new NotFoundError('Profile not found');
+    if (!files || files.length === 0) throw new ValidationError('At least one photo is required');
+    await this.addPhotos(profile.id, files);
+    return this.getForContact(organizationId, contactId);
+  }
+
   async removePhoto(organizationId, contactId, imageId) {
     const profile = await prisma.applicantProfile.findUnique({ where: { organizationId_contactId: { organizationId, contactId } } });
     if (!profile) throw new NotFoundError('Profile not found');

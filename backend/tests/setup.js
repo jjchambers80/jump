@@ -16,6 +16,8 @@ process.env.STRIPE_SECRET_KEY = 'sk_test_fake_key';
 // pin the webhook/feature switches so a developer's local values cannot
 // change test behaviour. Suites that need them set them explicitly.
 process.env.STRIPE_WEBHOOK_SECRET = '';
+process.env.STRIPE_CONNECT_WEBHOOK_SECRET = '';
+process.env.STRIPE_CONNECT_ENABLED = '';
 process.env.APPLICATIONS_PAYMENTS_ENABLED = '';
 process.env.RESEND_API_KEY = 're_test_fake_key';
 // Domain verify calls in contract tests run back to back; no user-check cooldown

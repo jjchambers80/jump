@@ -147,6 +147,10 @@ model Organization {
   statementDescriptorSuffix String?
   enabledPaymentMethods     String[]  @default([])
   paymentSettingsUpdatedAt  DateTime?
+  // Spec 011 phase 3: daily email to members summarising new application
+  // submissions. `applicationDigestAt` is the end of the last window sent.
+  applicationDigestEnabled Boolean   @default(true)
+  applicationDigestAt      DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -7,6 +7,7 @@ import { NotFoundError, ValidationError, ConflictError } from '../middleware/err
 import logger from '../utils/logger.js';
 import { formatEventSummary } from '../utils/eventSummary.js';
 import taxService from './TaxService.js';
+import applicationFormService from './ApplicationFormService.js';
 
 class EventService {
   /**
@@ -98,6 +99,76 @@ class EventService {
     await this._refreshTaxRate(event);
 
     return this._formatEventDetail(event);
+  }
+
+  /**
+   * Duplicate an event as a new DRAFT (spec 011 phase 3): same venue,
+   * description, image, capacity, category and price tiers (inventory reset,
+   * sale windows cleared), plus every application form with its tiers and
+   * questions. Orders, tickets and applications are never copied.
+   * @param {string} orgId
+   * @param {string} eventId
+   * @param {{ name?: string, date: string }} input - new date is required; name defaults to "Copy of <name>"
+   */
+  async duplicateEvent(orgId, eventId, { name, date } = {}) {
+    const source = await prisma.event.findFirst({
+      where: { id: eventId, venue: { organizationId: orgId } },
+      include: { priceTiers: { orderBy: { displayOrder: 'asc' } } },
+    });
+    if (!source) throw new NotFoundError('Event not found');
+
+    const eventDate = new Date(date);
+    if (!date || isNaN(eventDate.getTime())) throw new ValidationError('Invalid date format');
+    if (eventDate <= new Date()) throw new ValidationError('Event date must be in the future');
+    const newName = name === undefined || name === null || String(name).trim() === '' ? `Copy of ${source.name}` : String(name).trim();
+    if (newName.length > 255) throw new ValidationError('Event name must be between 1 and 255 characters');
+
+    const { event, forms } = await prisma.$transaction(async (tx) => {
+      const created = await tx.event.create({
+        data: {
+          venueId: source.venueId,
+          name: newName,
+          description: source.description,
+          logoUrl: source.logoUrl,
+          imageId: source.imageId,
+          date: eventDate,
+          capacity: source.capacity,
+          category: source.category,
+          status: 'DRAFT',
+          taxRate: source.taxRate,
+          taxRateSource: source.taxRateSource,
+          priceTiers: {
+            create: source.priceTiers.map((tier) => ({
+              name: tier.name,
+              description: tier.description,
+              price: tier.price,
+              quantityTotal: tier.quantityTotal,
+              displayOrder: tier.displayOrder,
+              minPerOrder: tier.minPerOrder,
+              maxPerOrder: tier.maxPerOrder,
+              isActive: tier.isActive,
+              saleStartDate: null,
+              saleEndDate: null,
+              visibility: tier.visibility,
+              isRefundable: tier.isRefundable,
+            })),
+          },
+        },
+        include: { venue: true, priceTiers: { orderBy: { displayOrder: 'asc' } } },
+      });
+      const copied = await applicationFormService.copyForms(source.id, created.id, tx);
+      return { event: created, forms: copied };
+    });
+
+    logger.info('Event duplicated', {
+      event: 'event_duplicated',
+      orgId,
+      sourceEventId: source.id,
+      eventId: event.id,
+      forms,
+    });
+
+    return { ...this._formatEventDetail(event), copiedForms: forms };
   }
 
   /**

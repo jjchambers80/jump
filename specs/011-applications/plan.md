@@ -1,6 +1,6 @@
 # Implementation Plan: Applications (spec 011)
 
-**Status**: Planned 2026-09-16. Phase 1 built 2026-09-17 (PR #53). Phase 2 built 2026-09-17 on top of the spec 010 phase 2 stack (#49–#51), which it depends on for Connect routing on application charges. Phase 3 not started.
+**Status**: Planned 2026-09-16. Phase 1 built 2026-09-17 (PR #53). Phase 2 built 2026-09-17 on top of the spec 010 phase 2 stack (#49–#51), which it depends on for Connect routing on application charges. Phase 3 built 2026-09-17 (PR #55).
 **Spec**: [spec.md](./spec.md). Research: [Eventeny organizer interview](../../docs/research/2026-09-15-eventeny-organizer-interview.md).
 **Estimate**: phase 1 ~5 days, phase 2 ~6 days, phase 3 ~3 days.
 
@@ -450,6 +450,15 @@ Deliverable: press / panel / creator applications usable end to end; paid forms 
 ### Phase 3 — Scale and polish
 
 CSV export with photos as URLs, saved filters, bulk waitlist/reject for PAID, applicant profile edit from the account page, "price changed since submission" notice, organizer daily digest of new submissions, event duplicate copies forms. Hand-offs: add-ons (spec 012), messaging segments (013), booth assignment + public directory/map (014).
+
+Built 2026-09-17 (`feat/011-applications-phase-3`). Decisions taken while building:
+
+- Saved filters live in the browser (`localStorage`, per event) — the URL already carries the shareable form; no server table.
+- Bulk WAITLIST / REJECT on PAID forms needed no backend change (only APPROVE was guarded); the UI now disables Approve when a PAID row is selected and the contract test pins the behaviour.
+- The digest is a per-organization 24 h window claimed with a conditional update (`applicationDigestAt`), sent from the existing hourly application sweep to every member; opt-out toggle under Settings › Applications. No new env var.
+- Event duplication did not exist; `POST /organizations/:orgId/events/:eventId/duplicate` was added (DRAFT copy with tiers + forms; membership-guarded) with a Duplicate button on the admin events list.
+- The price-changed notice recomputes today's `tierAmounts` (price, fee mode, tax) and compares `applicantPays` with the snapshot — so a fee-mode or tax edit also surfaces, not only a price edit.
+- Profile self-service edits future applications only; a buyer photo upload route (`POST /buyer/me/applicant-profile/photos`) was added since submissions were the only upload path.
 
 ### Explicitly out of scope
 
