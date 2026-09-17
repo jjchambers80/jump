@@ -1,6 +1,6 @@
 # Jump Platform — Roadmap
 
-**Generated**: 2026-09-14 · **Updated**: 2026-09-16
+**Generated**: 2026-09-14 · **Updated**: 2026-09-17
 
 This page aggregates the project's fragmented roadmap sources into one place.
 There is no single "roadmap.md" — the actual direction is carried by the sources below.
@@ -21,10 +21,11 @@ See [specs/STATUS.md](../specs/STATUS.md) for verified lifecycle states.
 | 004 | `main` (merged) | Admin area with sidebar, RBAC, protected routes |
 | 005 | **Proposed** — design reviewed, not implemented | Create Event flow + admin RBAC, onboarding wizard, SUPER_ADMIN role |
 | 006 | (bundled into 004) | Organization branding, theme modes per org, logo box |
-| 007 | branch: `feat/007-custom-domains` (+ `feat/007-phase4-cleanup`) | Tenant identity, buyer accounts, custom domains |
-| 008 | branch: `feat/008-domains-ui` (+ `plan/008-domains-ui`) | Shopify-style Settings > Domains connect flow |
-| 009 | branch: `feat/009-tax-settings` (+ phases 2-3) | Settings > Tax — per-org tax regions, recalculate, collected tax report |
-| 010 | branch: `feat/010-payments-phase-1` (+ `plan/010-payments-settings`) | Settings > Payments — statement descriptor, payment methods, Stripe status |
+| 007 | `main` (merged, in prod) | Tenant identity, buyer accounts, custom domains |
+| 008 | `main` (merged, in prod) — apex + ops phases open | Shopify-style Settings > Domains connect flow |
+| 009 | `main` (merged, in prod) — Stripe Tax activation + §5 decisions open | Settings > Tax — per-org tax regions, recalculate, collected tax report |
+| 010 | `main` (merged) — phase 2 dark behind `STRIPE_CONNECT_ENABLED`; account model undecided | Settings > Payments — statement descriptor, payment methods, Stripe Connect payouts |
+| 011 | `main` (merged 2026-09-17) — paid forms dark behind `APPLICATIONS_PAYMENTS_ENABLED` | Applications — vendor / sponsor / press / panel forms, charge on approval, pay-now, refunds, digest, event duplicate |
 
 ---
 
@@ -36,7 +37,7 @@ Candidate specs surfaced by the 2026-09-15 Eventeny organizer interview ([analys
 
 | Candidate | Scope | Why |
 |---|---|---|
-| 011 applications | Vendor / sponsor / press / panel applications: tiers, custom questions, approve / reject / waitlist / withdraw, charge-on-approval, invoices, correct pending-vs-paid state | Required to replace Eventeny for a convention; the $900 failed-ACH incident |
+| ~~011 applications~~ | Shipped 2026-09-17 (see specs table) | — |
 | 012 add-ons | Add-on products on ticket tiers and application tiers (power, badges) | Organizer's biggest operational regret; fees on after-the-fact invoices |
 | fee modes | Per-product absorb / pass / split with buyer-price preview | "$275 booth costs $303" is the headline complaint |
 | 013 messaging | Segment sends from the org's verified domain, per-recipient delivery status, export, event-relative automations | Eventeny mail goes to spam; organizer runs Gmail mail-merge instead |
@@ -62,14 +63,15 @@ The Hermes Kanban board at `~/.hermes/kanban/boards/jump/` manages task lifecycl
 
 ## Production launch checklist
 
-`docs/wiki/config/production-launch-checklist.md` (branch: `docs/production-launch-checklist`, not yet merged to `main`)  
+`docs/wiki/config/production-launch-checklist.md` (on `main`)
 
-Current go-live blockers (as of 2026-09-14):
+Current go-live blockers (as of 2026-09-17):
 
-- Stripe Tax not activated on platform account (status: pending)
-- Venues missing state addresses (Madison Square Garden, The Fillmore)
-- Tax product decisions: seller of record, tax on service fees, tax-inclusive math
-- Live Stripe secret key + webhook secret on backend service
+- Stripe statement descriptor prefix on the platform account
+- Live Stripe secret key + webhook secret on the backend service; `payment_intent.*` + `charge.refunded` events on the platform webhook
+- Stripe Tax not activated on the platform account; NY / CA regions; seller-of-record and fee-tax decisions
+- Connected-account model decision (Express vs organizer-owned Stripe account) before any Connect setup
+- `APPLICATIONS_PAYMENTS_ENABLED` and `STRIPE_CONNECT_ENABLED` both off until the above
 - See the checklist file for the full human-action list
 
 ---
