@@ -6,7 +6,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { formatDate, money, PAYMENT_LABEL, STATUS_LABEL, STATUS_STYLE, type ApplicantApplication } from '@/lib/applications';
+import { addOnSummary, formatDate, money, PAYMENT_LABEL, STATUS_LABEL, STATUS_STYLE, type ApplicantApplication } from '@/lib/applications';
 
 export default function ApplicationsSection() {
   const [apps, setApps] = useState<ApplicantApplication[] | null>(null);
@@ -78,6 +78,9 @@ export default function ApplicationsSection() {
                 {a.form.kind === 'PAID' ? ` · ${PAYMENT_LABEL[a.paymentStatus]}${a.amounts.applicantPays > 0 ? ` ${money(a.amounts.applicantPays)}` : ''}${a.paymentStatus === 'PAYMENT_DUE' && a.paymentDueAt ? ` by ${formatDate(a.paymentDueAt)}` : ''}` : ''}
                 {a.boothLabel ? ` · ${a.boothLabel}` : ''}
               </p>
+              {a.addOns?.length > 0 && (
+                <p className="text-xs text-gray-500 dark:text-slate-400" data-testid="account-application-add-ons">Add-ons: {addOnSummary(a.addOns)}</p>
+              )}
             </div>
             <div className="flex items-center gap-3 shrink-0">
               {a.canPay && (

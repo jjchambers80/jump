@@ -1,6 +1,7 @@
 // Admin › Event › Application detail (spec 011): profile, photos, answers,
 // payment state, decision history, notes and the decision actions. Phase 2
-// adds the payment timeline, retry charge, refunds and the Stripe link.
+// adds the payment timeline, retry charge, refunds and the Stripe link;
+// spec 012 the add-on lines and their pre-payment edit.
 'use client';
 
 import Link from 'next/link';
@@ -20,6 +21,7 @@ import {
 } from '@/lib/applications';
 import ApplicationsHeader from '../ApplicationsHeader';
 import DecisionDialog from '../DecisionDialog';
+import EditAddOnsDialog from '../EditAddOnsDialog';
 import RefundDialog from '../RefundDialog';
 import { describeError, useApplicationsApi } from '../useApplicationsApi';
 
@@ -36,6 +38,11 @@ function answerText(value: string | string[] | null): string {
   return value ?? '—';
 }
 
+/** Older payloads (and test fixtures) predate spec 012; default the add-on fields. */
+function withAddOns(a: AdminApplication): AdminApplication {
+  return { ...a, addOns: a.addOns ?? [], addOnsEditable: a.addOnsEditable ?? { allowed: false, reason: null } };
+}
+
 const PAYMENT_HINT: Partial<Record<AdminApplication['paymentStatus'], string>> = {
   AWAITING_CARD: 'The applicant has not finished saving a card; they cannot be approved yet.',
   CARD_ON_FILE: 'Approving charges this card off-session.',
@@ -48,17 +55,20 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
   const { data: session } = useSession();
   const role = (session?.user as { role?: string } | undefined)?.role;
   const isAdmin = role === 'ADMIN' || role === 'SYSTEM_ADMIN';
-  const [app, setApp] = useState<AdminApplication | null>(null);
+  const [app, setAppRaw] = useState<AdminApplication | null>(null);
+  const setApp = (next: AdminApplication) => setAppRaw(withAddOns(next));
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [decision, setDecision] = useState<Decision | null>(null);
   const [refunding, setRefunding] = useState(false);
+  const [editingAddOns, setEditingAddOns] = useState(false);
   const [charging, setCharging] = useState(false);
   const [booth, setBooth] = useState('');
   const [note, setNote] = useState('');
   const [savingNotes, setSavingNotes] = useState(false);
   const decisionBtnRef = useRef<HTMLButtonElement>(null);
   const refundBtnRef = useRef<HTMLButtonElement>(null);
+  const addOnsBtnRef = useRef<HTMLButtonElement>(null);
 
   const load = useCallback(async () => {
     try {
@@ -256,7 +266,7 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
                 <h3 className="text-base font-semibold text-gray-900 dark:text-white">Payment</h3>
                 {app.pricing?.changed && (
                   <p role="note" data-testid="application-price-changed" className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
-                    Price changed since submission. {app.tier?.name ?? 'This tier'} now costs {money(app.pricing.currentApplicantPays)} to the applicant (you receive {money(app.pricing.currentOrgReceives)}); this application keeps the {money(app.amounts.applicantPays)} quoted when it was submitted.
+                    Price changed since submission. {app.tier?.name ?? 'This tier'}{app.addOns.length > 0 ? ' with these add-ons' : ''} now costs {money(app.pricing.currentApplicantPays)} to the applicant (you receive {money(app.pricing.currentOrgReceives)}); this application keeps the {money(app.amounts.applicantPays)} quoted when it was submitted.
                   </p>
                 )}
                 <dl className="mt-2 space-y-1 text-sm">
@@ -308,6 +318,57 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
                     </div>
                   )}
                 </dl>
+                {/* Add-on lines (spec 012) */}
+                {(app.addOns.length > 0 || app.addOnsEditable.allowed) && (
+                  <div className="mt-3 border-t border-gray-200 pt-3 dark:border-slate-700" data-testid="application-add-ons">
+                    <div className="flex items-center justify-between gap-2">
+                      <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Add-ons</h4>
+                      {app.addOnsEditable.allowed ? (
+                        <button
+                          ref={addOnsBtnRef}
+                          type="button"
+                          onClick={() => {
+                            setNotice(null);
+                            setEditingAddOns(true);
+                          }}
+                          className="text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+                          data-testid="application-edit-add-ons"
+                        >
+                          Edit add-ons
+                        </button>
+                      ) : (
+                        app.addOns.length > 0 && (
+                          <span className="text-xs text-gray-500 dark:text-slate-400" title={app.addOnsEditable.reason ?? undefined}>
+                            Locked
+                          </span>
+                        )
+                      )}
+                    </div>
+                    {app.addOns.length === 0 ? (
+                      <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">None</p>
+                    ) : (
+                      <table className="mt-1 w-full text-sm">
+                        <tbody>
+                          <tr>
+                            <td className="py-0.5 text-gray-700 dark:text-slate-300">{app.tier?.name ?? app.form.name}</td>
+                            <td className="py-0.5 text-right text-gray-700 dark:text-slate-300">{money(app.amounts.applicantPays - app.addOns.reduce((s, l) => s + l.applicantPays, 0))}</td>
+                          </tr>
+                          {app.addOns.map((l) => (
+                            <tr key={l.id} data-testid={`application-add-on-${l.addOnId}`}>
+                              <td className="py-0.5 text-gray-700 dark:text-slate-300">
+                                {l.name} <span className="text-gray-500 dark:text-slate-400">×{l.quantity} @ {money(l.unitPrice)}</span>
+                              </td>
+                              <td className="py-0.5 text-right text-gray-700 dark:text-slate-300">{money(l.applicantPays)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                    {!app.addOnsEditable.allowed && app.addOnsEditable.reason && app.addOns.length > 0 && (
+                      <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">{app.addOnsEditable.reason}</p>
+                    )}
+                  </div>
+                )}
                 {PAYMENT_HINT[app.paymentStatus] && <p className="mt-3 text-xs text-gray-600 dark:text-slate-400">{PAYMENT_HINT[app.paymentStatus]}</p>}
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   {app.payment.canRetryCharge && (
@@ -378,7 +439,8 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
                   {app.decisions.map((d) => (
                     <li key={d.id}>
                       <p className="font-medium text-gray-900 dark:text-white">
-                        {d.action.charAt(0) + d.action.slice(1).toLowerCase()} <span className="font-normal text-gray-500 dark:text-slate-400">· {formatDate(d.createdAt, true)}</span>
+                        {d.action === 'ADD_ONS_CHANGED' ? 'Add-ons changed' : d.action.charAt(0) + d.action.slice(1).toLowerCase()}{' '}
+                        <span className="font-normal text-gray-500 dark:text-slate-400">· {formatDate(d.createdAt, true)}</span>
                       </p>
                       {d.note && <p className="text-gray-700 dark:text-slate-300">{d.note}</p>}
                       {d.emailSubject && (
@@ -406,6 +468,20 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
             setApp(next);
             setRefunding(false);
             setNotice(`Refunded. ${PAYMENT_LABEL[next.paymentStatus]}.`);
+          }}
+        />
+      )}
+
+      {editingAddOns && app && (
+        <EditAddOnsDialog
+          eventId={params.eventId}
+          application={app}
+          returnFocusRef={addOnsBtnRef}
+          onClose={() => setEditingAddOns(false)}
+          onSaved={(next) => {
+            setApp(next);
+            setEditingAddOns(false);
+            setNotice(`Add-ons updated. New total ${money(next.amounts.applicantPays)}; the applicant has been emailed.`);
           }}
         />
       )}

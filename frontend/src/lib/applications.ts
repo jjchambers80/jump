@@ -7,7 +7,7 @@ export type QuestionType = 'SHORT_TEXT' | 'LONG_TEXT' | 'SINGLE_CHOICE' | 'MULTI
 export type ApplicationStatus = 'DRAFT' | 'SUBMITTED' | 'WAITLISTED' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN';
 export type PaymentStatus = 'NOT_REQUIRED' | 'AWAITING_CARD' | 'CARD_ON_FILE' | 'PROCESSING' | 'PAID' | 'PAYMENT_DUE' | 'REFUNDED' | 'PARTIALLY_REFUNDED';
 export type Decision = 'APPROVE' | 'REJECT' | 'WAITLIST' | 'WITHDRAW';
-export type TemplateAction = 'RECEIVED' | 'APPROVED' | 'REJECTED' | 'WAITLISTED' | 'WITHDRAWN' | 'PAYMENT_DUE';
+export type TemplateAction = 'RECEIVED' | 'APPROVED' | 'REJECTED' | 'WAITLISTED' | 'WITHDRAWN' | 'PAYMENT_DUE' | 'ADD_ONS_CHANGED';
 
 export interface Acceptance {
   open: boolean;
@@ -36,6 +36,42 @@ export interface TierAmounts {
   feeMode: 'PASS' | 'ABSORB';
 }
 
+/** Add-on offered on a tier of a public form, priced per unit under the form's fee mode. */
+export interface PublicTierAddOn {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number;
+  taxable: boolean;
+  applicantPays: number;
+  maxPerOrder: number | null;
+  remaining: number | null;
+  soldOut: boolean;
+}
+
+/** Add-on offered on an application tier, as the form editor and the edit-lines dialog see it (spec 012). */
+export interface TierAddOnOption extends PublicTierAddOn {
+  /** Offered on every tier; cannot be toggled per tier. */
+  allTiers: boolean;
+  isActive: boolean;
+}
+
+/** An add-on line on a submitted application. */
+export interface ApplicationAddOnLine {
+  id: string;
+  addOnId: string;
+  name: string | null;
+  quantity: number;
+  unitPrice: number;
+  /** This line's share of the applicant's total (fees and tax allocated). */
+  applicantPays: number;
+}
+
+export interface AddOnLineInput {
+  addOnId: string;
+  quantity: number;
+}
+
 /** Admin shape. */
 export interface AdminTier {
   id: string;
@@ -49,6 +85,8 @@ export interface AdminTier {
   displayOrder: number;
   isActive: boolean;
   amounts: TierAmounts;
+  /** Add-ons this tier offers (spec 012): every `allTiers` add-on plus the attached ones. */
+  addOns: TierAddOnOption[];
 }
 
 export interface AdminForm {
@@ -72,6 +110,8 @@ export interface AdminForm {
   applicationCount: number;
   tiers: AdminTier[];
   questions: Question[];
+  /** Every application add-on of the event (spec 012), for the tier dialog. */
+  addOns: { id: string; name: string; price: number; allTiers: boolean; isActive: boolean; scope: 'TICKET' | 'APPLICATION' | 'BOTH' }[];
 }
 
 /** Public shape. */
@@ -84,6 +124,7 @@ export interface PublicTier {
   feesIncluded: number;
   tax: number;
   soldOut: boolean;
+  addOns: PublicTierAddOn[];
 }
 
 export interface PublicForm {
@@ -132,6 +173,7 @@ export interface ApplicantApplication {
   paymentStatus: PaymentStatus;
   tier: { id: string; name: string } | null;
   amounts: TierAmounts & { currency: string };
+  addOns: ApplicationAddOnLine[];
   paymentDueAt: string | null;
   profile: ApplicantProfile;
   answers: AnswerView[];
@@ -160,6 +202,7 @@ export interface ApplicationRow {
   contact: { email: string; firstName: string; lastName: string };
   tier: { id: string; name: string } | null;
   applicantPays: number;
+  addOns: { addOnId: string; name: string | null; quantity: number }[];
   submittedAt: string | null;
   decidedAt: string | null;
   paymentDueAt: string | null;
@@ -196,8 +239,11 @@ export interface AdminApplication {
   profile: ApplicantProfile;
   tier: { id: string; name: string; price: number } | null;
   amounts: TierAmounts & { currency: string };
-  /** What the tier costs today vs the snapshot quoted at submission (PAID only; phase 3). */
+  /** What the tier + add-ons cost today vs the snapshot quoted at submission (PAID only; phase 3). */
   pricing: { currentApplicantPays: number; currentOrgReceives: number; changed: boolean } | null;
+  addOns: ApplicationAddOnLine[];
+  /** Whether the organizer may still change the add-on lines (spec 012 §2.5). */
+  addOnsEditable: { allowed: boolean; reason: string | null };
   payment: {
     stripePaymentIntentId: string | null;
     stripePaymentMethodId: 'on_file' | null;
@@ -331,6 +377,21 @@ export function tierPriceLine(tier: PublicTier, feeMode: 'PASS' | 'ABSORB' | nul
   if (tier.applicantPays === 0) return 'Free';
   if (feeMode === 'PASS' && tier.feesIncluded > 0) return `${money(tier.applicantPays)} incl. ${money(tier.feesIncluded)} fees`;
   return `${money(tier.applicantPays)}${tier.tax > 0 ? ' incl. tax' : ''}`;
+}
+
+/**
+ * Estimated applicant total for a tier plus chosen add-ons, from the per-unit
+ * figures the public form carries. The server snapshot allocates fees across
+ * the real lines and can differ by a cent or two.
+ */
+export function estimatedApplicantTotal(tier: PublicTier, quantities: Record<string, number>): number {
+  const addOns = (tier.addOns ?? []).reduce((sum, a) => sum + a.applicantPays * (quantities[a.id] ?? 0), 0);
+  return Math.round((tier.applicantPays + addOns) * 100) / 100;
+}
+
+/** "Booth power ×1, Extra badge ×2" for list rows and summaries. */
+export function addOnSummary(lines: { name: string | null; quantity: number }[] | undefined): string {
+  return (lines ?? []).map((l) => `${l.name ?? 'Add-on'} ×${l.quantity}`).join(', ');
 }
 
 export function acceptanceLine(a: Acceptance): string | null {

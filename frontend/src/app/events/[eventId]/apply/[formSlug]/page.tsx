@@ -1,13 +1,15 @@
-// Public application form (spec 011): tier choice (PAID), contact, business
-// profile with photos, the organizer's questions, submit. Submits as
-// multipart straight to the backend (public route, IP rate-limited there).
-// On success the applicant lands on their status page (token in the URL).
+// Public application form (spec 011): tier choice (PAID) with optional
+// add-ons (spec 012), contact, business profile with photos, the organizer's
+// questions, submit. Submits as multipart straight to the backend (public
+// route, IP rate-limited there). On success the applicant lands on their
+// status page (token in the URL).
 'use client';
 
 import { useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import api from '@/services/api';
-import { acceptanceLine, SOCIAL_FIELDS, tierPriceLine, type PublicForm, type Question } from '@/lib/applications';
+import { acceptanceLine, estimatedApplicantTotal, money, SOCIAL_FIELDS, tierPriceLine, type PublicForm, type Question } from '@/lib/applications';
+import AddOnPicker from '@/components/AddOnPicker';
 import ApplyShell from '../ApplyShell';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
@@ -34,6 +36,7 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [tierId, setTierId] = useState('');
+  const [addOnQty, setAddOnQty] = useState<Record<string, number>>({});
   const [contact, setContact] = useState({ email: '', firstName: '', lastName: '' });
   const [profile, setProfile] = useState({ businessName: '', description: '', website: '' });
   const [socials, setSocials] = useState<Record<string, string>>({});
@@ -56,6 +59,13 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
 
   const selectedTier = useMemo(() => form?.tiers.find((t) => t.id === tierId) ?? null, [form, tierId]);
   const closedLine = form ? acceptanceLine(form.acceptance) : null;
+  // Add-on lines the chosen tier offers with a quantity; another tier may not offer the same ones.
+  const tierAddOns = useMemo(() => selectedTier?.addOns ?? [], [selectedTier]);
+  const addOnLines = useMemo(
+    () => tierAddOns.filter((a) => (addOnQty[a.id] ?? 0) > 0).map((a) => ({ addOnId: a.id, quantity: addOnQty[a.id] })),
+    [tierAddOns, addOnQty]
+  );
+  const estimatedTotal = selectedTier ? estimatedApplicantTotal(selectedTier, addOnQty) : 0;
 
   const setAnswer = (id: string, value: string | string[] | boolean) => setAnswers((prev) => ({ ...prev, [id]: value }));
 
@@ -88,6 +98,7 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
       const payload = {
         formSlug: form.slug,
         ...(form.kind === 'PAID' && { tierId }),
+        ...(addOnLines.length > 0 && { addOns: addOnLines }),
         contact,
         profile: { ...profile, socials },
         answers,
@@ -148,12 +159,34 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
                     </label>
                   ))}
                 </div>
+                {selectedTier && tierAddOns.length > 0 && (
+                  <AddOnPicker
+                    addOns={tierAddOns}
+                    quantities={addOnQty}
+                    onChange={(id, quantity) => setAddOnQty((prev) => ({ ...prev, [id]: quantity }))}
+                    unitPrice={(a) => tierAddOns.find((x) => x.id === a.id)?.applicantPays ?? a.price}
+                    title="Add-ons"
+                    hint="Optional extras for your spot. Charged with your application."
+                  />
+                )}
                 {selectedTier && (
-                  <p className="text-sm text-gray-700 dark:text-slate-300" data-testid="apply-price-note">
-                    {form.chargeTiming === 'APPROVAL'
-                      ? `You will save a card now and be charged ${tierPriceLine(selectedTier, form.feeMode)} only if your application is accepted.`
-                      : `You will pay ${tierPriceLine(selectedTier, form.feeMode)} when you submit.`}
-                  </p>
+                  <div className="text-sm text-gray-700 dark:text-slate-300 space-y-1" data-testid="apply-price-note">
+                    {addOnLines.length > 0 && (
+                      <p data-testid="apply-total-line">
+                        {selectedTier.name} {money(selectedTier.applicantPays)}
+                        {tierAddOns
+                          .filter((a) => (addOnQty[a.id] ?? 0) > 0)
+                          .map((a) => ` + ${a.name} ×${addOnQty[a.id]} ${money(a.applicantPays * addOnQty[a.id])}`)
+                          .join('')}{' '}
+                        = <strong>{money(estimatedTotal)}</strong>
+                      </p>
+                    )}
+                    <p>
+                      {form.chargeTiming === 'APPROVAL'
+                        ? `You will save a card now and be charged ${addOnLines.length > 0 ? money(estimatedTotal) : tierPriceLine(selectedTier, form.feeMode)} only if your application is accepted.`
+                        : `You will pay ${addOnLines.length > 0 ? money(estimatedTotal) : tierPriceLine(selectedTier, form.feeMode)} when you submit.`}
+                    </p>
+                  </div>
                 )}
               </fieldset>
             )}

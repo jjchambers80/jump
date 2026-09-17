@@ -19,6 +19,9 @@ export interface AddOn {
   priceTierIds: string[] | null;
 }
 
+/** What a quantity picker needs; public ticket add-ons and application tier add-ons both satisfy it. */
+export type PickableAddOn = Pick<AddOn, 'id' | 'name' | 'description' | 'price' | 'taxable' | 'maxPerOrder' | 'remaining' | 'soldOut'>;
+
 /** Admin view (`GET /organizations/:orgId/events/:eventId/add-ons`). */
 export interface AdminAddOn extends Omit<AddOn, 'priceTierIds'> {
   scope: 'TICKET' | 'APPLICATION' | 'BOTH';
@@ -60,7 +63,7 @@ export function offeredAddOns(addOns: AddOn[] | undefined, cartTierIds: string[]
 }
 
 /** Upper bound of the quantity stepper: per-order max, remaining stock, hard cap 10. */
-export function addOnMaxQuantity(addOn: AddOn): number {
+export function addOnMaxQuantity(addOn: Pick<AddOn, 'maxPerOrder' | 'remaining'>): number {
   const caps = [10, addOn.maxPerOrder ?? 10, addOn.remaining ?? 10];
   return Math.max(0, Math.min(...caps));
 }

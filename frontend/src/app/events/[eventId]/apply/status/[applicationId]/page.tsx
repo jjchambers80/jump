@@ -1,7 +1,8 @@
 // Public application status page (spec 011): reached from the confirmation
 // email, right after submitting, or back from Stripe Checkout, with a signed
 // token in the URL. Paid applications can resume an abandoned Checkout or pay
-// an outstanding balance from here (phase 2).
+// an outstanding balance from here (phase 2); add-on lines (spec 012) are
+// itemised under the amount.
 'use client';
 
 import Link from 'next/link';
@@ -114,6 +115,20 @@ function StatusContent({ params }: { params: { eventId: string; applicationId: s
                     {app.paymentStatus === 'PAYMENT_DUE' && app.paymentDueAt ? ` · due ${formatDate(app.paymentDueAt)}` : ''}
                     {app.refundedTotal > 0 ? ` · ${money(app.refundedTotal)} refunded` : ''}
                   </p>
+                  {app.addOns?.length > 0 && (
+                    <ul className="mt-2 space-y-0.5 text-xs text-gray-600 dark:text-slate-400" data-testid="apply-add-ons">
+                      <li className="flex justify-between gap-3">
+                        <span>{app.tier?.name ?? app.form.name}</span>
+                        <span>{money(app.amounts.applicantPays - app.addOns.reduce((s, l) => s + l.applicantPays, 0))}</span>
+                      </li>
+                      {app.addOns.map((l) => (
+                        <li key={l.id} className="flex justify-between gap-3">
+                          <span>{l.name} ×{l.quantity}</span>
+                          <span>{money(l.applicantPays)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                   {app.status !== 'DRAFT' && PAYMENT_COPY[app.paymentStatus] && <p className="mt-1 text-gray-600 dark:text-slate-400">{PAYMENT_COPY[app.paymentStatus]}</p>}
                   {(app.canResume || app.canPay) && (
                     <div className="mt-3 flex flex-wrap items-center gap-3">
