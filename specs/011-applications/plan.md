@@ -1,6 +1,6 @@
 # Implementation Plan: Applications (spec 011)
 
-**Status**: Planned 2026-09-16. Phase 1 built 2026-09-17 (PR #53). Phase 2 built 2026-09-17 on top of the spec 010 phase 2 stack (#49–#51), which it depends on for Connect routing on application charges. Phase 3 not started.
+**Status**: Planned 2026-09-16. Phase 1 built 2026-09-17 (PR #53). Phase 2 built 2026-09-17 on top of the spec 010 phase 2 stack (#49–#51), which it depends on for Connect routing on application charges. Phase 3 built 2026-09-17 (PR #55).
 **Spec**: [spec.md](./spec.md). Research: [Eventeny organizer interview](../../docs/research/2026-09-15-eventeny-organizer-interview.md).
 **Estimate**: phase 1 ~5 days, phase 2 ~6 days, phase 3 ~3 days.
 
