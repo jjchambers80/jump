@@ -24,6 +24,8 @@ Jump uses Stripe SDK v17 (API version `2024-11-20.acacia`) for payment processin
 |----------|-------------|
 | `STRIPE_SECRET_KEY` | Required. Stripe secret API key. Throws on startup if missing. |
 | `STRIPE_WEBHOOK_SECRET` | Webhook signing secret. If unset, signature verification is skipped (dev only). |
+| `STRIPE_CONNECT_ENABLED` | `true` routes charges for organizations with an active Connect account as destination charges — [Connect Payouts](connect-payouts.md). |
+| `STRIPE_CONNECT_WEBHOOK_SECRET` | Signing secret for `POST /webhooks/stripe/connect` (connected-account events). Separate endpoint and secret. |
 | `AUTH_SECRET` | Used for QR JWT signing, not Stripe-specific. |
 
 ## How It Works
@@ -31,7 +33,7 @@ Jump uses Stripe SDK v17 (API version `2024-11-20.acacia`) for payment processin
 ### Checkout Session Creation (OrderService)
 
 1. After order and inventory reservation, `stripe.checkout.sessions.create` is called with:
-   - `mode: 'payment'`, plus `PaymentSettingsService.checkoutOptionsFor(organization)` — `payment_method_types` (`card` + the organization's enabled optional methods) and `payment_intent_data.statement_descriptor_suffix` (see [Payments Settings](payments-settings.md))
+   - `mode: 'payment'`, plus `PaymentSettingsService.checkoutOptionsFor(organization, { fees, lineItems })` — `payment_method_types` (`card` + the organization's enabled optional methods), `payment_intent_data.statement_descriptor_suffix` (see [Payments Settings](payments-settings.md)) and, for an organization with an active Connect account, `payment_intent_data.transfer_data.destination` + `application_fee_amount` making it a **destination charge** (see [Connect Payouts](connect-payouts.md))
    - `customer_email` from Contact
    - `line_items` with all-in unit pricing per tier
    - `metadata: { orderId, orderRef, eventId }`
@@ -39,7 +41,7 @@ Jump uses Stripe SDK v17 (API version `2024-11-20.acacia`) for payment processin
    - `cancel_url` -> `/events/:eventId?status=cancelled`
    - `expires_at` -> 30 minutes from creation
 2. Session ID stored on Order (`stripeSessionId`).
-3. `PaymentTransaction` record created with PENDING status.
+3. `PaymentTransaction` record created with PENDING status, plus `stripeAccountId` / `applicationFee` when the charge was routed to a connected account (null = platform account).
 
 ### Webhook Processing (PaymentService)
 
@@ -74,7 +76,8 @@ Jump uses Stripe SDK v17 (API version `2024-11-20.acacia`) for payment processin
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | `/webhooks/stripe` | Stripe signature | Handle Stripe webhook events |
+| POST | `/webhooks/stripe` | Stripe signature | Handle Stripe webhook events (platform account, including destination charges) |
+| POST | `/webhooks/stripe/connect` | Stripe signature (`STRIPE_CONNECT_WEBHOOK_SECRET`) | Connected-account events: `account.updated`, `capability.updated`, `account.application.deauthorized`, external accounts, `payout.paid/failed` |
 
 ## Gotchas
 
@@ -85,6 +88,7 @@ Jump uses Stripe SDK v17 (API version `2024-11-20.acacia`) for payment processin
 - **30-minute session expiry.** Stripe fires `checkout.session.expired` after timeout, which triggers inventory release.
 - **Stripe SDK version locked to `2024-11-20.acacia`** in `backend/src/config/stripe.js`. Upgrading requires checking for breaking API changes.
 - **`STRIPE_SECRET_KEY` is required at import time** -- app crashes on startup if missing (fail-fast).
+- **Destination-charge events stay on the platform endpoint.** `checkout.session.*` and `charge.refunded` for routed orders fire on the platform account; only account/capability/payout events go to `/webhooks/stripe/connect`. The startup log `Stripe webhook configuration` shows which secrets are set.
 
 ## Related Features
 

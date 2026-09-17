@@ -11,6 +11,7 @@ Blocking items, in the order to do them. Details in the sections below.
 - [ ] **Set the statement descriptor prefix on the Stripe account** (added 2026-09-14) — Stripe Dashboard › Settings › Business › Public details › Statement descriptor. Use something short like `JUMP` so organizations keep 16 characters for their own name. Until this is set, buyers see the raw account name on their card statement and Settings › Payments cannot save a statement name. See [Stripe payments](#stripe-payments).
 - [ ] Live `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` on Railway; activate the account. See [Stripe payments](#stripe-payments).
 - [ ] Decide NY and CA tax regions; activate Stripe Tax or keep manual rates. See [Stripe Tax](#stripe-tax-settings--tax-spec-009).
+- [ ] Stripe Connect platform setup, then `STRIPE_CONNECT_ENABLED=true` (added 2026-09-16) — only after the live key; see [Stripe Connect](#stripe-connect-spec-010-phase-2).
 
 ## Stripe Tax (Settings › Tax, spec 009)
 
@@ -37,6 +38,19 @@ Verified 2026-09-14 (read-only `accounts.retrieve()` with the backend's Railway 
 - [ ] Live `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` on the backend service; webhook endpoint `POST /webhooks/stripe` registered on the live account — see [Stripe Setup](stripe-setup.md).
 - [ ] **Set a statement descriptor prefix** on the live Stripe account (Dashboard › Settings › Business › Public details, "Statement descriptor" → shortened descriptor / prefix). Keep it short (e.g. `JUMP`, 4 characters): organizations get `22 − prefix − 2` characters for their own name on Settings › Payments. Until it is set, no per-organization statement name is sent and the dialog is disabled — see [Payments Settings](../features/payments-settings.md).
 - [ ] **Confirm capabilities** for the optional payment methods organizations may enable (`link_payments`, `cashapp_payments`; BNPL later per spec 010 §5.6). Methods without an active capability show as *Unavailable*.
+
+## Stripe Connect (spec 010 phase 2)
+
+Code and tests shipped 2026-09-16 behind `STRIPE_CONNECT_ENABLED` (default off). Until it is on, nothing routes and the Payments page renders as phase 1. Do these **after** the live `STRIPE_SECRET_KEY` is in place — connected accounts are per Stripe mode, so anything onboarded under the test key is void live. Details: [Connect Payouts](../features/connect-payouts.md), `specs/010-payments-settings/plan-phase-2.md` §8.
+
+- [ ] **Stripe Dashboard › Connect › Get started** on the live account: platform profile, business type "platform / marketplace", accept the Connect terms.
+- [ ] **Connect › Settings › Branding** — name, icon, brand colour. This is what organizers see on the Stripe-hosted onboarding page and in their Express dashboard.
+- [ ] **Connect › Settings › Express dashboard features** — payouts and bank-account editing on; payment details visible. Jump links organizers here for bank changes and payout history.
+- [ ] **Connect › Tax forms** — enable 1099-K filing by Stripe for Express accounts (the platform is merchant of record; Stripe files for connected accounts when enabled). Confirm with finance alongside spec 009 §5.4 (seller of record).
+- [ ] **Add a Connect webhook endpoint** — Developers › Webhooks › Add endpoint › *Listen to events on Connected accounts*: `https://<backend>/webhooks/stripe/connect`, events `account.updated`, `capability.updated`, `account.application.deauthorized`, `account.external_account.created|updated|deleted`, `payout.paid`, `payout.failed`. Copy the secret to `STRIPE_CONNECT_WEBHOOK_SECRET` on the backend service. Do **not** add `checkout.session.*` or `charge.refunded` here.
+- [ ] Set `STRIPE_CONNECT_ENABLED=true` on the backend service and redeploy. The startup log `Stripe webhook configuration` should show `platformSecret: true, connectSecret: true, connectEnabled: true`.
+- [ ] **Verify with one internal organization**: Settings › Payments › *Set up payouts* → complete Express onboarding → `Receiving payouts` → place a test order and confirm in the Stripe dashboard that the payment shows `application_fee_amount` = fees + tax and the connected balance received the subtotal → change the payout schedule → refund one ticket and confirm the transfer reversal and application-fee refund → full refund.
+- [ ] Decide the cutover policy for organizations that never onboard (plan §5.7: no deadline, persistent dashboard banner). Revisit once the first organizations are connected.
 
 ## Related
 

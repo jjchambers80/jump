@@ -1,6 +1,6 @@
 # Implementation Plan: Spec 010 Phase 2 — Stripe Connect payouts
 
-**Status**: Planned 2026-09-16. Not started.
+**Status**: Implemented 2026-09-16 — PR A backend (#49), PR B routes + UI (#50), PR C docs; deployed dark behind `STRIPE_CONNECT_ENABLED`. Production enablement pending the §8 ops steps (tracked on the launch checklist).
 **Parent**: [plan.md](./plan.md) (§2.1, §3.4, §4 phase 2, §5, §6.3–6.5, §8 phase 2) and [spec.md](./spec.md). This document turns the phase 2 outline into a buildable plan; where it refines the parent (gate on the `transfers` capability, cents math by subtraction, `mode` column) this document wins.
 **Decisions taken 2026-09-16** (parent §5): 5.1 **Express** accounts; 5.2 **destination charges without `on_behalf_of`** (platform stays merchant of record, spec 009 tax model unchanged); 5.3 platform keeps **platform fee + processing fee + tax**, organization receives exactly the ticket subtotal; 5.4 refunds `reverse_transfer: true`, `refund_application_fee: true`; 5.7 no cutover deadline, persistent "Set up payouts" banner.
 **Why now**: every roadmap candidate after this (011 applications, 012 add-ons, fee modes) moves money for an organization. Without Connect the platform collects it and settles by hand — see [docs/research/2026-09-15-eventeny-organizer-interview.md](../../docs/research/2026-09-15-eventeny-organizer-interview.md) §7.
