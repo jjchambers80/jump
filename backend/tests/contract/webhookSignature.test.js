@@ -1,5 +1,5 @@
 // Stripe webhook signature verification (contract)
-// The Stripe webhook route must see the raw request bytes:
+// The platform and Connect webhook routes must see the raw request bytes:
 // a global express.json() ahead of express.raw() makes constructEvent throw
 // "Webhook payload must be provided as a string or a Buffer" for every event
 // once STRIPE_WEBHOOK_SECRET is set. Uses the real stripe library's signing
@@ -12,19 +12,21 @@ process.env.STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || 'sk_test_webhoo
 const { default: app } = await import('../../src/api/server.js');
 
 const SECRET = 'whsec_contract_test_secret';
+const CONNECT_SECRET = 'whsec_contract_test_connect';
 
 function signed(payload, secret) {
   return Stripe.webhooks.generateTestHeaderString({ payload, secret });
 }
 
 describe('Stripe webhook signature', () => {
-  const previous = process.env.STRIPE_WEBHOOK_SECRET;
+  const previous = { platform: process.env.STRIPE_WEBHOOK_SECRET, connect: process.env.STRIPE_CONNECT_WEBHOOK_SECRET };
   beforeAll(() => {
     process.env.STRIPE_WEBHOOK_SECRET = SECRET;
+    process.env.STRIPE_CONNECT_WEBHOOK_SECRET = CONNECT_SECRET;
   });
   afterAll(() => {
-    if (previous === undefined) delete process.env.STRIPE_WEBHOOK_SECRET;
-    else process.env.STRIPE_WEBHOOK_SECRET = previous;
+    process.env.STRIPE_WEBHOOK_SECRET = previous.platform ?? '';
+    process.env.STRIPE_CONNECT_WEBHOOK_SECRET = previous.connect ?? '';
   });
 
   const event = JSON.stringify({ id: 'evt_sig_test', object: 'event', type: 'ping.contract_test', data: { object: { id: 'x' } } });
@@ -40,6 +42,12 @@ describe('Stripe webhook signature', () => {
     expect(res.status).toBe(400);
     res = await request(app).post('/webhooks/stripe').set('stripe-signature', signed(event, SECRET)).set('Content-Type', 'application/json').send(event.replace('evt_sig_test', 'evt_other'));
     expect(res.status).toBe(400);
+  });
+
+  it('accepts a correctly signed Connect event', async () => {
+    const connectEvent = JSON.stringify({ id: 'evt_sig_connect', object: 'event', account: 'acct_contract', type: 'ping.contract_test', data: { object: { id: 'x' } } });
+    const res = await request(app).post('/webhooks/stripe/connect').set('stripe-signature', signed(connectEvent, CONNECT_SECRET)).set('Content-Type', 'application/json').send(connectEvent);
+    expect(res.status).toBe(200);
   });
 
   it('other JSON routes still parse bodies', async () => {

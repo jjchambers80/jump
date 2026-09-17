@@ -139,6 +139,7 @@ ORGANIZER+ views forms/applications and decides; ADMIN/SYSTEM_ADMIN configures f
 
 ## Gotchas
 
+- **Webhook raw body**: `server.js` must not run `express.json()` on `/webhooks/*` — the route applies `express.raw` and `constructEvent` needs the bytes. Broken on main until PR #56; `tests/contract/webhookSignature.test.js` pins it with real signatures. Local flow: `stripe listen --api-key $STRIPE_SECRET_KEY --forward-to localhost:3002/webhooks/stripe`, copy the printed `whsec_…` into `backend/.env` `STRIPE_WEBHOOK_SECRET`, restart the backend (`tests/setup.js` blanks these so local values never reach the suites).
 - **PAID forms need `APPLICATIONS_PAYMENTS_ENABLED=true`** — otherwise the API returns 409 on `status: OPEN` and the editor shows the warning. Tiers, fee mode and questions can be prepared before flipping it.
 - **Synchronous `succeeded` marks PAID immediately**; the later `payment_intent.succeeded` webhook is a no-op (guarded on `paymentStatus`). Without a webhook (local dev) only the `processing` path and Checkout returns need one — run `stripe listen --forward-to localhost:3000/webhooks/stripe`.
 - **Stripe Checkout `mode: setup` returns a SetupIntent id only**; the handler retrieves it for the payment method. In tests `setupIntents.retrieve` is mocked.
