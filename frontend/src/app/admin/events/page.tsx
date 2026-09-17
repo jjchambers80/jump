@@ -265,6 +265,12 @@ export default function DashboardEventsPage() {
                       >
                         {isExpanded ? 'Hide Tiers' : 'Show Tiers'}
                       </button>
+                      <Link
+                        href={`/admin/events/${event.id}/applications`}
+                        className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
+                      >
+                        Applications
+                      </Link>
                       {event.status === 'PUBLISHED' && (
                         <Link
                           href={`/admin/events/${event.id}/analytics`}

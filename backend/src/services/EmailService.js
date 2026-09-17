@@ -195,6 +195,54 @@ ${manageTicketsHtml}
   }
 
   /**
+   * Send an application decision / status email (spec 011). `body` is plain
+   * text already rendered from the organization's template; paragraphs are
+   * split on blank lines and every line is escaped, so organizer text can
+   * never inject markup. URLs on their own line become buttons.
+   *
+   * @param {{ to: string, subject: string, body: string, organization?: { name?: string, logoUrl?: string } }} params
+   */
+  async sendApplicationMessage({ to, subject, body, organization = {} }) {
+    const orgName = organization.name || 'the organizer';
+    const paragraphs = String(body || '')
+      .split(/\n\s*\n/)
+      .map((p) => p.trim())
+      .filter(Boolean)
+      .map((p) => {
+        if (/^https?:\/\/\S+$/.test(p)) {
+          return `<div style="text-align: center; margin: 24px 0;"><a href="${escapeHtml(p)}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 15px; font-weight: bold; padding: 12px 28px; border-radius: 8px; text-decoration: none;">Open</a></div>`;
+        }
+        const lines = p.split('\n').map((line) => {
+          const escaped = escapeHtml(line);
+          return escaped.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color: #2563eb;">$1</a>');
+        });
+        return `<p style="margin: 0 0 14px; line-height: 1.5;">${lines.join('<br />')}</p>`;
+      })
+      .join('');
+
+    const msg = {
+      to: [to],
+      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      subject,
+      text: body,
+      html: `
+        <html>
+          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+            <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
+              ${orgLogoHtml(organization.logoUrl, orgName)}
+              <h1 style="color: #333; font-size: 20px; margin: 0;">${escapeHtml(orgName)}</h1>
+            </div>
+            <div style="padding: 24px; color: #111827; font-size: 15px;">
+              ${paragraphs}
+            </div>
+          </body>
+        </html>
+      `,
+    };
+    await resend.emails.send(msg);
+  }
+
+  /**
    * Send cancellation notification to all ticket holders (FR-037)
    * @param {Object} event - Event object
    * @param {Array} tickets - Tickets to notify (with contact relations)

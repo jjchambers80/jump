@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { api } from '../../../services/api';
 import { resolveAssetUrl } from '../../../lib/assets';
 import BrandScope from '../../../components/BrandScope';
+import GetInvolved from './GetInvolved';
 import CartLineItem from '../../../components/CartLineItem';
 import OrderTotals from '../../../components/OrderTotals';
 import ExpandCollapseAll from '../../../components/ExpandCollapseAll';
@@ -521,6 +522,9 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
               </div>
             )}
           </div>
+
+          {/* Applications (spec 011): vendors, sponsors, press, panels */}
+          <GetInvolved eventId={event.id} />
         </div>
         {/* End content card */}
 

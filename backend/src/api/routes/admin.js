@@ -11,6 +11,7 @@ import { validateUpdateAttendee } from '../validators/adminValidators.js';
 import { validateUpdateBusinessDetails } from '../validators/organizationValidators.js';
 import { validateCreateOrganizationPerson } from '../validators/organizationPersonValidators.js';
 import { validateTaxRegionParams, validateUpsertTaxRegion, validateUpdateTaxSettings, validateTaxReportQuery } from '../validators/taxValidators.js';
+import { validateFormBody, validateTierBody, validateQuestionBody, validateDecisionBody, validateBulkBody, validateTemplateBody } from '../validators/applicationValidators.js';
 import { validateUpdatePaymentSettings, validateUpdatePayoutSettings } from '../validators/paymentValidators.js';
 import organizationService from '../../services/OrganizationService.js';
 import organizationPersonService from '../../services/OrganizationPersonService.js';
@@ -25,6 +26,9 @@ import connectService from '../../services/ConnectService.js';
 import imageService from '../../services/ImageService.js';
 import emailService from '../../services/EmailService.js';
 import qrService from '../../services/QRService.js';
+import applicationFormService from '../../services/ApplicationFormService.js';
+import applicationService from '../../services/ApplicationService.js';
+import applicationTemplateService from '../../services/ApplicationTemplateService.js';
 
 const router = express.Router();
 
@@ -319,6 +323,111 @@ router.patch('/settings/payments', requireAdmin, validateUpdatePaymentSettings, 
   }
 });
 
+// ─── Applications (spec 011) ──────────────────────────────────────────────
+// Event ownership is enforced inside the services via requireEvent(eventId, orgId);
+// SYSTEM_ADMIN passes null and may reach any event.
+
+async function scopedOrgFor(req) {
+  const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
+  if (isUnscoped(scope)) return null;
+  if (!scope.organizationId) throw new NotFoundError('Event not found');
+  return scope.organizationId;
+}
+
+const wrap = (fn) => async (req, res, next) => {
+  try {
+    await fn(req, res);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Forms
+router.get('/events/:eventId/application-forms', wrap(async (req, res) => {
+  res.json({ data: await applicationFormService.listForms(req.params.eventId, await scopedOrgFor(req)) });
+}));
+router.post('/events/:eventId/application-forms', requireAdmin, validateFormBody, wrap(async (req, res) => {
+  res.status(201).json(await applicationFormService.createForm(req.params.eventId, await scopedOrgFor(req), req.body));
+}));
+router.get('/events/:eventId/application-forms/:formId', wrap(async (req, res) => {
+  res.json(await applicationFormService.getForm(req.params.eventId, req.params.formId, await scopedOrgFor(req)));
+}));
+router.patch('/events/:eventId/application-forms/:formId', requireAdmin, validateFormBody, wrap(async (req, res) => {
+  res.json(await applicationFormService.updateForm(req.params.eventId, req.params.formId, await scopedOrgFor(req), req.body));
+}));
+router.delete('/events/:eventId/application-forms/:formId', requireAdmin, wrap(async (req, res) => {
+  await applicationFormService.deleteForm(req.params.eventId, req.params.formId, await scopedOrgFor(req));
+  res.status(204).end();
+}));
+
+// Tiers
+router.post('/events/:eventId/application-forms/:formId/tiers', requireAdmin, validateTierBody, wrap(async (req, res) => {
+  res.status(201).json(await applicationFormService.addTier(req.params.eventId, req.params.formId, await scopedOrgFor(req), req.body));
+}));
+router.patch('/events/:eventId/application-forms/:formId/tiers/:tierId', requireAdmin, validateTierBody, wrap(async (req, res) => {
+  res.json(await applicationFormService.updateTier(req.params.eventId, req.params.formId, req.params.tierId, await scopedOrgFor(req), req.body));
+}));
+router.delete('/events/:eventId/application-forms/:formId/tiers/:tierId', requireAdmin, wrap(async (req, res) => {
+  await applicationFormService.deleteTier(req.params.eventId, req.params.formId, req.params.tierId, await scopedOrgFor(req));
+  res.status(204).end();
+}));
+
+// Questions
+router.post('/events/:eventId/application-forms/:formId/questions', requireAdmin, validateQuestionBody, wrap(async (req, res) => {
+  res.status(201).json(await applicationFormService.addQuestion(req.params.eventId, req.params.formId, await scopedOrgFor(req), req.body));
+}));
+router.patch('/events/:eventId/application-forms/:formId/questions/reorder', requireAdmin, wrap(async (req, res) => {
+  res.json({ data: await applicationFormService.reorderQuestions(req.params.eventId, req.params.formId, await scopedOrgFor(req), req.body?.ids) });
+}));
+router.patch('/events/:eventId/application-forms/:formId/questions/:questionId', requireAdmin, validateQuestionBody, wrap(async (req, res) => {
+  res.json(await applicationFormService.updateQuestion(req.params.eventId, req.params.formId, req.params.questionId, await scopedOrgFor(req), req.body));
+}));
+router.delete('/events/:eventId/application-forms/:formId/questions/:questionId', requireAdmin, wrap(async (req, res) => {
+  res.json(await applicationFormService.removeQuestion(req.params.eventId, req.params.formId, req.params.questionId, await scopedOrgFor(req)));
+}));
+
+// Applications
+router.get('/events/:eventId/applications', wrap(async (req, res) => {
+  res.json(await applicationService.list(req.params.eventId, await scopedOrgFor(req), req.query));
+}));
+router.get('/events/:eventId/applications/summary', wrap(async (req, res) => {
+  res.json(await applicationService.summary(req.params.eventId, await scopedOrgFor(req)));
+}));
+router.get('/events/:eventId/applications/export.csv', wrap(async (req, res) => {
+  const csv = await applicationService.exportCsv(req.params.eventId, await scopedOrgFor(req), req.query);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="applications-${req.params.eventId}.csv"`);
+  res.send(csv);
+}));
+router.post('/events/:eventId/applications/bulk', validateBulkBody, wrap(async (req, res) => {
+  res.json(await applicationService.bulkDecide(req.params.eventId, await scopedOrgFor(req), { ...req.body, byUserId: req.user.id }));
+}));
+router.get('/events/:eventId/applications/:applicationId', wrap(async (req, res) => {
+  res.json(await applicationService.get(req.params.eventId, req.params.applicationId, await scopedOrgFor(req)));
+}));
+router.patch('/events/:eventId/applications/:applicationId', wrap(async (req, res) => {
+  const { boothLabel, internalNote, ...rest } = req.body || {};
+  if (Object.keys(rest).length) throw new ValidationError(`Unknown field(s): ${Object.keys(rest).join(', ')}`);
+  res.json(await applicationService.updateNotes(req.params.eventId, req.params.applicationId, await scopedOrgFor(req), { boothLabel, internalNote }));
+}));
+router.post('/events/:eventId/applications/:applicationId/preview', wrap(async (req, res) => {
+  res.json(await applicationService.previewMessage(req.params.eventId, req.params.applicationId, await scopedOrgFor(req), req.body?.decision));
+}));
+router.post('/events/:eventId/applications/:applicationId/decision', validateDecisionBody, wrap(async (req, res) => {
+  res.json(await applicationService.decide(req.params.eventId, req.params.applicationId, await scopedOrgFor(req), { ...req.body, byUserId: req.user.id }));
+}));
+
+// Templates (Settings › Applications)
+router.get('/settings/application-templates', wrap(async (req, res) => {
+  const organizationId = await activeOrgFor(req);
+  res.json({ data: await applicationTemplateService.listTemplates(organizationId), mergeFields: applicationTemplateService.mergeFields() });
+}));
+router.put('/settings/application-templates/:action', requireAdmin, validateTemplateBody, wrap(async (req, res) => {
+  res.json(await applicationTemplateService.updateTemplate(await activeOrgFor(req), req.params.action, req.body));
+}));
+router.delete('/settings/application-templates/:action', requireAdmin, wrap(async (req, res) => {
+  res.json(await applicationTemplateService.resetTemplate(await activeOrgFor(req), req.params.action));
+}));
 // ─── Stripe Connect (spec 010 phase 2) ────────────────────────────────────
 // All 404 while STRIPE_CONNECT_ENABLED is off (ConnectService._assertEnabled).
 
