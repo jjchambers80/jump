@@ -17,12 +17,18 @@ jest.unstable_mockModule('../../src/config/stripe.js', () => ({
 jest.unstable_mockModule('../../src/utils/logger.js', () => ({
   default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }));
+// Connect routing (phase 2) is decided by ConnectService; pin its answer here.
+const mockDestinationFor = jest.fn();
+jest.unstable_mockModule('../../src/services/ConnectService.js', () => ({
+  default: { destinationFor: mockDestinationFor },
+}));
 
 process.env.STRIPE_SECRET_KEY = 'sk_test_unit';
 
-const { default: service, deriveDescriptorSuffix, normalizeDescriptorText, suffixBudget, stripeMode } = await import(
+const { default: service, deriveDescriptorSuffix, normalizeDescriptorText, suffixBudget, stripeMode, applicationFeeCents } = await import(
   '../../src/services/PaymentSettingsService.js'
 );
+const { default: feeService } = await import('../../src/services/FeeService.js');
 
 const account = ({ prefix = 'JUMP', caps = {}, charges = true } = {}) => ({
   charges_enabled: charges,
@@ -42,6 +48,7 @@ const org = (over = {}) => ({
 beforeEach(() => {
   jest.clearAllMocks();
   service._invalidate();
+  mockDestinationFor.mockResolvedValue(null);
   mockAccountsRetrieve.mockResolvedValue(account());
   mockOrgUpdate.mockImplementation(({ data }) => Promise.resolve(org(data)));
 });
@@ -194,5 +201,95 @@ describe('checkoutOptionsFor', () => {
     mockAccountsRetrieve.mockRejectedValueOnce(new Error('down'));
     expect(await service.checkoutOptionsFor(org({ enabledPaymentMethods: ['link'] }))).toEqual({ payment_method_types: ['card'] });
     expect(await service.checkoutOptionsFor(null)).toEqual({ payment_method_types: ['card'] });
+  });
+});
+
+// Build the Checkout line items exactly as OrderService does: all-in unit
+// price = line total / quantity, rounded to cents.
+function lineItemsFor(items, taxRate, taxInclusive = false) {
+  const fees = feeService.computeOrderFees(items, taxRate, { taxInclusive });
+  const lineItems = fees.itemBreakdowns.map((b) => ({
+    price_data: { currency: 'usd', unit_amount: Math.round((b.lineTotal / b.quantity) * 100) },
+    quantity: b.quantity,
+  }));
+  return { fees, lineItems };
+}
+
+describe('applicationFeeCents (spec 010 phase 2)', () => {
+  const totalCents = (lineItems) => lineItems.reduce((s, i) => s + i.price_data.unit_amount * i.quantity, 0);
+
+  test.each([
+    ['single tier, tax on top', [{ unitPrice: 25, quantity: 2 }], 0.0725, false],
+    ['single tier, no tax', [{ unitPrice: 25, quantity: 2 }], 0, false],
+    ['tax-inclusive listing', [{ unitPrice: 25, quantity: 2 }], 0.0725, true],
+    ['three tiers with rounding drift', [{ unitPrice: 19.99, quantity: 3 }, { unitPrice: 75, quantity: 1 }, { unitPrice: 5.55, quantity: 7 }], 0.08875, false],
+    ['three tiers tax-inclusive', [{ unitPrice: 19.99, quantity: 3 }, { unitPrice: 75, quantity: 1 }, { unitPrice: 5.55, quantity: 7 }], 0.08875, true],
+    ['one-cent ticket', [{ unitPrice: 0.01, quantity: 1 }], 0.07, false],
+    ['free ticket', [{ unitPrice: 0, quantity: 3 }], 0.07, false],
+  ])('%s: organization receives exactly the ex-tax subtotal', (_name, items, taxRate, taxInclusive) => {
+    const { fees, lineItems } = lineItemsFor(items, taxRate, taxInclusive);
+    const cents = applicationFeeCents({ fees, lineItems });
+    expect(Number.isInteger(cents)).toBe(true);
+    expect(cents).toBeGreaterThanOrEqual(0);
+    expect(totalCents(lineItems) - cents).toBe(Math.round(fees.subtotal * 100));
+  });
+
+  test('platform keeps fees plus tax within per-unit rounding', () => {
+    const { fees, lineItems } = lineItemsFor([{ unitPrice: 25, quantity: 2 }], 0.0725);
+    const expected = Math.round((fees.platformFee + fees.processingFee + fees.tax) * 100);
+    expect(Math.abs(applicationFeeCents({ fees, lineItems }) - expected)).toBeLessThanOrEqual(lineItems.length);
+  });
+
+  test('null for anything that cannot be right', () => {
+    const { fees, lineItems } = lineItemsFor([{ unitPrice: 25, quantity: 2 }], 0);
+    expect(applicationFeeCents(null)).toBeNull();
+    expect(applicationFeeCents({ fees, lineItems: [] })).toBeNull();
+    expect(applicationFeeCents({ fees: { subtotal: 'x' }, lineItems })).toBeNull();
+    expect(applicationFeeCents({ fees: { subtotal: 999 }, lineItems })).toBeNull(); // subtotal above the charge
+    expect(applicationFeeCents({ fees, lineItems: [{ price_data: { unit_amount: 12.5 }, quantity: 1 }] })).toBeNull();
+    expect(applicationFeeCents({ fees, lineItems: [{ price_data: { unit_amount: 1250 }, quantity: 0 }] })).toBeNull();
+  });
+});
+
+describe('checkoutOptionsFor with Connect routing (spec 010 phase 2)', () => {
+  const charge = () => lineItemsFor([{ unitPrice: 25, quantity: 2 }], 0.0725);
+
+  test('adds transfer_data and application_fee_amount when the organization has an active account', async () => {
+    mockDestinationFor.mockResolvedValueOnce({ stripeAccountId: 'acct_1' });
+    const { fees, lineItems } = charge();
+    const options = await service.checkoutOptionsFor(org(), { fees, lineItems });
+    expect(options.payment_intent_data).toEqual({
+      statement_descriptor_suffix: 'ROMAN SKIN CARE',
+      transfer_data: { destination: 'acct_1' },
+      application_fee_amount: applicationFeeCents({ fees, lineItems }),
+    });
+    expect(mockDestinationFor).toHaveBeenCalledWith('org_1');
+  });
+
+  test('routes even when the platform has no descriptor prefix', async () => {
+    mockAccountsRetrieve.mockResolvedValueOnce(account({ prefix: null }));
+    mockDestinationFor.mockResolvedValueOnce({ stripeAccountId: 'acct_1' });
+    const options = await service.checkoutOptionsFor(org(), charge());
+    expect(options.payment_intent_data).toEqual({ transfer_data: { destination: 'acct_1' }, application_fee_amount: expect.any(Number) });
+  });
+
+  test('platform account when routing says no, when no charge context is given, or when the cents are inconsistent', async () => {
+    const { fees, lineItems } = charge();
+    expect((await service.checkoutOptionsFor(org(), { fees, lineItems })).payment_intent_data).toEqual({ statement_descriptor_suffix: 'ROMAN SKIN CARE' });
+
+    expect((await service.checkoutOptionsFor(org())).payment_intent_data).toEqual({ statement_descriptor_suffix: 'ROMAN SKIN CARE' });
+    expect(mockDestinationFor).toHaveBeenCalledTimes(1); // no charge → no routing lookup
+
+    mockDestinationFor.mockResolvedValueOnce({ stripeAccountId: 'acct_1' });
+    const bad = await service.checkoutOptionsFor(org(), { fees: { subtotal: 9999 }, lineItems });
+    expect(bad.payment_intent_data).toEqual({ statement_descriptor_suffix: 'ROMAN SKIN CARE' });
+  });
+
+  test('a routing failure keeps the phase 1 options and charges on the platform account', async () => {
+    mockDestinationFor.mockRejectedValueOnce(new Error('boom'));
+    expect(await service.checkoutOptionsFor(org(), charge())).toEqual({
+      payment_method_types: ['card'],
+      payment_intent_data: { statement_descriptor_suffix: 'ROMAN SKIN CARE' },
+    });
   });
 });

@@ -6,9 +6,23 @@ import express from 'express';
 import stripe from '../../config/stripe.js';
 import PaymentService from '../../services/PaymentService.js';
 import RefundService from '../../services/RefundService.js';
+import ConnectService from '../../services/ConnectService.js';
 import logger from '../../utils/logger.js';
 
 const router = express.Router();
+
+/**
+ * Parse and (when a secret is configured) verify a Stripe webhook body.
+ * Without a secret — development and tests — the body is trusted and a warning
+ * is logged. Throws on a bad signature.
+ */
+function readStripeEvent(req, secret, label) {
+  if (secret) return stripe.webhooks.constructEvent(req.body, req.headers['stripe-signature'], secret);
+  logger.warn(`Stripe ${label} webhook signature verification skipped (no secret configured)`);
+  if (Buffer.isBuffer(req.body)) return JSON.parse(req.body.toString());
+  if (typeof req.body === 'string') return JSON.parse(req.body);
+  return req.body;
+}
 
 /**
  * POST /webhooks/stripe
@@ -106,6 +120,66 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
       error: error.message,
     });
     // Still return 200 to prevent Stripe from retrying
+    res.json({ received: true, error: error.message });
+  }
+});
+
+/**
+ * POST /webhooks/stripe/connect — events from connected accounts (spec 010
+ * phase 2). A separate Stripe endpoint ("listen to events on connected
+ * accounts") with its own signing secret, STRIPE_CONNECT_WEBHOOK_SECRET.
+ * Destination-charge events (checkout.session.*, charge.refunded) still arrive
+ * on the platform endpoint above. Every event carries `event.account`, the
+ * connected account id, which is the only key the handlers use.
+ */
+router.post('/stripe/connect', express.raw({ type: 'application/json' }), async (req, res) => {
+  let event;
+  try {
+    event = readStripeEvent(req, process.env.STRIPE_CONNECT_WEBHOOK_SECRET, 'Connect');
+  } catch (err) {
+    logger.error('Connect webhook signature verification failed', { error: err.message });
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  const accountId = event.account;
+  try {
+    if (!accountId) {
+      logger.warn('Connect webhook without an account id', { type: event.type });
+      return res.json({ received: true });
+    }
+
+    switch (event.type) {
+      case 'account.updated':
+        await ConnectService.applyAccount(accountId, event.data.object);
+        break;
+
+      case 'capability.updated':
+      case 'account.external_account.created':
+      case 'account.external_account.updated':
+      case 'account.external_account.deleted': {
+        // The payload is the sub-object; re-read the account for the full state.
+        const account = await stripe.accounts.retrieve(accountId, { expand: ['external_accounts'] });
+        await ConnectService.applyAccount(accountId, account);
+        break;
+      }
+
+      case 'account.application.deauthorized':
+        await ConnectService.markDisconnected(accountId);
+        break;
+
+      case 'payout.paid':
+      case 'payout.failed':
+        await ConnectService.recordPayout(accountId, event.data.object);
+        break;
+
+      default:
+        logger.info('Unhandled Stripe Connect webhook event', { type: event.type, account: accountId });
+    }
+
+    res.json({ received: true });
+  } catch (error) {
+    logger.error('Error processing Connect webhook', { type: event.type, account: accountId, error: error.message });
+    // 200 so Stripe does not retry; the page's Sync button is the recovery path
     res.json({ received: true, error: error.message });
   }
 });

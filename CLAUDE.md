@@ -55,6 +55,8 @@ cd frontend && npm run test:unit    # Vitest unit tests (lib/color.ts)
 | `RAILWAY_API_TOKEN`, `RAILWAY_FRONTEND_SERVICE_ID` | backend | Optional. With Railway-injected `RAILWAY_PROJECT_ID` + `RAILWAY_ENVIRONMENT_ID`, lets the backend attach verified custom domains to the frontend service for TLS. Unset: domains activate on DNS proof and TLS must be added in the Railway dashboard |
 | `DOMAIN_SWEEP_INTERVAL_MS` | backend | Optional. Custom-domain re-check interval (default 10 min) |
 | `DOMAIN_VERIFY_COOLDOWN_MS` | backend | Optional. Minimum gap between user-initiated "I updated DNS records" checks (default 15 s; tests use 0) |
+| `STRIPE_CONNECT_ENABLED` | backend | Optional. `true` routes charges for organizations with an active Stripe Connect account as destination charges (spec 010 phase 2). Default off; code deploys dark |
+| `STRIPE_CONNECT_WEBHOOK_SECRET` | backend | Optional. Signing secret for `POST /webhooks/stripe/connect` (connected-account events). Separate from `STRIPE_WEBHOOK_SECRET` |
 | `SCANNER_API_KEY` | backend | Optional. Shared key for hardware ticket readers calling `POST /tickets/scan` / `/redeem` via `X-Scanner-Key`. Unset: only staff sessions can scan |
 
 ## Deployment

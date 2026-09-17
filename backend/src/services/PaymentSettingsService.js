@@ -16,6 +16,7 @@ import {
 } from '../config/payments.js';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import logger from '../utils/logger.js';
+import connectService from './ConnectService.js';
 
 // Platform account details (prefix, capabilities) change rarely; one call per 5 minutes.
 const PROVIDER_STATUS_TTL_MS = 5 * 60 * 1000;
@@ -66,6 +67,30 @@ export function deriveDescriptorSuffix(name, prefix) {
   if (budget <= 0) return null;
   const clean = normalizeDescriptorText(name).slice(0, budget).trim();
   return /[A-Z]/.test(clean) ? clean : null;
+}
+
+/**
+ * Cents the platform keeps on a destination charge: every cent Stripe collects
+ * beyond the organization's ex-tax subtotal. Null when the numbers cannot be
+ * right (missing inputs, negative fee, subtotal above the charge).
+ *
+ * @param {{ fees: { subtotal: number }, lineItems: Array<{ price_data: { unit_amount: number }, quantity: number }> }} charge
+ * @returns {number|null}
+ */
+export function applicationFeeCents(charge) {
+  const items = charge?.lineItems;
+  const subtotal = charge?.fees?.subtotal;
+  if (!Array.isArray(items) || items.length === 0 || typeof subtotal !== 'number' || !Number.isFinite(subtotal)) return null;
+  let totalCents = 0;
+  for (const item of items) {
+    const unit = item?.price_data?.unit_amount;
+    const qty = item?.quantity;
+    if (!Number.isInteger(unit) || unit < 0 || !Number.isInteger(qty) || qty <= 0) return null;
+    totalCents += unit * qty;
+  }
+  const subtotalCents = Math.round(subtotal * 100);
+  if (subtotalCents < 0 || subtotalCents > totalCents) return null;
+  return totalCents - subtotalCents;
 }
 
 class PaymentSettingsService {
@@ -170,10 +195,19 @@ class PaymentSettingsService {
    * value Stripe would reject: a suffix that no longer fits the platform prefix
    * is dropped, a method the platform lost the capability for is filtered out.
    *
+   * With `charge` (spec 010 phase 2) the session becomes a destination charge
+   * when the organization has an active Connect account: the organization
+   * receives exactly the ex-tax subtotal and the platform keeps fees + tax.
+   * `application_fee_amount` is total cents minus subtotal cents, computed from
+   * the exact line-item cents Stripe will charge so per-unit rounding never
+   * moves a cent between the parties. Callers read the routing outcome back
+   * from `payment_intent_data.transfer_data` / `application_fee_amount`.
+   *
    * @param {{ id: string, name: string, statementDescriptorSuffix?: string|null, enabledPaymentMethods?: string[] }} organization
-   * @returns {Promise<{ payment_method_types: string[], payment_intent_data?: { statement_descriptor_suffix: string } }>}
+   * @param {{ fees: { subtotal: number }, lineItems: Array<{ price_data: { unit_amount: number }, quantity: number }> }} [charge]
+   * @returns {Promise<{ payment_method_types: string[], payment_intent_data?: { statement_descriptor_suffix?: string, transfer_data?: { destination: string }, application_fee_amount?: number } }>}
    */
-  async checkoutOptionsFor(organization) {
+  async checkoutOptionsFor(organization, charge = null) {
     const fallback = { payment_method_types: ['card'] };
     if (!organization) return fallback;
     try {
@@ -193,6 +227,15 @@ class PaymentSettingsService {
           prefix: provider.statementDescriptorPrefix,
         });
       }
+
+      const routing = charge ? await this._connectRouting(organization, charge) : null;
+      if (routing) {
+        options.payment_intent_data = {
+          ...options.payment_intent_data,
+          transfer_data: { destination: routing.stripeAccountId },
+          application_fee_amount: routing.applicationFeeCents,
+        };
+      }
       return options;
     } catch (error) {
       logger.error('Checkout options failed; using defaults', { organizationId: organization.id, error: error.message });
@@ -203,6 +246,36 @@ class PaymentSettingsService {
   // ---------------------------------------------------------------------------
   // Internals
   // ---------------------------------------------------------------------------
+
+  /**
+   * Destination-charge routing (plan-phase-2 §2.1–2.2). Null = platform account.
+   * Any inconsistency in the cents falls back to the platform account rather
+   * than risking a mis-split; the log line is the reconciliation breadcrumb.
+   */
+  async _connectRouting(organization, charge) {
+    let destination;
+    try {
+      destination = await connectService.destinationFor(organization.id);
+    } catch (error) {
+      logger.error('Connect routing skipped: lookup failed', {
+        event: 'connect_routing_skipped',
+        organizationId: organization.id,
+        error: error.message,
+      });
+      return null;
+    }
+    if (!destination) return null;
+    const cents = applicationFeeCents(charge);
+    if (cents === null) {
+      logger.error('Connect routing skipped: inconsistent charge amounts', {
+        event: 'connect_routing_skipped',
+        organizationId: organization.id,
+        stripeAccountId: destination.stripeAccountId,
+      });
+      return null;
+    }
+    return { stripeAccountId: destination.stripeAccountId, applicationFeeCents: cents };
+  }
 
   /** Stored suffix when it still fits the platform prefix, else the derived one. */
   _effectiveSuffix(organization, provider) {

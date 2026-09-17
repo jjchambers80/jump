@@ -20,7 +20,7 @@ class RefundService {
     const result = await prisma.$transaction(async (tx) => {
       // Lock the order row to prevent concurrent refunds
       const [order] = await tx.$queryRaw`
-        SELECT o.*, p."stripePaymentIntentId", p."status" AS "paymentStatus"
+        SELECT o.*, p."stripePaymentIntentId", p."status" AS "paymentStatus", p."stripeAccountId"
         FROM "Order" o
         LEFT JOIN "PaymentTransaction" p ON p."orderId" = o."id"
         WHERE o."id" = ${orderId}
@@ -77,7 +77,8 @@ class RefundService {
         stripeRefund = await this._createStripeRefund(
           order.stripePaymentIntentId,
           refundAmount,
-          reason
+          reason,
+          { connected: Boolean(order.stripeAccountId) }
         );
       } catch (err) {
         // Stripe failed — transaction rolls back, PENDING record disappears
@@ -214,7 +215,8 @@ class RefundService {
         stripeRefund = await this._createStripeRefund(
           order.payment.stripePaymentIntentId,
           refundAmount,
-          reason
+          reason,
+          { connected: Boolean(order.payment.stripeAccountId) }
         );
       } catch (err) {
         throw err;
@@ -421,12 +423,20 @@ class RefundService {
 
   // ─── Internal ─────────────────────────────────────
 
-  async _createStripeRefund(paymentIntentId, amount, reason) {
+  /**
+   * @param {{ connected?: boolean }} [options] - `connected`: the charge was a
+   *   destination charge (spec 010 phase 2). Stripe then pulls the organization's
+   *   share back (`reverse_transfer`) and returns the platform's fee
+   *   (`refund_application_fee`), both pro rata for partial amounts, so the
+   *   buyer is made whole and the platform eats only Stripe's processing cost.
+   */
+  async _createStripeRefund(paymentIntentId, amount, reason, { connected = false } = {}) {
     try {
       return await stripe.refunds.create({
         payment_intent: paymentIntentId,
         amount: Math.round(amount * 100), // Stripe uses cents
         ...(reason && { reason: 'requested_by_customer' }),
+        ...(connected && { reverse_transfer: true, refund_application_fee: true }),
         metadata: { source: 'jump-platform' },
       });
     } catch (err) {
