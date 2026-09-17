@@ -16,6 +16,7 @@ const SECTIONS: Section[] = [
   { href: '/admin/settings/domains', label: 'Domains' },
   { href: '/admin/settings/payments', label: 'Payments' },
   { href: '/admin/settings/tax', label: 'Tax' },
+  { href: '/admin/settings/applications', label: 'Applications' },
   { href: '/admin/settings/users', label: 'Users', roles: ['ADMIN', 'SYSTEM_ADMIN'] },
 ];
 
