@@ -43,6 +43,19 @@ Loads when agent touches `backend/` files. For root-level commands and env vars,
 6. **Never** update payment status from client requests — only from webhook
 7. Spec 010 phase 2: with `STRIPE_CONNECT_ENABLED=true` and an active `OrganizationStripeAccount` (`transfersEnabled`, current `mode`, not disconnected), the session is a **destination charge** — `transfer_data.destination` + `application_fee_amount` = total cents − subtotal cents, so the organization receives exactly the ex-tax subtotal. Routing is decided only in `PaymentSettingsService.checkoutOptionsFor`; `PaymentTransaction.stripeAccountId` / `applicationFee` record it. Refunds on those orders pass `reverse_transfer` + `refund_application_fee`. Connected-account events arrive on `POST /webhooks/stripe/connect` (`STRIPE_CONNECT_WEBHOOK_SECRET`), never on the platform endpoint
 
+## Applications (spec 011)
+
+Vendor / sponsor / press forms per event — a second money path next to orders. Rules that differ from tickets:
+
+1. **Webhook dispatch is on `metadata.applicationId`**: `routes/webhooks.js` hands those events to `ApplicationPaymentService.handleEvent` before the order switch; ticket sessions never carry that key. `charge.refunded` is matched by known intent id.
+2. **Capacity is taken on approval, never on submission** (`ApplicationTier.quantityApproved` / `quantityReserved`, conditional `UPDATE … RETURNING` in `ApplicationService._takeCapacity`). Review `status` and `paymentStatus` are independent columns. The amount snapshot on `Application` is the only amount ever charged; tier price edits only surface as `pricing.changed` on the admin detail.
+3. **PAID forms are gated by `APPLICATIONS_PAYMENTS_ENABLED`** (`paymentsEnabled()` in `ApplicationFormService`); bulk APPROVE on PAID is refused per application (each approval charges the saved card) — bulk WAITLIST / REJECT are fine.
+4. **Sweeps in `server.js`** share one unref'd hourly timer (`APPLICATION_SWEEP_INTERVAL_MS`): `ApplicationPaymentService.sweepOverdue` then `ApplicationDigestService.sendDue`. The digest claims each organization's 24 h window with a conditional `updateMany` on `Organization.applicationDigestAt` before reading, so multiple instances never double-send.
+5. **Guest status links are derived**: `applicationLinks.statusToken` = HMAC(`AUTH_SECRET`, `application-status:<id>`); rotating the secret invalidates every emailed link. Withdraw / update card / profile edits need the buyer session.
+6. `POST /organizations/:orgId/events/:eventId/duplicate` (DRAFT copy incl. price tiers + application forms) is the only route in `routes/events.js` behind `requireOrgMembership`; the older org event routes rely on service-level `venue.organizationId` scoping.
+
+See `docs/wiki/features/applications.md`.
+
 ## Capacity Enforcement (WHY: prevents overselling under concurrent load)
 
 ```sql
@@ -71,11 +84,11 @@ total = subtotal + platformFee + processingFee + tax
 ## File Layout
 
 ```
-src/api/routes/       # Express route handlers (10 files)
+src/api/routes/       # Express route handlers (15 files)
 src/api/validators/   # Request validation (express-validator)
 src/api/server.js     # App setup + middleware + route registration
 src/config/           # Stripe, database, logging config
 src/middleware/        # Auth, RBAC, error handling, file uploads
-src/services/         # Business logic (13 domain services)
+src/services/         # Business logic (~29 files: domain services + small helpers like applicationLinks.js, stripeRefund.js)
 src/utils/            # Logger, metrics, barcode generation
 ```
