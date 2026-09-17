@@ -9,7 +9,7 @@ import { ValidationError } from '../../middleware/errorHandler.js';
  */
 export const validateCreateOrder = (req, res, next) => {
   const errors = [];
-  const { eventId, items, priceTierId, quantity, contact } = req.body;
+  const { eventId, items, priceTierId, quantity, contact, addOns } = req.body;
 
   if (!eventId) {
     errors.push({ field: 'eventId', message: 'eventId is required' });
@@ -47,6 +47,27 @@ export const validateCreateOrder = (req, res, next) => {
 
     if (!quantity || parseInt(quantity) < 1) {
       errors.push({ field: 'quantity', message: 'quantity must be >= 1' });
+    }
+  }
+
+  // Add-on lines (spec 012): optional, unique ids, positive integer quantities
+  if (addOns !== undefined) {
+    if (!Array.isArray(addOns)) {
+      errors.push({ field: 'addOns', message: 'addOns must be an array' });
+    } else {
+      const addOnIds = new Set();
+      addOns.forEach((line, index) => {
+        if (!line?.addOnId || typeof line.addOnId !== 'string') {
+          errors.push({ field: `addOns[${index}].addOnId`, message: 'addOnId is required' });
+        } else if (addOnIds.has(line.addOnId)) {
+          errors.push({ field: 'addOns', message: 'add-ons must be unique' });
+        } else {
+          addOnIds.add(line.addOnId);
+        }
+        if (!Number.isInteger(line?.quantity) || line.quantity < 1) {
+          errors.push({ field: `addOns[${index}].quantity`, message: 'quantity must be an integer >= 1' });
+        }
+      });
     }
   }
 

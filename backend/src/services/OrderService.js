@@ -10,6 +10,7 @@ import { NotFoundError, ConflictError, ValidationError } from '../middleware/err
 import qrService from './QRService.js';
 import feeService from './FeeService.js';
 import PaymentSettingsService from './PaymentSettingsService.js';
+import addOnService from './AddOnService.js';
 import { confirmationUrl, eventUrl } from '../utils/storefrontUrl.js';
 
 class OrderService {
@@ -65,9 +66,17 @@ class OrderService {
    * @param {boolean} [params.emailSubscribed] - Buyer opted into marketing email from this org
    * @returns {Promise<{ orderId, orderRef, stripeCheckoutUrl }>}
    */
-  async createOrder({ eventId, items, contact, createAccount = false, emailSubscribed = false }) {
+  async createOrder({ eventId, items, addOns = [], contact, createAccount = false, emailSubscribed = false }) {
     // Generate order ref outside transaction to avoid retry collisions
     let orderRef = this._generateOrderRef();
+
+    // Add-on lines (spec 012): validated against scope / attachment / max
+    // before the transaction; quantity is reserved inside it, after the tiers.
+    const addOnLines = await addOnService.validateOrderLines(
+      eventId,
+      addOns,
+      items.map((item) => item.priceTierId)
+    );
 
     const result = await prisma.$transaction(async (tx) => {
       // 1. Validate event
@@ -150,6 +159,9 @@ class OrderService {
         }
       }
 
+      // 2b. Reserve add-on quantities (after the tiers, fixed lock order)
+      await addOnService.reserve(tx, addOnLines);
+
       // 3. Upsert contact — scoped to the event's organization (spec 007).
       // The same email buying from two organizations is two Contact rows.
       const organizationId = event.venue.organizationId;
@@ -174,10 +186,18 @@ class OrderService {
 
       // 4. Calculate total with fee breakdown (FTC all-in pricing)
       const quantity = items.reduce((sum, item) => sum + item.quantity, 0);
-      const feeItems = items.map((item) => ({
-        unitPrice: Number(tierById.get(item.priceTierId).price),
-        quantity: item.quantity,
-      }));
+      const feeItems = [
+        ...items.map((item) => ({
+          unitPrice: Number(tierById.get(item.priceTierId).price),
+          quantity: item.quantity,
+        })),
+        // Add-on lines follow the tier lines; index = items.length + i
+        ...addOnLines.map((line) => ({
+          unitPrice: Number(line.addOn.price),
+          quantity: line.quantity,
+          taxable: line.addOn.taxable,
+        })),
+      ];
       const fees = feeService.computeOrderFees(feeItems, Number(event.taxRate || 0), {
         taxInclusive: event.venue.organization?.taxInclusivePricing === true,
       });
@@ -214,6 +234,19 @@ class OrderService {
               processingFee: fees.itemBreakdowns[idx].processingFee,
             })),
           },
+          addOns: {
+            create: addOnLines.map((line, i) => {
+              const breakdown = fees.itemBreakdowns[items.length + i];
+              return {
+                addOnId: line.addOn.id,
+                quantity: line.quantity,
+                unitPrice: line.addOn.price,
+                platformFee: breakdown.platformFee,
+                processingFee: breakdown.processingFee,
+                tax: breakdown.tax,
+              };
+            }),
+          },
         },
       });
 
@@ -242,6 +275,20 @@ class OrderService {
         },
         quantity: itemWithIdx.quantity,
       };
+    });
+    addOnLines.forEach((line, i) => {
+      const breakdown = fees.itemBreakdowns[items.length + i];
+      lineItems.push({
+        price_data: {
+          currency: 'usd',
+          product_data: {
+            name: `${event.name} — ${line.addOn.name}`,
+            ...(line.addOn.description && { description: line.addOn.description }),
+          },
+          unit_amount: Math.round((breakdown.lineTotal / breakdown.quantity) * 100),
+        },
+        quantity: line.quantity,
+      });
     });
 
     // Payment methods and the statement descriptor come from the organization's
@@ -278,18 +325,19 @@ class OrderService {
         orderId: order.id,
         error: stripeError.message,
       });
-      await prisma.$transaction([
-        ...items.map((item) =>
-          prisma.priceTier.update({
+      await prisma.$transaction(async (tx) => {
+        for (const item of items) {
+          await tx.priceTier.update({
             where: { id: item.priceTierId },
             data: { quantityReserved: { decrement: item.quantity } },
-          })
-        ),
-        prisma.order.update({
+          });
+        }
+        await addOnService.release(tx, addOnLines.map((line) => ({ addOnId: line.addOn.id, quantity: line.quantity })));
+        await tx.order.update({
           where: { id: order.id },
           data: { status: 'FAILED' },
-        }),
-      ]);
+        });
+      });
       throw stripeError;
     }
 
@@ -371,6 +419,10 @@ class OrderService {
         },
         items: {
           include: { priceTier: { select: { name: true } } },
+          orderBy: { createdAt: 'asc' },
+        },
+        addOns: {
+          include: { addOn: { select: { name: true } } },
           orderBy: { createdAt: 'asc' },
         },
         payment: true,
@@ -563,9 +615,14 @@ class OrderService {
    * @param {string} orderId
    */
   async completeOrder(orderId) {
-    await prisma.order.update({
-      where: { id: orderId },
-      data: { status: 'COMPLETED' },
+    await prisma.$transaction(async (tx) => {
+      await tx.order.update({
+        where: { id: orderId },
+        data: { status: 'COMPLETED' },
+      });
+      // Add-on reservations → sold (tiers move in TicketService.createTicketsForOrder)
+      const addOns = await tx.orderAddOn.findMany({ where: { orderId }, select: { addOnId: true, quantity: true } });
+      await addOnService.commit(tx, addOns);
     });
 
     logger.info('Order completed', { orderId });
@@ -581,7 +638,7 @@ class OrderService {
   async failOrder(orderId, reason) {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      include: { items: true },
+      include: { items: true, addOns: true },
     });
 
     if (!order || order.status !== 'PENDING') {
@@ -619,6 +676,7 @@ class OrderService {
           },
         });
       }
+      await addOnService.release(tx, order.addOns);
     });
 
     logger.info('Order failed — inventory released', {
@@ -820,6 +878,8 @@ class OrderService {
         processingFee: Number(item.processingFee),
         lineTotal: Number(item.unitPrice) * item.quantity + Number(item.platformFee) + Number(item.processingFee),
       })),
+      // Add-on lines (spec 012) — never tickets, never in `quantity`
+      addOns: (order.addOns || []).map((line) => addOnService.serializeOrderLine(line)),
       subtotalAmount: Number(order.subtotalAmount),
       platformFeeAmount: Number(order.platformFeeAmount),
       processingFeeAmount: Number(order.processingFeeAmount),

@@ -135,4 +135,57 @@ describe('FeeService.computeOrderFees', () => {
       expect(result.tax).toBe(4.13);
     });
   });
+
+  // Mixed taxable lines (spec 012 add-ons). Fixture shared with frontend/tests/unit/fees.test.ts.
+  describe('untaxed add-on lines', () => {
+    it('taxes only taxable lines, fees on the whole subtotal', () => {
+      const result = feeService.computeOrderFees(
+        [
+          { unitPrice: 100, quantity: 1 }, // tier, taxable
+          { unitPrice: 20, quantity: 2, taxable: false }, // add-on, untaxed
+        ],
+        0.1
+      );
+      expect(result.subtotal).toBe(140);
+      expect(result.tax).toBe(10); // 10% of 100 only
+      expect(result.platformFee).toBe(7); // 5% of 140
+      expect(result.processingFee).toBe(4.56); // (140 + 7) × 2.9% + 0.30 = 4.563
+      expect(result.total).toBe(161.56);
+      expect(result.itemBreakdowns[0].tax).toBe(10);
+      expect(result.itemBreakdowns[1].tax).toBe(0);
+      expect(result.itemBreakdowns[1].taxable).toBe(false);
+      const lineSum = result.itemBreakdowns.reduce((s, b) => s + b.lineTotal, 0);
+      expect(Math.round(lineSum * 100) / 100).toBe(result.total);
+    });
+
+    it('backs tax out of taxable lines only when tax-inclusive', () => {
+      const result = feeService.computeOrderFees(
+        [
+          { unitPrice: 110, quantity: 1 }, // listed incl. 10% tax → net 100
+          { unitPrice: 25, quantity: 1, taxable: false },
+        ],
+        0.1,
+        { taxInclusive: true }
+      );
+      expect(result.subtotal).toBe(125);
+      expect(result.tax).toBe(10);
+      expect(result.itemBreakdowns[1].tax).toBe(0);
+      expect(result.itemBreakdowns[1].lineTotal).toBeGreaterThan(25); // add-on + its fee share
+      expect(result.total).toBe(Math.round((125 + result.platformFee + result.processingFee + 10) * 100) / 100);
+    });
+
+    it('lands tax drift on the largest taxable line, never an untaxed one', () => {
+      const result = feeService.computeOrderFees(
+        [
+          { unitPrice: 33.33, quantity: 1 },
+          { unitPrice: 33.33, quantity: 1 },
+          { unitPrice: 50, quantity: 1, taxable: false },
+        ],
+        0.0725
+      );
+      expect(result.itemBreakdowns[2].tax).toBe(0);
+      const allocatedTax = result.itemBreakdowns.reduce((s, b) => s + b.tax, 0);
+      expect(Math.round(allocatedTax * 100) / 100).toBe(result.tax);
+    });
+  });
 });

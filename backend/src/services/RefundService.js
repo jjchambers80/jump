@@ -4,6 +4,7 @@
 
 import { prisma } from '@jump/db';
 import { createStripeRefund } from './stripeRefund.js';
+import addOnService from './AddOnService.js';
 import logger from '../utils/logger.js';
 import { NotFoundError, ConflictError, ValidationError } from '../middleware/errorHandler.js';
 
@@ -24,7 +25,7 @@ class RefundService {
         FROM "Order" o
         LEFT JOIN "PaymentTransaction" p ON p."orderId" = o."id"
         WHERE o."id" = ${orderId}
-        FOR UPDATE
+        FOR UPDATE OF o
       `;
 
       if (!order) throw new NotFoundError('Order not found');
@@ -110,6 +111,13 @@ class RefundService {
           SET "quantitySold" = "quantitySold" - ${qty}
           WHERE "id" = ${tierId}
         `;
+      }
+
+      // Add-on lines (spec 012): the full refund covers them; release their quantity
+      const openAddOnLines = await tx.orderAddOn.findMany({ where: { orderId, refundedAt: null } });
+      if (openAddOnLines.length > 0) {
+        await tx.orderAddOn.updateMany({ where: { orderId, refundedAt: null }, data: { refundedAt: new Date() } });
+        await addOnService.unsell(tx, openAddOnLines);
       }
 
       // Update order status
@@ -248,7 +256,8 @@ class RefundService {
           status: { in: ['VALID', 'REDEEMED'] },
         },
       });
-      const newOrderStatus = activeTicketsAfter === 0 ? 'REFUNDED' : 'PARTIALLY_REFUNDED';
+      const openAddOnLines = await tx.orderAddOn.count({ where: { orderId: order.id, refundedAt: null } });
+      const newOrderStatus = activeTicketsAfter === 0 && openAddOnLines === 0 ? 'REFUNDED' : 'PARTIALLY_REFUNDED';
 
       await tx.order.update({
         where: { id: order.id },
@@ -265,6 +274,79 @@ class RefundService {
 
     logger.info('Ticket refunded', {
       ticketId,
+      orderId: result.order.id,
+      refundId: result.refund.id,
+      amount: result.refundAmount,
+      newOrderStatus: result.newOrderStatus,
+    });
+
+    return this._formatRefund(result.refund, result.order);
+  }
+
+  /**
+   * Refund one add-on line (spec 012): the line's all-in amount, quantity
+   * released, tickets untouched.
+   *
+   * @param {string} orderAddOnId
+   * @param {{ reason?: string, initiatedBy?: string }} options
+   */
+  async refundAddOnLine(orderAddOnId, { reason = null, initiatedBy = null } = {}) {
+    const result = await prisma.$transaction(async (tx) => {
+      const line = await tx.orderAddOn.findUnique({
+        where: { id: orderAddOnId },
+        include: { addOn: { select: { name: true } }, order: { include: { payment: true } } },
+      });
+      if (!line) throw new NotFoundError('Add-on line not found');
+      if (line.refundedAt) throw new ConflictError('Add-on line has already been refunded');
+
+      const order = line.order;
+      await tx.$executeRaw`SELECT 1 FROM "Order" WHERE "id" = ${order.id} FOR UPDATE`;
+
+      if (order.status !== 'COMPLETED' && order.status !== 'PARTIALLY_REFUNDED') {
+        throw new ValidationError('Order is not in a refundable state');
+      }
+      if (!order.payment || order.payment.status !== 'SUCCEEDED') {
+        throw new ValidationError('No successful payment found');
+      }
+
+      const refundAmount = addOnService.serializeOrderLine(line).lineTotal;
+      if (refundAmount <= 0) throw new ValidationError('Add-on line has no refundable amount');
+
+      const [{ total: alreadyRefundedRaw }] = await tx.$queryRaw`
+        SELECT COALESCE(SUM("amount"), 0) AS total
+        FROM "Refund"
+        WHERE "orderId" = ${order.id} AND "status" = 'SUCCEEDED'::"RefundStatus"
+      `;
+      if (Number(alreadyRefundedRaw) + refundAmount > Number(order.totalAmount) + 0.005) {
+        throw new ValidationError('Refund would exceed order total');
+      }
+
+      const refundRecord = await tx.refund.create({
+        data: { orderId: order.id, orderAddOnId: line.id, amount: refundAmount, reason, status: 'PENDING', initiatedBy },
+      });
+
+      const stripeRefund = await this._createStripeRefund(order.payment.stripePaymentIntentId, refundAmount, reason, {
+        connected: Boolean(order.payment.stripeAccountId),
+      });
+
+      await tx.$executeRaw`
+        UPDATE "Refund" SET "stripeRefundId" = ${stripeRefund.id}, "status" = 'SUCCEEDED'::"RefundStatus"
+        WHERE "id" = ${refundRecord.id}
+      `;
+      await tx.orderAddOn.update({ where: { id: line.id }, data: { refundedAt: new Date() } });
+      await addOnService.unsell(tx, [line]);
+
+      const activeTickets = await tx.ticket.count({ where: { orderId: order.id, status: { in: ['VALID', 'REDEEMED'] } } });
+      const openAddOnLines = await tx.orderAddOn.count({ where: { orderId: order.id, refundedAt: null } });
+      const newOrderStatus = activeTickets === 0 && openAddOnLines === 0 ? 'REFUNDED' : 'PARTIALLY_REFUNDED';
+      await tx.order.update({ where: { id: order.id }, data: { status: newOrderStatus } });
+
+      return { refund: { ...refundRecord, stripeRefundId: stripeRefund.id, status: 'SUCCEEDED' }, order, refundAmount, newOrderStatus };
+    });
+
+    logger.info('Add-on line refunded', {
+      event: 'add_on_line_refunded',
+      orderAddOnId,
       orderId: result.order.id,
       refundId: result.refund.id,
       amount: result.refundAmount,
@@ -399,6 +481,7 @@ class RefundService {
         ticket: {
           select: { id: true, barcode: true, ticketNumber: true },
         },
+        orderAddOn: { include: { addOn: { select: { name: true } } } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -416,6 +499,7 @@ class RefundService {
             ticketNumber: r.ticket.ticketNumber,
           }
         : null,
+      addOn: r.orderAddOn ? { id: r.orderAddOn.id, name: r.orderAddOn.addOn?.name ?? null, quantity: r.orderAddOn.quantity } : null,
       initiatedBy: r.initiatedBy,
       createdAt: r.createdAt,
     }));
@@ -439,6 +523,7 @@ class RefundService {
       id: refund.id,
       orderId: refund.orderId,
       ticketId: refund.ticketId,
+      orderAddOnId: refund.orderAddOnId ?? null,
       amount: Number(refund.amount),
       reason: refund.reason,
       status: refund.status,
