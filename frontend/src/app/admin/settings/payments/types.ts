@@ -51,9 +51,55 @@ export interface PaymentSettings {
   updatedAt: string | null;
 }
 
+// ─── Stripe Connect (spec 010 phase 2) ─────────────────────────────────────
+
+export type ConnectStatus = 'not_started' | 'onboarding' | 'restricted' | 'active' | 'disconnected';
+
+export interface ConnectAccount {
+  stripeAccountId: string;
+  mode: StripeMode;
+  status: ConnectStatus;
+  chargesEnabled: boolean;
+  transfersEnabled: boolean;
+  payoutsEnabled: boolean;
+  detailsSubmitted: boolean;
+  disabledReason: string | null;
+  /** Stripe requirement field names still outstanding (e.g. "external_account"). */
+  currentlyDue: string[];
+  bank: { name: string | null; last4: string; currency: string | null } | null;
+  payouts: {
+    interval: 'daily' | 'weekly' | 'monthly' | 'manual' | null;
+    /** Weekday name for weekly, day-of-month as a string for monthly. */
+    anchor: string | null;
+    delayDays: number | null;
+    statementDescriptor: string | null;
+    lastPayoutAt: string | null;
+    lastPayoutFailure: string | null;
+  };
+  disconnectedAt: string | null;
+  lastSyncedAt: string | null;
+}
+
+export interface ConnectState {
+  /** STRIPE_CONNECT_ENABLED on the backend. False hides every payouts element. */
+  enabled: boolean;
+  status: ConnectStatus;
+  account: ConnectAccount | null;
+}
+
+export interface UpdatePayoutSettingsBody {
+  interval?: 'daily' | 'weekly' | 'monthly';
+  anchor?: string | number | null;
+  statementDescriptor?: string;
+}
+
+export const CONNECT_DISABLED: ConnectState = { enabled: false, status: 'not_started', account: null };
+
 export interface PaymentSettingsResponse {
   provider: PaymentProviderStatus;
   settings: PaymentSettings;
+  /** Absent from older backends; treat as disabled. */
+  connect?: ConnectState;
   canEdit: boolean;
 }
 
@@ -101,4 +147,73 @@ export function normalizeDescriptor(value: string): string {
 
 export function formatPercent(fraction: number): string {
   return `${(fraction * 100).toFixed(1).replace(/\.0$/, '')}%`;
+}
+
+export const CONNECT_PILL: Record<ConnectStatus, { label: string; style: string }> = {
+  not_started: { label: 'Set up payouts', style: 'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-300' },
+  onboarding: { label: 'Finish setup', style: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300' },
+  restricted: { label: 'Action required', style: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' },
+  active: { label: 'Receiving payouts', style: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' },
+  disconnected: { label: 'Disconnected', style: 'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-300' },
+};
+
+/** Button label for the onboarding action per state (null = no onboarding action). */
+export const CONNECT_ACTION: Record<ConnectStatus, string | null> = {
+  not_started: 'Set up payouts',
+  onboarding: 'Continue setup',
+  restricted: 'Update details',
+  active: null,
+  disconnected: 'Reconnect',
+};
+
+export const WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
+
+export function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+/** "Daily", "Weekly on Friday", "Monthly on the 15th". */
+export function describeSchedule(payouts: ConnectAccount['payouts']): string {
+  const { interval, anchor } = payouts;
+  if (!interval) return 'Not set';
+  if (interval === 'daily') return 'Every business day';
+  if (interval === 'weekly') return anchor ? `Weekly on ${capitalize(anchor)}` : 'Weekly';
+  if (interval === 'monthly') return anchor ? `Monthly on the ${ordinal(Number(anchor))}` : 'Monthly';
+  return 'Manual';
+}
+
+export function ordinal(day: number): string {
+  const mod100 = day % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${day}th`;
+  switch (day % 10) {
+    case 1:
+      return `${day}st`;
+    case 2:
+      return `${day}nd`;
+    case 3:
+      return `${day}rd`;
+    default:
+      return `${day}th`;
+  }
+}
+
+/** Client-side mirror of the payout descriptor rule (22 chars, letters/numbers/spaces, one letter). */
+export function payoutDescriptorError(value: string): string | null {
+  const trimmed = value.trim();
+  if (trimmed === '') return 'Enter a payout name.';
+  if (/[^A-Za-z0-9 ]/.test(trimmed)) return 'Letters, numbers and spaces only.';
+  const clean = normalizeDescriptor(trimmed);
+  if (!/[A-Z]/.test(clean)) return 'Include at least one letter.';
+  if (clean.length > 22) return 'Use 22 characters or fewer.';
+  return null;
+}
+
+/** Human labels for the Stripe requirement field names shown while restricted. */
+export function describeRequirement(field: string): string {
+  if (field === 'external_account') return 'Bank account';
+  if (field.startsWith('individual.') || field.startsWith('representative.')) return 'Personal details';
+  if (field.startsWith('company.')) return 'Business details';
+  if (field.startsWith('business_profile.')) return 'Business profile';
+  if (field.startsWith('tos_acceptance')) return 'Terms of service';
+  return field.replace(/[._]/g, ' ');
 }

@@ -20,6 +20,7 @@ import priceTiersRouter from './routes/priceTiers.js';
 import tierPresetsRouter from './routes/tierPresets.js';
 import ticketsRouter from './routes/tickets.js';
 import webhooksRouter from './routes/webhooks.js';
+import { eventApplicationsRouter, applicationStatusRouter } from './routes/applications.js';
 import adminRouter from './routes/admin.js';
 import customersRouter from './routes/customers.js';
 import organizationsRouter from './routes/organizations.js';
@@ -30,6 +31,8 @@ import imagesRouter from './routes/images.js';
 import buyerRouter from './routes/buyerAuth.js';
 import domainsRouter from './routes/domains.js';
 import domainService from '../services/DomainService.js';
+import applicationPaymentService from '../services/ApplicationPaymentService.js';
+import applicationDigestService from '../services/ApplicationDigestService.js';
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -71,7 +74,9 @@ app.use(
   })
 );
 
-app.use(express.json());
+// Stripe webhooks verify the signature over the raw bytes; the JSON parser
+// must not touch them (routes/webhooks.js applies express.raw itself).
+app.use((req, res, next) => (req.path.startsWith('/webhooks/') ? next() : express.json()(req, res, next)));
 app.use(cookieParser());
 
 // Serve uploaded files statically
@@ -124,6 +129,8 @@ app.get('/metrics', metricsHandler);
 // API routes
 app.use('/admin', adminRouter);
 app.use('/customers', customersRouter);
+app.use('/events/:eventId/applications', eventApplicationsRouter);
+app.use('/applications', applicationStatusRouter);
 app.use('/events', eventsRouter);
 app.use('/venues', venuesRouter);
 app.use('/organizations', organizationsRouter);
@@ -147,6 +154,14 @@ app.use(errorHandler);
 if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, () => {
     logger.info(`Server started on port ${PORT}`);
+    // Which Stripe endpoints are verified — the platform and Connect secrets
+    // are easy to swap, and a wrong one shows up here before it shows up as
+    // "account status never updates" (spec 010 phase 2).
+    logger.info('Stripe webhook configuration', {
+      platformSecret: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
+      connectSecret: Boolean(process.env.STRIPE_CONNECT_WEBHOOK_SECRET),
+      connectEnabled: String(process.env.STRIPE_CONNECT_ENABLED || '').toLowerCase() === 'true',
+    });
     console.log(`🚀 Jump Backend API running on http://localhost:${PORT}`);
     console.log(`📊 Metrics available at http://localhost:${PORT}/metrics`);
     console.log(`💚 Health check at http://localhost:${PORT}/health`);
@@ -158,6 +173,18 @@ if (process.env.NODE_ENV !== 'test') {
   const DOMAIN_SWEEP_MS = Number(process.env.DOMAIN_SWEEP_INTERVAL_MS) || 10 * 60 * 1000;
   setTimeout(() => domainService.checkAll().catch(() => {}), 15 * 1000).unref();
   setInterval(() => domainService.checkAll().catch(() => {}), DOMAIN_SWEEP_MS).unref();
+
+  // Application overdue sweep (spec 011 phase 2): approved applications whose
+  // pay-now deadline passed are withdrawn (WITHDRAW policy) or flagged (HOLD).
+  const APPLICATION_SWEEP_MS = Number(process.env.APPLICATION_SWEEP_INTERVAL_MS) || 60 * 60 * 1000;
+  // The same tick sends organizer daily digests of new submissions (phase 3);
+  // ApplicationDigestService only sends once a ~day per organization.
+  const applicationSweep = async () => {
+    await applicationPaymentService.sweepOverdue().catch(() => {});
+    await applicationDigestService.sendDue().catch(() => {});
+  };
+  setTimeout(applicationSweep, 30 * 1000).unref();
+  setInterval(applicationSweep, APPLICATION_SWEEP_MS).unref();
 }
 
 export default app;

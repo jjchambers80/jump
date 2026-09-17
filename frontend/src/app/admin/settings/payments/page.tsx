@@ -1,20 +1,33 @@
-// Settings › Payments (spec 010 phase 1)
+// Settings › Payments (spec 010)
 // Shopify-style payment configuration for an organization on the platform's
 // Stripe account: whether payments are live, which methods checkout offers,
 // what buyers see on their card statement, the rates buyers pay, and fraud
-// screening. Payouts arrive with Stripe Connect (phase 2).
+// screening. With Stripe Connect enabled (phase 2) the provider card also
+// shows whether the organization is receiving payouts and links to Payouts.
 'use client';
 
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useOrg } from '@/components/OrgContext';
 import SettingsNav from '../SettingsNav';
-import { CardIcon, ChevronRightIcon, ExternalLinkIcon, ReceiptIcon, ShieldIcon, WarningIcon } from '../icons';
+import { BankIcon, CardIcon, ChevronRightIcon, ExternalLinkIcon, ReceiptIcon, ShieldIcon, WarningIcon } from '../icons';
 import { formatPhone } from '../formShared';
 import BrandBadge from './BrandBadge';
 import StatementDescriptorDialog from './StatementDescriptorDialog';
 import { describeError, usePaymentsApi } from './usePaymentsApi';
-import { CARD_BRAND_LABEL, CHARGES_LABEL, CHARGES_STYLE, formatPercent, type PaymentSettings, type PaymentSettingsResponse } from './types';
+import { useConnectActions } from './useConnectActions';
+import {
+  CARD_BRAND_LABEL,
+  CHARGES_LABEL,
+  CHARGES_STYLE,
+  CONNECT_ACTION,
+  CONNECT_DISABLED,
+  CONNECT_PILL,
+  formatPercent,
+  type ConnectState,
+  type PaymentSettings,
+  type PaymentSettingsResponse,
+} from './types';
 
 const cardClass = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
 const secondaryBtn =
@@ -54,6 +67,13 @@ export default function PaymentsSettingsPage() {
 
   const provider = data?.provider;
   const settings = data?.settings;
+  const connect = data?.connect ?? CONNECT_DISABLED;
+  const canEdit = data?.canEdit === true;
+
+  const applyConnect = useCallback((next: ConnectState) => setData((prev) => (prev ? { ...prev, connect: next } : prev)), []);
+  const showError = useCallback((message: string) => setError(message), []);
+  const connectActions = useConnectActions(applyConnect, showError);
+  const connectAction = CONNECT_ACTION[connect.status];
 
   const handleStatementSaved = (next: PaymentSettings) => {
     setData((prev) => (prev ? { ...prev, settings: next } : prev));
@@ -99,35 +119,81 @@ export default function PaymentsSettingsPage() {
           <div className={cardClass} data-testid="payments-provider-card">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h3 className="text-base font-semibold text-gray-900 dark:text-white">Stripe</h3>
-              {provider?.manageUrl && (
-                <a href={provider.manageUrl} target="_blank" rel="noreferrer" className={secondaryBtn}>
-                  Manage
-                  <ExternalLinkIcon />
-                </a>
-              )}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Express dashboard for the organization's own account (phase 2) */}
+                {connect.enabled && connect.status === 'active' && canEdit && (
+                  <button
+                    type="button"
+                    className={secondaryBtn}
+                    data-testid="payments-connect-manage"
+                    disabled={connectActions.busy !== null}
+                    onClick={connectActions.openDashboard}
+                  >
+                    {connectActions.busy === 'login' ? 'Opening…' : 'Manage'}
+                    <ExternalLinkIcon />
+                  </button>
+                )}
+                {provider?.manageUrl && (
+                  <a href={provider.manageUrl} target="_blank" rel="noreferrer" className={secondaryBtn}>
+                    {connect.enabled && connect.status === 'active' && canEdit ? 'Platform dashboard' : 'Manage'}
+                    <ExternalLinkIcon />
+                  </a>
+                )}
+              </div>
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 px-4 py-3 dark:border-slate-700">
-              {provider ? (
-                <span
-                  data-testid="payments-charges-pill"
-                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${CHARGES_STYLE[provider.charges]}`}
-                >
-                  <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
-                  {CHARGES_LABEL[provider.charges]}
-                </span>
-              ) : (
-                <span className="text-xs text-gray-500 dark:text-slate-400">Checking…</span>
-              )}
-              {provider?.mode === 'test' && (
-                <span
-                  data-testid="payments-test-mode"
-                  className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
-                >
-                  Test mode
-                </span>
+            <div className="mt-3 grid gap-3 rounded-lg border border-gray-200 px-4 py-3 dark:border-slate-700 sm:grid-cols-2 sm:gap-0 sm:divide-x sm:divide-gray-200 dark:sm:divide-slate-700">
+              <div className="flex flex-wrap items-center gap-3 sm:pr-4">
+                {provider ? (
+                  <span
+                    data-testid="payments-charges-pill"
+                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${CHARGES_STYLE[provider.charges]}`}
+                  >
+                    <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
+                    {CHARGES_LABEL[provider.charges]}
+                  </span>
+                ) : (
+                  <span className="text-xs text-gray-500 dark:text-slate-400">Checking…</span>
+                )}
+                {provider?.mode === 'test' && (
+                  <span
+                    data-testid="payments-test-mode"
+                    className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+                  >
+                    Test mode
+                  </span>
+                )}
+              </div>
+              {/* Right half: payouts (only when Stripe Connect is enabled on the platform) */}
+              {connect.enabled && (
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-3 dark:border-slate-700 sm:border-t-0 sm:pl-4 sm:pt-0">
+                  <span
+                    data-testid="payments-payouts-pill"
+                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${CONNECT_PILL[connect.status].style}`}
+                  >
+                    <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${connect.status === 'not_started' ? 'border border-current' : 'bg-current'}`} />
+                    {CONNECT_PILL[connect.status].label}
+                  </span>
+                  {connectAction && canEdit && (
+                    <button
+                      type="button"
+                      data-testid="payments-connect-action"
+                      className="text-sm font-semibold text-indigo-600 hover:underline disabled:opacity-50 dark:text-indigo-300"
+                      disabled={connectActions.busy !== null}
+                      onClick={connectActions.onboard}
+                    >
+                      {connectActions.busy === 'onboard' ? 'Redirecting…' : connectAction}
+                    </button>
+                  )}
+                </div>
               )}
             </div>
+            {connect.enabled && connect.status === 'restricted' && (
+              <p className="mt-3 flex items-start gap-1.5 text-sm text-red-700 dark:text-red-300" data-testid="payments-connect-restricted">
+                <WarningIcon className="mt-0.5 h-4 w-4 shrink-0" />
+                Stripe needs more information before payouts can continue. Sales still go through.
+              </p>
+            )}
             {provider?.mode === 'test' && (
               <p className="mt-3 flex items-start gap-1.5 text-sm text-amber-700 dark:text-amber-300">
                 <WarningIcon className="mt-0.5 h-4 w-4 shrink-0" />
@@ -157,6 +223,20 @@ export default function PaymentsSettingsPage() {
                 </span>
                 <ChevronRightIcon className="h-4 w-4 shrink-0 text-gray-400 dark:text-slate-500" />
               </Link>
+              {connect.enabled && (
+                <Link href="/admin/settings/payments/payouts" className={rowClass} data-testid="payments-payouts-row">
+                  <BankIcon className="h-5 w-5 shrink-0 text-gray-500 dark:text-slate-400" />
+                  <span className="min-w-0 flex-1 font-medium text-gray-900 dark:text-white">Payouts</span>
+                  <span className="truncate text-gray-600 dark:text-slate-400">
+                    {connect.account?.bank
+                      ? `${connect.account.bank.name ?? 'Bank account'} •••• ${connect.account.bank.last4}`
+                      : connect.status === 'active'
+                        ? 'No bank account yet'
+                        : 'Not set up'}
+                  </span>
+                  <ChevronRightIcon className="h-4 w-4 shrink-0 text-gray-400 dark:text-slate-500" />
+                </Link>
+              )}
             </div>
             {settings && optionalEnabledCount === 0 && (
               <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">Cards, Apple Pay and Google Pay are always on. Add more ways to pay on the Payment methods page.</p>
@@ -262,9 +342,11 @@ export default function PaymentsSettingsPage() {
             </div>
           </div>
 
-          <p className="text-center text-xs text-gray-500 dark:text-slate-400">
-            Payouts to your bank account are coming with Stripe Connect. Until then, the platform settles with you outside Jump.
-          </p>
+          {!connect.enabled && (
+            <p className="text-center text-xs text-gray-500 dark:text-slate-400">
+              Payouts to your bank account are coming with Stripe Connect. Until then, the platform settles with you outside Jump.
+            </p>
+          )}
         </section>
       </div>
 

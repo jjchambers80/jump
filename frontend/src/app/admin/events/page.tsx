@@ -9,6 +9,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import api from '@/services/api';
 import { useOrg } from '@/components/OrgContext';
+import DuplicateEventDialog from './DuplicateEventDialog';
 
 interface PriceTier {
   id: string;
@@ -83,6 +84,8 @@ export default function DashboardEventsPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
+  const [duplicating, setDuplicating] = useState<{ id: string; name: string } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const fetchEvents = useCallback(async () => {
     if (!selectedOrgId) return;
@@ -183,6 +186,27 @@ export default function DashboardEventsPage() {
         </div>
       )}
 
+      {notice && (
+        <p role="status" className="mb-4 rounded-md border border-green-200 bg-green-50 p-4 text-sm text-green-800 dark:border-green-800 dark:bg-green-900/20 dark:text-green-300">
+          {notice}
+        </p>
+      )}
+
+      {duplicating && selectedOrgId && (
+        <DuplicateEventDialog
+          orgId={selectedOrgId}
+          event={duplicating}
+          onClose={() => setDuplicating(null)}
+          onDone={(created) => {
+            setDuplicating(null);
+            setNotice(`Created draft "${created.name}"${created.copiedForms ? ` with ${created.copiedForms} application form${created.copiedForms === 1 ? '' : 's'}` : ''}.`);
+            setStatusFilter('');
+            setPage(1);
+            fetchEvents();
+          }}
+        />
+      )}
+
       {/* Loading */}
       {eventsLoading && (
         <div className="space-y-3">
@@ -265,6 +289,19 @@ export default function DashboardEventsPage() {
                       >
                         {isExpanded ? 'Hide Tiers' : 'Show Tiers'}
                       </button>
+                      <button
+                        onClick={() => setDuplicating({ id: event.id, name: event.name })}
+                        className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
+                        data-testid={`event-duplicate-${event.id}`}
+                      >
+                        Duplicate
+                      </button>
+                      <Link
+                        href={`/admin/events/${event.id}/applications`}
+                        className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
+                      >
+                        Applications
+                      </Link>
                       {event.status === 'PUBLISHED' && (
                         <Link
                           href={`/admin/events/${event.id}/analytics`}

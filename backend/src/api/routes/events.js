@@ -3,6 +3,7 @@
 // Org-scoped: GET/POST /organizations/:orgId/events,
 //             PATCH .../events/:eventId,
 //             POST .../events/:eventId/publish,
+//             POST .../events/:eventId/duplicate,
 //             POST .../events/:eventId/cancel
 // Per FR-050, contracts/api.yaml
 
@@ -11,6 +12,7 @@ import { prisma } from '@jump/db';
 import eventService from '../../services/EventService.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireOrganizer } from '../../middleware/rbac.js';
+import { requireOrgMembership } from '../../middleware/orgScope.js';
 import { uploadImage } from '../../middleware/imageUpload.js';
 import imageService from '../../services/ImageService.js';
 import { validateCreateEvent, validateUpdateEvent } from '../validators/eventValidators.js';
@@ -102,6 +104,21 @@ orgRouter.patch(
     }
   }
 );
+
+/**
+ * POST /organizations/:orgId/events/:eventId/duplicate
+ * Copy an event (tiers + application forms) as a new DRAFT on a new date
+ * (spec 011 phase 3). Body: { date, name? }
+ */
+orgRouter.post('/:eventId/duplicate', requireAuth, requireOrganizer, requireOrgMembership(), async (req, res, next) => {
+  try {
+    const { orgId, eventId } = req.params;
+    const result = await eventService.duplicateEvent(orgId, eventId, req.body || {});
+    res.status(201).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
 
 /**
  * POST /organizations/:orgId/events/:eventId/publish

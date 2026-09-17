@@ -1,0 +1,109 @@
+// Applications configuration (spec 011)
+// Limits, question types, and the default decision emails an organization
+// starts with. Templates are plain text with {{merge.fields}}; every value is
+// HTML-escaped when rendered into the branded email shell.
+
+export const MAX_PROFILE_PHOTOS = 6;
+export const MAX_PHOTO_MB = 5;
+export const MAX_FILES_PER_SUBMISSION = 12;
+export const STATUS_TOKEN_TTL_DAYS = 180;
+export const MAX_ANSWER_LENGTH = 5000;
+export const MAX_OPTIONS = 30;
+export const LIST_PAGE_SIZE = 50;
+
+export const QUESTION_TYPES = new Set([
+  'SHORT_TEXT',
+  'LONG_TEXT',
+  'SINGLE_CHOICE',
+  'MULTI_CHOICE',
+  'CHECKBOX',
+  'URL',
+  'EMAIL',
+  'PHONE',
+  'NUMBER',
+  'PHOTO',
+]);
+export const CHOICE_TYPES = new Set(['SINGLE_CHOICE', 'MULTI_CHOICE']);
+
+export const SOCIAL_KEYS = ['instagram', 'tiktok', 'facebook', 'x', 'youtube', 'other'];
+
+/** Merge fields organizers may use, with the description shown in the template editor. */
+export const MERGE_FIELDS = [
+  ['applicant.firstName', 'Applicant first name'],
+  ['applicant.lastName', 'Applicant last name'],
+  ['applicant.email', 'Applicant email'],
+  ['profile.businessName', 'Business or outlet name'],
+  ['event.name', 'Event name'],
+  ['event.date', 'Event date'],
+  ['organization.name', 'Your organization name'],
+  ['form.name', 'Application form name'],
+  ['tier.name', 'Selected tier'],
+  ['amount.applicantPays', 'Amount charged to the applicant'],
+  ['payment.dueDate', 'Payment due date'],
+  ['links.status', 'Link to the application status page'],
+  ['links.payNow', 'Link to pay an outstanding balance'],
+  ['links.account', 'Link to the applicant account page'],
+];
+
+/** Actions that have a template. PAYMENT_DUE is used from phase 2. */
+export const TEMPLATE_ACTIONS = ['RECEIVED', 'APPROVED', 'REJECTED', 'WAITLISTED', 'WITHDRAWN', 'PAYMENT_DUE'];
+
+export const DEFAULT_TEMPLATES = {
+  RECEIVED: {
+    subject: 'We received your application for {{event.name}}',
+    body: `Hi {{applicant.firstName}},
+
+Thanks for applying to {{event.name}} as {{form.name}}{{#tier}} ({{tier.name}}){{/tier}}. We have your application and will review it soon.
+
+You can check its status any time: {{links.status}}
+
+{{organization.name}}`,
+  },
+  APPROVED: {
+    subject: 'You are approved for {{event.name}}',
+    body: `Hi {{applicant.firstName}},
+
+Good news — {{profile.businessName}} is approved for {{event.name}}{{#tier}} ({{tier.name}}){{/tier}}.
+
+We will follow up with logistics closer to the event. Your application: {{links.status}}
+
+See you there,
+{{organization.name}}`,
+  },
+  REJECTED: {
+    subject: 'Your application for {{event.name}}',
+    body: `Hi {{applicant.firstName}},
+
+Thank you for applying to {{event.name}}. We are not able to offer {{profile.businessName}} a spot this time. We hope you will apply again for a future event.
+
+{{organization.name}}`,
+  },
+  WAITLISTED: {
+    subject: 'You are on the waitlist for {{event.name}}',
+    body: `Hi {{applicant.firstName}},
+
+{{profile.businessName}} is on the waitlist for {{event.name}}{{#tier}} ({{tier.name}}){{/tier}}. We will let you know as soon as a spot opens up.
+
+Your application: {{links.status}}
+
+{{organization.name}}`,
+  },
+  WITHDRAWN: {
+    subject: 'Your application for {{event.name}} has been withdrawn',
+    body: `Hi {{applicant.firstName}},
+
+Your application for {{event.name}} ({{form.name}}) has been withdrawn. If this was unexpected, reply to this email and we will sort it out.
+
+{{organization.name}}`,
+  },
+  PAYMENT_DUE: {
+    subject: 'Payment needed to confirm your spot at {{event.name}}',
+    body: `Hi {{applicant.firstName}},
+
+{{profile.businessName}} is approved for {{event.name}}{{#tier}} ({{tier.name}}){{/tier}}, but we could not charge the card on file. Please pay {{amount.applicantPays}} by {{payment.dueDate}} to keep your spot:
+
+{{links.payNow}}
+
+{{organization.name}}`,
+  },
+};

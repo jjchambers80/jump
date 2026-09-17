@@ -64,7 +64,7 @@ Auth.js v5 (JWT HS256) · Resend email · Redis caching · Railway deployment
 
 1. AUTH_SECRET mismatch → silent JWT verification failure
 2. Prisma client not regenerated after schema change → stale types
-3. Stripe webhooks locally need: `stripe listen --forward-to localhost:3000/webhooks/stripe`
+3. Stripe webhooks locally need: `stripe listen --forward-to localhost:3000/webhooks/stripe` (add `--forward-connect-to localhost:3000/webhooks/stripe/connect` when `STRIPE_CONNECT_ENABLED=true`)
 4. Capacity is per-tier, not per-event
 5. Railway services need explicit PORT env var
 6. Public org/venue/event pages use `brand` Tailwind tokens (CSS vars set by `BrandScope`), not raw blue classes — see `docs/wiki/features/organization-branding.md`
@@ -75,3 +75,5 @@ Auth.js v5 (JWT HS256) · Resend email · Redis caching · Railway deployment
 11. Admin Playwright specs must sign in with `frontend/e2e/helpers/session.ts` (`signInAsStaff`): the edge middleware decodes the HS256 session cookie itself, so mocking `GET /api/auth/session` alone redirects to sign-in. Run Playwright with `PLAYWRIGHT_PORT=<free port>` when another checkout's dev server holds 3001
 12. Tax (spec 009): `Event.taxRate` is resolved from the organization's `TaxRegion` for the venue's state — not collecting → 0, `MANUAL` → flat rate, `STRIPE` → Stripe Tax lookup. Stripe Tax registrations belong to the platform Stripe account, so a 0% from Stripe may mean "not registered", not "tax-free"; `TaxService.getTaxRateForVenue` throws instead of returning 0 and the region row records `lastError`. `frontend/src/lib/fees.ts` must stay identical to `backend/src/services/FeeService.js` (both support `taxInclusive`) — change both plus both fixture files. See `docs/wiki/features/tax-settings.md`
 13. Payments (spec 010): `OrderService.createOrder` spreads `PaymentSettingsService.checkoutOptionsFor(organization)` into the Checkout Session — never hardcode `payment_method_types` or `payment_intent_data` there. The service validates against the live platform account (descriptor prefix, capabilities) on save and re-filters at checkout, so it never throws; a suffix that stops fitting is dropped, not sent. Contract tests pin `paymentSettingsService._statusCache` instead of mocking Stripe. See `docs/wiki/features/payments-settings.md`
+14. Running `next build` inside `frontend/` while `next dev` is up replaces `.next/` under the live server (`Cannot find module './vendor-chunks/next-auth.js'` on every page) — restart the dev server afterwards, or typecheck with `npx tsc --noEmit -p .` instead
+15. Applications (spec 011): a second money path beside orders — Stripe events are routed on `metadata.applicationId`, tier capacity moves only on approval, PAID forms need `APPLICATIONS_PAYMENTS_ENABLED`, and the hourly application sweep also sends the organizer daily digest. See `backend/AGENTS.md` and `docs/wiki/features/applications.md`

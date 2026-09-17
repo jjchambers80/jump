@@ -11,6 +11,7 @@ Blocking items, in the order to do them. Details in the sections below.
 - [ ] **Set the statement descriptor prefix on the Stripe account** (added 2026-09-14) — Stripe Dashboard › Settings › Business › Public details › Statement descriptor. Use something short like `JUMP` so organizations keep 16 characters for their own name. Until this is set, buyers see the raw account name on their card statement and Settings › Payments cannot save a statement name. See [Stripe payments](#stripe-payments).
 - [ ] Live `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` on Railway; activate the account. See [Stripe payments](#stripe-payments).
 - [ ] Decide NY and CA tax regions; activate Stripe Tax or keep manual rates. See [Stripe Tax](#stripe-tax-settings--tax-spec-009).
+- [ ] Stripe Connect platform setup, then `STRIPE_CONNECT_ENABLED=true` (added 2026-09-16) — only after the live key; see [Stripe Connect](#stripe-connect-spec-010-phase-2).
 
 ## Stripe Tax (Settings › Tax, spec 009)
 
@@ -37,6 +38,29 @@ Verified 2026-09-14 (read-only `accounts.retrieve()` with the backend's Railway 
 - [ ] Live `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` on the backend service; webhook endpoint `POST /webhooks/stripe` registered on the live account — see [Stripe Setup](stripe-setup.md).
 - [ ] **Set a statement descriptor prefix** on the live Stripe account (Dashboard › Settings › Business › Public details, "Statement descriptor" → shortened descriptor / prefix). Keep it short (e.g. `JUMP`, 4 characters): organizations get `22 − prefix − 2` characters for their own name on Settings › Payments. Until it is set, no per-organization statement name is sent and the dialog is disabled — see [Payments Settings](../features/payments-settings.md).
 - [ ] **Confirm capabilities** for the optional payment methods organizations may enable (`link_payments`, `cashapp_payments`; BNPL later per spec 010 §5.6). Methods without an active capability show as *Unavailable*.
+
+## Application payments (spec 011 phase 2)
+
+Vendor / sponsor application charges use the same Stripe account, statement descriptor and Connect routing as ticket orders — nothing new to configure in Stripe beyond the webhook events. Off by default.
+
+- [ ] **Platform webhook events** — add `payment_intent.succeeded`, `payment_intent.payment_failed`, `payment_intent.canceled` and `charge.refunded` to the existing `POST /webhooks/stripe` endpoint (Developers › Webhooks). Off-session charges that Stripe returns as `processing` and every pay-now / card-on-file Checkout return depend on them.
+- [ ] Set `APPLICATIONS_PAYMENTS_ENABLED=true` on the backend service and redeploy. Optional `APPLICATION_SWEEP_INTERVAL_MS` (default 1 h) for the overdue pay-now sweep.
+- [x] **Verified locally 2026-09-17** against the test-mode account with `stripe listen --forward-to localhost:3002/webhooks/stripe` (`STRIPE_WEBHOOK_SECRET` set, `APPLICATIONS_PAYMENTS_ENABLED=true`): PAID form (charge at approval) → apply with `4242…` → setup-mode Checkout → *Card on file* via `checkout.session.completed` → approve → off-session PaymentIntent `29742` cents succeeded synchronously → *Paid*, tier remaining 40 → 39; apply with `4000 0000 0000 0341` → *Card on file* → approve → `card_declined` → *Approved · Payment due* (slot reserved, due +7 days) + PAYMENT_DUE email with the status link → pay-now Checkout, new card → *Paid* (`checkout=paid` notice), remaining 38; partial refund $50 from the admin detail → `re_…` succeeded in Stripe, `PARTIALLY_REFUNDED`, refundable $247.42. Found and fixed on the way: the global `express.json()` broke signature verification for every webhook once a secret is set (PR #56) — **merge #56 before setting `STRIPE_WEBHOOK_SECRET` in prod**.
+- [ ] **Verify in prod with one internal organization** after enabling: same script as above with the live webhook endpoint; add the `reverse_transfer` check on a refund once the organization is connected.
+
+## Stripe Connect (spec 010 phase 2)
+
+Code and tests shipped 2026-09-16 behind `STRIPE_CONNECT_ENABLED` (default off). Until it is on, nothing routes and the Payments page renders as phase 1. Do these **after** the live `STRIPE_SECRET_KEY` is in place — connected accounts are per Stripe mode, so anything onboarded under the test key is void live. Details: [Connect Payouts](../features/connect-payouts.md), `specs/010-payments-settings/plan-phase-2.md` §8.
+
+- [ ] **Decide the connected-account model before any of the steps below** (raised 2026-09-17, undecided). Built as Stripe-created **Express** accounts with destination charges: Jump is merchant of record, charges run on Jump's account, organizers receive the ex-tax subtotal, Jump keeps `application_fee_amount` (fees + tax). The alternative is organizers linking their **own existing Stripe account** (Standard, OAuth "Connect with Stripe"), which changes onboarding and — if charges should run on the organizer's account (direct charges) — makes the organizer merchant of record with their own Stripe fees, disputes, tax and statement descriptor. Destination charges to a Standard account keep Jump as merchant of record and only swap the onboarding flow. Both alternatives are not built; see `specs/010-payments-settings/plan-phase-2.md` §11.
+- [ ] **Stripe Dashboard › Connect › Get started** on the live account: platform profile, business type "platform / marketplace", accept the Connect terms.
+- [ ] **Connect › Settings › Branding** — name, icon, brand colour. This is what organizers see on the Stripe-hosted onboarding page and in their Express dashboard.
+- [ ] **Connect › Settings › Express dashboard features** — payouts and bank-account editing on; payment details visible. Jump links organizers here for bank changes and payout history.
+- [ ] **Connect › Tax forms** — enable 1099-K filing by Stripe for Express accounts (the platform is merchant of record; Stripe files for connected accounts when enabled). Confirm with finance alongside spec 009 §5.4 (seller of record).
+- [ ] **Add a Connect webhook endpoint** — Developers › Webhooks › Add endpoint › *Listen to events on Connected accounts*: `https://<backend>/webhooks/stripe/connect`, events `account.updated`, `capability.updated`, `account.application.deauthorized`, `account.external_account.created|updated|deleted`, `payout.paid`, `payout.failed`. Copy the secret to `STRIPE_CONNECT_WEBHOOK_SECRET` on the backend service. Do **not** add `checkout.session.*` or `charge.refunded` here.
+- [ ] Set `STRIPE_CONNECT_ENABLED=true` on the backend service and redeploy. The startup log `Stripe webhook configuration` should show `platformSecret: true, connectSecret: true, connectEnabled: true`.
+- [ ] **Verify with one internal organization**: Settings › Payments › *Set up payouts* → complete Express onboarding → `Receiving payouts` → place a test order and confirm in the Stripe dashboard that the payment shows `application_fee_amount` = fees + tax and the connected balance received the subtotal → change the payout schedule → refund one ticket and confirm the transfer reversal and application-fee refund → full refund.
+- [ ] Decide the cutover policy for organizations that never onboard (plan §5.7: no deadline, persistent dashboard banner). Revisit once the first organizations are connected.
 
 ## Related
 

@@ -9,6 +9,8 @@ import Link from 'next/link';
 import { api } from '../../../../services/api';
 import { resolveAssetUrl } from '../../../../lib/assets';
 import BrandScope from '../../../../components/BrandScope';
+import ApplicationsSection from './ApplicationsSection';
+import ApplicantProfileSection from './ApplicantProfileSection';
 import type { ThemeMode } from '@/lib/theme';
 
 interface OrganizationPublic {
@@ -269,6 +271,8 @@ export default function BuyerAccountPage({ params }: { params: { orgId: string }
           </div>
         ) : (
           <div className="space-y-8">
+            <ApplicationsSection />
+            <ApplicantProfileSection />
             <section>
               <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-3">Orders</h2>
               {orders.length === 0 ? (

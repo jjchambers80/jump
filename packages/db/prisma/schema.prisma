@@ -104,6 +104,8 @@ model Image {
   events Event[]
   organizationLogos  Organization[] @relation("OrgLogo")
   organizationCovers Organization[] @relation("OrgCover")
+  applicantProfileImages ApplicantProfileImage[]
+  applicationAnswers     ApplicationAnswer[]
 
   @@index([fileId])
   @@index([usageType])
@@ -145,6 +147,10 @@ model Organization {
   statementDescriptorSuffix String?
   enabledPaymentMethods     String[]  @default([])
   paymentSettingsUpdatedAt  DateTime?
+  // Spec 011 phase 3: daily email to members summarising new application
+  // submissions. `applicationDigestAt` is the end of the last window sent.
+  applicationDigestEnabled Boolean   @default(true)
+  applicationDigestAt      DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -158,6 +164,44 @@ model Organization {
   people      OrganizationPerson[]
   tierPresets TierPreset[]
   taxRegions  TaxRegion[]
+  applicantProfiles    ApplicantProfile[]
+  applicationTemplates ApplicationMessageTemplate[]
+  stripeAccounts OrganizationStripeAccount[]
+}
+
+// Spec 010 phase 2: the organization's Stripe Connect (Express) account that
+// receives destination-charge transfers and pays out to its bank. One row per
+// organization per Stripe mode (test/live); rows for the other mode are ignored.
+// State is written only from Stripe Account objects (sync + Connect webhook).
+model OrganizationStripeAccount {
+  id                String    @id @default(cuid())
+  organizationId    String
+  mode              String                    // 'test' | 'live' — stripeMode() when created
+  stripeAccountId   String    @unique         // acct_…
+  chargesEnabled    Boolean   @default(false)
+  transfersEnabled  Boolean   @default(false) // capabilities.transfers === 'active' — the routing gate
+  payoutsEnabled    Boolean   @default(false)
+  detailsSubmitted  Boolean   @default(false)
+  disabledReason    String?                   // requirements.disabled_reason
+  currentlyDue      String[]  @default([])    // requirements.currently_due (field names only)
+  bankName          String?                   // display snapshot from external_accounts (default_for_currency)
+  bankLast4         String?
+  currency          String?
+  payoutInterval    String?                   // daily | weekly | monthly | manual
+  payoutAnchor      String?                   // weekly_anchor or monthly_anchor
+  payoutDelayDays   Int?
+  payoutDescriptor  String?                   // settings.payouts.statement_descriptor
+  lastPayoutAt      DateTime?
+  lastPayoutFailure String?
+  disconnectedAt    DateTime?
+  lastSyncedAt      DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, mode])
+  @@index([stripeAccountId])
 }
 
 // White-label storefront hostname owned by an organization (spec 007 phase 3).
@@ -257,6 +301,7 @@ model Contact {
   note             String?
   emailSubscribed  Boolean   @default(false)
   accountCreatedAt DateTime? // null = guest checkout; set = login-enabled buyer account
+  stripeCustomerId String?   @unique // spec 011: platform-account Customer holding the applicant's saved card
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -265,6 +310,8 @@ model Contact {
   orders    Order[]
   tickets   Ticket[]
   loginTokens BuyerLoginToken[]
+  applicantProfiles ApplicantProfile[]
+  applications      Application[]
 
   @@unique([organizationId, email])
   @@index([email])
@@ -311,6 +358,8 @@ model Event {
   priceTiers  PriceTier[]
   orders      Order[]
   tickets     Ticket[]
+  applicationForms ApplicationForm[]
+  applications     Application[]
 
   @@index([venueId])
   @@index([status])
@@ -484,6 +533,10 @@ model PaymentTransaction {
   currency              String        @default("usd")
   status                PaymentStatus @default(PENDING)
   failureReason         String?
+  // Spec 010 phase 2: destination charge routing, set at creation only.
+  // null stripeAccountId = charged on the platform account (every pre-Connect order).
+  stripeAccountId       String?
+  applicationFee        Decimal?      @db.Decimal(10, 2) // dollars kept by the platform (fees + tax)
 
   createdAt             DateTime      @default(now())
   // NO updatedAt — append-only per constitution
@@ -599,4 +652,311 @@ enum RefundStatus {
   PENDING
   SUCCEEDED
   FAILED
+}
+
+// ─── Applications (spec 011) ───────────────────────────────────────────────
+// Per-event application forms for vendors, sponsors (PAID, tiered, capacity
+// on approval) and press / panels / creators (FREE). Review status and payment
+// status are independent columns. Capacity is consumed by approval, never by
+// submission, so waitlisting works. Money columns are used from phase 2.
+
+enum ApplicationFormKind {
+  PAID
+  FREE
+}
+
+enum ApplicationFormStatus {
+  DRAFT
+  OPEN
+  CLOSED
+}
+
+enum ChargeTiming {
+  SUBMIT
+  APPROVAL
+}
+
+enum FeeMode {
+  PASS
+  ABSORB
+}
+
+enum OverduePolicy {
+  WITHDRAW
+  HOLD
+}
+
+enum ApplicationStatus {
+  DRAFT
+  SUBMITTED
+  WAITLISTED
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+enum ApplicationPayment {
+  NOT_REQUIRED
+  AWAITING_CARD
+  CARD_ON_FILE
+  PROCESSING
+  PAID
+  PAYMENT_DUE
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum CapacitySlot {
+  NONE
+  RESERVED
+  APPROVED
+}
+
+enum QuestionType {
+  SHORT_TEXT
+  LONG_TEXT
+  SINGLE_CHOICE
+  MULTI_CHOICE
+  CHECKBOX
+  URL
+  EMAIL
+  PHONE
+  NUMBER
+  PHOTO
+}
+
+enum ApplicationAction {
+  RECEIVED
+  APPROVED
+  REJECTED
+  WAITLISTED
+  WITHDRAWN
+  PAYMENT_DUE
+}
+
+enum WithdrawnBy {
+  ORGANIZER
+  APPLICANT
+  SYSTEM
+}
+
+model ApplicationForm {
+  id             String                @id @default(cuid())
+  eventId        String
+  kind           ApplicationFormKind
+  name           String
+  slug           String
+  intro          String?
+  status         ApplicationFormStatus @default(DRAFT)
+  opensAt        DateTime?
+  closesAt       DateTime?
+  chargeTiming   ChargeTiming          @default(APPROVAL)
+  feeMode        FeeMode               @default(PASS)
+  taxable        Boolean               @default(false)
+  paymentDueDays Int                   @default(7)
+  overduePolicy  OverduePolicy         @default(WITHDRAW)
+  displayOrder   Int                   @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  event        Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  tiers        ApplicationTier[]
+  questions    ApplicationQuestion[]
+  applications Application[]
+
+  @@unique([eventId, slug])
+  @@index([eventId, status])
+}
+
+model ApplicationTier {
+  id               String  @id @default(cuid())
+  formId           String
+  name             String
+  description      String?
+  price            Decimal @db.Decimal(10, 2)
+  quantityTotal    Int
+  quantityApproved Int     @default(0) // slots held by approved (paid or free) applications
+  quantityReserved Int     @default(0) // slots held while a charge is in flight or payment is due
+  displayOrder     Int     @default(0)
+  isActive         Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  form         ApplicationForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+  applications Application[]
+
+  @@index([formId])
+}
+
+model ApplicationQuestion {
+  id           String       @id @default(cuid())
+  formId       String
+  label        String
+  helpText     String?
+  type         QuestionType
+  required     Boolean      @default(false)
+  options      String[]     @default([])
+  displayOrder Int          @default(0)
+  archivedAt   DateTime? // archived, never deleted, once answers exist
+
+  form    ApplicationForm     @relation(fields: [formId], references: [id], onDelete: Cascade)
+  answers ApplicationAnswer[]
+
+  @@index([formId])
+}
+
+// Reusable per organization + contact: business identity shown to the
+// organizer (and, with spec 014, optionally to attendees).
+model ApplicantProfile {
+  id             String  @id @default(cuid())
+  organizationId String
+  contactId      String
+  businessName   String
+  description    String?
+  website        String?
+  socials        Json? // { instagram, tiktok, facebook, x, youtube, other }
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contact      Contact                 @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  images       ApplicantProfileImage[]
+  applications Application[]
+
+  @@unique([organizationId, contactId])
+}
+
+model ApplicantProfileImage {
+  id           String @id @default(cuid())
+  profileId    String
+  imageId      String
+  displayOrder Int    @default(0)
+
+  profile ApplicantProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  image   Image            @relation(fields: [imageId], references: [id])
+
+  @@unique([profileId, imageId])
+}
+
+model Application {
+  id             String             @id @default(cuid())
+  formId         String
+  eventId        String
+  organizationId String
+  contactId      String
+  profileId      String
+  tierId         String?
+  status         ApplicationStatus  @default(DRAFT)
+  paymentStatus  ApplicationPayment @default(NOT_REQUIRED)
+  capacitySlot   CapacitySlot       @default(NONE)
+
+  // Amount snapshot (dollars) taken at submission — the only amount ever charged
+  subtotal      Decimal @db.Decimal(10, 2) @default(0)
+  platformFee   Decimal @db.Decimal(10, 2) @default(0)
+  processingFee Decimal @db.Decimal(10, 2) @default(0)
+  tax           Decimal @db.Decimal(10, 2) @default(0)
+  applicantPays Decimal @db.Decimal(10, 2) @default(0)
+  orgReceives   Decimal @db.Decimal(10, 2) @default(0)
+  feeMode       FeeMode @default(PASS)
+  currency      String  @default("usd")
+
+  // Stripe objects on the platform account (phase 2)
+  stripeCheckoutSessionId String?  @unique
+  stripePaymentMethodId   String?
+  stripePaymentIntentId   String?  @unique
+  stripeAccountId         String? // destination account when routed (spec 010)
+  applicationFee          Decimal? @db.Decimal(10, 2)
+  chargeAttempts          Int      @default(0)
+  paidAt                  DateTime?
+  paymentDueAt            DateTime?
+  overdue                 Boolean  @default(false)
+
+  // Review
+  submittedAt    DateTime?
+  decidedAt      DateTime?
+  decidedById    String?
+  internalNote   String?
+  withdrawnBy    WithdrawnBy?
+  withdrawReason String?
+  boothLabel     String?
+  statusTokenHash String  @unique // guest status-page token, sha256 of the raw token
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  form      ApplicationForm       @relation(fields: [formId], references: [id])
+  event     Event                 @relation(fields: [eventId], references: [id])
+  contact   Contact               @relation(fields: [contactId], references: [id])
+  profile   ApplicantProfile      @relation(fields: [profileId], references: [id])
+  tier      ApplicationTier?      @relation(fields: [tierId], references: [id])
+  answers   ApplicationAnswer[]
+  decisions ApplicationDecision[]
+  refunds   ApplicationRefund[]
+
+  @@index([eventId, status])
+  @@index([formId, status])
+  @@index([contactId])
+  @@index([organizationId])
+  @@index([paymentStatus, paymentDueAt])
+}
+
+model ApplicationAnswer {
+  id            String  @id @default(cuid())
+  applicationId String
+  questionId    String
+  valueText     String?
+  valueJson     Json? // MULTI_CHOICE selections
+  imageId       String? // PHOTO
+
+  application Application         @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  question    ApplicationQuestion @relation(fields: [questionId], references: [id])
+  image       Image?              @relation(fields: [imageId], references: [id])
+
+  @@unique([applicationId, questionId])
+}
+
+model ApplicationDecision {
+  id            String            @id @default(cuid())
+  applicationId String
+  action        ApplicationAction
+  byUserId      String? // null = system (overdue sweep) or the applicant
+  note          String?
+  emailSubject  String?
+  emailBody     String?
+  createdAt     DateTime          @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+}
+
+model ApplicationRefund {
+  id             String       @id @default(cuid())
+  applicationId  String
+  amount         Decimal      @db.Decimal(10, 2)
+  reason         String?
+  status         RefundStatus @default(PENDING)
+  stripeRefundId String?      @unique
+  initiatedBy    String?
+  createdAt      DateTime     @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id])
+
+  @@index([applicationId])
+}
+
+model ApplicationMessageTemplate {
+  id             String            @id @default(cuid())
+  organizationId String
+  action         ApplicationAction
+  subject        String
+  body           String // plain text with {{merge.fields}}; rendered into the branded email shell
+  updatedAt      DateTime          @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, action])
 }

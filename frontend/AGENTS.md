@@ -7,21 +7,22 @@ Loads when agent touches `frontend/` files. For root-level commands and env vars
 ```
 app/
 ├── admin/           # Organizer/admin dashboard (session-protected)
-├── events/          # Public event browsing + detail pages
+├── events/          # Public event browsing + detail pages; [eventId]/apply/* application forms + status page (spec 011)
 ├── auth/            # Sign-in page
 ├── checkout/        # Cart + payment flow
 ├── confirmation/    # Post-purchase confirmation
 ├── orders/          # [orderId] detail (buyer session or staff) + lookup
 ├── venues/          # Venue pages
-├── organizations/   # Public org page + [orgId]/account (buyer sign-in, orders, tickets)
+├── organizations/   # Public org page + [orgId]/account (buyer sign-in, orders, tickets, applications, applicant business profile)
 ├── api/auth/        # Auth.js API route handler (staff)
-└── api/buyer/       # Buyer session proxies: request/verify/logout/me/* (httpOnly jump_buyer cookie)
+└── api/buyer/       # Buyer session proxies: request/verify/logout/me/* (httpOnly jump_buyer cookie); me/applications*, me/applicant-profile[/photos] forward JSON — the photos route forwards multipart
 ```
 
 ## Key Files
 
 - `auth.ts` — Auth.js v5 config (Google OAuth + magic link, JWT strategy, Prisma adapter). `auth.config.ts` is the edge-safe subset (providers, `trustHost`, HS256 cookie codec from `lib/authJwt.ts`) that `src/middleware.ts` also uses
 - `services/api.ts` — All backend API calls go through here
+- `lib/applications.ts` — Shared types, labels and helpers for spec 011; admin calls live in `app/admin/events/[eventId]/applications/useApplicationsApi.ts` (also `useTemplatesApi` for Settings › Applications). Admin list saved views are `localStorage` (`jump.applications.views.<eventId>`), never server state
 - `components/` — Shared React components
 - `lib/` — Utilities and helpers (`lib/color.ts` — WCAG contrast + brand CSS vars; `lib/fees.ts` — all-in fee math mirroring backend `FeeService`; `lib/buyerSession.ts` — server-only buyer cookie + backend proxy, signs the client IP for the backend rate limiter)
 
