@@ -10,6 +10,7 @@ import { api } from '../../../services/api';
 import CartLineItem from '../../../components/CartLineItem';
 import ExpandCollapseAll from '../../../components/ExpandCollapseAll';
 import { computeOrderFees, formatPrice } from '../../../lib/fees';
+import { parseAddOnLines, type AddOn } from '../../../lib/addOns';
 import BrandScope from '../../../components/BrandScope';
 import type { ThemeMode } from '../../../lib/theme';
 
@@ -37,6 +38,7 @@ interface Event {
   taxInclusivePricing?: boolean;
   venue: EventVenue | null;
   priceTiers: PriceTier[];
+  addOns?: AddOn[];
   organizationId?: string | null;
   organizationName?: string | null;
   organizationBrandColor?: string | null;
@@ -107,6 +109,8 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
     searchParams.get('tierId'),
     searchParams.get('quantity')
   );
+  // Add-on lines (spec 012) chosen on the event page; unknown ids are dropped
+  const addOnLines = parseAddOnLines(searchParams.get('addOns'));
 
   useEffect(() => {
     fetchEventDetails();
@@ -131,6 +135,12 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
       return tier ? { ...item, tier } : null;
     })
     .filter((item): item is CartItem & { tier: PriceTier } => item !== null);
+  const selectedAddOns = addOnLines
+    .map((line) => {
+      const addOn = event?.addOns?.find((candidate) => candidate.id === line.addOnId);
+      return addOn ? { ...line, addOn } : null;
+    })
+    .filter((line): line is (typeof addOnLines)[number] & { addOn: AddOn } => line !== null);
 
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
@@ -162,6 +172,7 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
       const response = await api.post<CreateOrderResponse>('/orders', {
         eventId: params.eventId,
         items: selectedItems.map(({ priceTierId, quantity }) => ({ priceTierId, quantity })),
+        ...(selectedAddOns.length > 0 && { addOns: selectedAddOns.map(({ addOnId, quantity }) => ({ addOnId, quantity })) }),
         contact: {
           firstName: firstName.trim(),
           lastName: lastName.trim(),
@@ -279,16 +290,24 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
   });
 
   const totalQuantity = selectedItems.reduce((sum, item) => sum + item.quantity, 0);
-  const feeItems = selectedItems.map((item) => ({ price: item.tier.price, quantity: item.quantity }));
+  const feeItems = [
+    ...selectedItems.map((item) => ({ price: item.tier.price, quantity: item.quantity })),
+    ...selectedAddOns.map((line) => ({ price: line.addOn.price, quantity: line.quantity, taxable: line.addOn.taxable })),
+  ];
   const fees = computeOrderFees(feeItems, event?.taxRate ?? 0, event?.taxInclusivePricing === true);
   const totalAmount = fees.total;
+  // Tiers first, then add-ons — same order as `fees.lines`
+  const cartLines = [
+    ...selectedItems.map((item) => ({ key: item.priceTierId, name: item.tier.name })),
+    ...selectedAddOns.map((line) => ({ key: line.addOnId, name: line.addOn.name })),
+  ];
 
-  const allLinesOpen = selectedItems.every((item) => openLines[item.priceTierId]);
-  const toggleLine = (tierId: string) =>
-    setOpenLines((current) => ({ ...current, [tierId]: !current[tierId] }));
+  const allLinesOpen = cartLines.every((line) => openLines[line.key]);
+  const toggleLine = (key: string) =>
+    setOpenLines((current) => ({ ...current, [key]: !current[key] }));
   const toggleAllLines = () => {
     const next = !allLinesOpen;
-    setOpenLines(Object.fromEntries(selectedItems.map((item) => [item.priceTierId, next])));
+    setOpenLines(Object.fromEntries(cartLines.map((line) => [line.key, next])));
   };
 
   return (
@@ -340,14 +359,14 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
 
               <div className="border-t border-gray-200 dark:border-slate-700 pt-4 space-y-2">
                 <div data-testid="cart-lines-checkout">
-                  {selectedItems.map((item, index) => (
+                  {cartLines.map((line, index) => (
                     <CartLineItem
-                      key={item.priceTierId}
-                      id={`checkout-${item.priceTierId}`}
-                      name={item.tier.name}
+                      key={line.key}
+                      id={`checkout-${line.key}`}
+                      name={line.name}
                       line={fees.lines[index]}
-                      open={!!openLines[item.priceTierId]}
-                      onToggle={() => toggleLine(item.priceTierId)}
+                      open={!!openLines[line.key]}
+                      onToggle={() => toggleLine(line.key)}
                       variant="drawer"
                     />
                   ))}

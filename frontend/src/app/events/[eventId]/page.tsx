@@ -14,6 +14,8 @@ import CartLineItem from '../../../components/CartLineItem';
 import OrderTotals from '../../../components/OrderTotals';
 import ExpandCollapseAll from '../../../components/ExpandCollapseAll';
 import { computeOrderFees, computeTierAllInPrice, formatPrice } from '../../../lib/fees';
+import AddOnPicker from '../../../components/AddOnPicker';
+import { offeredAddOns, addOnMaxQuantity, type AddOn } from '../../../lib/addOns';
 import type { ThemeMode } from '@/lib/theme';
 
 interface EventVenue {
@@ -58,6 +60,8 @@ interface Event {
   organizationThemeMode?: ThemeMode | null;
   venue: EventVenue | null;
   priceTiers: PriceTier[];
+  /** Ticket-scope add-ons (spec 012); offered per cart tier. */
+  addOns?: AddOn[];
   createdAt: string;
   updatedAt: string;
 }
@@ -68,6 +72,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [addOnQuantities, setAddOnQuantities] = useState<Record<string, number>>({});
   const [showDescription, setShowDescription] = useState(false);
   const [showTierDescription, setShowTierDescription] = useState<PriceTier | null>(null);
   const [showImagePreview, setShowImagePreview] = useState(false);
@@ -118,9 +123,13 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
     });
   };
 
+  const setAddOnQuantity = (addOnId: string, quantity: number) =>
+    setAddOnQuantities((current) => ({ ...current, [addOnId]: quantity }));
+
   const handleProceedToCheckout = () => {
     if (cartItems.length > 0) {
       const search = new URLSearchParams({ items: JSON.stringify(cartItems) });
+      if (addOnLines.length > 0) search.set('addOns', JSON.stringify(addOnLines));
       router.push(`/checkout/${params.eventId}?${search.toString()}`);
     }
   };
@@ -205,19 +214,35 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
   const totalQuantity = cartItems.reduce((sum, item) => sum + item.quantity, 0);
   // All-in order total with per-line fee allocation (mirrors backend FeeService)
   const cartTiers = activeTiers.filter((tier) => (quantities[tier.id] ?? 0) > 0);
+  // Add-ons (spec 012): only those offered on a tier in the cart count; a
+  // quantity left behind after its tier was removed is simply not a line.
+  const offered = offeredAddOns(event.addOns, cartTiers.map((tier) => tier.id));
+  const cartAddOns = offered.filter((addOn) => Math.min(addOnQuantities[addOn.id] ?? 0, addOnMaxQuantity(addOn)) > 0);
+  const addOnLines = cartAddOns.map((addOn) => ({
+    addOnId: addOn.id,
+    quantity: Math.min(addOnQuantities[addOn.id] ?? 0, addOnMaxQuantity(addOn)),
+  }));
   const cartFees = computeOrderFees(
-    cartTiers.map((tier) => ({ price: tier.price, quantity: quantities[tier.id] ?? 0 })),
+    [
+      ...cartTiers.map((tier) => ({ price: tier.price, quantity: quantities[tier.id] ?? 0 })),
+      ...cartAddOns.map((addOn, i) => ({ price: addOn.price, quantity: addOnLines[i].quantity, taxable: addOn.taxable })),
+    ],
     event?.taxRate ?? 0,
     event?.taxInclusivePricing === true
   );
   const totalAmount = cartTiers.length > 0 ? cartFees.total : 0;
+  // Lines in cart order: tiers first, then add-ons (same order as `cartFees.lines`)
+  const cartLines = [
+    ...cartTiers.map((tier) => ({ key: tier.id, name: tier.name })),
+    ...cartAddOns.map((addOn) => ({ key: addOn.id, name: addOn.name })),
+  ];
 
-  const allLinesOpen = cartTiers.length > 0 && cartTiers.every((tier) => openLines[tier.id]);
-  const toggleLine = (tierId: string) =>
-    setOpenLines((current) => ({ ...current, [tierId]: !current[tierId] }));
+  const allLinesOpen = cartLines.length > 0 && cartLines.every((line) => openLines[line.key]);
+  const toggleLine = (key: string) =>
+    setOpenLines((current) => ({ ...current, [key]: !current[key] }));
   const toggleAllLines = () => {
     const next = !allLinesOpen;
-    setOpenLines(Object.fromEntries(cartTiers.map((tier) => [tier.id, next])));
+    setOpenLines(Object.fromEntries(cartLines.map((line) => [line.key, next])));
   };
 
   return (
@@ -523,6 +548,20 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
             )}
           </div>
 
+          {/* Add-ons (spec 012): shown once the cart holds a ticket that offers them */}
+          {!isPastEvent && !isSoldOut && offered.length > 0 && (
+            <div className="px-6 sm:px-8 pb-8">
+              <AddOnPicker
+                addOns={offered}
+                quantities={addOnQuantities}
+                onChange={setAddOnQuantity}
+                taxRate={event.taxRate ?? 0}
+                taxInclusive={event.taxInclusivePricing === true}
+                hint="Optional extras bought with your tickets."
+              />
+            </div>
+          )}
+
           {/* Applications (spec 011): vendors, sponsors, press, panels */}
           <GetInvolved eventId={event.id} />
         </div>
@@ -538,7 +577,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                 <ExpandCollapseAll
                   allOpen={allLinesOpen}
                   onToggle={toggleAllLines}
-                  disabled={cartTiers.length === 0}
+                  disabled={cartLines.length === 0}
                 />
               </div>
 
@@ -546,14 +585,14 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                 <p className="text-sm text-gray-500 dark:text-slate-400 mb-4">Select tickets to get started</p>
               ) : (
                 <div className="space-y-3 mb-4" data-testid="cart-lines-desktop">
-                  {cartTiers.map((tier, index) => (
+                  {cartLines.map((line, index) => (
                     <CartLineItem
-                      key={tier.id}
-                      id={`desktop-${tier.id}`}
-                      name={tier.name}
+                      key={line.key}
+                      id={`desktop-${line.key}`}
+                      name={line.name}
                       line={cartFees.lines[index]}
-                      open={!!openLines[tier.id]}
-                      onToggle={() => toggleLine(tier.id)}
+                      open={!!openLines[line.key]}
+                      onToggle={() => toggleLine(line.key)}
                       variant="compact"
                     />
                   ))}
@@ -639,7 +678,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
               <ExpandCollapseAll
                 allOpen={allLinesOpen}
                 onToggle={toggleAllLines}
-                disabled={cartTiers.length === 0}
+                disabled={cartLines.length === 0}
               />
               <button
                 onClick={() => setShowMobileCart(false)}
@@ -656,14 +695,14 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                 <p className="text-gray-500 dark:text-slate-400 text-center py-6">No tickets selected</p>
               ) : (
                 <div data-testid="cart-lines-mobile">
-                  {cartTiers.map((tier, index) => (
+                  {cartLines.map((line, index) => (
                     <CartLineItem
-                      key={tier.id}
-                      id={`mobile-${tier.id}`}
-                      name={tier.name}
+                      key={line.key}
+                      id={`mobile-${line.key}`}
+                      name={line.name}
                       line={cartFees.lines[index]}
-                      open={!!openLines[tier.id]}
-                      onToggle={() => toggleLine(tier.id)}
+                      open={!!openLines[line.key]}
+                      onToggle={() => toggleLine(line.key)}
                       variant="drawer"
                     />
                   ))}

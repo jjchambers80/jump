@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import api from '@/services/api';
+import type { OrderAddOnLine } from '@/lib/addOns';
 
 interface OrderTicket {
   id: string;
@@ -37,6 +38,8 @@ interface OrderDetail {
   contact: { firstName: string; lastName: string; email: string };
   quantity: number;
   items: OrderItem[];
+  /** Add-on lines (spec 012) */
+  addOns?: OrderAddOnLine[];
   subtotalAmount: number;
   platformFeeAmount: number;
   processingFeeAmount: number;
@@ -62,6 +65,7 @@ interface RefundRecord {
   reason: string | null;
   status: string;
   ticket: { id: string; barcode: string; ticketNumber: number } | null;
+  addOn?: { id: string; name: string | null; quantity: number } | null;
   createdAt: string;
 }
 
@@ -133,7 +137,7 @@ export default function AdminOrderDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [refunds, setRefunds] = useState<RefundRecord[]>([]);
   const [showRefundDialog, setShowRefundDialog] = useState(false);
-  const [refundTarget, setRefundTarget] = useState<{ type: 'order' | 'ticket'; id: string; label: string } | null>(null);
+  const [refundTarget, setRefundTarget] = useState<{ type: 'order' | 'ticket' | 'addOn'; id: string; label: string } | null>(null);
   const [refundReason, setRefundReason] = useState('');
   const [refunding, setRefunding] = useState(false);
   const [refundError, setRefundError] = useState<string | null>(null);
@@ -165,7 +169,7 @@ export default function AdminOrderDetailPage() {
       .finally(() => setLoading(false));
   }, [orderId]);
 
-  const openRefundDialog = (type: 'order' | 'ticket', id: string, label: string) => {
+  const openRefundDialog = (type: 'order' | 'ticket' | 'addOn', id: string, label: string) => {
     setRefundTarget({ type, id, label });
     setRefundReason('');
     setRefundError(null);
@@ -179,7 +183,9 @@ export default function AdminOrderDetailPage() {
     try {
       const endpoint = refundTarget.type === 'order'
         ? `/admin/orders/${refundTarget.id}/refund`
-        : `/admin/tickets/${refundTarget.id}/refund`;
+        : refundTarget.type === 'addOn'
+          ? `/admin/orders/${orderId}/add-ons/${refundTarget.id}/refund`
+          : `/admin/tickets/${refundTarget.id}/refund`;
       await api.post(endpoint, { reason: refundReason || undefined });
       setShowRefundDialog(false);
       fetchOrder();
@@ -297,6 +303,30 @@ export default function AdminOrderDetailPage() {
                 <td className="py-2 text-right">{formatCurrency(item.lineTotal)}</td>
               </tr>
             ))}
+            {(order.addOns || []).map((line) => (
+              <tr key={line.id} className="text-gray-900 dark:text-slate-100" data-testid="order-add-on-line">
+                <td className="py-2">
+                  <span className="text-xs uppercase tracking-wider text-gray-400 dark:text-slate-500 mr-2">Add-on</span>
+                  {line.name ?? 'Add-on'}
+                  {line.refundedAt && (
+                    <span className="ml-2 text-xs font-medium text-purple-700 dark:text-purple-300">Refunded</span>
+                  )}
+                </td>
+                <td className="py-2 text-right">{line.quantity}</td>
+                <td className="py-2 text-right">{formatCurrency(line.unitPrice)}</td>
+                <td className="py-2 text-right">
+                  <span className={line.refundedAt ? 'line-through text-gray-400' : ''}>{formatCurrency(line.lineTotal)}</span>
+                  {!line.refundedAt && (order.status === 'COMPLETED' || order.status === 'PARTIALLY_REFUNDED') && (
+                    <button
+                      onClick={() => openRefundDialog('addOn', line.id, `${line.quantity} × ${line.name ?? 'Add-on'}`)}
+                      className="ml-3 px-2 py-1 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition"
+                    >
+                      Refund
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </Section>
@@ -398,6 +428,11 @@ export default function AdminOrderDetailPage() {
                     {refund.ticket && (
                       <span className="text-gray-500 dark:text-slate-400 ml-2">
                         Ticket #{refund.ticket.ticketNumber}
+                      </span>
+                    )}
+                    {refund.addOn && (
+                      <span className="text-gray-500 dark:text-slate-400 ml-2">
+                        {refund.addOn.quantity} × {refund.addOn.name ?? 'Add-on'}
                       </span>
                     )}
                   </p>

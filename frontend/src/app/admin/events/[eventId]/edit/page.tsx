@@ -11,6 +11,7 @@ import api from '@/services/api';
 import { resolveAssetUrl } from '@/lib/assets';
 import ImageUploader from '@/components/ImageUploader';
 import { TierCard, TierEditDialog, type TierFormData } from '@/components/TierEditDialog';
+import AddOnsSection from './AddOnsSection';
 
 interface Venue {
   id: string;
@@ -124,6 +125,8 @@ interface EventDetail {
   } | null;
   /** Cached sales tax for this event and where it came from (Settings › Tax). */
   tax?: { rate: number; source: 'STRIPE' | 'MANUAL' | null; region: string | null };
+  /** Listed prices include tax (spec 009 phase 3). */
+  taxInclusivePricing?: boolean;
   priceTiers: PriceTier[];
 }
 
@@ -737,6 +740,19 @@ function EditEventContent() {
           </button>
         </div>
       </form>
+
+      {/* Add-ons (spec 012) — saved through their own API, outside the event form */}
+      {eventData && (
+        <div className="mt-10 pt-8 border-t border-gray-200 dark:border-slate-700">
+          <AddOnsSection
+            orgId={orgId}
+            eventId={eventId}
+            priceTiers={eventData.priceTiers.map((t) => ({ id: t.id, name: t.name }))}
+            taxRate={eventData.tax?.rate ?? 0}
+            taxInclusive={eventData.taxInclusivePricing === true}
+          />
+        </div>
+      )}
     </div>
   );
 }
