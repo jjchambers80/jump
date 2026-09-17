@@ -377,3 +377,15 @@ Estimate: PR A ~2 days, PR B ~2 days, PR C + verification ~1 day.
 ## 11. Out of scope (phase 3 or later specs)
 
 Payout email confirmations (`payout.paid` → org email), embedded payouts list via Account Sessions, instant payouts, multi-currency / non-US accounts, `on_behalf_of` charges, Standard or Custom account types, moving historical orders, platform-side balance/transfer reports, per-product fee modes (roadmap "fee modes"), application/invoice charges (spec 011).
+
+### 11.1 Open: connected-account model (raised 2026-09-17)
+
+The owner's stated intent is "the organizer provides their Stripe account; platform fees are collected in Jump's Stripe account". Phase 2 satisfies the money direction (subtotal to the organizer, `application_fee_amount` to Jump) but assumes Jump *creates* the organizer's account (Express). Undecided whether organizers should instead link an existing Stripe account:
+
+| Option | Onboarding | Charge | Merchant of record | Change from phase 2 |
+|---|---|---|---|---|
+| A. Express (built) | Jump creates account, Stripe-hosted onboarding | destination | Jump | none |
+| B. Standard via OAuth, destination charges | "Connect with Stripe" OAuth, organizer's existing account | destination | Jump | onboarding only (`oauth/authorize` + token exchange, `stripe_user_id` stored in `OrganizationStripeAccount`); Express dashboard links become Stripe dashboard links |
+| C. Standard via OAuth, direct charges | as B | direct on the organizer's account with `application_fee_amount` | organizer | Checkout Sessions, PaymentIntents, refunds, webhooks, Stripe Tax and statement descriptors all move to the connected account; spec 009 seller-of-record decision flips; application charges (spec 011) follow |
+
+Decision blocks the Connect steps in the launch checklist. Not blocking anything else on main.
