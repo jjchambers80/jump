@@ -259,6 +259,21 @@ export default function ScanPage() {
             <p className="text-sm text-gray-500 dark:text-slate-400">
               Total tickets: {state.data.totalTickets}
             </p>
+            {state.data.addOns && state.data.addOns.length > 0 && (
+              <div
+                className="mt-2 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-3 py-2"
+                data-testid="scan-add-ons"
+              >
+                <p className="text-xs font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-300">Hand over</p>
+                <ul className="text-sm text-amber-900 dark:text-amber-200">
+                  {state.data.addOns.map((line, i) => (
+                    <li key={i}>
+                      {line.quantity} × {line.name}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
 
           {/* Current ticket (the scanned one) */}

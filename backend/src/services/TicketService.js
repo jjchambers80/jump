@@ -758,7 +758,14 @@ class TicketService {
       where: { barcode },
       include: {
         event: { select: { id: true, name: true, date: true } },
-        order: { select: { id: true, orderRef: true } },
+        order: {
+          select: {
+            id: true,
+            orderRef: true,
+            // Add-ons on the order (spec 012) — staff hands these over at the door
+            addOns: { where: { refundedAt: null }, include: { addOn: { select: { name: true } } } },
+          },
+        },
       },
     });
 
@@ -796,6 +803,7 @@ class TicketService {
       eventDate: ticket.event.date,
       eventId: ticket.event.id,
       totalTickets: allTickets.length,
+      addOns: ticket.order.addOns.map((line) => ({ name: line.addOn?.name ?? 'Add-on', quantity: line.quantity })),
       tickets: allTickets.map((t) => ({
         ticketId: t.id,
         barcode: t.barcode,
