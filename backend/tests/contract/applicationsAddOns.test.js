@@ -38,6 +38,8 @@ const { default: app } = await import('../../src/api/server.js');
 const { prisma } = await import('@jump/db');
 const { default: paymentSettingsService } = await import('../../src/services/PaymentSettingsService.js');
 const { default: applicationPaymentService } = await import('../../src/services/ApplicationPaymentService.js');
+const { default: applicationDigestService } = await import('../../src/services/ApplicationDigestService.js');
+const { default: paymentService } = await import('../../src/services/PaymentService.js');
 const { default: feeService } = await import('../../src/services/FeeService.js');
 const { applicationAmounts } = await import('../../src/services/ApplicationFormService.js');
 const { statusToken } = await import('../../src/services/applicationLinks.js');
@@ -170,6 +172,9 @@ describe('Applications with add-ons (spec 012 phase 2)', () => {
 
   afterAll(async () => {
     delete process.env.APPLICATIONS_PAYMENTS_ENABLED;
+    await prisma.paymentTransaction.deleteMany({ where: { order: { event: { venue: { organizationId: org.id } } } } }).catch(() => {});
+    await prisma.ticket.deleteMany({ where: { event: { venue: { organizationId: org.id } } } }).catch(() => {});
+    await prisma.order.deleteMany({ where: { event: { venue: { organizationId: org.id } } } }).catch(() => {});
     await prisma.applicationRefund.deleteMany({ where: { application: { organizationId: org.id } } }).catch(() => {});
     await prisma.application.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
     await prisma.applicantProfile.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
@@ -533,6 +538,56 @@ describe('Applications with add-ons (spec 012 phase 2)', () => {
       expect(hidden[idx('addon:Extra vendor badge')]).toBe('2');
       const plugs = rows.map((r) => r.split(',')).find((r) => r[idx('businessName')] === 'Two Plugs');
       expect(plugs[idx('addon:Extra vendor badge')]).toBe('');
+    });
+
+    it('sales report and purchasers CSV combine ticket orders and applications (phase 3)', async () => {
+      // A ticket buyer takes two tables (BOTH scope) so the report mixes sources.
+      const ga = await prisma.priceTier.create({ data: { eventId, name: 'GA', price: 20, quantityTotal: 50, displayOrder: 0 } });
+      const order = await request(app)
+        .post('/orders')
+        .send({ eventId, items: [{ priceTierId: ga.id, quantity: 1 }], addOns: [{ addOnId: table.id, quantity: 2 }], contact: { email: `buyer@${TAG}.test`, firstName: 'Ada', lastName: 'Buyer' } });
+      expect(order.status).toBe(201);
+      await paymentService.handleCheckoutCompleted((await prisma.order.findUnique({ where: { id: order.body.orderId } })).stripeSessionId, `pi_${TAG}_order`);
+
+      const forbidden = await request(app).get(`${addOnBase()}/sales`);
+      expect(forbidden.status).toBe(401);
+      const res = await request(app).get(`${addOnBase()}/sales`).set(...auth(organizerToken));
+      expect(res.status).toBe(200);
+      const byName = Object.fromEntries(res.body.addOns.map((r) => [r.name, r]));
+      // Tables: A (1) + C (1) paid applications, 2 on the order; the withdrawn D and the DRAFT sponsor count nowhere.
+      expect(byName['Table & chairs']).toMatchObject({ sold: 4, reserved: 0, remaining: null, revenue: 160, orders: { quantity: 2, revenue: 80, lines: 1 }, applications: { quantity: 2, revenue: 80, lines: 2, held: 0, pending: 0 } });
+      expect(byName['Booth power']).toMatchObject({ sold: 2, reserved: 0, remaining: 0, quantityTotal: 2, revenue: 250, orders: { quantity: 0 }, applications: { quantity: 2, revenue: 250 } });
+      expect(byName['Extra vendor badge']).toMatchObject({ sold: 2, revenue: 20, applications: { quantity: 2 } });
+      expect(byName['Parking pass']).toMatchObject({ sold: 0, revenue: 0 });
+      expect(res.body.totals).toEqual({ sold: 8, reserved: 0, revenue: 430 });
+
+      const csv = await request(app).get(`${addOnBase()}/purchasers.csv`).set(...auth(organizerToken));
+      expect(csv.status).toBe(200);
+      expect(csv.headers['content-type']).toMatch(/text\/csv/);
+      const [header, ...rows] = csv.text.split('\r\n');
+      const cols = header.split(',');
+      expect(cols).toEqual(['addOn', 'quantity', 'unitPrice', 'source', 'sourceId', 'status', 'firstName', 'lastName', 'email', 'businessName', 'form', 'tier', 'boothLabel', 'refunded', 'createdAt']);
+      const parsed = rows.map((r) => Object.fromEntries(r.split(',').map((c, i) => [cols[i], c])));
+      const orderRow = parsed.find((r) => r.source === 'order');
+      expect(orderRow).toMatchObject({ addOn: 'Table & chairs', quantity: '2', unitPrice: '40.00', sourceId: order.body.orderId, status: 'COMPLETED', email: `buyer@${TAG}.test`, refunded: '' });
+      const hidden = parsed.filter((r) => r.businessName === 'Hidden Block Games');
+      expect(hidden.map((r) => `${r.addOn} ×${r.quantity}`).sort()).toEqual(['Booth power ×1', 'Extra vendor badge ×2', 'Table & chairs ×1']);
+      expect(hidden[0]).toMatchObject({ source: 'application', status: 'APPROVED/PAID', form: 'Vendor Booth', tier: 'Booth' });
+      // Withdrawn applications still appear (with their status); DRAFTs do not.
+      expect(parsed.some((r) => r.businessName === 'Overdue LLC' && r.status.startsWith('WITHDRAWN'))).toBe(true);
+      expect(parsed.some((r) => r.businessName === 'Gold Sponsor Co')).toBe(false);
+    });
+
+    it('the organizer digest counts add-ons per form and lists them per application (phase 3)', async () => {
+      sentEmails.length = 0;
+      const orgRow = await prisma.organization.findUnique({ where: { id: org.id }, select: { id: true, name: true, logoUrl: true, applicationDigestAt: true } });
+      const sent = await applicationDigestService.sendForOrganization(orgRow, new Date());
+      expect(sent).toBe(true);
+      const body = String(sentEmails.at(-1)?.text || sentEmails.at(-1)?.html || '');
+      // A (1 power, 2 badges, 1 table) + B (1 power) + C (1 power, 1 table) + D (3 tables)
+      expect(body).toMatch(/Add-ons requested: Booth power ×3, Extra vendor badge ×2, Table &amp; chairs ×5|Add-ons requested: Booth power ×3, Extra vendor badge ×2, Table & chairs ×5/);
+      expect(body).toMatch(/Hidden Block Games \(Vee Vendor\) — Booth, Booth power ×1, Extra vendor badge ×2, Table (&amp;|&) chairs ×1, \$/);
+      await prisma.organization.update({ where: { id: org.id }, data: { applicationDigestAt: orgRow.applicationDigestAt } });
     });
 
     it('duplicating the event copies add-ons and their application-tier attachments', async () => {

@@ -24,6 +24,19 @@ router.get('/presets', ...member, wrap(async (req, res) => {
   res.json(addOnService.presets());
 }));
 
+/** GET /sales — per add-on sold / held / remaining / revenue, split by tickets vs applications (spec 012 phase 3). */
+router.get('/sales', ...member, wrap(async (req, res) => {
+  res.json(await addOnService.sales(req.params.orgId, req.params.eventId));
+}));
+
+/** GET /purchasers.csv — one row per add-on line (orders and applications). */
+router.get('/purchasers.csv', ...member, wrap(async (req, res) => {
+  const csv = await addOnService.purchasersCsv(req.params.orgId, req.params.eventId);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="add-on-purchasers-${req.params.eventId}.csv"`);
+  res.send(csv);
+}));
+
 router.post('/', ...admin, wrap(async (req, res) => {
   res.status(201).json(await addOnService.create(req.params.orgId, req.params.eventId, req.body || {}));
 }));

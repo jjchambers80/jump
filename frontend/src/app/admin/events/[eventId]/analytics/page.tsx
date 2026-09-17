@@ -2,14 +2,17 @@
 // Moved from dashboard/events/[eventId]/analytics/page.tsx
 // AdminRoute wrapper removed — layout.tsx handles auth guard
 // Links updated from /dashboard/* to /admin/*
+// Spec 012 phase 3: add-on sales table + purchasers CSV.
 
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { useOrg } from '@/components/OrgContext';
 import api from '@/services/api';
+import type { AddOnSales } from '@/lib/addOns';
 
 interface TierAnalytics {
   id: string;
@@ -40,11 +43,12 @@ interface EventAnalytics {
   tiers: TierAnalytics[];
 }
 
-function formatCurrency(amountCents: number): string {
+// Amounts from the API are dollars (Prisma Decimal), not cents.
+function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
-  }).format(amountCents / 100);
+  }).format(amount);
 }
 
 function formatDate(iso: string): string {
@@ -91,13 +95,18 @@ export default function EventAnalyticsPage() {
   const eventId = params.eventId as string;
 
   const { selectedOrgId } = useOrg();
+  const { data: session } = useSession();
+  const accessToken = (session as { accessToken?: string } | null)?.accessToken;
   const [analytics, setAnalytics] = useState<EventAnalytics | null>(null);
+  const [addOnSales, setAddOnSales] = useState<AddOnSales | null>(null);
+  const [csvError, setCsvError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Reset when org changes
   useEffect(() => {
     setAnalytics(null);
+    setAddOnSales(null);
   }, [selectedOrgId]);
 
   const fetchAnalytics = useCallback(async () => {
@@ -109,6 +118,11 @@ export default function EventAnalyticsPage() {
         `/organizations/${selectedOrgId}/events/${eventId}/analytics`
       );
       setAnalytics(data);
+      // Add-on sales are optional: an event without add-ons still renders.
+      api
+        .get<AddOnSales>(`/organizations/${selectedOrgId}/events/${eventId}/add-ons/sales`)
+        .then(setAddOnSales)
+        .catch(() => setAddOnSales(null));
     } catch (err: any) {
       if (err.status === 404) {
         setError('Event not found in this organization.');
@@ -123,6 +137,22 @@ export default function EventAnalyticsPage() {
   useEffect(() => {
     fetchAnalytics();
   }, [fetchAnalytics]);
+
+  const downloadPurchasers = async () => {
+    setCsvError(null);
+    const url = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/organizations/${selectedOrgId}/events/${eventId}/add-ons/purchasers.csv`;
+    const res = await fetch(url, { headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} });
+    if (!res.ok) {
+      setCsvError('Export failed');
+      return;
+    }
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `add-on-purchasers-${eventId}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
@@ -285,6 +315,71 @@ export default function EventAnalyticsPage() {
               </table>
             </div>
           </div>
+
+          {/* Add-on sales (spec 012) */}
+          {addOnSales && addOnSales.addOns.length > 0 && (
+            <div className="mt-6 bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden" data-testid="add-on-sales">
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Add-on sales</h3>
+                  <p className="text-xs text-gray-500 dark:text-slate-400">
+                    {addOnSales.totals.sold} sold · {addOnSales.totals.reserved} held · {formatCurrency(addOnSales.totals.revenue)} listed revenue
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {csvError && <span role="alert" className="text-xs text-red-700 dark:text-red-300">{csvError}</span>}
+                  <button
+                    type="button"
+                    onClick={downloadPurchasers}
+                    className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+                    data-testid="add-on-purchasers-csv"
+                  >
+                    Purchasers CSV
+                  </button>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 dark:bg-slate-900/50 text-left text-xs text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                      <th className="px-6 py-3">Add-on</th>
+                      <th className="px-6 py-3">Price</th>
+                      <th className="px-6 py-3">Sold</th>
+                      <th className="px-6 py-3">With tickets</th>
+                      <th className="px-6 py-3">With applications</th>
+                      <th className="px-6 py-3">Held</th>
+                      <th className="px-6 py-3">Remaining</th>
+                      <th className="px-6 py-3">Revenue</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-slate-700">
+                    {addOnSales.addOns.map((a) => (
+                      <tr key={a.id} className={`text-gray-900 dark:text-slate-100 ${a.isActive ? '' : 'opacity-60'}`} data-testid={`add-on-sales-${a.id}`}>
+                        <td className="px-6 py-4 font-medium">
+                          {a.name}
+                          {!a.isActive && <span className="ml-2 text-xs font-normal text-gray-500 dark:text-slate-400">inactive</span>}
+                        </td>
+                        <td className="px-6 py-4">{formatCurrency(a.price)}</td>
+                        <td className="px-6 py-4">{a.sold}</td>
+                        <td className="px-6 py-4">{a.orders.quantity}</td>
+                        <td className="px-6 py-4">
+                          {a.applications.quantity}
+                          {a.applications.pending > 0 && (
+                            <span className="ml-1 text-xs text-gray-500 dark:text-slate-400" title="On applications still under review">+{a.applications.pending} pending</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">{a.reserved}</td>
+                        <td className="px-6 py-4">
+                          {a.remaining === null ? <span className="text-gray-500 dark:text-slate-400">∞</span> : <span className={a.remaining === 0 ? 'text-red-600 dark:text-red-400 font-semibold' : ''}>{a.remaining}</span>}
+                        </td>
+                        <td className="px-6 py-4 font-medium">{formatCurrency(a.revenue)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

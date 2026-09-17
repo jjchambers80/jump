@@ -69,6 +69,7 @@ class ApplicationDigestService {
         tier: { select: { name: true } },
         profile: { select: { businessName: true } },
         contact: { select: { firstName: true, lastName: true } },
+        addOns: { select: { quantity: true, addOn: { select: { name: true, displayOrder: true } } }, orderBy: { addOn: { displayOrder: 'asc' } } },
       },
       orderBy: [{ eventId: 'asc' }, { formId: 'asc' }, { submittedAt: 'asc' }],
     });
@@ -120,9 +121,23 @@ class ApplicationDigestService {
       parts.push(`${event.name}`);
       for (const { form, rows: list } of forms.values()) {
         const lines = [`${form.name}: ${list.length}`];
+        // Add-on counts across the form's new applications (spec 012 phase 3)
+        const addOnTotals = new Map();
+        for (const a of list) {
+          for (const l of a.addOns || []) {
+            const t = addOnTotals.get(l.addOn.name) ?? { quantity: 0, order: l.addOn.displayOrder };
+            t.quantity += l.quantity;
+            addOnTotals.set(l.addOn.name, t);
+          }
+        }
+        if (addOnTotals.size) {
+          const summary = [...addOnTotals.entries()].sort((x, y) => x[1].order - y[1].order).map(([name, t]) => `${name} ×${t.quantity}`).join(', ');
+          lines.push(`Add-ons requested: ${summary}`);
+        }
         for (const a of list.slice(0, MAX_ROWS_PER_FORM)) {
           const who = `${a.contact.firstName} ${a.contact.lastName}`.trim();
-          const extra = [a.tier?.name, form.kind === 'PAID' && Number(a.applicantPays) > 0 ? money(a.applicantPays) : null].filter(Boolean).join(', ');
+          const addOns = (a.addOns || []).map((l) => `${l.addOn.name} ×${l.quantity}`).join(', ');
+          const extra = [a.tier?.name, addOns || null, form.kind === 'PAID' && Number(a.applicantPays) > 0 ? money(a.applicantPays) : null].filter(Boolean).join(', ');
           lines.push(`- ${a.profile.businessName} (${who})${extra ? ` — ${extra}` : ''}`);
         }
         if (list.length > MAX_ROWS_PER_FORM) lines.push(`…and ${list.length - MAX_ROWS_PER_FORM} more`);

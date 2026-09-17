@@ -1,6 +1,6 @@
 # Implementation Plan: Add-ons (spec 012)
 
-**Status**: Planned 2026-09-17. Phase 1 built 2026-09-17 (`feat/012-add-ons-phase-1`). Phase 2 built 2026-09-17 (`feat/012-add-ons-phase-2`, stacked). Phase 3 not started.
+**Status**: Planned 2026-09-17. All three phases built 2026-09-17 on stacked branches `feat/012-add-ons-phase-1` → `-phase-2` → `-phase-3`.
 **Spec**: [spec.md](./spec.md). Depends on spec 011 (all phases on `main` 2026-09-17) and spec 010 phase 2 (Connect routing, on `main`, dark).
 
 ---
@@ -275,6 +275,14 @@ Built 2026-09-17. Decisions taken while building:
 ### Phase 3 — Reporting and polish
 
 Sales endpoint + analytics table, purchasers CSV, "has add-on" saved views, presets in the create-event wizard (spec 005 when built), digest email add-on counts, wiki page + agent docs.
+
+Built 2026-09-17. Decisions taken while building:
+
+- Reporting routes live on the add-ons router (`GET /organizations/:orgId/events/:eventId/add-ons/sales`, `…/purchasers.csv`, member reads) rather than `/admin/events/:eventId/…` as sketched in §4.3, because the analytics page already calls the org-scoped analytics route and the add-ons router carries the same membership guard.
+- `sales` counts revenue at listed price (unit × quantity) of sold lines: order lines on COMPLETED / PARTIALLY_REFUNDED orders that are not refunded, application lines on PAID / PARTIALLY_REFUNDED applications whose slot is APPROVED. `held` = lines on RESERVED slots, `pending` = lines on SUBMITTED / WAITLISTED applications (chosen, not held). DRAFT applications count nowhere.
+- The "has add-on" filter shipped in phase 2; saved views already carried it.
+- Presets in the create-event wizard are deferred with spec 005 (the wizard is not built; add-ons need a saved event id).
+- Fixed in passing: the event analytics page divided API dollar amounts by 100 (tier price and revenue showed as cents).
 
 ### Explicitly out of scope
 

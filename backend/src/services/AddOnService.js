@@ -422,6 +422,131 @@ class AddOnService {
   }
 
   // ---------------------------------------------------------------------------
+  // Reporting (spec 012 phase 3)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Per add-on: what sold (paid) and what is held, split by source, with
+   * listed revenue. Ticket lines count once their order completed and the
+   * line is not refunded; application lines count once the application is
+   * paid (approved with the slot sold) — held ones are the in-flight charges
+   * and PAYMENT_DUE applications.
+   */
+  async sales(orgId, eventId) {
+    await this._requireEvent(orgId, eventId);
+    const addOns = await prisma.addOn.findMany({
+      where: { eventId },
+      include: {
+        orderLines: { where: { refundedAt: null, order: { status: { in: ['COMPLETED', 'PARTIALLY_REFUNDED'] } } }, select: { quantity: true, unitPrice: true } },
+        applicationLines: {
+          where: { application: { status: { not: 'DRAFT' } } },
+          select: { quantity: true, unitPrice: true, application: { select: { status: true, paymentStatus: true, capacitySlot: true } } },
+        },
+      },
+      orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
+    });
+    const round = (v) => Math.round((v + Number.EPSILON) * 100) / 100;
+    const rows = addOns.map((a) => {
+      const orders = { quantity: 0, revenue: 0, lines: a.orderLines.length };
+      for (const l of a.orderLines) {
+        orders.quantity += l.quantity;
+        orders.revenue += Number(l.unitPrice) * l.quantity;
+      }
+      const applications = { quantity: 0, revenue: 0, lines: 0, held: 0, pending: 0 };
+      for (const l of a.applicationLines) {
+        const app = l.application;
+        if (['PAID', 'PARTIALLY_REFUNDED'].includes(app.paymentStatus) && app.capacitySlot === 'APPROVED') {
+          applications.quantity += l.quantity;
+          applications.revenue += Number(l.unitPrice) * l.quantity;
+          applications.lines += 1;
+        } else if (app.capacitySlot === 'RESERVED') {
+          applications.held += l.quantity;
+        } else if (['SUBMITTED', 'WAITLISTED'].includes(app.status)) {
+          // Chosen on an application that is still under review: not held, not sold.
+          applications.pending += l.quantity;
+        }
+      }
+      const remaining = a.quantityTotal == null ? null : Math.max(0, a.quantityTotal - a.quantitySold - a.quantityReserved);
+      return {
+        id: a.id,
+        name: a.name,
+        scope: a.scope,
+        price: Number(a.price),
+        isActive: a.isActive,
+        quantityTotal: a.quantityTotal,
+        sold: a.quantitySold,
+        reserved: a.quantityReserved,
+        remaining,
+        revenue: round(orders.revenue + applications.revenue),
+        orders: { quantity: orders.quantity, revenue: round(orders.revenue), lines: orders.lines },
+        applications: { ...applications, revenue: round(applications.revenue) },
+      };
+    });
+    return {
+      addOns: rows,
+      totals: {
+        sold: rows.reduce((s, r) => s + r.sold, 0),
+        reserved: rows.reduce((s, r) => s + r.reserved, 0),
+        revenue: round(rows.reduce((s, r) => s + r.revenue, 0)),
+      },
+    };
+  }
+
+  /** One CSV row per add-on line, ticket orders and applications alike. */
+  async purchasersCsv(orgId, eventId) {
+    await this._requireEvent(orgId, eventId);
+    const [orderLines, applicationLines] = await Promise.all([
+      prisma.orderAddOn.findMany({
+        where: { addOn: { eventId }, order: { status: { not: 'PENDING' } } },
+        include: {
+          addOn: { select: { name: true, displayOrder: true } },
+          order: { select: { id: true, status: true, createdAt: true, contact: { select: { email: true, firstName: true, lastName: true } } } },
+        },
+      }),
+      prisma.applicationAddOn.findMany({
+        where: { addOn: { eventId }, application: { status: { not: 'DRAFT' } } },
+        include: {
+          addOn: { select: { name: true, displayOrder: true } },
+          application: {
+            select: {
+              id: true,
+              status: true,
+              paymentStatus: true,
+              submittedAt: true,
+              boothLabel: true,
+              contact: { select: { email: true, firstName: true, lastName: true } },
+              profile: { select: { businessName: true } },
+              tier: { select: { name: true } },
+              form: { select: { name: true } },
+            },
+          },
+        },
+      }),
+    ]);
+    const csvCell = (value) => {
+      if (value === null || value === undefined) return '';
+      const s = String(value);
+      return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const header = ['addOn', 'quantity', 'unitPrice', 'source', 'sourceId', 'status', 'firstName', 'lastName', 'email', 'businessName', 'form', 'tier', 'boothLabel', 'refunded', 'createdAt'];
+    const rows = [
+      ...orderLines.map((l) => ({
+        sort: [l.addOn.displayOrder, l.order.createdAt],
+        cells: [l.addOn.name, l.quantity, Number(l.unitPrice).toFixed(2), 'order', l.order.id, l.order.status, l.order.contact?.firstName, l.order.contact?.lastName, l.order.contact?.email, '', '', '', '', l.refundedAt ? 'yes' : '', l.order.createdAt.toISOString()],
+      })),
+      ...applicationLines.map((l) => ({
+        sort: [l.addOn.displayOrder, l.application.submittedAt ?? new Date(0)],
+        cells: [
+          l.addOn.name, l.quantity, Number(l.unitPrice).toFixed(2), 'application', l.application.id, `${l.application.status}/${l.application.paymentStatus}`,
+          l.application.contact?.firstName, l.application.contact?.lastName, l.application.contact?.email, l.application.profile?.businessName ?? '',
+          l.application.form?.name ?? '', l.application.tier?.name ?? '', l.application.boothLabel ?? '', '', l.application.submittedAt?.toISOString() ?? '',
+        ],
+      })),
+    ].sort((x, y) => x.sort[0] - y.sort[0] || x.sort[1] - y.sort[1]);
+    return [header, ...rows.map((r) => r.cells)].map((cells) => cells.map(csvCell).join(',')).join('\r\n');
+  }
+
+  // ---------------------------------------------------------------------------
   // Serializers
   // ---------------------------------------------------------------------------
 
