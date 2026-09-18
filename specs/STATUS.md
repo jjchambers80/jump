@@ -1,7 +1,7 @@
 # Spec Lifecycle Status
 
 This index records the verified lifecycle state of every spec document in this directory.
-Last updated: 2026-09-17.
+Last updated: 2026-09-18.
 
 | # | Title | Lifecycle | Notes |
 |---|-------|-----------|-------|
@@ -17,6 +17,7 @@ Last updated: 2026-09-17.
 | 011 | Applications (vendors, sponsors, press, panels) | **Implemented** | Phases 1-3 on `origin/main` 2026-09-17: forms + free applications, card on file + charge at approval + pay-now + refunds (behind `APPLICATIONS_PAYMENTS_ENABLED`), CSV/saved views/digest/event duplicate. Hand-offs: 012 add-ons, 013 messaging, 014 floor map. |
 | 012 | Add-ons (ticket tiers and application tiers) | **Implemented** | Phases 1-3 on `origin/main` 2026-09-17 (PRs #59/#63/#61/#62): add-ons on ticket tiers, on application tiers, sales report + purchasers CSV + analytics. |
 | 018 | Transactions — unified view of ticket orders and application payments | **Partially implemented** | Phases 1-3 built 2026-09-18 (PRs #65–#67); phase 1 (org-wide Transactions list / search / CSV / refunds) **removed** 2026-09-18 — it duplicated Orders and the per-event Applications tab. Kept: order refunds ADMIN; customers, analytics, dashboard, tax report include application money; tier change, adjustments, waive, offline payment, manual refunds on applications. 013–017 reserved (messaging, floor map, pages, machine access, MCP). |
+| 019 | Participants — org-wide submissions list, application forms and templates | **Planned** | Plan written 2026-09-18 (`019-participants/plan.md`); not built. Sidebar **Participants**, one `SubmissionsTable` for the org-wide and per-event lists, Applications tab (forms across events, `ApplicationFormTemplate` snapshots), tags + check-in in phase 3. |
 
 ## Documents archived as historical
 
