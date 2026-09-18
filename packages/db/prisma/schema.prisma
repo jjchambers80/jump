@@ -832,6 +832,7 @@ model ApplicationQuestion {
   required     Boolean      @default(false)
   options      String[]     @default([])
   displayOrder Int          @default(0)
+  pinned       Boolean      @default(false) // spec 019: shown as a column on the submissions list (≤ 2 per form)
   archivedAt   DateTime? // archived, never deleted, once answers exist
 
   form    ApplicationForm     @relation(fields: [formId], references: [id], onDelete: Cascade)

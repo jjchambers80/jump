@@ -48,6 +48,9 @@ interface FilterForm {
   eventId?: string;
   event?: { id: string; name: string; date: string };
   addOns?: { id: string; name: string }[];
+  /** Per-event forms carry every question; the org-wide list only the pinned ones. */
+  questions?: { id: string; label: string; pinned?: boolean }[];
+  pinnedQuestions?: { id: string; label: string }[];
 }
 
 const select = 'rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100';
@@ -289,12 +292,21 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
     return [...seen.values()];
   }, [formOptions]);
 
+  // Pinned answer columns (spec 019 follow-up): with a Form filter, one column per
+  // pinned question of that form; otherwise one "Answers" column listing label: value.
+  const pinnedColumns = useMemo(() => {
+    if (!query.form) return [];
+    const f = forms.find((x) => x.id === query.form);
+    return f?.pinnedQuestions ?? (f?.questions ?? []).filter((q) => q.pinned).map((q) => ({ id: q.id, label: q.label }));
+  }, [forms, query.form]);
+  const showAnswers = pinnedColumns.length === 0 && (list?.data ?? []).some((r) => (r.pinnedAnswers ?? []).length > 0);
+
   const selectedPaid = (list?.data ?? []).some((r) => selected.has(r.id) && r.formKind === 'PAID');
   const showOrganization = orgWide && (list?.data ?? []).some((r) => r.organization);
   const summary = list?.summary ?? {};
   const totalPages = list ? Math.max(1, Math.ceil(list.total / list.pageSize)) : 1;
   const statusSort = query.sort === 'status' ? 'ascending' : query.sort === 'status_desc' ? 'descending' : 'none';
-  const columns = 10 + (showOrganization ? 1 : 0);
+  const columns = 10 + (showOrganization ? 1 : 0) + pinnedColumns.length + (showAnswers ? 1 : 0);
   const detailHref = (row: ApplicationRow) => `/admin/events/${row.eventId ?? eventId}/applications/${row.id}`;
 
   return (
@@ -443,6 +455,12 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
               <th className="px-3 py-2">Tags</th>
               <th className="px-3 py-2">Application</th>
               {showOrganization && <th className="px-3 py-2">Organization</th>}
+              {pinnedColumns.map((c) => (
+                <th key={c.id} className="px-3 py-2" data-testid={`pinned-column-${c.id}`}>
+                  {c.label}
+                </th>
+              ))}
+              {showAnswers && <th className="px-3 py-2">Answers</th>}
               <th className="px-3 py-2" aria-sort={statusSort}>
                 <button
                   type="button"
@@ -514,6 +532,27 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
                     )}
                   </td>
                   {showOrganization && <td className="px-3 py-2 align-top text-gray-800 dark:text-slate-200">{row.organization?.name ?? ''}</td>}
+                  {pinnedColumns.map((c) => {
+                    const a = (row.pinnedAnswers ?? []).find((x) => x.questionId === c.id);
+                    return (
+                      <td key={c.id} className="max-w-[14rem] truncate px-3 py-2 align-top text-gray-800 dark:text-slate-200" title={a?.value || undefined} data-testid={`pinned-answer-${row.id}-${c.id}`}>
+                        {a?.value || <span className="text-gray-400 dark:text-slate-500">—</span>}
+                      </td>
+                    );
+                  })}
+                  {showAnswers && (
+                    <td className="max-w-[16rem] px-3 py-2 align-top text-xs text-gray-700 dark:text-slate-300" data-testid={`application-answers-${row.id}`}>
+                      {(row.pinnedAnswers ?? []).length === 0 ? (
+                        <span className="text-gray-400 dark:text-slate-500">—</span>
+                      ) : (
+                        (row.pinnedAnswers ?? []).map((a) => (
+                          <div key={a.questionId} className="truncate" title={a.value}>
+                            <span className="text-gray-500 dark:text-slate-400">{a.label}:</span> {a.value || '—'}
+                          </div>
+                        ))
+                      )}
+                    </td>
+                  )}
                   <td className="px-3 py-2 align-top">
                     <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_STYLE[row.status]}`}>{STATUS_LABEL[row.status]}</span>
                   </td>

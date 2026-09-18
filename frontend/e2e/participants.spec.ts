@@ -14,9 +14,9 @@ const CON = { id: 'evt-con', name: 'Winter Con', date: '2027-01-10T15:00:00.000Z
 const json = (body: unknown, status = 200) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
 const forms = [
-  { id: 'form-press', eventId: EXPO.id, event: EXPO, kind: 'FREE', name: 'Press & Media', slug: 'press-media', status: 'OPEN', opensAt: null, closesAt: null, acceptance: { open: true, reason: null }, applicationCount: 2, addOns: [], updatedAt: '2026-09-01T00:00:00.000Z' },
-  { id: 'form-vendor', eventId: EXPO.id, event: EXPO, kind: 'PAID', name: 'Vendor Space', slug: 'vendor-space', status: 'OPEN', opensAt: null, closesAt: null, acceptance: { open: true, reason: null }, applicationCount: 1, addOns: [{ id: 'addon-power', name: 'Booth power' }], updatedAt: '2026-09-01T00:00:00.000Z' },
-  { id: 'form-panels', eventId: CON.id, event: CON, kind: 'FREE', name: 'Panels', slug: 'panels', status: 'DRAFT', opensAt: null, closesAt: null, acceptance: { open: false, reason: 'not_published' }, applicationCount: 1, addOns: [], updatedAt: '2026-09-01T00:00:00.000Z' },
+  { id: 'form-press', eventId: EXPO.id, event: EXPO, kind: 'FREE', name: 'Press & Media', slug: 'press-media', status: 'OPEN', opensAt: null, closesAt: null, acceptance: { open: true, reason: null }, applicationCount: 2, pinnedQuestions: [{ id: 'q-outlet', label: 'Outlet', type: 'SHORT_TEXT' }, { id: 'q-insurance', label: 'Proof of insurance', type: 'CHECKBOX' }], addOns: [], updatedAt: '2026-09-01T00:00:00.000Z' },
+  { id: 'form-vendor', eventId: EXPO.id, event: EXPO, kind: 'PAID', name: 'Vendor Space', slug: 'vendor-space', status: 'OPEN', opensAt: null, closesAt: null, acceptance: { open: true, reason: null }, applicationCount: 1, pinnedQuestions: [], addOns: [{ id: 'addon-power', name: 'Booth power' }], updatedAt: '2026-09-01T00:00:00.000Z' },
+  { id: 'form-panels', eventId: CON.id, event: CON, kind: 'FREE', name: 'Panels', slug: 'panels', status: 'DRAFT', opensAt: null, closesAt: null, acceptance: { open: false, reason: 'not_published' }, applicationCount: 1, pinnedQuestions: [], addOns: [], updatedAt: '2026-09-01T00:00:00.000Z' },
 ];
 
 type Row = Record<string, any>;
@@ -39,6 +39,7 @@ function row(over: Row): Row {
     tags: [],
     checkedInAt: null,
     checkedOutAt: null,
+    pinnedAnswers: [],
     logoUrl: null,
     statusUrl: 'http://localhost:3001/events/evt-expo/apply/status/app-1?token=tok',
     ...over,
@@ -46,7 +47,7 @@ function row(over: Row): Row {
 }
 
 const rows: Row[] = [
-  row({ id: 'app-retroweekly', shortId: 'ROWEEKLY', eventId: EXPO.id, event: EXPO, businessName: 'Retro Weekly', boothLabel: 'Media row 3', tags: ['Sponsor', 'Returning'] }),
+  row({ id: 'app-retroweekly', shortId: 'ROWEEKLY', eventId: EXPO.id, event: EXPO, businessName: 'Retro Weekly', boothLabel: 'Media row 3', tags: ['Sponsor', 'Returning'], pinnedAnswers: [{ questionId: 'q-outlet', label: 'Outlet', type: 'SHORT_TEXT', value: 'Retro Weekly Magazine' }, { questionId: 'q-insurance', label: 'Proof of insurance', type: 'CHECKBOX', value: 'true' }] }),
   row({ id: 'app-pixelpins1', shortId: 'XELPINS1', eventId: EXPO.id, event: EXPO, businessName: 'Pixel Pins', formId: 'form-vendor', formName: 'Vendor Space', formKind: 'PAID', paymentStatus: 'CARD_ON_FILE', tier: { id: 't1', name: '10x10' }, applicantPays: 303.3, contact: { email: 'pins@example.com', firstName: 'Pix', lastName: 'Pins' }, submittedAt: '2026-09-16T12:00:00.000Z' }),
   row({ id: 'app-piatalks01', shortId: 'ATALKS01', eventId: CON.id, event: CON, businessName: 'Pia Talks', formId: 'form-panels', formName: 'Panels', status: 'APPROVED', contact: { email: 'pia@example.com', firstName: 'Pia', lastName: 'Panel' }, submittedAt: '2026-09-15T10:00:00.000Z', decidedAt: '2026-09-16T09:00:00.000Z' }),
 ];
@@ -103,11 +104,13 @@ async function mockAdmin(page: Page, baseURL: string, role: 'ADMIN' | 'ORGANIZER
     const q = url.searchParams.get('q')?.toLowerCase();
     const event = url.searchParams.get('event');
     const tag = url.searchParams.get('tag');
+    const form = url.searchParams.get('form');
     const sort = url.searchParams.get('sort');
     let data = scope.filter(
       (r) =>
         (!status || status.split(',').includes(r.status)) &&
         (!event || r.eventId === event) &&
+        (!form || r.formId === form) &&
         (!tag || r.tags.includes(tag)) &&
         (!q || r.businessName.toLowerCase().includes(q) || r.shortId.toLowerCase() === q || r.formName.toLowerCase().includes(q) || r.tags.some((t: string) => t.toLowerCase() === q))
     );
@@ -169,7 +172,7 @@ async function mockAdmin(page: Page, baseURL: string, role: 'ADMIN' | 'ORGANIZER
     }
     if (path.match(/^\/admin\/events\/[^/]+\/application-forms$/)) {
       const eventId = path.split('/')[3];
-      return route.fulfill(json({ data: forms.filter((f) => f.eventId === eventId).map((f) => ({ ...f, tiers: [], questions: [], addOns: f.addOns.map((a) => ({ ...a, price: 10, allTiers: true, isActive: true, scope: 'APPLICATION' })) })) }));
+      return route.fulfill(json({ data: forms.filter((f) => f.eventId === eventId).map((f) => ({ ...f, tiers: [], questions: f.pinnedQuestions.map((q, i) => ({ ...q, helpText: null, required: false, options: [], displayOrder: i, pinned: true })), addOns: f.addOns.map((a) => ({ ...a, price: 10, allTiers: true, isActive: true, scope: 'APPLICATION' })) })) }));
     }
     return route.fulfill(json({ error: 'NotFoundError', message: `Unmocked ${method} ${path}` }, 404));
   });
@@ -196,7 +199,7 @@ test('sidebar entry and the org-wide list: events, short ids, tags, status sort,
   await expect(page).toHaveURL(/sort=status&/);
   await page.getByTestId('applications-sort-status').click();
   await expect(page).toHaveURL(/sort=status_desc/);
-  expect(calls.some((c) => c.path === '/admin/applications' && c.search.includes('sort=status_desc'))).toBe(true);
+  await expect.poll(() => calls.some((c) => c.path === '/admin/applications' && c.search.includes('sort=status_desc'))).toBe(true);
 
   await page.getByLabel('Event').selectOption(CON.id);
   await expect(page).toHaveURL(/event=evt-con/);
@@ -371,4 +374,34 @@ test('detail page: tags block with Edit tags, check-in on an approved applicatio
   await checkin.getByRole('checkbox', { name: /Checked in/ }).check();
   await expect(checkin).toContainText('Checked in · Sep 18, 2026');
   await expect(checkin.getByRole('checkbox', { name: /Checked in/ })).toBeChecked();
+});
+
+// ─── Pinned answer columns ───────────────────────────────────────────────────
+
+test('pinned answers: an Answers column without a form filter, one column per pinned question with it — on both mounts', async ({ page, baseURL }) => {
+  await mockAdmin(page, baseURL!);
+  await page.goto('/admin/participants');
+  const table = page.getByTestId('applications-table');
+  await expect(table.getByRole('columnheader', { name: 'Answers' })).toBeVisible();
+  await expect(page.getByTestId('application-answers-app-retroweekly')).toContainText('Outlet: Retro Weekly Magazine');
+  await expect(page.getByTestId('application-answers-app-retroweekly')).toContainText('Proof of insurance: true');
+  await expect(page.getByTestId('application-answers-app-piatalks01')).toContainText('—');
+
+  await page.getByLabel('Form').selectOption('form-press');
+  await expect(page).toHaveURL(/form=form-press/);
+  await expect(table.getByRole('columnheader', { name: 'Answers' })).toHaveCount(0);
+  await expect(page.getByTestId('pinned-column-q-outlet')).toHaveText('Outlet');
+  await expect(page.getByTestId('pinned-column-q-insurance')).toHaveText('Proof of insurance');
+  await expect(page.getByTestId('pinned-answer-app-retroweekly-q-outlet')).toHaveText('Retro Weekly Magazine');
+  await expect(page.getByTestId('pinned-answer-app-retroweekly-q-insurance')).toHaveText('true');
+
+  // Per-event mount reads pinned questions from the event's forms.
+  await page.goto(`/admin/events/${EXPO.id}/applications?form=form-press`);
+  await expect(page.getByTestId('pinned-column-q-outlet')).toHaveText('Outlet');
+  await expect(page.getByTestId('pinned-answer-app-retroweekly-q-outlet')).toHaveText('Retro Weekly Magazine');
+  // A form with nothing pinned and no pinned answers shows neither.
+  await page.goto(`/admin/events/${EXPO.id}/applications?form=form-vendor`);
+  await expect(page.getByTestId('applications-table')).toContainText('Pixel Pins');
+  await expect(page.getByTestId('applications-table').getByRole('columnheader', { name: 'Answers' })).toHaveCount(0);
+  await expect(page.getByTestId('pinned-column-q-outlet')).toHaveCount(0);
 });

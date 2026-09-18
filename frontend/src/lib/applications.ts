@@ -24,6 +24,18 @@ export interface Question {
   required: boolean;
   options: string[];
   displayOrder: number;
+  /** Spec 019: shown as a column on the submissions list (≤ MAX_PINNED_QUESTIONS per form). */
+  pinned: boolean;
+}
+
+export const MAX_PINNED_QUESTIONS = 2;
+
+/** An answer to a pinned question, on list rows. */
+export interface PinnedAnswer {
+  questionId: string;
+  label: string;
+  type: QuestionType;
+  value: string;
 }
 
 export interface TierAmounts {
@@ -225,6 +237,8 @@ export interface ApplicationRow {
   tags: string[];
   checkedInAt: string | null;
   checkedOutAt: string | null;
+  /** Answers to the form's pinned questions, in question order. */
+  pinnedAnswers: PinnedAnswer[];
   /** The applicant's status-page link, for "Copy status link" (spec 019). */
   statusUrl: string | null;
 }
@@ -243,6 +257,7 @@ export interface TemplateQuestion {
   type: QuestionType;
   required: boolean;
   options: string[];
+  pinned: boolean;
 }
 export interface TemplateDefinition {
   intro: string | null;
@@ -290,6 +305,7 @@ export interface OrgForm {
   closesAt: string | null;
   acceptance: Acceptance;
   applicationCount: number;
+  pinnedQuestions: { id: string; label: string; type: QuestionType }[];
   addOns: { id: string; name: string }[];
   updatedAt: string;
 }

@@ -50,6 +50,7 @@ function questionFromBody(body: Record<string, unknown>): TemplateQuestion {
     type: body.type as TemplateQuestion['type'],
     required: body.required === true,
     options: Array.isArray(body.options) ? (body.options as string[]) : [],
+    pinned: body.pinned === true,
   };
 }
 
