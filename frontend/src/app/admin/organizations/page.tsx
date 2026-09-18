@@ -21,6 +21,8 @@ interface Organization {
   themeMode?: ThemeMode;
   createdAt: string;
   updatedAt: string;
+  /** null while the organization is still in the /signup flow (spec 022) */
+  onboardingCompletedAt?: string | null;
   _count?: {
     venues: number;
     users: number;
@@ -39,7 +41,8 @@ export default function OrganizationsPage() {
     try {
       setLoading(true);
       setError(null);
-      const data = await api.get<Organization[]>('/organizations');
+      // SYSTEM_ADMIN also sees organizations whose signup was never finished
+      const data = await api.get<Organization[]>('/organizations?includePending=1');
       setOrganizations(data);
     } catch (err: any) {
       setError(err.message || 'Failed to load organizations');
@@ -51,6 +54,17 @@ export default function OrganizationsPage() {
   useEffect(() => {
     fetchOrganizations();
   }, [fetchOrganizations]);
+
+  const handleDiscard = async (org: Organization) => {
+    if (!window.confirm(`Discard the unfinished signup for "${org.name}"? This cannot be undone.`)) return;
+    try {
+      setError(null);
+      await api.delete(`/signup/${org.id}`);
+      await fetchOrganizations();
+    } catch (err: any) {
+      setError(err.message || 'Failed to discard organization');
+    }
+  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -163,6 +177,14 @@ export default function OrganizationsPage() {
                       >
                         {org.status}
                       </span>
+                      {org.onboardingCompletedAt === null && (
+                        <span
+                          className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+                          title="The signup flow was started but not finished; hidden from the org switcher"
+                        >
+                          Pending setup
+                        </span>
+                      )}
                       {org._count && (
                         <>
                           <span>
@@ -178,7 +200,14 @@ export default function OrganizationsPage() {
                 </div>
 
                 <div className="ml-4">
-                  {editingId !== org.id ? (
+                  {org.onboardingCompletedAt === null ? (
+                    <button
+                      onClick={() => handleDiscard(org)}
+                      className="text-sm font-medium text-red-600 dark:text-red-400 hover:text-red-500"
+                    >
+                      Discard
+                    </button>
+                  ) : editingId !== org.id ? (
                     <button
                       onClick={() => setEditingId(org.id)}
                       className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300"

@@ -13,7 +13,7 @@ import type { Page } from '@playwright/test';
 export interface StaffUser {
   id: string;
   email: string;
-  role: 'ADMIN' | 'ORGANIZER' | 'SYSTEM_ADMIN';
+  role: 'ADMIN' | 'ORGANIZER' | 'SYSTEM_ADMIN' | 'UNASSIGNED';
   name?: string;
 }
 

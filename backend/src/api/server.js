@@ -25,6 +25,7 @@ import { eventApplicationsRouter, applicationStatusRouter } from './routes/appli
 import adminRouter from './routes/admin.js';
 import customersRouter from './routes/customers.js';
 import organizationsRouter from './routes/organizations.js';
+import signupRouter from './routes/signup.js';
 import venuesRouter, { orgVenuesRouter } from './routes/venues.js';
 import ordersRouter, { eventOrdersRouter } from './routes/orders.js';
 import usersRouter from './routes/users.js';
@@ -134,6 +135,7 @@ app.use('/events/:eventId/applications', eventApplicationsRouter);
 app.use('/applications', applicationStatusRouter);
 app.use('/events', eventsRouter);
 app.use('/venues', venuesRouter);
+app.use('/signup', signupRouter);
 app.use('/organizations', organizationsRouter);
 app.use('/organizations/:orgId/venues', orgVenuesRouter);
 app.use('/organizations/:orgId/events', orgEventsRouter);

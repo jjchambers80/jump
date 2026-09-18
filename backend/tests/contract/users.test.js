@@ -38,6 +38,7 @@ jest.unstable_mockModule('../../src/config/stripe.js', () => ({
 
 const { default: app } = await import('../../src/api/server.js');
 const { prisma } = await import('@jump/db');
+const { staffToken, cleanupStaff } = await import('../helpers/staff.js');
 
 describe('User Management Contract Tests', () => {
   let adminToken, customerToken;
@@ -45,11 +46,8 @@ describe('User Management Contract Tests', () => {
   let testUserId;
 
   beforeAll(async () => {
-    adminToken = generateToken({
-      id: 'admin-user-test',
-      role: 'ADMIN',
-      email: 'admin@user-contract.com',
-    });
+    // POST /organizations adds the creator as a member (spec 022): real user needed
+    adminToken = await staffToken({ role: 'ADMIN', email: 'admin@user-contract.com' });
     customerToken = generateToken({
       id: 'cust-user-test',
       role: 'UNASSIGNED',
@@ -80,6 +78,7 @@ describe('User Management Contract Tests', () => {
   afterAll(async () => {
     if (testUserId) await prisma.user.deleteMany({ where: { id: testUserId } });
     if (testOrgId) await prisma.organization.deleteMany({ where: { id: testOrgId } });
+    await cleanupStaff(['admin@user-contract.com']);
   });
 
   // ===== GET /users =====

@@ -46,22 +46,28 @@ class OrganizationService {
   }
 
   /**
-   * Create a new organization
+   * Create a new organization, already onboarded (the /signup flow is the
+   * self-serve path; this one is for SYSTEM_ADMIN tooling, seeds and tests).
+   * The creator becomes an ADMIN member so the organization shows up in
+   * their switcher (spec 022).
    * @param {Object} data - { name }
+   * @param {string} [creatorUserId] - User to add as ADMIN member
    * @returns {Promise<Object>} Created organization
    */
-  async createOrganization(data) {
+  async createOrganization(data, creatorUserId = null) {
     const organization = await prisma.organization.create({
       data: {
         name: data.name,
         slug: await this.uniqueSlug(data.name),
+        ...(creatorUserId ? { members: { create: { userId: creatorUserId, role: 'ADMIN' } } } : {}),
       },
     });
 
     logger.info('Organization created', {
       event: 'organization_created',
       organizationId: organization.id,
-      name: organization.name,
+      name: data.name,
+      creatorUserId,
     });
 
     return organization;
@@ -84,8 +90,10 @@ class OrganizationService {
    * List all organizations
    * @returns {Promise<Array>} List of organizations
    */
-  async listOrganizations() {
+  async listOrganizations({ includePending = false } = {}) {
     const orgs = await prisma.organization.findMany({
+      // Spec 022: organizations still in /signup are hidden from the switcher
+      where: includePending ? undefined : { onboardingCompletedAt: { not: null } },
       orderBy: { createdAt: 'desc' },
       include: { _count: { select: { venues: true, members: true } } },
     });
@@ -98,7 +106,7 @@ class OrganizationService {
    */
   async listOrganizationsForUser(userId) {
     const memberships = await prisma.organizationMember.findMany({
-      where: { userId },
+      where: { userId, organization: { onboardingCompletedAt: { not: null } } },
       orderBy: { createdAt: 'asc' },
       include: { organization: { include: { _count: { select: { venues: true, members: true } } } } },
     });

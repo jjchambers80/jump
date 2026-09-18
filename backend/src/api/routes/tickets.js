@@ -8,7 +8,7 @@ import express from 'express';
 import ticketService from '../../services/TicketService.js';
 import refundService from '../../services/RefundService.js';
 import qrService from '../../services/QRService.js';
-import { requireScannerOrStaff } from '../../middleware/scannerAuth.js';
+import { requireScannerOrStaff, scannerOrgScope } from '../../middleware/scannerAuth.js';
 
 const router = express.Router();
 
@@ -59,7 +59,7 @@ router.post('/scan', requireScannerOrStaff, async (req, res, next) => {
           message: 'Invalid QR code format',
         });
       }
-      result = await ticketService.lookupByBarcode(parsed.barcode, null);
+      result = await ticketService.lookupByBarcode(parsed.barcode, null, await scannerOrgScope(req));
     } else {
       // Legacy JWT — verify and look up
       let decoded;
@@ -77,10 +77,7 @@ router.post('/scan', requireScannerOrStaff, async (req, res, next) => {
           message: 'Invalid or forged QR code',
         });
       }
-      result = await ticketService.lookupByBarcode(
-        decoded.barcode,
-        null
-      );
+      result = await ticketService.lookupByBarcode(decoded.barcode, null, await scannerOrgScope(req));
     }
 
     res.json(result);
@@ -105,10 +102,11 @@ router.post('/scan', requireScannerOrStaff, async (req, res, next) => {
 router.post('/redeem', requireScannerOrStaff, async (req, res, next) => {
   try {
     const { qrPayload, barcode, eventId } = req.body;
+    const scope = await scannerOrgScope(req);
 
     // Direct barcode redemption (from scan preview flow)
     if (barcode) {
-      const result = await ticketService.redeemByBarcode(barcode, eventId || null);
+      const result = await ticketService.redeemByBarcode(barcode, eventId || null, scope);
       return res.json(result);
     }
 
@@ -128,12 +126,12 @@ router.post('/redeem', requireScannerOrStaff, async (req, res, next) => {
           message: 'Invalid QR code format',
         });
       }
-      const result = await ticketService.redeemByBarcode(parsed.barcode, eventId || parsed.eventId);
+      const result = await ticketService.redeemByBarcode(parsed.barcode, eventId || parsed.eventId, scope);
       return res.json(result);
     }
 
     // Legacy JWT format
-    const result = await ticketService.redeemTicket(qrPayload, eventId || null);
+    const result = await ticketService.redeemTicket(qrPayload, eventId || null, scope);
     res.json(result);
   } catch (error) {
     handleRedemptionError(error, res, next);

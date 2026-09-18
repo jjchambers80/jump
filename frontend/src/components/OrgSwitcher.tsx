@@ -2,62 +2,50 @@
 
 // Shopify-style organization switcher dropdown.
 // Shows current org, list of orgs to switch, create new, user info, and logout.
+// "Create organization" opens the /signup onboarding flow in a new tab
+// (spec 022); OrgContext picks the new organization up when that tab finishes.
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { useOrg } from './OrgContext';
-import api from '@/services/api';
+
+export const SIGNUP_FROM_ADMIN_PATH = '/signup?from_admin=1';
 
 export default function OrgSwitcher() {
-  const { organizations, selectedOrg, setSelectedOrgId, refresh } = useOrg();
+  const { organizations, selectedOrg, setSelectedOrgId } = useOrg();
   const { data: session } = useSession();
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   const [open, setOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [createError, setCreateError] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   // Close on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setOpen(false);
-        setCreating(false);
-        setNewName('');
-        setCreateError(null);
       }
     }
     if (open) document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [open]);
 
-  // Focus input when entering create mode
-  useEffect(() => {
-    if (creating && inputRef.current) inputRef.current.focus();
-  }, [creating]);
-
   const handleSelect = (orgId: string) => {
     setSelectedOrgId(orgId);
     setOpen(false);
   };
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newName.trim()) return;
-    try {
-      setCreateError(null);
-      await api.post('/organizations', { name: newName.trim() });
-      setNewName('');
-      setCreating(false);
-      await refresh();
-    } catch (err: any) {
-      setCreateError(err.message || 'Failed to create');
-    }
+  const handleCreate = () => {
+    setOpen(false);
+    // Synchronous in the click handler so popup blockers allow it; fall back
+    // to navigating this tab when the popup is refused. (Passing 'noopener'
+    // to window.open would make it return null even on success, so the
+    // opener is severed by hand instead.)
+    const popup = window.open(SIGNUP_FROM_ADMIN_PATH, '_blank');
+    if (popup) popup.opener = null;
+    else router.push(SIGNUP_FROM_ADMIN_PATH);
   };
 
   const handleLogout = () => {
@@ -130,49 +118,19 @@ export default function OrgSwitcher() {
 
           {/* Create org */}
           <div className="border-t border-gray-100 dark:border-slate-700">
-            {creating ? (
-              <form onSubmit={handleCreate} className="p-3">
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Organization name"
-                  className="w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-1.5 text-sm text-gray-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                />
-                {createError && (
-                  <p className="mt-1 text-xs text-red-500">{createError}</p>
-                )}
-                <div className="flex gap-2 mt-2">
-                  <button
-                    type="submit"
-                    disabled={!newName.trim()}
-                    className="flex-1 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-                  >
-                    Create
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setCreating(false); setNewName(''); setCreateError(null); }}
-                    className="rounded-md px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <button
-                onClick={() => setCreating(true)}
-                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
-              >
-                <span className="flex items-center justify-center w-8 h-8 rounded-full border-2 border-dashed border-gray-300 dark:border-slate-500 text-gray-400 dark:text-slate-500">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                </span>
-                <span className="font-medium">Create organization</span>
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={handleCreate}
+              data-testid="org-switcher-create"
+              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
+            >
+              <span className="flex items-center justify-center w-8 h-8 rounded-full border-2 border-dashed border-gray-300 dark:border-slate-500 text-gray-400 dark:text-slate-500">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              </span>
+              <span className="font-medium">Create organization</span>
+            </button>
           </div>
 
           {/* User info & logout */}

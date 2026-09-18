@@ -31,6 +31,7 @@ import applicationService from '../../services/ApplicationService.js';
 import applicationTemplateService from '../../services/ApplicationTemplateService.js';
 import applicationFormTemplateService from '../../services/ApplicationFormTemplateService.js';
 import applicationDigestService from '../../services/ApplicationDigestService.js';
+import setupGuideService from '../../services/SetupGuideService.js';
 import { PAID_ORDER_STATUSES, PAID_APPLICATION_STATUSES } from '../../services/paidStatuses.js';
 
 const router = express.Router();
@@ -81,6 +82,25 @@ router.patch(
     }
   }
 );
+
+/** GET /admin/setup-guide — dashboard setup tasks for the active organization (spec 022). */
+router.get('/setup-guide', async (req, res, next) => {
+  try {
+    res.json(await setupGuideService.get(await activeOrgFor(req)));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** PATCH /admin/setup-guide { dismissed: true } — hide the guide for this organization. */
+router.patch('/setup-guide', async (req, res, next) => {
+  try {
+    if (req.body?.dismissed !== true) throw new ValidationError('dismissed must be true');
+    res.json(await setupGuideService.dismiss(await activeOrgFor(req)));
+  } catch (error) {
+    next(error);
+  }
+});
 
 /** GET /admin/settings/people — list people in the current user's organization. */
 router.get('/settings/people', async (req, res, next) => {

@@ -10,7 +10,7 @@ The admin area is accessible at `/admin` and is restricted to users with **Admin
 2. Click the **Admin** link in the top navigation bar
 3. You'll be redirected to the admin dashboard
 
-> **Note**: The "Admin" link only appears for users with Admin or Organizer roles. Customer accounts cannot access the admin area.
+> **Note**: The "Admin" link only appears for users with Admin or Organizer roles. A signed-in account with no organization yet is taken to signup instead — see [Getting started](getting-started.md).
 
 ## Navigation
 
