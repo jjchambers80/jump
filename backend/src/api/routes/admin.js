@@ -32,6 +32,7 @@ import applicationService from '../../services/ApplicationService.js';
 import applicationTemplateService from '../../services/ApplicationTemplateService.js';
 import applicationDigestService from '../../services/ApplicationDigestService.js';
 import transactionService from '../../services/TransactionService.js';
+import { PAID_ORDER_STATUSES, PAID_APPLICATION_STATUSES } from '../../services/transactionQuery.js';
 
 const router = express.Router();
 
@@ -561,6 +562,7 @@ router.get('/dashboard/stats', async (req, res, next) => {
         ticketsRedeemed: 0,
         salesRate: 0,
         paymentSuccessRate: 100,
+        revenue: { orders: 0, applications: 0, gross: 0 },
       });
     }
 
@@ -609,6 +611,17 @@ router.get('/dashboard/stats', async (req, res, next) => {
     const paymentSuccessRate =
       totalOrders > 0 ? Math.round((completedOrders / totalOrders) * 100) : 100;
 
+    // Gross revenue by source (spec 018 phase 2): orders through the venue
+    // scope, applications through their own organizationId.
+    const orgId = isUnscoped(scope) ? null : scope.organizationId;
+    const [orderRevenue, applicationRevenue] = await Promise.all([
+      prisma.order.aggregate({ where: { status: { in: PAID_ORDER_STATUSES }, event: venueFilter }, _sum: { totalAmount: true } }),
+      prisma.application.aggregate({ where: { paymentStatus: { in: PAID_APPLICATION_STATUSES }, ...(orgId && { organizationId: orgId }) }, _sum: { applicantPays: true } }),
+    ]);
+    const round = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+    const ordersGross = round(Number(orderRevenue._sum.totalAmount || 0));
+    const applicationsGross = round(Number(applicationRevenue._sum.applicantPays || 0));
+
     res.json({
       totalCapacity,
       ticketsSold,
@@ -616,6 +629,7 @@ router.get('/dashboard/stats', async (req, res, next) => {
       ticketsRedeemed,
       salesRate,
       paymentSuccessRate,
+      revenue: { orders: ordersGross, applications: applicationsGross, gross: round(ordersGross + applicationsGross) },
     });
   } catch (error) {
     next(error);

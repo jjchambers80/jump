@@ -47,23 +47,35 @@ export interface TaxSettingsResponse {
   canEdit: boolean;
 }
 
-export interface TaxReportRow {
-  region: string | null;
-  name: string;
-  orders: number;
+export type TaxReportSource = 'order' | 'application';
+
+export interface TaxReportBucket {
+  /** Transactions (orders + paid taxable applications) in the bucket. */
+  count: number;
   taxableSales: number;
   taxCollected: number;
-  /** Estimated: refund ÷ order total × order tax. */
+  /** Estimated: refund ÷ total × tax. */
   taxRefunded: number;
   taxNet: number;
+}
+
+export interface TaxReportRow extends TaxReportBucket {
+  region: string | null;
+  name: string;
+  /** Pre-018 alias of `count`. */
+  orders: number;
+  /** Per-source breakdown (spec 018 phase 2); only sources with activity. */
+  sources: ({ source: TaxReportSource } & TaxReportBucket)[];
 }
 
 export interface TaxReport {
   from: string;
   to: string;
   rows: TaxReportRow[];
-  totals: Omit<TaxReportRow, 'region' | 'name'>;
+  totals: TaxReportBucket & { orders: number };
 }
+
+export const TAX_SOURCE_LABEL: Record<TaxReportSource, string> = { order: 'Orders', application: 'Applications' };
 
 export interface UpsertTaxRegionBody {
   collecting: boolean;
@@ -111,11 +123,13 @@ export function parsePercent(input: string): number | null {
 export function reportToCsv(report: TaxReport): string {
   const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
   const money = (n: number) => n.toFixed(2);
-  const lines = [['Region', 'State', 'Orders', 'Taxable sales', 'Tax collected', 'Tax refunded (est.)', 'Tax net'].map(esc).join(',')];
+  const lines = [['Region', 'State', 'Source', 'Count', 'Taxable sales', 'Tax collected', 'Tax refunded (est.)', 'Tax net'].map(esc).join(',')];
   for (const r of report.rows) {
-    lines.push([r.name, r.region ?? '', r.orders, money(r.taxableSales), money(r.taxCollected), money(r.taxRefunded), money(r.taxNet)].map(esc).join(','));
+    for (const s of r.sources) {
+      lines.push([r.name, r.region ?? '', TAX_SOURCE_LABEL[s.source], s.count, money(s.taxableSales), money(s.taxCollected), money(s.taxRefunded), money(s.taxNet)].map(esc).join(','));
+    }
   }
   const t = report.totals;
-  lines.push(['Total', '', t.orders, money(t.taxableSales), money(t.taxCollected), money(t.taxRefunded), money(t.taxNet)].map(esc).join(','));
+  lines.push(['Total', '', '', t.count, money(t.taxableSales), money(t.taxCollected), money(t.taxRefunded), money(t.taxNet)].map(esc).join(','));
   return lines.join('\n') + '\n';
 }

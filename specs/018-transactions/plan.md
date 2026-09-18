@@ -1,6 +1,6 @@
 # Implementation Plan: Transactions (spec 018)
 
-**Status**: Planned 2026-09-17. Phase 1 built 2026-09-18 on `feat/018-transactions-phase-1`.
+**Status**: Planned 2026-09-17. Phase 1 built 2026-09-18 (PR #65, merged). Phase 2 built 2026-09-18 on `feat/018-transactions-phase-2`.
 **Spec**: [spec.md](./spec.md). Depends on spec 011 (all phases on `main`), spec 012 (all phases on `main`), spec 009 (collected tax report), spec 010 phase 2 (Connect routing, dark).
 **Branches**: plan on `plan/018-transactions` (PR #64); phases on `feat/018-transactions-phase-1` → `-phase-2` → `-phase-3`, each merged to `main` alone.
 
@@ -259,6 +259,14 @@ Built 2026-09-18. Decisions taken while building:
 ### Phase 2 — Customers, analytics, dashboard, tax report (FR-006–FR-008)
 
 `CustomerService` predicate + aggregates + `applications[]`; `getEventAnalytics.revenue`; dashboard `revenue`; `collectedReport` application loop + `source`; four frontend surfaces. Tests: `backend/tests/contract/transactionsReporting.test.js` — application-only contact appears in customers with `totalSpent`; mixed contact sums; `revenue.applications` and `applicationRefunds` after a partial refund; REFUNDED application nets to zero; tax report: taxable form contributes a row with `source: application`, `taxable: false` form contributes nothing, totals sum both sources; existing `analytics.test.js` and `tax.test.js` assertions on `totals` unchanged.
+
+Built 2026-09-18. Decisions taken while building:
+
+- Tax report rows stay one per region (the e2e test ids and the `rows.find(region)` consumers keep working) and gain `count` + `sources[]` instead of splitting into (region, source) rows as §2.5 sketched; the CSV is the flat per-(region, source) form with `Source` / `Count` columns. `orders` is kept as an alias of `count` on rows and totals.
+- Customers search also matches `ApplicantProfile.businessName`, since a vendor is usually looked up by business.
+- `revenue.applicationCount` was added to the analytics object so the page can label the applications line ("3 paid").
+- Dashboard `revenue` is gross only (no refunds) — the dashboard has no refund concept today and the Transactions page is one click away.
+- Decisions 7.2 (refunded orders count as customers), 7.6 (applications by `paidAt`) and 7.7 (`applicationRefunds` only) taken as recommended.
 
 ### Phase 3 — Corrections: tier change, adjustments, waive, offline payment (FR-009–FR-013)
 

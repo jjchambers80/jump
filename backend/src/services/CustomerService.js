@@ -1,12 +1,56 @@
 // Customer Service
-// Aggregated customer view: contacts who have placed orders, scoped by organization
+// Aggregated customer view: contacts who have paid the organization — through
+// a ticket order or a paid application (spec 018 phase 2) — scoped by organization.
 
 import { prisma } from '@jump/db';
 import { NotFoundError } from '../middleware/errorHandler.js';
+import { PAID_ORDER_STATUSES, PAID_APPLICATION_STATUSES } from './transactionQuery.js';
+
+const round = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+const sum = (rows, pick) => rows.reduce((total, r) => total + Number(pick(r) || 0), 0);
+const latest = (dates) => dates.filter(Boolean).reduce((max, d) => (!max || d > max ? d : max), null);
+
+const ORDER_SELECT = {
+  where: { status: { in: PAID_ORDER_STATUSES } },
+  select: { id: true, totalAmount: true, createdAt: true, refunds: { where: { status: 'SUCCEEDED' }, select: { amount: true } } },
+};
+const APPLICATION_SELECT = {
+  where: { paymentStatus: { in: PAID_APPLICATION_STATUSES } },
+  select: { id: true, applicantPays: true, paidAt: true, submittedAt: true, createdAt: true, refunds: { where: { status: 'SUCCEEDED' }, select: { amount: true } } },
+};
+
+/** A customer is a contact with money collected: a paid order or a paid application. */
+function customerPredicate() {
+  return {
+    OR: [{ orders: { some: { status: { in: PAID_ORDER_STATUSES } } } }, { applications: { some: { paymentStatus: { in: PAID_APPLICATION_STATUSES } } } }],
+  };
+}
+
+/**
+ * Money aggregates over a contact's paid orders and applications. `totalSpent`
+ * is gross (as before spec 018); `totalRefunded` is reported beside it so the
+ * numbers reconcile with Stripe's gross and refunded totals.
+ */
+function aggregates(orders, applications) {
+  const totalSpent = round(sum(orders, (o) => o.totalAmount) + sum(applications, (a) => a.applicantPays));
+  const totalRefunded = round(sum(orders, (o) => sum(o.refunds, (r) => r.amount)) + sum(applications, (a) => sum(a.refunds, (r) => r.amount)));
+  const lastActivityAt = latest([...orders.map((o) => o.createdAt), ...applications.map((a) => a.paidAt || a.submittedAt || a.createdAt)]);
+  const transactionCount = orders.length + applications.length;
+  return {
+    orderCount: transactionCount, // alias kept for existing consumers
+    transactionCount,
+    ticketOrderCount: orders.length,
+    applicationCount: applications.length,
+    totalSpent,
+    totalRefunded,
+    lastOrderDate: lastActivityAt, // alias kept for existing consumers
+    lastActivityAt,
+  };
+}
 
 class CustomerService {
   /**
-   * List customers (contacts with completed orders) for an organization.
+   * List customers for an organization.
    *
    * @param {string|null} organizationId - null for system admins (unscoped)
    * @param {Object} options - { page, limit, search }
@@ -17,15 +61,20 @@ class CustomerService {
     limit = parseInt(limit) || 20;
 
     // Contacts are rows of their own organization (spec 007), so the org filter
-    // is a column match. Orders are still narrowed to COMPLETED for the summary.
+    // is a column match.
     const where = {
       ...(organizationId && { organizationId }),
-      orders: { some: { status: 'COMPLETED' } },
+      ...customerPredicate(),
       ...(search && {
-        OR: [
-          { email: { contains: search.toLowerCase(), mode: 'insensitive' } },
-          { firstName: { contains: search, mode: 'insensitive' } },
-          { lastName: { contains: search, mode: 'insensitive' } },
+        AND: [
+          {
+            OR: [
+              { email: { contains: search.toLowerCase(), mode: 'insensitive' } },
+              { firstName: { contains: search, mode: 'insensitive' } },
+              { lastName: { contains: search, mode: 'insensitive' } },
+              { applicantProfiles: { some: { businessName: { contains: search, mode: 'insensitive' } } } },
+            ],
+          },
         ],
       }),
     };
@@ -33,16 +82,7 @@ class CustomerService {
     const [contacts, total] = await Promise.all([
       prisma.contact.findMany({
         where,
-        include: {
-          orders: {
-            where: { status: 'COMPLETED' },
-            select: {
-              id: true,
-              totalAmount: true,
-              createdAt: true,
-            },
-          },
-        },
+        include: { orders: ORDER_SELECT, applications: APPLICATION_SELECT },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,
         take: limit,
@@ -58,11 +98,7 @@ class CustomerService {
       location: c.location,
       note: c.note,
       emailSubscribed: c.emailSubscribed,
-      orderCount: c.orders.length,
-      totalSpent: c.orders.reduce((sum, o) => sum + parseFloat(o.totalAmount || 0), 0),
-      lastOrderDate: c.orders.length
-        ? c.orders.reduce((latest, o) => (o.createdAt > latest ? o.createdAt : latest), c.orders[0].createdAt)
-        : null,
+      ...aggregates(c.orders, c.applications),
       createdAt: c.createdAt,
     }));
 
@@ -73,7 +109,7 @@ class CustomerService {
   }
 
   /**
-   * Get a single customer with their order history, scoped by organization.
+   * Get a single customer with their order and application history, scoped by organization.
    *
    * @param {string} contactId
    * @param {string|null} organizationId
@@ -84,16 +120,24 @@ class CustomerService {
       where: { id: contactId, ...(organizationId && { organizationId }) },
       include: {
         orders: {
-          where: { status: 'COMPLETED' },
+          where: { status: { in: PAID_ORDER_STATUSES } },
           include: {
-            event: {
-              select: { id: true, name: true, date: true, logoUrl: true },
-            },
-            tickets: {
-              select: { id: true, status: true },
-            },
+            event: { select: { id: true, name: true, date: true, logoUrl: true } },
+            tickets: { select: { id: true, status: true } },
+            refunds: { where: { status: 'SUCCEEDED' }, select: { amount: true } },
           },
           orderBy: { createdAt: 'desc' },
+        },
+        applications: {
+          where: { paymentStatus: { in: PAID_APPLICATION_STATUSES } },
+          include: {
+            event: { select: { id: true, name: true, date: true, logoUrl: true } },
+            form: { select: { id: true, name: true, kind: true } },
+            tier: { select: { id: true, name: true } },
+            profile: { select: { businessName: true } },
+            refunds: { where: { status: 'SUCCEEDED' }, select: { amount: true } },
+          },
+          orderBy: [{ paidAt: 'desc' }, { createdAt: 'desc' }],
         },
       },
     });
@@ -102,8 +146,8 @@ class CustomerService {
       throw new NotFoundError('Customer not found');
     }
 
-    // Verify customer has at least one completed order in this org
-    if (contact.orders.length === 0) {
+    // A contact with no money collected is not a customer of this organization
+    if (contact.orders.length === 0 && contact.applications.length === 0) {
       throw new NotFoundError('Customer not found');
     }
 
@@ -111,11 +155,30 @@ class CustomerService {
       id: o.id,
       orderRef: o.orderRef,
       totalAmount: parseFloat(o.totalAmount || 0),
+      refunded: round(sum(o.refunds, (r) => r.amount)),
       quantity: o.quantity,
       status: o.status,
       createdAt: o.createdAt,
       ticketCount: o.tickets.length,
       event: o.event,
+    }));
+
+    const applications = contact.applications.map((a) => ({
+      id: a.id,
+      eventId: a.eventId,
+      form: a.form,
+      tier: a.tier,
+      businessName: a.profile?.businessName ?? null,
+      status: a.status,
+      paymentStatus: a.paymentStatus,
+      paymentSource: 'stripe',
+      applicantPays: Number(a.applicantPays),
+      refunded: round(sum(a.refunds, (r) => r.amount)),
+      paidAt: a.paidAt,
+      submittedAt: a.submittedAt,
+      createdAt: a.createdAt,
+      event: a.event,
+      detailUrl: `/admin/events/${a.eventId}/applications/${a.id}`,
     }));
 
     return {
@@ -127,10 +190,9 @@ class CustomerService {
       note: contact.note,
       emailSubscribed: contact.emailSubscribed,
       createdAt: contact.createdAt,
-      orderCount: orders.length,
-      totalSpent: orders.reduce((sum, o) => sum + o.totalAmount, 0),
-      lastOrderDate: orders.length ? orders[0].createdAt : null,
+      ...aggregates(contact.orders, contact.applications),
       orders,
+      applications,
     };
   }
 

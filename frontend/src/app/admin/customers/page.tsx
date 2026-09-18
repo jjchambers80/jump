@@ -13,9 +13,13 @@ interface Customer {
   location: string | null;
   note: string | null;
   emailSubscribed: boolean;
-  orderCount: number;
+  /** Orders + paid applications (spec 018). `orderCount` is the pre-018 alias. */
+  transactionCount: number;
+  ticketOrderCount: number;
+  applicationCount: number;
   totalSpent: number;
-  lastOrderDate: string | null;
+  totalRefunded: number;
+  lastActivityAt: string | null;
   createdAt: string;
 }
 
@@ -211,7 +215,7 @@ export default function CustomersPage() {
             <div>Email</div>
             <div className="text-center">Sub</div>
             <div>Location</div>
-            <div className="text-right">Orders</div>
+            <div className="text-right">Transactions</div>
             <div className="text-right">Spent</div>
             <div>Note</div>
           </div>
@@ -229,9 +233,9 @@ export default function CustomersPage() {
                     <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
                       {customer.firstName} {customer.lastName}
                     </p>
-                    {customer.lastOrderDate && (
+                    {customer.lastActivityAt && (
                       <p className="text-xs text-gray-400 dark:text-slate-500 truncate">
-                        Last order {formatDate(customer.lastOrderDate)}
+                        Last activity {formatDate(customer.lastActivityAt)}
                       </p>
                     )}
                   </div>
@@ -291,9 +295,12 @@ export default function CustomersPage() {
                     )}
                   </div>
 
-                  {/* Orders */}
-                  <div className="text-right">
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">{customer.orderCount}</span>
+                  {/* Transactions: orders + paid applications */}
+                  <div className="text-right" title={`${customer.ticketOrderCount} order${customer.ticketOrderCount !== 1 ? 's' : ''}, ${customer.applicationCount} application${customer.applicationCount !== 1 ? 's' : ''}`}>
+                    <span className="text-sm font-medium text-gray-900 dark:text-white">{customer.transactionCount}</span>
+                    {customer.applicationCount > 0 && (
+                      <p className="text-[11px] text-gray-400 dark:text-slate-500">{customer.applicationCount} app{customer.applicationCount !== 1 ? 's' : ''}</p>
+                    )}
                   </div>
 
                   {/* Amount spent */}
@@ -358,15 +365,15 @@ export default function CustomersPage() {
                     </button>
                   </div>
                   <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-slate-400">
-                    <span>{customer.orderCount} order{customer.orderCount !== 1 ? 's' : ''}</span>
+                    <span>{customer.transactionCount} transaction{customer.transactionCount !== 1 ? 's' : ''}</span>
                     <span>{formatCurrency(customer.totalSpent)}</span>
                     {customer.location && <span>{customer.location}</span>}
                   </div>
                   {customer.note && (
                     <p className="text-xs text-gray-400 dark:text-slate-500 italic">{customer.note}</p>
                   )}
-                  {customer.lastOrderDate && (
-                    <p className="text-xs text-gray-400 dark:text-slate-500">Last order {formatDate(customer.lastOrderDate)}</p>
+                  {customer.lastActivityAt && (
+                    <p className="text-xs text-gray-400 dark:text-slate-500">Last activity {formatDate(customer.lastActivityAt)}</p>
                   )}
                 </div>
               </div>

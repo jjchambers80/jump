@@ -82,7 +82,13 @@ function DashboardContent() {
 
         {/* Stats Cards (T111) */}
         {stats && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+            <StatCard
+              label="Gross Revenue"
+              value={formatMoney(stats.revenue?.gross ?? 0)}
+              icon="💵"
+              subtitle={stats.revenue ? `${formatMoney(stats.revenue.orders)} orders · ${formatMoney(stats.revenue.applications)} applications` : undefined}
+            />
             <StatCard
               label="Total Capacity"
               value={(stats.totalCapacity ?? 0).toLocaleString()}
@@ -207,6 +213,10 @@ function DashboardContent() {
       </div>
     </div>
   );
+}
+
+function formatMoney(value: number): string {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
 }
 
 function StatCard({
