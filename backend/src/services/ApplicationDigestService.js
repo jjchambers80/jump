@@ -117,8 +117,10 @@ class ApplicationDigestService {
     const count = rows.length;
     const subject = `${count} new application${count === 1 ? '' : 's'} — ${org.name}`;
     const parts = [`${count} new application${count === 1 ? '' : 's'} came in between ${since.toUTCString()} and ${now.toUTCString()}.`];
+    // Spec 019: links open the Participants list (one table for every event);
+    // the per-event line links inline, the button at the end is org-wide.
     for (const { event, forms } of byEvent.values()) {
-      parts.push(`${event.name}`);
+      parts.push(`${event.name}\n${base}/admin/participants?event=${event.id}&status=SUBMITTED`);
       for (const { form, rows: list } of forms.values()) {
         const lines = [`${form.name}: ${list.length}`];
         // Add-on counts across the form's new applications (spec 012 phase 3)
@@ -143,8 +145,8 @@ class ApplicationDigestService {
         if (list.length > MAX_ROWS_PER_FORM) lines.push(`…and ${list.length - MAX_ROWS_PER_FORM} more`);
         parts.push(lines.join('\n'));
       }
-      parts.push(`${base}/admin/events/${event.id}/applications?status=SUBMITTED`);
     }
+    parts.push(`${base}/admin/participants?status=SUBMITTED`);
     parts.push(`You get this daily summary because you are a member of ${org.name}. Turn it off under Settings › Applications.`);
     return { subject, body: parts.join('\n\n') };
   }

@@ -268,7 +268,10 @@ describe('Applications contract (spec 011 phase 3)', () => {
       expect(ours.map((m) => m.to[0]).sort()).toEqual([emails[0], emails[1]].sort());
       expect(ours[0].text).toContain(`${TAG} Expo 2027`);
       expect(ours[0].text).toContain('Vendor Space:');
-      expect(ours[0].text).toContain(`/admin/events/${eventId}/applications?status=SUBMITTED`);
+      // Spec 019: the digest opens the Participants list — per event inline, org-wide as the button.
+      expect(ours[0].text).toContain(`/admin/participants?event=${eventId}&status=SUBMITTED`);
+      expect(ours[0].text).toContain('/admin/participants?status=SUBMITTED');
+      expect(ours[0].html).toMatch(/href="[^"]*\/admin\/participants\?status=SUBMITTED"[^>]*>Open</);
       expect(ours[0].html).not.toContain('<script');
 
       // Same hour again: window claimed, nothing sent.
