@@ -2,6 +2,7 @@
 // Input validation for organization endpoints per FR-048
 
 import { ValidationError } from '../../middleware/errorHandler.js';
+import { SLUG_MAX_LENGTH, SLUG_PATTERN } from '../../utils/slug.js';
 
 export const BUSINESS_TYPES = [
   'SOLE_PROPRIETORSHIP',
@@ -104,7 +105,7 @@ export const validateCreateOrganization = (req, res, next) => {
  * Validate organization update payload
  */
 export const validateUpdateOrganization = (req, res, next) => {
-  const { name, status, brandColor, themeMode } = req.body;
+  const { name, slug, status, brandColor, themeMode } = req.body;
 
   if (name !== undefined) {
     if (typeof name !== 'string' || name.trim().length === 0) {
@@ -114,6 +115,19 @@ export const validateUpdateOrganization = (req, res, next) => {
       return next(new ValidationError('Organization name must be 255 characters or less'));
     }
     req.body.name = name.trim();
+  }
+
+  // slug: lowercase letters, digits, single hyphens between words
+  if (slug !== undefined) {
+    const normalized = typeof slug === 'string' ? slug.trim().toLowerCase() : '';
+    if (!SLUG_PATTERN.test(normalized) || normalized.length > SLUG_MAX_LENGTH) {
+      return next(
+        new ValidationError(
+          `Slug must be 1-${SLUG_MAX_LENGTH} lowercase letters, digits, and hyphens (e.g. raleigh-retro-gamers)`
+        )
+      );
+    }
+    req.body.slug = normalized;
   }
 
   if (status !== undefined) {

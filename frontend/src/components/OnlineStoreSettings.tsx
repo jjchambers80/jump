@@ -1,8 +1,8 @@
 'use client';
 
-// Organization settings editor: name, public theme mode, and branding (logo,
-// cover image, brand color). Shared by the admin organization page
-// (/admin/organization/[orgSlug]) and the legacy Organizations list.
+// Online store settings editor for one organization: store name, handle
+// (slug), public theme mode, and branding (logo, cover image, brand color).
+// Shared by /admin/online-store (active org) and the legacy Organizations list.
 
 import React, { useEffect, useState } from 'react';
 import api from '@/services/api';
@@ -13,9 +13,10 @@ import { resolveAssetUrl } from '@/lib/assets';
 import { evaluateBrandColor } from '@/lib/color';
 import { DEFAULT_THEME_MODE, type ThemeMode } from '@/lib/theme';
 
-export interface OrganizationSettingsOrg {
+export interface OnlineStoreSettingsOrg {
   id: string;
   name: string;
+  slug: string;
   logoUrl?: string | null;
   coverUrl?: string | null;
   brandColor?: string | null;
@@ -23,17 +24,19 @@ export interface OrganizationSettingsOrg {
   createdAt: string;
 }
 
-interface OrganizationSettingsProps {
-  org: OrganizationSettingsOrg;
+interface OnlineStoreSettingsProps {
+  org: OnlineStoreSettingsOrg;
   /** Re-fetch the organization after a successful save. */
   onSaved: () => Promise<void> | void;
   /** Surface an error to the parent (parent owns the error banner). */
   onError: (message: string | null) => void;
 }
 
-export default function OrganizationSettings({ org, onSaved, onError }: OrganizationSettingsProps) {
+export default function OnlineStoreSettings({ org, onSaved, onError }: OnlineStoreSettingsProps) {
   const [editName, setEditName] = useState(org.name);
   const [saving, setSaving] = useState(false);
+  const [editSlug, setEditSlug] = useState(org.slug ?? '');
+  const [savingSlug, setSavingSlug] = useState(false);
   const [uploading, setUploading] = useState<'logo' | 'cover' | null>(null);
   const [editBrandColor, setEditBrandColor] = useState<string | null>(org.brandColor ?? null);
   const [savingBrandColor, setSavingBrandColor] = useState(false);
@@ -43,6 +46,7 @@ export default function OrganizationSettings({ org, onSaved, onError }: Organiza
   // Reset drafts when switching to a different organization.
   useEffect(() => {
     setEditName(org.name);
+    setEditSlug(org.slug ?? '');
     setEditBrandColor(org.brandColor ?? null);
     setEditThemeMode(org.themeMode ?? DEFAULT_THEME_MODE);
   }, [org.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -56,9 +60,25 @@ export default function OrganizationSettings({ org, onSaved, onError }: Organiza
       await api.patch(`/organizations/${org.id}`, { name: editName.trim() });
       await onSaved();
     } catch (err: any) {
-      onError(err.message || 'Failed to update organization');
+      onError(err.message || 'Failed to update store name');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveSlug = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const slug = editSlug.trim().toLowerCase();
+    if (!slug || slug === org.slug) return;
+    try {
+      setSavingSlug(true);
+      onError(null);
+      await api.patch(`/organizations/${org.id}`, { slug });
+      await onSaved();
+    } catch (err: any) {
+      onError(err.message || 'Failed to update store handle');
+    } finally {
+      setSavingSlug(false);
     }
   };
 
@@ -127,7 +147,7 @@ export default function OrganizationSettings({ org, onSaved, onError }: Organiza
           htmlFor={`org-name-${org.id}`}
           className="text-sm font-medium text-gray-600 dark:text-slate-400 flex-shrink-0"
         >
-          Name
+          Store name
         </label>
         <input
           id={`org-name-${org.id}`}
@@ -144,6 +164,37 @@ export default function OrganizationSettings({ org, onSaved, onError }: Organiza
           {saving ? 'Saving…' : 'Save'}
         </button>
       </form>
+
+      {/* Slug edit */}
+      <form onSubmit={handleSaveSlug} className="flex items-center gap-2 mb-1">
+        <label
+          htmlFor={`org-slug-${org.id}`}
+          className="text-sm font-medium text-gray-600 dark:text-slate-400 flex-shrink-0"
+        >
+          Handle
+        </label>
+        <input
+          id={`org-slug-${org.id}`}
+          type="text"
+          value={editSlug}
+          onChange={(e) => setEditSlug(e.target.value.toLowerCase())}
+          pattern="[a-z0-9]+(-[a-z0-9]+)*"
+          maxLength={60}
+          spellCheck={false}
+          className="flex-1 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-1.5 text-sm font-mono text-gray-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+        />
+        <button
+          type="submit"
+          disabled={savingSlug || !editSlug.trim() || editSlug.trim().toLowerCase() === org.slug}
+          data-testid="handle-save"
+          className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-500 disabled:opacity-50"
+        >
+          {savingSlug ? 'Saving…' : 'Save'}
+        </button>
+      </form>
+      <p className="text-xs text-gray-500 dark:text-slate-400 mb-6">
+        Short URL-safe name for this store: lowercase letters, digits, and hyphens.
+      </p>
 
       {/* Theme */}
       <h4 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1">Theme</h4>

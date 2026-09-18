@@ -42,6 +42,25 @@ describe('Organization Contract Tests', () => {
       expect(res.body).toHaveProperty('id');
       expect(res.body.name).toBe('Test Org');
       expect(res.body.status).toBe('ACTIVE');
+      expect(res.body.slug).toMatch(/^test-org(-\d+)?$/);
+    });
+
+    it('derives a unique slug from the name', async () => {
+      const suffix = Date.now();
+      const name = `Raleigh Rétro Gamers ${suffix}`;
+      const first = await request(app)
+        .post('/organizations')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ name });
+      const second = await request(app)
+        .post('/organizations')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ name });
+
+      expect(first.body.slug).toBe(`raleigh-retro-gamers-${suffix}`);
+      expect(second.body.slug).toBe(`raleigh-retro-gamers-${suffix}-2`);
+
+      await prisma.organization.deleteMany({ where: { id: { in: [first.body.id, second.body.id] } } });
     });
 
     it('should return 403 when organizer tries to create organization', async () => {
@@ -200,6 +219,47 @@ describe('Organization Contract Tests', () => {
         .send({ name: 'Hacked Name' });
 
       expect(res.status).toBe(403);
+    });
+
+    it('keeps the slug when the name changes', async () => {
+      const before = await prisma.organization.findUnique({ where: { id: orgId }, select: { slug: true } });
+      const res = await request(app)
+        .patch(`/organizations/${orgId}`)
+        .set('Authorization', `Bearer ${orgAdminToken}`)
+        .send({ name: 'Renamed Patch Org' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.slug).toBe(before.slug);
+    });
+
+    it('sets a normalized slug explicitly', async () => {
+      const slug = `patched-slug-${Date.now()}`;
+      const res = await request(app)
+        .patch(`/organizations/${orgId}`)
+        .set('Authorization', `Bearer ${orgAdminToken}`)
+        .send({ slug: ` ${slug.toUpperCase()} ` });
+
+      expect(res.status).toBe(200);
+      expect(res.body.slug).toBe(slug);
+    });
+
+    it('returns 400 for an invalid slug', async () => {
+      const res = await request(app)
+        .patch(`/organizations/${orgId}`)
+        .set('Authorization', `Bearer ${orgAdminToken}`)
+        .send({ slug: 'not a slug!' });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 409 when the slug belongs to another organization', async () => {
+      const other = await prisma.organization.findUnique({ where: { id: otherOrgId }, select: { slug: true } });
+      const res = await request(app)
+        .patch(`/organizations/${orgId}`)
+        .set('Authorization', `Bearer ${orgAdminToken}`)
+        .send({ slug: other.slug });
+
+      expect(res.status).toBe(409);
     });
 
     it('sets a normalized brand color', async () => {

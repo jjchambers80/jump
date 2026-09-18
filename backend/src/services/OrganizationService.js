@@ -3,8 +3,9 @@
 
 import { prisma } from '@jump/db';
 import logger from '../utils/logger.js';
-import { NotFoundError } from '../middleware/errorHandler.js';
+import { ConflictError, NotFoundError } from '../middleware/errorHandler.js';
 import { formatEventSummary } from '../utils/eventSummary.js';
+import { slugify } from '../utils/slug.js';
 
 export const serializeBusinessDetails = (organization) => {
   const { ein, ...businessDetails } = organization;
@@ -26,6 +27,25 @@ const withUserCount = ({ _count, ...org }) => ({
 
 class OrganizationService {
   /**
+   * First free slug derived from `raw` ("acme", then "acme-2", "acme-3", ...).
+   * @param {string} raw - Name or requested slug
+   * @param {string|null} exceptOrganizationId - Ignore this org's own slug (updates)
+   */
+  async uniqueSlug(raw, exceptOrganizationId = null) {
+    const base = slugify(raw) || 'org';
+    let slug = base;
+    for (let i = 2; i < 1000; i += 1) {
+      const clash = await prisma.organization.findFirst({
+        where: { slug, NOT: exceptOrganizationId ? { id: exceptOrganizationId } : undefined },
+        select: { id: true },
+      });
+      if (!clash) return slug;
+      slug = `${base}-${i}`;
+    }
+    throw new ConflictError('Could not find a free organization slug');
+  }
+
+  /**
    * Create a new organization
    * @param {Object} data - { name }
    * @returns {Promise<Object>} Created organization
@@ -34,6 +54,7 @@ class OrganizationService {
     const organization = await prisma.organization.create({
       data: {
         name: data.name,
+        slug: await this.uniqueSlug(data.name),
       },
     });
 
@@ -87,12 +108,22 @@ class OrganizationService {
   /**
    * Update an organization
    * @param {string} id - Organization ID
-   * @param {Object} data - Fields to update { name?, status?, brandColor?, themeMode? }
+   * @param {Object} data - Fields to update { name?, slug?, status?, brandColor?, themeMode? }
    * @returns {Promise<Object>} Updated organization
    */
   async updateOrganization(id, data) {
     const updateData = {};
     if (data.name !== undefined) updateData.name = data.name;
+    // The slug does not follow renames (URLs stay stable); it only changes
+    // when set explicitly, and must be free.
+    if (data.slug !== undefined) {
+      const clash = await prisma.organization.findFirst({
+        where: { slug: data.slug, NOT: { id } },
+        select: { id: true },
+      });
+      if (clash) throw new ConflictError('That slug is already in use');
+      updateData.slug = data.slug;
+    }
     if (data.status !== undefined) updateData.status = data.status;
     if (data.brandColor !== undefined) updateData.brandColor = data.brandColor;
     if (data.themeMode !== undefined) updateData.themeMode = data.themeMode;

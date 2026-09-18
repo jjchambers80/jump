@@ -1,34 +1,19 @@
 'use client';
 
-// Organization settings page — /admin/organization/[orgSlug]
-// Opened from the header org switcher. The slug is the slugified organization
-// name (falling back to the id); it is resolved against the org switcher list
-// and the matching organization becomes the active one.
+// Online store — /admin/online-store
+// Public storefront settings (store name, handle, theme, branding) for the
+// organization currently picked in the header org switcher.
 
-import React, { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import React, { useState } from 'react';
 import { useOrg } from '@/components/OrgContext';
-import OrganizationSettings from '@/components/OrganizationSettings';
+import OnlineStoreSettings from '@/components/OnlineStoreSettings';
 import { resolveAssetUrl } from '@/lib/assets';
-import { slugify } from '@/lib/slug';
 
-export default function OrganizationPage() {
-  const params = useParams<{ orgSlug: string }>();
-  const orgSlug = decodeURIComponent(params.orgSlug ?? '');
-  const { organizations, selectedOrgId, setSelectedOrgId, loading, error: orgError, refresh } = useOrg();
+export default function OnlineStorePage() {
+  const { selectedOrg: org, loading, error: orgError, refresh } = useOrg();
   const [error, setError] = useState<string | null>(null);
 
-  const org =
-    organizations.find((o) => slugify(o.name) === orgSlug) ??
-    organizations.find((o) => o.id === orgSlug) ??
-    null;
-
-  // Visiting an org's page makes it the active org for the rest of the admin.
-  useEffect(() => {
-    if (org && org.id !== selectedOrgId) setSelectedOrgId(org.id);
-  }, [org, selectedOrgId, setSelectedOrgId]);
-
-  if (loading && organizations.length === 0) {
+  if (loading && !org) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-8 space-y-3">
         {[1, 2, 3].map((i) => (
@@ -41,7 +26,7 @@ export default function OrganizationPage() {
   if (!org) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Organization not found</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Online store</h1>
         <p className="text-sm text-gray-500 dark:text-slate-400">
           {orgError ?? 'Pick an organization from the menu in the top right.'}
         </p>
@@ -51,7 +36,9 @@ export default function OrganizationPage() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      {/* Header */}
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Online store</h1>
+
+      {/* Store header */}
       <div className="flex items-center gap-3 mb-6">
         {org.logoUrl ? (
           <img
@@ -67,7 +54,7 @@ export default function OrganizationPage() {
           </div>
         )}
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">{org.name}</h1>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white truncate">{org.name}</h2>
           <div className="flex items-center gap-4 mt-0.5 text-sm text-gray-500 dark:text-slate-400">
             <span
               className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -99,7 +86,7 @@ export default function OrganizationPage() {
       )}
 
       <div className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4">
-        <OrganizationSettings org={org} onSaved={refresh} onError={setError} />
+        <OnlineStoreSettings org={org} onSaved={refresh} onError={setError} />
       </div>
     </div>
   );

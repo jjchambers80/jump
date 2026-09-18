@@ -19,7 +19,7 @@ Organizations are the top-level tenant boundary in Jump. Each Organization owns 
 
 ## How It Works
 
-1. **Organization** is created by an admin via `POST /organizations`. Fields: `name`, `status`, plus business details (address, EIN, etc.).
+1. **Organization** is created by an admin via `POST /organizations`. Fields: `name`, `slug` (unique URL-safe store handle, generated from the name with `-2`, `-3`… on clashes, stable across renames, editable via `PATCH /organizations/:id`; migration `20260926000000_organization_slug` backfilled existing rows), `status`, plus business details (address, EIN, etc.).
 2. **Venues** are created under an org via `POST /organizations/:orgId/venues` with address, city, state, postalCode, timezone.
 3. **Events** are created under an org but linked to a Venue (`event.venueId`). Org ownership is resolved transitively: `event.venue.organizationId`.
 4. **OrganizationPerson** records track business reps. When `isAccountRepresentative` is set, a transaction first clears the flag on all existing reps, then creates the new one. A Prisma `P2002` error (unique constraint) on concurrent writes throws `ConflictError`.

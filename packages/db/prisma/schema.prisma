@@ -118,6 +118,11 @@ model Image {
 model Organization {
   id                        String             @id @default(cuid())
   name                      String
+  // URL handle for the admin org page (/admin/organization/[slug]). Generated
+  // from the name at creation, stable across renames; editable via PATCH.
+  // The cuid() default only covers direct prisma.organization.create calls
+  // (tests, seed); OrganizationService always sets a name-derived slug.
+  slug                      String             @unique @default(cuid())
   status                    OrganizationStatus @default(ACTIVE)
   companyName               String?
   email                     String?

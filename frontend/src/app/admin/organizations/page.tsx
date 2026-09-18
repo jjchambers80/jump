@@ -6,13 +6,14 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import api from '@/services/api';
-import OrganizationSettings from '@/components/OrganizationSettings';
+import OnlineStoreSettings from '@/components/OnlineStoreSettings';
 import { resolveAssetUrl } from '@/lib/assets';
 import type { ThemeMode } from '@/lib/theme';
 
 interface Organization {
   id: string;
   name: string;
+  slug: string;
   status: 'ACTIVE' | 'INACTIVE';
   logoUrl?: string | null;
   coverUrl?: string | null;
@@ -198,7 +199,7 @@ export default function OrganizationsPage() {
               {/* Edit section — name + branding */}
               {editingId === org.id && (
                 <div className="border-t border-gray-200 dark:border-slate-700 p-4 bg-gray-50 dark:bg-slate-800/50">
-                  <OrganizationSettings org={org} onSaved={fetchOrganizations} onError={setError} />
+                  <OnlineStoreSettings org={org} onSaved={fetchOrganizations} onError={setError} />
                 </div>
               )}
             </div>

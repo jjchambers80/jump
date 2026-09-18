@@ -10,6 +10,8 @@ import type { ThemeMode } from '@/lib/theme';
 export interface Organization {
   id: string;
   name: string;
+  /** URL-safe store handle; generated from the name, stable across renames. */
+  slug: string;
   status: 'ACTIVE' | 'INACTIVE';
   logoUrl?: string | null;
   coverUrl?: string | null;

@@ -24,12 +24,13 @@ The sidebar appears on the left side of every admin page and provides quick navi
 | Venues        | `/admin/venues`        | Manage venues                      | Admin, Organizer |
 | Events        | `/admin/events`        | Manage events and create new ones  | Admin, Organizer |
 | Analytics     | `/admin/analytics`     | View ticket sales and revenue data | Admin, Organizer |
+| Online store  | `/admin/online-store`  | Store name, handle, public theme, logo, cover image, brand color for the active organization | Admin, Organizer |
 | Scan          | `/admin/scan`          | Scan and validate tickets at entry | Admin, Organizer |
 | Settings      | `/admin/settings`      | Business details, domains, and (admins) user accounts | Admin, Organizer |
 
 ### Organization Switcher
 
-The organization menu in the top-right corner lists every organization you belong to. Picking one makes it the active organization and opens its settings at `/admin/organization/<org-name>` (name, public theme, logo, cover image, brand color). The same menu creates new organizations.
+The organization menu in the top-right corner lists every organization you belong to. Picking one makes it the active organization: every admin page (events, orders, Online store, Settings, …) then shows that organization's data. The same menu creates new organizations.
 
 ### Pinned Settings Link
 
