@@ -1,6 +1,7 @@
 // Admin Sidebar navigation component (T003, T018, T024)
-// Links per FR-005 (Dashboard, Orgs, Venues, Events, Analytics), with
-// Settings pinned to the footer. Users (FR-006, ADMIN only) lives under
+// Links per FR-005 (Dashboard, Venues, Events, Analytics), with Settings
+// pinned to the footer. Organization settings open from the header org
+// switcher (/admin/organization/[orgSlug]), not from this list. Users (FR-006, ADMIN only) lives under
 // Settings › Users rather than in the main list.
 // Active state via usePathname(), mobile-responsive with toggle
 
@@ -19,7 +20,6 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/admin/dashboard' },
-  { label: 'Organizations', href: '/admin/organizations' },
   { label: 'Venues', href: '/admin/venues' },
   { label: 'Events', href: '/admin/events' },
   { label: 'Tickets', href: '/admin/tickets' },

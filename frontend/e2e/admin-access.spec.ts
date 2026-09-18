@@ -32,15 +32,16 @@ test.describe('US1 - Admin accesses the admin area', () => {
     // Sidebar should contain all expected links
     const expectedLinks = [
       'Dashboard',
-      'Organizations',
       'Venues',
       'Events',
       'Analytics',
       'Scan',
       'Settings',
     ];
-    // Users lives under Settings › Users, not the main list.
+    // Users lives under Settings › Users, not the main list. Organization
+    // settings open from the header org switcher, not the sidebar.
     await expect(sidebar.getByRole('link', { name: 'Users' })).toHaveCount(0);
+    await expect(sidebar.getByRole('link', { name: 'Organizations' })).toHaveCount(0);
     for (const linkText of expectedLinks) {
       await expect(sidebar.getByRole('link', { name: linkText })).toBeVisible();
     }
@@ -55,7 +56,6 @@ test.describe('US1 - Admin accesses the admin area', () => {
 
     const sidebarLinks = [
       { name: 'Dashboard', url: '/admin/dashboard' },
-      { name: 'Organizations', url: '/admin/organizations' },
       { name: 'Venues', url: '/admin/venues' },
       { name: 'Events', url: '/admin/events' },
       { name: 'Analytics', url: '/admin/analytics' },

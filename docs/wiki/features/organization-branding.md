@@ -23,7 +23,7 @@ Organizations can upload a logo and cover image and pick a brand color. The bran
 | `frontend/src/components/BrandColorPicker.tsx` | Preset swatches, custom hex, reset |
 | `frontend/src/components/ContrastBadge.tsx` | Pass/fail pill, three ratio rows, light/dark preview |
 | `frontend/src/components/InfoTooltip.tsx` | Accessible `?` tooltip (hover + focus, Escape closes) |
-| `frontend/src/app/admin/organizations/page.tsx` | Edit → Branding: logo, cover, brand color |
+| `frontend/src/components/OrganizationSettings.tsx` | Branding: logo, cover, brand color (rendered on `/admin/organization/[orgSlug]`, opened from the org switcher, and on the legacy `/admin/organizations` list) |
 | `frontend/src/app/globals.css`, `frontend/tailwind.config.js` | `--brand` defaults and `brand` Tailwind tokens |
 | `frontend/tests/unit/color.test.ts` | Vitest coverage of the color math |
 | `frontend/e2e/admin-branding-color.spec.ts` | Playwright: picker, badge, save, inheritance, axe scans |

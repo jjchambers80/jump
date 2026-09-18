@@ -5,11 +5,16 @@
 
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import api, { setActiveOrganizationId } from '@/services/api';
+import type { ThemeMode } from '@/lib/theme';
 
 export interface Organization {
   id: string;
   name: string;
   status: 'ACTIVE' | 'INACTIVE';
+  logoUrl?: string | null;
+  coverUrl?: string | null;
+  brandColor?: string | null;
+  themeMode?: ThemeMode;
   createdAt: string;
   updatedAt: string;
   _count?: {

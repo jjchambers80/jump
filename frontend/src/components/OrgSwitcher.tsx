@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { useOrg } from './OrgContext';
 import api from '@/services/api';
+import { organizationAdminPath } from '@/lib/slug';
 
 export default function OrgSwitcher() {
   const { organizations, selectedOrg, setSelectedOrgId, refresh } = useOrg();
@@ -41,9 +42,11 @@ export default function OrgSwitcher() {
     if (creating && inputRef.current) inputRef.current.focus();
   }, [creating]);
 
-  const handleSelect = (orgId: string) => {
-    setSelectedOrgId(orgId);
+  // Picking an org switches the active org and opens its settings page.
+  const handleSelect = (org: { id: string; name: string }) => {
+    setSelectedOrgId(org.id);
     setOpen(false);
+    router.push(organizationAdminPath(org));
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -104,7 +107,7 @@ export default function OrgSwitcher() {
             {organizations.map((org) => (
               <button
                 key={org.id}
-                onClick={() => handleSelect(org.id)}
+                onClick={() => handleSelect(org)}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors ${
                   org.id === selectedOrg?.id
                     ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
