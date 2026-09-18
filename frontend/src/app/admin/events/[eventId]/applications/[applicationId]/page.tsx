@@ -1,17 +1,20 @@
 // Admin › Event › Application detail (spec 011): profile, photos, answers,
 // payment state, decision history, notes and the decision actions. Phase 2
 // adds the payment timeline, retry charge, refunds and the Stripe link;
-// spec 012 the add-on lines and their pre-payment edit.
+// spec 012 the add-on lines and their pre-payment edit; spec 018 tier change,
+// adjustments, waive and offline payment.
 'use client';
 
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ACTION_LABEL,
   decisionsFor,
   DECISION_LABEL,
   formatDate,
   money,
+  OFFLINE_METHOD_LABEL,
   PAYMENT_LABEL,
   PAYMENT_STYLE,
   STATUS_LABEL,
@@ -22,6 +25,7 @@ import {
 import ApplicationsHeader from '../ApplicationsHeader';
 import DecisionDialog from '../DecisionDialog';
 import EditAddOnsDialog from '../EditAddOnsDialog';
+import { AdjustmentDialog, ChangeTierDialog, OfflinePaymentDialog, WaiveDialog } from '../CorrectionDialogs';
 import RefundDialog from '../RefundDialog';
 import { describeError, useApplicationsApi } from '../useApplicationsApi';
 
@@ -40,14 +44,23 @@ function answerText(value: string | string[] | null): string {
 
 /** Older payloads (and test fixtures) predate spec 012; default the add-on fields. */
 function withAddOns(a: AdminApplication): AdminApplication {
-  return { ...a, addOns: a.addOns ?? [], addOnsEditable: a.addOnsEditable ?? { allowed: false, reason: null } };
+  return {
+    ...a,
+    addOns: a.addOns ?? [],
+    addOnsEditable: a.addOnsEditable ?? { allowed: false, reason: null },
+    adjustments: a.adjustments ?? [],
+    amountEditable: a.amountEditable ?? { allowed: false, reason: null },
+    canSettleOffline: a.canSettleOffline ?? false,
+    paymentSource: a.paymentSource ?? 'stripe',
+    offlinePayment: a.offlinePayment ?? null,
+  };
 }
 
 const PAYMENT_HINT: Partial<Record<AdminApplication['paymentStatus'], string>> = {
   AWAITING_CARD: 'The applicant has not finished saving a card; they cannot be approved yet.',
   CARD_ON_FILE: 'Approving charges this card off-session.',
   PROCESSING: 'Charge in flight — confirming with Stripe.',
-  PAYMENT_DUE: 'The card on file was declined. The applicant has a pay-now link; you can retry the card after they update it.',
+  PAYMENT_DUE: 'The card on file was declined. The applicant has a pay-now link; you can retry the card after they update it, record a payment taken outside Jump, or waive the balance.',
 };
 
 export default function ApplicationDetailPage({ params }: { params: { eventId: string; applicationId: string } }) {
@@ -62,6 +75,8 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
   const [decision, setDecision] = useState<Decision | null>(null);
   const [refunding, setRefunding] = useState(false);
   const [editingAddOns, setEditingAddOns] = useState(false);
+  const [correction, setCorrection] = useState<'tier' | 'adjust' | 'waive' | 'offline' | null>(null);
+  const [removingAdjustment, setRemovingAdjustment] = useState<string | null>(null);
   const [charging, setCharging] = useState(false);
   const [booth, setBooth] = useState('');
   const [note, setNote] = useState('');
@@ -69,6 +84,21 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
   const decisionBtnRef = useRef<HTMLButtonElement>(null);
   const refundBtnRef = useRef<HTMLButtonElement>(null);
   const addOnsBtnRef = useRef<HTMLButtonElement>(null);
+  const correctionBtnRef = useRef<HTMLButtonElement>(null);
+
+  const removeAdjustment = async (adjustmentId: string) => {
+    if (!app || removingAdjustment) return;
+    setRemovingAdjustment(adjustmentId);
+    setError(null);
+    try {
+      setApp(await api.removeAdjustment(app.id, adjustmentId));
+      setNotice('Adjustment removed.');
+    } catch (err) {
+      setError(describeError(err, 'Could not remove the adjustment'));
+    } finally {
+      setRemovingAdjustment(null);
+    }
+  };
 
   const load = useCallback(async () => {
     try {
@@ -270,6 +300,32 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
                   </p>
                 )}
                 <dl className="mt-2 space-y-1 text-sm">
+                  {app.tier && (
+                    <div className="flex items-center justify-between gap-2">
+                      <dt className="text-gray-600 dark:text-slate-400">Tier</dt>
+                      <dd className="flex items-center gap-2 text-gray-900 dark:text-white">
+                        {app.tier.name}
+                        {app.amountEditable.allowed ? (
+                          <button
+                            type="button"
+                            ref={correction === 'tier' ? correctionBtnRef : undefined}
+                            onClick={() => {
+                              setNotice(null);
+                              setCorrection('tier');
+                            }}
+                            className="text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+                            data-testid="application-change-tier"
+                          >
+                            Change
+                          </button>
+                        ) : (
+                          <span className="text-xs text-gray-500 dark:text-slate-400" title={app.amountEditable.reason ?? undefined}>
+                            Locked
+                          </span>
+                        )}
+                      </dd>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <dt className="text-gray-600 dark:text-slate-400">Applicant pays</dt>
                     <dd className="font-medium text-gray-900 dark:text-white">{money(app.amounts.applicantPays)}</dd>
@@ -291,7 +347,16 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
                   {app.payment.paidAt && (
                     <div className="flex justify-between">
                       <dt className="text-gray-600 dark:text-slate-400">Paid</dt>
-                      <dd className="text-gray-700 dark:text-slate-300">{formatDate(app.payment.paidAt, true)}</dd>
+                      <dd className="text-gray-700 dark:text-slate-300">
+                        {formatDate(app.payment.paidAt, true)}
+                        {app.offlinePayment ? ` · ${OFFLINE_METHOD_LABEL[app.offlinePayment.method]}${app.offlinePayment.reference ? ` ${app.offlinePayment.reference}` : ''} (offline)` : ''}
+                      </dd>
+                    </div>
+                  )}
+                  {app.paymentSource === 'offline' && app.paymentStatus === 'NOT_REQUIRED' && (
+                    <div className="flex justify-between">
+                      <dt className="text-gray-600 dark:text-slate-400">Balance</dt>
+                      <dd className="text-gray-700 dark:text-slate-300">Waived</dd>
                     </div>
                   )}
                   {app.payment.paymentDueAt && (
@@ -318,6 +383,56 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
                     </div>
                   )}
                 </dl>
+                {/* Adjustments (spec 018 phase 3) */}
+                {(app.adjustments.length > 0 || app.amountEditable.allowed) && (
+                  <div className="mt-3 border-t border-gray-200 pt-3 dark:border-slate-700" data-testid="application-adjustments">
+                    <div className="flex items-center justify-between gap-2">
+                      <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Adjustments</h4>
+                      {app.amountEditable.allowed && (
+                        <button
+                          type="button"
+                          ref={correction === 'adjust' ? correctionBtnRef : undefined}
+                          onClick={() => {
+                            setNotice(null);
+                            setCorrection('adjust');
+                          }}
+                          className="text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+                          data-testid="application-add-adjustment"
+                        >
+                          Add adjustment
+                        </button>
+                      )}
+                    </div>
+                    {app.adjustments.length === 0 ? (
+                      <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">None</p>
+                    ) : (
+                      <ul className="mt-1 space-y-0.5 text-sm">
+                        {app.adjustments.map((adj) => (
+                          <li key={adj.id} className="flex items-center justify-between gap-2" data-testid={`application-adjustment-${adj.id}`}>
+                            <span className="text-gray-700 dark:text-slate-300">
+                              {adj.kind === 'WAIVER' ? 'Waived' : adj.reason}
+                              {adj.kind === 'WAIVER' && adj.reason ? <span className="text-gray-500 dark:text-slate-400"> — {adj.reason}</span> : null}
+                            </span>
+                            <span className="flex items-center gap-2 text-gray-700 dark:text-slate-300">
+                              {adj.amount < 0 ? `−${money(-adj.amount)}` : `+${money(adj.amount)}`}
+                              {adj.kind === 'ADJUSTMENT' && app.amountEditable.allowed && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeAdjustment(adj.id)}
+                                  disabled={removingAdjustment === adj.id}
+                                  className="text-xs text-red-600 hover:underline disabled:opacity-50 dark:text-red-300"
+                                  aria-label={`Remove adjustment ${adj.reason}`}
+                                >
+                                  remove
+                                </button>
+                              )}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
                 {/* Add-on lines (spec 012) */}
                 {(app.addOns.length > 0 || app.addOnsEditable.allowed) && (
                   <div className="mt-3 border-t border-gray-200 pt-3 dark:border-slate-700" data-testid="application-add-ons">
@@ -376,6 +491,34 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
                       {charging ? 'Charging…' : `Retry card (${app.payment.chargeAttempts} so far)`}
                     </button>
                   )}
+                  {app.canSettleOffline && isAdmin && (
+                    <>
+                      <button
+                        type="button"
+                        ref={correction === 'offline' ? correctionBtnRef : undefined}
+                        onClick={() => {
+                          setNotice(null);
+                          setCorrection('offline');
+                        }}
+                        className={btn}
+                        data-testid="application-offline-payment"
+                      >
+                        Record offline payment…
+                      </button>
+                      <button
+                        type="button"
+                        ref={correction === 'waive' ? correctionBtnRef : undefined}
+                        onClick={() => {
+                          setNotice(null);
+                          setCorrection('waive');
+                        }}
+                        className={btn}
+                        data-testid="application-waive"
+                      >
+                        Waive balance…
+                      </button>
+                    </>
+                  )}
                   {app.payment.canRefund && isAdmin && (
                     <button
                       ref={refundBtnRef}
@@ -404,6 +547,7 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
                           {money(r.amount)} {r.status.toLowerCase()}
                           {r.reason ? ` — ${r.reason}` : ''}
                           {!r.initiatedBy && r.stripeRefundId ? ' (from Stripe)' : ''}
+                          {r.manual ? ' (recorded offline)' : ''}
                         </span>
                         <span>{formatDate(r.createdAt, true)}</span>
                       </li>
@@ -439,7 +583,7 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
                   {app.decisions.map((d) => (
                     <li key={d.id}>
                       <p className="font-medium text-gray-900 dark:text-white">
-                        {d.action === 'ADD_ONS_CHANGED' ? 'Add-ons changed' : d.action.charAt(0) + d.action.slice(1).toLowerCase()}{' '}
+                        {ACTION_LABEL[d.action] ?? d.action.charAt(0) + d.action.slice(1).toLowerCase()}{' '}
                         <span className="font-normal text-gray-500 dark:text-slate-400">· {formatDate(d.createdAt, true)}</span>
                       </p>
                       {d.note && <p className="text-gray-700 dark:text-slate-300">{d.note}</p>}
@@ -482,6 +626,58 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
             setApp(next);
             setEditingAddOns(false);
             setNotice(`Add-ons updated. New total ${money(next.amounts.applicantPays)}; the applicant has been emailed.`);
+          }}
+        />
+      )}
+      {app && correction === 'tier' && (
+        <ChangeTierDialog
+          eventId={params.eventId}
+          application={app}
+          returnFocusRef={correctionBtnRef}
+          onClose={() => setCorrection(null)}
+          onSaved={(next) => {
+            setApp(next);
+            setCorrection(null);
+            setNotice(`Moved to ${next.tier?.name}. New total ${money(next.amounts.applicantPays)}.`);
+          }}
+        />
+      )}
+      {app && correction === 'adjust' && (
+        <AdjustmentDialog
+          eventId={params.eventId}
+          application={app}
+          returnFocusRef={correctionBtnRef}
+          onClose={() => setCorrection(null)}
+          onSaved={(next) => {
+            setApp(next);
+            setCorrection(null);
+            setNotice(`Adjustment added. New total ${money(next.amounts.applicantPays)}.`);
+          }}
+        />
+      )}
+      {app && correction === 'waive' && (
+        <WaiveDialog
+          eventId={params.eventId}
+          application={app}
+          returnFocusRef={correctionBtnRef}
+          onClose={() => setCorrection(null)}
+          onSaved={(next) => {
+            setApp(next);
+            setCorrection(null);
+            setNotice('Balance waived. The applicant has been emailed.');
+          }}
+        />
+      )}
+      {app && correction === 'offline' && (
+        <OfflinePaymentDialog
+          eventId={params.eventId}
+          application={app}
+          returnFocusRef={correctionBtnRef}
+          onClose={() => setCorrection(null)}
+          onSaved={(next) => {
+            setApp(next);
+            setCorrection(null);
+            setNotice('Payment recorded. The applicant has been emailed.');
           }}
         />
       )}

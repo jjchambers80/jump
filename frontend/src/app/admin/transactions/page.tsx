@@ -114,6 +114,7 @@ function TransactionsPageInner() {
       from: searchParams.get('from') || '',
       to: searchParams.get('to') || '',
       hasRefunds: searchParams.get('hasRefunds') === 'true',
+      paymentSource: (searchParams.get('paymentSource') as 'stripe' | 'offline' | null) || '',
       search: searchParams.get('search') || '',
       sort: (searchParams.get('sort') as TransactionSort | null) || '-date',
       page: Number(searchParams.get('page') || '1') || 1,
@@ -144,7 +145,7 @@ function TransactionsPageInner() {
   const [error, setError] = useState<string | null>(null);
   const [events, setEvents] = useState<EventOption[]>([]);
   const [searchInput, setSearchInput] = useState(query.search || '');
-  const [showFilters, setShowFilters] = useState(Boolean(query.type || query.status || query.eventId || query.from || query.to || query.hasRefunds));
+  const [showFilters, setShowFilters] = useState(Boolean(query.type || query.status || query.eventId || query.from || query.to || query.hasRefunds || query.paymentSource));
   const [expanded, setExpanded] = useState<string | null>(null);
   const [refundsByKey, setRefundsByKey] = useState<Record<string, TransactionRefund[]>>({});
   const [refundsLoading, setRefundsLoading] = useState<string | null>(null);
@@ -154,7 +155,7 @@ function TransactionsPageInner() {
   const refundBtnRef = useRef<HTMLButtonElement>(null);
 
   const showOrg = rows.some((r) => r.organization);
-  const hasFilters = Boolean(query.type || query.status || query.eventId || query.from || query.to || query.hasRefunds);
+  const hasFilters = Boolean(query.type || query.status || query.eventId || query.from || query.to || query.hasRefunds || query.paymentSource);
 
   useEffect(() => {
     setSearchInput(query.search || '');
@@ -390,10 +391,20 @@ function TransactionsPageInner() {
             <input type="checkbox" checked={Boolean(query.hasRefunds)} onChange={(e) => setQuery({ hasRefunds: e.target.checked })} className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
             Has refunds
           </label>
+          <div>
+            <label htmlFor="tx-source" className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">
+              Source
+            </label>
+            <select id="tx-source" value={query.paymentSource} onChange={(e) => setQuery({ paymentSource: e.target.value as 'stripe' | 'offline' | '' })} className={selectClass}>
+              <option value="">Stripe + offline</option>
+              <option value="stripe">Stripe</option>
+              <option value="offline">Offline</option>
+            </select>
+          </div>
           {hasFilters && (
             <button
               type="button"
-              onClick={() => setQuery({ type: '', status: '', eventId: '', from: '', to: '', hasRefunds: false })}
+              onClick={() => setQuery({ type: '', status: '', eventId: '', from: '', to: '', hasRefunds: false, paymentSource: '' })}
               className="px-3 py-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
             >
               Clear filters
@@ -490,7 +501,14 @@ function TransactionsPageInner() {
                       <p className="text-xs text-gray-500 dark:text-slate-400">{formatTime(t.occurredAt)}</p>
                     </div>
                     <div className="flex flex-col items-end gap-1">
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${status?.color || 'bg-gray-100 text-gray-600'}`}>{transactionStatusLabel(t)}</span>
+                      <span className="flex items-center gap-1">
+                        {t.paymentSource === 'offline' && (
+                          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200" title="Recorded outside Stripe">
+                            Offline
+                          </span>
+                        )}
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${status?.color || 'bg-gray-100 text-gray-600'}`}>{transactionStatusLabel(t)}</span>
+                      </span>
                       <div className="flex items-center gap-2">
                         <button type="button" onClick={() => toggleExpanded(t)} className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline">
                           {isOpen ? 'hide refunds' : t.refunded > 0 ? 'refunds' : 'details'}

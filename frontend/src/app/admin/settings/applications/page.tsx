@@ -21,6 +21,9 @@ const ACTION_LABEL: Record<TemplateAction, string> = {
   WITHDRAWN: 'Withdrawn',
   PAYMENT_DUE: 'Payment due (paid forms)',
   ADD_ONS_CHANGED: 'Add-ons changed (paid forms)',
+  TIER_CHANGED: 'Tier changed (paid forms)',
+  WAIVED: 'Balance waived (paid forms)',
+  OFFLINE_PAID: 'Payment recorded offline (paid forms)',
 };
 
 export default function ApplicationTemplatesPage() {

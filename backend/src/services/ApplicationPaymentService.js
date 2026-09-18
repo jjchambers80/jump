@@ -448,7 +448,8 @@ class ApplicationPaymentService {
    * review status is untouched — withdraw separately to release the slot.
    */
   async refund(application, { amount = null, reason = null, initiatedBy = null } = {}) {
-    if (!['PAID', 'PARTIALLY_REFUNDED'].includes(application.paymentStatus) || !application.stripePaymentIntentId) {
+    const offline = application.paymentSource === 'OFFLINE';
+    if (!['PAID', 'PARTIALLY_REFUNDED'].includes(application.paymentStatus) || (!offline && !application.stripePaymentIntentId)) {
       throw new ConflictError('Only paid applications can be refunded');
     }
     const refunded = (application.refunds || []).filter((r) => r.status === 'SUCCEEDED').reduce((sum, r) => sum + Number(r.amount), 0);
@@ -456,6 +457,18 @@ class ApplicationPaymentService {
     const value = amount == null ? remaining : Math.round(Number(amount) * 100) / 100;
     if (!Number.isFinite(value) || value <= 0) throw new ValidationError('amount must be a positive number');
     if (value > remaining + 1e-9) throw new ValidationError(`amount cannot exceed the remaining ${remaining.toFixed(2)}`);
+
+    // Spec 018 phase 3: an offline payment has no Stripe charge — record the
+    // refund the organizer made outside Jump and move on.
+    if (offline) {
+      const manual = await prisma.applicationRefund.create({
+        data: { applicationId: application.id, amount: value, reason, status: 'SUCCEEDED', manual: true, initiatedBy },
+      });
+      await prisma.applicationDecision.create({ data: { applicationId: application.id, action: 'MANUAL_REFUND', byUserId: initiatedBy, note: `Recorded refund of $${value.toFixed(2)}${reason ? `: ${reason}` : ''}` } });
+      await this._recomputeRefundStatus(application.id);
+      logger.info('Application refund recorded (offline)', { event: 'application_refund_manual', applicationId: application.id, amount: value, initiatedBy });
+      return manual.id;
+    }
 
     const row = await prisma.applicationRefund.create({
       data: { applicationId: application.id, amount: value, reason, status: 'PENDING', initiatedBy },

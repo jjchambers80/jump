@@ -6,7 +6,7 @@ import { jest } from '@jest/globals';
 jest.unstable_mockModule('@jump/db', () => ({ prisma: {} }));
 jest.unstable_mockModule('../../src/utils/logger.js', () => ({ default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } }));
 
-const { default: service, tierAmounts, slugify, paymentsEnabled } = await import('../../src/services/ApplicationFormService.js');
+const { default: service, tierAmounts, slugify, paymentsEnabled, applicationAmounts, applicationLines } = await import('../../src/services/ApplicationFormService.js');
 const { default: feeService } = await import('../../src/services/FeeService.js');
 
 describe('tierAmounts', () => {
@@ -39,6 +39,38 @@ describe('tierAmounts', () => {
   test('free tier', () => {
     const a = tierAmounts(0, { feeMode: 'PASS', taxable: false }, event, org);
     expect(a.orgReceives).toBe(0);
+  });
+});
+
+describe('applicationLines with adjustments (spec 018 phase 3)', () => {
+  const event = { taxRate: 0.1 };
+  const org = { taxInclusivePricing: false };
+  const form = { feeMode: 'PASS', taxable: true };
+  const tier = { price: 275 };
+  const power = { addOn: { id: 'power', price: 125, taxable: false }, quantity: 1 };
+
+  test('a signed adjustment folds into the tier line; add-on lines move by at most the proportional-fee cent', () => {
+    const base = applicationAmounts(applicationLines(tier, form, [power]), form, event, org);
+    const discounted = applicationAmounts(applicationLines(tier, form, [power], -25), form, event, org);
+    expect(applicationLines(tier, form, [power], -25)[0]).toEqual({ price: 250, quantity: 1, taxable: true });
+    expect(applicationLines(tier, form, [power], -25)[1]).toMatchObject({ addOnId: 'power', price: 125, quantity: 1, taxable: false });
+    expect(discounted.subtotal).toBeCloseTo(base.subtotal - 25, 2);
+    expect(discounted.tax).toBeCloseTo(25, 2); // 10% of the adjusted taxable tier line only
+    expect(discounted.applicantPays).toBeLessThan(base.applicantPays);
+    // Fees are allocated proportionally across lines, so the add-on share can drift by a cent.
+    expect(Math.abs(discounted.lines[1].applicantPays - base.lines[1].applicantPays)).toBeLessThanOrEqual(0.02);
+  });
+
+  test('an adjustment equal to the tier price zeroes the tier line but keeps the add-on line', () => {
+    const lines = applicationLines(tier, form, [power], -275);
+    expect(lines[0].price).toBe(0);
+    const amounts = applicationAmounts(lines, form, event, org);
+    expect(amounts.subtotal).toBeCloseTo(125, 2);
+    expect(amounts.applicantPays).toBeGreaterThan(125);
+  });
+
+  test('cents are rounded once on the tier line', () => {
+    expect(applicationLines({ price: 10.1 }, form, [], -0.055)[0].price).toBeCloseTo(10.05, 2);
   });
 });
 

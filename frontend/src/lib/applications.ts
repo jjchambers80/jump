@@ -7,7 +7,7 @@ export type QuestionType = 'SHORT_TEXT' | 'LONG_TEXT' | 'SINGLE_CHOICE' | 'MULTI
 export type ApplicationStatus = 'DRAFT' | 'SUBMITTED' | 'WAITLISTED' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN';
 export type PaymentStatus = 'NOT_REQUIRED' | 'AWAITING_CARD' | 'CARD_ON_FILE' | 'PROCESSING' | 'PAID' | 'PAYMENT_DUE' | 'REFUNDED' | 'PARTIALLY_REFUNDED';
 export type Decision = 'APPROVE' | 'REJECT' | 'WAITLIST' | 'WITHDRAW';
-export type TemplateAction = 'RECEIVED' | 'APPROVED' | 'REJECTED' | 'WAITLISTED' | 'WITHDRAWN' | 'PAYMENT_DUE' | 'ADD_ONS_CHANGED';
+export type TemplateAction = 'RECEIVED' | 'APPROVED' | 'REJECTED' | 'WAITLISTED' | 'WITHDRAWN' | 'PAYMENT_DUE' | 'ADD_ONS_CHANGED' | 'TIER_CHANGED' | 'WAIVED' | 'OFFLINE_PAID';
 
 export interface Acceptance {
   open: boolean;
@@ -174,6 +174,9 @@ export interface ApplicantApplication {
   tier: { id: string; name: string } | null;
   amounts: TierAmounts & { currency: string };
   addOns: ApplicationAddOnLine[];
+  /** Spec 018: organizer adjustments on the amount (discounts, fees), shown with their reasons. */
+  adjustments?: { id: string; amount: number; reason: string }[];
+  paymentSource?: 'stripe' | 'offline';
   paymentDueAt: string | null;
   profile: ApplicantProfile;
   answers: AnswerView[];
@@ -228,6 +231,37 @@ export interface DecisionRecord {
   createdAt: string;
 }
 
+export type OfflinePaymentMethod = 'CHEQUE' | 'CASH' | 'BANK_TRANSFER' | 'COMPED' | 'OTHER';
+
+export const OFFLINE_METHOD_LABEL: Record<OfflinePaymentMethod, string> = {
+  CHEQUE: 'Cheque',
+  CASH: 'Cash',
+  BANK_TRANSFER: 'Bank transfer',
+  COMPED: 'Comped',
+  OTHER: 'Other',
+};
+
+export interface ApplicationAdjustment {
+  id: string;
+  kind: 'ADJUSTMENT' | 'WAIVER';
+  /** Signed; negative = discount. */
+  amount: number;
+  reason: string;
+  createdById: string | null;
+  createdAt: string;
+}
+
+/** Decision-log actions that are not a review decision, with their timeline labels. */
+export const ACTION_LABEL: Record<string, string> = {
+  ADD_ONS_CHANGED: 'Add-ons changed',
+  TIER_CHANGED: 'Tier changed',
+  ADJUSTED: 'Amount adjusted',
+  WAIVED: 'Balance waived',
+  OFFLINE_PAID: 'Paid offline',
+  MANUAL_REFUND: 'Refund recorded',
+  PAYMENT_DUE: 'Payment due',
+};
+
 export interface AdminApplication {
   id: string;
   form: { id: string; name: string; slug: string; kind: FormKind; chargeTiming: 'SUBMIT' | 'APPROVAL'; feeMode: string; paymentDueDays: number; overduePolicy: 'WITHDRAW' | 'HOLD' };
@@ -244,6 +278,14 @@ export interface AdminApplication {
   addOns: ApplicationAddOnLine[];
   /** Whether the organizer may still change the add-on lines (spec 012 §2.5). */
   addOnsEditable: { allowed: boolean; reason: string | null };
+  /** Spec 018 phase 3: manual adjustment lines (and the WAIVER record once waived). */
+  adjustments: ApplicationAdjustment[];
+  /** Whether tier / adjustments may still change (no money has moved). */
+  amountEditable: { allowed: boolean; reason: string | null };
+  /** ADMIN may waive the balance or record an offline payment (APPROVED + PAYMENT_DUE). */
+  canSettleOffline: boolean;
+  paymentSource: 'stripe' | 'offline';
+  offlinePayment: { method: OfflinePaymentMethod; reference: string | null; recordedById: string | null } | null;
   payment: {
     stripePaymentIntentId: string | null;
     stripePaymentMethodId: 'on_file' | null;
@@ -257,11 +299,13 @@ export interface AdminApplication {
     refundable: number;
     stripeDashboardUrl: string | null;
     canRefund: boolean;
+    /** Offline-paid: a refund is recorded, not sent through Stripe. */
+    manualRefund: boolean;
     canRetryCharge: boolean;
   };
   answers: AnswerView[];
   decisions: DecisionRecord[];
-  refunds: { id: string; amount: number; status: string; reason: string | null; stripeRefundId: string | null; initiatedBy: string | null; createdAt: string }[];
+  refunds: { id: string; amount: number; status: string; reason: string | null; stripeRefundId: string | null; initiatedBy: string | null; manual?: boolean; createdAt: string }[];
   submittedAt: string | null;
   decidedAt: string | null;
   decidedById: string | null;

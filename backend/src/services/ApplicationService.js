@@ -68,17 +68,49 @@ const DETAIL_INCLUDE = {
   addOns: { include: { addOn: true }, orderBy: { addOn: { displayOrder: 'asc' } } },
   decisions: { orderBy: { createdAt: 'asc' } },
   refunds: { orderBy: { createdAt: 'asc' } },
+  adjustments: { orderBy: { createdAt: 'asc' } },
 };
 
-/** Statuses in which the organizer may still change add-on lines (no money has moved). */
-function addOnsEditable(application) {
-  if (application.form?.kind !== 'PAID' || !application.tierId) return { allowed: false, reason: 'This form has no add-ons' };
+const OFFLINE_METHODS = new Set(['CHEQUE', 'CASH', 'BANK_TRANSFER', 'COMPED', 'OTHER']);
+const OFFLINE_METHOD_LABEL = { CHEQUE: 'Cheque', CASH: 'Cash', BANK_TRANSFER: 'Bank transfer', COMPED: 'Comped', OTHER: 'Other' };
+const money = (n) => `$${Number(n).toFixed(2)}`;
+
+/**
+ * Statuses in which the organizer may still change what the applicant owes
+ * — add-on lines (spec 012), tier and adjustments (spec 018): no money has
+ * moved. One rule: money that has moved is only ever refunded, never
+ * re-priced.
+ */
+function amountEditable(application, what = 'the amount') {
+  if (application.form?.kind !== 'PAID' || !application.tierId) return { allowed: false, reason: 'This form has no amount to change' };
+  if (application.paymentSource === 'OFFLINE' || application.paymentStatus === 'NOT_REQUIRED') return { allowed: false, reason: 'Settled outside Stripe — the amount is final' };
   if (['PAID', 'REFUNDED', 'PARTIALLY_REFUNDED'].includes(application.paymentStatus)) return { allowed: false, reason: 'Already paid — refund part of the amount instead' };
   if (application.paymentStatus === 'PROCESSING') return { allowed: false, reason: 'A payment is in progress' };
   if (['SUBMITTED', 'WAITLISTED'].includes(application.status)) return { allowed: true, reason: null };
   if (application.status === 'APPROVED' && application.paymentStatus === 'PAYMENT_DUE') return { allowed: true, reason: null };
   if (application.status === 'APPROVED') return { allowed: false, reason: 'Approved — the amount is locked once the charge starts' };
-  return { allowed: false, reason: `Cannot change add-ons on a ${application.status.toLowerCase()} application` };
+  return { allowed: false, reason: `Cannot change ${what} on a ${application.status.toLowerCase()} application` };
+}
+
+/** Statuses in which the organizer may still change add-on lines (no money has moved). */
+function addOnsEditable(application) {
+  if (application.form?.kind !== 'PAID' || !application.tierId) return { allowed: false, reason: 'This form has no add-ons' };
+  return amountEditable(application, 'add-ons');
+}
+
+/** Signed total of manual adjustment lines (waiver rows are records, not inputs to the snapshot). */
+function adjustmentTotal(adjustments) {
+  return Math.round((adjustments || []).filter((a) => a.kind !== 'WAIVER').reduce((sum, a) => sum + Number(a.amount), 0) * 100) / 100;
+}
+
+/** A pay-now Checkout session minted for the old amount (only APPROVED + PAYMENT_DUE rows hold one). */
+function pendingPayNowSession(application) {
+  return application.status === 'APPROVED' && application.paymentStatus === 'PAYMENT_DUE' ? application.stripeCheckoutSessionId : null;
+}
+
+/** ADMIN may settle an APPROVED + PAYMENT_DUE application outside Stripe. */
+function canSettleOffline(application) {
+  return application.form?.kind === 'PAID' && application.status === 'APPROVED' && application.paymentStatus === 'PAYMENT_DUE' && application.paymentSource !== 'OFFLINE';
 }
 
 class ApplicationService {
@@ -538,7 +570,7 @@ class ApplicationService {
         if (validated.length) await addOnService.reserve(tx, validated);
       }
 
-      const amounts = applicationAmounts(applicationLines(application.tier, application.form, validated), application.form, application.event, application.event.venue.organization);
+      const amounts = applicationAmounts(applicationLines(application.tier, application.form, validated, adjustmentTotal(application.adjustments)), application.form, application.event, application.event.venue.organization);
       const beforeText = addOnService.summarizeLines(application.addOns) || 'none';
       const afterText = addOnService.summarizeLines(validated.map((l) => ({ addOn: l.addOn, quantity: l.quantity }))) || 'none';
       const note = `Add-ons: ${beforeText} → ${afterText}. Total $${Number(application.applicantPays).toFixed(2)} → $${amounts.applicantPays.toFixed(2)}.`;
@@ -578,6 +610,276 @@ class ApplicationService {
       }
     }
     return this.get(eventId, applicationId, organizationId);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Organizer: corrections before money moves (spec 018 phase 3)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Move the application to another tier of the same form. Add-on lines the
+   * new tier does not offer are dropped (named in the note); a PAYMENT_DUE
+   * application's holds move to the new tier and lines inside one
+   * transaction, so a full tier is a 409 that changes nothing. The snapshot
+   * is recomputed at today's prices with any adjustments.
+   */
+  async changeTier(eventId, applicationId, organizationId, tierId, { byUserId, sendEmail = true } = {}) {
+    await applicationFormService.requireEvent(eventId, organizationId);
+    if (typeof tierId !== 'string' || !tierId) throw new ValidationError('tierId is required');
+
+    const { updated, note, sessionId } = await prisma.$transaction(async (tx) => {
+      const application = await this._lockForEdit(tx, eventId, applicationId, 'the tier');
+      if (application.tierId === tierId) throw new ValidationError('The application is already on that tier');
+      const newTier = await tx.applicationTier.findFirst({ where: { id: tierId, formId: application.formId } });
+      if (!newTier) throw new NotFoundError('Tier not found on this form');
+      if (!newTier.isActive) throw new ValidationError(`${newTier.name} is not active`);
+
+      // Reconcile add-on lines to the new tier's offer.
+      const addOns = await tx.addOn.findMany({ where: { id: { in: application.addOns.map((l) => l.addOnId) } }, include: { applicationTiers: { select: { applicationTierId: true } } } });
+      const offered = new Set(addOns.filter((a) => a.isActive && addOnService.offeredOnApplicationTier(a, newTier.id)).map((a) => a.id));
+      const kept = application.addOns.filter((l) => offered.has(l.addOnId)).map((l) => ({ addOn: l.addOn, addOnId: l.addOnId, quantity: l.quantity }));
+      const dropped = application.addOns.filter((l) => !offered.has(l.addOnId));
+
+      // A PAYMENT_DUE application holds its slot and lines: release them, rewrite, then hold again on the new tier.
+      const held = application.capacitySlot === 'RESERVED';
+      if (held) await this._releaseCapacity(tx, application);
+
+      const amounts = applicationAmounts(applicationLines(newTier, application.form, kept, adjustmentTotal(application.adjustments)), application.form, application.event, application.event.venue.organization);
+      const droppedText = dropped.length ? ` Dropped add-ons: ${addOnService.summarizeLines(dropped)}.` : '';
+      const noteText = `Tier: ${application.tier.name} → ${newTier.name}. Total ${money(application.applicantPays)} → ${money(amounts.applicantPays)}.${droppedText}`;
+
+      await tx.applicationAddOn.deleteMany({ where: { applicationId } });
+      const row = await tx.application.update({
+        where: { id: applicationId },
+        data: {
+          tierId: newTier.id,
+          subtotal: amounts.subtotal,
+          platformFee: amounts.platformFee,
+          processingFee: amounts.processingFee,
+          tax: amounts.tax,
+          applicantPays: amounts.applicantPays,
+          orgReceives: amounts.orgReceives,
+          feeMode: amounts.feeMode,
+          addOns: { create: this._addOnRows(kept, amounts) },
+          decisions: { create: { action: 'TIER_CHANGED', byUserId, note: noteText } },
+        },
+        include: DETAIL_INCLUDE,
+      });
+      if (held) {
+        await this._takeCapacity(tx, { ...application, tierId: newTier.id }, 'RESERVED');
+      }
+      return { updated: row, note: noteText, sessionId: pendingPayNowSession(application) };
+    });
+
+    logger.info('Application tier changed', { event: 'application_tier_changed', applicationId, eventId, byUserId, tierId, applicantPays: Number(updated.applicantPays) });
+    await this._afterAmountChange(organizationId, updated, sessionId, 'TIER_CHANGED', sendEmail);
+    return this.get(eventId, applicationId, organizationId);
+  }
+
+  /**
+   * Add a signed manual adjustment line (discount, late fee). Folded into the
+   * tier line for fee math, so the tier price plus every adjustment may not
+   * go below zero — deeper discounts remove add-ons or waive the balance.
+   */
+  async addAdjustment(eventId, applicationId, organizationId, { amount, reason }, { byUserId } = {}) {
+    await applicationFormService.requireEvent(eventId, organizationId);
+    const value = Math.round(Number(amount) * 100) / 100;
+    if (!Number.isFinite(value) || value === 0 || Math.abs(value) > 10_000) throw new ValidationError('amount must be a non-zero number up to 10,000');
+    const text = typeof reason === 'string' ? reason.trim() : '';
+    if (!text || text.length > 200) throw new ValidationError('reason is required (200 characters or fewer)');
+
+    const { updated, sessionId } = await prisma.$transaction(async (tx) => {
+      const application = await this._lockForEdit(tx, eventId, applicationId, 'the amount');
+      const total = adjustmentTotal([...application.adjustments, { amount: value, kind: 'ADJUSTMENT' }]);
+      if (Number(application.tier.price) + total < -1e-9) {
+        throw new ValidationError(`Adjustment exceeds the tier price (${money(application.tier.price)}); edit add-ons or waive the balance instead`);
+      }
+      await tx.applicationAdjustment.create({ data: { applicationId, amount: value, reason: text, createdById: byUserId ?? null } });
+      const row = await this._rewriteSnapshot(tx, application, total, {
+        decisions: { create: { action: 'ADJUSTED', byUserId, note: `${value < 0 ? '−' : '+'}${money(Math.abs(value))} ${text}` } },
+      });
+      return { updated: row, sessionId: pendingPayNowSession(application) };
+    });
+
+    logger.info('Application adjusted', { event: 'application_adjusted', applicationId, eventId, byUserId, amount: value, applicantPays: Number(updated.applicantPays) });
+    await this._afterAmountChange(organizationId, updated, sessionId, null, false);
+    return this.get(eventId, applicationId, organizationId);
+  }
+
+  /** Remove an adjustment line and recompute. */
+  async removeAdjustment(eventId, applicationId, organizationId, adjustmentId, { byUserId } = {}) {
+    await applicationFormService.requireEvent(eventId, organizationId);
+    const { updated, sessionId } = await prisma.$transaction(async (tx) => {
+      const application = await this._lockForEdit(tx, eventId, applicationId, 'the amount');
+      const adjustment = application.adjustments.find((a) => a.id === adjustmentId);
+      if (!adjustment) throw new NotFoundError('Adjustment not found');
+      if (adjustment.kind === 'WAIVER') throw new ConflictError('A waiver cannot be removed');
+      await tx.applicationAdjustment.delete({ where: { id: adjustmentId } });
+      const total = adjustmentTotal(application.adjustments.filter((a) => a.id !== adjustmentId));
+      const row = await this._rewriteSnapshot(tx, application, total, {
+        decisions: { create: { action: 'ADJUSTED', byUserId, note: `Removed ${Number(adjustment.amount) < 0 ? '−' : '+'}${money(Math.abs(adjustment.amount))} ${adjustment.reason}` } },
+      });
+      return { updated: row, sessionId: pendingPayNowSession(application) };
+    });
+
+    logger.info('Application adjustment removed', { event: 'application_adjustment_removed', applicationId, eventId, byUserId, adjustmentId });
+    await this._afterAmountChange(organizationId, updated, sessionId, null, false);
+    return this.get(eventId, applicationId, organizationId);
+  }
+
+  /**
+   * ADMIN: waive the outstanding balance on an APPROVED + PAYMENT_DUE
+   * application. Records the waived amount as a WAIVER line, zeroes the
+   * snapshot, confirms the slot and marks the row settled offline.
+   */
+  async waiveBalance(eventId, applicationId, organizationId, { reason }, { byUserId, sendEmail = true } = {}) {
+    await applicationFormService.requireEvent(eventId, organizationId);
+    const text = typeof reason === 'string' ? reason.trim() : '';
+    if (!text || text.length > 200) throw new ValidationError('reason is required (200 characters or fewer)');
+
+    const { updated, sessionId } = await prisma.$transaction(async (tx) => {
+      const application = await this._lockForSettlement(tx, eventId, applicationId);
+      const waived = Number(application.applicantPays);
+      await tx.applicationAdjustment.create({ data: { applicationId, kind: 'WAIVER', amount: -waived, reason: text, createdById: byUserId ?? null } });
+      await this._confirmHeldSlot(tx, application);
+      const row = await tx.application.update({
+        where: { id: applicationId },
+        data: {
+          subtotal: 0,
+          platformFee: 0,
+          processingFee: 0,
+          tax: 0,
+          applicantPays: 0,
+          orgReceives: 0,
+          paymentStatus: 'NOT_REQUIRED',
+          paymentSource: 'OFFLINE',
+          paymentDueAt: null,
+          overdue: false,
+          capacitySlot: application.tierId ? 'APPROVED' : application.capacitySlot,
+          stripeCheckoutSessionId: null,
+          decisions: { create: { action: 'WAIVED', byUserId, note: `Waived ${money(waived)}: ${text}` } },
+        },
+        include: DETAIL_INCLUDE,
+      });
+      return { updated: row, sessionId: application.stripeCheckoutSessionId };
+    });
+
+    logger.info('Application balance waived', { event: 'application_waived', applicationId, eventId, byUserId });
+    await this._afterAmountChange(organizationId, updated, sessionId, 'WAIVED', sendEmail);
+    return this.get(eventId, applicationId, organizationId);
+  }
+
+  /**
+   * ADMIN: record a payment taken outside Stripe (cheque, cash, transfer,
+   * comped) on an APPROVED + PAYMENT_DUE application. The amount must equal
+   * the snapshot; the slot is confirmed like a Stripe payment. No Stripe call.
+   */
+  async recordOfflinePayment(eventId, applicationId, organizationId, { method, amount, reference, paidAt }, { byUserId, sendEmail = true } = {}) {
+    await applicationFormService.requireEvent(eventId, organizationId);
+    if (!OFFLINE_METHODS.has(method)) throw new ValidationError(`method must be one of ${[...OFFLINE_METHODS].join(', ')}`);
+    const value = Math.round(Number(amount) * 100) / 100;
+    if (!Number.isFinite(value) || value < 0) throw new ValidationError('amount must be a number');
+    const ref = reference == null ? null : String(reference).trim().slice(0, 120) || null;
+    const when = paidAt ? new Date(paidAt) : new Date();
+    if (Number.isNaN(when.getTime())) throw new ValidationError('paidAt must be a date');
+    if (when.getTime() > Date.now() + 86_400_000) throw new ValidationError('paidAt cannot be in the future');
+
+    const { updated, sessionId } = await prisma.$transaction(async (tx) => {
+      const application = await this._lockForSettlement(tx, eventId, applicationId);
+      const due = Number(application.applicantPays);
+      if (Math.abs(value - due) > 0.005) throw new ValidationError(`amount must equal the balance due (${money(due)}); add an adjustment first to change what is owed`);
+      await this._confirmHeldSlot(tx, application);
+      const row = await tx.application.update({
+        where: { id: applicationId },
+        data: {
+          paymentStatus: 'PAID',
+          paymentSource: 'OFFLINE',
+          offlinePaymentMethod: method,
+          offlinePaymentReference: ref,
+          offlinePaymentRecordedById: byUserId ?? null,
+          paidAt: when,
+          paymentDueAt: null,
+          overdue: false,
+          capacitySlot: application.tierId ? 'APPROVED' : application.capacitySlot,
+          stripeCheckoutSessionId: null,
+          decisions: { create: { action: 'OFFLINE_PAID', byUserId, note: `${OFFLINE_METHOD_LABEL[method]}${ref ? ` ${ref}` : ''}, ${money(value)}` } },
+        },
+        include: DETAIL_INCLUDE,
+      });
+      return { updated: row, sessionId: application.stripeCheckoutSessionId };
+    });
+
+    logger.info('Application paid offline', { event: 'application_paid_offline', applicationId, eventId, byUserId, method, amount: value });
+    await this._afterAmountChange(organizationId, updated, sessionId, 'OFFLINE_PAID', sendEmail);
+    return this.get(eventId, applicationId, organizationId);
+  }
+
+  /** Lock the row and check the money can still change (add-ons, tier, adjustments). */
+  async _lockForEdit(tx, eventId, applicationId, what) {
+    const locked = await tx.$queryRaw`SELECT "id" FROM "Application" WHERE "id" = ${applicationId} AND "eventId" = ${eventId} FOR UPDATE`;
+    if (!locked[0]) throw new NotFoundError('Application not found');
+    const application = await tx.application.findUnique({ where: { id: applicationId }, include: DETAIL_INCLUDE });
+    if (!application || application.status === 'DRAFT') throw new NotFoundError('Application not found');
+    const editable = amountEditable(application, what);
+    if (!editable.allowed) throw new ConflictError(editable.reason);
+    return application;
+  }
+
+  /** Lock the row and check it is APPROVED + PAYMENT_DUE (waive, offline payment). */
+  async _lockForSettlement(tx, eventId, applicationId) {
+    const locked = await tx.$queryRaw`SELECT "id" FROM "Application" WHERE "id" = ${applicationId} AND "eventId" = ${eventId} FOR UPDATE`;
+    if (!locked[0]) throw new NotFoundError('Application not found');
+    const application = await tx.application.findUnique({ where: { id: applicationId }, include: DETAIL_INCLUDE });
+    if (!application || application.status === 'DRAFT') throw new NotFoundError('Application not found');
+    if (!canSettleOffline(application)) throw new ConflictError('Only an approved application with a payment due can be settled outside Stripe');
+    return application;
+  }
+
+  /** RESERVED → APPROVED for the tier and add-on holds, as `_markPaid` does after a Stripe payment. */
+  async _confirmHeldSlot(tx, application) {
+    if (!application.tierId || application.capacitySlot !== 'RESERVED') return;
+    await tx.$executeRaw`UPDATE "ApplicationTier" SET "quantityReserved" = GREATEST("quantityReserved" - 1, 0), "quantityApproved" = "quantityApproved" + 1 WHERE "id" = ${application.tierId}`;
+    const lines = await this._addOnLines(tx, application.id);
+    if (lines.length) await addOnService.commit(tx, lines);
+  }
+
+  /** Recompute the snapshot for the current tier and lines with a new adjustment total. */
+  async _rewriteSnapshot(tx, application, total, extraData = {}) {
+    const lines = application.addOns.map((l) => ({ addOn: l.addOn, addOnId: l.addOnId, quantity: l.quantity }));
+    const amounts = applicationAmounts(applicationLines(application.tier, application.form, lines, total), application.form, application.event, application.event.venue.organization);
+    // Add-on lines keep their share; rewrite them so `applicantPays` per line stays exact.
+    await tx.applicationAddOn.deleteMany({ where: { applicationId: application.id } });
+    return tx.application.update({
+      where: { id: application.id },
+      data: {
+        subtotal: amounts.subtotal,
+        platformFee: amounts.platformFee,
+        processingFee: amounts.processingFee,
+        tax: amounts.tax,
+        applicantPays: amounts.applicantPays,
+        orgReceives: amounts.orgReceives,
+        feeMode: amounts.feeMode,
+        addOns: { create: this._addOnRows(lines, amounts) },
+        ...extraData,
+      },
+      include: DETAIL_INCLUDE,
+    });
+  }
+
+  /**
+   * After the amount changed: a pending pay-now session carries the old
+   * amount, so expire it; optionally email the applicant with `action`'s
+   * template and pin the rendered email to the latest decision row.
+   */
+  async _afterAmountChange(organizationId, updated, sessionId, action, sendEmail) {
+    if (sessionId) await applicationPaymentService.expireSession(updated, sessionId);
+    if (!action || sendEmail === false) return;
+    const statusUrl = await statusUrlFor(updated);
+    const sent = await applicationTemplateService.send(organizationId, action, { ...updated, statusUrl }, { payNowUrl: statusUrl });
+    if (sent) {
+      const decision = updated.decisions[updated.decisions.length - 1];
+      await prisma.applicationDecision.update({ where: { id: decision.id }, data: { emailSubject: sent.subject, emailBody: sent.body } }).catch(() => {});
+    }
   }
 
   /**
@@ -913,7 +1215,7 @@ class ApplicationService {
   _pricing(a) {
     if (!a.tier || a.form?.kind !== 'PAID') return null;
     const lines = (a.addOns || []).map((l) => ({ addOn: l.addOn, quantity: l.quantity }));
-    const now = applicationAmounts(applicationLines(a.tier, a.form, lines), a.form, a.event, a.event?.venue?.organization);
+    const now = applicationAmounts(applicationLines(a.tier, a.form, lines, adjustmentTotal(a.adjustments)), a.form, a.event, a.event?.venue?.organization);
     const snapshot = Number(a.applicantPays);
     return {
       currentApplicantPays: now.applicantPays,
@@ -967,6 +1269,12 @@ class ApplicationService {
       pricing: this._pricing(a),
       addOns: (a.addOns || []).map((l) => addOnService.serializeApplicationLine(l)),
       addOnsEditable: addOnsEditable(a),
+      // Spec 018 phase 3
+      adjustments: (a.adjustments || []).map((adj) => ({ id: adj.id, kind: adj.kind, amount: Number(adj.amount), reason: adj.reason, createdById: adj.createdById, createdAt: adj.createdAt })),
+      amountEditable: amountEditable(a),
+      canSettleOffline: canSettleOffline(a),
+      paymentSource: a.paymentSource === 'OFFLINE' ? 'offline' : 'stripe',
+      offlinePayment: a.paymentSource === 'OFFLINE' && a.offlinePaymentMethod ? { method: a.offlinePaymentMethod, reference: a.offlinePaymentReference, recordedById: a.offlinePaymentRecordedById } : null,
       payment: {
         stripePaymentIntentId: a.stripePaymentIntentId,
         stripePaymentMethodId: a.stripePaymentMethodId ? 'on_file' : null,
@@ -979,12 +1287,13 @@ class ApplicationService {
         refundedTotal: refunded,
         refundable: Math.max(0, Math.round((Number(a.applicantPays) - refunded) * 100) / 100),
         stripeDashboardUrl: applicationPaymentService.dashboardPaymentUrl(a.stripePaymentIntentId),
-        canRefund: ['PAID', 'PARTIALLY_REFUNDED'].includes(a.paymentStatus) && Boolean(a.stripePaymentIntentId),
+        canRefund: ['PAID', 'PARTIALLY_REFUNDED'].includes(a.paymentStatus) && (Boolean(a.stripePaymentIntentId) || a.paymentSource === 'OFFLINE'),
+        manualRefund: a.paymentSource === 'OFFLINE',
         canRetryCharge: a.status === 'APPROVED' && a.paymentStatus === 'PAYMENT_DUE' && Boolean(a.stripePaymentMethodId),
       },
       answers: this._serializeAnswers(a),
       decisions: (a.decisions || []).map((d) => ({ id: d.id, action: d.action, byUserId: d.byUserId, note: d.note, emailSubject: d.emailSubject, emailBody: d.emailBody, createdAt: d.createdAt })),
-      refunds: (a.refunds || []).map((r) => ({ id: r.id, amount: Number(r.amount), status: r.status, reason: r.reason, stripeRefundId: r.stripeRefundId, initiatedBy: r.initiatedBy, createdAt: r.createdAt })),
+      refunds: (a.refunds || []).map((r) => ({ id: r.id, amount: Number(r.amount), status: r.status, reason: r.reason, stripeRefundId: r.stripeRefundId, initiatedBy: r.initiatedBy, manual: r.manual === true, createdAt: r.createdAt })),
       submittedAt: a.submittedAt,
       decidedAt: a.decidedAt,
       decidedById: a.decidedById,
@@ -1008,6 +1317,8 @@ class ApplicationService {
       tier: a.tier ? { id: a.tier.id, name: a.tier.name } : null,
       amounts: this._amounts(a),
       addOns: (a.addOns || []).map((l) => addOnService.serializeApplicationLine(l)),
+      adjustments: (a.adjustments || []).filter((adj) => adj.kind !== 'WAIVER').map((adj) => ({ id: adj.id, amount: Number(adj.amount), reason: adj.reason })),
+      paymentSource: a.paymentSource === 'OFFLINE' ? 'offline' : 'stripe',
       paymentDueAt: a.paymentDueAt,
       profile: applicantProfileService.serialize(a.profile),
       answers: this._serializeAnswers(a).filter((ans) => !ans.archived),

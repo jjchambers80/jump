@@ -449,7 +449,7 @@ describe('Applications contract (spec 011 phase 1)', () => {
     it('lists defaults with merge fields; ADMIN edits and resets; unbalanced sections rejected', async () => {
       const list = await request(app).get('/admin/settings/application-templates').set(...auth(organizerToken));
       expect(list.status).toBe(200);
-      expect(list.body.data.map((t) => t.action)).toEqual(['RECEIVED', 'APPROVED', 'REJECTED', 'WAITLISTED', 'WITHDRAWN', 'PAYMENT_DUE', 'ADD_ONS_CHANGED']);
+      expect(list.body.data.map((t) => t.action)).toEqual(['RECEIVED', 'APPROVED', 'REJECTED', 'WAITLISTED', 'WITHDRAWN', 'PAYMENT_DUE', 'ADD_ONS_CHANGED', 'TIER_CHANGED', 'WAIVED', 'OFFLINE_PAID']);
       expect(list.body.data.every((t) => t.isDefault)).toBe(true);
       expect(list.body.mergeFields.some((m) => m.key === 'profile.businessName')).toBe(true);
 

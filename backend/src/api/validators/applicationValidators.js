@@ -119,6 +119,68 @@ export const validateAddOnLinesBody = (req, res, next) => {
   }
 };
 
+// ─── Spec 018 phase 3: corrections ──────────────────────────────────────────
+
+/** { tierId, sendEmail? } */
+export const validateTierChangeBody = (req, res, next) => {
+  try {
+    const body = req.body || {};
+    onlyFields(body, new Set(['tierId', 'sendEmail']), 'tier change');
+    if (typeof body.tierId !== 'string' || !body.tierId) throw new ValidationError('tierId is required');
+    if (body.sendEmail !== undefined && typeof body.sendEmail !== 'boolean') throw new ValidationError('sendEmail must be a boolean');
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
+/** { amount (signed, non-zero), reason } */
+export const validateAdjustmentBody = (req, res, next) => {
+  try {
+    const body = req.body || {};
+    onlyFields(body, new Set(['amount', 'reason']), 'adjustment');
+    if (typeof body.amount !== 'number' || !Number.isFinite(body.amount) || body.amount === 0) throw new ValidationError('amount must be a non-zero number');
+    if (Math.abs(body.amount) > 10_000) throw new ValidationError('amount must be 10,000 or less');
+    if (typeof body.reason !== 'string' || !body.reason.trim()) throw new ValidationError('reason is required');
+    if (body.reason.length > 200) throw new ValidationError('reason must be 200 characters or fewer');
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
+/** { reason, sendEmail? } */
+export const validateWaiveBody = (req, res, next) => {
+  try {
+    const body = req.body || {};
+    onlyFields(body, new Set(['reason', 'sendEmail']), 'waive');
+    if (typeof body.reason !== 'string' || !body.reason.trim()) throw new ValidationError('reason is required');
+    if (body.reason.length > 200) throw new ValidationError('reason must be 200 characters or fewer');
+    if (body.sendEmail !== undefined && typeof body.sendEmail !== 'boolean') throw new ValidationError('sendEmail must be a boolean');
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
+const OFFLINE_METHODS = new Set(['CHEQUE', 'CASH', 'BANK_TRANSFER', 'COMPED', 'OTHER']);
+
+/** { method, amount, reference?, paidAt?, sendEmail? } */
+export const validateOfflinePaymentBody = (req, res, next) => {
+  try {
+    const body = req.body || {};
+    onlyFields(body, new Set(['method', 'amount', 'reference', 'paidAt', 'sendEmail']), 'offline payment');
+    if (!OFFLINE_METHODS.has(body.method)) throw new ValidationError(`method must be one of ${[...OFFLINE_METHODS].join(', ')}`);
+    if (typeof body.amount !== 'number' || !Number.isFinite(body.amount) || body.amount < 0) throw new ValidationError('amount must be a number');
+    if (body.reference !== undefined && body.reference !== null && (typeof body.reference !== 'string' || body.reference.length > 120)) throw new ValidationError('reference must be 120 characters or fewer');
+    if (body.paidAt !== undefined && body.paidAt !== null && (typeof body.paidAt !== 'string' || Number.isNaN(new Date(body.paidAt).getTime()))) throw new ValidationError('paidAt must be an ISO 8601 date');
+    if (body.sendEmail !== undefined && typeof body.sendEmail !== 'boolean') throw new ValidationError('sendEmail must be a boolean');
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
 /** Spec 012: { addOnIds: string[] } — restricted add-ons a tier offers. */
 export const validateTierAddOnsBody = (req, res, next) => {
   try {

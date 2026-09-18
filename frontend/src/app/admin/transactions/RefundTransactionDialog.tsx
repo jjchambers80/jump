@@ -22,6 +22,7 @@ interface RefundTransactionDialogProps {
 export default function RefundTransactionDialog({ transaction, returnFocusRef, onClose, onRefunded }: RefundTransactionDialogProps) {
   const api = useTransactionsApi();
   const isOrder = transaction.type === 'ORDER';
+  const manual = transaction.paymentSource === 'offline';
   const max = transaction.net;
   const [amount, setAmount] = useState(max.toFixed(2));
   const [reason, setReason] = useState('');
@@ -51,13 +52,13 @@ export default function RefundTransactionDialog({ transaction, returnFocusRef, o
   return (
     <SettingsDialog
       titleId="refund-transaction-dialog-title"
-      title={isOrder ? `Refund order ${transaction.reference}` : `Refund ${shortReference(transaction)}`}
+      title={isOrder ? `Refund order ${transaction.reference}` : `${manual ? 'Record refund for' : 'Refund'} ${shortReference(transaction)}`}
       dirty={amount !== max.toFixed(2) || reason.trim() !== ''}
       saving={saving}
       saveDisabled={!valid}
       submitWhenClean
-      submitLabel={full ? `Refund ${formatMoney(max)}` : `Refund ${valid ? formatMoney(value) : ''}`}
-      savingLabel="Refunding…"
+      submitLabel={`${manual ? 'Record' : 'Refund'} ${full ? formatMoney(max) : valid ? formatMoney(value) : ''}`}
+      savingLabel={manual ? 'Recording…' : 'Refunding…'}
       initialFocusRef={firstFieldRef}
       returnFocusRef={returnFocusRef}
       onClose={onClose}
@@ -71,7 +72,7 @@ export default function RefundTransactionDialog({ transaction, returnFocusRef, o
         )}
         <p className="text-sm text-gray-700 dark:text-slate-300">
           <strong>{transaction.businessName || transaction.contact.name}</strong> paid {formatMoney(transaction.gross)} for {transaction.description || transaction.event.name}
-          {transaction.refunded > 0 ? `; ${formatMoney(transaction.refunded)} already refunded` : ''}. Up to {formatMoney(max)} can be returned to their card.
+          {transaction.refunded > 0 ? `; ${formatMoney(transaction.refunded)} already refunded` : ''}. Up to {formatMoney(max)} can be {manual ? 'recorded as refunded' : 'returned to their card'}.
         </p>
         {isOrder ? (
           <p className="text-sm text-gray-600 dark:text-slate-400">
@@ -99,9 +100,11 @@ export default function RefundTransactionDialog({ transaction, returnFocusRef, o
               className={fieldClass}
             />
             <p className={hintClass}>
-              {transaction.stripeAccountId
-                ? 'The organization’s share is pulled back from the connected account and the platform fee is returned, pro rata.'
-                : 'Stripe returns the money to the original card in 5–10 business days.'}
+              {manual
+                ? 'Paid outside Jump — there is no Stripe charge. The refund is recorded here and you return the money yourself.'
+                : transaction.stripeAccountId
+                  ? 'The organization’s share is pulled back from the connected account and the platform fee is returned, pro rata.'
+                  : 'Stripe returns the money to the original card in 5–10 business days.'}
             </p>
           </div>
         )}
