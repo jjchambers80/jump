@@ -25,6 +25,7 @@ const navItems: NavItem[] = [
   { label: 'Tickets', href: '/admin/tickets' },
   { label: 'Orders', href: '/admin/orders' },
   { label: 'Customers', href: '/admin/customers' },
+  { label: 'Participants', href: '/admin/participants' },
   { label: 'Check In', href: '/admin/orders/scan' },
   { label: 'Analytics', href: '/admin/analytics' },
 ];

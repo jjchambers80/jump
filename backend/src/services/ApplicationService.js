@@ -23,9 +23,10 @@ import addOnService from './AddOnService.js';
 import applicantProfileService from './ApplicantProfileService.js';
 import applicationTemplateService from './ApplicationTemplateService.js';
 import applicationPaymentService from './ApplicationPaymentService.js';
-import { hashToken, statusToken, statusUrlFor, verifyStatusToken } from './applicationLinks.js';
+import { hashToken, statusToken, statusUrlFor, statusUrlWithBase, verifyStatusToken } from './applicationLinks.js';
 import imageService from './ImageService.js';
 import { absoluteAssetUrl } from '../utils/publicUrl.js';
+import { storefrontFor } from '../utils/storefrontUrl.js';
 import logger from '../utils/logger.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -33,6 +34,19 @@ const URL_RE = /^https?:\/\/[^\s]+$/i;
 const ACTIVE_STATUSES = ['DRAFT', 'SUBMITTED', 'WAITLISTED', 'APPROVED'];
 const STATUSES = new Set(['DRAFT', 'SUBMITTED', 'WAITLISTED', 'APPROVED', 'REJECTED', 'WITHDRAWN']);
 const PAYMENT_STATUSES = new Set(['NOT_REQUIRED', 'AWAITING_CARD', 'CARD_ON_FILE', 'PROCESSING', 'PAID', 'PAYMENT_DUE', 'REFUNDED', 'PARTIALLY_REFUNDED']);
+/** A search term that could be the tail of an application id (cuids are lowercase). */
+const ID_FRAGMENT_RE = /^[a-z0-9]{6,25}$/;
+/** Org-wide CSV cap (spec 019): beyond this the caller narrows the filter. */
+const EXPORT_MAX_ROWS = 10_000;
+/** Per-row list include, shared by the per-event and organization-wide lists (spec 019). */
+const LIST_INCLUDE = {
+  contact: { select: { email: true, firstName: true, lastName: true } },
+  profile: { select: { businessName: true, images: { take: 1, orderBy: { displayOrder: 'asc' }, include: { image: { include: { file: true } } } } } },
+  tier: { select: { id: true, name: true } },
+  form: { select: { id: true, name: true, kind: true } },
+  event: { select: { id: true, name: true, date: true, venue: { select: { organization: { select: { id: true, name: true } } } } } },
+  addOns: { include: { addOn: { select: { id: true, name: true, displayOrder: true } } }, orderBy: { addOn: { displayOrder: 'asc' } } },
+};
 
 /** Organizer decisions: which statuses they leave from and land on. */
 export const DECISIONS = {
@@ -43,6 +57,11 @@ export const DECISIONS = {
 };
 
 export { hashToken, statusToken };
+
+/** The tail of the id shown on list rows and searchable as `q` (spec 019). */
+export function shortId(id) {
+  return String(id).slice(-8).toUpperCase();
+}
 
 function csvCell(value) {
   if (value === null || value === undefined) return '';
@@ -337,30 +356,32 @@ class ApplicationService {
 
   async list(eventId, organizationId, query = {}) {
     await applicationFormService.requireEvent(eventId, organizationId);
-    const where = this._listWhere(eventId, query);
+    return this.listInScope({ eventId, organizationId }, query);
+  }
+
+  async summary(eventId, organizationId) {
+    await applicationFormService.requireEvent(eventId, organizationId);
+    return this.summaryInScope({ eventId, organizationId });
+  }
+
+  /**
+   * Submissions in a scope (spec 019). `scope.eventId` for the per-event tab,
+   * `scope.organizationId` for members; both null = SYSTEM_ADMIN across all
+   * organizations, in which case rows carry `organization`.
+   */
+  async listInScope(scope, query = {}) {
+    const where = await this._scopedWhere(scope, query);
     const page = Math.max(1, parseInt(query.page, 10) || 1);
     const pageSize = Math.min(200, Math.max(1, parseInt(query.pageSize, 10) || LIST_PAGE_SIZE));
     const orderBy = this._listOrder(query.sort);
-    const [rows, total, statusGroups] = await Promise.all([
-      prisma.application.findMany({
-        where,
-        include: {
-          contact: { select: { email: true, firstName: true, lastName: true } },
-          profile: { select: { businessName: true } },
-          tier: { select: { id: true, name: true } },
-          form: { select: { id: true, name: true, kind: true } },
-          addOns: { include: { addOn: { select: { id: true, name: true, displayOrder: true } } }, orderBy: { addOn: { displayOrder: 'asc' } } },
-        },
-        orderBy,
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      }),
+    const [rows, total, summary] = await Promise.all([
+      prisma.application.findMany({ where, include: LIST_INCLUDE, orderBy, skip: (page - 1) * pageSize, take: pageSize }),
       prisma.application.count({ where }),
-      prisma.application.groupBy({ by: ['status'], where: { eventId, status: { not: 'DRAFT' } }, _count: { _all: true } }),
+      this.summaryInScope(scope),
     ]);
-    const summary = Object.fromEntries(statusGroups.map((g) => [g.status, g._count._all]));
+    const bases = await this._storefrontBases(rows);
     return {
-      data: rows.map((a) => this._serializeRow(a)),
+      data: rows.map((a) => this._serializeRow(a, { unscoped: !scope.organizationId && !scope.eventId, statusBase: bases.get(a.organizationId) })),
       total,
       page,
       pageSize,
@@ -368,10 +389,34 @@ class ApplicationService {
     };
   }
 
-  async summary(eventId, organizationId) {
-    await applicationFormService.requireEvent(eventId, organizationId);
-    const groups = await prisma.application.groupBy({ by: ['status'], where: { eventId, status: { not: 'DRAFT' } }, _count: { _all: true } });
+  /** Status counts over the scope alone, so the chips stay stable while filtering. */
+  async summaryInScope(scope) {
+    const groups = await prisma.application.groupBy({ by: ['status'], where: this._scopeWhere(scope), _count: { _all: true } });
     return Object.fromEntries(groups.map((g) => [g.status, g._count._all]));
+  }
+
+  /** One storefront base per organization present in the rows, for `statusUrl`. */
+  async _storefrontBases(rows) {
+    const ids = [...new Set(rows.map((a) => a.organizationId))];
+    const bases = await Promise.all(ids.map((id) => storefrontFor(id).then((s) => s.base)));
+    return new Map(ids.map((id, i) => [id, bases[i]]));
+  }
+
+  _scopeWhere({ eventId = null, organizationId = null }) {
+    const where = { status: { not: 'DRAFT' } };
+    if (eventId) where.eventId = eventId;
+    if (organizationId) where.organizationId = organizationId;
+    return where;
+  }
+
+  /** Scope + query filters; an `event` filter outside the scope is a 404 like `requireEvent`. */
+  async _scopedWhere(scope, query) {
+    const where = this._listWhere(scope, query);
+    if (query.event && !scope.eventId) {
+      await applicationFormService.requireEvent(String(query.event), scope.organizationId);
+      where.eventId = String(query.event);
+    }
+    return where;
   }
 
   async get(eventId, applicationId, organizationId) {
@@ -888,8 +933,46 @@ class ApplicationService {
    */
   async bulkDecide(eventId, organizationId, { ids, decision, note, byUserId }) {
     await applicationFormService.requireEvent(eventId, organizationId);
+    this._validateBulk(ids, decision);
+    const results = await this._bulkDecideRows(eventId, organizationId, ids, { decision, note, byUserId });
+    return this._bulkResult(results);
+  }
+
+  /**
+   * Organization-wide bulk (spec 019): ids are grouped by event and run
+   * through the per-event path so every rule (PAID approve refused, state
+   * machine, capacity) is the same. Ids outside the scope come back not found.
+   */
+  async bulkDecideInScope(organizationId, { ids, decision, note, byUserId }) {
+    this._validateBulk(ids, decision);
+    const rows = await prisma.application.findMany({
+      where: { id: { in: ids }, ...(organizationId ? { organizationId } : {}) },
+      select: { id: true, eventId: true, organizationId: true },
+    });
+    const byEvent = new Map();
+    for (const r of rows) {
+      if (!byEvent.has(r.eventId)) byEvent.set(r.eventId, { organizationId: r.organizationId, ids: [] });
+      byEvent.get(r.eventId).ids.push(r.id);
+    }
+    const found = new Map();
+    for (const [eventId, group] of byEvent) {
+      for (const r of await this._bulkDecideRows(eventId, group.organizationId, group.ids, { decision, note, byUserId })) found.set(r.id, r);
+    }
+    // Keep the caller's order; unknown ids fail like a per-event 404.
+    const results = ids.map((id) => found.get(id) ?? { id, ok: false, error: 'Application not found' });
+    return this._bulkResult(results);
+  }
+
+  _validateBulk(ids, decision) {
     if (!Array.isArray(ids) || ids.length === 0 || ids.length > 200) throw new ValidationError('ids must be 1-200 application ids');
     if (!DECISIONS[decision]) throw new ValidationError('decision must be APPROVE, REJECT, WAITLIST or WITHDRAW');
+  }
+
+  _bulkResult(results) {
+    return { results, succeeded: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length };
+  }
+
+  async _bulkDecideRows(eventId, organizationId, ids, { decision, note, byUserId }) {
     const results = [];
     for (const id of ids) {
       try {
@@ -903,13 +986,32 @@ class ApplicationService {
         results.push({ id, ok: false, error: error.message });
       }
     }
-    return { results, succeeded: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length };
+    return results;
   }
 
   /** CSV with one column per (unarchived or answered) question. */
   async exportCsv(eventId, organizationId, query = {}) {
     await applicationFormService.requireEvent(eventId, organizationId);
-    const where = this._listWhere(eventId, query);
+    return this.exportCsvInScope({ eventId, organizationId }, query);
+  }
+
+  /**
+   * Same builder over a scope (spec 019). Organization-wide exports prepend
+   * `event` / `eventDate` (and `organization` when unscoped) and cap at
+   * EXPORT_MAX_ROWS with a 413 that asks for a narrower filter.
+   */
+  async exportCsvInScope(scope, query = {}) {
+    const where = await this._scopedWhere(scope, query);
+    const orgWide = !scope.eventId;
+    const unscoped = !scope.eventId && !scope.organizationId;
+    if (orgWide) {
+      const count = await prisma.application.count({ where });
+      if (count > EXPORT_MAX_ROWS) {
+        const error = new ValidationError(`Export is limited to ${EXPORT_MAX_ROWS} applications; narrow the filter`);
+        error.statusCode = 413;
+        throw error;
+      }
+    }
     const rows = await prisma.application.findMany({
       where,
       include: {
@@ -917,6 +1019,7 @@ class ApplicationService {
         profile: { select: { businessName: true, website: true, description: true, socials: true, images: { include: { image: { include: { file: true } } }, orderBy: { displayOrder: 'asc' } } } },
         tier: { select: { name: true } },
         form: { select: { name: true, kind: true } },
+        event: { select: { id: true, name: true, date: true, venue: { select: { organization: { select: { name: true } } } } } },
         answers: { include: { question: { select: { id: true, label: true, type: true } }, image: { include: { file: true } } } },
         addOns: { include: { addOn: { select: { id: true, name: true, displayOrder: true } } } },
       },
@@ -925,13 +1028,19 @@ class ApplicationService {
     const questions = new Map();
     for (const a of rows) for (const ans of a.answers) if (!questions.has(ans.question.id)) questions.set(ans.question.id, ans.question);
     const qList = [...questions.values()];
-    // One column per add-on that is active for applications or appears on any row (spec 012).
+    // One column per add-on that is active for applications on any event in
+    // the export or appears on any row (spec 012).
     const addOns = new Map();
-    const active = await prisma.addOn.findMany({ where: { eventId, isActive: true, scope: { in: ['APPLICATION', 'BOTH'] } }, select: { id: true, name: true, displayOrder: true } });
+    const eventIds = scope.eventId ? [scope.eventId] : [...new Set(rows.map((a) => a.eventId))];
+    const active = eventIds.length
+      ? await prisma.addOn.findMany({ where: { eventId: { in: eventIds }, isActive: true, scope: { in: ['APPLICATION', 'BOTH'] } }, select: { id: true, name: true, displayOrder: true } })
+      : [];
     for (const ad of active) addOns.set(ad.id, ad);
     for (const a of rows) for (const l of a.addOns) if (!addOns.has(l.addOn.id)) addOns.set(l.addOn.id, l.addOn);
     const addOnList = [...addOns.values()].sort((x, y) => x.displayOrder - y.displayOrder);
     const header = [
+      ...(unscoped ? ['organization'] : []),
+      ...(orgWide ? ['event', 'eventDate'] : []),
       'applicationId', 'form', 'status', 'paymentStatus', 'submittedAt', 'decidedAt', 'tier', 'businessName', 'firstName', 'lastName', 'email',
       'website', 'description', 'socials', 'profilePhotos', 'applicantPays', 'orgReceives', 'boothLabel', 'internalNote', 'stripePaymentIntentId',
       ...addOnList.map((ad) => `addon:${ad.name}`),
@@ -942,6 +1051,8 @@ class ApplicationService {
       const byQ = new Map(a.answers.map((ans) => [ans.question.id, ans]));
       const byAddOn = new Map(a.addOns.map((l) => [l.addOnId, l.quantity]));
       const cells = [
+        ...(unscoped ? [a.event.venue.organization.name] : []),
+        ...(orgWide ? [a.event.name, a.event.date?.toISOString() ?? ''] : []),
         a.id, a.form.name, a.status, a.paymentStatus, a.submittedAt?.toISOString() ?? '', a.decidedAt?.toISOString() ?? '', a.tier?.name ?? '',
         a.profile.businessName, a.contact.firstName, a.contact.lastName, a.contact.email, a.profile.website ?? '', a.profile.description ?? '',
         a.profile.socials ? Object.entries(a.profile.socials).map(([k, v]) => `${k}: ${v}`).join('; ') : '',
@@ -1128,8 +1239,8 @@ class ApplicationService {
     return out;
   }
 
-  _listWhere(eventId, query) {
-    const where = { eventId, status: { not: 'DRAFT' } };
+  _listWhere(scope, query) {
+    const where = this._scopeWhere(scope);
     if (query.form) where.formId = String(query.form);
     if (query.tier) where.tierId = String(query.tier);
     if (query.addOn) where.addOns = { some: { addOnId: String(query.addOn) } };
@@ -1149,7 +1260,13 @@ class ApplicationService {
           { contact: { email: { contains: q, mode: 'insensitive' } } },
           { contact: { firstName: { contains: q, mode: 'insensitive' } } },
           { contact: { lastName: { contains: q, mode: 'insensitive' } } },
+          { form: { name: { contains: q, mode: 'insensitive' } } },
+          { boothLabel: { contains: q, mode: 'insensitive' } },
+          { id: q },
         ];
+        // "ID: XNKNHSCH" on a row is the tail of the cuid; cuids are lowercase.
+        const tail = q.toLowerCase();
+        if (ID_FRAGMENT_RE.test(tail)) where.OR.push({ id: { endsWith: tail } });
       }
     }
     return where;
@@ -1161,8 +1278,14 @@ class ApplicationService {
         return [{ submittedAt: 'asc' }];
       case 'business':
         return [{ profile: { businessName: 'asc' } }];
+      case 'business_desc':
+        return [{ profile: { businessName: 'desc' } }];
       case 'status':
         return [{ status: 'asc' }, { submittedAt: 'desc' }];
+      case 'status_desc':
+        return [{ status: 'desc' }, { submittedAt: 'desc' }];
+      case 'event':
+        return [{ event: { date: 'desc' } }, { submittedAt: 'desc' }];
       default:
         return [{ submittedAt: 'desc' }];
     }
@@ -1224,15 +1347,25 @@ class ApplicationService {
     };
   }
 
-  _serializeRow(a) {
+  /**
+   * List row. `unscoped` adds `organization` (SYSTEM_ADMIN across orgs);
+   * `statusBase` is the organization's storefront base for `statusUrl`.
+   */
+  _serializeRow(a, { unscoped = false, statusBase = null } = {}) {
+    const firstImage = a.profile?.images?.[0]?.image;
     return {
       id: a.id,
+      shortId: shortId(a.id),
+      eventId: a.eventId,
+      event: a.event ? { id: a.event.id, name: a.event.name, date: a.event.date } : null,
+      ...(unscoped && a.event?.venue?.organization ? { organization: { id: a.event.venue.organization.id, name: a.event.venue.organization.name } } : {}),
       formId: a.formId,
       formName: a.form?.name,
       formKind: a.form?.kind,
       status: a.status,
       paymentStatus: a.paymentStatus,
       businessName: a.profile?.businessName,
+      logoUrl: firstImage?.file ? imageService.formatImageResponse(firstImage).urls.thumb : null,
       contact: a.contact,
       tier: a.tier ? { id: a.tier.id, name: a.tier.name } : null,
       applicantPays: Number(a.applicantPays),
@@ -1242,6 +1375,7 @@ class ApplicationService {
       paymentDueAt: a.paymentDueAt,
       overdue: a.overdue,
       boothLabel: a.boothLabel,
+      statusUrl: statusBase ? statusUrlWithBase(statusBase, a) : null,
     };
   }
 

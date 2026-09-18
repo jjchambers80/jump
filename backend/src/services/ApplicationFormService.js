@@ -127,6 +127,47 @@ class ApplicationFormService {
   // Forms (admin)
   // ---------------------------------------------------------------------------
 
+  /**
+   * Forms across every event in scope (spec 019): a light row per form with
+   * its event and the event's application add-ons, for the Participants
+   * filters and the Applications tab. `organizationId` null = all
+   * organizations (SYSTEM_ADMIN); rows then carry `organization`.
+   */
+  async listFormsInScope(organizationId) {
+    const forms = await prisma.applicationForm.findMany({
+      where: organizationId ? { event: { venue: { organizationId } } } : {},
+      include: {
+        _count: { select: { applications: { where: { status: { not: 'DRAFT' } } } } },
+        event: { select: { id: true, name: true, date: true, status: true, venue: { select: { organization: { select: { id: true, name: true } } } } } },
+      },
+      orderBy: [{ event: { date: 'desc' } }, { displayOrder: 'asc' }, { createdAt: 'asc' }],
+    });
+    const eventIds = [...new Set(forms.map((f) => f.eventId))];
+    const addOns = eventIds.length
+      ? await prisma.addOn.findMany({
+          where: { eventId: { in: eventIds }, scope: { in: ['APPLICATION', 'BOTH'] }, isActive: true },
+          select: { id: true, eventId: true, name: true },
+          orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
+        })
+      : [];
+    return forms.map((f) => ({
+      id: f.id,
+      eventId: f.eventId,
+      event: { id: f.event.id, name: f.event.name, date: f.event.date, status: f.event.status },
+      ...(organizationId ? {} : { organization: f.event.venue.organization }),
+      kind: f.kind,
+      name: f.name,
+      slug: f.slug,
+      status: f.status,
+      opensAt: f.opensAt,
+      closesAt: f.closesAt,
+      acceptance: this.acceptance(f),
+      applicationCount: f._count.applications,
+      addOns: addOns.filter((a) => a.eventId === f.eventId).map((a) => ({ id: a.id, name: a.name })),
+      updatedAt: f.updatedAt,
+    }));
+  }
+
   async listForms(eventId, organizationId) {
     const event = await this.requireEvent(eventId, organizationId);
     const forms = await prisma.applicationForm.findMany({

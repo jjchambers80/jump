@@ -196,12 +196,20 @@ export interface ApplicantApplication {
 
 export interface ApplicationRow {
   id: string;
+  /** Tail of the id shown on list rows and searchable (spec 019). */
+  shortId: string;
+  eventId: string;
+  event: { id: string; name: string; date: string } | null;
+  /** Unscoped (SYSTEM_ADMIN) callers only. */
+  organization?: { id: string; name: string };
   formId: string;
   formName: string;
   formKind: FormKind;
   status: ApplicationStatus;
   paymentStatus: PaymentStatus;
   businessName: string;
+  /** First profile photo, thumb variant (spec 019). */
+  logoUrl: string | null;
   contact: { email: string; firstName: string; lastName: string };
   tier: { id: string; name: string } | null;
   applicantPays: number;
@@ -211,6 +219,26 @@ export interface ApplicationRow {
   paymentDueAt: string | null;
   overdue: boolean;
   boothLabel: string | null;
+  /** The applicant's status-page link, for "Copy status link" (spec 019). */
+  statusUrl: string | null;
+}
+
+/** One form across events, from `GET /admin/application-forms` (spec 019). */
+export interface OrgForm {
+  id: string;
+  eventId: string;
+  event: { id: string; name: string; date: string; status: string };
+  organization?: { id: string; name: string };
+  kind: FormKind;
+  name: string;
+  slug: string;
+  status: FormStatus;
+  opensAt: string | null;
+  closesAt: string | null;
+  acceptance: Acceptance;
+  applicationCount: number;
+  addOns: { id: string; name: string }[];
+  updatedAt: string;
 }
 
 export interface ApplicationList {
@@ -401,6 +429,11 @@ export const SOCIAL_FIELDS: { key: string; label: string; placeholder: string }[
   { key: 'x', label: 'X', placeholder: '@handle' },
   { key: 'youtube', label: 'YouTube', placeholder: 'channel URL' },
 ];
+
+/** Mirrors the backend `shortId`: the last 8 characters, upper-cased. */
+export function shortId(id: string): string {
+  return id.slice(-8).toUpperCase();
+}
 
 export function money(value: number | string | null | undefined): string {
   return `$${Number(value || 0).toFixed(2)}`;

@@ -939,6 +939,7 @@ model Application {
   @@index([formId, status])
   @@index([contactId])
   @@index([organizationId])
+  @@index([organizationId, submittedAt]) // spec 019: org-wide Participants list
   @@index([paymentStatus, paymentDueAt])
 }
 

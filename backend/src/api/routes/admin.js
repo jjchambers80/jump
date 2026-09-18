@@ -344,6 +344,50 @@ const wrap = (fn) => async (req, res, next) => {
   }
 };
 
+/**
+ * Scope for the organization-wide Participants routes (spec 019), the
+ * customers-route shape: SYSTEM_ADMIN unscoped (organizationId null), a
+ * member scoped to the active organization, a staff user with no
+ * membership sees nothing (`empty`).
+ */
+async function participantsScopeFor(req) {
+  const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
+  if (isUnscoped(scope)) return { organizationId: null, empty: false };
+  return { organizationId: scope.organizationId, empty: !scope.organizationId };
+}
+
+// ─── Participants: submissions across events (spec 019) ───────────────────
+// Registered before the per-event block so `applications` is never read as an
+// event id (different prefix, but the contract test pins it).
+
+router.get('/applications', wrap(async (req, res) => {
+  const scope = await participantsScopeFor(req);
+  if (scope.empty) return res.json({ data: [], total: 0, page: 1, pageSize: 0, summary: {} });
+  res.json(await applicationService.listInScope({ organizationId: scope.organizationId }, req.query));
+}));
+router.get('/applications/summary', wrap(async (req, res) => {
+  const scope = await participantsScopeFor(req);
+  if (scope.empty) return res.json({});
+  res.json(await applicationService.summaryInScope({ organizationId: scope.organizationId }));
+}));
+router.get('/applications/export.csv', wrap(async (req, res) => {
+  const scope = await participantsScopeFor(req);
+  const csv = scope.empty ? '' : await applicationService.exportCsvInScope({ organizationId: scope.organizationId }, req.query);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="participants-${new Date().toISOString().slice(0, 10)}.csv"`);
+  res.send(csv);
+}));
+router.post('/applications/bulk', validateBulkBody, wrap(async (req, res) => {
+  const scope = await participantsScopeFor(req);
+  if (scope.empty) return res.json({ results: req.body.ids.map((id) => ({ id, ok: false, error: 'Application not found' })), succeeded: 0, failed: req.body.ids.length });
+  res.json(await applicationService.bulkDecideInScope(scope.organizationId, { ...req.body, byUserId: req.user.id }));
+}));
+router.get('/application-forms', wrap(async (req, res) => {
+  const scope = await participantsScopeFor(req);
+  if (scope.empty) return res.json({ data: [] });
+  res.json({ data: await applicationFormService.listFormsInScope(scope.organizationId) });
+}));
+
 // Forms
 router.get('/events/:eventId/application-forms', wrap(async (req, res) => {
   res.json({ data: await applicationFormService.listForms(req.params.eventId, await scopedOrgFor(req)) });
