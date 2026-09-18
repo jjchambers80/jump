@@ -91,7 +91,7 @@ Setup-guide `done` rules: `event` = any event under the org's venues; `design` =
 
 ## Check-in scope (fixed in this phase)
 
-`POST /tickets/scan` and `POST /tickets/redeem` used to check only the role: staff of organization A could preview and redeem organization B's tickets. `scannerOrgScope(req)` now resolves the staff caller's organization (honouring `X-Jump-Org`), and `TicketService.lookupByBarcode / redeemByBarcode / redeemTicket` take `{ organizationId }` and answer `INVALID` (400) for a ticket outside it. Hardware readers (`X-Scanner-Key`) and `SYSTEM_ADMIN` stay unscoped; a staff user with no membership matches nothing. Per-organization scanner keys are a follow-up.
+`POST /tickets/scan` and `POST /tickets/redeem` used to check only the role: staff of organization A could preview and redeem organization B's tickets. `scannerOrgScope(req)` now resolves the staff caller's organization (honouring `X-Jump-Org`), and `TicketService.lookupByBarcode / redeemByBarcode / redeemTicket` take `{ organizationId }` and answer `INVALID` (400) for a ticket outside it. Hardware readers (`X-Scanner-Key`) stay unscoped, and `SYSTEM_ADMIN` only without `X-Jump-Org`; a staff user with no membership matches nothing. Per-organization scanner keys are a follow-up.
 
 ## Gotchas
 

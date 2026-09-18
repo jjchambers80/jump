@@ -42,7 +42,7 @@ Organizations are the top-level tenant boundary in Jump. Each Organization owns 
 - **OrganizationPerson DOB** is privacy-sensitive. Summary serialization intentionally omits it (only `id`, `firstName`, `lastName`, `isAccountRepresentative` returned).
 - **Max 1 account rep per org** enforced by a transaction that clears existing reps before creating the new one. Concurrent requests can hit `P2002` and should retry.
 - **EIN is never returned raw** -- only `hasEin` (boolean) and `einMasked` (last 4) are exposed.
-- **Check-in scan/redeem is org-scoped** (`scannerOrgScope` in `middleware/scannerAuth.js`): staff see only their own organization's tickets; hardware readers with `X-Scanner-Key` and SYSTEM_ADMIN are unscoped.
+- **Check-in scan/redeem is org-scoped** (`scannerOrgScope` in `middleware/scannerAuth.js`): staff see only their own organization's tickets; hardware readers with `X-Scanner-Key` are unscoped; SYSTEM_ADMIN follows `X-Jump-Org` and is unscoped only without it.
 - **Org-param routes use `requireOrgMembership(param)`** from `middleware/orgScope.js` (SYSTEM_ADMIN bypasses). Do not reintroduce per-file `verifyOrgOwnership` helpers or read `User.organizationId`.
 
 ## Related Features
