@@ -20,9 +20,25 @@ export interface ListQuery {
   tier?: string;
   /** Spec 012: only applications with a line for this add-on. */
   addOn?: string;
+  /** Spec 019 phase 3: exact tag. */
+  tag?: string;
   q?: string;
   sort?: string;
   page?: number;
+}
+
+/** PATCH /admin/events/:eventId/applications/:id (spec 011 notes + spec 019 phase 3 tags / check-in). */
+export interface MetaPatch {
+  boothLabel?: string | null;
+  internalNote?: string | null;
+  tags?: string[];
+  checkedIn?: boolean;
+  checkedOut?: boolean;
+}
+
+/** Spec 019 phase 3: the meta PATCH for a row from any mount (the row knows its event). */
+export function patchApplicationMeta(eventId: string, id: string, body: MetaPatch) {
+  return api.patch<AdminApplication>(`/admin/events/${eventId}/applications/${id}`, body);
 }
 
 function qs(query: ListQuery) {
@@ -44,7 +60,10 @@ export function useApplicationsApi(eventId: string) {
         api.post<AdminApplication>(`${base}/applications/${id}/decision`, body),
       bulk: (body: { ids: string[]; decision: Decision; note?: string }) =>
         api.post<{ results: { id: string; ok: boolean; error?: string }[]; succeeded: number; failed: number }>(`${base}/applications/bulk`, body),
-      updateNotes: (id: string, body: { boothLabel?: string | null; internalNote?: string | null }) => api.patch<AdminApplication>(`${base}/applications/${id}`, body),
+      updateNotes: (id: string, body: MetaPatch) => api.patch<AdminApplication>(`${base}/applications/${id}`, body),
+      /** Spec 019 phase 3: same PATCH, full shape (tags, check-in). */
+      updateMeta: (id: string, body: MetaPatch) => api.patch<AdminApplication>(`${base}/applications/${id}`, body),
+      tags: () => api.get<{ data: string[] }>(`${base}/applications/tags`),
       retryCharge: (id: string) => api.post<AdminApplication>(`${base}/applications/${id}/charge`, {}),
       refund: (id: string, body: { amount?: number | null; reason?: string | null }) => api.post<AdminApplication>(`${base}/applications/${id}/refund`, body),
       updateAddOns: (id: string, addOns: AddOnLineInput[]) => api.patch<AdminApplication>(`${base}/applications/${id}/add-ons`, { addOns }),

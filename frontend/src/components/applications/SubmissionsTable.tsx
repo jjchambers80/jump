@@ -28,7 +28,8 @@ import {
 } from '@/lib/applications';
 import { readSavedViews, viewKey, writeSavedViews, type SavedView } from '@/lib/savedViews';
 import DecisionDialog from '@/app/admin/events/[eventId]/applications/DecisionDialog';
-import { describeError, useApplicationsApi } from '@/app/admin/events/[eventId]/applications/useApplicationsApi';
+import { describeError, patchApplicationMeta, useApplicationsApi } from '@/app/admin/events/[eventId]/applications/useApplicationsApi';
+import EditTagsDialog from './EditTagsDialog';
 import { useParticipantsApi, type ParticipantsQuery } from '@/app/admin/participants/useParticipantsApi';
 import BusinessCell from './BusinessCell';
 import RowActionsMenu from './RowActionsMenu';
@@ -37,7 +38,7 @@ const STATUS_ORDER: ApplicationStatus[] = ['SUBMITTED', 'WAITLISTED', 'APPROVED'
 /** Organization mount page size (plan §7.4); the per-event mount keeps the API default. */
 const ORG_PAGE_SIZE = 25;
 type Filters = Omit<ParticipantsQuery, 'page' | 'pageSize'>;
-const FILTER_KEYS: (keyof Filters)[] = ['event', 'form', 'status', 'payment', 'addOn', 'q', 'sort'];
+const FILTER_KEYS: (keyof Filters)[] = ['event', 'form', 'status', 'payment', 'addOn', 'tag', 'q', 'sort'];
 const DECIDED: Record<Decision, string> = { APPROVE: 'approved', REJECT: 'rejected', WAITLIST: 'waitlisted', WITHDRAW: 'withdrawn' };
 
 /** The subset of a form the filters need, common to the per-event and org-wide form lists. */
@@ -52,6 +53,7 @@ interface FilterForm {
 const select = 'rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100';
 const btn = 'rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
 const chip = 'inline-block rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 dark:bg-slate-700 dark:text-slate-200';
+const tagChip = 'inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-200';
 
 function submittedLines(value: string | null) {
   if (!value) return ['', ''];
@@ -76,6 +78,7 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
       status: searchParams.get('status') || undefined,
       payment: searchParams.get('payment') || undefined,
       addOn: searchParams.get('addOn') || undefined,
+      tag: searchParams.get('tag') || undefined,
       q: searchParams.get('q') || undefined,
       sort: searchParams.get('sort') || undefined,
       page: Number(searchParams.get('page') || 1),
@@ -92,6 +95,11 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
   const [search, setSearch] = useState(query.q || '');
   const [decision, setDecision] = useState<{ row: ApplicationRow; application: AdminApplication; decision: Decision } | null>(null);
   const decisionTriggerRef = useRef<HTMLButtonElement>(null);
+  // Phase 3: tags in scope (filter + autocomplete), the Edit tags dialog, in-flight check-in toggles.
+  const [tagOptions, setTagOptions] = useState<string[]>([]);
+  const [editingTags, setEditingTags] = useState<ApplicationRow | null>(null);
+  const tagsTriggerRef = useRef<HTMLButtonElement>(null);
+  const [checkBusy, setCheckBusy] = useState<Set<string>>(new Set());
 
   const setQuery = useCallback(
     (patch: Partial<ParticipantsQuery>) => {
@@ -155,6 +163,47 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  const loadTags = useCallback(async () => {
+    try {
+      const r = orgWide ? await orgApi.tags() : await eventApi.tags();
+      setTagOptions(r.data);
+    } catch {
+      setTagOptions([]);
+    }
+  }, [orgWide, orgApi, eventApi]);
+
+  useEffect(() => {
+    loadTags();
+  }, [loadTags]);
+
+  const patchRow = (next: AdminApplication) =>
+    setList((prev) =>
+      prev
+        ? { ...prev, data: prev.data.map((r) => (r.id === next.id ? { ...r, status: next.status, paymentStatus: next.paymentStatus, decidedAt: next.decidedAt, boothLabel: next.boothLabel, tags: next.tags ?? [], checkedInAt: next.checkedInAt ?? null, checkedOutAt: next.checkedOutAt ?? null } : r)) }
+        : prev
+    );
+
+  // Optimistic check-in tick; reverted on error.
+  const toggleCheck = async (row: ApplicationRow, field: 'checkedIn' | 'checkedOut', value: boolean) => {
+    const column = field === 'checkedIn' ? 'checkedInAt' : 'checkedOutAt';
+    const before = row[column];
+    setList((prev) => (prev ? { ...prev, data: prev.data.map((r) => (r.id === row.id ? { ...r, [column]: value ? before ?? new Date().toISOString() : null } : r)) } : prev));
+    setCheckBusy((prev) => new Set(prev).add(row.id));
+    setError(null);
+    try {
+      patchRow(await patchApplicationMeta(row.eventId ?? eventId ?? '', row.id, { [field]: value }));
+    } catch (err) {
+      setList((prev) => (prev ? { ...prev, data: prev.data.map((r) => (r.id === row.id ? { ...r, [column]: before } : r)) } : prev));
+      setError(describeError(err, 'Could not update check-in'));
+    } finally {
+      setCheckBusy((prev) => {
+        const next = new Set(prev);
+        next.delete(row.id);
+        return next;
+      });
+    }
+  };
 
   const refreshSummary = async () => {
     try {
@@ -220,9 +269,7 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
   };
 
   const onDecided = (next: AdminApplication) => {
-    setList((prev) =>
-      prev ? { ...prev, data: prev.data.map((r) => (r.id === next.id ? { ...r, status: next.status, paymentStatus: next.paymentStatus, decidedAt: next.decidedAt } : r)) } : prev
-    );
+    patchRow(next);
     setDecision(null);
     setNotice(`${next.profile?.businessName ?? 'Application'}: ${STATUS_LABEL[next.status].toLowerCase()}.`);
     refreshSummary();
@@ -308,6 +355,16 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
             ))}
           </select>
         )}
+        {tagOptions.length > 0 && (
+          <select aria-label="Tag" value={query.tag || ''} onChange={(e) => setQuery({ tag: e.target.value || undefined })} className={select} data-testid="applications-tag-filter">
+            <option value="">Any tag</option>
+            {tagOptions.map((t) => (
+              <option key={t} value={t}>
+                Tagged {t}
+              </option>
+            ))}
+          </select>
+        )}
         <select aria-label="Sort" value={query.sort || ''} onChange={(e) => setQuery({ sort: e.target.value || undefined })} className={select}>
           <option value="">Newest first</option>
           <option value="submitted_asc">Oldest first</option>
@@ -316,7 +373,7 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
           <option value="status">By status</option>
           {orgWide && <option value="event">By event</option>}
         </select>
-        <input aria-label="Search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search business, contact, email, application or ID" className={`${select} w-72`} />
+        <input aria-label="Search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search business, contact, email, application, ID or tag" className={`${select} w-72`} />
         <button type="submit" className={btn}>
           Search
         </button>
@@ -431,10 +488,21 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
                     <input type="checkbox" aria-label={`Select ${row.businessName}`} checked={selected.has(row.id)} onChange={() => toggle(row.id)} />
                   </td>
                   <td className="px-3 py-2 align-top">
-                    <BusinessCell row={row} eventId={row.eventId ?? eventId ?? ''} />
+                    <BusinessCell row={row} eventId={row.eventId ?? eventId ?? ''} onCheck={(field, value) => toggleCheck(row, field, value)} checkBusy={checkBusy.has(row.id)} />
                   </td>
                   <td className="px-3 py-2 align-top" data-testid={`application-tags-${row.id}`}>
-                    {row.boothLabel ? <span className={chip}>{row.boothLabel}</span> : <span className="text-gray-400 dark:text-slate-500">—</span>}
+                    {!row.boothLabel && !(row.tags ?? []).length ? (
+                      <span className="text-gray-400 dark:text-slate-500">—</span>
+                    ) : (
+                      <div className="flex max-w-[14rem] flex-wrap gap-1">
+                        {row.boothLabel && <span className={chip}>{row.boothLabel}</span>}
+                        {(row.tags ?? []).map((t) => (
+                          <span key={t} className={tagChip}>
+                            {t}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </td>
                   <td className="px-3 py-2 align-top text-gray-800 dark:text-slate-200">
                     {row.formName}
@@ -467,7 +535,16 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
                     <div className="text-xs text-gray-500 dark:text-slate-400">{time}</div>
                   </td>
                   <td className="px-1 py-2 text-right align-top">
-                    <RowActionsMenu row={row} detailHref={detailHref(row)} onDecision={(d, trigger) => openDecision(row, d, trigger)} onNotice={setNotice} />
+                    <RowActionsMenu
+                      row={row}
+                      detailHref={detailHref(row)}
+                      onDecision={(d, trigger) => openDecision(row, d, trigger)}
+                      onEditTags={(trigger) => {
+                        (tagsTriggerRef as { current: HTMLButtonElement | null }).current = trigger;
+                        setEditingTags(row);
+                      }}
+                      onNotice={setNotice}
+                    />
                   </td>
                 </tr>
               );
@@ -490,6 +567,24 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
             </button>
           </div>
         </div>
+      )}
+
+      {editingTags && (
+        <EditTagsDialog
+          eventId={editingTags.eventId ?? eventId ?? ''}
+          applicationId={editingTags.id}
+          businessName={editingTags.businessName}
+          tags={editingTags.tags ?? []}
+          suggestions={tagOptions}
+          returnFocusRef={tagsTriggerRef}
+          onClose={() => setEditingTags(null)}
+          onSaved={(next) => {
+            patchRow(next);
+            setEditingTags(null);
+            setNotice('Tags saved.');
+            loadTags();
+          }}
+        />
       )}
 
       {decision && (

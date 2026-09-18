@@ -120,7 +120,7 @@ ORGANIZER+ views forms/applications and decides; ADMIN/SYSTEM_ADMIN configures f
 | POST/PATCH/DELETE | `…/application-forms/:formId/tiers[/:tierId]` | admin |
 | POST/PATCH/DELETE | `…/application-forms/:formId/questions[/:questionId]`, PATCH `…/questions/reorder` | admin |
 | GET | `/admin/events/:eventId/applications` (`form,status,payment,tier,addOn,q,sort,page,pageSize`), `…/summary`, `…/export.csv` — org-wide twins under `/admin/applications*`, see [Participants](participants.md) | organizer+ |
-| GET/PATCH | `…/applications/:id` (PATCH `boothLabel`, `internalNote`) | organizer+ |
+| GET/PATCH | `…/applications/:id` (PATCH `boothLabel`, `internalNote`, and since spec 019 `tags`, `checkedIn`, `checkedOut`) | organizer+ |
 | POST | `…/applications/:id/preview`, `…/applications/:id/decision`, `…/applications/:id/charge`, `…/applications/bulk` | organizer+ |
 | POST | `…/applications/:id/refund` `{ amount?, reason? }` | admin |
 | POST | `/webhooks/stripe` — events whose `metadata.applicationId` is set (Checkout, SetupIntent, PaymentIntent) and `charge.refunded` for a known intent | Stripe |

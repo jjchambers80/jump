@@ -16,7 +16,7 @@
 // concurrent approvals lock in one order.
 
 import { prisma } from '@jump/db';
-import { LIST_PAGE_SIZE, MAX_ANSWER_LENGTH, MAX_PROFILE_PHOTOS, STATUS_TOKEN_TTL_DAYS } from '../config/applications.js';
+import { LIST_PAGE_SIZE, MAX_ANSWER_LENGTH, MAX_PROFILE_PHOTOS, MAX_TAGS, MAX_TAG_LENGTH, STATUS_TOKEN_TTL_DAYS } from '../config/applications.js';
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import applicationFormService, { applicationAmounts, applicationLines, paymentsEnabled } from './ApplicationFormService.js';
 import addOnService from './AddOnService.js';
@@ -426,7 +426,19 @@ class ApplicationService {
     return this._serializeAdmin(application);
   }
 
-  async updateNotes(eventId, applicationId, organizationId, { boothLabel, internalNote }) {
+  /** Kept for callers of the phase 1 name; `updateMeta` is the full version. */
+  async updateNotes(eventId, applicationId, organizationId, fields) {
+    return this.updateMeta(eventId, applicationId, organizationId, fields);
+  }
+
+  /**
+   * Organizer-only metadata (spec 019 phase 3 generalises the notes patch):
+   * `boothLabel`, `internalNote`, `tags` (trimmed, deduped case-insensitively
+   * — first spelling wins — at most MAX_TAGS × MAX_TAG_LENGTH), and
+   * `checkedIn` / `checkedOut` booleans that stamp or clear the timestamps.
+   * Check-in is refused (409) unless the application is APPROVED.
+   */
+  async updateMeta(eventId, applicationId, organizationId, { boothLabel, internalNote, tags, checkedIn, checkedOut }) {
     await applicationFormService.requireEvent(eventId, organizationId);
     const data = {};
     if (boothLabel !== undefined) {
@@ -437,14 +449,64 @@ class ApplicationService {
       if (internalNote !== null && (typeof internalNote !== 'string' || internalNote.length > 5000)) throw new ValidationError('internalNote must be 5000 characters or fewer');
       data.internalNote = internalNote ? internalNote.trim() : null;
     }
+    if (tags !== undefined) data.tags = this._normaliseTags(tags);
+    for (const [key, column] of [['checkedIn', 'checkedInAt'], ['checkedOut', 'checkedOutAt']]) {
+      const value = key === 'checkedIn' ? checkedIn : checkedOut;
+      if (value === undefined) continue;
+      if (typeof value !== 'boolean') throw new ValidationError(`${key} must be a boolean`);
+      data[column] = value;
+    }
     if (Object.keys(data).length === 0) throw new ValidationError('Nothing to update');
-    const existing = await prisma.application.findFirst({ where: { id: applicationId, eventId }, select: { id: true } });
-    if (!existing) throw new NotFoundError('Application not found');
+    const existing = await prisma.application.findFirst({ where: { id: applicationId, eventId }, select: { id: true, status: true, checkedInAt: true, checkedOutAt: true } });
+    if (!existing || existing.status === 'DRAFT') throw new NotFoundError('Application not found');
+    const now = new Date();
+    for (const column of ['checkedInAt', 'checkedOutAt']) {
+      if (data[column] === undefined) continue;
+      if (existing.status !== 'APPROVED') throw new ConflictError('Only approved applications can be checked in');
+      // true keeps an existing stamp; false clears it.
+      data[column] = data[column] ? existing[column] ?? now : null;
+    }
     const application = await prisma.application.update({ where: { id: applicationId }, data, include: DETAIL_INCLUDE });
     return this._serializeAdmin(application);
   }
 
-  /** Rendered template for the decision dialog preview. */
+  _normaliseTags(tags) {
+    if (!Array.isArray(tags)) throw new ValidationError('tags must be an array of strings');
+    const seen = new Set();
+    const out = [];
+    for (const raw of tags) {
+      if (typeof raw !== 'string') throw new ValidationError('tags must be an array of strings');
+      const tag = raw.trim().replace(/\s+/g, ' ');
+      if (!tag) continue;
+      if (tag.length > MAX_TAG_LENGTH) throw new ValidationError(`tags must be ${MAX_TAG_LENGTH} characters or fewer`);
+      const key = tag.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(tag);
+    }
+    if (out.length > MAX_TAGS) throw new ValidationError(`at most ${MAX_TAGS} tags`);
+    return out;
+  }
+
+  /** Distinct tags used in a scope (spec 019 phase 3), for autocomplete and the filter. */
+  async distinctTags({ eventId = null, organizationId = null } = {}) {
+    const clauses = [`status <> 'DRAFT'`];
+    const params = [];
+    if (organizationId) {
+      params.push(organizationId);
+      clauses.push(`"organizationId" = $${params.length}`);
+    }
+    if (eventId) {
+      params.push(eventId);
+      clauses.push(`"eventId" = $${params.length}`);
+    }
+    const rows = await prisma.$queryRawUnsafe(
+      `SELECT DISTINCT ON (lower(tag)) tag FROM "Application", unnest(tags) AS tag WHERE ${clauses.join(' AND ')} ORDER BY lower(tag), tag`,
+      ...params
+    );
+    return rows.map((r) => r.tag);
+  }
+
   async previewMessage(eventId, applicationId, organizationId, decision) {
     await applicationFormService.requireEvent(eventId, organizationId);
     const spec = DECISIONS[decision];
@@ -1042,7 +1104,7 @@ class ApplicationService {
       ...(unscoped ? ['organization'] : []),
       ...(orgWide ? ['event', 'eventDate'] : []),
       'applicationId', 'form', 'status', 'paymentStatus', 'submittedAt', 'decidedAt', 'tier', 'businessName', 'firstName', 'lastName', 'email',
-      'website', 'description', 'socials', 'profilePhotos', 'applicantPays', 'orgReceives', 'boothLabel', 'internalNote', 'stripePaymentIntentId',
+      'website', 'description', 'socials', 'profilePhotos', 'applicantPays', 'orgReceives', 'boothLabel', 'tags', 'checkedInAt', 'checkedOutAt', 'internalNote', 'stripePaymentIntentId',
       ...addOnList.map((ad) => `addon:${ad.name}`),
       ...qList.map((q) => q.label),
     ];
@@ -1057,7 +1119,7 @@ class ApplicationService {
         a.profile.businessName, a.contact.firstName, a.contact.lastName, a.contact.email, a.profile.website ?? '', a.profile.description ?? '',
         a.profile.socials ? Object.entries(a.profile.socials).map(([k, v]) => `${k}: ${v}`).join('; ') : '',
         (a.profile.images || []).map((pi) => absoluteAssetUrl(imageService.formatImageResponse(pi.image).urls.original)).join('; '),
-        Number(a.applicantPays).toFixed(2), Number(a.orgReceives).toFixed(2), a.boothLabel ?? '', a.internalNote ?? '', a.stripePaymentIntentId ?? '',
+        Number(a.applicantPays).toFixed(2), Number(a.orgReceives).toFixed(2), a.boothLabel ?? '', (a.tags || []).join('; '), a.checkedInAt?.toISOString() ?? '', a.checkedOutAt?.toISOString() ?? '', a.internalNote ?? '', a.stripePaymentIntentId ?? '',
         ...addOnList.map((ad) => byAddOn.get(ad.id) ?? ''),
         ...qList.map((q) => this._answerText(byQ.get(q.id))),
       ];
@@ -1244,6 +1306,7 @@ class ApplicationService {
     if (query.form) where.formId = String(query.form);
     if (query.tier) where.tierId = String(query.tier);
     if (query.addOn) where.addOns = { some: { addOnId: String(query.addOn) } };
+    if (query.tag) where.tags = { has: String(query.tag) };
     if (query.status) {
       const list = String(query.status).split(',').filter((s) => STATUSES.has(s) && s !== 'DRAFT');
       if (list.length) where.status = { in: list };
@@ -1262,6 +1325,7 @@ class ApplicationService {
           { contact: { lastName: { contains: q, mode: 'insensitive' } } },
           { form: { name: { contains: q, mode: 'insensitive' } } },
           { boothLabel: { contains: q, mode: 'insensitive' } },
+          { tags: { has: q } },
           { id: q },
         ];
         // "ID: XNKNHSCH" on a row is the tail of the cuid; cuids are lowercase.
@@ -1375,6 +1439,9 @@ class ApplicationService {
       paymentDueAt: a.paymentDueAt,
       overdue: a.overdue,
       boothLabel: a.boothLabel,
+      tags: a.tags ?? [],
+      checkedInAt: a.checkedInAt ?? null,
+      checkedOutAt: a.checkedOutAt ?? null,
       statusUrl: statusBase ? statusUrlWithBase(statusBase, a) : null,
     };
   }
@@ -1435,6 +1502,9 @@ class ApplicationService {
       withdrawReason: a.withdrawReason,
       boothLabel: a.boothLabel,
       internalNote: a.internalNote,
+      tags: a.tags ?? [],
+      checkedInAt: a.checkedInAt ?? null,
+      checkedOutAt: a.checkedOutAt ?? null,
       createdAt: a.createdAt,
       updatedAt: a.updatedAt,
     };

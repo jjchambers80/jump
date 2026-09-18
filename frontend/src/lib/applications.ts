@@ -221,6 +221,10 @@ export interface ApplicationRow {
   paymentDueAt: string | null;
   overdue: boolean;
   boothLabel: string | null;
+  /** Spec 019 phase 3: organizer tags and on-site check-in (APPROVED only). */
+  tags: string[];
+  checkedInAt: string | null;
+  checkedOutAt: string | null;
   /** The applicant's status-page link, for "Copy status link" (spec 019). */
   statusUrl: string | null;
 }
@@ -390,6 +394,9 @@ export interface AdminApplication {
   withdrawReason: string | null;
   boothLabel: string | null;
   internalNote: string | null;
+  tags: string[];
+  checkedInAt: string | null;
+  checkedOutAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

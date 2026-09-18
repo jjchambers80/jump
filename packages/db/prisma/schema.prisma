@@ -921,6 +921,9 @@ model Application {
   withdrawnBy     WithdrawnBy?
   withdrawReason  String?
   boothLabel      String?
+  tags            String[]     @default([]) // spec 019 phase 3: free-form organizer tags
+  checkedInAt     DateTime? // spec 019 phase 3: on-site check-in (APPROVED only)
+  checkedOutAt    DateTime?
   statusTokenHash String       @unique // guest status-page token, sha256 of the raw token
 
   createdAt DateTime @default(now())
@@ -943,6 +946,7 @@ model Application {
   @@index([organizationId])
   @@index([organizationId, submittedAt]) // spec 019: org-wide Participants list
   @@index([paymentStatus, paymentDueAt])
+  @@index([tags], type: Gin)
 }
 
 model ApplicationAnswer {
