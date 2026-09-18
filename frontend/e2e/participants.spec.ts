@@ -121,6 +121,7 @@ async function mockAdmin(page: Page, baseURL: string, role: 'ADMIN' | 'ORGANIZER
     }
     if (path === '/admin/applications/summary') return route.fulfill(json(summaryOf(state.rows)));
     if (path === '/admin/application-forms' && method === 'GET') return route.fulfill(json({ data: forms }));
+    if (path === '/admin/application-templates' && method === 'GET') return route.fulfill(json({ data: [] }));
     if (path === '/admin/applications/bulk' && method === 'POST') {
       const { ids, decision } = body as { ids: string[]; decision: string };
       const to = decision === 'WAITLIST' ? 'WAITLISTED' : decision === 'REJECT' ? 'REJECTED' : 'APPROVED';

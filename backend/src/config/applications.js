@@ -10,6 +10,9 @@ export const STATUS_TOKEN_TTL_DAYS = 180;
 export const MAX_ANSWER_LENGTH = 5000;
 export const MAX_OPTIONS = 30;
 export const LIST_PAGE_SIZE = 50;
+/** Spec 019: caps on a hand-edited form template definition. */
+export const MAX_TEMPLATE_TIERS = 50;
+export const MAX_TEMPLATE_QUESTIONS = 100;
 
 export const QUESTION_TYPES = new Set([
   'SHORT_TEXT',

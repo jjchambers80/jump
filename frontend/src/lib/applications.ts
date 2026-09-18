@@ -105,6 +105,8 @@ export interface AdminForm {
   paymentDueDays: number;
   overduePolicy: 'WITHDRAW' | 'HOLD';
   displayOrder: number;
+  /** Spec 019: the template this form was created from (informational). */
+  createdFromTemplateId: string | null;
   acceptance: Acceptance;
   paymentsEnabled: boolean;
   applicationCount: number;
@@ -221,6 +223,53 @@ export interface ApplicationRow {
   boothLabel: string | null;
   /** The applicant's status-page link, for "Copy status link" (spec 019). */
   statusUrl: string | null;
+}
+
+/** Spec 019 phase 2: a form template definition — a snapshot, not a live form. */
+export interface TemplateTier {
+  name: string;
+  description: string | null;
+  price: number;
+  quantityTotal: number;
+  isActive: boolean;
+}
+export interface TemplateQuestion {
+  label: string;
+  helpText: string | null;
+  type: QuestionType;
+  required: boolean;
+  options: string[];
+}
+export interface TemplateDefinition {
+  intro: string | null;
+  chargeTiming: 'SUBMIT' | 'APPROVAL' | null;
+  feeMode: 'PASS' | 'ABSORB' | null;
+  taxable: boolean | null;
+  paymentDueDays: number | null;
+  overduePolicy: 'WITHDRAW' | 'HOLD' | null;
+  tiers: TemplateTier[];
+  questions: TemplateQuestion[];
+}
+export interface FormTemplateSummary {
+  id: string;
+  name: string;
+  kind: FormKind;
+  tierCount: number;
+  questionCount: number;
+  sourceFormId: string | null;
+  organization?: { id: string; name: string };
+  createdAt: string;
+  updatedAt: string;
+}
+export interface FormTemplate {
+  id: string;
+  organizationId: string;
+  name: string;
+  kind: FormKind;
+  definition: TemplateDefinition;
+  sourceFormId: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /** One form across events, from `GET /admin/application-forms` (spec 019). */

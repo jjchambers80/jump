@@ -5,7 +5,8 @@
 import Link from 'next/link';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { acceptanceLine, type AdminForm, type FormKind } from '@/lib/applications';
+import { acceptanceLine, type AdminForm, type FormKind, type FormTemplateSummary } from '@/lib/applications';
+import { useParticipantsApi } from '@/app/admin/participants/useParticipantsApi';
 import ApplicationsHeader from '../ApplicationsHeader';
 import { describeError, useApplicationsApi } from '../useApplicationsApi';
 
@@ -22,6 +23,7 @@ const STATUS_PILL: Record<AdminForm['status'], string> = {
 
 export default function FormsPage({ params }: { params: { eventId: string } }) {
   const api = useApplicationsApi(params.eventId);
+  const participants = useParticipantsApi();
   const { data: session } = useSession();
   const role = (session?.user as { role?: string } | undefined)?.role;
   const canEdit = role === 'ADMIN' || role === 'SYSTEM_ADMIN';
@@ -30,6 +32,8 @@ export default function FormsPage({ params }: { params: { eventId: string } }) {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [kind, setKind] = useState<FormKind>('FREE');
+  const [templates, setTemplates] = useState<FormTemplateSummary[]>([]);
+  const [templateId, setTemplateId] = useState('');
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -44,13 +48,26 @@ export default function FormsPage({ params }: { params: { eventId: string } }) {
     load();
   }, [load]);
 
+  // Spec 019: templates the new form can start from (same kind).
+  useEffect(() => {
+    if (!canEdit) return;
+    participants
+      .templates()
+      .then((r) => setTemplates(r.data))
+      .catch(() => setTemplates([]));
+  }, [participants, canEdit]);
+  const sameKind = templates.filter((t) => t.kind === kind);
+  useEffect(() => {
+    if (templateId && !sameKind.some((t) => t.id === templateId)) setTemplateId('');
+  }, [sameKind, templateId]);
+
   const create = async (e: FormEvent) => {
     e.preventDefault();
     if (saving) return;
     setSaving(true);
     setError(null);
     try {
-      const form = await api.createForm({ kind, name: name.trim() });
+      const form = await api.createForm({ kind, name: name.trim(), ...(templateId ? { templateId } : {}) });
       window.location.assign(`/admin/events/${params.eventId}/applications/forms/${form.id}`);
     } catch (err) {
       setError(describeError(err, 'Could not create the form'));
@@ -77,7 +94,7 @@ export default function FormsPage({ params }: { params: { eventId: string } }) {
       </div>
 
       {creating && (
-        <form onSubmit={create} className={`${card} mb-4 grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end`} data-testid="forms-create">
+        <form onSubmit={create} className={`${card} mb-4 grid gap-3 sm:grid-cols-[1fr_auto_auto_auto] sm:items-end`} data-testid="forms-create">
           <div>
             <label htmlFor="form-name" className="block text-sm font-medium text-gray-700 dark:text-slate-300">
               Name
@@ -93,6 +110,21 @@ export default function FormsPage({ params }: { params: { eventId: string } }) {
               <option value="PAID">Paid with options (vendors, sponsors)</option>
             </select>
           </div>
+          {sameKind.length > 0 && (
+            <div>
+              <label htmlFor="form-template" className="block text-sm font-medium text-gray-700 dark:text-slate-300">
+                Start from template
+              </label>
+              <select id="form-template" value={templateId} onChange={(e) => setTemplateId(e.target.value)} className={field}>
+                <option value="">Blank</option>
+                {sameKind.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <button type="submit" disabled={saving || name.trim().length < 2} className={primary}>
             {saving ? 'Creating…' : 'Create'}
           </button>

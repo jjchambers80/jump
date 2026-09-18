@@ -166,6 +166,7 @@ model Organization {
   taxRegions           TaxRegion[]
   applicantProfiles    ApplicantProfile[]
   applicationTemplates ApplicationMessageTemplate[]
+  applicationFormTemplates ApplicationFormTemplate[]
   stripeAccounts       OrganizationStripeAccount[]
 }
 
@@ -786,6 +787,7 @@ model ApplicationForm {
   paymentDueDays Int                   @default(7)
   overduePolicy  OverduePolicy         @default(WITHDRAW)
   displayOrder   Int                   @default(0)
+  createdFromTemplateId String? // spec 019: informational, no relation
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1004,6 +1006,26 @@ model ApplicationAdjustment {
   application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
   @@index([applicationId])
+}
+
+// Spec 019 phase 2: a reusable form definition per organization. A snapshot
+// (tiers and questions as JSON), not a live form — materialised into an
+// ApplicationForm through ApplicationFormService._materialise.
+model ApplicationFormTemplate {
+  id             String              @id @default(cuid())
+  organizationId String
+  name           String
+  kind           ApplicationFormKind
+  definition     Json // { intro, chargeTiming, feeMode, taxable, paymentDueDays, overduePolicy, tiers: [...], questions: [...] }
+  sourceFormId   String? // informational: the form it was saved from
+  createdById    String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, name])
+  @@index([organizationId, updatedAt])
 }
 
 model ApplicationMessageTemplate {

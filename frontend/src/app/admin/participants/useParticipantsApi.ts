@@ -7,7 +7,7 @@
 
 import { useMemo } from 'react';
 import api from '@/services/api';
-import type { ApplicationList, Decision, OrgForm } from '@/lib/applications';
+import type { ApplicationList, Decision, FormTemplate, FormTemplateSummary, OrgForm, TemplateDefinition } from '@/lib/applications';
 import type { ListQuery } from '@/app/admin/events/[eventId]/applications/useApplicationsApi';
 
 /** The per-event query plus the organization-wide `event` filter. */
@@ -32,6 +32,12 @@ export function useParticipantsApi() {
         api.post<{ results: { id: string; ok: boolean; error?: string }[]; succeeded: number; failed: number }>('/admin/applications/bulk', body),
       exportUrl: (query: ParticipantsQuery) => `/admin/applications/export.csv${qs(query)}`,
       forms: () => api.get<{ data: OrgForm[] }>('/admin/application-forms'),
+      // Phase 2: form templates
+      templates: () => api.get<{ data: FormTemplateSummary[] }>('/admin/application-templates'),
+      template: (id: string) => api.get<FormTemplate>(`/admin/application-templates/${id}`),
+      createTemplate: (body: { name: string; kind: 'PAID' | 'FREE'; definition?: Partial<TemplateDefinition> }) => api.post<FormTemplate>('/admin/application-templates', body),
+      updateTemplate: (id: string, body: { name?: string; definition?: TemplateDefinition }) => api.put<FormTemplate>(`/admin/application-templates/${id}`, body),
+      deleteTemplate: (id: string) => api.delete(`/admin/application-templates/${id}`),
     }),
     []
   );
