@@ -26,6 +26,8 @@ See [specs/STATUS.md](../specs/STATUS.md) for verified lifecycle states.
 | 009 | `main` (merged, in prod) — Stripe Tax activation + §5 decisions open | Settings > Tax — per-org tax regions, recalculate, collected tax report |
 | 010 | `main` (merged) — phase 2 dark behind `STRIPE_CONNECT_ENABLED`; account model undecided | Settings > Payments — statement descriptor, payment methods, Stripe Connect payouts |
 | 011 | `main` (merged 2026-09-17) — paid forms dark behind `APPLICATIONS_PAYMENTS_ENABLED` | Applications — vendor / sponsor / press / panel forms, charge on approval, pay-now, refunds, digest, event duplicate |
+| 012 | `main` (merged 2026-09-17) | Add-ons — products on ticket and application tiers, sales report, purchasers CSV |
+| 018 | **Proposed** — spec drafted 2026-09-17, no plan | Transactions — org-wide list of ticket orders + application payments, search by email/name/Stripe id, refunds, customers/analytics/tax report include applications, tier change / adjustments / waive / offline payment on applications |
 
 ---
 

@@ -15,7 +15,8 @@ Last updated: 2026-09-17.
 | 009 | Settings › Tax (Shopify-style Tax Configuration) | **Implemented** | Phases 1-3 on `origin/main`: service card, tax regions table, edit dialog, tax-inclusive pricing, collected tax report. |
 | 010 | Settings › Payments (Shopify-style Payment Configuration) | **Implemented** | Phases 1-2 on `origin/main`. Phase 2 (Stripe Connect Express, destination charges, Payouts page) is dark behind `STRIPE_CONNECT_ENABLED`; the connected-account model (Express vs organizer-owned account) is an open decision — see `010-payments-settings/plan-phase-2.md` §11.1. |
 | 011 | Applications (vendors, sponsors, press, panels) | **Implemented** | Phases 1-3 on `origin/main` 2026-09-17: forms + free applications, card on file + charge at approval + pay-now + refunds (behind `APPLICATIONS_PAYMENTS_ENABLED`), CSV/saved views/digest/event duplicate. Hand-offs: 012 add-ons, 013 messaging, 014 floor map. |
-| 012 | Add-ons (ticket tiers and application tiers) | **Proposed** | Planned 2026-09-17 — `012-add-ons/spec.md` + `plan.md`; 3 phases (ticket checkout, applications, reporting). Not started. |
+| 012 | Add-ons (ticket tiers and application tiers) | **Implemented** | Phases 1-3 on `origin/main` 2026-09-17 (PRs #59/#63/#61/#62): add-ons on ticket tiers, on application tiers, sales report + purchasers CSV + analytics. |
+| 018 | Transactions — unified view of ticket orders and application payments | **Proposed** | Drafted 2026-09-17 — `018-transactions/spec.md`; no plan yet. Org-wide transactions list + search + refunds, customers/analytics/tax report including applications, tier change / adjustments / waive / offline payment on applications. 013–017 reserved (messaging, floor map, pages, machine access, MCP). |
 
 ## Documents archived as historical
 
