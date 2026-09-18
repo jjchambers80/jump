@@ -216,7 +216,8 @@ test.describe('signup flow', () => {
     const context = await browser.newContext();
     const page = await context.newPage();
     await page.goto('/signup');
-    await expect(page).toHaveURL(/\/auth\/signin\?callbackUrl=%2Fsignup/);
+    // The real Auth.js session endpoint answers here (no mock); allow for a cold start
+    await expect(page).toHaveURL(/\/auth\/signin\?callbackUrl=%2Fsignup/, { timeout: 15_000 });
     await expect(page.getByRole('link', { name: 'Create your organization' })).toBeVisible();
     await context.close();
   });

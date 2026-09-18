@@ -82,6 +82,16 @@ const ART: Record<SetupTaskId, React.ReactNode> = {
       </g>
     </svg>
   ),
+  checkin: (
+    <svg viewBox="0 0 160 80" className="w-full h-full text-gray-300 dark:text-slate-600" aria-hidden="true">
+      <g fill="none" stroke={stroke} strokeWidth="2">
+        <rect x="52" y="8" width="56" height="64" rx="8" />
+        <rect x="64" y="20" width="32" height="32" rx="3" />
+        <path d="M70 26h6v6h-6zM84 26h6v6h-6zM70 40h6v6h-6z" fill={stroke} />
+        <path d="M112 36l10 10 20-20" strokeLinecap="round" strokeLinejoin="round" />
+      </g>
+    </svg>
+  ),
 };
 
 function copyFor(task: SetupTask): CardCopy {
@@ -141,6 +151,14 @@ function copyFor(task: SetupTask): CardCopy {
         cta: 'Set up applications',
         doneTitle: 'Applications open',
         art: ART.applications,
+      };
+    case 'checkin':
+      return {
+        title: 'Check tickets in at the door',
+        body: 'Scan QR codes from any phone. Try it with a test ticket before doors open.',
+        cta: 'Open scanner',
+        doneTitle: 'First ticket checked in',
+        art: ART.checkin,
       };
   }
 }

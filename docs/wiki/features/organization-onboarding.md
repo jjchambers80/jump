@@ -1,6 +1,6 @@
 # Organization Onboarding (signup flow, Jump customer record, setup guide)
 
-**Status:** Implemented — phases 1–2 (spec 022); phase 2 dark behind `BILLING_ENABLED`
+**Status:** Implemented — phases 1–3 (spec 022); phase 2 (billing) dark behind `BILLING_ENABLED`
 **Last Updated:** 2026-09-18
 **Spec / plan:** `specs/022-organization-onboarding/plan.md`
 **Reference screenshots:** `docs/research/shopify-onboarding-subscribe.png`, `-survey.png`, `-setup-guide.png`
@@ -28,6 +28,10 @@ The self-serve path from "signed in" to "has an organization". **Create organiza
 | `frontend/src/components/billing/EmbeddedCheckout.tsx`, `lib/billing.ts` | Mounts `stripe.initEmbeddedCheckout` with `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`; plan types, `formatOfferPrice`, `SUBSCRIPTION_LABEL` |
 | `frontend/src/app/admin/settings/plan/*`, `settings/SettingsNav.tsx` | Settings › **Plan** (`usePlanApi`): plan, status pill, trial end / renewal, **Start N-day free trial** (inline Checkout card), **Manage billing** (portal); nav entry only with `NEXT_PUBLIC_BILLING_ENABLED` |
 | `frontend/src/app/admin/dashboard/PlanBanner.tsx` | `past_due` / `unpaid` banner → Settings › Plan |
+| `backend/src/config/onboarding.js` `SEED_TEMPLATES`, `CHECKIN_GOAL`, `ABANDON_AFTER_MS` | Phase 3: the two starter form templates, the door-sales goal, the abandon threshold |
+| `OnboardingService.seedTemplates / sweepAbandoned / funnel` | Phase 3: seed on complete (409 on a name clash = no-op), hourly sweep from `server.js` (`ONBOARDING_SWEEP_INTERVAL_MS`), SYSTEM_ADMIN funnel counts |
+| `GET /organizations/onboarding/funnel`, `OrganizationService.listOrganizations({ withOnboarding })` | SYSTEM_ADMIN: started / completed / subscribed for 7 and 30 days + pending now; each org row carries `plan`, `subscriptionStatus`, `onboarding` (survey summary) |
+| `frontend/src/app/admin/organizations/page.tsx` | Funnel card (SYSTEM_ADMIN), survey chips + plan pill per row |
 | `frontend/src/lib/onboarding.ts` | Survey steps, labels, `visibleSteps(answers)`, `signupPathFor(org)` — ids mirror the backend config (contract test) |
 | `frontend/src/lib/orgChannel.ts` | `announceOrganizationCreated` / `onOrganizationCreated`: `BroadcastChannel('jump-org')` + `localStorage` fallback |
 | `frontend/src/services/signupService.ts` | API wrappers |
@@ -46,6 +50,7 @@ The self-serve path from "signed in" to "has an organization". **Create organiza
 | `BILLING_ENABLED` | `true` inserts the subscribe step and opens Settings › Plan; unset/false: the step is skipped and `POST /signup/:orgId/subscribe` returns 409. Requires `JUMP_STARTER_PRICE_ID` or it stays off (startup warning) |
 | `JUMP_STARTER_PRICE_ID`, `BILLING_TRIAL_DAYS` (30), `STRIPE_BILLING_WEBHOOK_SECRET` | The STARTER Price in Jump's account, trial length, signing secret for `POST /webhooks/stripe/billing` |
 | `NEXT_PUBLIC_BILLING_ENABLED`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Frontend: nav entry; Jump-account publishable key for embedded Checkout |
+| `ONBOARDING_SWEEP_INTERVAL_MS` (1 h), `ONBOARDING_ABANDON_AFTER_MS` (7 d) | Phase 3 sweep: unfinished signups older than the threshold with no events and no subscription are deleted |
 
 ## API
 
@@ -65,9 +70,10 @@ The self-serve path from "signed in" to "has an organization". **Create organiza
 | `DELETE` | `/signup/:orgId` | Discard a pending org (cascade) |
 | `GET` | `/admin/setup-guide` | `{ dismissedAt, tasks: [{ id, done, href, shown, state? }], onboarding: { goals } }` |
 | `PATCH` | `/admin/setup-guide` | `{ dismissed: true }` |
-| `GET` | `/organizations?includePending=1` | SYSTEM_ADMIN only: also lists pending orgs |
+| `GET` | `/organizations?includePending=1` | SYSTEM_ADMIN only: also lists pending orgs; SYSTEM_ADMIN rows carry `plan`, `subscriptionStatus`, `onboarding` (survey summary) |
+| `GET` | `/organizations/onboarding/funnel` | SYSTEM_ADMIN: `{ windows: { 7: { started, completed, subscribed }, 30: … }, pending }` |
 
-Setup-guide `done` rules: `event` = any event under the org's venues; `design` = brand colour, logo or non-SYSTEM theme; `payments` = Connect `active` when `STRIPE_CONNECT_ENABLED`, else `paymentSettingsUpdatedAt` set (`state` = `connect` / `platform` drives the card copy); `business` = `companyName` + `addressLine1`; `domain` = an ACTIVE `OrganizationDomain`; `applications` = any `ApplicationForm`, **shown** only when the survey goals include `vendor_applications` or `press_applications`.
+Setup-guide `done` rules: `event` = any event under the org's venues; `design` = brand colour, logo or non-SYSTEM theme; `payments` = Connect `active` when `STRIPE_CONNECT_ENABLED`, else `paymentSettingsUpdatedAt` set (`state` = `connect` / `platform` drives the card copy); `business` = `companyName` + `addressLine1`; `domain` = an ACTIVE `OrganizationDomain`; `applications` = any `ApplicationForm`, **shown** only when the survey goals include `vendor_applications` or `press_applications`; `checkin` (phase 3) = any REDEEMED ticket, **shown** only with the `sell_at_door` goal.
 
 ## How It Works
 
@@ -78,7 +84,10 @@ Setup-guide `done` rules: `event` = any event under the org's venues; `design` =
 5. **Done.** `complete` stamps `onboardingCompletedAt`, merges `surveyCompletedAt` unless the survey was skipped, and `updateMany({ role: 'UNASSIGNED' } → ADMIN)` — never a downgrade. The page then awaits `useSession().update()` (forces the claims refresh — without it the client keeps `UNASSIGNED` for up to 60 s and `AdminRoute` would bounce back to `/signup`), announces on the channel, and navigates to `/admin/dashboard?org=<id>`.
 6. **Opener tab.** `OrgProvider` subscribes to the channel; on `org-created` it sets the preferred id, refetches, and selects the new organization.
 7. **Subscribe (phase 2).** `stepFor` resumes at `subscribe` while billing is on and neither `subscribeSkippedAt` nor `subscribedAt` is set. `createCheckout` creates the Stripe customer once (`PlatformCustomer.stripeCustomerId`, `metadata.organizationId`), then an embedded Checkout session (`mode: subscription`, `trial_period_days`, `subscription_data.metadata.organizationId`, `return_url` = `/signup/:orgId/subscribe/return?session_id={CHECKOUT_SESSION_ID}`). The return page calls `confirm`, which retrieves the session, checks its `metadata.organizationId`, and mirrors the subscription (`subscriptionToRow`: `plan = STARTER` when the status is trialing/active/past_due/unpaid/incomplete and the price is the STARTER price, else `FREE`) plus `onboarding.subscribedAt`. Later changes (past due, cancel) arrive on the billing webhook and overwrite the mirror. Settings › Plan reuses the same Checkout with `return_url` back to the page. Nothing is gated on the plan.
-8. **Legacy create.** `POST /organizations` (ADMIN+, the SYSTEM_ADMIN Organizations page) now creates the membership for a non-SYSTEM_ADMIN caller and the org is onboarded at once (`@default(now())`).
+8. **Tailoring (phase 3).** `complete` calls `seedTemplates` when the goals include an application goal: **Vendor booth** (PAID, two tiers, four questions, one pinned) and **Press & media** (FREE) are created through `ApplicationFormTemplateService.create`, so they pass the same validation as the editor; a name clash (re-run) is a silent no-op and a seed failure never fails the signup. `sell_at_door` adds the **Check tickets in at the door** card.
+9. **Sweep (phase 3).** `sweepAbandoned` deletes pending organizations older than `ABANDON_AFTER_MS` that have no events and no `stripeSubscriptionId`, logging `organization_onboarding_abandoned` with the step reached. Started 45 s after boot, then every `ONBOARDING_SWEEP_INTERVAL_MS`.
+10. **Funnel (phase 3).** "Started" = organizations that have a `PlatformCustomer` (created at step 1), "completed" = those with `onboardingCompletedAt` in the window, "subscribed" = those with a subscription id, plus `pending` now. Rendered on `/admin/organizations` for SYSTEM_ADMIN next to a survey summary per row (goals, event types, size, moving-from; "Survey skipped" when nothing was answered). Log events: `organization_onboarding_started` / `_step` / `_completed` / `_templates_seeded` / `_abandoned` / `_discarded`.
+11. **Legacy create.** `POST /organizations` (ADMIN+, the SYSTEM_ADMIN Organizations page) now creates the membership for a non-SYSTEM_ADMIN caller and the org is onboarded at once (`@default(now())`).
 
 ## Check-in scope (fixed in this phase)
 
@@ -102,11 +111,13 @@ Setup-guide `done` rules: `event` = any event under the org's venues; `design` =
 - `frontend/e2e/admin-setup-guide.spec.ts` — cards, done state, Connect vs platform copy, dismiss, all-done heading, 375 px.
 - `frontend/e2e/admin-access.spec.ts` T106 — `UNASSIGNED` at `/admin` lands on `/signup`.
 - `backend/tests/contract/billing.test.js` — off → 409 + step skipped; customer created once; Checkout params; confirm (open / complete / foreign session); already-subscribed 409; Plan status roles + portal; webhook mirror (updated, deleted by subscription id, unknown org); wrong-endpoint events ignored both ways.
+- `backend/tests/contract/onboardingPhase3.test.js` — seeded templates (listed, no-op re-seed, validator), no seed without the goal, sweep keeps fresh / with-event / subscribed / completed orgs, funnel counts + 403, survey summary for SYSTEM_ADMIN only.
+- `frontend/e2e/admin-organizations-onboarding.spec.ts` — funnel card, survey chips, plan pill, ADMIN sees none, check-in setup card.
 - `frontend/e2e/billing.spec.ts` — subscribe ledger + Skip, billing-off redirect, return confirm (complete / open), Settings › Plan FREE → checkout card, STARTER status + portal, return notice, billing-off note, dashboard banner.
 
-## Not yet (phase 3)
+## Not built
 
-Survey-tailored templates, abandoned-org sweep, funnel counts, survey answers on the SYSTEM_ADMIN org row. Open decisions in the plan §9 (price, gating, promoting `ORGANIZER → ADMIN`). Launch steps for billing: `docs/wiki/config/production-launch-checklist.md` › Jump subscriptions.
+`eventTypes` does not preselect an event category: the create-event form has no category field. Open decisions in the plan §9 (price, gating, promoting `ORGANIZER → ADMIN`). Launch steps for billing: `docs/wiki/config/production-launch-checklist.md` › Jump subscriptions.
 
 ## Related Features
 
