@@ -297,7 +297,7 @@ describe('Settings › Tax contract (spec 009)', () => {
     const res = await request(app).get('/admin/settings/tax/report').set('Authorization', `Bearer ${tokenFor(organizerA)}`);
     expect(res.status).toBe(200);
     const tx = res.body.rows.find((r) => r.region === 'TX');
-    expect(tx).toMatchObject({ name: 'Texas', orders: expect.any(Number) });
+    expect(tx).toMatchObject({ name: 'Texas', orders: expect.any(Number), count: tx.orders, sources: [expect.objectContaining({ source: 'order', count: tx.orders })] });
     expect(tx.orders).toBeGreaterThanOrEqual(2);
     expect(tx.taxCollected).toBeGreaterThanOrEqual(24);
     expect(tx.taxRefunded).toBeCloseTo(8, 2);
@@ -308,7 +308,8 @@ describe('Settings › Tax contract (spec 009)', () => {
     expect(csv.status).toBe(200);
     expect(csv.headers['content-type']).toMatch(/text\/csv/);
     expect(csv.headers['content-disposition']).toMatch(/tax-collected-2026-01-01_/);
-    expect(csv.text.split('\n')[0]).toBe('"Region","State","Orders","Taxable sales","Tax collected","Tax refunded (est.)","Tax net"');
+    expect(csv.text.split('\n')[0]).toBe('"Region","State","Source","Count","Taxable sales","Tax collected","Tax refunded (est.)","Tax net"');
+    expect(csv.text).toMatch(/"Texas","TX","Orders"/);
     expect(csv.text).toMatch(/"Total"/);
 
     const badRange = await request(app).get('/admin/settings/tax/report?from=2026-05-01&to=2026-01-01').set('Authorization', `Bearer ${tokenFor(adminA)}`);

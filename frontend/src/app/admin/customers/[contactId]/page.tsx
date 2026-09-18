@@ -25,6 +25,24 @@ interface CustomerOrder {
   event: OrderEvent;
 }
 
+interface CustomerApplication {
+  id: string;
+  eventId: string;
+  form: { id: string; name: string; kind: 'PAID' | 'FREE' };
+  tier: { id: string; name: string } | null;
+  businessName: string | null;
+  status: string;
+  paymentStatus: string;
+  paymentSource: 'stripe' | 'offline';
+  applicantPays: number;
+  refunded: number;
+  paidAt: string | null;
+  submittedAt: string | null;
+  createdAt: string;
+  event: OrderEvent;
+  detailUrl: string;
+}
+
 interface CustomerDetail {
   id: string;
   firstName: string;
@@ -34,10 +52,15 @@ interface CustomerDetail {
   note: string | null;
   emailSubscribed: boolean;
   createdAt: string;
-  orderCount: number;
+  /** Orders + paid applications (spec 018). */
+  transactionCount: number;
+  ticketOrderCount: number;
+  applicationCount: number;
   totalSpent: number;
-  lastOrderDate: string | null;
+  totalRefunded: number;
+  lastActivityAt: string | null;
   orders: CustomerOrder[];
+  applications: CustomerApplication[];
 }
 
 function formatCurrency(amount: number): string {
@@ -67,10 +90,13 @@ function StatusBadge({ status }: { status: string }) {
     PENDING: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
     CANCELLED: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
     REFUNDED: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
+    PARTIALLY_REFUNDED: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+    PAID: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
   };
+  const label = status.charAt(0) + status.slice(1).toLowerCase().replace(/_/g, ' ');
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${colors[status] || colors.PENDING}`}>
-      {status.charAt(0) + status.slice(1).toLowerCase()}
+      {label}
     </span>
   );
 }
@@ -197,14 +223,15 @@ export default function CustomerDetailPage() {
       {/* Stats bar */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {[
-          { label: 'Amount spent', value: formatCurrency(customer.totalSpent) },
-          { label: 'Orders', value: String(customer.orderCount) },
+          { label: 'Amount spent', value: formatCurrency(customer.totalSpent), hint: customer.totalRefunded > 0 ? `${formatCurrency(customer.totalRefunded)} refunded` : undefined },
+          { label: 'Transactions', value: String(customer.transactionCount), hint: customer.applicationCount > 0 ? `${customer.ticketOrderCount} order${customer.ticketOrderCount !== 1 ? 's' : ''} · ${customer.applicationCount} application${customer.applicationCount !== 1 ? 's' : ''}` : undefined },
           { label: 'Customer since', value: formatRelative(customer.createdAt) },
-          { label: 'Last order', value: customer.lastOrderDate ? formatRelative(customer.lastOrderDate) : 'N/A' },
+          { label: 'Last activity', value: customer.lastActivityAt ? formatRelative(customer.lastActivityAt) : 'N/A' },
         ].map((stat) => (
           <div key={stat.label} className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg px-4 py-3">
             <p className="text-xs text-gray-500 dark:text-slate-400 mb-1">{stat.label}</p>
             <p className="text-lg font-semibold text-gray-900 dark:text-white">{stat.value}</p>
+            {stat.hint && <p className="text-[11px] text-gray-400 dark:text-slate-500">{stat.hint}</p>}
           </div>
         ))}
       </div>
@@ -276,6 +303,55 @@ export default function CustomerDetailPage() {
               </div>
             )}
           </div>
+
+          {/* Applications (spec 018 phase 2): paid vendor / sponsor applications */}
+          {customer.applications.length > 0 && (
+            <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg overflow-hidden" data-testid="customer-applications">
+              <div className="px-4 py-3 border-b border-gray-200 dark:border-slate-700">
+                <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Applications</h2>
+              </div>
+              <div className="divide-y divide-gray-100 dark:divide-slate-700/50">
+                {customer.applications.map((application) => (
+                  <Link
+                    key={application.id}
+                    href={application.detailUrl}
+                    className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
+                  >
+                    <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-slate-700 flex-shrink-0 overflow-hidden flex items-center justify-center">
+                      {application.event.logoUrl ? (
+                        <img src={resolveAssetUrl(application.event.logoUrl) || undefined} alt="" className="w-full h-full object-contain" />
+                      ) : (
+                        <svg className="w-5 h-5 text-gray-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6M7 4h10a2 2 0 012 2v14l-4-2-3 2-3-2-4 2V6a2 2 0 012-2z" />
+                        </svg>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                          {application.businessName || application.form.name}
+                        </span>
+                        <StatusBadge status={application.paymentStatus} />
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-slate-400 truncate">
+                        {application.event.name} &middot; {application.form.name}
+                        {application.tier ? ` — ${application.tier.name}` : ''}
+                      </p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">{formatCurrency(application.applicantPays)}</p>
+                      <p className="text-xs text-gray-500 dark:text-slate-400">
+                        {application.refunded > 0 ? `${formatCurrency(application.refunded)} refunded` : application.paidAt ? `Paid ${formatDate(application.paidAt)}` : application.status.toLowerCase()}
+                      </p>
+                    </div>
+                    <svg className="w-4 h-4 text-gray-400 dark:text-slate-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right: Sidebar */}

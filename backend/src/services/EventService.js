@@ -9,6 +9,7 @@ import { formatEventSummary } from '../utils/eventSummary.js';
 import taxService from './TaxService.js';
 import applicationFormService from './ApplicationFormService.js';
 import addOnService from './AddOnService.js';
+import { PAID_APPLICATION_STATUSES } from './transactionQuery.js';
 
 class EventService {
   /**
@@ -587,6 +588,7 @@ class EventService {
     const totalRedeemed = tiers.reduce((sum, t) => sum + t.redeemed, 0);
     const totalRemaining = tiers.reduce((sum, t) => sum + t.remaining, 0);
     const totalRevenue = tiers.reduce((sum, t) => sum + t.revenue, 0);
+    const revenue = await this._revenueBreakdown(orgId, eventId, totalRevenue);
 
     return {
       event: {
@@ -603,7 +605,34 @@ class EventService {
         remaining: totalRemaining,
         revenue: totalRevenue,
       },
+      revenue,
       tiers,
+    };
+  }
+
+  /**
+   * Revenue by source for the analytics page (spec 018 phase 2). Ticket and
+   * add-on lines are listed-price sums of what is currently sold, so refunded
+   * lines are already excluded; application revenue is the gross collected and
+   * its refunds are reported separately, hence `net`.
+   */
+  async _revenueBreakdown(orgId, eventId, tickets) {
+    const round = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+    const [addOnSales, applications, applicationRefunds] = await Promise.all([
+      addOnService.sales(orgId, eventId),
+      prisma.application.aggregate({ where: { eventId, paymentStatus: { in: PAID_APPLICATION_STATUSES } }, _sum: { applicantPays: true }, _count: { id: true } }),
+      prisma.applicationRefund.aggregate({ where: { status: 'SUCCEEDED', application: { eventId } }, _sum: { amount: true } }),
+    ]);
+    const addOns = Number(addOnSales.totals?.revenue || 0);
+    const applicationGross = Number(applications._sum.applicantPays || 0);
+    const refunds = Number(applicationRefunds._sum.amount || 0);
+    return {
+      tickets: round(tickets),
+      addOns: round(addOns),
+      applications: round(applicationGross),
+      applicationCount: applications._count.id,
+      applicationRefunds: round(refunds),
+      net: round(tickets + addOns + applicationGross - refunds),
     };
   }
 

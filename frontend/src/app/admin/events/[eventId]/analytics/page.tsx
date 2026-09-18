@@ -40,6 +40,15 @@ interface EventAnalytics {
     remaining: number;
     revenue: number;
   };
+  /** Revenue by source (spec 018 phase 2). Ticket / add-on lines are already net of refunded lines. */
+  revenue: {
+    tickets: number;
+    addOns: number;
+    applications: number;
+    applicationCount: number;
+    applicationRefunds: number;
+    net: number;
+  };
   tiers: TierAnalytics[];
 }
 
@@ -236,10 +245,37 @@ export default function EventAnalyticsPage() {
             />
             <StatCard
               label="Revenue"
-              value={formatCurrency(analytics.totals.revenue)}
+              value={formatCurrency(analytics.revenue?.net ?? analytics.totals.revenue)}
+              subtext={analytics.revenue ? 'net of application refunds' : undefined}
               color="amber"
             />
           </div>
+
+          {/* Revenue by source (spec 018 phase 2) */}
+          {analytics.revenue && (
+            <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden" data-testid="revenue-breakdown">
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-slate-700">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Revenue by source</h3>
+              </div>
+              <dl className="grid grid-cols-2 lg:grid-cols-5 divide-y lg:divide-y-0 lg:divide-x divide-gray-100 dark:divide-slate-700/60">
+                {[
+                  { label: 'Tickets', value: analytics.revenue.tickets, hint: 'sold × listed price' },
+                  { label: 'Add-ons', value: analytics.revenue.addOns, hint: 'sold lines, listed price' },
+                  { label: 'Applications', value: analytics.revenue.applications, hint: `${analytics.revenue.applicationCount} paid` },
+                  { label: 'Application refunds', value: -analytics.revenue.applicationRefunds, hint: 'returned to applicants' },
+                  { label: 'Net', value: analytics.revenue.net, hint: 'tickets + add-ons + applications − refunds', strong: true },
+                ].map((item) => (
+                  <div key={item.label} className="px-6 py-4">
+                    <dt className="text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">{item.label}</dt>
+                    <dd className={`mt-1 text-lg ${item.strong ? 'font-bold' : 'font-semibold'} text-gray-900 dark:text-slate-100`}>
+                      {item.value < 0 ? `−${formatCurrency(-item.value)}` : formatCurrency(item.value)}
+                    </dd>
+                    <dd className="text-xs text-gray-400 dark:text-slate-500">{item.hint}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          )}
 
           {/* Per-Tier Breakdown */}
           <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden">

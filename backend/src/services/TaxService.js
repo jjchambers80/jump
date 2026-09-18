@@ -8,6 +8,7 @@ import stripe from '../config/stripe.js';
 import logger from '../utils/logger.js';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import { US_STATES, stateName } from '../utils/usStates.js';
+import { PAID_ORDER_STATUSES, PAID_APPLICATION_STATUSES } from './transactionQuery.js';
 
 // Stripe product tax code for general event admissions
 const ADMISSIONS_TAX_CODE = 'txcd_20060057';
@@ -220,65 +221,114 @@ class TaxService {
    * @returns {Promise<{ from: string, to: string, rows: Array, totals: Object }>}
    */
   async collectedReport(orgId, { from, to }) {
-    const orders = await prisma.order.findMany({
-      where: {
-        status: { in: ['COMPLETED', 'PARTIALLY_REFUNDED', 'REFUNDED'] },
-        createdAt: { gte: from, lte: to },
-        event: { venue: { organizationId: orgId } },
-      },
-      select: {
-        id: true,
-        subtotalAmount: true,
-        taxAmount: true,
-        totalAmount: true,
-        event: { select: { venue: { select: { state: true } } } },
-        refunds: { where: { status: 'SUCCEEDED' }, select: { amount: true } },
-      },
-    });
+    const [orders, applications] = await Promise.all([
+      prisma.order.findMany({
+        where: {
+          status: { in: PAID_ORDER_STATUSES },
+          createdAt: { gte: from, lte: to },
+          event: { venue: { organizationId: orgId } },
+        },
+        select: {
+          id: true,
+          subtotalAmount: true,
+          taxAmount: true,
+          totalAmount: true,
+          event: { select: { venue: { select: { state: true } } } },
+          refunds: { where: { status: 'SUCCEEDED' }, select: { amount: true } },
+        },
+      }),
+      // Spec 018 phase 2: taxable application forms collect tax too. Their
+      // period is the day the money moved (paidAt), not the submission.
+      prisma.application.findMany({
+        where: {
+          organizationId: orgId,
+          paymentStatus: { in: PAID_APPLICATION_STATUSES },
+          paidAt: { gte: from, lte: to },
+          form: { taxable: true },
+        },
+        select: {
+          id: true,
+          subtotal: true,
+          tax: true,
+          applicantPays: true,
+          event: { select: { venue: { select: { state: true } } } },
+          refunds: { where: { status: 'SUCCEEDED' }, select: { amount: true } },
+        },
+      }),
+    ]);
 
+    const blank = () => ({ count: 0, taxableSales: 0, taxCollected: 0, taxRefunded: 0 });
     const byRegion = new Map();
-    for (const order of orders) {
-      const region = this.resolveRegionForVenue(order.event.venue)?.region || null;
+    const add = (venue, source, { subtotal, tax, total, refunded }) => {
+      const region = this.resolveRegionForVenue(venue)?.region || null;
       const key = region || '—';
       if (!byRegion.has(key)) {
-        byRegion.set(key, { region, name: region ? stateName(region) : 'No state', orders: 0, taxableSales: 0, taxCollected: 0, taxRefunded: 0 });
+        byRegion.set(key, { region, name: region ? stateName(region) : 'No state', all: blank(), order: blank(), application: blank() });
       }
-      const row = byRegion.get(key);
-      const total = Number(order.totalAmount);
-      const tax = Number(order.taxAmount);
-      const refunded = order.refunds.reduce((sum, r) => sum + Number(r.amount), 0);
-      row.orders += 1;
-      row.taxableSales += Number(order.subtotalAmount);
-      row.taxCollected += tax;
-      row.taxRefunded += total > 0 ? (refunded / total) * tax : 0;
+      const entry = byRegion.get(key);
+      for (const bucket of [entry.all, entry[source]]) {
+        bucket.count += 1;
+        bucket.taxableSales += subtotal;
+        bucket.taxCollected += tax;
+        bucket.taxRefunded += total > 0 ? (refunded / total) * tax : 0;
+      }
+    };
+    for (const order of orders) {
+      add(order.event.venue, 'order', {
+        subtotal: Number(order.subtotalAmount),
+        tax: Number(order.taxAmount),
+        total: Number(order.totalAmount),
+        refunded: order.refunds.reduce((sum, r) => sum + Number(r.amount), 0),
+      });
+    }
+    for (const application of applications) {
+      add(application.event.venue, 'application', {
+        subtotal: Number(application.subtotal),
+        tax: Number(application.tax),
+        total: Number(application.applicantPays),
+        refunded: application.refunds.reduce((sum, r) => sum + Number(r.amount), 0),
+      });
     }
 
     const round = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+    const finish = (b) => ({ count: b.count, taxableSales: round(b.taxableSales), taxCollected: round(b.taxCollected), taxRefunded: round(b.taxRefunded), taxNet: round(b.taxCollected - b.taxRefunded) });
     const rows = [...byRegion.values()]
-      .map((r) => ({ ...r, taxableSales: round(r.taxableSales), taxCollected: round(r.taxCollected), taxRefunded: round(r.taxRefunded), taxNet: round(r.taxCollected - r.taxRefunded) }))
+      .map((r) => {
+        const all = finish(r.all);
+        return {
+          region: r.region,
+          name: r.name,
+          orders: all.count, // alias kept: the pre-018 name for the row count
+          ...all,
+          sources: ['order', 'application'].filter((source) => r[source].count > 0).map((source) => ({ source, ...finish(r[source]) })),
+        };
+      })
       .sort((a, b) => a.name.localeCompare(b.name));
     const totals = rows.reduce(
       (t, r) => ({
-        orders: t.orders + r.orders,
+        orders: t.orders + r.count,
+        count: t.count + r.count,
         taxableSales: round(t.taxableSales + r.taxableSales),
         taxCollected: round(t.taxCollected + r.taxCollected),
         taxRefunded: round(t.taxRefunded + r.taxRefunded),
         taxNet: round(t.taxNet + r.taxNet),
       }),
-      { orders: 0, taxableSales: 0, taxCollected: 0, taxRefunded: 0, taxNet: 0 }
+      { orders: 0, count: 0, taxableSales: 0, taxCollected: 0, taxRefunded: 0, taxNet: 0 }
     );
     return { from: from.toISOString(), to: to.toISOString(), rows, totals };
   }
 
-  /** CSV rendering of collectedReport() for download. */
+  /** CSV rendering of collectedReport() for download: one line per region and source, then the total. */
   reportToCsv(report) {
     const esc = (v) => `"${String(v).replace(/"/g, '""')}"`;
-    const lines = [['Region', 'State', 'Orders', 'Taxable sales', 'Tax collected', 'Tax refunded (est.)', 'Tax net'].map(esc).join(',')];
+    const lines = [['Region', 'State', 'Source', 'Count', 'Taxable sales', 'Tax collected', 'Tax refunded (est.)', 'Tax net'].map(esc).join(',')];
     for (const r of report.rows) {
-      lines.push([r.name, r.region || '', r.orders, r.taxableSales.toFixed(2), r.taxCollected.toFixed(2), r.taxRefunded.toFixed(2), r.taxNet.toFixed(2)].map(esc).join(','));
+      for (const s of r.sources) {
+        lines.push([r.name, r.region || '', s.source === 'order' ? 'Orders' : 'Applications', s.count, s.taxableSales.toFixed(2), s.taxCollected.toFixed(2), s.taxRefunded.toFixed(2), s.taxNet.toFixed(2)].map(esc).join(','));
+      }
     }
     const t = report.totals;
-    lines.push(['Total', '', t.orders, t.taxableSales.toFixed(2), t.taxCollected.toFixed(2), t.taxRefunded.toFixed(2), t.taxNet.toFixed(2)].map(esc).join(','));
+    lines.push(['Total', '', '', t.count, t.taxableSales.toFixed(2), t.taxCollected.toFixed(2), t.taxRefunded.toFixed(2), t.taxNet.toFixed(2)].map(esc).join(','));
     return lines.join('\n') + '\n';
   }
 

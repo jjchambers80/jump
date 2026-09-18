@@ -75,7 +75,7 @@ interface MockOptions {
   /** What a recalculate returns for lastRate / lastError. */
   recalc?: { lastRate: number | null; lastError: string | null };
   taxInclusivePricing?: boolean;
-  report?: { rows: Array<{ region: string | null; name: string; orders: number; taxableSales: number; taxCollected: number; taxRefunded: number; taxNet: number }> };
+  report?: { rows: Array<{ region: string | null; name: string; orders: number; taxableSales: number; taxCollected: number; taxRefunded: number; taxNet: number; sources?: Array<{ source: 'order' | 'application'; count: number; taxableSales: number; taxCollected: number; taxRefunded: number; taxNet: number }> }> };
 }
 
 async function mockTaxApi(page: Page, regions: MockRegion[], options: MockOptions = {}) {
@@ -107,10 +107,15 @@ async function mockTaxApi(page: Page, regions: MockRegion[], options: MockOption
       return route.fulfill(json(settings));
     }
     if (method === 'GET' && path === '/report') {
-      const rowsOut = options.report?.rows ?? [];
+      // Spec 018 phase 2 shape: `count` beside the `orders` alias, per-source breakdown.
+      const rowsOut = (options.report?.rows ?? []).map((r) => ({
+        ...r,
+        count: r.orders,
+        sources: r.sources ?? [{ source: 'order', count: r.orders, taxableSales: r.taxableSales, taxCollected: r.taxCollected, taxRefunded: r.taxRefunded, taxNet: r.taxNet }],
+      }));
       const totals = rowsOut.reduce(
-        (t, r) => ({ orders: t.orders + r.orders, taxableSales: t.taxableSales + r.taxableSales, taxCollected: t.taxCollected + r.taxCollected, taxRefunded: t.taxRefunded + r.taxRefunded, taxNet: t.taxNet + r.taxNet }),
-        { orders: 0, taxableSales: 0, taxCollected: 0, taxRefunded: 0, taxNet: 0 }
+        (t, r) => ({ orders: t.orders + r.orders, count: t.count + r.count, taxableSales: t.taxableSales + r.taxableSales, taxCollected: t.taxCollected + r.taxCollected, taxRefunded: t.taxRefunded + r.taxRefunded, taxNet: t.taxNet + r.taxNet }),
+        { orders: 0, count: 0, taxableSales: 0, taxCollected: 0, taxRefunded: 0, taxNet: 0 }
       );
       return route.fulfill(json({ from: `${url.searchParams.get('from')}T00:00:00.000Z`, to: `${url.searchParams.get('to')}T23:59:59.999Z`, rows: rowsOut, totals }));
     }
@@ -371,7 +376,13 @@ test('Collected tax report lists regions with totals and downloads a CSV', async
   const api = await mockTaxApi(page, [], {
     report: {
       rows: [
-        { region: 'NC', name: 'North Carolina', orders: 12, taxableSales: 1200, taxCollected: 87, taxRefunded: 7.25, taxNet: 79.75 },
+        {
+          region: 'NC', name: 'North Carolina', orders: 12, taxableSales: 1200, taxCollected: 87, taxRefunded: 7.25, taxNet: 79.75,
+          sources: [
+            { source: 'order', count: 10, taxableSales: 1000, taxCollected: 72.5, taxRefunded: 7.25, taxNet: 65.25 },
+            { source: 'application', count: 2, taxableSales: 200, taxCollected: 14.5, taxRefunded: 0, taxNet: 14.5 },
+          ],
+        },
         { region: 'TX', name: 'Texas', orders: 3, taxableSales: 300, taxCollected: 18.75, taxRefunded: 0, taxNet: 18.75 },
       ],
     },
@@ -387,6 +398,10 @@ test('Collected tax report lists regions with totals and downloads a CSV', async
   await expect(nc).toContainText('$87.00');
   await expect(nc).toContainText('$7.25');
   await expect(nc).toContainText('$79.75');
+  // Source breakdown rows appear only where both kinds of money were collected (spec 018)
+  await expect(page.getByTestId('tax-report-NC-application')).toContainText('Applications');
+  await expect(page.getByTestId('tax-report-NC-application')).toContainText('$14.50');
+  await expect(page.getByTestId('tax-report-TX-order')).toHaveCount(0);
   const totals = page.getByTestId('tax-report-totals');
   await expect(totals).toContainText('15');
   await expect(totals).toContainText('$105.75');
@@ -403,9 +418,10 @@ test('Collected tax report lists regions with totals and downloads a CSV', async
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe('tax-collected-2026-03-01_2026-03-31.csv');
   const text = await (await download.createReadStream()).toArray().then((chunks) => Buffer.concat(chunks as Buffer[]).toString('utf8'));
-  expect(text.split('\n')[0]).toBe('"Region","State","Orders","Taxable sales","Tax collected","Tax refunded (est.)","Tax net"');
-  expect(text).toContain('"North Carolina","NC","12","1200.00","87.00","7.25","79.75"');
-  expect(text).toContain('"Total","","15"');
+  expect(text.split('\n')[0]).toBe('"Region","State","Source","Count","Taxable sales","Tax collected","Tax refunded (est.)","Tax net"');
+  expect(text).toContain('"North Carolina","NC","Orders","10","1000.00","72.50","7.25","65.25"');
+  expect(text).toContain('"North Carolina","NC","Applications","2","200.00","14.50","0.00","14.50"');
+  expect(text).toContain('"Total","","","15"');
 
   const a11y = await new AxeBuilder({ page }).include('main').analyze();
   expect(a11y.violations).toEqual([]);

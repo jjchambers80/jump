@@ -5,13 +5,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { useOrg } from '@/components/OrgContext';
 import { formatPrice } from '@/lib/fees';
 import SettingsNav from '../../SettingsNav';
 import { TaxIcon } from '../../icons';
 import { describeError, useTaxApi } from '../useTaxApi';
-import { reportToCsv, type TaxReport } from '../types';
+import { TAX_SOURCE_LABEL, reportToCsv, type TaxReport } from '../types';
 
 const cardClass = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
 const inputClass =
@@ -21,6 +21,7 @@ const secondaryBtn =
 const primaryBtn =
   'rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50';
 const num = 'px-4 py-3 text-right text-sm tabular-nums';
+const numSub = 'px-4 py-2 text-right text-xs tabular-nums text-gray-600 dark:text-slate-400';
 
 function isoDate(d: Date) {
   return d.toISOString().slice(0, 10);
@@ -137,7 +138,7 @@ export default function TaxReportPage() {
                 <thead className="bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-600 dark:bg-slate-800/60 dark:text-slate-400">
                   <tr>
                     <th scope="col" className="px-4 py-2.5">Region</th>
-                    <th scope="col" className="px-4 py-2.5 text-right">Orders</th>
+                    <th scope="col" className="px-4 py-2.5 text-right">Transactions</th>
                     <th scope="col" className="px-4 py-2.5 text-right">Taxable sales</th>
                     <th scope="col" className="px-4 py-2.5 text-right">Tax collected</th>
                     <th scope="col" className="px-4 py-2.5 text-right">
@@ -150,26 +151,40 @@ export default function TaxReportPage() {
                   {report && report.rows.length === 0 && (
                     <tr>
                       <td colSpan={6} className="px-4 py-3 text-sm text-gray-600 dark:text-slate-400">
-                        No completed orders in this range.
+                        No completed orders or paid applications in this range.
                       </td>
                     </tr>
                   )}
                   {report?.rows.map((r) => (
-                    <tr key={r.region ?? 'none'} data-testid={`tax-report-${r.region ?? 'none'}`}>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">{r.name}</td>
-                      <td className={`${num} text-gray-900 dark:text-white`}>{r.orders}</td>
-                      <td className={`${num} text-gray-900 dark:text-white`}>{formatPrice(r.taxableSales)}</td>
-                      <td className={`${num} text-gray-900 dark:text-white`}>{formatPrice(r.taxCollected)}</td>
-                      <td className={`${num} text-gray-600 dark:text-slate-400`}>{formatPrice(r.taxRefunded)}</td>
-                      <td className={`${num} font-medium text-gray-900 dark:text-white`}>{formatPrice(r.taxNet)}</td>
-                    </tr>
+                    <Fragment key={r.region ?? 'none'}>
+                      <tr data-testid={`tax-report-${r.region ?? 'none'}`}>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">{r.name}</td>
+                        <td className={`${num} text-gray-900 dark:text-white`}>{r.count}</td>
+                        <td className={`${num} text-gray-900 dark:text-white`}>{formatPrice(r.taxableSales)}</td>
+                        <td className={`${num} text-gray-900 dark:text-white`}>{formatPrice(r.taxCollected)}</td>
+                        <td className={`${num} text-gray-600 dark:text-slate-400`}>{formatPrice(r.taxRefunded)}</td>
+                        <td className={`${num} font-medium text-gray-900 dark:text-white`}>{formatPrice(r.taxNet)}</td>
+                      </tr>
+                      {/* Source breakdown (spec 018): only shown when both kinds of money were collected */}
+                      {r.sources.length > 1 &&
+                        r.sources.map((s) => (
+                          <tr key={`${r.region ?? 'none'}-${s.source}`} data-testid={`tax-report-${r.region ?? 'none'}-${s.source}`} className="bg-gray-50/60 dark:bg-slate-900/30">
+                            <td className="px-4 py-2 pl-8 text-xs text-gray-600 dark:text-slate-400">{TAX_SOURCE_LABEL[s.source]}</td>
+                            <td className={numSub}>{s.count}</td>
+                            <td className={numSub}>{formatPrice(s.taxableSales)}</td>
+                            <td className={numSub}>{formatPrice(s.taxCollected)}</td>
+                            <td className={numSub}>{formatPrice(s.taxRefunded)}</td>
+                            <td className={numSub}>{formatPrice(s.taxNet)}</td>
+                          </tr>
+                        ))}
+                    </Fragment>
                   ))}
                 </tbody>
                 {report && report.rows.length > 0 && (
                   <tfoot className="bg-gray-50 dark:bg-slate-800/60">
                     <tr data-testid="tax-report-totals">
                       <th scope="row" className="px-4 py-3 text-left text-sm font-semibold text-gray-900 dark:text-white">Total</th>
-                      <td className={`${num} font-semibold text-gray-900 dark:text-white`}>{report.totals.orders}</td>
+                      <td className={`${num} font-semibold text-gray-900 dark:text-white`}>{report.totals.count}</td>
                       <td className={`${num} font-semibold text-gray-900 dark:text-white`}>{formatPrice(report.totals.taxableSales)}</td>
                       <td className={`${num} font-semibold text-gray-900 dark:text-white`}>{formatPrice(report.totals.taxCollected)}</td>
                       <td className={`${num} font-semibold text-gray-600 dark:text-slate-400`}>{formatPrice(report.totals.taxRefunded)}</td>
@@ -180,8 +195,8 @@ export default function TaxReportPage() {
               </table>
             </div>
             <p className="mt-3 text-xs text-gray-600 dark:text-slate-400">
-              Orders are counted by the date they were placed. Refunded tax is estimated in proportion to the refunded amount because refunds
-              are not itemised by tax. Taxable sales is the ticket base price before fees and tax.
+              Orders are counted by the date they were placed; paid applications on taxable forms by the date they were paid. Refunded tax is
+              estimated in proportion to the refunded amount because refunds are not itemised by tax. Taxable sales is the base price before fees and tax.
             </p>
           </div>
         </section>

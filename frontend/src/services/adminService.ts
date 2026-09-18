@@ -44,6 +44,8 @@ export interface DashboardStats {
   ticketsRedeemed: number;
   salesRate: number;
   paymentSuccessRate: number;
+  /** Gross collected by source (spec 018 phase 2). */
+  revenue?: { orders: number; applications: number; gross: number };
 }
 
 const adminService = {
