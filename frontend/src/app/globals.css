@@ -39,3 +39,12 @@ body {
   min-height: 100vh;
   @apply transition-colors duration-150;
 }
+
+/* Signup stage (spec 022): full-bleed gradient behind the onboarding steps. */
+.signup-stage {
+  background: radial-gradient(ellipse at 50% 30%, #e8f1ed 0%, #f3f4f6 60%, #e5e7eb 100%);
+}
+
+.dark .signup-stage {
+  background: radial-gradient(ellipse at 50% 30%, #0f1f1c 0%, #070d0c 60%, #050807 100%);
+}

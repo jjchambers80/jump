@@ -19,7 +19,7 @@ function Pill({ label, selected, onClick }: { label: string; selected: boolean; 
       aria-checked={selected}
       onClick={onClick}
       className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition ${
-        selected ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+        selected ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900' : 'bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600'
       }`}
     >
       <span aria-hidden="true" className="text-xs">
@@ -148,7 +148,7 @@ function Survey() {
     return (
       <SignupShell title=" ">
         <div className="py-6 flex justify-center">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900" />
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900 dark:border-white" />
         </div>
       </SignupShell>
     );
@@ -164,16 +164,16 @@ function Survey() {
     >
       <div data-testid={`survey-step-${current.key}`}>
         <SurveyStepView step={current} answers={answers} onChange={(patch) => setAnswers((a) => ({ ...a, ...patch }))} />
-        {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+        {error && <p className="mt-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
         <button
           type="button"
           onClick={handleContinue}
           disabled={busy}
-          className="mt-5 w-full rounded-full bg-gray-900 px-4 py-3 text-sm font-semibold text-white hover:bg-black transition disabled:opacity-50"
+          className="mt-5 w-full rounded-full bg-gray-900 px-4 py-3 text-sm font-semibold text-white hover:bg-black dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200 transition disabled:opacity-50"
         >
           {busy ? 'Saving…' : isLast ? 'Finish' : 'Continue'}
         </button>
-        <p className="mt-3 text-center text-xs text-gray-400">
+        <p className="mt-3 text-center text-xs text-gray-400 dark:text-slate-500">
           Step {Math.min(index, steps.length - 1) + 1} of {steps.length}
         </p>
       </div>

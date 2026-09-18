@@ -37,27 +37,26 @@ export default function DoneStep() {
 
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-center text-white px-4"
-      style={{ background: 'radial-gradient(ellipse at 50% 30%, #0f1f1c 0%, #070d0c 60%, #050807 100%)' }}
+      className="min-h-screen signup-stage flex flex-col items-center justify-center text-gray-900 dark:text-white px-4"
       data-testid="signup-done"
       data-channel={ORG_CHANNEL}
     >
       {error ? (
         <div className="max-w-md text-center">
           <p className="text-lg font-semibold">Something went wrong</p>
-          <p className="mt-2 text-sm text-white/70">{error}</p>
+          <p className="mt-2 text-sm text-gray-600 dark:text-white/70">{error}</p>
           <button
             type="button"
             onClick={() => router.replace('/signup')}
-            className="mt-6 rounded-full bg-white/10 hover:bg-white/20 px-5 py-2 text-sm font-medium"
+            className="mt-6 rounded-full bg-gray-900/10 hover:bg-gray-900/20 dark:bg-white/10 dark:hover:bg-white/20 px-5 py-2 text-sm font-medium"
           >
             Back to signup
           </button>
         </div>
       ) : (
         <>
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white" />
-          <p className="mt-4 text-sm text-white/70">Setting up your organization…</p>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-white" />
+          <p className="mt-4 text-sm text-gray-600 dark:text-white/70">Setting up your organization…</p>
         </>
       )}
     </div>

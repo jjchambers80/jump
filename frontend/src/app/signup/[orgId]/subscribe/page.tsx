@@ -71,20 +71,19 @@ export default function SubscribeStep() {
 
   return (
     <div
-      className="min-h-screen text-white px-4 py-10 sm:py-16"
-      style={{ background: 'radial-gradient(ellipse at 50% 30%, #0f1f1c 0%, #070d0c 60%, #050807 100%)' }}
+      className="min-h-screen signup-stage text-gray-900 dark:text-white px-4 py-10 sm:py-16"
       data-testid="signup-subscribe"
     >
       <button
         type="button"
         onClick={handleSkip}
         disabled={busy}
-        className="fixed top-4 right-4 rounded-full bg-white/10 hover:bg-white/20 px-4 py-2 text-sm font-medium text-white transition disabled:opacity-50"
+        className="fixed top-4 right-4 rounded-full bg-gray-900/10 hover:bg-gray-900/20 dark:bg-white/10 dark:hover:bg-white/20 px-4 py-2 text-sm font-medium transition disabled:opacity-50"
       >
         Skip
       </button>
 
-      <div className="max-w-4xl mx-auto mt-6 sm:mt-10 rounded-2xl bg-[#0d1a17] shadow-2xl overflow-hidden grid grid-cols-1 md:grid-cols-[1fr_1.1fr]">
+      <div className="max-w-4xl mx-auto mt-6 sm:mt-10 rounded-2xl bg-gray-100 dark:bg-[#0d1a17] shadow-2xl overflow-hidden grid grid-cols-1 md:grid-cols-[1fr_1.1fr]">
         {/* Ledger */}
         <div className="p-7 sm:p-9 flex flex-col">
           <h1 className="text-3xl font-light leading-tight">
@@ -100,21 +99,21 @@ export default function SubscribeStep() {
           </h1>
           <dl className="mt-8 space-y-4 text-sm">
             {trialDays > 0 && (
-              <div className="flex justify-between border-b border-white/10 pb-3">
-                <dt className="text-white/70">Today</dt>
+              <div className="flex justify-between border-b border-gray-900/10 dark:border-white/10 pb-3">
+                <dt className="text-gray-600 dark:text-white/70">Today</dt>
                 <dd>{trialDays} days free</dd>
               </div>
             )}
-            <div className="flex justify-between border-b border-white/10 pb-3">
-              <dt className="text-white/70">{renews}</dt>
+            <div className="flex justify-between border-b border-gray-900/10 dark:border-white/10 pb-3">
+              <dt className="text-gray-600 dark:text-white/70">{renews}</dt>
               <dd>{price ? `${price} + tax` : '—'}</dd>
             </div>
-            <div className="flex justify-between border-b border-white/10 pb-3">
-              <dt className="text-white/70">Always</dt>
+            <div className="flex justify-between border-b border-gray-900/10 dark:border-white/10 pb-3">
+              <dt className="text-gray-600 dark:text-white/70">Always</dt>
               <dd>Cancel anytime</dd>
             </div>
           </dl>
-          <p className="mt-auto pt-8 text-xs text-white/50">
+          <p className="mt-auto pt-8 text-xs text-gray-500 dark:text-white/50">
             Your card is only charged when the trial ends. Ticket revenue is never touched: it goes to your own Stripe account.
           </p>
         </div>
@@ -122,7 +121,7 @@ export default function SubscribeStep() {
         {/* Stripe embedded Checkout */}
         <div className="bg-white text-gray-900 p-4 sm:p-6 min-h-[360px]">
           {error ? (
-            <p className="text-sm text-red-600" role="alert">{error}</p>
+            <p className="text-sm text-red-600 dark:text-red-400" role="alert">{error}</p>
           ) : clientSecret ? (
             <EmbeddedCheckout clientSecret={clientSecret} />
           ) : (
