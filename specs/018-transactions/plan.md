@@ -1,6 +1,6 @@
 # Implementation Plan: Transactions (spec 018)
 
-**Status**: Planned 2026-09-17. Not built.
+**Status**: Planned 2026-09-17. Phase 1 built 2026-09-18 on `feat/018-transactions-phase-1`.
 **Spec**: [spec.md](./spec.md). Depends on spec 011 (all phases on `main`), spec 012 (all phases on `main`), spec 009 (collected tax report), spec 010 phase 2 (Connect routing, dark).
 **Branches**: plan on `plan/018-transactions` (PR #64); phases on `feat/018-transactions-phase-1` → `-phase-2` → `-phase-3`, each merged to `main` alone.
 
@@ -245,6 +245,16 @@ None added or changed.
 ### Phase 1 — Transactions list, search, CSV, refunds (FR-001–FR-005, FR-014)
 
 `transactionQuery.js` + unit fixtures; `TransactionService`; four routes + validators; index migration; `requireAdmin` on order refund routes; Transactions page, refund dialog, sidebar entry, orders banner. Tests: `backend/tests/unit/transactionQuery.test.js`; `backend/tests/contract/transactions.test.js` — interleaved pagination across both types (seed 6 orders and 6 applications with alternating timestamps, assert page 1 / 2 order and `total`), every search key including `pi_` / `re_` / `cs_` equality and business name, each filter, `hasRefunds`, org isolation (org B sees nothing; SYSTEM_ADMIN sees both with `organization`), refund delegation for each type with `initiatedBy`, ORGANIZER refund → 403, CSV header + row count + refund rows, and a 5 000 + 2 000 row timing check under `describe.skip` unless `TRANSACTIONS_PERF=1`. Frontend e2e `transactions.spec.ts`: search by email finds both rows; refund an application from the list.
+
+Built 2026-09-18. Decisions taken while building:
+
+- The builder is `$queryRawUnsafe` with a `Params` collector rather than a tagged template, so both halves can be assembled conditionally; enum columns are compared as `::text` and date parameters as `($n::timestamptz AT TIME ZONE 'UTC')` (a bare parameter against Prisma's `timestamp(3)` is read in the session time zone — the contract test caught a 4-hour shift locally).
+- `occurredAt` for applications is `COALESCE(paidAt, submittedAt, createdAt)` (decision 7.3 as recommended). Application gross and fee columns are 0 until paid so pending rows never inflate totals; `amountDue` carries the snapshot for `PAYMENT_DUE`.
+- A row fetched by id (`getOne`, returned after a refund) is exempt from the default PENDING / FAILED hiding.
+- SYSTEM_ADMIN narrows with `X-Jump-Org` or `?organizationId=` (unlike `/admin/orders`, which ignores the switcher); unscoped rows carry `organization`.
+- ORDER refunds from the list are full refunds only (a partial `amount` is 400) — per-ticket and per-line refunds stay on the order page where the lines are visible. The order detail page now hides refund buttons for organizers.
+- CSV pages with `OFFSET` in 500-row chunks inside one request; keyset pagination deferred.
+- The perf gate (5 000 + 2 000 rows) was not added as a test; the indexes in `20260919120000_transactions_indexes` are in place and `pg_trgm` remains the documented next step.
 
 ### Phase 2 — Customers, analytics, dashboard, tax report (FR-006–FR-008)
 

@@ -27,7 +27,7 @@ See [specs/STATUS.md](../specs/STATUS.md) for verified lifecycle states.
 | 010 | `main` (merged) — phase 2 dark behind `STRIPE_CONNECT_ENABLED`; account model undecided | Settings > Payments — statement descriptor, payment methods, Stripe Connect payouts |
 | 011 | `main` (merged 2026-09-17) — paid forms dark behind `APPLICATIONS_PAYMENTS_ENABLED` | Applications — vendor / sponsor / press / panel forms, charge on approval, pay-now, refunds, digest, event duplicate |
 | 012 | `main` (merged 2026-09-17) | Add-ons — products on ticket and application tiers, sales report, purchasers CSV |
-| 018 | **Planned** — spec + plan 2026-09-17 (PR #64), not built | Transactions — org-wide list of ticket orders + application payments, search by email/name/Stripe id, refunds, customers/analytics/tax report include applications, tier change / adjustments / waive / offline payment on applications |
+| 018 | **In progress** — phase 1 (Transactions list, search, CSV, refunds) built 2026-09-18; phases 2–3 planned | Transactions — org-wide list of ticket orders + application payments, search by email/name/Stripe id, refunds, customers/analytics/tax report include applications, tier change / adjustments / waive / offline payment on applications |
 
 ---
 
