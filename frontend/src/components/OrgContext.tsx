@@ -6,6 +6,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import api, { setActiveOrganizationId } from '@/services/api';
 import type { ThemeMode } from '@/lib/theme';
+import { onOrganizationCreated } from '@/lib/orgChannel';
 
 export interface Organization {
   id: string;
@@ -19,6 +20,8 @@ export interface Organization {
   themeMode?: ThemeMode;
   createdAt: string;
   updatedAt: string;
+  /** null while the organization is still in the /signup flow (spec 022) */
+  onboardingCompletedAt?: string | null;
   _count?: {
     venues: number;
     users: number;
@@ -55,16 +58,28 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
     setSelectedOrgIdState(id);
   }, []);
 
+  // An organization to prefer once the list arrives: `?org=<id>` on the URL
+  // (the signup flow lands on /admin/dashboard?org=…) or a cross-tab
+  // "org-created" announcement (spec 022).
+  const preferredOrgIdRef = useRef<string | null>(null);
+
   const fetchOrgs = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
       const data = await api.get<Organization[]>('/organizations');
       setOrganizations(data);
-      // Auto-select first org if none selected or current selection no longer exists
+      // Auto-select: the preferred org when it is in the list, else keep the
+      // current selection, else the first org
       if (data.length > 0) {
+        const preferred = preferredOrgIdRef.current;
+        preferredOrgIdRef.current = null;
         const prev = selectedOrgIdRef.current;
-        setSelectedOrgId(prev && data.some((o) => o.id === prev) ? prev : data[0].id);
+        const next =
+          (preferred && data.some((o) => o.id === preferred) && preferred) ||
+          (prev && data.some((o) => o.id === prev) && prev) ||
+          data[0].id;
+        setSelectedOrgId(next);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to load organizations');
@@ -74,7 +89,27 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      const fromUrl = url.searchParams.get('org');
+      if (fromUrl) {
+        preferredOrgIdRef.current = fromUrl;
+        url.searchParams.delete('org');
+        window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+      }
+    } catch {
+      // ignore
+    }
     fetchOrgs();
+  }, [fetchOrgs]);
+
+  // The org switcher opens /signup in another tab; when it finishes, pick up
+  // the new organization here without a reload.
+  useEffect(() => {
+    return onOrganizationCreated((id) => {
+      preferredOrgIdRef.current = id;
+      fetchOrgs();
+    });
   }, [fetchOrgs]);
 
   const updateOrganization = useCallback((id: string, patch: Partial<Organization>) => {

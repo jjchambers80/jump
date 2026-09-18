@@ -270,18 +270,30 @@ class TicketService {
   }
 
   /**
+   * Whether a ticket belongs to the staff caller's organization. `null` scope
+   * means unscoped (SYSTEM_ADMIN, hardware scanner key); NO_ORG_SCOPE means a
+   * staff user with no membership, who may see nothing.
+   */
+  _inScope(ticket, organizationId) {
+    if (organizationId === null) return true;
+    return ticket.event?.venue?.organizationId === organizationId;
+  }
+
+  /**
    * Look up a ticket by barcode without redeeming it.
    * Used by the scan preview step (scan → show info → confirm).
    *
    * @param {string} barcode - JUMP-XXXXXXXXXXXX barcode
    * @param {string|null} expectedEventId - Optional event scoping
+   * @param {{ organizationId?: string|null }} [options] - Staff org scope (spec 022): a ticket
+   *   outside it reads as not found so one organization can never see another's tickets
    * @returns {Promise<Object>} Ticket preview info
    */
-  async lookupByBarcode(barcode, expectedEventId = null) {
+  async lookupByBarcode(barcode, expectedEventId = null, { organizationId = null } = {}) {
     const ticket = await prisma.ticket.findUnique({
       where: { barcode },
       include: {
-        event: { select: { id: true, name: true, date: true } },
+        event: { select: { id: true, name: true, date: true, venue: { select: { organizationId: true } } } },
         priceTier: { select: { name: true } },
         contact: { select: { firstName: true, lastName: true, email: true } },
         // Add-ons bought with the order (spec 012) so staff can hand them over at the door
@@ -289,7 +301,7 @@ class TicketService {
       },
     });
 
-    if (!ticket) {
+    if (!ticket || !this._inScope(ticket, organizationId)) {
       const error = new ValidationError('Ticket not found');
       error.redemptionStatus = 'INVALID';
       error.statusCode = 400;
@@ -333,20 +345,21 @@ class TicketService {
    *
    * @param {string} barcode - JUMP-XXXXXXXXXXXX barcode
    * @param {string|null} expectedEventId - Optional event scoping
+   * @param {{ organizationId?: string|null }} [options] - Staff org scope (spec 022)
    * @returns {Promise<Object>} RedemptionResult
    */
-  async redeemByBarcode(barcode, expectedEventId = null) {
+  async redeemByBarcode(barcode, expectedEventId = null, { organizationId = null } = {}) {
     const ticket = await prisma.ticket.findUnique({
       where: { barcode },
       include: {
-        event: { select: { id: true, name: true, date: true } },
+        event: { select: { id: true, name: true, date: true, venue: { select: { organizationId: true } } } },
         priceTier: { select: { name: true } },
         contact: { select: { firstName: true, lastName: true } },
         order: { select: { addOns: { where: { refundedAt: null }, include: { addOn: { select: { name: true } } } } } },
       },
     });
 
-    if (!ticket) {
+    if (!ticket || !this._inScope(ticket, organizationId)) {
       const error = new ValidationError('Ticket not found');
       error.redemptionStatus = 'INVALID';
       error.statusCode = 400;
@@ -432,9 +445,10 @@ class TicketService {
    *
    * @param {string} qrPayload - Raw JWT string from QR code scan
    * @param {string|null} expectedEventId - Optional event ID for cross-event validation
+   * @param {{ organizationId?: string|null }} [options] - Staff org scope (spec 022)
    * @returns {Promise<Object>} RedemptionResult or throws with RedemptionRejection info
    */
-  async redeemTicket(qrPayload, expectedEventId = null) {
+  async redeemTicket(qrPayload, expectedEventId = null, { organizationId = null } = {}) {
     // 1. Verify JWT
     let decoded;
     try {
@@ -457,13 +471,13 @@ class TicketService {
     const ticket = await prisma.ticket.findUnique({
       where: { id: ticketId },
       include: {
-        event: { select: { id: true, name: true, date: true } },
+        event: { select: { id: true, name: true, date: true, venue: { select: { organizationId: true } } } },
         priceTier: { select: { name: true } },
         contact: { select: { firstName: true, lastName: true } },
       },
     });
 
-    if (!ticket) {
+    if (!ticket || !this._inScope(ticket, organizationId)) {
       const notFoundError = new ValidationError('Ticket not found');
       notFoundError.redemptionStatus = 'INVALID';
       notFoundError.statusCode = 400;

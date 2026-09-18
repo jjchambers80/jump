@@ -6,6 +6,7 @@ import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import app from '../../src/api/server.js';
 import { prisma } from '@jump/db';
+import { staffToken, cleanupStaff } from '../helpers/staff.js';
 
 const AUTH_SECRET = process.env.AUTH_SECRET;
 
@@ -25,10 +26,16 @@ describe('Organization Contract Tests', () => {
   let organizerToken;
   let customerToken;
 
-  beforeAll(() => {
-    adminToken = generateToken({ role: 'ADMIN' });
+  beforeAll(async () => {
+    // POST /organizations now adds the creator as an ADMIN member (spec 022),
+    // so the admin must be a real user.
+    adminToken = await staffToken({ role: 'ADMIN', email: 'admin@org-contract-test.com' });
     organizerToken = generateToken({ role: 'ORGANIZER', email: 'organizer@test.com' });
     customerToken = generateToken({ role: 'UNASSIGNED', email: 'customer@test.com' });
+  });
+
+  afterAll(async () => {
+    await cleanupStaff(['admin@org-contract-test.com']);
   });
 
   describe('POST /organizations', () => {

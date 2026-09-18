@@ -66,15 +66,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
   session: { strategy: 'jwt' },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       // Role and active org live in the JWT so the backend can trust them without a
-      // DB hit per request. Re-read them on sign-in and whenever the snapshot is
-      // older than CLAIMS_REFRESH_MS so role changes and new memberships take effect
-      // without a re-login. A missing or soft-deleted user invalidates the session.
+      // DB hit per request. Re-read them on sign-in, when the client calls
+      // useSession().update() (trigger === 'update' — the signup flow does this right
+      // after promoting the user, spec 022), and whenever the snapshot is older than
+      // CLAIMS_REFRESH_MS so role changes and new memberships take effect without a
+      // re-login. A missing or soft-deleted user invalidates the session.
       const now = Date.now();
       const userId = user?.id ?? token.sub;
       if (!userId) return token;
-      if (!user?.id && !shouldRefreshClaims(token, now)) return token;
+      if (!user?.id && trigger !== 'update' && !shouldRefreshClaims(token, now)) return token;
 
       const claims = await loadUserClaims(userId);
       if (!claims) return null;

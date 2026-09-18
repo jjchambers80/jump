@@ -59,6 +59,8 @@ cd frontend && npm run test:unit    # Vitest unit tests (lib/color.ts)
 | `APPLICATION_SWEEP_INTERVAL_MS` | backend | Optional. Application sweep interval (default 1 h): overdue pay-now check + organizer daily digest (spec 011 phase 3) |
 | `STRIPE_CONNECT_ENABLED` | backend | Optional. `true` routes charges for organizations with an active Stripe Connect account as destination charges (spec 010 phase 2). Default off; code deploys dark |
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | backend | Optional. Signing secret for `POST /webhooks/stripe/connect` (connected-account events). Separate from `STRIPE_WEBHOOK_SECRET` |
+| `BILLING_ENABLED` | backend | Optional. `true` inserts the subscribe step into `/signup` and opens Settings › Plan (spec 022 phase 2, Stripe Billing on Jump's own Stripe account). Default off: phase 1 flow only (name → survey → done) |
+| `STRIPE_BILLING_WEBHOOK_SECRET`, `JUMP_STARTER_PRICE_ID` | backend | Phase 2 with `BILLING_ENABLED`: signing secret for `POST /webhooks/stripe/billing` and the Price id of the STARTER plan |
 | `SCANNER_API_KEY` | backend | Optional. Shared key for hardware ticket readers calling `POST /tickets/scan` / `/redeem` via `X-Scanner-Key`. Unset: only staff sessions can scan |
 
 ## Deployment

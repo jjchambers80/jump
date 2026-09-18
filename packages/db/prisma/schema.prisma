@@ -39,6 +39,8 @@ model User {
   // Domain relations. Staff belong to organizations via OrganizationMember;
   // buyers are Contact rows and never link here (spec 007).
   memberships OrganizationMember[]
+  // Spec 022: organizations this user signed up (owner of the Jump account)
+  platformCustomers PlatformCustomer[]
 
   @@index([role])
   @@index([email])
@@ -156,10 +158,18 @@ model Organization {
   // submissions. `applicationDigestAt` is the end of the last window sent.
   applicationDigestEnabled  Boolean            @default(true)
   applicationDigestAt       DateTime?
+  // Spec 022: null while the /signup flow is in progress (OnboardingService
+  // sets it explicitly); direct creates (tests, seed, POST /organizations)
+  // are onboarded at once. Pending organizations are hidden from the org
+  // switcher and swept when abandoned.
+  onboardingCompletedAt     DateTime?          @default(now())
+  // Spec 022: the organizer dismissed the dashboard setup guide.
+  setupGuideDismissedAt     DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  platformCustomer     PlatformCustomer?
   logoImage            Image?                       @relation("OrgLogo", fields: [logoImageId], references: [id])
   coverImage           Image?                       @relation("OrgCover", fields: [coverImageId], references: [id])
   venues               Venue[]
@@ -242,6 +252,34 @@ model OrganizationDomain {
 
 // Staff membership: which organizations a User can administer, and in what role.
 // Replaces User.organizationId so one person can belong to several organizations.
+// Spec 022: the organization's relationship with Jump — who signed up, which
+// plan, the Stripe Billing customer (in Jump's own Stripe account) and the
+// onboarding survey answers. Distinct from Contact (the organization's own
+// buyers and applicants) and from the Auth.js Account model. One row per
+// organization, created when onboarding completes or when the organizer
+// starts a subscription, whichever comes first.
+model PlatformCustomer {
+  id                   String       @id @default(cuid())
+  organizationId       String       @unique
+  ownerUserId          String
+  plan                 PlatformPlan @default(FREE)
+  stripeCustomerId     String?      @unique
+  stripeSubscriptionId String?      @unique
+  subscriptionStatus   String?
+  trialEndsAt          DateTime?
+  currentPeriodEndsAt  DateTime?
+  // { version, goals[], eventTypes[], eventsPerYear, attendance, movingFrom,
+  //   surveySkippedAt, subscribeSkippedAt, source }
+  onboarding           Json?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owner        User         @relation(fields: [ownerUserId], references: [id])
+
+  @@index([ownerUserId])
+}
+
 model OrganizationMember {
   id             String     @id @default(cuid())
   userId         String
@@ -596,6 +634,13 @@ enum UserRole {
 enum MemberRole {
   ORGANIZER
   ADMIN
+}
+
+// Spec 022: FREE = no subscription, platform fee only. STARTER = the paid
+// plan (phase 2, price from JUMP_STARTER_PRICE_ID).
+enum PlatformPlan {
+  FREE
+  STARTER
 }
 
 enum BuyerTokenPurpose {

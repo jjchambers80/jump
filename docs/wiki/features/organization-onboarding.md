@@ -1,0 +1,101 @@
+# Organization Onboarding (signup flow, Jump customer record, setup guide)
+
+**Status:** Implemented — phase 1 (spec 022)
+**Last Updated:** 2026-09-18
+**Spec / plan:** `specs/022-organization-onboarding/plan.md`
+**Reference screenshots:** `docs/research/shopify-onboarding-subscribe.png`, `-survey.png`, `-setup-guide.png`
+
+## Overview
+
+The self-serve path from "signed in" to "has an organization". **Create organization** in the admin org switcher opens `/signup` in a new tab (Shopify-style); a signed-in user with no staff role (`UNASSIGNED`) who opens `/admin` is sent there too. The flow is name → *(subscribe, phase 2)* → survey → done. Step 1 creates a **pending** `Organization` plus an ADMIN `OrganizationMember` for the caller; the survey (five ticketing-flavoured screens, all skippable) is stored on the organization's `PlatformCustomer`; **done** stamps `Organization.onboardingCompletedAt`, promotes the owner from `UNASSIGNED` to `ADMIN`, forces the session's JWT claims to refresh, tells the opener tab to refetch its organization list, and lands on `/admin/dashboard?org=<id>` where the **setup guide** card grid replaces the empty-state box.
+
+`PlatformCustomer` is the *organization's relationship with Jump*: owner, plan (`FREE` today), Stripe Billing customer (phase 2), survey answers. It is not a `Contact` (those are the organization's own buyers) and not the Auth.js `Account` model.
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `packages/db/prisma/schema.prisma` | `PlatformCustomer`, `PlatformPlan`, `Organization.onboardingCompletedAt` (`@default(now())`, set to `null` only by the signup flow), `Organization.setupGuideDismissedAt` |
+| `backend/src/config/onboarding.js` | Survey option ids (the allowlist), `APPLICATION_GOALS`, `MAX_PENDING_ORGANIZATIONS = 3`, `SIGNUP_SOURCES` |
+| `backend/src/services/OnboardingService.js` | `start`, `current`, `getPending`, `saveSurvey`, `skipSurvey`, `skipSubscribe`, `complete`, `discard`; `stepFor(onboarding)` decides where a pending org resumes; `billingEnabled()` |
+| `backend/src/api/routes/signup.js` | `/signup*` routes (any signed-in user) |
+| `backend/src/services/SetupGuideService.js` + `routes/admin.js` | `GET|PATCH /admin/setup-guide` for `activeOrgFor(req)` |
+| `backend/src/services/OrganizationService.js` | `listOrganizations` / `listOrganizationsForUser` hide pending orgs; `createOrganization(data, creatorUserId)` adds the creator as ADMIN member |
+| `backend/src/middleware/scannerAuth.js`, `services/TicketService.js`, `routes/tickets.js` | Check-in scan/redeem scoped to the staff caller's organization (`scannerOrgScope`, `_inScope`) |
+| `frontend/src/app/signup/*` | `layout.tsx` + `SignupGuard` (session required, `callbackUrl` back), `SignupShell` (dark stage, Skip / back), `page.tsx` (name + handle preview, resume), `[orgId]/subscribe` (phase 2 placeholder → survey), `[orgId]/survey`, `[orgId]/done` |
+| `frontend/src/lib/onboarding.ts` | Survey steps, labels, `visibleSteps(answers)`, `signupPathFor(org)` — ids mirror the backend config (contract test) |
+| `frontend/src/lib/orgChannel.ts` | `announceOrganizationCreated` / `onOrganizationCreated`: `BroadcastChannel('jump-org')` + `localStorage` fallback |
+| `frontend/src/services/signupService.ts` | API wrappers |
+| `frontend/src/components/OrgSwitcher.tsx` | **Create organization** → `window.open('/signup?from_admin=1')` (falls back to same-tab navigation when blocked) |
+| `frontend/src/components/OrgContext.tsx` | Honors `?org=<id>` on first load and cross-tab announcements: refetch + select the new org |
+| `frontend/src/components/AdminRoute.tsx` | `UNASSIGNED` → `router.replace('/signup')` |
+| `frontend/src/auth.ts` | `jwt` callback refreshes claims on `trigger === 'update'` (the done page calls `useSession().update()`) |
+| `frontend/src/app/auth/signin/page.tsx` | Honors `?callbackUrl=` (same-origin paths only); footer link **Create your organization** |
+| `frontend/src/app/admin/dashboard/SetupGuide.tsx` | The card grid; copy and inline SVG art live here |
+| `frontend/src/app/admin/organizations/page.tsx` | SYSTEM_ADMIN list: `?includePending=1`, **Pending setup** pill, **Discard** |
+
+## Configuration
+
+| Variable | Notes |
+|---|---|
+| `BILLING_ENABLED` | Phase 2. `true` inserts the subscribe step; unset/false: the step is skipped and `POST /signup/:orgId/subscribe` returns 409 |
+| `STRIPE_BILLING_WEBHOOK_SECRET`, `JUMP_STARTER_PRICE_ID` | Phase 2 (Stripe Billing on Jump's own Stripe account, `POST /webhooks/stripe/billing`) |
+
+## API
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/signup/current` | `{ organization: pending \| null, billingEnabled }` — newest pending org the caller administers |
+| `POST` | `/signup` | `{ name, source?: 'admin'\|'public' }` → 201 pending org `{ id, name, slug, step, onboarding }`. 409 at 3 pending orgs |
+| `GET` | `/signup/:orgId` | One pending org (404 once completed, or for non-members) |
+| `PATCH` | `/signup/:orgId/survey` | Partial `{ goals?, eventTypes?, eventsPerYear?, attendance?, movingFrom? }`; ids validated against `config/onboarding.js` |
+| `POST` | `/signup/:orgId/survey/skip`, `/subscribe/skip` | Record the decision in the onboarding JSON |
+| `POST` | `/signup/:orgId/subscribe` | 409 until `BILLING_ENABLED` (phase 2) |
+| `POST` | `/signup/:orgId/complete` | Stamps, upserts `PlatformCustomer`, promotes `UNASSIGNED → ADMIN`; idempotent; returns the org in the `GET /organizations` shape |
+| `DELETE` | `/signup/:orgId` | Discard a pending org (cascade) |
+| `GET` | `/admin/setup-guide` | `{ dismissedAt, tasks: [{ id, done, href, shown, state? }], onboarding: { goals } }` |
+| `PATCH` | `/admin/setup-guide` | `{ dismissed: true }` |
+| `GET` | `/organizations?includePending=1` | SYSTEM_ADMIN only: also lists pending orgs |
+
+Setup-guide `done` rules: `event` = any event under the org's venues; `design` = brand colour, logo or non-SYSTEM theme; `payments` = Connect `active` when `STRIPE_CONNECT_ENABLED`, else `paymentSettingsUpdatedAt` set (`state` = `connect` / `platform` drives the card copy); `business` = `companyName` + `addressLine1`; `domain` = an ACTIVE `OrganizationDomain`; `applications` = any `ApplicationForm`, **shown** only when the survey goals include `vendor_applications` or `press_applications`.
+
+## How It Works
+
+1. **Start.** `POST /signup` runs one transaction: `Organization { onboardingCompletedAt: null }`, `OrganizationMember { role: ADMIN }`, `PlatformCustomer { ownerUserId, onboarding: { version, source } }`. The slug comes from `OrganizationService.uniqueSlug`.
+2. **Pending is invisible.** `GET /organizations` (both branches) filters `onboardingCompletedAt IS NOT NULL`, so the switcher never lists a half-finished org. `resolveOrgScope` still sees the membership, which is harmless: a brand-new user has no other membership, and an existing member's newer pending org is never auto-selected.
+3. **Resume.** `/signup` calls `GET /signup/current` and redirects to `signupPathFor(org)`; `stepFor` returns `subscribe` only when billing is on and no decision was recorded, `survey` until skipped or completed, else `done`.
+4. **Survey.** One screen per key; Continue PATCHes that key only; the fifth screen (moving-from) appears only when `move_platform` was chosen. Empty answers save `[]`.
+5. **Done.** `complete` stamps `onboardingCompletedAt`, merges `surveyCompletedAt` unless the survey was skipped, and `updateMany({ role: 'UNASSIGNED' } → ADMIN)` — never a downgrade. The page then awaits `useSession().update()` (forces the claims refresh — without it the client keeps `UNASSIGNED` for up to 60 s and `AdminRoute` would bounce back to `/signup`), announces on the channel, and navigates to `/admin/dashboard?org=<id>`.
+6. **Opener tab.** `OrgProvider` subscribes to the channel; on `org-created` it sets the preferred id, refetches, and selects the new organization.
+7. **Legacy create.** `POST /organizations` (ADMIN+, the SYSTEM_ADMIN Organizations page) now creates the membership for a non-SYSTEM_ADMIN caller and the org is onboarded at once (`@default(now())`).
+
+## Check-in scope (fixed in this phase)
+
+`POST /tickets/scan` and `POST /tickets/redeem` used to check only the role: staff of organization A could preview and redeem organization B's tickets. `scannerOrgScope(req)` now resolves the staff caller's organization (honouring `X-Jump-Org`), and `TicketService.lookupByBarcode / redeemByBarcode / redeemTicket` take `{ organizationId }` and answer `INVALID` (400) for a ticket outside it. Hardware readers (`X-Scanner-Key`) and `SYSTEM_ADMIN` stay unscoped; a staff user with no membership matches nothing. Per-organization scanner keys are a follow-up.
+
+## Gotchas
+
+- `onboardingCompletedAt` defaults to `now()`: only `OnboardingService.start` writes `null`. Direct `prisma.organization.create` in tests and seeds produces an onboarded org.
+- `POST /organizations` now needs a real user for non-SYSTEM_ADMIN callers (membership FK). Contract tests must use `staffToken`, not a fabricated ADMIN JWT.
+- `window.open(url, '_blank', 'noopener')` returns `null` even on success; the switcher severs `popup.opener` by hand so the fallback fires only when the popup is actually blocked.
+- Playwright: the popup is a new page in the same context, so the session mock must be registered with `context.route`, and after `complete` the mocked `/api/auth/session` must report `ADMIN` (see `e2e/signup.spec.ts` `promoteSession`).
+- `useSession().update()` only works because `auth.ts` checks `trigger === 'update'`; do not remove that branch.
+- SYSTEM_ADMIN can run `/signup` too (gets a membership like anyone; they see every org regardless).
+
+## Tests
+
+- `backend/tests/contract/signup.test.js` — flow, validation, cap, discard, SYSTEM_ADMIN, legacy create membership, frontend/backend option-id mirror, check-in scope.
+- `frontend/e2e/signup.spec.ts` — name → survey → done, skip, conditional step, resume, signed-out redirect, switcher popup + opener refresh.
+- `frontend/e2e/admin-setup-guide.spec.ts` — cards, done state, Connect vs platform copy, dismiss, all-done heading, 375 px.
+- `frontend/e2e/admin-access.spec.ts` T106 — `UNASSIGNED` at `/admin` lands on `/signup`.
+
+## Not yet (phases 2–3)
+
+Subscribe step + Settings › Plan (Stripe Billing, `BILLING_ENABLED`); survey-tailored templates, abandoned-org sweep, funnel counts, survey answers on the SYSTEM_ADMIN org row. Open decisions in the plan §9 (price, gating, promoting `ORGANIZER → ADMIN`).
+
+## Related Features
+
+- [Org Switcher](org-switcher.md) — `X-Jump-Org`, `activeOrgFor`, claims refresh
+- [Multi-tenant Architecture](multi-tenant-architecture.md) — `Contact` vs `PlatformCustomer`, memberships
+- [Payments Settings](payments-settings.md) — the `payments` card reads Connect status
+- [Custom Domains](custom-domains.md), [Organization Branding](organization-branding.md), [Participants](participants.md) — the other cards

@@ -3,10 +3,23 @@
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { Suspense, useState } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 
-export default function SignInPage() {
+/** Only same-origin paths may be a post-sign-in destination. */
+function safeCallbackUrl(raw: string | null, fallback: string): string {
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return fallback;
+  return raw;
+}
+
+function SignInForm() {
+  const params = useSearchParams();
+  // /signup and the edge middleware pass callbackUrl so a new organizer lands
+  // back where they were going (spec 022)
+  const callbackUrl = safeCallbackUrl(params.get('callbackUrl'), '/events');
+  const devCallbackUrl = safeCallbackUrl(params.get('callbackUrl'), '/admin/dashboard');
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
@@ -21,7 +34,7 @@ export default function SignInPage() {
       const result = await signIn('resend', {
         email,
         redirect: false,
-        callbackUrl: '/events',
+        callbackUrl,
       });
 
       if (result?.error) {
@@ -37,7 +50,7 @@ export default function SignInPage() {
   }
 
   async function handleGoogle() {
-    await signIn('google', { callbackUrl: '/events' });
+    await signIn('google', { callbackUrl });
   }
 
   if (sent) {
@@ -150,7 +163,7 @@ export default function SignInPage() {
               const result = await signIn('dev-email', {
                 email,
                 redirect: false,
-                callbackUrl: '/admin/dashboard',
+                callbackUrl: devCallbackUrl,
               });
               if (result?.error) {
                 setError('Sign-in failed. Make sure the email exists in the database.');
@@ -178,7 +191,22 @@ export default function SignInPage() {
             {loading ? 'Sending...' : 'Send Magic Link'}
           </button>
         </form>
+
+        <p className="mt-6 text-center text-xs text-gray-500 dark:text-slate-400">
+          Want to sell tickets on Jump?{' '}
+          <Link href="/signup" className="text-indigo-600 dark:text-indigo-400 hover:underline">
+            Create your organization
+          </Link>
+        </p>
       </div>
     </div>
+  );
+}
+
+export default function SignInPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignInForm />
+    </Suspense>
   );
 }
