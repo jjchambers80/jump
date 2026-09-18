@@ -11,7 +11,7 @@ import { validateUpdateAttendee } from '../validators/adminValidators.js';
 import { validateUpdateBusinessDetails } from '../validators/organizationValidators.js';
 import { validateCreateOrganizationPerson } from '../validators/organizationPersonValidators.js';
 import { validateTaxRegionParams, validateUpsertTaxRegion, validateUpdateTaxSettings, validateTaxReportQuery } from '../validators/taxValidators.js';
-import { validateFormBody, validateTierBody, validateQuestionBody, validateDecisionBody, validateBulkBody, validateTemplateBody, validateRefundBody, validateAddOnLinesBody, validateTierAddOnsBody } from '../validators/applicationValidators.js';
+import { validateFormBody, validateTierBody, validateQuestionBody, validateDecisionBody, validateBulkBody, validateTemplateBody, validateRefundBody, validateAddOnLinesBody, validateTierAddOnsBody, validateTierChangeBody, validateAdjustmentBody, validateWaiveBody, validateOfflinePaymentBody } from '../validators/applicationValidators.js';
 import { validateUpdatePaymentSettings, validateUpdatePayoutSettings } from '../validators/paymentValidators.js';
 import { validateTransactionQuery, validateTransactionParams, validateTransactionRefundBody } from '../validators/transactionValidators.js';
 import organizationService from '../../services/OrganizationService.js';
@@ -437,6 +437,27 @@ router.post('/events/:eventId/applications/:applicationId/refund', requireAdmin,
 router.patch('/events/:eventId/applications/:applicationId/add-ons', validateAddOnLinesBody, wrap(async (req, res) => {
   const { eventId, applicationId } = req.params;
   res.json(await applicationService.updateAddOns(eventId, applicationId, await scopedOrgFor(req), req.body.addOns, { byUserId: req.user.id, sendEmail: req.body.sendEmail }));
+}));
+// Spec 018 phase 3: corrections before money moves (organizer+) and offline settlement (ADMIN)
+router.post('/events/:eventId/applications/:applicationId/tier', validateTierChangeBody, wrap(async (req, res) => {
+  const { eventId, applicationId } = req.params;
+  res.json(await applicationService.changeTier(eventId, applicationId, await scopedOrgFor(req), req.body.tierId, { byUserId: req.user.id, sendEmail: req.body.sendEmail }));
+}));
+router.post('/events/:eventId/applications/:applicationId/adjustments', validateAdjustmentBody, wrap(async (req, res) => {
+  const { eventId, applicationId } = req.params;
+  res.status(201).json(await applicationService.addAdjustment(eventId, applicationId, await scopedOrgFor(req), req.body, { byUserId: req.user.id }));
+}));
+router.delete('/events/:eventId/applications/:applicationId/adjustments/:adjustmentId', wrap(async (req, res) => {
+  const { eventId, applicationId, adjustmentId } = req.params;
+  res.json(await applicationService.removeAdjustment(eventId, applicationId, await scopedOrgFor(req), adjustmentId, { byUserId: req.user.id }));
+}));
+router.post('/events/:eventId/applications/:applicationId/waive', requireAdmin, validateWaiveBody, wrap(async (req, res) => {
+  const { eventId, applicationId } = req.params;
+  res.json(await applicationService.waiveBalance(eventId, applicationId, await scopedOrgFor(req), req.body, { byUserId: req.user.id, sendEmail: req.body.sendEmail }));
+}));
+router.post('/events/:eventId/applications/:applicationId/offline-payment', requireAdmin, validateOfflinePaymentBody, wrap(async (req, res) => {
+  const { eventId, applicationId } = req.params;
+  res.json(await applicationService.recordOfflinePayment(eventId, applicationId, await scopedOrgFor(req), req.body, { byUserId: req.user.id, sendEmail: req.body.sendEmail }));
 }));
 
 // Templates (Settings › Applications)

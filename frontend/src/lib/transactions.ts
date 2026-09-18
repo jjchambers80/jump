@@ -60,6 +60,7 @@ export interface TransactionQuery {
   from?: string;
   to?: string;
   hasRefunds?: boolean;
+  paymentSource?: 'stripe' | 'offline' | '';
   search?: string;
   sort?: TransactionSort;
   page?: number;
@@ -97,9 +98,8 @@ export function transactionStatusLabel(t: Transaction): string {
   return t.status === 'PENDING' ? pendingLabel(t) : transactionStatusDisplay[t.status]?.label ?? t.status;
 }
 
-/** Whether the row can be refunded from the list (the API enforces ADMIN). */
+/** Whether the row can be refunded from the list (the API enforces ADMIN). Offline rows record a manual refund. */
 export function isRefundable(t: Transaction): boolean {
-  if (t.paymentSource === 'offline') return false;
   return (t.status === 'PAID' || t.status === 'PARTIALLY_REFUNDED') && t.net > 0;
 }
 
@@ -116,6 +116,7 @@ export function transactionQueryString(query: TransactionQuery): string {
     params.set('to', end.toISOString());
   }
   if (query.hasRefunds) params.set('hasRefunds', 'true');
+  if (query.paymentSource) params.set('paymentSource', query.paymentSource);
   if (query.search) params.set('search', query.search);
   if (query.sort) params.set('sort', query.sort);
   if (query.page) params.set('page', String(query.page));

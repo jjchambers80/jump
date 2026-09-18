@@ -11,6 +11,7 @@
 export const TRANSACTION_TYPES = ['ORDER', 'APPLICATION'];
 export const TRANSACTION_STATUSES = ['PENDING', 'PAID', 'PAYMENT_DUE', 'PARTIALLY_REFUNDED', 'REFUNDED', 'FAILED'];
 export const TRANSACTION_SORTS = ['-date', 'date', '-gross', 'gross'];
+export const PAYMENT_SOURCES = ['stripe', 'offline'];
 
 /** Order statuses that count as money collected. */
 export const PAID_ORDER_STATUSES = ['COMPLETED', 'PARTIALLY_REFUNDED', 'REFUNDED'];
@@ -29,7 +30,7 @@ const ORDER_STATUS_MAP = {
 };
 const APPLICATION_STATUS_MAP = {
   PENDING: ['AWAITING_CARD', 'CARD_ON_FILE', 'PROCESSING'],
-  PAID: ['PAID'],
+  PAID: ['PAID', 'NOT_REQUIRED'], // NOT_REQUIRED rows only exist here when settled OFFLINE (waived)
   PAYMENT_DUE: ['PAYMENT_DUE'],
   PARTIALLY_REFUNDED: ['PARTIALLY_REFUNDED'],
   REFUNDED: ['REFUNDED'],
@@ -90,6 +91,7 @@ const APPLICATION_PAID = `a."paymentStatus" IN ('PAID', 'PARTIALLY_REFUNDED', 'R
  * a correlated sum so the row never needs a GROUP BY.
  */
 function orderSelect(filters, params) {
+  if (filters.paymentSource === 'offline') return null; // orders are always Stripe
   const where = [];
   if (filters.organizationId) where.push(`v."organizationId" = ${params.p(filters.organizationId)}`);
   if (filters.ids?.length) where.push(`o."id" IN (${params.list(filters.ids)})`);
@@ -163,7 +165,9 @@ function orderSelect(filters, params) {
  * so pending rows never inflate totals; the snapshot is shown as amountDue.
  */
 function applicationSelect(filters, params) {
-  const where = [`a."status" <> 'DRAFT'`, `a."paymentStatus" <> 'NOT_REQUIRED'`];
+  // NOT_REQUIRED is no money (FREE forms) — except a waived balance (spec 018
+  // phase 3), which is settled OFFLINE and stays auditable as a $0 row.
+  const where = [`a."status" <> 'DRAFT'`, `(a."paymentStatus" <> 'NOT_REQUIRED' OR a."paymentSource" = 'OFFLINE')`];
   if (filters.organizationId) where.push(`a."organizationId" = ${params.p(filters.organizationId)}`);
   if (filters.ids?.length) where.push(`a."id" IN (${params.list(filters.ids)})`);
   if (filters.eventId) where.push(`a."eventId" = ${params.p(filters.eventId)}`);
@@ -176,6 +180,9 @@ function applicationSelect(filters, params) {
     if (statuses.length === 0) return null;
     where.push(`a."paymentStatus"::text IN (${params.list(statuses)})`);
   }
+
+  if (filters.paymentSource === 'offline') where.push(`a."paymentSource" = 'OFFLINE'`);
+  if (filters.paymentSource === 'stripe') where.push(`a."paymentSource" = 'STRIPE'`);
 
   if (filters.hasRefunds === true) where.push(`EXISTS (SELECT 1 FROM "ApplicationRefund" r WHERE r."applicationId" = a."id" AND r."status" = 'SUCCEEDED')`);
   if (filters.hasRefunds === false) where.push(`NOT EXISTS (SELECT 1 FROM "ApplicationRefund" r WHERE r."applicationId" = a."id" AND r."status" = 'SUCCEEDED')`);
@@ -198,7 +205,7 @@ function applicationSelect(filters, params) {
       a."id" AS "reference",
       ${occurredAt} AS "occurredAt",
       a."paymentStatus"::text AS "sourceStatus",
-      ${APPLICATION_STATUS_CASE} AS "status",
+      CASE WHEN a."paymentStatus" = 'NOT_REQUIRED' THEN 'PAID' ELSE ${APPLICATION_STATUS_CASE} END AS "status",
       c."id" AS "contactId",
       c."firstName" AS "firstName",
       c."lastName" AS "lastName",
@@ -220,7 +227,7 @@ function applicationSelect(filters, params) {
       a."stripePaymentIntentId" AS "stripePaymentIntentId",
       a."stripeCheckoutSessionId" AS "stripeCheckoutSessionId",
       a."stripeAccountId" AS "stripeAccountId",
-      'stripe'::text AS "paymentSource"
+      CASE WHEN a."paymentSource" = 'OFFLINE' THEN 'offline' ELSE 'stripe' END AS "paymentSource"
     FROM "Application" a
     JOIN "Contact" c ON c."id" = a."contactId"
     JOIN "ApplicantProfile" p ON p."id" = a."profileId"
@@ -284,6 +291,7 @@ function orderBy(sort) {
  * @property {Date} [from]
  * @property {Date} [to]
  * @property {boolean} [hasRefunds]
+ * @property {'stripe'|'offline'} [paymentSource]
  * @property {string} [search]
  * @property {string[]} [ids]               restrict to these row ids (either type)
  * @property {string} [sort]                one of TRANSACTION_SORTS

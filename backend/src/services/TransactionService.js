@@ -93,7 +93,7 @@ class TransactionService {
       status: r.status,
       stripeRefundId: r.stripeRefundId,
       initiatedBy: r.initiatedBy,
-      manual: false,
+      manual: r.manual === true,
       detail: null,
       createdAt: r.createdAt,
     }));
@@ -175,6 +175,7 @@ class TransactionService {
       from: query.from,
       to: query.to,
       hasRefunds: query.hasRefunds,
+      paymentSource: query.paymentSource,
       search: query.search,
       sort: query.sort,
     };

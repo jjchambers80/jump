@@ -115,13 +115,18 @@ function StatusContent({ params }: { params: { eventId: string; applicationId: s
                     {app.paymentStatus === 'PAYMENT_DUE' && app.paymentDueAt ? ` · due ${formatDate(app.paymentDueAt)}` : ''}
                     {app.refundedTotal > 0 ? ` · ${money(app.refundedTotal)} refunded` : ''}
                   </p>
-                  {app.addOns?.length > 0 && (
+                  {(app.addOns?.length > 0 || (app.adjustments?.length ?? 0) > 0) && (
                     <ul className="mt-2 space-y-0.5 text-xs text-gray-600 dark:text-slate-400" data-testid="apply-add-ons">
                       <li className="flex justify-between gap-3">
                         <span>{app.tier?.name ?? app.form.name}</span>
-                        <span>{money(app.amounts.applicantPays - app.addOns.reduce((s, l) => s + l.applicantPays, 0))}</span>
+                        <span>{money(app.amounts.applicantPays - (app.addOns ?? []).reduce((s, l) => s + l.applicantPays, 0))}</span>
                       </li>
-                      {app.addOns.map((l) => (
+                      {(app.adjustments?.length ?? 0) > 0 && (
+                        <li className="pl-3 italic text-gray-500 dark:text-slate-500" data-testid="apply-adjustment">
+                          Includes {(app.adjustments ?? []).map((adj) => `${adj.reason} (${adj.amount < 0 ? `−${money(-adj.amount)}` : `+${money(adj.amount)}`})`).join(', ')}
+                        </li>
+                      )}
+                      {(app.addOns ?? []).map((l) => (
                         <li key={l.id} className="flex justify-between gap-3">
                           <span>{l.name} ×{l.quantity}</span>
                           <span>{money(l.applicantPays)}</span>

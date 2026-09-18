@@ -87,10 +87,15 @@ export function tierAmounts(price, form, event, organization) {
   return amounts;
 }
 
-/** Lines for `applicationAmounts`: the tier first, then add-ons in display order. */
-export function applicationLines(tier, form, addOnLines = []) {
+/**
+ * Lines for `applicationAmounts`: the tier first, then add-ons in display
+ * order. Manual adjustments (spec 018 phase 3) fold into the tier line so the
+ * fee math never sees a negative item and every add-on line keeps its exact
+ * share; callers guarantee `tier.price + adjustmentTotal >= 0`.
+ */
+export function applicationLines(tier, form, addOnLines = [], adjustmentTotal = 0) {
   return [
-    { price: Number(tier.price), quantity: 1, taxable: form.taxable },
+    { price: Math.round((Number(tier.price) + Number(adjustmentTotal || 0)) * 100) / 100, quantity: 1, taxable: form.taxable },
     ...addOnLines.map((l) => ({ addOnId: l.addOn.id, price: Number(l.addOn.price), quantity: l.quantity, taxable: l.addOn.taxable })),
   ];
 }

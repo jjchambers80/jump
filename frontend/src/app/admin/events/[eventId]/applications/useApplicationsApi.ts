@@ -48,6 +48,13 @@ export function useApplicationsApi(eventId: string) {
       retryCharge: (id: string) => api.post<AdminApplication>(`${base}/applications/${id}/charge`, {}),
       refund: (id: string, body: { amount?: number | null; reason?: string | null }) => api.post<AdminApplication>(`${base}/applications/${id}/refund`, body),
       updateAddOns: (id: string, addOns: AddOnLineInput[]) => api.patch<AdminApplication>(`${base}/applications/${id}/add-ons`, { addOns }),
+      // Spec 018 phase 3
+      changeTier: (id: string, tierId: string) => api.post<AdminApplication>(`${base}/applications/${id}/tier`, { tierId }),
+      addAdjustment: (id: string, body: { amount: number; reason: string }) => api.post<AdminApplication>(`${base}/applications/${id}/adjustments`, body),
+      removeAdjustment: (id: string, adjustmentId: string) => api.delete<AdminApplication>(`${base}/applications/${id}/adjustments/${adjustmentId}`),
+      waive: (id: string, body: { reason: string }) => api.post<AdminApplication>(`${base}/applications/${id}/waive`, body),
+      recordOfflinePayment: (id: string, body: { method: string; amount: number; reference?: string | null; paidAt?: string | null }) =>
+        api.post<AdminApplication>(`${base}/applications/${id}/offline-payment`, body),
       exportUrl: (query: ListQuery) => `${base}/applications/export.csv${qs(query)}`,
       forms: () => api.get<{ data: AdminForm[] }>(`${base}/application-forms`),
       form: (formId: string) => api.get<AdminForm>(`${base}/application-forms/${formId}`),

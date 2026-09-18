@@ -740,6 +740,29 @@ enum ApplicationAction {
   WITHDRAWN
   PAYMENT_DUE
   ADD_ONS_CHANGED // spec 012 phase 2: organizer edited the add-on lines before payment
+  TIER_CHANGED // spec 018 phase 3: organizer moved the application to another tier
+  ADJUSTED // spec 018 phase 3: manual adjustment line added or removed
+  WAIVED // spec 018 phase 3: balance waived (ADMIN)
+  OFFLINE_PAID // spec 018 phase 3: payment recorded outside Stripe (ADMIN)
+  MANUAL_REFUND // spec 018 phase 3: refund recorded on an offline-paid application
+}
+
+enum PaymentSource {
+  STRIPE
+  OFFLINE
+}
+
+enum OfflinePaymentMethod {
+  CHEQUE
+  CASH
+  BANK_TRANSFER
+  COMPED
+  OTHER
+}
+
+enum AdjustmentKind {
+  ADJUSTMENT
+  WAIVER
 }
 
 enum WithdrawnBy {
@@ -883,6 +906,12 @@ model Application {
   paymentDueAt            DateTime?
   overdue                 Boolean   @default(false)
 
+  // Spec 018 phase 3: money recorded outside Stripe (offline payment, waived balance)
+  paymentSource              PaymentSource         @default(STRIPE)
+  offlinePaymentMethod       OfflinePaymentMethod?
+  offlinePaymentReference    String?
+  offlinePaymentRecordedById String?
+
   // Review
   submittedAt     DateTime?
   decidedAt       DateTime?
@@ -903,8 +932,9 @@ model Application {
   tier      ApplicationTier?      @relation(fields: [tierId], references: [id])
   answers   ApplicationAnswer[]
   decisions ApplicationDecision[]
-  refunds   ApplicationRefund[]
-  addOns    ApplicationAddOn[]
+  refunds     ApplicationRefund[]
+  addOns      ApplicationAddOn[]
+  adjustments ApplicationAdjustment[]
 
   @@index([eventId, status])
   @@index([formId, status])
@@ -953,9 +983,27 @@ model ApplicationRefund {
   status         RefundStatus @default(PENDING)
   stripeRefundId String?      @unique
   initiatedBy    String?
+  manual         Boolean      @default(false) // spec 018: recorded refund on an offline-paid application, no Stripe call
   createdAt      DateTime     @default(now())
 
   application Application @relation(fields: [applicationId], references: [id])
+
+  @@index([applicationId])
+}
+
+// Spec 018 phase 3: signed line on an application's amount snapshot — a
+// discount, a late fee, or the waived balance. Removed and re-added rather
+// than edited; the snapshot is recomputed on every change.
+model ApplicationAdjustment {
+  id            String         @id @default(cuid())
+  applicationId String
+  kind          AdjustmentKind @default(ADJUSTMENT)
+  amount        Decimal        @db.Decimal(10, 2) // signed; negative = discount
+  reason        String
+  createdById   String?
+  createdAt     DateTime       @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
   @@index([applicationId])
 }

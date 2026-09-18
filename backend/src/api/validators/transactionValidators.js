@@ -3,7 +3,7 @@
 // GET|POST /admin/transactions/:type/:id/refund(s)
 
 import { ValidationError } from '../../middleware/errorHandler.js';
-import { TRANSACTION_TYPES, TRANSACTION_STATUSES, TRANSACTION_SORTS } from '../../services/transactionQuery.js';
+import { TRANSACTION_TYPES, TRANSACTION_STATUSES, TRANSACTION_SORTS, PAYMENT_SOURCES } from '../../services/transactionQuery.js';
 
 const MAX_PAGE = 1000;
 const MAX_PAGE_SIZE = 100;
@@ -58,6 +58,11 @@ export const validateTransactionQuery = (req, res, next) => {
     out.to = parseDateParam(q.to, 'to');
     if (out.from && out.to && out.from > out.to) throw new ValidationError('from must be before to');
     out.hasRefunds = parseBoolParam(q.hasRefunds, 'hasRefunds');
+    if (q.paymentSource !== undefined && q.paymentSource !== '') {
+      const source = String(q.paymentSource).toLowerCase();
+      if (!PAYMENT_SOURCES.includes(source)) throw new ValidationError(`paymentSource must be one of ${PAYMENT_SOURCES.join(', ')}`);
+      out.paymentSource = source;
+    }
     if (q.search !== undefined && q.search !== '') {
       const search = String(q.search).trim();
       if (search.length > MAX_SEARCH) throw new ValidationError(`search must be ${MAX_SEARCH} characters or fewer`);

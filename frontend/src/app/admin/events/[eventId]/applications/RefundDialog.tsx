@@ -48,13 +48,13 @@ export default function RefundDialog({ eventId, application, returnFocusRef, onC
   return (
     <SettingsDialog
       titleId="refund-dialog-title"
-      title="Refund application"
+      title={application.payment.manualRefund ? 'Record refund' : 'Refund application'}
       dirty={amount !== max.toFixed(2) || reason.trim() !== ''}
       saving={saving}
       saveDisabled={!valid}
       submitWhenClean
-      submitLabel={full ? `Refund ${money(max)}` : `Refund ${valid ? money(value) : ''}`}
-      savingLabel="Refunding…"
+      submitLabel={`${application.payment.manualRefund ? 'Record' : 'Refund'} ${full ? money(max) : valid ? money(value) : ''}`}
+      savingLabel={application.payment.manualRefund ? 'Recording…' : 'Refunding…'}
       initialFocusRef={amountRef}
       returnFocusRef={returnFocusRef}
       onClose={onClose}
@@ -68,7 +68,7 @@ export default function RefundDialog({ eventId, application, returnFocusRef, onC
         )}
         <p className="text-sm text-gray-700 dark:text-slate-300">
           <strong>{application.profile.businessName}</strong> paid {money(application.amounts.applicantPays)}
-          {application.payment.refundedTotal > 0 ? `; ${money(application.payment.refundedTotal)} already refunded` : ''}. Up to {money(max)} can be returned to their card.
+          {application.payment.refundedTotal > 0 ? `; ${money(application.payment.refundedTotal)} already refunded` : ''}. Up to {money(max)} can be {application.payment.manualRefund ? 'recorded as refunded' : 'returned to their card'}.
         </p>
         <div>
           <label htmlFor="refund-amount" className={labelClass}>
@@ -87,9 +87,11 @@ export default function RefundDialog({ eventId, application, returnFocusRef, onC
             className={fieldClass}
           />
           <p className={hintClass}>
-            {application.payment.stripeAccountId
-              ? 'The organization’s share is pulled back from the connected account and the platform fee is returned, pro rata.'
-              : 'Stripe returns the money to the original card in 5–10 business days.'}
+            {application.payment.manualRefund
+              ? 'This application was paid outside Jump, so there is no Stripe charge: the refund is recorded here and you return the money yourself.'
+              : application.payment.stripeAccountId
+                ? 'The organization’s share is pulled back from the connected account and the platform fee is returned, pro rata.'
+                : 'Stripe returns the money to the original card in 5–10 business days.'}
           </p>
         </div>
         <div>

@@ -46,8 +46,8 @@ export const MERGE_FIELDS = [
   ['links.account', 'Link to the applicant account page'],
 ];
 
-/** Actions that have a template. PAYMENT_DUE is used from phase 2; ADD_ONS_CHANGED from spec 012. */
-export const TEMPLATE_ACTIONS = ['RECEIVED', 'APPROVED', 'REJECTED', 'WAITLISTED', 'WITHDRAWN', 'PAYMENT_DUE', 'ADD_ONS_CHANGED'];
+/** Actions that have a template. PAYMENT_DUE is used from phase 2; ADD_ONS_CHANGED from spec 012; TIER_CHANGED / WAIVED / OFFLINE_PAID from spec 018. */
+export const TEMPLATE_ACTIONS = ['RECEIVED', 'APPROVED', 'REJECTED', 'WAITLISTED', 'WITHDRAWN', 'PAYMENT_DUE', 'ADD_ONS_CHANGED', 'TIER_CHANGED', 'WAIVED', 'OFFLINE_PAID'];
 
 export const DEFAULT_TEMPLATES = {
   RECEIVED: {
@@ -117,6 +117,40 @@ We updated the add-ons on {{profile.businessName}}'s application for {{event.nam
 
 Add-ons: {{addOns.summary}}
 New total: {{amount.applicantPays}}
+
+Your application: {{links.status}}
+
+{{organization.name}}`,
+  },
+  TIER_CHANGED: {
+    subject: 'Your {{event.name}} application was moved to {{tier.name}}',
+    body: `Hi {{applicant.firstName}},
+
+We moved {{profile.businessName}}'s application for {{event.name}} to {{tier.name}}.
+{{#addOns}}
+Add-ons: {{addOns.summary}}
+{{/addOns}}
+New total: {{amount.applicantPays}}
+
+Your application: {{links.status}}
+
+{{organization.name}}`,
+  },
+  WAIVED: {
+    subject: 'Your balance for {{event.name}} has been waived',
+    body: `Hi {{applicant.firstName}},
+
+Good news: the balance on {{profile.businessName}}'s application for {{event.name}}{{#tier}} ({{tier.name}}){{/tier}} has been waived. Nothing is owed and your spot is confirmed.
+
+Your application: {{links.status}}
+
+{{organization.name}}`,
+  },
+  OFFLINE_PAID: {
+    subject: 'Payment received for {{event.name}}',
+    body: `Hi {{applicant.firstName}},
+
+We recorded your payment of {{amount.applicantPays}} for {{profile.businessName}}'s application to {{event.name}}{{#tier}} ({{tier.name}}){{/tier}}. Your spot is confirmed.
 
 Your application: {{links.status}}
 

@@ -1,6 +1,6 @@
 # Implementation Plan: Transactions (spec 018)
 
-**Status**: Planned 2026-09-17. Phase 1 built 2026-09-18 (PR #65, merged). Phase 2 built 2026-09-18 on `feat/018-transactions-phase-2`.
+**Status**: Planned 2026-09-17. Phases 1–2 built and merged 2026-09-18 (PRs #65, #66). Phase 3 built 2026-09-18 on `feat/018-transactions-phase-3`.
 **Spec**: [spec.md](./spec.md). Depends on spec 011 (all phases on `main`), spec 012 (all phases on `main`), spec 009 (collected tax report), spec 010 phase 2 (Connect routing, dark).
 **Branches**: plan on `plan/018-transactions` (PR #64); phases on `feat/018-transactions-phase-1` → `-phase-2` → `-phase-3`, each merged to `main` alone.
 
@@ -271,6 +271,16 @@ Built 2026-09-18. Decisions taken while building:
 ### Phase 3 — Corrections: tier change, adjustments, waive, offline payment (FR-009–FR-013)
 
 Schema migration; `amountEditable`; five service methods; six routes + validators; three templates; serialisers; detail-page dialogs; status-page adjustments; Source pill and filter. Tests: `backend/tests/contract/applicationCorrections.test.js` — tier change on SUBMITTED recomputes `applicantPays` and writes `TIER_CHANGED` + email; tier change on `PAYMENT_DUE` moves the reserved slot (old tier `quantityReserved` −1, new +1) and 409s with nothing changed when the new tier is full; tier change drops an add-on not offered on the new tier and names it; adjustment −$25 on a $25 tier passes, −$25.01 → 400, add-on lines' `applicantPays` unchanged; adjustment on PAID → 409; waive: money columns 0, `NOT_REQUIRED`, slot APPROVED, adjustment `WAIVER` row, listed in Transactions with gross 0 and `offline`; offline payment: `PAID`, `paymentSource: OFFLINE`, no `stripePaymentIntentId`, slot APPROVED, add-on holds committed, amount mismatch → 400, wrong state → 409, ORGANIZER → 403; manual refund on offline row creates `manual: true` with no Stripe call (Stripe mock asserts zero calls) and `PARTIALLY_REFUNDED`; approval after a tier change charges the new amount (extends `applicationPayments.test.js`). e2e: change tier → approve → PAID at the new amount.
+
+Built 2026-09-18. Decisions taken while building:
+
+- Waive and offline payment share `_lockForSettlement` (APPROVED + PAYMENT_DUE) and `_confirmHeldSlot` (the RESERVED → APPROVED move from `_markPaid`, including add-on holds → sold) rather than making `_markPaid` public: the offline path also has to write the `paymentSource` columns in the same transaction, and `_markPaid` opens its own.
+- A waived application is `paymentStatus = NOT_REQUIRED` + `paymentSource = OFFLINE`, and the Transactions union includes NOT_REQUIRED rows only when OFFLINE (decision 7.9 as recommended: a $0 `PAID` row with the Offline pill).
+- Add-on lines are rewritten on every recompute so each line's `applicantPays` is exact; because FeeService allocates the fixed processing component proportionally, a line's share can move by a cent when the tier line changes — the tests assert ≤ 2¢, not equality.
+- Adjustments do not email the applicant; tier change, waive and offline payment do (`TIER_CHANGED`, `WAIVED`, `OFFLINE_PAID` templates). The applicant status page shows adjustments as "Includes …" under the tier line because the tier line is already net of them.
+- `_afterAmountChange` only expires a Checkout session on APPROVED + PAYMENT_DUE rows (a SUBMITTED row's stored session is the completed setup session and must stay).
+- `offlinePayment.paidAt` may be back-dated (≤ 1 day in the future is rejected); the tax report's `paidAt` basis therefore honours the cheque date.
+- Not built: a "settle offline instead of charging" option at approval — approving a CARD_ON_FILE application still charges the card, so an organizer accepting a cheque for a submitted application approves, lets the charge fail (or has the applicant remove the card), then records the payment. Follow-up if it comes up.
 
 ### Explicitly out of scope
 
