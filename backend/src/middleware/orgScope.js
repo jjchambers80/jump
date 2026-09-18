@@ -42,7 +42,10 @@ export async function resolveActiveMembership(userId, preferredOrgId) {
 
 /**
  * Resolves organization scope for the current user.
- * SYSTEM_ADMIN: no filter (access to everything)
+ * SYSTEM_ADMIN: the organization chosen in the admin switcher (X-Jump-Org)
+ *   when one was sent, else no filter (access to everything). Every main-nav
+ *   page shows one organization's data at a time; only the Organizations
+ *   page is cross-org.
  * ADMIN/ORGANIZER: scoped to their active organization
  *
  * @param {string} userId
@@ -52,6 +55,9 @@ export async function resolveActiveMembership(userId, preferredOrgId) {
  */
 export async function resolveOrgScope(userId, userRole, preferredOrgId) {
   if (userRole === 'SYSTEM_ADMIN') {
+    if (preferredOrgId) {
+      return { organizationId: preferredOrgId, venueFilter: { venue: { organizationId: preferredOrgId } } };
+    }
     return { organizationId: null, venueFilter: undefined };
   }
 

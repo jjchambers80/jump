@@ -52,7 +52,7 @@ Why this exists when the spec 018 Transactions list was removed: submissions had
 
 ### Scope
 
-`participantsScopeFor(req)` follows the customers route: SYSTEM_ADMIN is unscoped (`organizationId: null`, rows and forms carry `organization`); a member is scoped to the active organization (X-Jump-Org); a staff user with no membership gets empty results (`{ data: [], total: 0, summary: {} }`, `{ data: [] }`, an empty CSV, bulk results all "Application not found").
+`participantsScopeFor(req)` follows the customers route: SYSTEM_ADMIN without `X-Jump-Org` is unscoped (`organizationId: null`, rows and forms carry `organization`), with the header it is scoped like a member; a member is scoped to the active organization (X-Jump-Org); a staff user with no membership gets empty results (`{ data: [], total: 0, summary: {} }`, `{ data: [] }`, an empty CSV, bulk results all "Application not found").
 
 ### Query
 
