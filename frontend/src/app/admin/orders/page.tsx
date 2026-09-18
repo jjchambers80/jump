@@ -612,6 +612,15 @@ export default function AdminOrdersPage() {
         </Link>
       </div>
 
+      {/* Application payments live in Transactions (spec 018) */}
+      <p className="mb-4 text-xs text-gray-500 dark:text-slate-400">
+        Looking for application payments or a charge by Stripe id?{' '}
+        <Link href="/admin/transactions" className="text-indigo-600 dark:text-indigo-400 hover:underline">
+          See Transactions
+        </Link>
+        .
+      </p>
+
       {/* Search bar */}
       <div className="flex items-center gap-3 mb-4">
         <form onSubmit={handleSearch} className="flex-1 relative">

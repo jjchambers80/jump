@@ -13,6 +13,7 @@ import { validateCreateOrganizationPerson } from '../validators/organizationPers
 import { validateTaxRegionParams, validateUpsertTaxRegion, validateUpdateTaxSettings, validateTaxReportQuery } from '../validators/taxValidators.js';
 import { validateFormBody, validateTierBody, validateQuestionBody, validateDecisionBody, validateBulkBody, validateTemplateBody, validateRefundBody, validateAddOnLinesBody, validateTierAddOnsBody } from '../validators/applicationValidators.js';
 import { validateUpdatePaymentSettings, validateUpdatePayoutSettings } from '../validators/paymentValidators.js';
+import { validateTransactionQuery, validateTransactionParams, validateTransactionRefundBody } from '../validators/transactionValidators.js';
 import organizationService from '../../services/OrganizationService.js';
 import organizationPersonService from '../../services/OrganizationPersonService.js';
 import orderService from '../../services/OrderService.js';
@@ -30,6 +31,7 @@ import applicationFormService from '../../services/ApplicationFormService.js';
 import applicationService from '../../services/ApplicationService.js';
 import applicationTemplateService from '../../services/ApplicationTemplateService.js';
 import applicationDigestService from '../../services/ApplicationDigestService.js';
+import transactionService from '../../services/TransactionService.js';
 
 const router = express.Router();
 
@@ -501,6 +503,47 @@ router.patch('/settings/payments/connect/payouts', requireAdmin, validateUpdateP
   }
 });
 
+// ─── Transactions (spec 018 phase 1) ──────────────────────────────────────
+// Org-wide union of ticket orders and application payments. Members are
+// scoped to their active organization; SYSTEM_ADMIN is unscoped unless the
+// org switcher (X-Jump-Org) or ?organizationId= names one, and then gets an
+// organization column on every row.
+
+async function transactionsOrgFor(req) {
+  const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
+  if (isUnscoped(scope)) return req.user.organizationId || req.query.organizationId || null;
+  if (!scope.organizationId) throw new NotFoundError('No organization is assigned to this user');
+  return scope.organizationId;
+}
+
+/** GET /admin/transactions — see validateTransactionQuery for the filters. */
+router.get('/transactions', validateTransactionQuery, wrap(async (req, res) => {
+  res.json(await transactionService.list(await transactionsOrgFor(req), req.transactionQuery));
+}));
+
+/** GET /admin/transactions/export.csv — same filters, one row per transaction plus one per refund. */
+router.get('/transactions/export.csv', validateTransactionQuery, wrap(async (req, res) => {
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="transactions-${new Date().toISOString().slice(0, 10)}.csv"`);
+  await transactionService.exportCsv(await transactionsOrgFor(req), req.transactionQuery, res);
+  res.end();
+}));
+
+/** GET /admin/transactions/:type/:id/refunds — normalised refund history. */
+router.get('/transactions/:type/:id/refunds', validateTransactionParams, wrap(async (req, res) => {
+  res.json({ refunds: await transactionService.refunds(await transactionsOrgFor(req), req.params.type, req.params.id) });
+}));
+
+/** POST /admin/transactions/:type/:id/refund { amount?, reason? } — ADMIN; delegates to the per-type refund service. */
+router.post('/transactions/:type/:id/refund', requireAdmin, validateTransactionParams, validateTransactionRefundBody, wrap(async (req, res) => {
+  const result = await transactionService.refund(await transactionsOrgFor(req), req.params.type, req.params.id, {
+    amount: req.body.amount ?? null,
+    reason: req.body.reason ? req.body.reason.trim() || null : null,
+    initiatedBy: req.user.id,
+  });
+  res.json(result);
+}));
+
 /**
  * GET /admin/dashboard/stats
  * Aggregate statistics across all accessible events
@@ -900,7 +943,7 @@ router.post('/orders/:orderId/resend-confirmation', async (req, res, next) => {
  * Refund an entire order (all tickets voided, full amount returned).
  * Body: { reason?: string }
  */
-router.post('/orders/:orderId/refund', async (req, res, next) => {
+router.post('/orders/:orderId/refund', requireAdmin, async (req, res, next) => {
   try {
     const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
 
@@ -937,7 +980,7 @@ router.post('/orders/:orderId/refund', async (req, res, next) => {
  * Refund a single ticket (void ticket, partial refund).
  * Body: { reason?: string }
  */
-router.post('/tickets/:ticketId/refund', async (req, res, next) => {
+router.post('/tickets/:ticketId/refund', requireAdmin, async (req, res, next) => {
   try {
     const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
 
@@ -972,7 +1015,7 @@ router.post('/tickets/:ticketId/refund', async (req, res, next) => {
  * Refund one add-on line (spec 012): all-in line amount, quantity released,
  * tickets untouched. Body: { reason?: string }
  */
-router.post('/orders/:orderId/add-ons/:orderAddOnId/refund', async (req, res, next) => {
+router.post('/orders/:orderId/add-ons/:orderAddOnId/refund', requireAdmin, async (req, res, next) => {
   try {
     const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
 

@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import api from '@/services/api';
 import type { OrderAddOnLine } from '@/lib/addOns';
 
@@ -132,6 +133,10 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
 
 export default function AdminOrderDetailPage() {
   const { orderId } = useParams<{ orderId: string }>();
+  const { data: session } = useSession();
+  const role = (session?.user as { role?: string } | undefined)?.role;
+  // Refunds are ADMIN on the backend (spec 018 phase 1); organizers see the history only.
+  const canRefund = role === 'ADMIN' || role === 'SYSTEM_ADMIN';
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -245,7 +250,7 @@ export default function AdminOrderDetailPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {(order.status === 'COMPLETED' || order.status === 'PARTIALLY_REFUNDED') && (
+          {canRefund && (order.status === 'COMPLETED' || order.status === 'PARTIALLY_REFUNDED') && (
             <button
               onClick={() => openRefundDialog('order', order.id, `Order ${order.orderRef}`)}
               className="px-3 py-1.5 text-sm font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition"
@@ -316,7 +321,7 @@ export default function AdminOrderDetailPage() {
                 <td className="py-2 text-right">{formatCurrency(line.unitPrice)}</td>
                 <td className="py-2 text-right">
                   <span className={line.refundedAt ? 'line-through text-gray-400' : ''}>{formatCurrency(line.lineTotal)}</span>
-                  {!line.refundedAt && (order.status === 'COMPLETED' || order.status === 'PARTIALLY_REFUNDED') && (
+                  {canRefund && !line.refundedAt && (order.status === 'COMPLETED' || order.status === 'PARTIALLY_REFUNDED') && (
                     <button
                       onClick={() => openRefundDialog('addOn', line.id, `${line.quantity} × ${line.name ?? 'Add-on'}`)}
                       className="ml-3 px-2 py-1 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition"
@@ -391,7 +396,7 @@ export default function AdminOrderDetailPage() {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  {(ticket.status === 'VALID' || ticket.status === 'REDEEMED') && (
+                  {canRefund && (ticket.status === 'VALID' || ticket.status === 'REDEEMED') && (
                     <button
                       onClick={() => openRefundDialog('ticket', ticket.id, `Ticket ${ticket.barcode}`)}
                       className="px-2 py-1 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition"
