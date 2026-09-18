@@ -28,6 +28,7 @@ See [specs/STATUS.md](../specs/STATUS.md) for verified lifecycle states.
 | 011 | `main` (merged 2026-09-17) — paid forms dark behind `APPLICATIONS_PAYMENTS_ENABLED` | Applications — vendor / sponsor / press / panel forms, charge on approval, pay-now, refunds, digest, event duplicate |
 | 012 | `main` (merged 2026-09-17) | Add-ons — products on ticket and application tiers, sales report, purchasers CSV |
 | 018 | `main` (phases 1–3 built 2026-09-18; phase 1 Transactions list removed 2026-09-18) — settle-offline-at-approval is a noted follow-up | Application money in customers/analytics/dashboard/tax report; tier change / adjustments / waive / offline payment on applications. The org-wide Transactions list was removed: it duplicated Orders and the per-event Applications tab |
+| 023 | **Proposed** 2026-09-18 — `specs/023-legal-compliance/spec.md`; phase 1 is a go-live blocker | Legal and compliance foundation — Terms, Privacy, Organizer Terms (Connect + subscription annexes), refund disclosure at checkout, card-on-file authorization, copyright / content complaint intake + DMCA agent, privacy requests and erasure, audit log |
 
 ---
 
