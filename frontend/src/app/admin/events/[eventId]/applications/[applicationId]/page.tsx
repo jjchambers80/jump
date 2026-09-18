@@ -27,6 +27,7 @@ import DecisionDialog from '../DecisionDialog';
 import EditAddOnsDialog from '../EditAddOnsDialog';
 import { AdjustmentDialog, ChangeTierDialog, OfflinePaymentDialog, WaiveDialog } from '../CorrectionDialogs';
 import RefundDialog from '../RefundDialog';
+import EditTagsDialog from '@/components/applications/EditTagsDialog';
 import { describeError, useApplicationsApi } from '../useApplicationsApi';
 
 const card = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
@@ -81,6 +82,11 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
   const [booth, setBooth] = useState('');
   const [note, setNote] = useState('');
   const [savingNotes, setSavingNotes] = useState(false);
+  // Spec 019 phase 3: tags and check-in.
+  const [editingTags, setEditingTags] = useState(false);
+  const [tagOptions, setTagOptions] = useState<string[]>([]);
+  const [checking, setChecking] = useState(false);
+  const tagsBtnRef = useRef<HTMLButtonElement>(null);
   const decisionBtnRef = useRef<HTMLButtonElement>(null);
   const refundBtnRef = useRef<HTMLButtonElement>(null);
   const addOnsBtnRef = useRef<HTMLButtonElement>(null);
@@ -135,6 +141,33 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
       setError(describeError(err, 'Could not charge the card'));
     } finally {
       setCharging(false);
+    }
+  };
+
+  const openTags = async () => {
+    try {
+      setTagOptions((await api.tags()).data);
+    } catch {
+      setTagOptions([]);
+    }
+    setEditingTags(true);
+  };
+
+  // Optimistic tick (as on the list); reverted on error.
+  const toggleCheck = async (field: 'checkedIn' | 'checkedOut', value: boolean) => {
+    if (!app || checking) return;
+    const column = field === 'checkedIn' ? 'checkedInAt' : 'checkedOutAt';
+    const before = app[column];
+    setApp({ ...app, [column]: value ? before ?? new Date().toISOString() : null });
+    setChecking(true);
+    setError(null);
+    try {
+      setApp(await api.updateMeta(app.id, { [field]: value }));
+    } catch (err) {
+      setApp((prev) => (prev ? { ...prev, [column]: before } : prev));
+      setError(describeError(err, 'Could not update check-in'));
+    } finally {
+      setChecking(false);
     }
   };
 
@@ -571,6 +604,41 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
               <button type="button" onClick={saveNotes} disabled={savingNotes || (booth === (app.boothLabel ?? '') && note === (app.internalNote ?? ''))} className={`${btn} mt-3`}>
                 {savingNotes ? 'Saving…' : 'Save notes'}
               </button>
+
+              {/* Tags (spec 019 phase 3) */}
+              <div className="mt-4 border-t border-gray-200 pt-4 dark:border-slate-700" data-testid="application-tags">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-gray-700 dark:text-slate-300">Tags</p>
+                  <button ref={tagsBtnRef} type="button" onClick={openTags} className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300">
+                    Edit tags
+                  </button>
+                </div>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {(app.tags ?? []).length === 0 && <span className="text-xs text-gray-500 dark:text-slate-400">No tags.</span>}
+                  {(app.tags ?? []).map((t) => (
+                    <span key={t} className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Check-in (spec 019 phase 3) */}
+              {app.status === 'APPROVED' && (
+                <div className="mt-4 border-t border-gray-200 pt-4 dark:border-slate-700" data-testid="application-checkin">
+                  <p className="text-sm font-medium text-gray-700 dark:text-slate-300">On site</p>
+                  <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-800 dark:text-slate-200">
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" checked={Boolean(app.checkedInAt)} disabled={checking} onChange={(e) => toggleCheck('checkedIn', e.target.checked)} />
+                      Checked in{app.checkedInAt ? ` · ${formatDate(app.checkedInAt, true)}` : ''}
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" checked={Boolean(app.checkedOutAt)} disabled={checking} onChange={(e) => toggleCheck('checkedOut', e.target.checked)} />
+                      Checked out{app.checkedOutAt ? ` · ${formatDate(app.checkedOutAt, true)}` : ''}
+                    </label>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* History */}
@@ -678,6 +746,23 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
             setApp(next);
             setCorrection(null);
             setNotice('Payment recorded. The applicant has been emailed.');
+          }}
+        />
+      )}
+
+      {editingTags && app && (
+        <EditTagsDialog
+          eventId={params.eventId}
+          applicationId={app.id}
+          businessName={app.profile.businessName}
+          tags={app.tags ?? []}
+          suggestions={tagOptions}
+          returnFocusRef={tagsBtnRef}
+          onClose={() => setEditingTags(false)}
+          onSaved={(next) => {
+            setApp(next);
+            setEditingTags(false);
+            setNotice('Tags saved.');
           }}
         />
       )}

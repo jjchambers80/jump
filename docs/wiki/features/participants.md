@@ -1,6 +1,6 @@
 # Participants
 
-**Status**: Phases 1–2 implemented 2026-09-18 (organization-wide submissions list, shared table, Applications tab with forms across events, form templates). Phase 3 (tags, check-in) planned. Spec: `specs/019-participants/`.
+**Status**: Implemented — all three phases 2026-09-18 (organization-wide submissions list and shared table; Applications tab with forms across events and form templates; tags and on-site check-in). Spec: `specs/019-participants/`.
 **Last Updated**: 2026-09-18
 
 ## Overview
@@ -34,6 +34,12 @@ Why this exists when the spec 018 Transactions list was removed: submissions had
 | `frontend/src/app/admin/participants/applications/page.tsx` | Applications tab: forms across events (Event, Form, Kind, Status, Submissions link, Edit) + Templates cards with Delete; New application / New template (ADMIN) |
 | `frontend/src/app/admin/participants/templates/[templateId]/page.tsx` | Template editor: cards on a local definition with synthetic `t0…` / `q0…` ids, one Save (`PUT`), `beforeunload` guard while dirty |
 | `frontend/src/app/admin/events/[eventId]/applications/forms/[formId]/page.tsx`, `forms/page.tsx` | **Save as template** button + "Created from the … template" note; New form gains a Start-from-template select |
+| `packages/db/prisma/migrations/20260924000000_application_tags_checkin` | Phase 3: `Application.tags String[]` (GIN index), `checkedInAt`, `checkedOutAt` |
+| `backend/src/services/ApplicationService.js` (`updateMeta`, `_normaliseTags`, `distinctTags`) | Phase 3: `updateNotes` is an alias of `updateMeta({ boothLabel, internalNote, tags, checkedIn, checkedOut })`; `MAX_TAGS` (20) / `MAX_TAG_LENGTH` (40) in `config/applications.js`; `tag` filter and `q` on tags in `_listWhere`; CSV `tags`, `checkedInAt`, `checkedOutAt` |
+| `backend/src/api/validators/applicationValidators.js` (`validateMetaBody`) | Phase 3: PATCH shape |
+| `frontend/src/components/applications/EditTagsDialog.tsx` | Chip input (Enter / comma adds, Backspace removes, `datalist` + "Used elsewhere" suggestions from the tags endpoint); mirrors the backend normalisation |
+| `frontend/src/components/applications/BusinessCell.tsx`, `SubmissionsTable.tsx`, `RowActionsMenu.tsx` | Checked in / out ticks on APPROVED rows (optimistic, reverted on error), Tag filter, Tags column (`boothLabel` grey chip + amber tag chips), ⋯ → Edit tags |
+| `frontend/src/app/admin/events/[eventId]/applications/[applicationId]/page.tsx` | Notes card: Tags block + Edit tags, On site check-in ticks with timestamps (APPROVED only) |
 | `frontend/src/app/admin/events/[eventId]/applications/page.tsx` | Now `ApplicationsHeader` + `SubmissionsTable eventId=…` |
 | `frontend/src/app/admin/events/[eventId]/applications/DecisionDialog.tsx` | `submitWhenClean` — a decision can be sent with the untouched template (previously the button stayed disabled until something was edited) |
 | `frontend/src/components/AdminSidebar.tsx` | **Participants** after Customers |
@@ -69,6 +75,13 @@ A template is a **snapshot**, not a live form: `ApplicationFormTemplate.definiti
 - **Create from template** (`POST …/application-forms { name, kind, templateId }`, ADMIN): `kind` must match (400), the template must be in scope (404), `tiers` / `questions` in the body are refused; explicit body settings win over the template's. The form is created and `_materialise`d in one transaction — DRAFT, no window, tiers at full quantity — with `createdFromTemplateId` set (informational; survives template deletion).
 - Editing a template never changes forms created from it. Writes are ADMIN; reads follow the Participants scope. SYSTEM_ADMIN creates under the active organization (X-Jump-Org).
 
+### Tags and check-in (phase 3)
+
+- `Application.tags` is free-form per application: trimmed, inner whitespace collapsed, deduped case-insensitively (first spelling wins), ≤ 20 tags × 40 characters. `boothLabel` stays a separate single value (used by emails and the detail page; decision 7.5) and renders as the grey chip before the amber tags.
+- `PATCH /admin/events/:eventId/applications/:id` now takes `{ boothLabel?, internalNote?, tags?, checkedIn?, checkedOut? }` (`validateMetaBody`). `checkedIn: true` stamps `checkedInAt = now` only when it is null (repeat ticks keep the first stamp); `false` clears it; same for out. Both are refused with 409 unless `status = APPROVED`.
+- `GET /admin/applications/tags` and `GET /admin/events/:eventId/applications/tags` return the distinct tags in scope — one spelling per tag (`DISTINCT ON (lower(tag))`), alphabetical — for the Tag filter and the Edit tags suggestions.
+- List: `tag=` is an exact match (`tags: { has }`); `q` matches a tag exactly (case-sensitive `has`) alongside the loose matches on the other fields. No QR / scanner path (decision 7.6).
+
 ## API Endpoints
 
 | Method | Path | Auth |
@@ -77,6 +90,8 @@ A template is a **snapshot**, not a live form: `ApplicationFormTemplate.definiti
 | GET | `/admin/applications/summary`, `/admin/applications/export.csv` | organizer+ |
 | POST | `/admin/applications/bulk` `{ ids, decision, note? }` | organizer+ |
 | GET | `/admin/application-forms` | organizer+ |
+| GET | `/admin/applications/tags`, `/admin/events/:eventId/applications/tags` | organizer+ |
+| PATCH | `/admin/events/:eventId/applications/:id` `{ boothLabel?, internalNote?, tags?, checkedIn?, checkedOut? }` | organizer+ |
 | GET/POST | `/admin/application-templates` (POST `{ name, kind, definition? }`) | organizer+ / admin |
 | GET/PUT/DELETE | `/admin/application-templates/:templateId` (PUT `{ name?, definition? }`) | organizer+ / admin / admin |
 | POST | `/admin/events/:eventId/application-forms/:formId/save-as-template` `{ name }` or `{ replaceTemplateId, name? }` | admin |
@@ -88,6 +103,8 @@ A template is a **snapshot**, not a live form: `ApplicationFormTemplate.definiti
 - `frontend/e2e/participants.spec.ts` — sidebar entry, list with two events, status header sort, event filter narrowing the Form options, search by short id, `⋯` → Waitlist round-trip (row + chips updated, no reload), bulk to the org route, saved views under `jump.participants.views.org`, per-event mount without Event filter, Applications tab; axe on both mounts.
 - `backend/tests/contract/applicationTemplates.test.js` — save-as (snapshot shape, 409, replace), RBAC matrix incl. other org / no membership / SYSTEM_ADMIN with X-Jump-Org, validation parity (one bad value per rule), create-from (settings, tiers, questions, back-reference, body override, kind mismatch, other org, missing), template edits and deletion leave created forms alone, `copyForms` through `_materialise`.
 - `frontend/e2e/participants-templates.spec.ts` — Templates section, New application (event filtering, same-kind templates, create-from lands in the editor with the copied questions), Save as template (conflict, new, replace), template editor (settings / question / tier edits kept local until Save, PUT payload, unsaved guard), ORGANIZER read-only, New template + Delete.
+- `backend/tests/contract/participantsTags.test.js` — normalisation, limits, unknown fields, `tag` filter, `q` on a tag, distinct tags per scope (org / event / other org / SYSTEM_ADMIN / no membership), check-in stamp / keep / clear, 409 on non-approved, CSV columns.
+- `frontend/e2e/participants.spec.ts` (phase 3 tests) — Edit tags with suggestions from ⋯, Tag filter, search a tag, check-in ticks only on approved rows, optimistic tick persists on reload; detail page tags + check-in.
 - `frontend/e2e/applications*.spec.ts` still cover the per-event mount (same `data-testid`s).
 
 ## Gotchas
@@ -95,7 +112,7 @@ A template is a **snapshot**, not a live form: `ApplicationFormTemplate.definiti
 - `statusUrl` on rows costs one `storefrontFor` per organization in the page, not per row — keep it that way (`_storefrontBases`).
 - The e2e mocks for the per-event list predate spec 019 and omit the new row fields; the table treats `eventId`, `shortId`, `event`, `logoUrl`, `statusUrl` as optional at runtime (`row.eventId ?? eventId`, `row.shortId ?? shortId(row.id)`).
 - Two `next dev` servers sharing `.next` can serve a stale chunk on the first compile; a Playwright failure that passes alone is that, not the code.
-- Phase 3 will add `tags[]`, `checkedInAt` / `checkedOutAt`; the Tags column shows `boothLabel` as a single chip until then.
+- `distinctTags` is raw SQL (`unnest` + `DISTINCT ON (lower(tag))`); the returned spelling for a tag used in several cases is whichever sorts first under the DB collation — display only, the filter still needs the exact stored spelling (the dropdown supplies it).
 - `ApplicationFormService` and `ApplicationFormTemplateService` import each other (create-from-template ↔ validator reuse); both only touch the other inside methods, so the ESM cycle is harmless — keep it that way (no top-level use).
 - The template editor's cards get synthetic ids (`t0…`, `q0…`) that are array positions; reorder / delete recompute them on the next render.
 

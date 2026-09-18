@@ -32,6 +32,8 @@ export function useParticipantsApi() {
         api.post<{ results: { id: string; ok: boolean; error?: string }[]; succeeded: number; failed: number }>('/admin/applications/bulk', body),
       exportUrl: (query: ParticipantsQuery) => `/admin/applications/export.csv${qs(query)}`,
       forms: () => api.get<{ data: OrgForm[] }>('/admin/application-forms'),
+      // Phase 3: distinct tags in scope
+      tags: () => api.get<{ data: string[] }>('/admin/applications/tags'),
       // Phase 2: form templates
       templates: () => api.get<{ data: FormTemplateSummary[] }>('/admin/application-templates'),
       template: (id: string) => api.get<FormTemplate>(`/admin/application-templates/${id}`),

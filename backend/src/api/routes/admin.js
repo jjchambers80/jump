@@ -11,7 +11,7 @@ import { validateUpdateAttendee } from '../validators/adminValidators.js';
 import { validateUpdateBusinessDetails } from '../validators/organizationValidators.js';
 import { validateCreateOrganizationPerson } from '../validators/organizationPersonValidators.js';
 import { validateTaxRegionParams, validateUpsertTaxRegion, validateUpdateTaxSettings, validateTaxReportQuery } from '../validators/taxValidators.js';
-import { validateFormBody, validateTierBody, validateQuestionBody, validateDecisionBody, validateBulkBody, validateTemplateBody, validateRefundBody, validateAddOnLinesBody, validateTierAddOnsBody, validateTierChangeBody, validateAdjustmentBody, validateWaiveBody, validateOfflinePaymentBody, validateFormTemplateBody, validateSaveAsTemplateBody } from '../validators/applicationValidators.js';
+import { validateFormBody, validateTierBody, validateQuestionBody, validateDecisionBody, validateBulkBody, validateTemplateBody, validateRefundBody, validateAddOnLinesBody, validateTierAddOnsBody, validateTierChangeBody, validateAdjustmentBody, validateWaiveBody, validateOfflinePaymentBody, validateFormTemplateBody, validateSaveAsTemplateBody, validateMetaBody } from '../validators/applicationValidators.js';
 import { validateUpdatePaymentSettings, validateUpdatePayoutSettings } from '../validators/paymentValidators.js';
 import organizationService from '../../services/OrganizationService.js';
 import organizationPersonService from '../../services/OrganizationPersonService.js';
@@ -371,6 +371,11 @@ router.get('/applications/summary', wrap(async (req, res) => {
   if (scope.empty) return res.json({});
   res.json(await applicationService.summaryInScope({ organizationId: scope.organizationId }));
 }));
+router.get('/applications/tags', wrap(async (req, res) => {
+  const scope = await participantsScopeFor(req);
+  if (scope.empty) return res.json({ data: [] });
+  res.json({ data: await applicationService.distinctTags({ organizationId: scope.organizationId }) });
+}));
 router.get('/applications/export.csv', wrap(async (req, res) => {
   const scope = await participantsScopeFor(req);
   const csv = scope.empty ? '' : await applicationService.exportCsvInScope({ organizationId: scope.organizationId }, req.query);
@@ -485,6 +490,10 @@ router.get('/events/:eventId/applications', wrap(async (req, res) => {
 router.get('/events/:eventId/applications/summary', wrap(async (req, res) => {
   res.json(await applicationService.summary(req.params.eventId, await scopedOrgFor(req)));
 }));
+router.get('/events/:eventId/applications/tags', wrap(async (req, res) => {
+  await applicationFormService.requireEvent(req.params.eventId, await scopedOrgFor(req));
+  res.json({ data: await applicationService.distinctTags({ eventId: req.params.eventId }) });
+}));
 router.get('/events/:eventId/applications/export.csv', wrap(async (req, res) => {
   const csv = await applicationService.exportCsv(req.params.eventId, await scopedOrgFor(req), req.query);
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -497,10 +506,8 @@ router.post('/events/:eventId/applications/bulk', validateBulkBody, wrap(async (
 router.get('/events/:eventId/applications/:applicationId', wrap(async (req, res) => {
   res.json(await applicationService.get(req.params.eventId, req.params.applicationId, await scopedOrgFor(req)));
 }));
-router.patch('/events/:eventId/applications/:applicationId', wrap(async (req, res) => {
-  const { boothLabel, internalNote, ...rest } = req.body || {};
-  if (Object.keys(rest).length) throw new ValidationError(`Unknown field(s): ${Object.keys(rest).join(', ')}`);
-  res.json(await applicationService.updateNotes(req.params.eventId, req.params.applicationId, await scopedOrgFor(req), { boothLabel, internalNote }));
+router.patch('/events/:eventId/applications/:applicationId', validateMetaBody, wrap(async (req, res) => {
+  res.json(await applicationService.updateMeta(req.params.eventId, req.params.applicationId, await scopedOrgFor(req), req.body));
 }));
 router.post('/events/:eventId/applications/:applicationId/preview', wrap(async (req, res) => {
   res.json(await applicationService.previewMessage(req.params.eventId, req.params.applicationId, await scopedOrgFor(req), req.body?.decision));

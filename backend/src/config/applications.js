@@ -13,6 +13,9 @@ export const LIST_PAGE_SIZE = 50;
 /** Spec 019: caps on a hand-edited form template definition. */
 export const MAX_TEMPLATE_TIERS = 50;
 export const MAX_TEMPLATE_QUESTIONS = 100;
+/** Spec 019 phase 3: organizer tags per application. */
+export const MAX_TAGS = 20;
+export const MAX_TAG_LENGTH = 40;
 
 export const QUESTION_TYPES = new Set([
   'SHORT_TEXT',

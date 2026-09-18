@@ -1,7 +1,7 @@
 'use client';
 
 // The `⋯` menu on a submissions row (spec 019): View, the decisions the row's
-// status allows, and Copy status link. Keyboard: arrows move, Escape closes,
+// status allows, Edit tags (phase 3), and Copy status link. Keyboard: arrows move, Escape closes,
 // focus returns to the button.
 
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
@@ -12,12 +12,13 @@ interface RowActionsMenuProps {
   row: ApplicationRow;
   detailHref: string;
   onDecision: (decision: Decision, trigger: HTMLButtonElement) => void;
+  onEditTags?: (trigger: HTMLButtonElement) => void;
   onNotice: (text: string) => void;
 }
 
 const item = 'block w-full px-3 py-1.5 text-left text-sm text-gray-800 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none dark:text-slate-100 dark:hover:bg-slate-700 dark:focus:bg-slate-700';
 
-export default function RowActionsMenu({ row, detailHref, onDecision, onNotice }: RowActionsMenuProps) {
+export default function RowActionsMenu({ row, detailHref, onDecision, onEditTags, onNotice }: RowActionsMenuProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -95,6 +96,11 @@ export default function RowActionsMenu({ row, detailHref, onDecision, onNotice }
               {DECISION_LABEL[d]}
             </button>
           ))}
+          {onEditTags && (
+            <button type="button" role="menuitem" className={item} onClick={() => { close(false); onEditTags(buttonRef.current!); }}>
+              Edit tags
+            </button>
+          )}
           {row.statusUrl && (
             <button type="button" role="menuitem" className={item} onClick={copyStatusLink}>
               Copy status link
