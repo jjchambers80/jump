@@ -8,7 +8,7 @@ import stripe from '../config/stripe.js';
 import logger from '../utils/logger.js';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import { US_STATES, stateName } from '../utils/usStates.js';
-import { PAID_ORDER_STATUSES, PAID_APPLICATION_STATUSES } from './transactionQuery.js';
+import { PAID_ORDER_STATUSES, PAID_APPLICATION_STATUSES } from './paidStatuses.js';
 
 // Stripe product tax code for general event admissions
 const ADMISSIONS_TAX_CODE = 'txcd_20060057';

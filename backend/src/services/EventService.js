@@ -9,7 +9,7 @@ import { formatEventSummary } from '../utils/eventSummary.js';
 import taxService from './TaxService.js';
 import applicationFormService from './ApplicationFormService.js';
 import addOnService from './AddOnService.js';
-import { PAID_APPLICATION_STATUSES } from './transactionQuery.js';
+import { PAID_APPLICATION_STATUSES } from './paidStatuses.js';
 
 class EventService {
   /**

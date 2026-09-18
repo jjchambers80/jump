@@ -477,7 +477,6 @@ model Order {
   @@index([contactId])
   @@index([status])
   @@index([orderRef])
-  @@index([createdAt]) // spec 018: transactions union sorts on it
 }
 
 model OrderItem {
@@ -941,8 +940,6 @@ model Application {
   @@index([contactId])
   @@index([organizationId])
   @@index([paymentStatus, paymentDueAt])
-  @@index([organizationId, paidAt]) // spec 018: transactions union
-  @@index([organizationId, submittedAt])
 }
 
 model ApplicationAnswer {

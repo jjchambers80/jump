@@ -1,6 +1,6 @@
 # Implementation Plan: Transactions (spec 018)
 
-**Status**: Planned 2026-09-17. Phases 1–2 built and merged 2026-09-18 (PRs #65, #66). Phase 3 built 2026-09-18 on `feat/018-transactions-phase-3`.
+**Status**: Planned 2026-09-17. Phases 1–3 built and merged 2026-09-18 (PRs #65, #66, #67). **Phase 1 (the org-wide Transactions list, `/admin/transactions`, sidebar entry, `TransactionService`, indexes) was removed 2026-09-18**: a second money list beside Orders and the per-event Applications tab was a navigation problem, not a fix. Phases 2–3 and decision 7.1 (order refunds ADMIN) remain. Sections 2.1–2.4, 4.1–4.2 (transactions routes) and 5.1 below describe removed code and are kept as history. `PAID_*_STATUSES` moved to `backend/src/services/paidStatuses.js`.
 **Spec**: [spec.md](./spec.md). Depends on spec 011 (all phases on `main`), spec 012 (all phases on `main`), spec 009 (collected tax report), spec 010 phase 2 (Connect routing, dark).
 **Branches**: plan on `plan/018-transactions` (PR #64); phases on `feat/018-transactions-phase-1` → `-phase-2` → `-phase-3`, each merged to `main` alone.
 

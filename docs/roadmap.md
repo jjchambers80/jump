@@ -27,7 +27,7 @@ See [specs/STATUS.md](../specs/STATUS.md) for verified lifecycle states.
 | 010 | `main` (merged) — phase 2 dark behind `STRIPE_CONNECT_ENABLED`; account model undecided | Settings > Payments — statement descriptor, payment methods, Stripe Connect payouts |
 | 011 | `main` (merged 2026-09-17) — paid forms dark behind `APPLICATIONS_PAYMENTS_ENABLED` | Applications — vendor / sponsor / press / panel forms, charge on approval, pay-now, refunds, digest, event duplicate |
 | 012 | `main` (merged 2026-09-17) | Add-ons — products on ticket and application tiers, sales report, purchasers CSV |
-| 018 | `main` (phases 1–3 built 2026-09-18) — settle-offline-at-approval is a noted follow-up | Transactions — org-wide list of ticket orders + application payments, search by email/name/Stripe id, refunds, customers/analytics/tax report include applications, tier change / adjustments / waive / offline payment on applications |
+| 018 | `main` (phases 1–3 built 2026-09-18; phase 1 Transactions list removed 2026-09-18) — settle-offline-at-approval is a noted follow-up | Application money in customers/analytics/dashboard/tax report; tier change / adjustments / waive / offline payment on applications. The org-wide Transactions list was removed: it duplicated Orders and the per-event Applications tab |
 
 ---
 
