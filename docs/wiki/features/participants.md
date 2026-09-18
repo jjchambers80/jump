@@ -82,6 +82,8 @@ A template is a **snapshot**, not a live form: `ApplicationFormTemplate.definiti
 - `GET /admin/applications/tags` and `GET /admin/events/:eventId/applications/tags` return the distinct tags in scope — one spelling per tag (`DISTINCT ON (lower(tag))`), alphabetical — for the Tag filter and the Edit tags suggestions.
 - List: `tag=` is an exact match (`tags: { has }`); `q` matches a tag exactly (case-sensitive `has`) alongside the loose matches on the other fields. No QR / scanner path (decision 7.6).
 
+The organizer daily digest (spec 011 phase 3) links here: per event `/admin/participants?event=:id&status=SUBMITTED` inline, and one **Open** button to `/admin/participants?status=SUBMITTED`.
+
 ## API Endpoints
 
 | Method | Path | Auth |

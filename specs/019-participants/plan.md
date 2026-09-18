@@ -325,4 +325,4 @@ Tests: contract — tag normalisation and limits, `tag` filter, `q` matches a ta
 - **Jury scoring**: `ApplicationScore` per member, average on the row. Own spec.
 - **Participant messaging** from a selection (spec 013).
 - **Public participant directory** ("who's exhibiting") on the event page, fed by APPROVED rows and profile photos.
-- **Digest link** could point at `/admin/participants?status=SUBMITTED` once phase 1 ships; leave the per-event link until then.
+- **Digest link** — done 2026-09-18 after phase 3: per-event links inline to `/admin/participants?event=:id&status=SUBMITTED`, one org-wide **Open** button to `/admin/participants?status=SUBMITTED`.
