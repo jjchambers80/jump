@@ -11,6 +11,7 @@ Blocking items, in the order to do them. Details in the sections below.
 - [ ] **Set the statement descriptor prefix on the Stripe account** (added 2026-09-14) — Stripe Dashboard › Settings › Business › Public details › Statement descriptor. Use something short like `JUMP` so organizations keep 16 characters for their own name. Until this is set, buyers see the raw account name on their card statement and Settings › Payments cannot save a statement name. See [Stripe payments](#stripe-payments).
 - [ ] Live `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` on Railway; activate the account. See [Stripe payments](#stripe-payments).
 - [ ] Decide NY and CA tax regions; activate Stripe Tax or keep manual rates. See [Stripe Tax](#stripe-tax-settings--tax-spec-009).
+- [ ] **Legal documents live before the first real order** (added 2026-09-18) — Terms of Service, Privacy Policy, Organizer Terms, copyright / content complaint page, refund disclosure at checkout, card-on-file authorization checkbox on PAID application forms, DMCA agent registered, `legal@` / `privacy@` / `security@` mailboxes. Today `/terms` and `/privacy` (linked from checkout) return 404 and there is no working data-deletion path. Spec 023 phase 1; every document needs NC attorney review. See [Legal](#legal-spec-023).
 - [ ] Stripe Connect platform setup, then `STRIPE_CONNECT_ENABLED=true` (added 2026-09-16) — only after the live key; see [Stripe Connect](#stripe-connect-spec-010-phase-2).
 
 ## Stripe Tax (Settings › Tax, spec 009)
@@ -78,6 +79,19 @@ Code and tests shipped 2026-09-18 behind `BILLING_ENABLED` (default off). Until 
 - [ ] Backend: `BILLING_ENABLED=true`, `JUMP_STARTER_PRICE_ID`, `BILLING_TRIAL_DAYS` (default 30). Frontend: `NEXT_PUBLIC_BILLING_ENABLED=true`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (Jump account). Redeploy both; the backend startup log `Stripe webhook configuration` should show `billingSecret: true, billingEnabled: true`.
 - [ ] **Verify with one internal organization**: org switcher › Create organization → subscribe screen shows the trial ledger and the embedded card form → subscribe with a test card → returns to the survey → Settings › Plan shows *Free trial* with the trial end → *Manage billing* opens the portal → cancel there and confirm the plan flips to Free after the `customer.subscription.deleted` event.
 - [ ] Decide dunning copy beyond the dashboard banner (`past_due` / `unpaid`); nothing is gated on the plan today.
+
+## Legal (spec 023)
+
+Spec written 2026-09-18 (`specs/023-legal-compliance/spec.md`); nothing built, no legal text drafted. Phase 0 (routes, version constants, consent capture, dead-code removal, `security.txt`) ships dark and needs no lawyer; phase 1 needs the attorney-reviewed documents and blocks launch. Open questions are spec §12 — the entity details (Q1), dispute resolution (Q2), merchant of record (Q3, same decision as Connect above), refund allocation (Q4) and the controller / processor framing (Q7) gate drafting.
+
+- [ ] Answer spec 023 §12 Q1–Q4, Q7 with counsel; hand the spec's §4 content requirements to the attorney.
+- [ ] Register the DMCA designated agent (copyright.gov) and publish the contact on `/legal/copyright`.
+- [ ] Create and monitor `legal@`, `privacy@`, `security@` and the DMCA mailbox; publish `security.txt`.
+- [ ] Record vendor DPA / terms acceptance (Stripe, Resend, Railway, Google OAuth) in `docs/wiki/config/privacy-register.md`.
+- [ ] Drop counsel's Markdown into `frontend/content/legal/`, set versions, flip `NEXT_PUBLIC_LEGAL_PAGES_ENABLED=true`, verify the footer and `/legal/*` on the platform host and on one custom domain.
+- [ ] Verify one PAID application form shows the card-authorization checkbox and the acceptance row is written; verify one checkout writes `LegalAcceptance` rows.
+- [ ] Before `BILLING_ENABLED`: subscribe-step renewal / cancellation disclosure text approved (spec 023 Q8).
+- [ ] Before `STRIPE_CONNECT_ENABLED`: Organizer Terms Connect annex approved; payouts interstitial live.
 
 ## Related
 
