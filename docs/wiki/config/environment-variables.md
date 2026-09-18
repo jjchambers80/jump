@@ -26,6 +26,8 @@ Complete reference for all environment variables used by the Jump platform.
 | `JUMP_STARTER_PRICE_ID` | With billing | Stripe Price id (`price_...`) of the STARTER plan in Jump's own account |
 | `BILLING_TRIAL_DAYS` | No | Free-trial length offered at signup (default 30; 0 = no trial) |
 | `STRIPE_BILLING_WEBHOOK_SECRET` | With billing | Signing secret for `POST /webhooks/stripe/billing` (subscription events). Same account as `STRIPE_WEBHOOK_SECRET`, separate endpoint; unset = unverified (dev/test only) |
+| `ONBOARDING_SWEEP_INTERVAL_MS` | No | Abandoned-signup sweep interval (default 1 h) |
+| `ONBOARDING_ABANDON_AFTER_MS` | No | Unfinished signups older than this with no events and no subscription are deleted (default 7 d) |
 | `RESEND_API_KEY` | Yes | Resend email API key (`re_...`) |
 | `PORT` | No | Server port. Default: 3000. Must be set explicitly on Railway |
 | `NODE_ENV` | No | `development` or `production`. Default: development |

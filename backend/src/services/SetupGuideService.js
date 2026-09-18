@@ -6,7 +6,7 @@ import { prisma } from '@jump/db';
 import logger from '../utils/logger.js';
 import { NotFoundError } from '../middleware/errorHandler.js';
 import connectService from './ConnectService.js';
-import { APPLICATION_GOALS } from '../config/onboarding.js';
+import { APPLICATION_GOALS, CHECKIN_GOAL } from '../config/onboarding.js';
 
 class SetupGuideService {
   /**
@@ -29,15 +29,17 @@ class SetupGuideService {
     });
     if (!org) throw new NotFoundError('Organization not found');
 
-    const [eventCount, activeDomainCount, formCount, connect] = await Promise.all([
+    const [eventCount, activeDomainCount, formCount, redeemedCount, connect] = await Promise.all([
       prisma.event.count({ where: { venue: { organizationId } } }),
       prisma.organizationDomain.count({ where: { organizationId, status: 'ACTIVE' } }),
       prisma.applicationForm.count({ where: { event: { venue: { organizationId } } } }),
+      prisma.ticket.count({ where: { status: 'REDEEMED', event: { venue: { organizationId } } } }),
       connectService.statusFor(organizationId),
     ]);
 
     const goals = org.platformCustomer?.onboarding?.goals ?? [];
     const showApplications = goals.some((goal) => APPLICATION_GOALS.includes(goal));
+    const showCheckin = goals.includes(CHECKIN_GOAL);
 
     const tasks = [
       { id: 'event', done: eventCount > 0, href: '/admin/create-event', shown: true },
@@ -59,6 +61,8 @@ class SetupGuideService {
       { id: 'business', done: Boolean(org.companyName && org.addressLine1), href: '/admin/settings', shown: true },
       { id: 'domain', done: activeDomainCount > 0, href: '/admin/settings/domains', shown: true },
       { id: 'applications', done: formCount > 0, href: '/admin/participants/applications', shown: showApplications },
+      // Phase 3: organizers selling at the door get pointed at the scanner
+      { id: 'checkin', done: redeemedCount > 0, href: '/admin/orders/scan', shown: showCheckin },
     ];
 
     return {

@@ -48,7 +48,7 @@ export interface DashboardStats {
   revenue?: { orders: number; applications: number; gross: number };
 }
 
-export type SetupTaskId = 'event' | 'design' | 'payments' | 'business' | 'domain' | 'applications';
+export type SetupTaskId = 'event' | 'design' | 'payments' | 'business' | 'domain' | 'applications' | 'checkin';
 
 export interface SetupTask {
   id: SetupTaskId;

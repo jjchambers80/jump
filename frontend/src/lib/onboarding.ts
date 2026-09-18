@@ -118,3 +118,26 @@ export interface PendingOrganization {
 export function signupPathFor(org: PendingOrganization): string {
   return `/signup/${org.id}/${org.step}`;
 }
+
+/** Human label for a survey option id, by step key. */
+export function surveyLabel(key: SurveyStep['key'], id: string | null | undefined): string | null {
+  if (!id) return null;
+  const step = SURVEY_STEPS.find((s) => s.key === key);
+  return step?.options.find((o) => o.id === id)?.label ?? id;
+}
+
+/** Survey summary as listed for SYSTEM_ADMIN on GET /organizations (spec 022 phase 3). */
+export interface OnboardingSummary {
+  source: string | null;
+  goals: string[];
+  eventTypes: string[];
+  eventsPerYear: string | null;
+  attendance: string | null;
+  movingFrom: string | null;
+  surveySkipped: boolean;
+}
+
+export interface OnboardingFunnel {
+  windows: Record<string, { started: number; completed: number; subscribed: number }>;
+  pending: number;
+}

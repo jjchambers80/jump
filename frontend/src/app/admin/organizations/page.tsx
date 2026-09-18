@@ -5,10 +5,12 @@
 // AdminRoute guard provided by admin layout.tsx
 
 import React, { useEffect, useState, useCallback } from 'react';
+import { useSession } from 'next-auth/react';
 import api from '@/services/api';
 import OnlineStoreSettings from '@/components/OnlineStoreSettings';
 import { resolveAssetUrl } from '@/lib/assets';
 import type { ThemeMode } from '@/lib/theme';
+import { surveyLabel, type OnboardingFunnel, type OnboardingSummary } from '@/lib/onboarding';
 
 interface Organization {
   id: string;
@@ -23,13 +25,80 @@ interface Organization {
   updatedAt: string;
   /** null while the organization is still in the /signup flow (spec 022) */
   onboardingCompletedAt?: string | null;
+  /** SYSTEM_ADMIN only (spec 022 phase 3) */
+  plan?: 'FREE' | 'STARTER';
+  subscriptionStatus?: string | null;
+  onboarding?: OnboardingSummary | null;
   _count?: {
     venues: number;
     users: number;
   };
 }
 
+/** One-line survey summary for a row: goals · event types · size · moving from. */
+function SurveyChips({ summary }: { summary: OnboardingSummary }) {
+  if (summary.surveySkipped && summary.goals.length === 0 && summary.eventTypes.length === 0) {
+    return <span className="text-xs text-gray-400 dark:text-slate-500">Survey skipped</span>;
+  }
+  const chips = [
+    ...summary.goals.map((g) => surveyLabel('goals', g)),
+    ...summary.eventTypes.map((t) => surveyLabel('eventTypes', t)),
+    surveyLabel('eventsPerYear', summary.eventsPerYear) && `${surveyLabel('eventsPerYear', summary.eventsPerYear)} / yr`,
+    surveyLabel('attendance', summary.attendance) && `${surveyLabel('attendance', summary.attendance)} attendees`,
+    surveyLabel('movingFrom', summary.movingFrom) && `from ${surveyLabel('movingFrom', summary.movingFrom)}`,
+  ].filter((c): c is string => Boolean(c));
+  if (chips.length === 0) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-1" data-testid="org-survey">
+      {chips.map((chip) => (
+        <span key={chip} className="inline-flex items-center rounded-full bg-gray-100 dark:bg-slate-700 px-2 py-0.5 text-xs text-gray-700 dark:text-slate-300">
+          {chip}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function FunnelCard({ funnel }: { funnel: OnboardingFunnel }) {
+  const windows = Object.keys(funnel.windows).sort((a, b) => Number(a) - Number(b));
+  return (
+    <section className="mb-8 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4" aria-labelledby="funnel-heading" data-testid="onboarding-funnel">
+      <div className="flex items-center justify-between">
+        <h2 id="funnel-heading" className="text-base font-semibold text-gray-900 dark:text-white">Onboarding</h2>
+        <span className="text-xs text-gray-500 dark:text-slate-400">{funnel.pending} pending now</span>
+      </div>
+      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {windows.map((days) => {
+          const w = funnel.windows[days];
+          return (
+            <div key={days} className="rounded-md bg-gray-50 dark:bg-slate-700/40 p-3" data-testid={`funnel-${days}`}>
+              <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-slate-400">Last {days} days</p>
+              <dl className="mt-2 grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <dt className="text-xs text-gray-500 dark:text-slate-400">Started</dt>
+                  <dd className="text-lg font-semibold text-gray-900 dark:text-white">{w.started}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-gray-500 dark:text-slate-400">Completed</dt>
+                  <dd className="text-lg font-semibold text-gray-900 dark:text-white">{w.completed}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-gray-500 dark:text-slate-400">Subscribed</dt>
+                  <dd className="text-lg font-semibold text-gray-900 dark:text-white">{w.subscribed}</dd>
+                </div>
+              </dl>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 export default function OrganizationsPage() {
+  const { data: session } = useSession();
+  const isSystemAdmin = (session?.user as { role?: string } | undefined)?.role === 'SYSTEM_ADMIN';
+  const [funnel, setFunnel] = useState<OnboardingFunnel | null>(null);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +123,15 @@ export default function OrganizationsPage() {
   useEffect(() => {
     fetchOrganizations();
   }, [fetchOrganizations]);
+
+  // Signup funnel (spec 022 phase 3), SYSTEM_ADMIN only; errors just hide the card
+  useEffect(() => {
+    if (!isSystemAdmin) return;
+    api
+      .get<OnboardingFunnel>('/organizations/onboarding/funnel')
+      .then(setFunnel)
+      .catch(() => setFunnel(null));
+  }, [isSystemAdmin]);
 
   const handleDiscard = async (org: Organization) => {
     if (!window.confirm(`Discard the unfinished signup for "${org.name}"? This cannot be undone.`)) return;
@@ -131,6 +209,8 @@ export default function OrganizationsPage() {
         </div>
       )}
 
+      {funnel && <FunnelCard funnel={funnel} />}
+
       {/* Organization List */}
       {!loading && organizations.length === 0 && (
         <p className="text-gray-500 dark:text-slate-400 text-center py-8">
@@ -195,7 +275,13 @@ export default function OrganizationsPage() {
                           </span>
                         </>
                       )}
+                      {org.plan === 'STARTER' && (
+                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300" data-testid="org-plan">
+                          Starter{org.subscriptionStatus === 'trialing' ? ' · trial' : org.subscriptionStatus === 'past_due' ? ' · past due' : ''}
+                        </span>
+                      )}
                     </div>
+                    {org.onboarding && <SurveyChips summary={org.onboarding} />}
                   </div>
                 </div>
 

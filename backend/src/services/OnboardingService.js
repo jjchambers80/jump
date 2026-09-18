@@ -9,6 +9,7 @@ import { prisma } from '@jump/db';
 import logger from '../utils/logger.js';
 import { ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import organizationService from './OrganizationService.js';
+import applicationFormTemplateService from './ApplicationFormTemplateService.js';
 import {
   ONBOARDING_VERSION,
   ONBOARDING_SURVEY,
@@ -16,6 +17,9 @@ import {
   SINGLE_SELECT_KEYS,
   MAX_PENDING_ORGANIZATIONS,
   SIGNUP_SOURCES,
+  APPLICATION_GOALS,
+  SEED_TEMPLATES,
+  ABANDON_AFTER_MS,
 } from '../config/onboarding.js';
 
 const SURVEY_KEYS = [...MULTI_SELECT_KEYS, ...SINGLE_SELECT_KEYS];
@@ -228,10 +232,85 @@ class OnboardingService {
         source: onboarding.source ?? null,
         surveySkipped: Boolean(onboarding.surveySkippedAt),
         subscribeSkipped: Boolean(onboarding.subscribeSkippedAt),
+        goals: onboarding.goals ?? [],
       });
+
+      await this.seedTemplates(existing.id, userId, onboarding.goals ?? []);
     }
 
     return organizationService.getOrganizationById(existing.id);
+  }
+
+  /**
+   * Phase 3 tailoring: organizations that said they run applications get the
+   * starter form templates. Names are unique per organization, so re-running
+   * is a no-op; a seed failure never fails the signup.
+   */
+  async seedTemplates(organizationId, userId, goals) {
+    if (!goals.some((goal) => APPLICATION_GOALS.includes(goal))) return [];
+    const seeded = [];
+    for (const template of SEED_TEMPLATES) {
+      try {
+        const created = await applicationFormTemplateService.create(organizationId, template, { byUserId: userId });
+        seeded.push(created.id);
+      } catch (error) {
+        if (error.statusCode !== 409) {
+          logger.error('Onboarding template seed failed', { organizationId, template: template.name, error: error.message });
+        }
+      }
+    }
+    logger.info('Onboarding templates seeded', { event: 'organization_onboarding_templates_seeded', organizationId, count: seeded.length });
+    return seeded;
+  }
+
+  /**
+   * Delete unfinished signups nobody came back to: pending for longer than
+   * `olderThanMs`, no events, no Stripe subscription. Runs from server.js.
+   * @returns {Promise<number>} organizations removed
+   */
+  async sweepAbandoned(olderThanMs = ABANDON_AFTER_MS) {
+    const cutoff = new Date(Date.now() - olderThanMs);
+    const stale = await prisma.organization.findMany({
+      where: {
+        onboardingCompletedAt: null,
+        createdAt: { lt: cutoff },
+        venues: { none: { events: { some: {} } } },
+        OR: [{ platformCustomer: null }, { platformCustomer: { stripeSubscriptionId: null } }],
+      },
+      select: { id: true, createdAt: true, platformCustomer: { select: { onboarding: true } } },
+    });
+    for (const org of stale) {
+      await prisma.organization.delete({ where: { id: org.id } });
+      logger.info('Organization onboarding abandoned', {
+        event: 'organization_onboarding_abandoned',
+        organizationId: org.id,
+        startedAt: org.createdAt,
+        step: stepFor(org.platformCustomer?.onboarding),
+        source: org.platformCustomer?.onboarding?.source ?? null,
+      });
+    }
+    return stale.length;
+  }
+
+  /**
+   * Funnel counts for SYSTEM_ADMIN (phase 3). "Started" = organizations
+   * created through /signup (they have a PlatformCustomer from step 1).
+   * @param {number[]} windowsDays
+   */
+  async funnel(windowsDays = [7, 30]) {
+    const now = Date.now();
+    const windows = {};
+    for (const days of windowsDays) {
+      const since = new Date(now - days * 24 * 60 * 60 * 1000);
+      const [started, completed, subscribed] = await Promise.all([
+        prisma.platformCustomer.count({ where: { createdAt: { gte: since } } }),
+        prisma.organization.count({ where: { onboardingCompletedAt: { gte: since }, platformCustomer: { isNot: null } } }),
+        prisma.platformCustomer.count({ where: { createdAt: { gte: since }, stripeSubscriptionId: { not: null } } }),
+      ]);
+      windows[days] = { started, completed, subscribed };
+    }
+    const pending = await prisma.organization.count({ where: { onboardingCompletedAt: null } });
+    return { windows, pending };
   }
 
   /** Discard an unfinished organization (membership and customer row cascade). */

@@ -27,6 +27,7 @@ import customersRouter from './routes/customers.js';
 import organizationsRouter from './routes/organizations.js';
 import signupRouter from './routes/signup.js';
 import { billingEnabled } from '../config/billing.js';
+import onboardingService from '../services/OnboardingService.js';
 import venuesRouter, { orgVenuesRouter } from './routes/venues.js';
 import ordersRouter, { eventOrdersRouter } from './routes/orders.js';
 import usersRouter from './routes/users.js';
@@ -193,6 +194,13 @@ if (process.env.NODE_ENV !== 'test') {
   };
   setTimeout(applicationSweep, 30 * 1000).unref();
   setInterval(applicationSweep, APPLICATION_SWEEP_MS).unref();
+
+  // Onboarding sweep (spec 022 phase 3): unfinished signups older than
+  // ONBOARDING_ABANDON_AFTER_MS (7 d) with no events and no subscription are
+  // deleted so pending organizations never pile up.
+  const ONBOARDING_SWEEP_MS = Number(process.env.ONBOARDING_SWEEP_INTERVAL_MS) || 60 * 60 * 1000;
+  setTimeout(() => onboardingService.sweepAbandoned().catch(() => {}), 45 * 1000).unref();
+  setInterval(() => onboardingService.sweepAbandoned().catch(() => {}), ONBOARDING_SWEEP_MS).unref();
 }
 
 export default app;

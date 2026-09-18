@@ -90,14 +90,39 @@ class OrganizationService {
    * List all organizations
    * @returns {Promise<Array>} List of organizations
    */
-  async listOrganizations({ includePending = false } = {}) {
+  async listOrganizations({ includePending = false, withOnboarding = false } = {}) {
     const orgs = await prisma.organization.findMany({
       // Spec 022: organizations still in /signup are hidden from the switcher
       where: includePending ? undefined : { onboardingCompletedAt: { not: null } },
       orderBy: { createdAt: 'desc' },
-      include: { _count: { select: { venues: true, members: true } } },
+      include: {
+        _count: { select: { venues: true, members: true } },
+        // Spec 022 phase 3: survey answers and plan for the SYSTEM_ADMIN list only
+        ...(withOnboarding ? { platformCustomer: { select: { plan: true, subscriptionStatus: true, onboarding: true } } } : {}),
+      },
     });
-    return orgs.map(withUserCount);
+    return orgs.map((org) => {
+      const { platformCustomer, ...rest } = org;
+      const base = withUserCount(rest);
+      if (!withOnboarding) return base;
+      const survey = platformCustomer?.onboarding ?? null;
+      return {
+        ...base,
+        plan: platformCustomer?.plan ?? 'FREE',
+        subscriptionStatus: platformCustomer?.subscriptionStatus ?? null,
+        onboarding: survey
+          ? {
+              source: survey.source ?? null,
+              goals: survey.goals ?? [],
+              eventTypes: survey.eventTypes ?? [],
+              eventsPerYear: survey.eventsPerYear ?? null,
+              attendance: survey.attendance ?? null,
+              movingFrom: survey.movingFrom ?? null,
+              surveySkipped: Boolean(survey.surveySkippedAt),
+            }
+          : null,
+      };
+    });
   }
 
   /**
