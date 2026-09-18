@@ -1,6 +1,6 @@
 # Production Launch Checklist
 
-**Last Updated**: 2026-09-14
+**Last Updated**: 2026-09-18
 
 Things a human has to do or decide before Jump takes real money. Code and tests are done for every item here; each needs an account setting, a business decision, or a data review that no deploy can perform. Tick items off in place and date them.
 
@@ -12,6 +12,8 @@ Blocking items, in the order to do them. Details in the sections below.
 - [ ] Live `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` on Railway; activate the account. See [Stripe payments](#stripe-payments).
 - [ ] Decide NY and CA tax regions; activate Stripe Tax or keep manual rates. See [Stripe Tax](#stripe-tax-settings--tax-spec-009).
 - [ ] Stripe Connect platform setup, then `STRIPE_CONNECT_ENABLED=true` (added 2026-09-16) — only after the live key; see [Stripe Connect](#stripe-connect-spec-010-phase-2).
+- [ ] **Ship spec 020 phase 1 (abuse protection) before the first public on-sale** (added 2026-09-18) — `POST /orders` is unauthenticated, unlimited, and reserves tier inventory for 30 minutes before payment, so a script can hold a whole tier for free. Phase 1 adds per-IP and per-buyer limits plus an abandoned-order sweep. See [Abuse protection](#abuse-protection-and-edge-layer-spec-020).
+- [ ] **Decide the edge layer (Cloudflare or Railway-only) before the first production custom domain** (added 2026-09-18) — moving behind Cloudflare later changes every organization's CNAME target. See [Abuse protection](#abuse-protection-and-edge-layer-spec-020).
 
 ## Stripe Tax (Settings › Tax, spec 009)
 
@@ -67,6 +69,15 @@ Code and tests shipped 2026-09-16 behind `STRIPE_CONNECT_ENABLED` (default off).
 - [ ] Set `STRIPE_CONNECT_ENABLED=true` on the backend service and redeploy. The startup log `Stripe webhook configuration` should show `platformSecret: true, connectSecret: true, connectEnabled: true`.
 - [ ] **Verify with one internal organization**: Settings › Payments › *Set up payouts* → complete Express onboarding → `Receiving payouts` → place a test order and confirm in the Stripe dashboard that the payment shows `application_fee_amount` = fees + tax and the connected balance received the subtotal → change the payout schedule → refund one ticket and confirm the transfer reversal and application-fee refund → full refund.
 - [ ] Decide the cutover policy for organizations that never onboard (plan §5.7: no deadline, persistent dashboard banner). Revisit once the first organizations are connected.
+
+## Abuse protection and edge layer (spec 020)
+
+Reviewed 2026-09-18 against `main`: production has no edge layer (Railway only, custom domains CNAME straight to the Railway frontend host). App-level `express-rate-limit` covers only `POST /buyer/auth/request` (20/h) and `POST /events/:eventId/applications` (30/h). Unbounded today: `POST /orders` (free 30-minute inventory holds, released only by the `checkout.session.expired` webhook), staff magic-link requests (any address gets mail; clicking creates an `UNASSIGNED` user), `POST /orders/lookup`, `verify-payment`, `X-Scanner-Key` brute force, `/domains/resolve`. Plan: `specs/020-abuse-protection/plan.md`.
+
+- [ ] **Phase 1 merged and deployed** — limiters on the money paths, per-buyer hold cap, abandoned-order sweep, `Order` indexes migration. Verify in prod: `GET /health` unlimited; 11th `POST /orders` from one IP in 15 min → 429; `rate_limited_total` visible on `/metrics`.
+- [ ] **Phase 2 merged and deployed** — magic-link guard, `helmet`, Next security headers with CSP report-only. Verify: storefront, checkout (Stripe redirect), admin with an uploaded image, Google sign-in — zero CSP reports for a week, then enforce.
+- [ ] **Edge-layer decision recorded here** (plan §7.1): A Cloudflare + Cloudflare for SaaS (phase 3) · B Railway-only (recommended for launch) · C platform hosts only. Decision: _undecided_. Date: —. If A, phase 3 must land before any organization publishes a storefront CNAME.
+- [ ] Optional: `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` on checkout, buyer sign-in and application submit — works without moving DNS to Cloudflare.
 
 ## Related
 

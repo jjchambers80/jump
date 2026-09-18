@@ -1,6 +1,6 @@
 # Jump Platform — Roadmap
 
-**Generated**: 2026-09-14 · **Updated**: 2026-09-17
+**Generated**: 2026-09-14 · **Updated**: 2026-09-18
 
 This page aggregates the project's fragmented roadmap sources into one place.
 There is no single "roadmap.md" — the actual direction is carried by the sources below.
@@ -28,6 +28,8 @@ See [specs/STATUS.md](../specs/STATUS.md) for verified lifecycle states.
 | 011 | `main` (merged 2026-09-17) — paid forms dark behind `APPLICATIONS_PAYMENTS_ENABLED` | Applications — vendor / sponsor / press / panel forms, charge on approval, pay-now, refunds, digest, event duplicate |
 | 012 | `main` (merged 2026-09-17) | Add-ons — products on ticket and application tiers, sales report, purchasers CSV |
 | 018 | `main` (phases 1–3 built 2026-09-18; phase 1 Transactions list removed 2026-09-18) — settle-offline-at-approval is a noted follow-up | Application money in customers/analytics/dashboard/tax report; tier change / adjustments / waive / offline payment on applications. The org-wide Transactions list was removed: it duplicated Orders and the per-event Applications tab |
+| 019 | `main` (all 3 phases merged 2026-09-18, PRs #70–#75; migrations verified in prod) | Participants — org-wide submissions list, one `SubmissionsTable` shared with the per-event tab, application form templates, tags + check-in |
+| 020 | **Planned 2026-09-18** — `plan/020-abuse-protection`; phase 1 is a go-live blocker | Abuse protection and edge security — per-IP and per-buyer limits on `POST /orders` and the other unauthenticated money paths, abandoned-order sweep, staff magic-link guard, `helmet` + CSP, optional Turnstile; edge-layer (Cloudflare vs Railway-only) decision before the first production custom domain |
 
 ---
 
@@ -67,13 +69,14 @@ The Hermes Kanban board at `~/.hermes/kanban/boards/jump/` manages task lifecycl
 
 `docs/wiki/config/production-launch-checklist.md` (on `main`)
 
-Current go-live blockers (as of 2026-09-17):
+Current go-live blockers (as of 2026-09-18):
 
 - Stripe statement descriptor prefix on the platform account
 - Live Stripe secret key + webhook secret on the backend service; `payment_intent.*` + `charge.refunded` events on the platform webhook
 - Stripe Tax not activated on the platform account; NY / CA regions; seller-of-record and fee-tax decisions
 - Connected-account model decision (Express vs organizer-owned Stripe account) before any Connect setup
 - `APPLICATIONS_PAYMENTS_ENABLED` and `STRIPE_CONNECT_ENABLED` both off until the above
+- Spec 020 phase 1 (rate limits on `POST /orders`, per-buyer hold cap, abandoned-order sweep) before the first public on-sale; edge-layer decision before the first production custom domain
 - See the checklist file for the full human-action list
 
 ---
