@@ -84,6 +84,7 @@ export default function DecisionDialog({ eventId, application, decision, returnF
       dirty={dirty}
       saving={saving}
       saveDisabled={!template}
+      submitWhenClean
       submitLabel={DECISION_LABEL[decision]}
       savingLabel="Saving…"
       initialFocusRef={noteRef}

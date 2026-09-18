@@ -31,7 +31,7 @@ Derived from the 2026-09-15 Eventeny organizer interview (`docs/research/`).
 | `frontend/src/lib/applications.ts` | Shared types, labels, helpers |
 | `frontend/src/app/events/[eventId]/apply/*` | Public index, form, status page; `GetInvolved.tsx` on the event page |
 | `frontend/src/app/organizations/[orgId]/account/ApplicationsSection.tsx`, `ApplicantProfileSection.tsx` + `frontend/src/app/api/buyer/me/applications*`, `applicant-profile[/photos]` | Applicant account view and business-profile editor (proxied through Next route handlers; the photo upload route forwards multipart) |
-| `frontend/src/app/admin/events/[eventId]/applications/*` | Admin list (saved views in `localStorage`, bulk bar), detail (payment card with price-changed note, retry charge, `RefundDialog`, Stripe link), `DecisionDialog`, forms list, form editor, `useApplicationsApi` |
+| `frontend/src/app/admin/events/[eventId]/applications/*` | Admin list page (since spec 019 it mounts the shared `components/applications/SubmissionsTable` with `eventId`; saved views in `localStorage`, bulk bar), detail (payment card with price-changed note, retry charge, `RefundDialog`, Stripe link), `DecisionDialog`, forms list, form editor, `useApplicationsApi` |
 | `frontend/src/app/admin/settings/applications/page.tsx` | Settings › Applications (daily digest toggle, email templates) |
 | `frontend/src/app/admin/events/DuplicateEventDialog.tsx` | Duplicate button on the admin events list |
 
@@ -119,7 +119,7 @@ ORGANIZER+ views forms/applications and decides; ADMIN/SYSTEM_ADMIN configures f
 | GET/PATCH/DELETE | `…/application-forms/:formId` | organizer+ / admin / admin |
 | POST/PATCH/DELETE | `…/application-forms/:formId/tiers[/:tierId]` | admin |
 | POST/PATCH/DELETE | `…/application-forms/:formId/questions[/:questionId]`, PATCH `…/questions/reorder` | admin |
-| GET | `/admin/events/:eventId/applications` (`form,status,payment,tier,q,sort,page,pageSize`), `…/summary`, `…/export.csv` | organizer+ |
+| GET | `/admin/events/:eventId/applications` (`form,status,payment,tier,addOn,q,sort,page,pageSize`), `…/summary`, `…/export.csv` — org-wide twins under `/admin/applications*`, see [Participants](participants.md) | organizer+ |
 | GET/PATCH | `…/applications/:id` (PATCH `boothLabel`, `internalNote`) | organizer+ |
 | POST | `…/applications/:id/preview`, `…/applications/:id/decision`, `…/applications/:id/charge`, `…/applications/bulk` | organizer+ |
 | POST | `…/applications/:id/refund` `{ amount?, reason? }` | admin |
@@ -156,6 +156,8 @@ ORGANIZER+ views forms/applications and decides; ADMIN/SYSTEM_ADMIN configures f
 - Frontend `e2e` runs of unrelated specs (`theme-modes`, `admin-access`, `wcag-contrast`) fail on a clean tree in this environment too — not related to this feature.
 
 ## Related Features
+
+- [Participants](participants.md) — the organization-wide submissions list built on the same service methods (spec 019).
 
 - [Buyer Accounts](buyer-accounts.md) — applicant sign-in and account page
 - [Fee Calculation](fee-calculation.md) — fee mode math

@@ -24,8 +24,13 @@ export function verifyStatusToken(applicationId, raw) {
   return expected.length === given.length && timingSafeEqual(expected, given);
 }
 
+/** Status URL under a known storefront base (list rows: one base lookup per organization). */
+export function statusUrlWithBase(base, application) {
+  return `${base}/events/${application.eventId}/apply/status/${application.id}?token=${statusToken(application.id)}`;
+}
+
 /** Absolute storefront status URL (custom domain when active), token included. */
 export async function statusUrlFor(application) {
   const { base } = await storefrontFor(application.organizationId);
-  return `${base}/events/${application.eventId}/apply/status/${application.id}?token=${statusToken(application.id)}`;
+  return statusUrlWithBase(base, application);
 }
