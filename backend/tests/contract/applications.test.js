@@ -349,6 +349,27 @@ describe('Applications contract (spec 011 phase 1)', () => {
       expect(res.body.body).not.toContain('{{');
     });
 
+    it('SYSTEM_ADMIN (no membership, unscoped) previews and decides with the event organization’s template and the email goes out', async () => {
+      const sysToken = await staffToken({ email: `sys@${TAG}.test`, role: 'SYSTEM_ADMIN' });
+      const preview = await request(app).post(`/admin/events/${eventId}/applications/${pressApp.id}/preview`).set(...auth(sysToken)).send({ decision: 'WAITLIST' });
+      expect(preview.status).toBe(200);
+      expect(preview.body.subject).toBe(`You are on the waitlist for ${TAG} Expo 2027`);
+      // An org-specific template is honoured too.
+      const custom = await request(app).put('/admin/settings/application-templates/WAITLISTED').set(...auth(adminToken)).send({ subject: 'Custom waitlist {{event.name}}', body: 'Hi {{applicant.firstName}}' });
+      expect(custom.status).toBe(200);
+      const previewCustom = await request(app).post(`/admin/events/${eventId}/applications/${pressApp.id}/preview`).set(...auth(sysToken)).send({ decision: 'WAITLIST' });
+      expect(previewCustom.body.subject).toBe(`Custom waitlist ${TAG} Expo 2027`);
+      sentEmails.length = 0;
+      const wl = await request(app).post(`/admin/events/${eventId}/applications/${pressApp.id}/decision`).set(...auth(sysToken)).send({ decision: 'WAITLIST' });
+      expect(wl.status).toBe(200);
+      expect(sentEmails).toHaveLength(1);
+      expect(sentEmails[0].subject).toBe(`Custom waitlist ${TAG} Expo 2027`);
+      // Put things back for the tests that follow.
+      expect((await request(app).delete('/admin/settings/application-templates/WAITLISTED').set(...auth(adminToken))).status).toBe(200);
+      await prisma.application.update({ where: { id: pressApp.id }, data: { status: 'SUBMITTED', decidedAt: null, decidedById: null } });
+      await cleanupStaff([`sys@${TAG}.test`]);
+    });
+
     it('ORGANIZER waitlists then approves with an edited message; transitions are enforced', async () => {
       const wl = await request(app).post(`/admin/events/${eventId}/applications/${pressApp.id}/decision`).set(...auth(organizerToken)).send({ decision: 'WAITLIST' });
       expect(wl.status).toBe(200);

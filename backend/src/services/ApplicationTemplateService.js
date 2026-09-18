@@ -116,9 +116,16 @@ class ApplicationTemplateService {
     };
   }
 
-  /** Rendered subject/body for an action, using the org template or the default. */
+  /**
+   * Rendered subject/body for an action, using the org template or the default.
+   * The organization is the application's own: callers pass the caller's
+   * scope, which is null for SYSTEM_ADMIN (no memberships), and a null
+   * organizationId would make the template lookup throw.
+   */
   async render(organizationId, action, application, options = {}) {
-    const template = await this.getTemplate(organizationId, action);
+    const orgId = organizationId || application.organizationId || application.event?.venue?.organizationId || application.event?.venue?.organization?.id || null;
+    this._assertAction(action);
+    const template = orgId ? await this.getTemplate(orgId, action) : this._serialize(action, null);
     const context = await this.contextFor(application, options);
     return {
       subject: renderTemplate(template.subject, context),
