@@ -22,8 +22,9 @@ const SURVEY_KEYS = [...MULTI_SELECT_KEYS, ...SINGLE_SELECT_KEYS];
 
 const pendingSelect = { id: true, name: true, slug: true, createdAt: true, platformCustomer: { select: { onboarding: true } } };
 
-/** True while the subscribe step is offered (phase 2). Off: the step is skipped. */
-export const billingEnabled = () => process.env.BILLING_ENABLED === 'true';
+import { billingEnabled } from '../config/billing.js';
+
+export { billingEnabled };
 
 /** Which step a pending organization resumes at. */
 export function stepFor(onboarding) {

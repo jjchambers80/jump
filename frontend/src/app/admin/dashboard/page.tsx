@@ -12,6 +12,7 @@ import { useSession } from 'next-auth/react';
 import adminService, { AdminEvent, DashboardStats } from '@/services/adminService';
 import PayoutsBanner from './PayoutsBanner';
 import SetupGuide from './SetupGuide';
+import PlanBanner from './PlanBanner';
 
 function DashboardContent() {
   const router = useRouter();
@@ -75,6 +76,7 @@ function DashboardContent() {
           <p className="text-sm text-gray-500 dark:text-slate-500">Welcome, {user?.name}</p>
         </div>
         <PayoutsBanner />
+        <PlanBanner />
         {/* Spec 022: setup cards for a new organization; hides itself once dismissed */}
         <SetupGuide />
         {error && (

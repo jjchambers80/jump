@@ -26,6 +26,7 @@ import adminRouter from './routes/admin.js';
 import customersRouter from './routes/customers.js';
 import organizationsRouter from './routes/organizations.js';
 import signupRouter from './routes/signup.js';
+import { billingEnabled } from '../config/billing.js';
 import venuesRouter, { orgVenuesRouter } from './routes/venues.js';
 import ordersRouter, { eventOrdersRouter } from './routes/orders.js';
 import usersRouter from './routes/users.js';
@@ -165,6 +166,9 @@ if (process.env.NODE_ENV !== 'test') {
       platformSecret: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
       connectSecret: Boolean(process.env.STRIPE_CONNECT_WEBHOOK_SECRET),
       connectEnabled: String(process.env.STRIPE_CONNECT_ENABLED || '').toLowerCase() === 'true',
+      // Spec 022 phase 2: Jump subscriptions on POST /webhooks/stripe/billing
+      billingSecret: Boolean(process.env.STRIPE_BILLING_WEBHOOK_SECRET),
+      billingEnabled: billingEnabled(),
     });
     console.log(`🚀 Jump Backend API running on http://localhost:${PORT}`);
     console.log(`📊 Metrics available at http://localhost:${PORT}/metrics`);

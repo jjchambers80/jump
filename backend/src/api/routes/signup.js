@@ -9,6 +9,7 @@ import { requireAuth } from '../../middleware/auth.js';
 import { validateCreateOrganization } from '../validators/organizationValidators.js';
 import { ConflictError } from '../../middleware/errorHandler.js';
 import onboardingService, { billingEnabled } from '../../services/OnboardingService.js';
+import billingService from '../../services/BillingService.js';
 
 const router = Router();
 
@@ -36,10 +37,21 @@ router.get('/:orgId', wrap(async (req, res) => {
   res.json(await onboardingService.getPending(req.user.id, req.user.role, req.params.orgId));
 }));
 
-/** POST /signup/:orgId/subscribe — phase 2 (Stripe Billing). 409 until BILLING_ENABLED. */
+/**
+ * POST /signup/:orgId/subscribe — embedded Stripe Checkout (subscription mode,
+ * trial) for the STARTER plan. 409 until BILLING_ENABLED (phase 2).
+ */
 router.post('/:orgId/subscribe', wrap(async (req, res) => {
-  await onboardingService.requirePending(req.user.id, req.user.role, req.params.orgId);
-  throw new ConflictError('Subscriptions are not available yet');
+  const org = await onboardingService.requirePending(req.user.id, req.user.role, req.params.orgId);
+  if (!billingEnabled()) throw new ConflictError('Subscriptions are not available yet');
+  res.json(await billingService.createCheckout(org.id, req.user.id, { returnPath: `/signup/${org.id}/subscribe/return` }));
+}));
+
+/** POST /signup/:orgId/subscribe/confirm { sessionId } — record the completed Checkout on return. */
+router.post('/:orgId/subscribe/confirm', wrap(async (req, res) => {
+  const org = await onboardingService.requirePending(req.user.id, req.user.role, req.params.orgId);
+  const result = await billingService.confirmCheckout(org.id, req.body?.sessionId);
+  res.json({ ...result, organization: await onboardingService.getPending(req.user.id, req.user.role, org.id) });
 }));
 
 router.post('/:orgId/subscribe/skip', wrap(async (req, res) => {
