@@ -8,6 +8,7 @@ import PaymentService from '../../services/PaymentService.js';
 import RefundService from '../../services/RefundService.js';
 import ConnectService from '../../services/ConnectService.js';
 import ApplicationPaymentService from '../../services/ApplicationPaymentService.js';
+import BillingService from '../../services/BillingService.js';
 import logger from '../../utils/logger.js';
 
 const router = express.Router();
@@ -59,6 +60,13 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
   }
 
   try {
+    // Jump subscription events belong on /webhooks/stripe/billing (spec 022);
+    // one registered here by mistake must not be mistaken for an order.
+    if (BillingService.isBillingEvent(event)) {
+      logger.warn('Billing event received on the platform endpoint; ignored', { type: event.type });
+      return res.json({ received: true, ignored: true });
+    }
+
     // Application payments (spec 011 phase 2) share this endpoint. Dispatch
     // strictly on metadata.applicationId (ticket sessions never carry it);
     // charge.refunded needs a row lookup because the charge has no metadata
@@ -191,6 +199,35 @@ router.post('/stripe/connect', express.raw({ type: 'application/json' }), async 
     logger.error('Error processing Connect webhook', { type: event.type, account: accountId, error: error.message });
     // 200 so Stripe does not retry; the page's Sync button is the recovery path
     res.json({ received: true, error: error.message });
+  }
+});
+
+/**
+ * POST /webhooks/stripe/billing
+ * Jump's own subscriptions (spec 022 phase 2). Same Stripe account as the
+ * platform endpoint above, but a separate endpoint registration with its own
+ * event list and signing secret (STRIPE_BILLING_WEBHOOK_SECRET), so
+ * subscription events never reach the order dispatch and vice versa.
+ */
+router.post('/stripe/billing', express.raw({ type: 'application/json' }), async (req, res) => {
+  let event;
+  try {
+    event = readStripeEvent(req, process.env.STRIPE_BILLING_WEBHOOK_SECRET, 'Billing');
+  } catch (err) {
+    logger.error('Billing webhook signature verification failed', { error: err.message });
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  try {
+    if (!BillingService.isBillingEvent(event)) {
+      logger.info('Ignoring non-billing event on the billing endpoint', { type: event.type });
+      return res.json({ received: true, ignored: true });
+    }
+    await BillingService.handleEvent(event);
+    res.json({ received: true });
+  } catch (error) {
+    logger.error('Billing webhook processing failed', { type: event.type, error: error.message });
+    res.status(500).json({ error: 'Webhook processing failed' });
   }
 });
 

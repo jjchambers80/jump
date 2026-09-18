@@ -1,15 +1,15 @@
 # Organization Onboarding (signup flow, Jump customer record, setup guide)
 
-**Status:** Implemented — phase 1 (spec 022)
+**Status:** Implemented — phases 1–2 (spec 022); phase 2 dark behind `BILLING_ENABLED`
 **Last Updated:** 2026-09-18
 **Spec / plan:** `specs/022-organization-onboarding/plan.md`
 **Reference screenshots:** `docs/research/shopify-onboarding-subscribe.png`, `-survey.png`, `-setup-guide.png`
 
 ## Overview
 
-The self-serve path from "signed in" to "has an organization". **Create organization** in the admin org switcher opens `/signup` in a new tab (Shopify-style); a signed-in user with no staff role (`UNASSIGNED`) who opens `/admin` is sent there too. The flow is name → *(subscribe, phase 2)* → survey → done. Step 1 creates a **pending** `Organization` plus an ADMIN `OrganizationMember` for the caller; the survey (five ticketing-flavoured screens, all skippable) is stored on the organization's `PlatformCustomer`; **done** stamps `Organization.onboardingCompletedAt`, promotes the owner from `UNASSIGNED` to `ADMIN`, forces the session's JWT claims to refresh, tells the opener tab to refetch its organization list, and lands on `/admin/dashboard?org=<id>` where the **setup guide** card grid replaces the empty-state box.
+The self-serve path from "signed in" to "has an organization". **Create organization** in the admin org switcher opens `/signup` in a new tab (Shopify-style); a signed-in user with no staff role (`UNASSIGNED`) who opens `/admin` is sent there too. The flow is name → subscribe (only with `BILLING_ENABLED`; skippable) → survey → done. Step 1 creates a **pending** `Organization` plus an ADMIN `OrganizationMember` for the caller; the survey (five ticketing-flavoured screens, all skippable) is stored on the organization's `PlatformCustomer`; **done** stamps `Organization.onboardingCompletedAt`, promotes the owner from `UNASSIGNED` to `ADMIN`, forces the session's JWT claims to refresh, tells the opener tab to refetch its organization list, and lands on `/admin/dashboard?org=<id>` where the **setup guide** card grid replaces the empty-state box.
 
-`PlatformCustomer` is the *organization's relationship with Jump*: owner, plan (`FREE` today), Stripe Billing customer (phase 2), survey answers. It is not a `Contact` (those are the organization's own buyers) and not the Auth.js `Account` model.
+`PlatformCustomer` is the *organization's relationship with Jump*: owner, plan (`FREE` or `STARTER`), the Stripe Billing customer and subscription **in Jump's own Stripe account** (never the organization's connected account), survey answers. It is not a `Contact` (those are the organization's own buyers) and not the Auth.js `Account` model.
 
 ## Key Files
 
@@ -22,7 +22,12 @@ The self-serve path from "signed in" to "has an organization". **Create organiza
 | `backend/src/services/SetupGuideService.js` + `routes/admin.js` | `GET|PATCH /admin/setup-guide` for `activeOrgFor(req)` |
 | `backend/src/services/OrganizationService.js` | `listOrganizations` / `listOrganizationsForUser` hide pending orgs; `createOrganization(data, creatorUserId)` adds the creator as ADMIN member |
 | `backend/src/middleware/scannerAuth.js`, `services/TicketService.js`, `routes/tickets.js` | Check-in scan/redeem scoped to the staff caller's organization (`scannerOrgScope`, `_inScope`) |
-| `frontend/src/app/signup/*` | `layout.tsx` + `SignupGuard` (session required, `callbackUrl` back), `SignupShell` (dark stage, Skip / back), `page.tsx` (name + handle preview, resume), `[orgId]/subscribe` (phase 2 placeholder → survey), `[orgId]/survey`, `[orgId]/done` |
+| `frontend/src/app/signup/*` | `layout.tsx` + `SignupGuard` (session required, `callbackUrl` back), `SignupShell` (dark stage, Skip / back), `page.tsx` (name + handle preview, resume), `[orgId]/subscribe` (trial ledger + embedded Checkout; 409 → survey), `[orgId]/subscribe/return` (confirms `?session_id`), `[orgId]/survey`, `[orgId]/done` |
+| `backend/src/config/billing.js`, `services/BillingService.js` | `billingEnabled()` (needs `JUMP_STARTER_PRICE_ID`), `trialDays()`; `offer()` (Price cached 10 min), `createCheckout` (embedded, subscription mode, trial, `metadata.organizationId`), `confirmCheckout` (on return, idempotent), `statusFor`, `portalLink`, `isBillingEvent` / `handleEvent`, `subscriptionToRow` |
+| `backend/src/api/routes/webhooks.js` | `POST /webhooks/stripe/billing` (`STRIPE_BILLING_WEBHOOK_SECRET`); the platform endpoint ignores billing events |
+| `frontend/src/components/billing/EmbeddedCheckout.tsx`, `lib/billing.ts` | Mounts `stripe.initEmbeddedCheckout` with `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`; plan types, `formatOfferPrice`, `SUBSCRIPTION_LABEL` |
+| `frontend/src/app/admin/settings/plan/*`, `settings/SettingsNav.tsx` | Settings › **Plan** (`usePlanApi`): plan, status pill, trial end / renewal, **Start N-day free trial** (inline Checkout card), **Manage billing** (portal); nav entry only with `NEXT_PUBLIC_BILLING_ENABLED` |
+| `frontend/src/app/admin/dashboard/PlanBanner.tsx` | `past_due` / `unpaid` banner → Settings › Plan |
 | `frontend/src/lib/onboarding.ts` | Survey steps, labels, `visibleSteps(answers)`, `signupPathFor(org)` — ids mirror the backend config (contract test) |
 | `frontend/src/lib/orgChannel.ts` | `announceOrganizationCreated` / `onOrganizationCreated`: `BroadcastChannel('jump-org')` + `localStorage` fallback |
 | `frontend/src/services/signupService.ts` | API wrappers |
@@ -38,8 +43,9 @@ The self-serve path from "signed in" to "has an organization". **Create organiza
 
 | Variable | Notes |
 |---|---|
-| `BILLING_ENABLED` | Phase 2. `true` inserts the subscribe step; unset/false: the step is skipped and `POST /signup/:orgId/subscribe` returns 409 |
-| `STRIPE_BILLING_WEBHOOK_SECRET`, `JUMP_STARTER_PRICE_ID` | Phase 2 (Stripe Billing on Jump's own Stripe account, `POST /webhooks/stripe/billing`) |
+| `BILLING_ENABLED` | `true` inserts the subscribe step and opens Settings › Plan; unset/false: the step is skipped and `POST /signup/:orgId/subscribe` returns 409. Requires `JUMP_STARTER_PRICE_ID` or it stays off (startup warning) |
+| `JUMP_STARTER_PRICE_ID`, `BILLING_TRIAL_DAYS` (30), `STRIPE_BILLING_WEBHOOK_SECRET` | The STARTER Price in Jump's account, trial length, signing secret for `POST /webhooks/stripe/billing` |
+| `NEXT_PUBLIC_BILLING_ENABLED`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Frontend: nav entry; Jump-account publishable key for embedded Checkout |
 
 ## API
 
@@ -50,7 +56,11 @@ The self-serve path from "signed in" to "has an organization". **Create organiza
 | `GET` | `/signup/:orgId` | One pending org (404 once completed, or for non-members) |
 | `PATCH` | `/signup/:orgId/survey` | Partial `{ goals?, eventTypes?, eventsPerYear?, attendance?, movingFrom? }`; ids validated against `config/onboarding.js` |
 | `POST` | `/signup/:orgId/survey/skip`, `/subscribe/skip` | Record the decision in the onboarding JSON |
-| `POST` | `/signup/:orgId/subscribe` | 409 until `BILLING_ENABLED` (phase 2) |
+| `POST` | `/signup/:orgId/subscribe` | `{ clientSecret, sessionId, offer }` for embedded Checkout; 409 while billing is off or the org already has a subscription |
+| `POST` | `/signup/:orgId/subscribe/confirm` | `{ sessionId }` → `{ subscribed, organization }`; records the subscription from the Checkout session (the webhook may lag) |
+| `GET` | `/admin/settings/plan` | `{ enabled, plan, subscriptionStatus, trialEndsAt, currentPeriodEndsAt, hasSubscription, canManage, offer, canEdit }` |
+| `POST` | `/admin/settings/plan/checkout`, `/confirm`, `/portal` | ADMIN: start the trial from Settings, confirm on return, Stripe customer portal URL |
+| `POST` | `/webhooks/stripe/billing` | Subscription events → `PlatformCustomer` |
 | `POST` | `/signup/:orgId/complete` | Stamps, upserts `PlatformCustomer`, promotes `UNASSIGNED → ADMIN`; idempotent; returns the org in the `GET /organizations` shape |
 | `DELETE` | `/signup/:orgId` | Discard a pending org (cascade) |
 | `GET` | `/admin/setup-guide` | `{ dismissedAt, tasks: [{ id, done, href, shown, state? }], onboarding: { goals } }` |
@@ -67,7 +77,8 @@ Setup-guide `done` rules: `event` = any event under the org's venues; `design` =
 4. **Survey.** One screen per key; Continue PATCHes that key only; the fifth screen (moving-from) appears only when `move_platform` was chosen. Empty answers save `[]`.
 5. **Done.** `complete` stamps `onboardingCompletedAt`, merges `surveyCompletedAt` unless the survey was skipped, and `updateMany({ role: 'UNASSIGNED' } → ADMIN)` — never a downgrade. The page then awaits `useSession().update()` (forces the claims refresh — without it the client keeps `UNASSIGNED` for up to 60 s and `AdminRoute` would bounce back to `/signup`), announces on the channel, and navigates to `/admin/dashboard?org=<id>`.
 6. **Opener tab.** `OrgProvider` subscribes to the channel; on `org-created` it sets the preferred id, refetches, and selects the new organization.
-7. **Legacy create.** `POST /organizations` (ADMIN+, the SYSTEM_ADMIN Organizations page) now creates the membership for a non-SYSTEM_ADMIN caller and the org is onboarded at once (`@default(now())`).
+7. **Subscribe (phase 2).** `stepFor` resumes at `subscribe` while billing is on and neither `subscribeSkippedAt` nor `subscribedAt` is set. `createCheckout` creates the Stripe customer once (`PlatformCustomer.stripeCustomerId`, `metadata.organizationId`), then an embedded Checkout session (`mode: subscription`, `trial_period_days`, `subscription_data.metadata.organizationId`, `return_url` = `/signup/:orgId/subscribe/return?session_id={CHECKOUT_SESSION_ID}`). The return page calls `confirm`, which retrieves the session, checks its `metadata.organizationId`, and mirrors the subscription (`subscriptionToRow`: `plan = STARTER` when the status is trialing/active/past_due/unpaid/incomplete and the price is the STARTER price, else `FREE`) plus `onboarding.subscribedAt`. Later changes (past due, cancel) arrive on the billing webhook and overwrite the mirror. Settings › Plan reuses the same Checkout with `return_url` back to the page. Nothing is gated on the plan.
+8. **Legacy create.** `POST /organizations` (ADMIN+, the SYSTEM_ADMIN Organizations page) now creates the membership for a non-SYSTEM_ADMIN caller and the org is onboarded at once (`@default(now())`).
 
 ## Check-in scope (fixed in this phase)
 
@@ -79,6 +90,8 @@ Setup-guide `done` rules: `event` = any event under the org's venues; `design` =
 - `POST /organizations` now needs a real user for non-SYSTEM_ADMIN callers (membership FK). Contract tests must use `staffToken`, not a fabricated ADMIN JWT.
 - `window.open(url, '_blank', 'noopener')` returns `null` even on success; the switcher severs `popup.opener` by hand so the fallback fires only when the popup is actually blocked.
 - Playwright: the popup is a new page in the same context, so the session mock must be registered with `context.route`, and after `complete` the mocked `/api/auth/session` must report `ADMIN` (see `e2e/signup.spec.ts` `promoteSession`).
+- Stripe.js: `EmbeddedCheckout` renders an error (`embedded-checkout-error`) instead of mounting when `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` is unset — that is what the e2e tests assert; they never load js.stripe.com.
+- `subscriptionToRow` compares the price id with `JUMP_STARTER_PRICE_ID`; a subscription on any other price mirrors as `FREE`.
 - `useSession().update()` only works because `auth.ts` checks `trigger === 'update'`; do not remove that branch.
 - SYSTEM_ADMIN can run `/signup` too (gets a membership like anyone; they see every org regardless).
 
@@ -88,10 +101,12 @@ Setup-guide `done` rules: `event` = any event under the org's venues; `design` =
 - `frontend/e2e/signup.spec.ts` — name → survey → done, skip, conditional step, resume, signed-out redirect, switcher popup + opener refresh.
 - `frontend/e2e/admin-setup-guide.spec.ts` — cards, done state, Connect vs platform copy, dismiss, all-done heading, 375 px.
 - `frontend/e2e/admin-access.spec.ts` T106 — `UNASSIGNED` at `/admin` lands on `/signup`.
+- `backend/tests/contract/billing.test.js` — off → 409 + step skipped; customer created once; Checkout params; confirm (open / complete / foreign session); already-subscribed 409; Plan status roles + portal; webhook mirror (updated, deleted by subscription id, unknown org); wrong-endpoint events ignored both ways.
+- `frontend/e2e/billing.spec.ts` — subscribe ledger + Skip, billing-off redirect, return confirm (complete / open), Settings › Plan FREE → checkout card, STARTER status + portal, return notice, billing-off note, dashboard banner.
 
-## Not yet (phases 2–3)
+## Not yet (phase 3)
 
-Subscribe step + Settings › Plan (Stripe Billing, `BILLING_ENABLED`); survey-tailored templates, abandoned-org sweep, funnel counts, survey answers on the SYSTEM_ADMIN org row. Open decisions in the plan §9 (price, gating, promoting `ORGANIZER → ADMIN`).
+Survey-tailored templates, abandoned-org sweep, funnel counts, survey answers on the SYSTEM_ADMIN org row. Open decisions in the plan §9 (price, gating, promoting `ORGANIZER → ADMIN`). Launch steps for billing: `docs/wiki/config/production-launch-checklist.md` › Jump subscriptions.
 
 ## Related Features
 

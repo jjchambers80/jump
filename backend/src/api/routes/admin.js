@@ -32,6 +32,7 @@ import applicationTemplateService from '../../services/ApplicationTemplateServic
 import applicationFormTemplateService from '../../services/ApplicationFormTemplateService.js';
 import applicationDigestService from '../../services/ApplicationDigestService.js';
 import setupGuideService from '../../services/SetupGuideService.js';
+import billingService from '../../services/BillingService.js';
 import { PAID_ORDER_STATUSES, PAID_APPLICATION_STATUSES } from '../../services/paidStatuses.js';
 
 const router = express.Router();
@@ -97,6 +98,46 @@ router.patch('/setup-guide', async (req, res, next) => {
   try {
     if (req.body?.dismissed !== true) throw new ValidationError('dismissed must be true');
     res.json(await setupGuideService.dismiss(await activeOrgFor(req)));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** GET /admin/settings/plan — the organization's Jump plan (spec 022 phase 2). */
+router.get('/settings/plan', async (req, res, next) => {
+  try {
+    const status = await billingService.statusFor(await activeOrgFor(req));
+    res.json({ ...status, canEdit: ['ADMIN', 'SYSTEM_ADMIN'].includes(req.user.role) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** POST /admin/settings/plan/checkout — start the STARTER trial from Settings (embedded Checkout). */
+router.post('/settings/plan/checkout', requireAdmin, async (req, res, next) => {
+  try {
+    const organizationId = await activeOrgFor(req);
+    res.json(await billingService.createCheckout(organizationId, req.user.id, { returnPath: '/admin/settings/plan' }));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** POST /admin/settings/plan/confirm { sessionId } — record a completed Checkout on return. */
+router.post('/settings/plan/confirm', requireAdmin, async (req, res, next) => {
+  try {
+    const organizationId = await activeOrgFor(req);
+    const result = await billingService.confirmCheckout(organizationId, req.body?.sessionId);
+    res.json({ ...result, ...(await billingService.statusFor(organizationId)) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** POST /admin/settings/plan/portal — Stripe customer portal link (cancel, card, invoices). */
+router.post('/settings/plan/portal', requireAdmin, async (req, res, next) => {
+  try {
+    res.json(await billingService.portalLink(await activeOrgFor(req), { returnPath: '/admin/settings/plan' }));
   } catch (error) {
     next(error);
   }
