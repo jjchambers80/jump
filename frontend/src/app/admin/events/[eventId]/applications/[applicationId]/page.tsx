@@ -164,7 +164,7 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
     try {
       setApp(await api.updateMeta(app.id, { [field]: value }));
     } catch (err) {
-      setApp((prev) => (prev ? { ...prev, [column]: before } : prev));
+      setApp({ ...app, [column]: before });
       setError(describeError(err, 'Could not update check-in'));
     } finally {
       setChecking(false);

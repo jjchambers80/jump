@@ -16,6 +16,8 @@ export const MAX_TEMPLATE_QUESTIONS = 100;
 /** Spec 019 phase 3: organizer tags per application. */
 export const MAX_TAGS = 20;
 export const MAX_TAG_LENGTH = 40;
+/** Spec 019 follow-up: questions a form may pin as list columns. */
+export const MAX_PINNED_QUESTIONS = 2;
 
 export const QUESTION_TYPES = new Set([
   'SHORT_TEXT',

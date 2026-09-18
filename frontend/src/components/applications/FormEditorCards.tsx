@@ -8,7 +8,7 @@
 
 import Link from 'next/link';
 import { FormEvent, useEffect, useState } from 'react';
-import { money, QUESTION_TYPE_LABEL, type AdminForm, type AdminTier, type Question, type QuestionType } from '@/lib/applications';
+import { MAX_PINNED_QUESTIONS, money, QUESTION_TYPE_LABEL, type AdminForm, type AdminTier, type Question, type QuestionType } from '@/lib/applications';
 
 const card = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
 const btn = 'rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
@@ -401,9 +401,10 @@ interface QuestionDraft {
   type: QuestionType;
   required: boolean;
   options: string;
+  pinned: boolean;
 }
 
-const emptyQuestion: QuestionDraft = { label: '', helpText: '', type: 'SHORT_TEXT', required: false, options: '' };
+const emptyQuestion: QuestionDraft = { label: '', helpText: '', type: 'SHORT_TEXT', required: false, options: '', pinned: false };
 
 function questionBody(d: QuestionDraft) {
   return {
@@ -411,6 +412,7 @@ function questionBody(d: QuestionDraft) {
     helpText: d.helpText || null,
     type: d.type,
     required: d.required,
+    pinned: d.pinned,
     ...(CHOICE.has(d.type) && { options: d.options.split('\n').map((o) => o.trim()).filter(Boolean) }),
   };
 }
@@ -439,8 +441,11 @@ export function QuestionsCard({
 
   const startEdit = (q: Question) => {
     setEditing(q.id);
-    setEdit({ label: q.label, helpText: q.helpText ?? '', type: q.type, required: q.required, options: q.options.join('\n') });
+    setEdit({ label: q.label, helpText: q.helpText ?? '', type: q.type, required: q.required, options: q.options.join('\n'), pinned: q.pinned ?? false });
   };
+  // Pinned answer columns (spec 019): at most MAX_PINNED_QUESTIONS per form.
+  const pinnedCount = form.questions.filter((x) => x.pinned).length;
+  const pinFull = (self: Question | null) => pinnedCount - (self?.pinned ? 1 : 0) >= MAX_PINNED_QUESTIONS;
 
   const move = (index: number, delta: number) => {
     const ids = form.questions.map((q) => q.id);
@@ -450,7 +455,7 @@ export function QuestionsCard({
     onReorder(ids);
   };
 
-  const editor = (value: QuestionDraft, set: (v: QuestionDraft) => void, idPrefix: string) => (
+  const editor = (value: QuestionDraft, set: (v: QuestionDraft) => void, idPrefix: string, self: Question | null = null) => (
     <div className="grid gap-2 sm:grid-cols-2">
       <div className="sm:col-span-2">
         <label htmlFor={`${idPrefix}-label`} className={labelClass}>Question</label>
@@ -477,6 +482,9 @@ export function QuestionsCard({
       <label className="flex items-center gap-2 text-sm text-gray-800 dark:text-slate-200">
         <input type="checkbox" checked={value.required} onChange={(e) => set({ ...value, required: e.target.checked })} /> Required
       </label>
+      <label className={`flex items-center gap-2 text-sm text-gray-800 dark:text-slate-200 ${!value.pinned && pinFull(self) ? 'opacity-60' : ''}`} title={!value.pinned && pinFull(self) ? `At most ${MAX_PINNED_QUESTIONS} questions can be pinned` : undefined}>
+        <input type="checkbox" checked={value.pinned} disabled={!value.pinned && pinFull(self)} onChange={(e) => set({ ...value, pinned: e.target.checked })} data-testid={`${idPrefix}-pinned`} /> Show as a column on the submissions list
+      </label>
     </div>
   );
 
@@ -496,7 +504,7 @@ export function QuestionsCard({
                 }}
                 className="space-y-2"
               >
-                {editor(edit, setEdit, `qe-${q.id}`)}
+                {editor(edit, setEdit, `qe-${q.id}`, q)}
                 <div className="flex gap-2">
                   <button type="submit" className={primary}>Save</button>
                   <button type="button" className={btn} onClick={() => setEditing(null)}>Cancel</button>
@@ -508,6 +516,11 @@ export function QuestionsCard({
                   <p className="font-medium text-gray-900 dark:text-white">
                     {q.label}
                     {q.required && <span className="text-red-600"> *</span>}
+                    {q.pinned && (
+                      <span className="ml-2 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300" data-testid={`question-pinned-${q.id}`}>
+                        List column
+                      </span>
+                    )}
                   </p>
                   <p className="text-xs text-gray-600 dark:text-slate-400">
                     {QUESTION_TYPE_LABEL[q.type]}

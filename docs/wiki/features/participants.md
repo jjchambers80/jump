@@ -40,6 +40,9 @@ Why this exists when the spec 018 Transactions list was removed: submissions had
 | `frontend/src/components/applications/EditTagsDialog.tsx` | Chip input (Enter / comma adds, Backspace removes, `datalist` + "Used elsewhere" suggestions from the tags endpoint); mirrors the backend normalisation |
 | `frontend/src/components/applications/BusinessCell.tsx`, `SubmissionsTable.tsx`, `RowActionsMenu.tsx` | Checked in / out ticks on APPROVED rows (optimistic, reverted on error), Tag filter, Tags column (`boothLabel` grey chip + amber tag chips), ⋯ → Edit tags |
 | `frontend/src/app/admin/events/[eventId]/applications/[applicationId]/page.tsx` | Notes card: Tags block + Edit tags, On site check-in ticks with timestamps (APPROVED only) |
+| `packages/db/prisma/migrations/20260925000000_question_pinned` | Follow-up: `ApplicationQuestion.pinned` |
+| `backend/src/services/ApplicationFormService.js` (`_assertPinnedCap`, `pinned` in `_validateQuestion` / `_materialise` / `snapshotForm`), `ApplicationService.js` (`LIST_INCLUDE.answers`, `pinnedAnswers`) | Follow-up: ≤ `MAX_PINNED_QUESTIONS` (2) live pinned questions per form; list rows load only those answers; `listFormsInScope` exposes `pinnedQuestions` |
+| `frontend/src/components/applications/FormEditorCards.tsx` (`QuestionsCard`), `SubmissionsTable.tsx` | Follow-up: "Show as a column on the submissions list" toggle (disabled at the cap) + **List column** badge; with a Form filter one column per pinned question, otherwise one **Answers** column of `label: value` lines |
 | `frontend/src/app/admin/events/[eventId]/applications/page.tsx` | Now `ApplicationsHeader` + `SubmissionsTable eventId=…` |
 | `frontend/src/app/admin/events/[eventId]/applications/DecisionDialog.tsx` | `submitWhenClean` — a decision can be sent with the untouched template (previously the button stayed disabled until something was edited) |
 | `frontend/src/components/AdminSidebar.tsx` | **Participants** after Customers |
@@ -82,6 +85,10 @@ A template is a **snapshot**, not a live form: `ApplicationFormTemplate.definiti
 - `GET /admin/applications/tags` and `GET /admin/events/:eventId/applications/tags` return the distinct tags in scope — one spelling per tag (`DISTINCT ON (lower(tag))`), alphabetical — for the Tag filter and the Edit tags suggestions.
 - List: `tag=` is an exact match (`tags: { has }`); `q` matches a tag exactly (case-sensitive `has`) alongside the loose matches on the other fields. No QR / scanner path (decision 7.6).
 
+### Pinned answer columns (follow-up, plan §9)
+
+`ApplicationQuestion.pinned` marks up to `MAX_PINNED_QUESTIONS` (2) live questions per form (400 beyond; archiving frees the slot; `_assertPinnedCap` runs on create, question add / update, and template definitions — templates round-trip the flag and create-from pins the copies). The list include loads only answers to pinned, non-archived questions (`pinnedAnswers: [{ questionId, label, type, value }]` via `_answerText`, so photos come back as URLs and multi-choice as `a; b`). Rendering: with a **Form** filter the table shows one column per pinned question of that form (per-event forms carry `questions[].pinned`; the org-wide forms list carries `pinnedQuestions`); without it, one **Answers** column lists `label: value` when any row has a pinned answer. The CSV is unchanged (it already has every question).
+
 The organizer daily digest (spec 011 phase 3) links here: per event `/admin/participants?event=:id&status=SUBMITTED` inline, and one **Open** button to `/admin/participants?status=SUBMITTED`.
 
 ## API Endpoints
@@ -94,6 +101,7 @@ The organizer daily digest (spec 011 phase 3) links here: per event `/admin/part
 | GET | `/admin/application-forms` | organizer+ |
 | GET | `/admin/applications/tags`, `/admin/events/:eventId/applications/tags` | organizer+ |
 | PATCH | `/admin/events/:eventId/applications/:id` `{ boothLabel?, internalNote?, tags?, checkedIn?, checkedOut? }` | organizer+ |
+| POST/PATCH | `…/application-forms/:formId/questions[/:questionId]` `+ pinned` (≤ 2 per form) | admin |
 | GET/POST | `/admin/application-templates` (POST `{ name, kind, definition? }`) | organizer+ / admin |
 | GET/PUT/DELETE | `/admin/application-templates/:templateId` (PUT `{ name?, definition? }`) | organizer+ / admin / admin |
 | POST | `/admin/events/:eventId/application-forms/:formId/save-as-template` `{ name }` or `{ replaceTemplateId, name? }` | admin |
@@ -107,6 +115,7 @@ The organizer daily digest (spec 011 phase 3) links here: per event `/admin/part
 - `frontend/e2e/participants-templates.spec.ts` — Templates section, New application (event filtering, same-kind templates, create-from lands in the editor with the copied questions), Save as template (conflict, new, replace), template editor (settings / question / tier edits kept local until Save, PUT payload, unsaved guard), ORGANIZER read-only, New template + Delete.
 - `backend/tests/contract/participantsTags.test.js` — normalisation, limits, unknown fields, `tag` filter, `q` on a tag, distinct tags per scope (org / event / other org / SYSTEM_ADMIN / no membership), check-in stamp / keep / clear, 409 on non-approved, CSV columns.
 - `frontend/e2e/participants.spec.ts` (phase 3 tests) — Edit tags with suggestions from ⋯, Tag filter, search a tag, check-in ticks only on approved rows, optimistic tick persists on reload; detail page tags + check-in.
+- `backend/tests/contract/participantsPinned.test.js` — rows carry pinned answers only, cap on add / update, unpin frees, archive frees, `pinnedQuestions`, template round-trip + cap + create-from. `frontend/e2e/participants.spec.ts` (pinned test) and `participants-templates.spec.ts` (editor toggle / cap).
 - `frontend/e2e/applications*.spec.ts` still cover the per-event mount (same `data-testid`s).
 
 ## Gotchas

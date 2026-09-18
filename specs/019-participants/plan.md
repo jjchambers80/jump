@@ -321,7 +321,7 @@ Tests: contract — tag normalisation and limits, `tag` filter, `q` matches a ta
 
 ## 9. Follow-ups noted, not planned
 
-- **Pinned answer columns**: let an organizer pick up to 2 questions per form to show as list columns (Eventeny's "Proof of insurance"). Needs answers on the list include; cheap once FR-001 exists.
+- **Pinned answer columns** — done 2026-09-18: `ApplicationQuestion.pinned` (≤ 2 live per form), `pinnedAnswers` on rows, per-question columns under a Form filter, one Answers column otherwise; templates carry the flag.
 - **Jury scoring**: `ApplicationScore` per member, average on the row. Own spec.
 - **Participant messaging** from a selection (spec 013).
 - **Public participant directory** ("who's exhibiting") on the event page, fed by APPROVED rows and profile photos.

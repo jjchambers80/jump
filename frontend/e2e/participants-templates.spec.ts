@@ -72,7 +72,11 @@ const vendorForm = {
   paymentsEnabled: true,
   applicationCount: 0,
   tiers: [{ id: 't1', name: '10x10', description: null, price: 275, quantityTotal: 5, quantityApproved: 0, quantityReserved: 0, remaining: 5, displayOrder: 0, isActive: true, amounts: { subtotal: 275, platformFee: 0, processingFee: 0, tax: 0, applicantPays: 275, orgReceives: 275, feeMode: 'ABSORB' }, addOns: [] }],
-  questions: [{ id: 'q1', label: 'What do you sell?', helpText: null, type: 'LONG_TEXT', required: true, options: [], displayOrder: 0 }],
+  questions: [
+    { id: 'q1', label: 'What do you sell?', helpText: null, type: 'LONG_TEXT', required: true, options: [], displayOrder: 0, pinned: true },
+    { id: 'q2', label: 'Website', helpText: null, type: 'URL', required: false, options: [], displayOrder: 1, pinned: false },
+    { id: 'q3', label: 'Years exhibiting', helpText: null, type: 'NUMBER', required: false, options: [], displayOrder: 2, pinned: false },
+  ],
   addOns: [],
 };
 
@@ -149,6 +153,14 @@ async function mockAdmin(page: Page, baseURL: string, role: 'ADMIN' | 'ORGANIZER
       return route.fulfill(json(form, 201));
     }
     if (create && method === 'GET') return route.fulfill(json({ data: [state.form] }));
+    const question = path.match(/^\/admin\/events\/([^/]+)\/application-forms\/([^/]+)\/questions\/([^/]+)$/);
+    if (question && method === 'PATCH') {
+      const b = body as Record<string, unknown>;
+      const pinnedAfter = state.form.questions.filter((x) => (x.id === question[3] ? b.pinned === true : x.pinned)).length;
+      if (pinnedAfter > 2) return route.fulfill(json({ error: 'ValidationError', message: 'At most 2 questions can be pinned to the list' }, 400));
+      state.form = { ...state.form, questions: state.form.questions.map((x) => (x.id === question[3] ? { ...x, ...b } : x)) };
+      return route.fulfill(json(state.form.questions.find((x) => x.id === question[3])));
+    }
     const one = path.match(/^\/admin\/events\/([^/]+)\/application-forms\/([^/]+)$/);
     if (one && method === 'GET') return route.fulfill(json(state.form));
     if (one && method === 'PATCH') {
@@ -331,4 +343,34 @@ test('New template creates an empty one and opens the editor; Delete removes it 
   await expect(page.getByRole('status')).toContainText('Template "Press pass" deleted.');
   await expect(page.getByTestId('participants-template-tpl-press')).toHaveCount(0);
   expect(calls.some((c) => c.method === 'DELETE' && c.path === '/admin/application-templates/tpl-press')).toBe(true);
+});
+
+test('form editor: pin a second question as a list column; the third toggle is disabled at the cap; unpin frees it', async ({ page, baseURL }) => {
+  const { calls } = await mockAdmin(page, baseURL!);
+  await page.goto(`/admin/events/${EXPO.id}/applications/forms/${vendorForm.id}`);
+  await expect(page.getByTestId('question-pinned-q1')).toHaveText('List column');
+  await expect(page.getByTestId('question-pinned-q2')).toHaveCount(0);
+
+  const rowQ2 = page.getByTestId('question-row-q2');
+  await rowQ2.getByRole('button', { name: 'Edit' }).click();
+  await expect(page.getByTestId('qe-q2-pinned')).toBeEnabled();
+  await page.getByTestId('qe-q2-pinned').check();
+  await rowQ2.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByTestId('question-pinned-q2')).toHaveText('List column');
+  expect(calls.find((c) => c.method === 'PATCH' && c.path.endsWith('/questions/q2'))?.body).toMatchObject({ pinned: true, label: 'Website' });
+
+  // Two pinned: the third question's toggle and the add form's toggle are disabled.
+  const rowQ3 = page.getByTestId('question-row-q3');
+  await rowQ3.getByRole('button', { name: 'Edit' }).click();
+  await expect(page.getByTestId('qe-q3-pinned')).toBeDisabled();
+  await rowQ3.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByTestId('qn-pinned')).toBeDisabled();
+
+  // Unpin q1 → q3 can be pinned.
+  const rowQ1 = page.getByTestId('question-row-q1');
+  await rowQ1.getByRole('button', { name: 'Edit' }).click();
+  await page.getByTestId('qe-q1-pinned').uncheck();
+  await rowQ1.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByTestId('question-pinned-q1')).toHaveCount(0);
+  await expect(page.getByTestId('qn-pinned')).toBeEnabled();
 });

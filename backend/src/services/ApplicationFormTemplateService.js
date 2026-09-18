@@ -17,7 +17,7 @@ import logger from '../utils/logger.js';
 const KINDS = new Set(['PAID', 'FREE']);
 const SETTING_KEYS = ['intro', 'chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy'];
 const TIER_KEYS = new Set(['name', 'description', 'price', 'quantityTotal', 'isActive']);
-const QUESTION_KEYS = new Set(['label', 'helpText', 'type', 'required', 'options']);
+const QUESTION_KEYS = new Set(['label', 'helpText', 'type', 'required', 'options', 'pinned']);
 
 /** The settings a definition carries when the caller sends none. */
 const EMPTY_DEFINITION = (kind) => ({
@@ -144,6 +144,7 @@ class ApplicationFormTemplateService {
       const { displayOrder: _o, ...data } = applicationFormService._validateQuestion(q, i);
       return data;
     });
+    applicationFormService._assertPinnedCap(out.questions.filter((q) => q.pinned).length);
     return out;
   }
 

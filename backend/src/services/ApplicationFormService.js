@@ -10,7 +10,7 @@
 
 import { prisma } from '@jump/db';
 import { ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
-import { CHOICE_TYPES, MAX_OPTIONS, QUESTION_TYPES } from '../config/applications.js';
+import { CHOICE_TYPES, MAX_OPTIONS, MAX_PINNED_QUESTIONS, QUESTION_TYPES } from '../config/applications.js';
 import feeService from './FeeService.js';
 import applicationFormTemplateService from './ApplicationFormTemplateService.js';
 import logger from '../utils/logger.js';
@@ -140,6 +140,7 @@ class ApplicationFormService {
       include: {
         _count: { select: { applications: { where: { status: { not: 'DRAFT' } } } } },
         event: { select: { id: true, name: true, date: true, status: true, venue: { select: { organization: { select: { id: true, name: true } } } } } },
+        questions: { where: { pinned: true, archivedAt: null }, select: { id: true, label: true, type: true }, orderBy: { displayOrder: 'asc' } },
       },
       orderBy: [{ event: { date: 'desc' } }, { displayOrder: 'asc' }, { createdAt: 'asc' }],
     });
@@ -164,6 +165,7 @@ class ApplicationFormService {
       closesAt: f.closesAt,
       acceptance: this.acceptance(f),
       applicationCount: f._count.applications,
+      pinnedQuestions: f.questions.map((q) => ({ id: q.id, label: q.label, type: q.type })),
       addOns: addOns.filter((a) => a.eventId === f.eventId).map((a) => ({ id: a.id, name: a.name })),
       updatedAt: f.updatedAt,
     }));
@@ -212,6 +214,7 @@ class ApplicationFormService {
     }
     if (body.questions !== undefined) {
       data.questions = { create: body.questions.map((q, i) => this._validateQuestion(q, i)) };
+      this._assertPinnedCap(data.questions.create.filter((q) => q.pinned).length);
     }
     if (template) data.createdFromTemplateId = template.id;
     const form = await prisma.$transaction(async (tx) => {
@@ -267,6 +270,7 @@ class ApplicationFormService {
           required: q.required === true,
           options: q.options ?? [],
           displayOrder: Number.isInteger(q.displayOrder) ? q.displayOrder : i,
+          pinned: q.pinned === true,
         },
       });
     }
@@ -279,15 +283,18 @@ class ApplicationFormService {
    * slug — those belong to an event.
    */
   snapshotForm(form) {
+    // FREE forms carry the column defaults for the PAID settings; a template
+    // definition holds null there (and the validator refuses them on FREE).
+    const paid = form.kind === 'PAID';
     return {
       intro: form.intro ?? null,
-      chargeTiming: form.chargeTiming,
-      feeMode: form.feeMode,
-      taxable: form.taxable,
-      paymentDueDays: form.paymentDueDays,
-      overduePolicy: form.overduePolicy,
+      chargeTiming: paid ? form.chargeTiming : null,
+      feeMode: paid ? form.feeMode : null,
+      taxable: paid ? form.taxable : null,
+      paymentDueDays: paid ? form.paymentDueDays : null,
+      overduePolicy: paid ? form.overduePolicy : null,
       tiers: (form.tiers || []).map((t) => ({ name: t.name, description: t.description ?? null, price: Number(t.price), quantityTotal: t.quantityTotal, isActive: t.isActive })),
-      questions: (form.questions || []).filter((q) => !q.archivedAt).map((q) => ({ label: q.label, helpText: q.helpText ?? null, type: q.type, required: q.required, options: q.options ?? [] })),
+      questions: (form.questions || []).filter((q) => !q.archivedAt).map((q) => ({ label: q.label, helpText: q.helpText ?? null, type: q.type, required: q.required, options: q.options ?? [], pinned: q.pinned ?? false })),
     };
   }
 
@@ -332,7 +339,7 @@ class ApplicationFormService {
       });
       const tiers = await this._materialise(tx, created.id, {
         tiers: f.tiers.map((t) => ({ name: t.name, description: t.description, price: t.price, quantityTotal: t.quantityTotal, displayOrder: t.displayOrder, isActive: t.isActive })),
-        questions: f.questions.map((q) => ({ label: q.label, helpText: q.helpText, type: q.type, required: q.required, options: q.options, displayOrder: q.displayOrder })),
+        questions: f.questions.map((q) => ({ label: q.label, helpText: q.helpText, type: q.type, required: q.required, options: q.options, displayOrder: q.displayOrder, pinned: q.pinned })),
       });
       // Tiers were created in source order, so index i of each list is the same tier.
       f.tiers.forEach((t, i) => tierIdMap.set(t.id, tiers[i]?.id));
@@ -427,7 +434,9 @@ class ApplicationFormService {
     await this.requireEvent(eventId, organizationId);
     await this._requireForm(eventId, formId);
     const count = await prisma.applicationQuestion.count({ where: { formId, archivedAt: null } });
-    return prisma.applicationQuestion.create({ data: { formId, ...this._validateQuestion(body, count) } });
+    const data = this._validateQuestion(body, count);
+    if (data.pinned) this._assertPinnedCap((await prisma.applicationQuestion.count({ where: { formId, archivedAt: null, pinned: true } })) + 1);
+    return prisma.applicationQuestion.create({ data: { formId, ...data } });
   }
 
   async updateQuestion(eventId, formId, questionId, organizationId, body) {
@@ -440,7 +449,14 @@ class ApplicationFormService {
     if (answered > 0 && body.type !== undefined && body.type !== existing.type) {
       throw new ConflictError('Type cannot change once the question has answers; archive it and add a new one');
     }
-    return prisma.applicationQuestion.update({ where: { id: questionId }, data: this._validateQuestion(merged, merged.displayOrder) });
+    const data = this._validateQuestion(merged, merged.displayOrder);
+    if (data.pinned && !existing.pinned) this._assertPinnedCap((await prisma.applicationQuestion.count({ where: { formId, archivedAt: null, pinned: true } })) + 1);
+    return prisma.applicationQuestion.update({ where: { id: questionId }, data });
+  }
+
+  /** At most MAX_PINNED_QUESTIONS questions per form show as list columns (spec 019). */
+  _assertPinnedCap(pinnedCount) {
+    if (pinnedCount > MAX_PINNED_QUESTIONS) throw new ValidationError(`At most ${MAX_PINNED_QUESTIONS} questions can be pinned to the list`);
   }
 
   /** Archive (answers exist) or delete (none yet). */
@@ -636,8 +652,10 @@ class ApplicationFormService {
       helpText: body.helpText ? String(body.helpText).slice(0, 500) : null,
       required: body.required === true,
       displayOrder: Number.isInteger(body.displayOrder) ? body.displayOrder : displayOrder,
+      pinned: body.pinned === true,
       options: [],
     };
+    if (body.pinned !== undefined && typeof body.pinned !== 'boolean') throw new ValidationError('pinned must be a boolean');
     if (CHOICE_TYPES.has(body.type)) {
       const options = Array.isArray(body.options) ? body.options.map((o) => String(o).trim()).filter(Boolean) : [];
       if (options.length < 2) throw new ValidationError('choice questions need at least two options');
@@ -676,6 +694,7 @@ class ApplicationFormService {
       required: q.required,
       options: q.options,
       displayOrder: q.displayOrder,
+      pinned: q.pinned ?? false,
     };
   }
 

@@ -104,8 +104,8 @@ describe('Application form templates (spec 019 phase 2)', () => {
           { name: 'Corner', description: 'Two open sides', price: 350, quantityTotal: 2, isActive: false },
         ],
         questions: [
-          { label: 'What do you sell?', helpText: null, type: 'LONG_TEXT', required: true, options: [] },
-          { label: 'Booth style', helpText: null, type: 'SINGLE_CHOICE', required: false, options: ['Table', 'Pipe & drape'] },
+          { label: 'What do you sell?', helpText: null, type: 'LONG_TEXT', required: true, options: [], pinned: false },
+          { label: 'Booth style', helpText: null, type: 'SINGLE_CHOICE', required: false, options: ['Table', 'Pipe & drape'], pinned: false },
         ],
       });
     });

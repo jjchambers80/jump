@@ -46,6 +46,12 @@ const LIST_INCLUDE = {
   form: { select: { id: true, name: true, kind: true } },
   event: { select: { id: true, name: true, date: true, venue: { select: { organization: { select: { id: true, name: true } } } } } },
   addOns: { include: { addOn: { select: { id: true, name: true, displayOrder: true } } }, orderBy: { addOn: { displayOrder: 'asc' } } },
+  // Pinned answer columns (spec 019 follow-up): only answers to pinned, live questions.
+  answers: {
+    where: { question: { pinned: true, archivedAt: null } },
+    include: { question: { select: { id: true, label: true, type: true, displayOrder: true } }, image: { include: { file: true } } },
+    orderBy: { question: { displayOrder: 'asc' } },
+  },
 };
 
 /** Organizer decisions: which statuses they leave from and land on. */
@@ -1442,6 +1448,7 @@ class ApplicationService {
       tags: a.tags ?? [],
       checkedInAt: a.checkedInAt ?? null,
       checkedOutAt: a.checkedOutAt ?? null,
+      pinnedAnswers: (a.answers || []).map((ans) => ({ questionId: ans.question.id, label: ans.question.label, type: ans.question.type, value: this._answerText(ans) })),
       statusUrl: statusBase ? statusUrlWithBase(statusBase, a) : null,
     };
   }
