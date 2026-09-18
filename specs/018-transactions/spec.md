@@ -2,7 +2,7 @@
 
 **Feature Branch**: `plan/018-transactions`  
 **Created**: 2026-09-17  
-**Status**: Proposed — no plan yet  
+**Status**: Planned 2026-09-17 — see [plan.md](./plan.md); not built  
 **Input**: Production smoke test of paid applications, 2026-09-17 (session [01158zLwVnUE4g159VJBFE7w](https://claude.ai/code/session_01158zLwVnUE4g159VJBFE7w)): admins need to find, reference, refund and correct application charges the same way they do ticket orders. Hand-off from spec 011 §Assumptions (post-payment changes) and spec 012 phase 3 (per-event add-on sales only).  
 **Builds on**: spec 003 (`Order`, `PaymentTransaction`, `Refund`, `orderRef`), spec 009 (collected tax report), spec 010 (Stripe Connect routing, `stripeAccountId`, `applicationFee`), spec 011 (`Application` amount snapshot, `ApplicationRefund`, charge at approval, pay-now), spec 012 (`OrderAddOn`, `ApplicationAddOn`, add-on sales report).
 
