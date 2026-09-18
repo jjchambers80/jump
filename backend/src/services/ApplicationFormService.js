@@ -12,6 +12,7 @@ import { prisma } from '@jump/db';
 import { ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import { CHOICE_TYPES, MAX_OPTIONS, QUESTION_TYPES } from '../config/applications.js';
 import feeService from './FeeService.js';
+import applicationFormTemplateService from './ApplicationFormTemplateService.js';
 import logger from '../utils/logger.js';
 
 const FORM_KINDS = new Set(['PAID', 'FREE']);
@@ -186,10 +187,24 @@ class ApplicationFormService {
     return this._serializeForm(form, event, await this._addOnsForEvent(eventId));
   }
 
+  /**
+   * Create a form. With `body.templateId` (spec 019 phase 2) the template's
+   * definition supplies settings, tiers and questions — `kind` must match
+   * and the template must be in the caller's scope; explicit body fields
+   * still win over the template's settings.
+   */
   async createForm(eventId, organizationId, body) {
     const event = await this.requireEvent(eventId, organizationId);
     if (!FORM_KINDS.has(body.kind)) throw new ValidationError('kind must be PAID or FREE');
-    const data = { eventId, kind: body.kind, ...this._validateFormFields(body, body.kind, null) };
+    let template = null;
+    if (body.templateId) {
+      template = await applicationFormTemplateService.requireInScope(body.templateId, organizationId ?? event.venue.organizationId);
+      if (template.kind !== body.kind) throw new ValidationError(`Template "${template.name}" is for ${template.kind} forms`);
+      if (body.tiers !== undefined || body.questions !== undefined) throw new ValidationError('tiers and questions come from the template');
+    }
+    const { templateId: _templateId, ...fields } = body;
+    const settings = template ? { ...this._templateSettings(template.definition, body.kind), ...fields } : fields;
+    const data = { eventId, kind: body.kind, ...this._validateFormFields(settings, body.kind, null) };
     data.slug = await this._uniqueSlug(eventId, body.slug || data.name);
     if (body.tiers !== undefined) {
       if (body.kind === 'FREE' && body.tiers.length > 0) throw new ValidationError('FREE forms cannot have tiers');
@@ -198,9 +213,82 @@ class ApplicationFormService {
     if (body.questions !== undefined) {
       data.questions = { create: body.questions.map((q, i) => this._validateQuestion(q, i)) };
     }
-    const form = await prisma.applicationForm.create({ data, include: FORM_INCLUDE });
-    logger.info('Application form created', { event: 'application_form_created', eventId, formId: form.id, kind: form.kind });
+    if (template) data.createdFromTemplateId = template.id;
+    const form = await prisma.$transaction(async (tx) => {
+      const created = await tx.applicationForm.create({ data, select: { id: true } });
+      if (template) await this._materialise(tx, created.id, template.definition);
+      return tx.applicationForm.findUnique({ where: { id: created.id }, include: FORM_INCLUDE });
+    });
+    logger.info('Application form created', { event: 'application_form_created', eventId, formId: form.id, kind: form.kind, templateId: template?.id });
     return this._serializeForm(form, event, await this._addOnsForEvent(eventId));
+  }
+
+  /** The settings half of a template definition, shaped like a create body (PAID keys only on PAID). */
+  _templateSettings(definition, kind) {
+    const out = { intro: definition.intro ?? null };
+    if (kind === 'PAID') {
+      for (const key of ['chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy']) {
+        if (definition[key] !== undefined && definition[key] !== null) out[key] = definition[key];
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Create tiers and questions on `formId` from a plain definition
+   * `{ tiers: [...], questions: [...] }` in list order, inside `tx`. Shared by
+   * `copyForms` (event duplication) and create-from-template. Returns the
+   * created tiers in order.
+   */
+  async _materialise(tx, formId, definition) {
+    const tiers = [];
+    for (const [i, t] of (definition.tiers || []).entries()) {
+      tiers.push(
+        await tx.applicationTier.create({
+          data: {
+            formId,
+            name: t.name,
+            description: t.description ?? null,
+            price: t.price,
+            quantityTotal: t.quantityTotal,
+            displayOrder: Number.isInteger(t.displayOrder) ? t.displayOrder : i,
+            isActive: t.isActive !== false,
+          },
+        })
+      );
+    }
+    for (const [i, q] of (definition.questions || []).entries()) {
+      await tx.applicationQuestion.create({
+        data: {
+          formId,
+          label: q.label,
+          helpText: q.helpText ?? null,
+          type: q.type,
+          required: q.required === true,
+          options: q.options ?? [],
+          displayOrder: Number.isInteger(q.displayOrder) ? q.displayOrder : i,
+        },
+      });
+    }
+    return tiers;
+  }
+
+  /**
+   * A form as a template definition (spec 019): settings, tiers without
+   * add-on attachments, non-archived questions in order. No status / window /
+   * slug — those belong to an event.
+   */
+  snapshotForm(form) {
+    return {
+      intro: form.intro ?? null,
+      chargeTiming: form.chargeTiming,
+      feeMode: form.feeMode,
+      taxable: form.taxable,
+      paymentDueDays: form.paymentDueDays,
+      overduePolicy: form.overduePolicy,
+      tiers: (form.tiers || []).map((t) => ({ name: t.name, description: t.description ?? null, price: Number(t.price), quantityTotal: t.quantityTotal, isActive: t.isActive })),
+      questions: (form.questions || []).filter((q) => !q.archivedAt).map((q) => ({ label: q.label, helpText: q.helpText ?? null, type: q.type, required: q.required, options: q.options ?? [] })),
+    };
   }
 
   /**
@@ -238,31 +326,16 @@ class ApplicationFormService {
           paymentDueDays: f.paymentDueDays,
           overduePolicy: f.overduePolicy,
           displayOrder: f.displayOrder,
-          tiers: {
-            create: f.tiers.map((t) => ({
-              name: t.name,
-              description: t.description,
-              price: t.price,
-              quantityTotal: t.quantityTotal,
-              displayOrder: t.displayOrder,
-              isActive: t.isActive,
-            })),
-          },
-          questions: {
-            create: f.questions.map((q) => ({
-              label: q.label,
-              helpText: q.helpText,
-              type: q.type,
-              required: q.required,
-              options: q.options,
-              displayOrder: q.displayOrder,
-            })),
-          },
+          createdFromTemplateId: f.createdFromTemplateId,
         },
-        include: { tiers: { orderBy: { displayOrder: 'asc' } } },
+        select: { id: true },
+      });
+      const tiers = await this._materialise(tx, created.id, {
+        tiers: f.tiers.map((t) => ({ name: t.name, description: t.description, price: t.price, quantityTotal: t.quantityTotal, displayOrder: t.displayOrder, isActive: t.isActive })),
+        questions: f.questions.map((q) => ({ label: q.label, helpText: q.helpText, type: q.type, required: q.required, options: q.options, displayOrder: q.displayOrder })),
       });
       // Tiers were created in source order, so index i of each list is the same tier.
-      f.tiers.forEach((t, i) => tierIdMap.set(t.id, created.tiers[i]?.id));
+      f.tiers.forEach((t, i) => tierIdMap.set(t.id, tiers[i]?.id));
       copied += 1;
     }
     return { copied, tierIdMap };
@@ -623,6 +696,7 @@ class ApplicationFormService {
       paymentDueDays: form.paymentDueDays,
       overduePolicy: form.overduePolicy,
       displayOrder: form.displayOrder,
+      createdFromTemplateId: form.createdFromTemplateId ?? null,
       acceptance: this.acceptance(form),
       paymentsEnabled: paymentsEnabled(),
       applicationCount: form._count?.applications ?? 0,

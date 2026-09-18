@@ -11,7 +11,7 @@ import { validateUpdateAttendee } from '../validators/adminValidators.js';
 import { validateUpdateBusinessDetails } from '../validators/organizationValidators.js';
 import { validateCreateOrganizationPerson } from '../validators/organizationPersonValidators.js';
 import { validateTaxRegionParams, validateUpsertTaxRegion, validateUpdateTaxSettings, validateTaxReportQuery } from '../validators/taxValidators.js';
-import { validateFormBody, validateTierBody, validateQuestionBody, validateDecisionBody, validateBulkBody, validateTemplateBody, validateRefundBody, validateAddOnLinesBody, validateTierAddOnsBody, validateTierChangeBody, validateAdjustmentBody, validateWaiveBody, validateOfflinePaymentBody } from '../validators/applicationValidators.js';
+import { validateFormBody, validateTierBody, validateQuestionBody, validateDecisionBody, validateBulkBody, validateTemplateBody, validateRefundBody, validateAddOnLinesBody, validateTierAddOnsBody, validateTierChangeBody, validateAdjustmentBody, validateWaiveBody, validateOfflinePaymentBody, validateFormTemplateBody, validateSaveAsTemplateBody } from '../validators/applicationValidators.js';
 import { validateUpdatePaymentSettings, validateUpdatePayoutSettings } from '../validators/paymentValidators.js';
 import organizationService from '../../services/OrganizationService.js';
 import organizationPersonService from '../../services/OrganizationPersonService.js';
@@ -29,6 +29,7 @@ import qrService from '../../services/QRService.js';
 import applicationFormService from '../../services/ApplicationFormService.js';
 import applicationService from '../../services/ApplicationService.js';
 import applicationTemplateService from '../../services/ApplicationTemplateService.js';
+import applicationFormTemplateService from '../../services/ApplicationFormTemplateService.js';
 import applicationDigestService from '../../services/ApplicationDigestService.js';
 import { PAID_ORDER_STATUSES, PAID_APPLICATION_STATUSES } from '../../services/paidStatuses.js';
 
@@ -388,6 +389,33 @@ router.get('/application-forms', wrap(async (req, res) => {
   res.json({ data: await applicationFormService.listFormsInScope(scope.organizationId) });
 }));
 
+// Form templates (spec 019 phase 2). Reads follow the Participants scope;
+// writes need one organization — a member's own, SYSTEM_ADMIN's active one.
+router.get('/application-templates', wrap(async (req, res) => {
+  const scope = await participantsScopeFor(req);
+  if (scope.empty) return res.json({ data: [] });
+  res.json({ data: await applicationFormTemplateService.list(scope.organizationId) });
+}));
+router.post('/application-templates', requireAdmin, validateFormTemplateBody, wrap(async (req, res) => {
+  res.status(201).json(await applicationFormTemplateService.create(await activeOrgFor(req), req.body, { byUserId: req.user.id }));
+}));
+router.get('/application-templates/:templateId', wrap(async (req, res) => {
+  const scope = await participantsScopeFor(req);
+  if (scope.empty) throw new NotFoundError('Application form template not found');
+  res.json(await applicationFormTemplateService.get(req.params.templateId, scope.organizationId));
+}));
+router.put('/application-templates/:templateId', requireAdmin, validateFormTemplateBody, wrap(async (req, res) => {
+  const scope = await participantsScopeFor(req);
+  if (scope.empty) throw new NotFoundError('Application form template not found');
+  res.json(await applicationFormTemplateService.update(req.params.templateId, scope.organizationId, req.body));
+}));
+router.delete('/application-templates/:templateId', requireAdmin, wrap(async (req, res) => {
+  const scope = await participantsScopeFor(req);
+  if (scope.empty) throw new NotFoundError('Application form template not found');
+  await applicationFormTemplateService.remove(req.params.templateId, scope.organizationId);
+  res.status(204).end();
+}));
+
 // Forms
 router.get('/events/:eventId/application-forms', wrap(async (req, res) => {
   res.json({ data: await applicationFormService.listForms(req.params.eventId, await scopedOrgFor(req)) });
@@ -404,6 +432,18 @@ router.patch('/events/:eventId/application-forms/:formId', requireAdmin, validat
 router.delete('/events/:eventId/application-forms/:formId', requireAdmin, wrap(async (req, res) => {
   await applicationFormService.deleteForm(req.params.eventId, req.params.formId, await scopedOrgFor(req));
   res.status(204).end();
+}));
+
+router.post('/events/:eventId/application-forms/:formId/save-as-template', requireAdmin, validateSaveAsTemplateBody, wrap(async (req, res) => {
+  const { eventId, formId } = req.params;
+  const event = await applicationFormService.requireEvent(eventId, await scopedOrgFor(req));
+  const form = await prisma.applicationForm.findFirst({
+    where: { id: formId, eventId },
+    include: { tiers: { orderBy: { displayOrder: 'asc' } }, questions: { where: { archivedAt: null }, orderBy: { displayOrder: 'asc' } } },
+  });
+  if (!form) throw new NotFoundError('Application form not found');
+  const status = req.body.replaceTemplateId ? 200 : 201;
+  res.status(status).json(await applicationFormTemplateService.saveFrom(form, event.venue.organizationId, req.body, { byUserId: req.user.id }));
 }));
 
 // Tiers

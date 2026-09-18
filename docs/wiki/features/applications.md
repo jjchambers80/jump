@@ -115,7 +115,7 @@ ORGANIZER+ views forms/applications and decides; ADMIN/SYSTEM_ADMIN configures f
 | GET | `/applications/:id/status?token=`; POST `…/resume`, `…/pay` (rate-limited) | token |
 | GET/PATCH | `/buyer/me/applicant-profile`; POST `…/photos` (multipart `photos`), DELETE `…/photos/:imageId` | buyer |
 | GET | `/buyer/me/applications`, `/buyer/me/applications/:id`; POST `…/withdraw`, `…/pay`, `…/update-card` | buyer |
-| GET/POST | `/admin/events/:eventId/application-forms` | organizer+ / admin |
+| GET/POST | `/admin/events/:eventId/application-forms` (POST accepts `templateId`, spec 019) | organizer+ / admin |
 | GET/PATCH/DELETE | `…/application-forms/:formId` | organizer+ / admin / admin |
 | POST/PATCH/DELETE | `…/application-forms/:formId/tiers[/:tierId]` | admin |
 | POST/PATCH/DELETE | `…/application-forms/:formId/questions[/:questionId]`, PATCH `…/questions/reorder` | admin |
