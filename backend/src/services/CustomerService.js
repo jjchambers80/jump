@@ -4,7 +4,7 @@
 
 import { prisma } from '@jump/db';
 import { NotFoundError } from '../middleware/errorHandler.js';
-import { PAID_ORDER_STATUSES, PAID_APPLICATION_STATUSES } from './transactionQuery.js';
+import { PAID_ORDER_STATUSES, PAID_APPLICATION_STATUSES } from './paidStatuses.js';
 
 const round = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
 const sum = (rows, pick) => rows.reduce((total, r) => total + Number(pick(r) || 0), 0);

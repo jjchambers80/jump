@@ -1,7 +1,7 @@
-// Contract tests for Transactions phase 3 (spec 018): corrections on an
+// Contract tests for application corrections (spec 018 phase 3): an
 // application's money before it moves — tier change, manual adjustments,
-// waived balance, offline payment, manual refund — and how the Transactions
-// list reports them. Stripe and Resend mocked; Postgres is real.
+// waived balance, offline payment, manual refund — and how customers and
+// analytics report them. Stripe and Resend mocked; Postgres is real.
 
 import { jest } from '@jest/globals';
 import request from 'supertest';
@@ -304,7 +304,7 @@ describe('Application corrections contract (spec 018 phase 3)', () => {
 
   // ─── Waive ───────────────────────────────────────────────────────────────
 
-  it('ADMIN waives a PAYMENT_DUE balance: zero snapshot, NOT_REQUIRED, slot confirmed, WAIVER row, listed in Transactions as offline', async () => {
+  it('ADMIN waives a PAYMENT_DUE balance: zero snapshot, NOT_REQUIRED, slot confirmed, WAIVER row', async () => {
     const id = await paymentDue(booth.id, `waive@${TAG}.test`, [{ addOnId: power.id, quantity: 1 }], 'Waived Co');
     const before = await appRow(id);
     const boothBefore = await tierRow(booth.id);
@@ -337,15 +337,6 @@ describe('Application corrections contract (spec 018 phase 3)', () => {
     expect(powerAfter.quantitySold).toBe(powerBefore.quantitySold + 1);
     // A waiver cannot be undone through the adjustments route.
     expect((await request(app).delete(`${adminBase()}/applications/${id}/adjustments/${res.body.adjustments[0].id}`).set(...auth(adminToken))).status).toBe(409);
-
-    // Transactions: a $0 offline row, findable, filterable.
-    const list = await request(app).get(`/admin/transactions?search=${encodeURIComponent('Waived Co')}`).set(...auth(adminToken));
-    expect(list.status).toBe(200);
-    expect(list.body.data).toHaveLength(1);
-    expect(list.body.data[0]).toMatchObject({ type: 'APPLICATION', id, status: 'PAID', sourceStatus: 'NOT_REQUIRED', gross: 0, paymentSource: 'offline' });
-    const offlineOnly = await request(app).get('/admin/transactions?paymentSource=offline').set(...auth(adminToken));
-    expect(offlineOnly.body.data.map((t) => t.id)).toContain(id);
-    expect(offlineOnly.body.data.every((t) => t.paymentSource === 'offline')).toBe(true);
   });
 
   // ─── Offline payment + manual refund ─────────────────────────────────────
@@ -402,17 +393,10 @@ describe('Application corrections contract (spec 018 phase 3)', () => {
     expect(refund.body.refunds[0]).toMatchObject({ amount: 20, status: 'SUCCEEDED', manual: true, stripeRefundId: null, reason: 'Left early' });
     expect(refund.body.decisions.at(-1)).toMatchObject({ action: 'MANUAL_REFUND', note: 'Recorded refund of $20.00: Left early' });
 
-    // Also from the Transactions list, with the manual flag in the history.
-    const viaList = await request(app).post(`/admin/transactions/APPLICATION/${id}/refund`).set(...auth(adminToken)).send({ amount: 5 });
-    expect(viaList.status).toBe(200);
-    expect(mockRefundsCreate).not.toHaveBeenCalled();
-    expect(viaList.body.transaction).toMatchObject({ paymentSource: 'offline', gross: due, refunded: 25, status: 'PARTIALLY_REFUNDED' });
-    expect(viaList.body.refunds.every((r) => r.manual === true)).toBe(true);
-
     // Customers and analytics count it like a Stripe payment.
     const customers = await request(app).get(`/admin/customers?search=${encodeURIComponent(`cheque@${TAG}.test`)}`).set(...auth(adminToken));
     expect(customers.body.data).toHaveLength(1);
-    expect(customers.body.data[0]).toMatchObject({ applicationCount: 1, totalSpent: due, totalRefunded: 25 });
+    expect(customers.body.data[0]).toMatchObject({ applicationCount: 1, totalSpent: due, totalRefunded: 20 });
   });
 
   it('organizers may change tier and adjust but not waive or settle; UNASSIGNED sees nothing', async () => {
