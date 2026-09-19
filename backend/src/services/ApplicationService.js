@@ -40,6 +40,9 @@ import orderLineService, { ORDER_INCLUDE, adjustmentItems } from './OrderLineSer
 import refundService from './RefundService.js';
 import { moneyOf } from './applicationMoney.js';
 import { orderStatusFor } from './applicationOrderStatus.js';
+import legalAcceptanceService from './LegalAcceptanceService.js';
+import contactOptInService from './ContactOptInService.js';
+import { applyConsentText, cardAuthorizationText } from '../config/legal.js';
 import {
   hashToken,
   statusToken,
@@ -203,11 +206,12 @@ class ApplicationService {
   /**
    * Submit an application.
    * @param {string} eventId
-   * @param {{ formSlug: string, tierId?: string, contact: { email, firstName, lastName }, profile: object, answers: Record<string, unknown>, optInMarketing?: boolean }} body
+   * @param {{ formSlug: string, tierId?: string, contact: { email, firstName, lastName }, profile: object, answers: Record<string, unknown>, optInAccount?: boolean, optInMarketing?: boolean, acceptances: Array<{ document: string, version: string }> }} body
    * @param {{ profilePhotos: File[], answerPhotos: Record<string, File> }} files
-   * @returns {Promise<{ applicationId: string, statusUrl: string, next: 'done'|'checkout', checkoutUrl?: string }>}
+   * @param {{ requestMeta?: { ipHash: string|null, userAgent: string|null } }} [options]
+   * @returns {Promise<{ applicationId: string, orderRef: string|null, statusUrl: string, next: 'done'|'checkout', checkoutUrl?: string }>}
    */
-  async submit(eventId, body, files = { profilePhotos: [], answerPhotos: {} }) {
+  async submit(eventId, body, files = { profilePhotos: [], answerPhotos: {} }, { requestMeta = { ipHash: null, userAgent: null } } = {}) {
     const event = await applicationFormService.requireEvent(eventId);
     if (event.status !== 'PUBLISHED') throw new NotFoundError('Event not found');
     const form = await prisma.applicationForm.findFirst({
@@ -253,11 +257,25 @@ class ApplicationService {
         )
       : null;
 
+    // Spec 024 phase 3: the consent trail. Terms and privacy always; the
+    // card-on-file authorization when the card saved now is charged at approval.
+    const optInAccount = body.optInAccount === true;
+    const optInMarketing = body.optInMarketing === true;
+    const cardAuthorization = form.kind === 'PAID' && form.chargeTiming === 'APPROVAL';
+    const acceptances = legalAcceptanceService.assertCurrent(body.acceptances, ['TERMS', 'PRIVACY', ...(cardAuthorization ? ['CARD_AUTHORIZATION'] : [])]);
+    const organizationName = event.venue.organization?.name;
+    const presentedText = {
+      PRIVACY: applyConsentText({ organizationName }),
+      ...(cardAuthorization && { CARD_AUTHORIZATION: cardAuthorizationText({ amount: orderData.amounts.applicantPays, paymentDueDays: form.paymentDueDays, organizationName }) }),
+    };
+
     const application = await prisma.$transaction(async (tx) => {
+      // Opt-ins are recorded on the application and applied by
+      // ContactOptInService once it reaches SUBMITTED, never here (spec 024 phase 3).
       const contactRecord = await tx.contact.upsert({
         where: { organizationId_email: { organizationId, email: contact.email } },
-        update: { firstName: contact.firstName, lastName: contact.lastName, ...(body.optInMarketing === true && { emailSubscribed: true }) },
-        create: { organizationId, email: contact.email, firstName: contact.firstName, lastName: contact.lastName, emailSubscribed: body.optInMarketing === true },
+        update: { firstName: contact.firstName, lastName: contact.lastName },
+        create: { organizationId, email: contact.email, firstName: contact.firstName, lastName: contact.lastName },
       });
 
       const dup = await tx.application.findFirst({
@@ -310,6 +328,8 @@ class ApplicationService {
           status: isFree ? 'SUBMITTED' : 'DRAFT',
           paymentStatus: isFree ? 'NOT_REQUIRED' : form.chargeTiming === 'APPROVAL' ? 'AWAITING_CARD' : 'NOT_REQUIRED',
           submittedAt: isFree ? new Date() : null,
+          optInAccount,
+          optInMarketing,
           statusTokenHash: `pending-${Date.now()}-${Math.random()}`,
           answers: { create: answerRows },
         },
@@ -317,8 +337,17 @@ class ApplicationService {
       });
       if (orderData)
         await orderService.createApplicationOrder(tx, { application: created, data: orderData });
+      await legalAcceptanceService.record(
+        tx,
+        { subjectType: 'CONTACT', subjectId: contactRecord.id, email: contact.email, organizationId, source: 'APPLY', referenceType: 'Application', referenceId: created.id, ...requestMeta, presentedText },
+        acceptances
+      );
+      // A FREE form is SUBMITTED on creation: its opt-ins apply now.
+      const optIns = isFree ? await contactOptInService.applyForApplication(tx, created.id) : null;
       // The status token is derived from the id (applicationLinks.js); store its hash.
-      return tx.application.update({ where: { id: created.id }, data: { statusTokenHash: hashToken(statusToken(created.id)) }, include: DETAIL_INCLUDE });
+      const row = await tx.application.update({ where: { id: created.id }, data: { statusTokenHash: hashToken(statusToken(created.id)) }, include: DETAIL_INCLUDE });
+      row.optIns = optIns;
+      return row;
     });
 
     const statusUrl = await statusUrlFor(application);
@@ -334,10 +363,9 @@ class ApplicationService {
     const orderRef = application.order?.orderRef ?? null;
     if (application.status === 'SUBMITTED') {
       // send() never throws; a failed email is logged and must not fail the submission.
-      await applicationTemplateService.send(organizationId, 'RECEIVED', {
-        ...application,
-        statusUrl,
-      });
+      // A just-created account gets its first sign-in link in the same email (spec 024 phase 3).
+      const accountUrl = application.optIns?.accountJustCreated ? await contactOptInService.welcomeUrl(application.contactId) : null;
+      await applicationTemplateService.send(organizationId, 'RECEIVED', { ...application, statusUrl }, { accountUrl, accountCreated: Boolean(accountUrl) });
       return { applicationId: application.id, orderRef, statusUrl, next: 'done' };
     }
 

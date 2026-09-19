@@ -5,6 +5,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { signInAsStaff } from './helpers/session';
+import { LEGAL_VERSIONS, mockLegalVersions } from './helpers/legal';
 
 const API = 'http://localhost:3002';
 const ORG_ID = 'org-apps';
@@ -118,6 +119,7 @@ const json = (body: unknown, status = 200) => ({ status, contentType: 'applicati
 
 async function mockPublic(page: Page) {
   const calls: { method: string; path: string; payload?: unknown }[] = [];
+  await mockLegalVersions(page, API);
   await page.route(`${API}/events/${EVENT_ID}`, (route) => route.fulfill(json(event)));
   await page.route(`${API}/events/${EVENT_ID}/applications/forms`, (route) => route.fulfill(json({ data: [publicPress, publicVendor] })));
   await page.route(`${API}/events/${EVENT_ID}/applications/forms/press-media`, (route) => route.fulfill(json(publicPress)));
@@ -258,8 +260,20 @@ test('press applicant fills the form and lands on the status page', async ({ pag
   await page.getByRole('radio', { name: 'Video' }).check();
   await page.getByRole('checkbox', { name: 'Agree to media policy' }).check();
 
+  // Spec 024 phase 3: account (default on), marketing, and the required consent; no card authorization on a FREE form
+  await expect(page.getByTestId('apply-opt-in-account')).toBeChecked();
+  await page.getByTestId('apply-opt-in-marketing').check();
+  await expect(page.getByTestId('apply-card-authorization')).toHaveCount(0);
+  await expect(page.getByTestId('apply-privacy-link')).toHaveCount(0); // legal pages dark
+
   const a11y = await new AxeBuilder({ page }).include('main').analyze();
   expect(a11y.violations).toEqual([]);
+
+  // Consent is required before anything is sent
+  await page.getByRole('button', { name: 'Submit application' }).click();
+  await expect(page.getByText('Please agree to the collection')).toBeVisible();
+  expect(api.calls.find((c) => c.method === 'POST')).toBeUndefined();
+  await page.getByTestId('apply-consent').check();
 
   await page.getByRole('button', { name: 'Submit application' }).click();
   await expect(page).toHaveURL(new RegExp(`/events/${EVENT_ID}/apply/status/${APP_ID}\\?token=tok123$`));
@@ -269,6 +283,12 @@ test('press applicant fills the form and lands on the status page', async ({ pag
     contact: { email: 'pat@retroweekly.example', firstName: 'Pat', lastName: 'Press' },
     profile: { businessName: 'Retro Weekly', website: 'retroweekly.example', socials: { instagram: '@retroweekly' } },
     answers: { 'q-outlet': 'Retro Weekly', 'q-type': 'Video', 'q-policy': true },
+    optInAccount: true,
+    optInMarketing: true,
+    acceptances: [
+      { document: 'TERMS', version: LEGAL_VERSIONS.terms },
+      { document: 'PRIVACY', version: LEGAL_VERSIONS.privacy },
+    ],
   });
 
   await expect(page.getByTestId('apply-status-pill')).toHaveText('Submitted');

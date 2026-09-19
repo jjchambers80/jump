@@ -150,6 +150,9 @@ export interface PublicForm {
   acceptance: Acceptance;
   chargeTiming: 'SUBMIT' | 'APPROVAL' | null;
   feeMode: 'PASS' | 'ABSORB' | null;
+  /** Pay-now window after a declined charge (PAID forms); the card-authorization label names it (spec 024 phase 3). */
+  paymentDueDays?: number | null;
+  organizationName?: string | null;
   tiers: PublicTier[];
   questions: Question[];
 }

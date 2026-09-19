@@ -372,16 +372,20 @@ model Venue {
 // Buyer record, scoped per organization. The same email at two organizations is
 // two rows with separate notes, consent, and order history. Buyers never live in User.
 model Contact {
-  id               String    @id @default(cuid())
-  organizationId   String
-  email            String
-  firstName        String
-  lastName         String
-  location         String?
-  note             String?
-  emailSubscribed  Boolean   @default(false)
-  accountCreatedAt DateTime? // null = guest checkout; set = login-enabled buyer account
-  stripeCustomerId String?   @unique // spec 011: platform-account Customer holding the applicant's saved card
+  id                    String                 @id @default(cuid())
+  organizationId        String
+  email                 String
+  firstName             String
+  lastName              String
+  location              String?
+  note                  String?
+  emailSubscribed       Boolean                @default(false)
+  // Marketing consent provenance (spec 023 LR-07, built by spec 024 phase 3)
+  emailSubscribedAt     DateTime?
+  emailSubscribedSource EmailSubscribedSource?
+  emailUnsubscribedAt   DateTime?
+  accountCreatedAt      DateTime? // null = guest checkout; set = login-enabled buyer account
+  stripeCustomerId      String?                @unique // spec 011: platform-account Customer holding the applicant's saved card
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -877,6 +881,65 @@ enum ApplicationAction {
   MANUAL_REFUND // spec 018 phase 3: refund recorded on an offline-paid application
 }
 
+enum EmailSubscribedSource {
+  CHECKOUT
+  APPLY
+  ADMIN
+  IMPORT
+}
+
+// ─── Legal acceptances (spec 023 §8.1, built by spec 024 phase 3) ───────────
+// Who accepted which document version, when, from where. Append-only, like
+// PaymentTransaction: never updated, kept for the life of the related ledger
+// row. `ipHash` is sha256(ip + day + salt); the raw IP is never stored.
+
+enum LegalSubject {
+  USER
+  CONTACT
+  ANONYMOUS_EMAIL
+}
+
+enum LegalDocument {
+  TERMS
+  PRIVACY
+  ORGANIZER_TERMS
+  CARD_AUTHORIZATION
+  SUBSCRIPTION_TERMS
+  CONNECT_TERMS
+  MARKETING
+}
+
+enum LegalSource {
+  CHECKOUT
+  APPLY
+  SIGNUP
+  SUBSCRIBE
+  CONNECT
+  ACCOUNT
+  ADMIN_INTERSTITIAL
+}
+
+model LegalAcceptance {
+  id             String        @id @default(cuid())
+  subjectType    LegalSubject
+  subjectId      String? // User.id or Contact.id; null when only an email is known
+  email          String // as entered; lets a pending checkout be matched later
+  organizationId String? // tenant context
+  document       LegalDocument
+  version        String
+  source         LegalSource
+  referenceType  String? // 'Order' | 'Application' | 'Organization' | 'CheckoutSession'
+  referenceId    String?
+  ipHash         String? // sha256(ip + daily salt); never the raw IP
+  userAgent      String? // truncated to 255
+  presentedText  String? // exact label shown for CARD_AUTHORIZATION (amount, trigger, window)
+  acceptedAt     DateTime      @default(now())
+
+  @@index([email, document])
+  @@index([subjectType, subjectId])
+  @@index([referenceType, referenceId])
+}
+
 enum PaymentSource {
   STRIPE
   OFFLINE
@@ -1017,6 +1080,13 @@ model Application {
 
   // Money lives on `order` (spec 024): amount snapshot as order lines,
   // PaymentTransaction, Refund. PAID forms only; FREE forms have no order.
+
+  // Apply-form opt-ins (spec 024 phase 3): recorded at submission, applied to
+  // the Contact once the application first reaches SUBMITTED (never for an
+  // abandoned DRAFT). Both only ever turn the contact's flags on.
+  optInAccount    Boolean   @default(false)
+  optInMarketing  Boolean   @default(false)
+  optInsAppliedAt DateTime?
 
   // Card on file (spec 011 phase 2)
   stripeCheckoutSessionId String? @unique

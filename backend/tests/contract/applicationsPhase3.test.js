@@ -9,6 +9,7 @@ import { jest } from '@jest/globals';
 import request from 'supertest';
 import sharp from 'sharp';
 import { staffToken, joinOrgByToken, cleanupStaff } from '../helpers/staff.js';
+import { allAcceptances } from '../helpers/legal.js';
 
 const sentEmails = [];
 jest.unstable_mockModule('../../src/config/resend.js', () => ({
@@ -141,7 +142,7 @@ describe('Applications contract (spec 011 phase 3)', () => {
       const image = await png();
       const sub = await request(app)
         .post(`/events/${eventId}/applications`)
-        .field('payload', JSON.stringify({ formSlug: freeForm.slug, contact: { email: `press@${TAG}.test`, firstName: 'Pat', lastName: 'Press' }, profile: { businessName: 'Retro Weekly' }, answers: { [q['Outlet name']]: 'Retro Weekly' } }))
+        .field('payload', JSON.stringify({ formSlug: freeForm.slug, contact: { email: `press@${TAG}.test`, firstName: 'Pat', lastName: 'Press' }, acceptances: allAcceptances(), profile: { businessName: 'Retro Weekly' }, answers: { [q['Outlet name']]: 'Retro Weekly' } }))
         .attach('profilePhotos', image, 'booth.png')
         .attach(`answer:${q['Press badge photo']}`, image, 'badge.png');
       expect(sub.status).toBe(201);

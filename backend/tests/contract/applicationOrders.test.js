@@ -9,6 +9,7 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
 import { staffToken, joinOrgByToken, cleanupStaff } from '../helpers/staff.js';
+import { allAcceptances } from '../helpers/legal.js';
 
 const sentEmails = [];
 jest.unstable_mockModule('../../src/config/resend.js', () => ({
@@ -133,7 +134,7 @@ describe('Application orders contract (spec 024 phase 1)', () => {
         formSlug,
         tierId,
         contact: { email, firstName: 'Vee', lastName: 'Vendor' },
-        profile: { businessName: `${email.split('@')[0]} Co` },
+        acceptances: allAcceptances(), profile: { businessName: `${email.split('@')[0]} Co` },
         answers: {},
         ...extra,
       });
