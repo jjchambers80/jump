@@ -377,8 +377,9 @@ describe('Application corrections contract (spec 018 phase 3)', () => {
     expect(res.body.payment.paymentDueAt).toBeNull();
     expect(res.body.payment).toMatchObject({ canRefund: true, manualRefund: true, canRetryCharge: false });
     expect(res.body.decisions.at(-1)).toMatchObject({ action: 'OFFLINE_PAID', note: `Cheque #1042, $${due.toFixed(2)}` });
-    expect(sentEmails).toHaveLength(1);
-    expect(sentEmails[0].subject).toContain('Payment received');
+    // Spec 024 phase 2: Jump's receipt (cheque method) then the organizer's OFFLINE_PAID template.
+    expect(sentEmails.map((e) => e.subject)).toEqual([expect.stringMatching(/^Receipt for/), expect.stringContaining('Payment received')]);
+    expect(sentEmails[0].text).toContain('Payment method: Cheque #1042');
     // Spec 024: the payment row is the offline record — no Stripe id (the
     // declined attempt stays in the decision log); no new Stripe object.
     const row = await appRow(id);

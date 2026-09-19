@@ -98,7 +98,10 @@ function StatusContent({ params }: { params: { eventId: string; applicationId: s
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-5 sm:p-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm text-gray-600 dark:text-slate-400">{app.form.name}{app.tier ? ` · ${app.tier.name}` : ''}</p>
+                  <p className="text-sm text-gray-600 dark:text-slate-400">
+                    {app.form.name}{app.tier ? ` · ${app.tier.name}` : ''}
+                    {app.orderRef ? <span className="font-mono" data-testid="apply-order-ref"> · Order {app.orderRef}</span> : null}
+                  </p>
                   <h2 className="text-xl font-semibold text-gray-900 dark:text-slate-100">{app.profile.businessName}</h2>
                 </div>
                 <span data-testid="apply-status-pill" className={`rounded-full px-3 py-1 text-sm font-semibold ${STATUS_STYLE[app.status]}`}>{STATUS_LABEL[app.status]}</span>

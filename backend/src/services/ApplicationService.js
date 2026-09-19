@@ -1133,6 +1133,7 @@ class ApplicationService {
     });
 
     logger.info('Application paid offline', { event: 'application_paid_offline', applicationId, eventId, byUserId, method, amount: value });
+    await applicationPaymentService.sendReceipt(applicationId);
     await this._afterAmountChange(organizationId, updated, sessionId, 'OFFLINE_PAID', sendEmail);
     return this.get(eventId, applicationId, organizationId);
   }

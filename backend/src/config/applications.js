@@ -67,6 +67,9 @@ Thanks for applying to {{event.name}} as {{form.name}}{{#tier}} ({{tier.name}}){
 {{#addOns}}
 Add-ons: {{addOns.summary}}
 {{/addOns}}
+{{#order.ref}}
+Order number: {{order.ref}}
+{{/order.ref}}
 You can check its status any time: {{links.status}}
 
 {{organization.name}}`,
@@ -76,7 +79,9 @@ You can check its status any time: {{links.status}}
     body: `Hi {{applicant.firstName}},
 
 Good news — {{profile.businessName}} is approved for {{event.name}}{{#tier}} ({{tier.name}}){{/tier}}.
-
+{{#order.ref}}
+Order number: {{order.ref}}
+{{/order.ref}}
 We will follow up with logistics closer to the event. Your application: {{links.status}}
 
 See you there,
@@ -112,7 +117,7 @@ Your application for {{event.name}} ({{form.name}}) has been withdrawn. If this 
     subject: 'Payment needed to confirm your spot at {{event.name}}',
     body: `Hi {{applicant.firstName}},
 
-{{profile.businessName}} is approved for {{event.name}}{{#tier}} ({{tier.name}}){{/tier}}, but we could not charge the card on file. Please pay {{amount.applicantPays}} by {{payment.dueDate}} to keep your spot:
+{{profile.businessName}} is approved for {{event.name}}{{#tier}} ({{tier.name}}){{/tier}}, but we could not charge the card on file. Please pay {{amount.applicantPays}} by {{payment.dueDate}} to keep your spot{{#order.ref}} (order {{order.ref}}){{/order.ref}}:
 
 {{links.payNow}}
 
@@ -159,7 +164,7 @@ Your application: {{links.status}}
     subject: 'Payment received for {{event.name}}',
     body: `Hi {{applicant.firstName}},
 
-We recorded your payment of {{amount.applicantPays}} for {{profile.businessName}}'s application to {{event.name}}{{#tier}} ({{tier.name}}){{/tier}}. Your spot is confirmed.
+We recorded your payment of {{amount.applicantPays}} for {{profile.businessName}}'s application to {{event.name}}{{#tier}} ({{tier.name}}){{/tier}}{{#order.ref}} (order {{order.ref}}){{/order.ref}}. Your spot is confirmed.
 
 Your application: {{links.status}}
 
