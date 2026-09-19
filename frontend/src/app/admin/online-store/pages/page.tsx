@@ -137,13 +137,21 @@ export default function PagesPage() {
                   >
                     Last updated
                   </th>
+                  <th scope="col" className="px-4 py-3">
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-slate-700">
                 {pages.map((storePage) => (
                   <tr key={storePage.id}>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
-                      {storePage.title}
+                      <Link
+                        href={`/admin/online-store/pages/${storePage.id}`}
+                        className="hover:underline"
+                      >
+                        {storePage.title}
+                      </Link>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600 dark:text-slate-300">
                       <span
@@ -154,6 +162,15 @@ export default function PagesPage() {
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-500 dark:text-slate-400">
                       {formatDate(storePage.updatedAt)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm">
+                      <Link
+                        href={`/admin/online-store/pages/${storePage.id}`}
+                        aria-label={`Edit ${storePage.title}`}
+                        className="font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+                      >
+                        Edit
+                      </Link>
                     </td>
                   </tr>
                 ))}

@@ -60,8 +60,11 @@ describe('Online Store pages contract', () => {
     expect(created.body).toMatchObject({
       organizationId: organization.id,
       title: 'About us',
+      slug: 'about-us',
       content: '<p>Our story</p>',
       isVisible: false,
+      seoTitle: null,
+      seoDescription: null,
     });
     expect(created.body.id).toEqual(expect.any(String));
     expect(created.body.createdAt).toEqual(expect.any(String));
@@ -108,6 +111,106 @@ describe('Online Store pages contract', () => {
     expect(response.body.details).toEqual(
       expect.arrayContaining([expect.objectContaining({ field })])
     );
+  });
+
+  it('stores the search engine listing and keeps handles unique per organization', async () => {
+    const created = await request(app)
+      .post('/admin/pages')
+      .set(...auth(organizerToken))
+      .send({
+        title: 'FAQ',
+        content: '<p>Answers</p>',
+        slug: 'About Us',
+        seoTitle: 'Frequently asked questions',
+        seoDescription: 'Everything you need to know.',
+      });
+
+    expect(created.status).toBe(201);
+    expect(created.body).toMatchObject({
+      slug: 'about-us-2',
+      seoTitle: 'Frequently asked questions',
+      seoDescription: 'Everything you need to know.',
+    });
+
+    // The same handle is free in another organization.
+    const theirs = await request(app)
+      .post('/admin/pages')
+      .set(...auth(otherToken))
+      .send({ title: 'About us', content: '<p>Them</p>' });
+    expect(theirs.status).toBe(201);
+    expect(theirs.body.slug).toBe('about-us');
+  });
+
+  it('gets and updates a page only within the active organization', async () => {
+    const created = await request(app)
+      .post('/admin/pages')
+      .set(...auth(organizerToken))
+      .send({ title: 'Policies', content: '<p>Rules</p>' });
+    expect(created.status).toBe(201);
+
+    const fetched = await request(app)
+      .get(`/admin/pages/${created.body.id}`)
+      .set(...auth(organizerToken));
+    expect(fetched.status).toBe(200);
+    expect(fetched.body).toMatchObject({
+      id: created.body.id,
+      title: 'Policies',
+      slug: 'policies',
+    });
+
+    const updated = await request(app)
+      .put(`/admin/pages/${created.body.id}`)
+      .set(...auth(organizerToken))
+      .send({ title: 'Refund policy', isVisible: false, seoTitle: 'Refunds', slug: '' });
+    expect(updated.status).toBe(200);
+    expect(updated.body).toMatchObject({
+      id: created.body.id,
+      title: 'Refund policy',
+      slug: 'refund-policy',
+      content: '<p>Rules</p>',
+      isVisible: false,
+      seoTitle: 'Refunds',
+    });
+
+    const custom = await request(app)
+      .put(`/admin/pages/${created.body.id}`)
+      .set(...auth(organizerToken))
+      .send({ slug: 'refunds', seoTitle: null });
+    expect(custom.status).toBe(200);
+    expect(custom.body).toMatchObject({ slug: 'refunds', seoTitle: null, title: 'Refund policy' });
+
+    const invalid = await request(app)
+      .put(`/admin/pages/${created.body.id}`)
+      .set(...auth(organizerToken))
+      .send({ seoDescription: 'x'.repeat(161) });
+    expect(invalid.status).toBe(400);
+    expect(invalid.body.details).toEqual(
+      expect.arrayContaining([expect.objectContaining({ field: 'seoDescription' })])
+    );
+
+    // Another organization cannot see or change it.
+    expect(
+      (
+        await request(app)
+          .get(`/admin/pages/${created.body.id}`)
+          .set(...auth(otherToken))
+      ).status
+    ).toBe(404);
+    expect(
+      (
+        await request(app)
+          .put(`/admin/pages/${created.body.id}`)
+          .set(...auth(otherToken))
+          .send({ title: 'Hijacked' })
+      ).status
+    ).toBe(404);
+    expect(
+      (
+        await request(app)
+          .get(`/admin/pages/${created.body.id}`)
+          .set(...auth(unassignedToken))
+      ).status
+    ).toBe(403);
   });
 
   it('requires authenticated administration access', async () => {

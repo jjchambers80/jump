@@ -13,7 +13,7 @@ import { validateCreateOrganizationPerson } from '../validators/organizationPers
 import { validateTaxRegionParams, validateUpsertTaxRegion, validateUpdateTaxSettings, validateTaxReportQuery } from '../validators/taxValidators.js';
 import { validateFormBody, validateTierBody, validateQuestionBody, validateDecisionBody, validateBulkBody, validateTemplateBody, validateRefundBody, validateAddOnLinesBody, validateTierAddOnsBody, validateTierChangeBody, validateAdjustmentBody, validateWaiveBody, validateOfflinePaymentBody, validateFormTemplateBody, validateSaveAsTemplateBody, validateMetaBody } from '../validators/applicationValidators.js';
 import { validateUpdatePaymentSettings, validateUpdatePayoutSettings } from '../validators/paymentValidators.js';
-import { validateCreatePage } from '../validators/pageValidators.js';
+import { validateCreatePage, validateUpdatePage } from '../validators/pageValidators.js';
 import organizationService from '../../services/OrganizationService.js';
 import organizationPersonService from '../../services/OrganizationPersonService.js';
 import orderService from '../../services/OrderService.js';
@@ -99,6 +99,24 @@ router.get('/pages', async (req, res, next) => {
 router.post('/pages', validateCreatePage, async (req, res, next) => {
   try {
     res.status(201).json(await pageService.create(await activeOrgFor(req), req.body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** GET /admin/pages/:pageId — one page; 404 when it belongs to another organization. */
+router.get('/pages/:pageId', async (req, res, next) => {
+  try {
+    res.json(await pageService.get(await activeOrgFor(req), req.params.pageId));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** PUT /admin/pages/:pageId — partial update (title, content, visibility, search engine listing). */
+router.put('/pages/:pageId', validateUpdatePage, async (req, res, next) => {
+  try {
+    res.json(await pageService.update(await activeOrgFor(req), req.params.pageId, req.body));
   } catch (error) {
     next(error);
   }
