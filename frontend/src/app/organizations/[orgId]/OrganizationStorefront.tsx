@@ -154,7 +154,7 @@ export default function OrganizationStorefront({ orgId }: { orgId: string }) {
   // The full-width header keeps the organization identity consistent at every size.
   return (
     <BrandScope color={organization.brandColor} themeMode={organization.themeMode} className="min-h-screen bg-gray-50 dark:bg-slate-900">
-      <OrganizationHeader organization={organization} as="h1" />
+      <OrganizationHeader organization={organization} as="h1" layout={hasCover ? 'two-column' : 'centered'} />
 
       {/* Mobile cover image */}
       {hasCover && (
