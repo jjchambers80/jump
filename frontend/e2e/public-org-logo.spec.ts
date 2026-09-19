@@ -46,7 +46,6 @@ test.describe('public organization logo header', () => {
 
     const header = page.getByTestId('organization-header');
     const box = page.getByTestId('logo-box');
-    await expect(box).toHaveAttribute('data-logo-fit', 'square');
     const cover = page.getByRole('img', { name: 'Logo Test Org cover' });
 
     const headerDims = (await header.boundingBox())!;
@@ -94,14 +93,11 @@ test.describe('public organization logo header', () => {
     await expect(header.getByTestId('logo-box')).toHaveCount(0);
   });
 
-  test('square logo fills the box with no blurred backdrop', async ({ page }) => {
+  test('square logo fills the box', async ({ page }) => {
     await mockOrg(page, 'org-square', svgLogo(200, 200, 'navy'));
     await page.goto('/organizations/org-square');
 
     const box = page.getByTestId('logo-box');
-    await expect(box).toHaveAttribute('data-logo-fit', 'square');
-    await expect(page.getByTestId('logo-box-backdrop')).toHaveCount(0);
-
     const dims = await box.boundingBox();
     expect(dims).not.toBeNull();
     expect(Math.round(dims!.width)).toBe(Math.round(dims!.height));
@@ -112,21 +108,17 @@ test.describe('public organization logo header', () => {
     expect(Math.round(logoDims!.height)).toBe(Math.round(dims!.height));
   });
 
-  test('landscape logo spans full width and gets a blurred backdrop', async ({ page }) => {
+  test('landscape logo spans full width with no blurred backdrop', async ({ page }) => {
     await mockOrg(page, 'org-landscape', svgLogo(400, 100, 'teal'));
     await page.goto('/organizations/org-landscape');
 
     const box = page.getByTestId('logo-box');
-    await expect(box).toHaveAttribute('data-logo-fit', 'backdrop');
-
-    const backdrop = page.getByTestId('logo-box-backdrop');
-    await expect(backdrop).toHaveCount(1);
-    await expect(backdrop).toHaveAttribute('aria-hidden', 'true');
-    await expect(backdrop).toHaveCSS('filter', /blur\(/);
-    await expect(backdrop).toHaveCSS('object-fit', 'cover');
+    await expect(box.getByRole('img')).toHaveCount(1);
+    expect(await box.evaluate((el) => el.querySelectorAll('img').length)).toBe(1);
 
     const logo = box.getByRole('img', { name: 'Logo Test Org logo' });
     await expect(logo).toHaveCSS('object-fit', 'contain');
+    await expect(logo).toHaveCSS('filter', 'none');
 
     // Rendered (painted) size follows object-fit: contain — measure via naturalWidth ratio.
     const painted = await logo.evaluate((img: HTMLImageElement) => {
@@ -141,13 +133,12 @@ test.describe('public organization logo header', () => {
     expect(painted.h).toBeLessThan(painted.boxH);
   });
 
-  test('portrait logo spans full height and gets a blurred backdrop', async ({ page }) => {
+  test('portrait logo spans full height with no blurred backdrop', async ({ page }) => {
     await mockOrg(page, 'org-portrait', svgLogo(100, 400, 'crimson'));
     await page.goto('/organizations/org-portrait');
 
     const box = page.getByTestId('logo-box');
-    await expect(box).toHaveAttribute('data-logo-fit', 'backdrop');
-    await expect(page.getByTestId('logo-box-backdrop')).toHaveCount(1);
+    expect(await box.evaluate((el) => el.querySelectorAll('img').length)).toBe(1);
 
     const logo = box.getByRole('img', { name: 'Logo Test Org logo' });
     const painted = await logo.evaluate((img: HTMLImageElement) => {
@@ -166,7 +157,6 @@ test.describe('public organization logo header', () => {
     await mockOrg(page, 'org-a11y', svgLogo(400, 100, 'teal'));
     await page.goto('/organizations/org-a11y');
 
-    await expect(page.getByTestId('logo-box')).toHaveAttribute('data-logo-fit', 'backdrop');
     await expect(page.getByRole('img', { name: 'Logo Test Org logo' })).toHaveCount(1);
   });
 });

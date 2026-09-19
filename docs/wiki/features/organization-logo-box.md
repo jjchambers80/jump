@@ -1,20 +1,25 @@
 # Organization Logo Header
 
 **Status:** Implemented
-**Last Updated:** 2026-09-18
+**Last Updated:** 2026-09-19
 
 ## Overview
 
-On the public organization page (`/organizations/[orgId]`) a full-width page header contains the organization logo and name at every viewport size. The square logo box is 80px on mobile and 96px from the `sm` breakpoint upward. Logos of any aspect ratio fit the box: non-square logos are letterboxed/pillarboxed over a blurred copy of themselves so the empty bands pick up the logo's own colours.
+Every public storefront page opens with a full-width organization header: the organization logo (square box, 80px on mobile, 96px from the `sm` breakpoint) next to the organization name. On `/organizations/[orgId]` the name is the page `<h1>`; on event, apply, checkout and confirmation pages the whole header links back to the organization page. Logos of any aspect ratio fit the box with `object-contain` over a flat background — no blurred backdrop.
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `frontend/src/components/LogoBox.tsx` | Client component: square container, aspect-ratio detection, blurred backdrop for non-square logos |
-| `frontend/src/app/organizations/[orgId]/page.tsx` | Public org page: full-width identity header followed by the existing cover and event layouts |
-| `frontend/src/lib/assets.ts` | `resolveAssetUrl` — turns stored `logoUrl`/`coverUrl` into an absolute image URL |
-| `frontend/e2e/public-org-logo.spec.ts` | Playwright: full-width and responsive header, square/landscape/portrait fit, no-cover/no-logo fallbacks, overflow, and accessible image count |
+| `frontend/src/components/OrganizationHeader.tsx` | Shared header: `LogoBox` + name; `as="h1"` (org page) or `as="link"` (default, links to `/organizations/:id`) |
+| `frontend/src/components/LogoBox.tsx` | Square container with `object-contain` logo |
+| `frontend/src/app/organizations/[orgId]/OrganizationStorefront.tsx` | Org page: header followed by the cover and event layouts |
+| `frontend/src/app/events/[eventId]/page.tsx` | Event page: header above the hero card |
+| `frontend/src/app/events/[eventId]/apply/ApplyShell.tsx` | Apply index / form / status pages |
+| `frontend/src/app/checkout/[eventId]/page.tsx`, `frontend/src/app/confirmation/page.tsx` | Checkout and confirmation |
+| `backend/src/services/EventService.js` | `_formatEventDetail` exposes `organizationLogoUrl` (alongside `organizationId`/`organizationName`) |
+| `frontend/src/lib/assets.ts` | `resolveAssetUrl` — turns stored `logoUrl` into an absolute image URL |
+| `frontend/e2e/public-org-logo.spec.ts` | Playwright: full-width and responsive header, square/landscape/portrait fit, no-cover/no-logo fallbacks, overflow, single accessible image |
 
 ## Configuration
 
@@ -22,30 +27,27 @@ No new environment variables. Images are served through the existing `ImageServi
 
 ## How It Works
 
-### Layout by viewport
+### Where the header renders
 
-| Viewport | Cover present | Logo rendering |
-|----------|---------------|----------------|
-| `< sm` | Yes / No | `LogoBox` in the full-width header at `w-20` (80px), followed by the organization name |
-| `sm+` | Yes / No | `LogoBox` in the full-width header at `w-24` (96px), followed by the organization name |
+| Page | Data source | Name element |
+|------|-------------|--------------|
+| `/organizations/[orgId]` | `GET /organizations/:id/public` → `organization` | `<h1>` |
+| `/events/[eventId]`, `/events/[eventId]/apply/*` | `GET /events/:id` → `organizationId`, `organizationName`, `organizationLogoUrl` | link |
+| `/checkout/[eventId]` | same event payload | link |
+| `/confirmation` | `GET /orders/:id` → `event.organization*` | link |
 
-The header is always before the cover/content layout and always exposes the organization name as the page's `<h1>`. When the org has no logo, only the heading is rendered.
+The header renders only when `organizationName` is present; the logo box renders only when `logoUrl` is set. It sits inside the page's `BrandScope`, so brand colour and theme mode apply. Pages that previously carried their own vertical padding on `BrandScope` moved it onto the inner container so the header stays flush with the top.
 
 ### Aspect-ratio fitting (`LogoBox`)
 
-1. Renders `<div class="relative aspect-square overflow-hidden">` with the logo as `<img class="h-full w-full object-contain">`.
-2. On `onLoad` (or immediately in an effect if the cached image is already `complete` before hydration) it compares `naturalWidth / naturalHeight` to 1 with a 2% tolerance (`SQUARE_TOLERANCE`).
-3. Square → nothing else; the logo fills the box.
-4. Non-square → a second `<img>` of the same `src` is mounted behind it: `absolute inset-0 object-cover scale-125 blur-xl opacity-80`, `aria-hidden`, empty `alt`. Landscape logos span full width, portrait logos span full height, and the blurred copy fills the remaining bands.
-5. Fit state is exposed as `data-logo-fit="pending" | "square" | "backdrop"` on the `data-testid="logo-box"` element; the backdrop carries `data-testid="logo-box-backdrop"`.
+`<div class="relative aspect-square overflow-hidden bg-gray-100 dark:bg-slate-800">` with the logo as `<img class="h-full w-full object-contain">`. Square logos fill the box; landscape logos are letterboxed, portrait logos pillarboxed, and the bands show the flat container background. There is no aspect-ratio measurement and no second image.
 
 ## API Endpoints
-
-Consumes only the existing public endpoint:
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | `/organizations/:id/public` | None | `{ organization: { id, name, logoUrl, coverUrl, brandColor, themeMode }, events }` |
+| GET | `/events/:id` | None | Includes `organizationId`, `organizationName`, `organizationLogoUrl`, `organizationBrandColor`, `organizationThemeMode` |
 
 ## Database
 
@@ -53,14 +55,12 @@ Reads `Organization.logoUrl` and `Organization.coverUrl` (see [Organization Bran
 
 ## Gotchas
 
-- **One logo component is shared by every breakpoint.** Keep it in the page header rather than duplicating it in the mobile cover or desktop event column; this ensures only one accessible logo image exists.
-- **`scale-125` on the backdrop is required.** `blur-xl` fades edges to transparent; scaling the blurred copy past the box hides the soft border. Remove it and a light ring appears around the box.
-- **Cached images skip `onLoad`.** The `useEffect` that checks `img.complete` handles this; if you refactor `LogoBox`, keep it or square logos will stay `pending` on client navigations.
+- **One header component.** Add new public storefront routes through `OrganizationHeader`; do not hand-roll a logo `<img>` so only one accessible logo image exists per page.
+- **Only one `<h1>` per page.** Use `as="h1"` only on the organization page; event and checkout pages already have their own `<h1>`.
 - **Header spacing is coupled to the responsive logo widths.** If the `w-20 sm:w-24` sizes change, verify the header's padding, long-name wrapping, and cover position at both mobile and desktop widths.
-- **`SQUARE_TOLERANCE` is 2%.** A 200×204 logo is treated as square and gets no backdrop; a 200×210 logo gets one.
 
 ## Related Features
 
 - [Organization Branding](organization-branding.md) — logo/cover upload endpoints and `ImageService`
-- [Organization Theme Mode](organization-theme-mode.md) — `BrandScope` wrapper on the same page
+- [Organization Theme Mode](organization-theme-mode.md) — `BrandScope` wrapper on the same pages
 - [Theme System](theme-system.md) — `dark:` classes on the box background

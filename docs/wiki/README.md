@@ -44,7 +44,7 @@ Generated and maintained by running `/doc-feature` after completing feature work
 - [Connect Payouts](features/connect-payouts.md) — Stripe Connect Express per organization: destination charges (org receives the subtotal, platform keeps fees + tax), onboarding, payouts page, schedule dialog, Connect webhook; dark behind `STRIPE_CONNECT_ENABLED` (spec 010 phase 2)
 - [Organization Branding](features/organization-branding.md) — Logo, cover image, brand color with WCAG AA contrast checker
 - [Organization Theme Mode](features/organization-theme-mode.md) — Per-org light/dark/system enforcement on public org pages
-- [Organization Logo Box](features/organization-logo-box.md) — Public org page logo: square box straddling the mobile cover, plain logo on desktop, blurred backdrop for non-square logos
+- [Organization Logo Header](features/organization-logo-box.md) — `OrganizationHeader` (logo + name) on every public storefront page; square `LogoBox` with `object-contain`, no backdrop
 - [Online Store Pages](features/online-store-pages.md) — Online store › Pages: create/edit custom pages, visibility, search engine listing (SEO title, meta description, URL handle)
 - [Online Store Preferences](features/online-store-preferences.md) — Online store › Preferences: store access (private mode + password gate on every public storefront page), homepage SEO title/description + Open Graph
 - [Storefront Language Redirection](features/storefront-language-redirection.md) — Online store › Preferences › Automatic redirection: Language toggle ("redirect visitors to the language that matches their browser when available"); stored on `Organization.autoRedirectLanguage`, no runtime effect until the storefront is localized

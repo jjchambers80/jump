@@ -438,7 +438,7 @@ class EventService {
     const event = await prisma.event.findUnique({
       where: { id: eventId },
       include: {
-        venue: { include: { organization: { select: { id: true, name: true, brandColor: true, themeMode: true, taxInclusivePricing: true } } } },
+        venue: { include: { organization: { select: { id: true, name: true, logoUrl: true, brandColor: true, themeMode: true, taxInclusivePricing: true } } } },
         priceTiers: { orderBy: { displayOrder: 'asc' } },
         // Add-ons a ticket checkout may offer (spec 012); the storefront picks
         // per cart tier via `allTiers` / `priceTierIds`.
@@ -659,6 +659,8 @@ class EventService {
       },
       organizationId: event.venue?.organization?.id || null,
       organizationName: event.venue?.organization?.name || null,
+      // Storefront header (logo + name) on event, checkout and apply pages.
+      organizationLogoUrl: event.venue?.organization?.logoUrl || null,
       organizationBrandColor: event.venue?.organization?.brandColor || null,
       organizationThemeMode: event.venue?.organization?.themeMode || 'SYSTEM',
       // Listed tier prices already include tax (spec 009 phase 3); customers see "incl. tax".

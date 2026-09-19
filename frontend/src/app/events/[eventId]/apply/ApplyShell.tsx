@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { ReactNode, useEffect, useState } from 'react';
 import api from '@/services/api';
 import BrandScope from '@/components/BrandScope';
+import OrganizationHeader from '@/components/OrganizationHeader';
 import type { ThemeMode } from '@/lib/theme';
 import { formatDate } from '@/lib/applications';
 import StorefrontPasswordGate from '@/components/StorefrontPasswordGate';
@@ -20,6 +21,7 @@ export interface ApplyEvent {
   status: string;
   organizationId?: string | null;
   organizationName?: string | null;
+  organizationLogoUrl?: string | null;
   organizationBrandColor?: string | null;
   organizationThemeMode?: ThemeMode | null;
   venue: { name: string; city?: string | null; state?: string | null } | null;
@@ -82,6 +84,11 @@ export default function ApplyShell({ eventId, title, children }: { eventId: stri
 
   return (
     <BrandScope color={event.organizationBrandColor} themeMode={event.organizationThemeMode} className="min-h-screen bg-gray-50 dark:bg-slate-900">
+      {event.organizationName && (
+        <OrganizationHeader
+          organization={{ id: event.organizationId, name: event.organizationName, logoUrl: event.organizationLogoUrl }}
+        />
+      )}
       <main className="max-w-3xl mx-auto px-4 py-8 sm:py-10">
         <Link href={`/events/${event.id}`} className="inline-flex items-center text-brand-link hover:opacity-80 font-semibold text-sm">
           ← Back to {event.name}

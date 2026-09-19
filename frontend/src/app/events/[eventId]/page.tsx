@@ -11,6 +11,7 @@ import Link from 'next/link';
 import { api } from '../../../services/api';
 import { resolveAssetUrl } from '../../../lib/assets';
 import BrandScope from '../../../components/BrandScope';
+import OrganizationHeader from '../../../components/OrganizationHeader';
 import GetInvolved from './GetInvolved';
 import CartLineItem from '../../../components/CartLineItem';
 import OrderTotals from '../../../components/OrderTotals';
@@ -58,6 +59,7 @@ interface Event {
   taxInclusivePricing?: boolean;
   organizationId?: string | null;
   organizationName?: string | null;
+  organizationLogoUrl?: string | null;
   organizationBrandColor?: string | null;
   organizationThemeMode?: ThemeMode | null;
   venue: EventVenue | null;
@@ -260,6 +262,11 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
 
   return (
     <BrandScope color={event.organizationBrandColor} themeMode={event.organizationThemeMode} className="min-h-screen bg-gray-50 dark:bg-slate-900 pb-20 sm:pb-0">
+      {event.organizationName && (
+        <OrganizationHeader
+          organization={{ id: event.organizationId, name: event.organizationName, logoUrl: event.organizationLogoUrl }}
+        />
+      )}
       <div className="max-w-6xl mx-auto px-0 sm:px-6 lg:px-8 py-0 sm:py-12 lg:flex lg:gap-6 lg:items-start">
         <div className="flex-1 min-w-0 bg-transparent sm:bg-white sm:dark:bg-slate-800 rounded-none sm:rounded-lg sm:shadow-lg sm:dark:shadow-lg sm:dark:shadow-black/20 overflow-hidden">
           {/* Hero Header */}
