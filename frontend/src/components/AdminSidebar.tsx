@@ -15,6 +15,8 @@ import { useSession } from 'next-auth/react';
 interface NavItem {
   label: string;
   href: string;
+  /** Visually nest this link beneath the preceding section link. */
+  nested?: boolean;
   /** Only show for these roles. If undefined, show for all allowed roles. */
   roles?: string[];
 }
@@ -30,6 +32,7 @@ const navItems: NavItem[] = [
   { label: 'Check In', href: '/admin/orders/scan' },
   { label: 'Analytics', href: '/admin/analytics' },
   { label: 'Online store', href: '/admin/online-store' },
+  { label: 'Pages', href: '/admin/online-store/pages', nested: true },
 ];
 
 interface AdminSidebarProps {
@@ -52,7 +55,8 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
     // (e.g. /admin/orders/scan should match "Check In", not "Orders")
     if (pathname.startsWith(href + '/')) {
       const moreSpecific = navItems.some(
-        (item) => item.href !== href && item.href.startsWith(href + '/') && pathname.startsWith(item.href),
+        (item) =>
+          item.href !== href && item.href.startsWith(href + '/') && pathname.startsWith(item.href)
       );
       return !moreSpecific;
     }
@@ -119,8 +123,10 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                   key={item.href}
                   href={item.href}
                   onClick={onClose}
+                  aria-current={active ? 'page' : undefined}
                   className={`
                     flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors
+                    ${item.nested ? 'ml-4 pl-5' : ''}
                     ${
                       active
                         ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'

@@ -13,6 +13,7 @@ import { validateCreateOrganizationPerson } from '../validators/organizationPers
 import { validateTaxRegionParams, validateUpsertTaxRegion, validateUpdateTaxSettings, validateTaxReportQuery } from '../validators/taxValidators.js';
 import { validateFormBody, validateTierBody, validateQuestionBody, validateDecisionBody, validateBulkBody, validateTemplateBody, validateRefundBody, validateAddOnLinesBody, validateTierAddOnsBody, validateTierChangeBody, validateAdjustmentBody, validateWaiveBody, validateOfflinePaymentBody, validateFormTemplateBody, validateSaveAsTemplateBody, validateMetaBody } from '../validators/applicationValidators.js';
 import { validateUpdatePaymentSettings, validateUpdatePayoutSettings } from '../validators/paymentValidators.js';
+import { validateCreatePage } from '../validators/pageValidators.js';
 import organizationService from '../../services/OrganizationService.js';
 import organizationPersonService from '../../services/OrganizationPersonService.js';
 import orderService from '../../services/OrderService.js';
@@ -33,6 +34,7 @@ import applicationFormTemplateService from '../../services/ApplicationFormTempla
 import applicationDigestService from '../../services/ApplicationDigestService.js';
 import setupGuideService from '../../services/SetupGuideService.js';
 import billingService from '../../services/BillingService.js';
+import pageService from '../../services/PageService.js';
 import { PAID_ORDER_STATUSES, PAID_APPLICATION_STATUSES } from '../../services/paidStatuses.js';
 
 const router = express.Router();
@@ -83,6 +85,24 @@ router.patch(
     }
   }
 );
+
+/** GET /admin/pages — list Online Store pages for the active organization. */
+router.get('/pages', async (req, res, next) => {
+  try {
+    res.json({ pages: await pageService.list(await activeOrgFor(req)) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** POST /admin/pages — create an Online Store page for the active organization. */
+router.post('/pages', validateCreatePage, async (req, res, next) => {
+  try {
+    res.status(201).json(await pageService.create(await activeOrgFor(req), req.body));
+  } catch (error) {
+    next(error);
+  }
+});
 
 /** GET /admin/setup-guide — dashboard setup tasks for the active organization (spec 022). */
 router.get('/setup-guide', async (req, res, next) => {
