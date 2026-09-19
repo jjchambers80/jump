@@ -14,7 +14,7 @@
 import express from 'express';
 import { clientIpForRateLimit } from '../../utils/clientIp.js';
 import multer from 'multer';
-import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import { LIMITS, makeLimiter } from '../../middleware/rateLimit.js';
 import buyerAuthService from '../../services/BuyerAuthService.js';
 import orderService from '../../services/OrderService.js';
 import ticketService from '../../services/TicketService.js';
@@ -35,15 +35,8 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // `clientIpForRateLimit` lives in utils/clientIp.js (spec 024 phase 3: services need it too); re-exported for the routes that import it from here.
 export { clientIpForRateLimit };
 
-// Per-IP cap on sign-in requests; the per-email cap lives in BuyerAuthService.
-const requestLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  limit: 20,
-  standardHeaders: 'draft-7',
-  legacyHeaders: false,
-  keyGenerator: (req) => ipKeyGenerator(clientIpForRateLimit(req)),
-  message: { error: 'Too many sign-in requests. Try again later.' },
-});
+// Per-IP cap on sign-in requests (spec 020 factory); the per-email cap lives in BuyerAuthService.
+const requestLimiter = makeLimiter('BUYER_AUTH_REQUEST', LIMITS.BUYER_AUTH_REQUEST);
 
 /** POST /buyer/auth/request — email a sign-in link. Never reveals account existence. */
 router.post('/auth/request', requestLimiter, async (req, res, next) => {

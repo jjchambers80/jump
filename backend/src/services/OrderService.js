@@ -51,6 +51,17 @@ function csvCell(value) {
   return /[",\n\r]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
 }
 
+/** Stripe Checkout sessions are created with a 30-minute expiry (createOrder). */
+const SESSION_TTL_MS = 30 * 60 * 1000;
+const envInt = (name, fallback) => {
+  const n = Number(process.env[name]);
+  return Number.isFinite(n) && n >= 0 && process.env[name] !== undefined && process.env[name] !== '' ? Math.floor(n) : fallback;
+};
+/** Open (PENDING) ticket checkouts one email may hold on one event (spec 020). */
+export const maxPendingPerContact = () => envInt('ORDER_MAX_PENDING_PER_CONTACT', 3);
+/** How long after a session's expiry the sweep waits before releasing a hold. */
+export const sweepGraceMs = () => envInt('ORDER_SWEEP_GRACE_MS', 5 * 60 * 1000);
+
 class OrderService {
   /**
    * Get the scannable QR payload for a ticket.
@@ -190,6 +201,20 @@ class OrderService {
 
       if (new Date(event.date) < new Date()) {
         throw new ValidationError('Event has already occurred');
+      }
+
+      // 1b. Per-buyer hold cap (spec 020): open (PENDING) checkouts for this
+      // email on this event, before anything is reserved. Abandoned holds are
+      // released by the sweep and by Stripe's session expiry.
+      const holdEmail = String(contact.email || '').toLowerCase();
+      const [{ open }] = await tx.$queryRaw`
+        SELECT COUNT(*)::int AS open FROM "Order" o
+        JOIN "Contact" c ON c."id" = o."contactId"
+        WHERE o."eventId" = ${eventId} AND o."status" = 'PENDING'::"OrderStatus" AND o."kind" = 'TICKET'::"OrderKind"
+          AND c."organizationId" = ${event.venue.organizationId} AND c."email" = ${holdEmail}
+      `;
+      if (open >= maxPendingPerContact()) {
+        throw new ConflictError('You already have tickets on hold for this event. Finish that checkout or wait for it to expire.', { open, max: maxPendingPerContact() });
       }
 
       // 2. Validate each price tier and reserve its inventory atomically
@@ -917,6 +942,48 @@ class OrderService {
     }
 
     return this.getOrderById(orderId);
+  }
+
+  /**
+   * Abandoned-checkout sweep (spec 020). PENDING ticket orders older than the
+   * Checkout session lifetime plus a grace period are checked against Stripe:
+   * an expired session (or an open one past its expiry) releases the hold
+   * through failOrder — the same path the webhook takes, a no-op unless still
+   * PENDING; a session that completed while the webhook was missed goes
+   * through the completion path. Orders without a session are skipped
+   * (createOrder rolled those back itself).
+   *
+   * @returns {Promise<{ scanned: number, failed: number, completed: number, skipped: number }>}
+   */
+  async sweepAbandoned(now = new Date()) {
+    const cutoff = new Date(now.getTime() - SESSION_TTL_MS - sweepGraceMs());
+    const stale = await prisma.order.findMany({
+      where: { status: 'PENDING', kind: 'TICKET', createdAt: { lt: cutoff }, stripeSessionId: { not: null } },
+      select: { id: true, orderRef: true, stripeSessionId: true },
+      orderBy: { createdAt: 'asc' },
+      take: 100,
+    });
+    const result = { scanned: stale.length, failed: 0, completed: 0, skipped: 0 };
+    for (const order of stale) {
+      try {
+        const session = await stripe.checkout.sessions.retrieve(order.stripeSessionId);
+        const expired = session.status === 'expired' || (session.status === 'open' && Number(session.expires_at || 0) * 1000 < now.getTime());
+        if (session.status === 'complete' || session.payment_status === 'paid') {
+          await this.verifyAndCompleteOrder(order.id);
+          result.completed += 1;
+        } else if (expired) {
+          await this.failOrder(order.id, 'Abandoned — session expired');
+          result.failed += 1;
+        } else {
+          result.skipped += 1;
+        }
+      } catch (error) {
+        result.skipped += 1;
+        logger.warn('Abandoned-order sweep could not settle an order', { orderId: order.id, orderRef: order.orderRef, error: error.message });
+      }
+    }
+    if (stale.length) logger.info('Abandoned-order sweep', { event: 'order_sweep', ...result });
+    return result;
   }
 
   /**

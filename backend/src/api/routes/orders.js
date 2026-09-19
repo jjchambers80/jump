@@ -14,6 +14,7 @@ import { requireOrganizer } from '../../middleware/rbac.js';
 import { validateCreateOrder, validateOrderLookup } from '../validators/orderValidators.js';
 import { gateByEventBody } from '../../middleware/storefrontGate.js';
 import { requestMeta } from '../../services/LegalAcceptanceService.js';
+import { LIMITS, makeLimiter } from '../../middleware/rateLimit.js';
 
 const router = express.Router();
 
@@ -22,7 +23,14 @@ const router = express.Router();
  * Create a new order (guest checkout — no auth required).
  * Returns orderId, orderRef, stripeCheckoutUrl.
  */
-router.post('/', validateCreateOrder, gateByEventBody, async (req, res, next) => {
+// Spec 020: per-IP caps. ORDER_CREATE counts orders, not requests
+// (validation 400s do not burn the budget); the lookup and the confirmation
+// page's payment poll have their own windows.
+const createLimiter = makeLimiter('ORDER_CREATE', { ...LIMITS.ORDER_CREATE, skipFailedRequests: true });
+const lookupLimiter = makeLimiter('ORDER_LOOKUP', LIMITS.ORDER_LOOKUP);
+const verifyLimiter = makeLimiter('ORDER_VERIFY', LIMITS.ORDER_VERIFY);
+
+router.post('/', createLimiter, validateCreateOrder, gateByEventBody, async (req, res, next) => {
   try {
     const { eventId, items, priceTierId, quantity, contact, createAccount, emailSubscribed, addOns, acceptances } = req.body;
 
@@ -47,7 +55,7 @@ router.post('/', validateCreateOrder, gateByEventBody, async (req, res, next) =>
  * POST /orders/lookup
  * Guest order lookup by email + orderRef (public, no auth).
  */
-router.post('/lookup', validateOrderLookup, async (req, res, next) => {
+router.post('/lookup', lookupLimiter, validateOrderLookup, async (req, res, next) => {
   try {
     const { email, orderRef } = req.body;
     const order = await orderService.lookupOrder(email, orderRef);
@@ -64,7 +72,7 @@ router.post('/lookup', validateOrderLookup, async (req, res, next) => {
  * Security: orderId is a UUID (not guessable), and only PENDING orders
  * with a valid Stripe session are affected.
  */
-router.post('/:orderId/verify-payment', async (req, res, next) => {
+router.post('/:orderId/verify-payment', verifyLimiter, async (req, res, next) => {
   try {
     const result = await orderService.verifyAndCompleteOrder(req.params.orderId);
     res.json(result);

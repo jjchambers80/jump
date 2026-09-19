@@ -44,6 +44,14 @@ export const qrGenerationCounter = new promClient.Counter({
   registers: [register],
 });
 
+// Spec 020: requests refused by a rate limiter, by limiter name.
+export const rateLimitedCounter = new promClient.Counter({
+  name: 'rate_limited_total',
+  help: 'Requests refused by a rate limiter',
+  labelNames: ['route'],
+  registers: [register],
+});
+
 // Active session count
 export const activeSessionsGauge = new promClient.Gauge({
   name: 'jump_active_sessions',
@@ -67,6 +75,10 @@ export const recordPaymentStatus = (status) => {
 };
 
 // Helper function to record QR generation
+export const recordRateLimited = (route) => {
+  rateLimitedCounter.labels(route).inc();
+};
+
 export const recordQRGeneration = (status) => {
   qrGenerationCounter.labels(status).inc();
 };
