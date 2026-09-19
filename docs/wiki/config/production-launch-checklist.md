@@ -76,7 +76,8 @@ Reviewed 2026-09-18 against `main`: production has no edge layer (Railway only, 
 
 - [ ] **Phase 1 merged and deployed** — limiters on the money paths, per-buyer hold cap, abandoned-order sweep, `Order` indexes migration. Verify in prod: `GET /health` unlimited; 11th `POST /orders` from one IP in 15 min → 429; `rate_limited_total` visible on `/metrics`.
 - [ ] **Phase 2 merged and deployed** — magic-link guard, `helmet`, Next security headers with CSP report-only. Verify: storefront, checkout (Stripe redirect), admin with an uploaded image, Google sign-in — zero CSP reports for a week, then enforce.
-- [ ] **Edge-layer decision recorded here** (plan §7.1): A Cloudflare + Cloudflare for SaaS (phase 3) · B Railway-only (recommended for launch) · C platform hosts only. Decision: _undecided_. Date: —. If A, phase 3 must land before any organization publishes a storefront CNAME.
+- [ ] **Edge-layer decision recorded** (plan §7.1): **B — Railway-only for launch**, with phases 1–2 and optional Turnstile; revisit Cloudflare + Cloudflare for SaaS at launch-plus-one-quarter or sooner if metrics justify it. Date: 2026-09-18. Option C (platform hosts only) rejected because custom-domain storefronts would remain exposed.
+- [ ] **Staff invite-first flow recorded** (plan §7.3): invite staff through Settings › People before magic-link sign-in; unknown/deleted addresses receive the same success-shaped response but no email and no `User` row. Google sign-in is unaffected.
 - [ ] Optional: `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` on checkout, buyer sign-in and application submit — works without moving DNS to Cloudflare.
 
 ## Related

@@ -53,6 +53,7 @@ export function makeLimiter(name, { windowMs, limit, skip, skipSuccessfulRequest
     keyGenerator: (req) => ipKeyGenerator(clientIpForRateLimit(req)),
     skip,
     skipSuccessfulRequests,
+    skipFailedRequests: name === 'ORDER_CREATE',
     handler: (req, res) => {
       rateLimitedCounter.inc({ route: name });
       logger.warn('Rate limited', { route: name, ip: clientIpForRateLimit(req), correlationId: req.id });
@@ -234,21 +235,23 @@ Magic-link guard, helmet, Next headers with CSP report-only, optional Turnstile,
 
 ### 7.1 Edge layer (decide before the first production custom domain)
 
+**Decision recorded 2026-09-18: Option B — Railway-only for launch.** Ship phases 1–2 and use optional Turnstile without changing DNS or adding a Cloudflare dependency. Revisit Option A (Cloudflare in front of Railway + Cloudflare for SaaS) at launch-plus-one-quarter, or sooner if `rate_limited_total` or operational evidence shows that app-level controls are insufficient. Option C is rejected because it leaves public custom-domain storefronts exposed while protecting only platform hosts.
+
 | Option | What it buys | What it costs |
 |---|---|---|
 | **A. Cloudflare in front of Railway** + Cloudflare for SaaS for storefront hostnames | Edge rate limiting, bot management, managed WAF, DDoS absorption, per-hostname TLS without Railway's domain API | Phase 3 (§6): every org's CNAME target changes; `railwayDomains.js` path replaced; origin-secret plumbing; plan-tier cost for WAF managed rules and bot management (verify current pricing before deciding); one more vendor in the launch checklist |
-| **B. Railway only** (phases 1–2 + optional Turnstile) | Nothing to migrate; no new vendor | No OWASP WAF, no volumetric protection beyond Railway's; scrapers still reach the origin (cost only) |
-| **C. Cloudflare for platform hosts only**, custom domains stay on Railway | Protects admin and the API; no custom-domain rework | Storefronts on custom domains stay unprotected — exactly where public traffic lands |
-
-Recommendation: **B now, revisit A at launch-plus-one-quarter** with real traffic numbers, unless bot traffic shows up in `rate_limited_total` before then. Record the choice on the launch checklist.
+| **B. Railway only** (phases 1–2 + optional Turnstile) — **chosen for launch** | Nothing to migrate; no new vendor | No OWASP WAF, no volumetric protection beyond Railway's; scrapers still reach the origin (cost only) |
+| **C. Cloudflare for platform hosts only**, custom domains stay on Railway — **rejected** | Protects admin and the API; no custom-domain rework | Storefronts on custom domains stay unprotected — exactly where public traffic lands |
 
 ### 7.2 Numbers
+
+**Decision recorded 2026-09-18: keep the proposed starting defaults.** `ORDER_CREATE` is 10 successful orders per IP per 15 minutes; validation failures do not consume the budget. The per-contact cap of 3 open `PENDING` orders is the primary anti-hoarding control. Monitor shared-NAT/box-office reports and raise the IP limit to 30 through its environment override if legitimate traffic demonstrates the need. Other defaults remain as listed in §2.1; they are configurable without a code change.
 
 Defaults in §2.1 are starting points. `ORDER_CREATE` 10 / 15 min per IP vs a venue box office on one NAT: the per-contact cap does the real work, so this can be raised (30) if a box office reports it. `BASELINE` 600 / 5 min ≈ 2 req/s sustained; admin pages burst well under that.
 
 ### 7.3 Magic-link existence gate
 
-Restricting sends to existing `User` rows means staff must be created through Settings › People before they can sign in. Today the adapter creates a `UNASSIGNED` user on first click and Settings › People assigns a role afterwards. Confirm with the owner that invite-first is the intended flow; if not, keep the send but drop the row creation by adding a `signIn` callback that refuses unknown emails after the mail is sent (still no enumeration).
+**Decision recorded 2026-09-18: invite-first is the required staff flow.** Restrict magic-link sends to existing, non-deleted `User` rows. Staff must be created through Settings › People before they can sign in; unknown addresses receive the same success-shaped redirect but no email and no `User` row. Google OAuth remains unaffected. This intentionally stops the current adapter behavior that creates an `UNASSIGNED` user after an unknown address follows a link. The launch checklist should point staff to Settings › People for invitations.
 
 ---
 
