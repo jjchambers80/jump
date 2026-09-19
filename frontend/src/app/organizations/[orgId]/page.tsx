@@ -98,21 +98,6 @@ export default function OrganizationPage({ params }: { params: { orgId: string }
 
   const eventList = (
     <>
-      {/* Org header — with a cover, the mobile logo lives on the cover image instead */}
-      <div className={`mb-8 ${hasCover && logoSrc ? 'hidden xl:block' : ''}`}>
-        {logoSrc ? (
-          <img
-            src={logoSrc}
-            alt={`${organization.name} logo`}
-            className="max-h-[85px] w-auto rounded-lg object-contain mb-3"
-          />
-        ) : (
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-slate-100 mb-2">
-            {organization.name}
-          </h1>
-        )}
-      </div>
-
       {/* Event cards */}
       {events.length === 0 ? (
         <div className="text-center py-16">
@@ -146,29 +131,38 @@ export default function OrganizationPage({ params }: { params: { orgId: string }
     </>
   );
 
-  // Desktop with cover: two-column, image flush right, plain logo in content
+  // Desktop with cover: two-column, image flush right
   // Desktop without cover: centered single column
-  // Mobile: cover at top with square logo box straddling its bottom edge, then content
+  // The full-width header keeps the organization identity consistent at every size.
   return (
     <BrandScope color={organization.brandColor} themeMode={organization.themeMode} className="min-h-screen bg-gray-50 dark:bg-slate-900">
+      <header
+        data-testid="organization-header"
+        className="w-full border-b border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-800"
+      >
+        <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-4 sm:gap-6 sm:px-6 sm:py-6 lg:px-8">
+          {logoSrc && (
+            <LogoBox
+              src={logoSrc}
+              alt={`${organization.name} logo`}
+              className="w-20 shrink-0 rounded-lg shadow-sm sm:w-24"
+            />
+          )}
+          <h1 className="min-w-0 break-words text-2xl font-bold text-gray-900 dark:text-slate-100 sm:text-3xl">
+            {organization.name}
+          </h1>
+        </div>
+      </header>
+
       {/* Mobile cover image */}
       {hasCover && (
         <div className="xl:hidden w-full">
-          <div className="relative w-full" style={{ aspectRatio: '16/9' }}>
+          <div className="w-full" style={{ aspectRatio: '16/9' }}>
             <img
               src={coverSrc!}
               alt={`${organization.name} cover`}
               className="w-full h-full object-cover"
             />
-            {logoSrc && (
-              <div className="absolute bottom-0 left-4 sm:left-6 translate-y-1/2">
-                <LogoBox
-                  src={logoSrc}
-                  alt={`${organization.name} logo`}
-                  className="w-24 rounded-lg shadow-lg"
-                />
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -178,8 +172,7 @@ export default function OrganizationPage({ params }: { params: { orgId: string }
         <div className="xl:flex min-h-screen">
           {/* Left: event content — full width below xl, pushed right at xl+ */}
           <div className="flex-1 xl:flex xl:justify-end">
-            {/* Extra top padding below xl clears the half of the logo box that overhangs the cover */}
-            <div className={`w-full xl:max-w-4xl px-4 sm:px-6 pb-8 xl:py-12 ${logoSrc ? 'pt-20' : 'pt-8'}`}>
+            <div className="w-full px-4 py-8 sm:px-6 xl:max-w-4xl xl:py-12">
               {eventList}
             </div>
           </div>
