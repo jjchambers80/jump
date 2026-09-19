@@ -183,6 +183,23 @@ model Organization {
   applicationTemplates ApplicationMessageTemplate[]
   applicationFormTemplates ApplicationFormTemplate[]
   stripeAccounts       OrganizationStripeAccount[]
+  pages                 Page[]
+}
+
+// Custom content pages managed under Online Store. Content is stored as the
+// editor's HTML snapshot; rendering/sanitization belongs to the storefront.
+model Page {
+  id             String   @id @default(cuid())
+  organizationId String
+  title          String
+  content        String
+  isVisible      Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
 }
 
 // Spec 010 phase 2: the organization's Stripe Connect (Express) account that
