@@ -3,6 +3,7 @@
 
 import { getSession } from 'next-auth/react';
 import type { OrderAddOnLine } from '@/lib/addOns';
+import { allStorefrontAccessTokens } from '@/lib/storefrontAccess';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
 
@@ -36,6 +37,13 @@ class ApiClient {
     // The backend honors it only when the user is a member of that organization.
     if (activeOrganizationId && !headers['X-Jump-Org']) {
       headers['X-Jump-Org'] = activeOrganizationId;
+    }
+
+    // Private storefront tokens (Online store › Preferences › Store access):
+    // send every one the visitor holds; the backend picks the matching org.
+    if (typeof window !== 'undefined' && !headers['X-Storefront-Access']) {
+      const tokens = allStorefrontAccessTokens();
+      if (tokens.length) headers['X-Storefront-Access'] = tokens.join(',');
     }
 
     if (typeof window !== 'undefined' && !headers['Authorization']) {

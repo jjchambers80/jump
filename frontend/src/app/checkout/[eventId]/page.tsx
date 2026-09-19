@@ -5,6 +5,8 @@
 // Returns stripeCheckoutUrl for redirect per FR-042, contracts/api.yaml
 
 import React, { useState, useEffect } from 'react';
+import StorefrontPasswordGate from '../../../components/StorefrontPasswordGate';
+import { storefrontLockFrom, type StorefrontLock } from '../../../lib/storefrontAccess';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '../../../services/api';
 import CartLineItem from '../../../components/CartLineItem';
@@ -90,6 +92,7 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lock, setLock] = useState<StorefrontLock | null>(null);
   const [processing, setProcessing] = useState(false);
 
   // Contact form state
@@ -122,7 +125,13 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
       setError(null);
       const data = await api.get<Event>(`/events/${params.eventId}`);
       setEvent(data);
+      setLock(null);
     } catch (err: any) {
+      const locked = storefrontLockFrom(err);
+      if (locked) {
+        setLock(locked);
+        return;
+      }
       setError(err.message || 'Failed to load event details');
     } finally {
       setLoading(false);
@@ -185,6 +194,11 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
       // Redirect to Stripe Checkout
       window.location.href = response.stripeCheckoutUrl;
     } catch (err: any) {
+      const locked = storefrontLockFrom(err);
+      if (locked) {
+        setLock(locked);
+        return;
+      }
       if (err.status === 409) {
         setError('Sorry, these tickets are no longer available. Please go back and try again.');
       } else {
@@ -193,6 +207,10 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
       setProcessing(false);
     }
   };
+
+  if (lock) {
+    return <StorefrontPasswordGate organization={lock.organization} message={lock.message} onUnlocked={fetchEventDetails} />;
+  }
 
   if (loading) {
     return (

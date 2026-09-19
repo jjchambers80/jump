@@ -7,7 +7,6 @@ import EventCard, { EventSummary } from '../../../components/EventCard';
 import BrandScope from '../../../components/BrandScope';
 import LogoBox from '../../../components/LogoBox';
 import StorefrontPasswordGate from '../../../components/StorefrontPasswordGate';
-import { readStorefrontAccess } from '../../../lib/storefrontAccess';
 import type { ThemeMode } from '@/lib/theme';
 
 interface OrganizationPublic {
@@ -38,10 +37,8 @@ export default function OrganizationStorefront({ orgId }: { orgId: string }) {
     try {
       setLoading(true);
       setError(null);
-      const token = readStorefrontAccess(orgId);
-      const result = await api.get<OrgPageData>(`/organizations/${orgId}/public`, {
-        headers: token ? { 'X-Storefront-Access': token } : {},
-      });
+      // services/api.ts attaches any stored X-Storefront-Access tokens.
+      const result = await api.get<OrgPageData>(`/organizations/${orgId}/public`);
       setData(result);
     } catch (err: any) {
       setError(err.message || 'Failed to load organization');

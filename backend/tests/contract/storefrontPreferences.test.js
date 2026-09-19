@@ -192,6 +192,71 @@ describe('Online Store preferences contract', () => {
     expect(stale.body.locked).toBe(true);
   });
 
+  it('locks event, venue, checkout and application form routes too, and hides events from discovery', async () => {
+    const venue = await prisma.venue.create({
+      data: { organizationId: organization.id, name: `${TAG} Venue`, address: '1 Test St' },
+    });
+    const event = await prisma.event.create({
+      data: {
+        venueId: venue.id,
+        name: `${TAG} Gated Event`,
+        date: new Date(Date.now() + 7 * 24 * 3600 * 1000),
+        capacity: 100,
+        status: 'PUBLISHED',
+      },
+    });
+    const tier = await prisma.priceTier.create({
+      data: { eventId: event.id, name: 'GA', price: 10, quantityTotal: 10 },
+    });
+
+    // Currently private with password retro-1986 (previous test).
+    const eventLocked = await request(app).get(`/events/${event.id}`);
+    expect(eventLocked.status).toBe(403);
+    expect(eventLocked.body).toMatchObject({
+      error: 'StorefrontLockedError',
+      details: {
+        locked: true,
+        organization: { id: organization.id, name: `${TAG} Store` },
+        message: 'Opening soon',
+      },
+    });
+    expect(eventLocked.body.details.organization).not.toHaveProperty('storefrontPasswordHash');
+
+    expect((await request(app).get(`/venues/${venue.id}`)).status).toBe(403);
+    expect((await request(app).get(`/events/${event.id}/applications/forms`)).status).toBe(403);
+    const checkout = await request(app)
+      .post('/orders')
+      .send({
+        eventId: event.id,
+        items: [{ priceTierId: tier.id, quantity: 1 }],
+        contact: { firstName: 'A', lastName: 'B', email: `buyer@${TAG}.test` },
+      });
+    expect(checkout.status).toBe(403);
+    expect(checkout.body.details.locked).toBe(true);
+
+    const list = await request(app).get('/events');
+    expect(list.status).toBe(200);
+    expect(list.body.events.some((e) => e.id === event.id)).toBe(false);
+
+    // A token for this org (sent alongside a stale/foreign one) opens them.
+    const { body } = await request(app)
+      .post(`/organizations/${organization.id}/storefront-access`)
+      .send({ password: 'retro-1986' });
+    const header = `stale-token, ${body.token}`;
+    expect((await request(app).get(`/events/${event.id}`).set('X-Storefront-Access', header)).status).toBe(200);
+    expect((await request(app).get(`/venues/${venue.id}`).set('X-Storefront-Access', header)).status).toBe(200);
+    expect(
+      (await request(app).get(`/events/${event.id}/applications/forms`).set('X-Storefront-Access', header)).status
+    ).toBe(200);
+
+    // Unknown ids still 404 rather than 403.
+    expect((await request(app).get('/events/does-not-exist')).status).toBe(404);
+
+    await prisma.priceTier.delete({ where: { id: tier.id } });
+    await prisma.event.delete({ where: { id: event.id } });
+    await prisma.venue.delete({ where: { id: venue.id } });
+  });
+
   it('cannot clear the password while private; turning private off with it works', async () => {
     const refused = await request(app)
       .patch('/admin/online-store/preferences')

@@ -12,6 +12,7 @@ import orderService from '../../services/OrderService.js';
 import { requireAuth, optionalAuth } from '../../middleware/auth.js';
 import { requireOrganizer } from '../../middleware/rbac.js';
 import { validateCreateOrder, validateOrderLookup } from '../validators/orderValidators.js';
+import { gateByEventBody } from '../../middleware/storefrontGate.js';
 
 const router = express.Router();
 
@@ -20,7 +21,7 @@ const router = express.Router();
  * Create a new order (guest checkout — no auth required).
  * Returns orderId, orderRef, stripeCheckoutUrl.
  */
-router.post('/', validateCreateOrder, async (req, res, next) => {
+router.post('/', validateCreateOrder, gateByEventBody, async (req, res, next) => {
   try {
     const { eventId, items, priceTierId, quantity, contact, createAccount, emailSubscribed, addOns } = req.body;
 

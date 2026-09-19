@@ -10,6 +10,8 @@ import api from '@/services/api';
 import BrandScope from '@/components/BrandScope';
 import type { ThemeMode } from '@/lib/theme';
 import { formatDate } from '@/lib/applications';
+import StorefrontPasswordGate from '@/components/StorefrontPasswordGate';
+import { storefrontLockFrom, type StorefrontLock } from '@/lib/storefrontAccess';
 
 export interface ApplyEvent {
   id: string;
@@ -26,21 +28,39 @@ export interface ApplyEvent {
 export default function ApplyShell({ eventId, title, children }: { eventId: string; title?: string; children: (event: ApplyEvent) => ReactNode }) {
   const [event, setEvent] = useState<ApplyEvent | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lock, setLock] = useState<StorefrontLock | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     api
       .get<ApplyEvent>(`/events/${eventId}`)
       .then((e) => {
-        if (!cancelled) setEvent(e);
+        if (!cancelled) {
+          setEvent(e);
+          setLock(null);
+        }
       })
       .catch((err) => {
-        if (!cancelled) setError(err?.message || 'Event not found');
+        if (cancelled) return;
+        const locked = storefrontLockFrom(err);
+        if (locked) setLock(locked);
+        else setError(err?.message || 'Event not found');
       });
     return () => {
       cancelled = true;
     };
-  }, [eventId]);
+  }, [eventId, attempt]);
+
+  if (lock) {
+    return (
+      <StorefrontPasswordGate
+        organization={lock.organization}
+        message={lock.message}
+        onUnlocked={() => setAttempt((n) => n + 1)}
+      />
+    );
+  }
 
   if (error) {
     return (

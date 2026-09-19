@@ -11,10 +11,16 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'crypto';
 import jwt from 'jsonwebtoken';
 import { prisma } from '@jump/db';
-import { AuthenticationError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
+import {
+  AuthenticationError,
+  NotFoundError,
+  StorefrontLockedError,
+  ValidationError,
+} from '../middleware/errorHandler.js';
 import logger from '../utils/logger.js';
 
 const ACCESS_TOKEN_TTL = '30d';
+const MAX_TOKENS_PER_REQUEST = 10;
 const SCRYPT_KEYLEN = 64;
 
 /** Optional text field: trims, and stores an empty string as null. */
@@ -135,20 +141,71 @@ class StorefrontPreferencesService {
     );
   }
 
-  /** True when the store is public, or the token unlocks this org's current password. */
-  hasAccess(org, token) {
+  /**
+   * True when the store is public, or one of the tokens unlocks this org's
+   * current password. `tokens` is the raw X-Storefront-Access header: the
+   * browser sends every token it holds, comma-separated, because it does
+   * not know which organization an event or venue belongs to before asking.
+   */
+  hasAccess(org, tokens) {
     if (!org.storefrontPrivate) return true;
-    if (!token || !org.storefrontPasswordHash) return false;
-    try {
-      const claims = jwt.verify(token, process.env.AUTH_SECRET, { algorithms: ['HS256'] });
-      return (
-        claims.typ === 'storefront' &&
-        claims.sub === org.id &&
-        claims.ph === fingerprint(org.storefrontPasswordHash)
-      );
-    } catch {
-      return false;
+    if (!tokens || !org.storefrontPasswordHash) return false;
+    const expected = fingerprint(org.storefrontPasswordHash);
+    return String(tokens)
+      .split(',')
+      .map((token) => token.trim())
+      .filter(Boolean)
+      .slice(0, MAX_TOKENS_PER_REQUEST)
+      .some((token) => {
+        try {
+          const claims = jwt.verify(token, process.env.AUTH_SECRET, { algorithms: ['HS256'] });
+          return claims.typ === 'storefront' && claims.sub === org.id && claims.ph === expected;
+        } catch {
+          return false;
+        }
+      });
+  }
+
+  /**
+   * Throw StorefrontLockedError (403) unless the request may see this
+   * organization's storefront. Used by every public storefront route
+   * (event, venue, checkout, application forms) so private mode is a full
+   * lockout, not just the home page.
+   */
+  async assertAccess(organizationId, req) {
+    if (!organizationId) return;
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: {
+        id: true,
+        name: true,
+        logoUrl: true,
+        brandColor: true,
+        themeMode: true,
+        storefrontPrivate: true,
+        storefrontPasswordHash: true,
+        storefrontMessage: true,
+      },
+    });
+    if (!org || this.hasAccess(org, req.get('x-storefront-access'))) return;
+    const { id, name, logoUrl, brandColor, themeMode } = org;
+    throw new StorefrontLockedError({ id, name, logoUrl, brandColor, themeMode }, org.storefrontMessage);
+  }
+
+  /** Organization behind a public event / venue id (null when unknown). */
+  async organizationIdFor({ eventId, venueId }) {
+    if (eventId) {
+      const event = await prisma.event.findUnique({
+        where: { id: eventId },
+        select: { venue: { select: { organizationId: true } } },
+      });
+      return event?.venue?.organizationId ?? null;
     }
+    if (venueId) {
+      const venue = await prisma.venue.findUnique({ where: { id: venueId }, select: { organizationId: true } });
+      return venue?.organizationId ?? null;
+    }
+    return null;
   }
 }
 

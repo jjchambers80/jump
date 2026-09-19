@@ -111,22 +111,15 @@ describe('EventService', () => {
       );
     });
 
-    it('should only query PUBLISHED events', async () => {
+    it('should only query PUBLISHED events of public storefronts', async () => {
       mockFindMany.mockResolvedValue([]);
       mockCount.mockResolvedValue(0);
 
       await EventService.listPublishedEvents();
 
-      expect(mockFindMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { status: 'PUBLISHED' },
-        })
-      );
-      expect(mockCount).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { status: 'PUBLISHED' },
-        })
-      );
+      const where = { status: 'PUBLISHED', venue: { organization: { storefrontPrivate: false } } };
+      expect(mockFindMany).toHaveBeenCalledWith(expect.objectContaining({ where }));
+      expect(mockCount).toHaveBeenCalledWith(expect.objectContaining({ where }));
     });
 
     it('should calculate totalPages correctly', async () => {

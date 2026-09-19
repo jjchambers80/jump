@@ -16,6 +16,7 @@ import { requireOrgMembership } from '../../middleware/orgScope.js';
 import { uploadImage } from '../../middleware/imageUpload.js';
 import imageService from '../../services/ImageService.js';
 import { validateCreateEvent, validateUpdateEvent } from '../validators/eventValidators.js';
+import { gateByEventParam } from '../../middleware/storefrontGate.js';
 
 // ── Public routes (mounted at /events) ──
 const publicRouter = express.Router();
@@ -44,7 +45,7 @@ publicRouter.get('/', async (req, res, next) => {
  * GET /events/:eventId
  * Get single published event details (public, no auth required)
  */
-publicRouter.get('/:eventId', async (req, res, next) => {
+publicRouter.get('/:eventId', gateByEventParam, async (req, res, next) => {
   try {
     const result = await eventService.getEventById(req.params.eventId);
     res.json(result);
