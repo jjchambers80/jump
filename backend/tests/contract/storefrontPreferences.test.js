@@ -16,6 +16,7 @@ const DEFAULTS = {
   storefrontMessage: null,
   seoTitle: null,
   seoDescription: null,
+  autoRedirectLanguage: false,
 };
 
 describe('Online Store preferences contract', () => {
@@ -70,16 +71,21 @@ describe('Online Store preferences contract', () => {
     expect(bad.status).toBe(400);
   });
 
-  it('saves the search engine listing per organization', async () => {
+  it('saves the search engine listing and redirection toggle per organization', async () => {
     const saved = await request(app)
       .patch('/admin/online-store/preferences')
       .set(...auth(adminToken))
-      .send({ seoTitle: ' Retro Nights ', seoDescription: 'Tickets for retro gaming nights' });
+      .send({
+        seoTitle: ' Retro Nights ',
+        seoDescription: 'Tickets for retro gaming nights',
+        autoRedirectLanguage: true,
+      });
     expect(saved.status).toBe(200);
     expect(saved.body).toEqual({
       ...DEFAULTS,
       seoTitle: 'Retro Nights',
       seoDescription: 'Tickets for retro gaming nights',
+      autoRedirectLanguage: true,
     });
 
     const meta = await request(app).get(`/organizations/${organization.id}/public/meta`);
