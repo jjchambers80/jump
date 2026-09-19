@@ -69,7 +69,7 @@ cd frontend && npm run test:unit    # Vitest unit tests (lib/color.ts)
 | `ORDER_MAX_PENDING_PER_CONTACT`, `ORDER_SWEEP_INTERVAL_MS`, `ORDER_SWEEP_GRACE_MS` | backend | Optional. Open checkouts one email may hold per event (default 3, then 409); abandoned-checkout sweep interval (default 5 min) and grace past the 30-minute Checkout session (default 5 min) |
 | `LEGAL_IP_SALT` | backend | Optional. Salt for the hashed IP on `LegalAcceptance` rows (spec 024 phase 3); falls back to `AUTH_SECRET`. The raw IP is never stored |
 | `LEGAL_ACCEPTANCE_REQUIRED` | backend | Optional. `true` makes `POST /orders` refuse a checkout without current `acceptances` (400 `LEGAL_ACCEPTANCE_REQUIRED`). Default off until the legal pages go live (spec 023 phase 1): a missing list is logged, a stale one is always refused. The apply form always requires them |
-| `NEXT_PUBLIC_LEGAL_PAGES_ENABLED` | frontend | Optional. `true` links the consent texts on the apply form and the checkout sentence to `/legal/privacy` / `/legal/terms` (spec 023). Off: the texts render without links, so nothing promises a 404. Build-time |
+| `NEXT_PUBLIC_LEGAL_PAGES_ENABLED` | frontend | Optional. `true` renders `/legal/<slug>` from `frontend/content/legal/<slug>.md` (attorney text with front matter, spec 023 LR-01) and links the consent texts on the apply form, the checkout sentence and `PaymentForm` to `/legal/privacy` / `/legal/terms`. Off (default): every `/legal/*` path is 404 and the texts render without links, so nothing promises a 404. `/terms` and `/privacy` 308 to the new paths either way. Build-time |
 
 ## Deployment
 

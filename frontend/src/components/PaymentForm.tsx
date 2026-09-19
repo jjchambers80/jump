@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { LEGAL_PAGES_ENABLED, LEGAL_PATHS } from '../lib/legal';
 
 interface PaymentFormProps {
   event: {
@@ -184,13 +185,21 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
       {/* Terms and Conditions */}
       <p className="mt-4 text-xs text-gray-500 dark:text-slate-500 text-center">
         By completing this purchase, you agree to our{' '}
-        <a href="/terms" className="text-blue-600 dark:text-indigo-400 hover:underline">
-          Terms of Service
-        </a>{' '}
+        {LEGAL_PAGES_ENABLED ? (
+          <a href={LEGAL_PATHS.terms} className="text-blue-600 dark:text-indigo-400 hover:underline">
+            Terms of Service
+          </a>
+        ) : (
+          <span>Terms of Service</span>
+        )}{' '}
         and{' '}
-        <a href="/privacy" className="text-blue-600 dark:text-indigo-400 hover:underline">
-          Privacy Policy
-        </a>
+        {LEGAL_PAGES_ENABLED ? (
+          <a href={LEGAL_PATHS.privacy} className="text-blue-600 dark:text-indigo-400 hover:underline">
+            Privacy Policy
+          </a>
+        ) : (
+          <span>Privacy Policy</span>
+        )}
       </p>
     </form>
   );

@@ -48,7 +48,7 @@ describe('routeForTenantHost', () => {
   it('passes the organization own paths and public storefront paths', () => {
     expect(route('/organizations/org_1')).toEqual({ kind: 'pass' });
     expect(route('/organizations/org_1/account')).toEqual({ kind: 'pass' });
-    for (const p of ['/events/e1', '/checkout/e1', '/confirmation', '/orders/o1', '/tickets/t1', '/venues/v1']) {
+    for (const p of ['/events/e1', '/checkout/e1', '/confirmation', '/orders/o1', '/tickets/t1', '/venues/v1', '/legal/terms', '/legal/privacy']) {
       expect(route(p)).toEqual({ kind: 'pass' });
     }
   });
