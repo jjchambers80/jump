@@ -11,12 +11,11 @@ function svgLogo(width: number, height: number, fill: string) {
   );
 }
 
-// The square logo box only renders below the xl breakpoint when the org has a cover image.
 const COVER = svgLogo(1600, 900, 'gray');
 const MOBILE = { width: 390, height: 844 };
 const DESKTOP = { width: 1440, height: 900 };
 
-function orgResponse(id: string, logoUrl: string, coverUrl: string | null = COVER) {
+function orgResponse(id: string, logoUrl: string | null, coverUrl: string | null = COVER) {
   return {
     organization: { id, name: 'Logo Test Org', logoUrl, coverUrl, brandColor: null, themeMode: 'LIGHT' },
     events: [],
@@ -26,7 +25,7 @@ function orgResponse(id: string, logoUrl: string, coverUrl: string | null = COVE
 async function mockOrg(
   page: import('@playwright/test').Page,
   id: string,
-  logoUrl: string,
+  logoUrl: string | null,
   coverUrl: string | null = COVER
 ) {
   await page.route(`${API}/organizations/${id}/public`, (route) =>
@@ -38,42 +37,61 @@ async function mockOrg(
   );
 }
 
-test.describe('public organization logo box', () => {
+test.describe('public organization logo header', () => {
   test.use({ viewport: MOBILE });
 
-  test('box straddles the bottom edge of the mobile cover image', async ({ page }) => {
-    await mockOrg(page, 'org-straddle', svgLogo(200, 200, 'navy'));
-    await page.goto('/organizations/org-straddle');
+  test('full-width header contains the logo and precedes the mobile cover', async ({ page }) => {
+    await mockOrg(page, 'org-header', svgLogo(200, 200, 'navy'));
+    await page.goto('/organizations/org-header');
 
+    const header = page.getByTestId('organization-header');
     const box = page.getByTestId('logo-box');
     await expect(box).toHaveAttribute('data-logo-fit', 'square');
     const cover = page.getByRole('img', { name: 'Logo Test Org cover' });
 
+    const headerDims = (await header.boundingBox())!;
     const boxDims = (await box.boundingBox())!;
     const coverDims = (await cover.boundingBox())!;
-    const coverBottom = coverDims.y + coverDims.height;
-    const boxCenter = boxDims.y + boxDims.height / 2;
-    expect(Math.abs(boxCenter - coverBottom)).toBeLessThanOrEqual(1);
+    expect(Math.round(headerDims.x)).toBe(0);
+    expect(Math.round(headerDims.width)).toBe(MOBILE.width);
+    expect(Math.round(boxDims.width)).toBe(80);
+    expect(coverDims.y).toBeGreaterThanOrEqual(headerDims.y + headerDims.height - 1);
+    await expect(header.getByRole('heading', { name: 'Logo Test Org', level: 1 })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth === document.documentElement.clientWidth)).toBe(true);
   });
 
-  test('desktop uses a plain logo image with no box or backdrop', async ({ page }) => {
+  test('desktop keeps the logo in the full-width header at its larger size', async ({ page }) => {
     await page.setViewportSize(DESKTOP);
     await mockOrg(page, 'org-desktop', svgLogo(400, 100, 'teal'));
     await page.goto('/organizations/org-desktop');
 
-    const logo = page.getByRole('img', { name: 'Logo Test Org logo' });
-    await expect(logo).toBeVisible();
-    await expect(logo).toHaveCount(1);
-    // The mobile cover block (and its logo box) is display:none at xl+.
-    await expect(page.getByTestId('logo-box')).toBeHidden();
+    const header = page.getByTestId('organization-header');
+    const box = header.getByTestId('logo-box');
+    const headerDims = (await header.boundingBox())!;
+    const boxDims = (await box.boundingBox())!;
+    expect(Math.round(headerDims.x)).toBe(0);
+    expect(Math.round(headerDims.width)).toBe(DESKTOP.width);
+    expect(Math.round(boxDims.width)).toBe(96);
+    await expect(header.getByRole('img', { name: 'Logo Test Org logo' })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth === document.documentElement.clientWidth)).toBe(true);
   });
 
-  test('no cover falls back to a plain logo image on mobile', async ({ page }) => {
+  test('no cover keeps the logo in the header on mobile', async ({ page }) => {
     await mockOrg(page, 'org-nocover', svgLogo(400, 100, 'teal'), null);
     await page.goto('/organizations/org-nocover');
 
-    await expect(page.getByRole('img', { name: 'Logo Test Org logo' })).toBeVisible();
-    await expect(page.getByTestId('logo-box')).toHaveCount(0);
+    const header = page.getByTestId('organization-header');
+    await expect(header.getByRole('img', { name: 'Logo Test Org logo' })).toBeVisible();
+    await expect(header.getByTestId('logo-box')).toBeVisible();
+  });
+
+  test('header retains its page heading when no logo is configured', async ({ page }) => {
+    await mockOrg(page, 'org-no-logo', null);
+    await page.goto('/organizations/org-no-logo');
+
+    const header = page.getByTestId('organization-header');
+    await expect(header.getByRole('heading', { name: 'Logo Test Org', level: 1 })).toBeVisible();
+    await expect(header.getByTestId('logo-box')).toHaveCount(0);
   });
 
   test('square logo fills the box with no blurred backdrop', async ({ page }) => {
