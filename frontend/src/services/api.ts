@@ -232,10 +232,26 @@ export interface PaginatedResponse<T> {
 export interface OnlineStorePage {
   id: string;
   title: string;
+  /** URL handle, unique per organization: /organizations/:orgId/pages/:slug */
+  slug: string;
   content: string;
   isVisible: boolean;
+  /** Search engine listing overrides; null falls back to the title / no description */
+  seoTitle: string | null;
+  seoDescription: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Body for POST /admin/pages and PUT /admin/pages/:id (PUT is partial). */
+export interface OnlineStorePageInput {
+  title: string;
+  content: string;
+  isVisible: boolean;
+  /** Empty string: derive the handle from the title */
+  slug: string;
+  seoTitle: string | null;
+  seoDescription: string | null;
 }
 
 // ===== Ticket Scanning & Redemption =====
