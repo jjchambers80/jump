@@ -9,7 +9,7 @@ import { formatEventSummary } from '../utils/eventSummary.js';
 import taxService from './TaxService.js';
 import applicationFormService from './ApplicationFormService.js';
 import addOnService from './AddOnService.js';
-import { PAID_APPLICATION_STATUSES } from './paidStatuses.js';
+import { PAID_ORDER_STATUSES } from './paidStatuses.js';
 
 class EventService {
   /**
@@ -619,13 +619,21 @@ class EventService {
    */
   async _revenueBreakdown(orgId, eventId, tickets) {
     const round = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+    // Spec 024: application money is on APPLICATION orders.
     const [addOnSales, applications, applicationRefunds] = await Promise.all([
       addOnService.sales(orgId, eventId),
-      prisma.application.aggregate({ where: { eventId, paymentStatus: { in: PAID_APPLICATION_STATUSES } }, _sum: { applicantPays: true }, _count: { id: true } }),
-      prisma.applicationRefund.aggregate({ where: { status: 'SUCCEEDED', application: { eventId } }, _sum: { amount: true } }),
+      prisma.order.aggregate({
+        where: { eventId, kind: 'APPLICATION', status: { in: PAID_ORDER_STATUSES } },
+        _sum: { totalAmount: true },
+        _count: { id: true },
+      }),
+      prisma.refund.aggregate({
+        where: { status: 'SUCCEEDED', order: { eventId, kind: 'APPLICATION' } },
+        _sum: { amount: true },
+      }),
     ]);
     const addOns = Number(addOnSales.totals?.revenue || 0);
-    const applicationGross = Number(applications._sum.applicantPays || 0);
+    const applicationGross = Number(applications._sum.totalAmount || 0);
     const refunds = Number(applicationRefunds._sum.amount || 0);
     return {
       tickets: round(tickets),

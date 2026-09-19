@@ -8,7 +8,7 @@ import stripe from '../config/stripe.js';
 import logger from '../utils/logger.js';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import { US_STATES, stateName } from '../utils/usStates.js';
-import { PAID_ORDER_STATUSES, PAID_APPLICATION_STATUSES } from './paidStatuses.js';
+import { PAID_ORDER_STATUSES } from './paidStatuses.js';
 
 // Stripe product tax code for general event admissions
 const ADMISSIONS_TAX_CODE = 'txcd_20060057';
@@ -221,41 +221,38 @@ class TaxService {
    * @returns {Promise<{ from: string, to: string, rows: Array, totals: Object }>}
    */
   async collectedReport(orgId, { from, to }) {
-    const [orders, applications] = await Promise.all([
-      prisma.order.findMany({
-        where: {
-          status: { in: PAID_ORDER_STATUSES },
-          createdAt: { gte: from, lte: to },
-          event: { venue: { organizationId: orgId } },
-        },
-        select: {
-          id: true,
-          subtotalAmount: true,
-          taxAmount: true,
-          totalAmount: true,
-          event: { select: { venue: { select: { state: true } } } },
-          refunds: { where: { status: 'SUCCEEDED' }, select: { amount: true } },
-        },
-      }),
-      // Spec 018 phase 2: taxable application forms collect tax too. Their
-      // period is the day the money moved (paidAt), not the submission.
-      prisma.application.findMany({
-        where: {
-          organizationId: orgId,
-          paymentStatus: { in: PAID_APPLICATION_STATUSES },
-          paidAt: { gte: from, lte: to },
-          form: { taxable: true },
-        },
-        select: {
-          id: true,
-          subtotal: true,
-          tax: true,
-          applicantPays: true,
-          event: { select: { venue: { select: { state: true } } } },
-          refunds: { where: { status: 'SUCCEEDED' }, select: { amount: true } },
-        },
-      }),
-    ]);
+    // Spec 024: one ledger. The period is the day the money moved (paidAt;
+    // createdAt for rows that predate the column). Application orders count
+    // only when their form is taxable, as the spec 018 report did.
+    const orders = await prisma.order.findMany({
+      where: {
+        status: { in: PAID_ORDER_STATUSES },
+        event: { venue: { organizationId: orgId } },
+        AND: [
+          {
+            OR: [
+              { paidAt: { gte: from, lte: to } },
+              { paidAt: null, createdAt: { gte: from, lte: to } },
+            ],
+          },
+          {
+            OR: [
+              { kind: 'TICKET' },
+              { kind: 'APPLICATION', application: { form: { taxable: true } } },
+            ],
+          },
+        ],
+      },
+      select: {
+        id: true,
+        kind: true,
+        subtotalAmount: true,
+        taxAmount: true,
+        totalAmount: true,
+        event: { select: { venue: { select: { state: true } } } },
+        refunds: { where: { status: 'SUCCEEDED' }, select: { amount: true } },
+      },
+    });
 
     const blank = () => ({ count: 0, taxableSales: 0, taxCollected: 0, taxRefunded: 0 });
     const byRegion = new Map();
@@ -274,19 +271,11 @@ class TaxService {
       }
     };
     for (const order of orders) {
-      add(order.event.venue, 'order', {
+      add(order.event.venue, order.kind === 'APPLICATION' ? 'application' : 'order', {
         subtotal: Number(order.subtotalAmount),
         tax: Number(order.taxAmount),
         total: Number(order.totalAmount),
         refunded: order.refunds.reduce((sum, r) => sum + Number(r.amount), 0),
-      });
-    }
-    for (const application of applications) {
-      add(application.event.venue, 'application', {
-        subtotal: Number(application.subtotal),
-        tax: Number(application.tax),
-        total: Number(application.applicantPays),
-        refunded: application.refunds.reduce((sum, r) => sum + Number(r.amount), 0),
       });
     }
 

@@ -33,8 +33,8 @@ export interface AdminAddOn extends Omit<AddOn, 'priceTierIds'> {
   quantityReserved: number;
   isActive: boolean;
   displayOrder: number;
+  /** Lines sold on ticket orders and application orders alike (spec 024). */
   orderLineCount: number;
-  applicationLineCount: number;
 }
 
 /** A purchased add-on line on an order. */

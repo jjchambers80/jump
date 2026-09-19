@@ -48,6 +48,7 @@ export const MERGE_FIELDS = [
   ['tier.name', 'Selected tier'],
   ['addOns.summary', 'Add-ons chosen, e.g. "Booth power ×1 ($125.00), Extra badge ×2 ($20.00)" (empty when none)'],
   ['amount.applicantPays', 'Amount charged to the applicant'],
+  ['order.ref', 'Order number of the application (e.g. JMP-K7M2PQ); empty on free forms'],
   ['payment.dueDate', 'Payment due date'],
   ['links.status', 'Link to the application status page'],
   ['links.payNow', 'Link to pay an outstanding balance'],

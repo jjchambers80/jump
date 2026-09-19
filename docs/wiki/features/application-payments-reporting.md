@@ -1,7 +1,7 @@
 # Application payments — reporting and corrections
 
-**Status**: Implemented — reporting (customers, analytics, dashboard, tax report include application money) and corrections (tier change, adjustments, waived balance, offline payment, manual refunds) 2026-09-18. Spec: `specs/018-transactions/` (phases 2–3). The phase 1 org-wide **Transactions** list was removed 2026-09-18 — see *History* below.
-**Last Updated**: 2026-09-18
+**Status**: Implemented 2026-09-18 (spec 018 phases 2–3); **superseded for the data model by [Application orders](application-orders.md) (spec 024, 2026-09-19)**: application money now lives on `Order` / `OrderItem` / `OrderAddOn` / `PaymentTransaction` / `Refund` and `ApplicationRefund` / `ApplicationAdjustment` / `ApplicationAddOn` no longer exist. The behaviours below (reporting, tier change, adjustments, waive, offline payment, manual refunds) are unchanged from the organizer's point of view; the file / model references are historical. The phase 1 org-wide **Transactions** list was removed 2026-09-18 — see *History* below.
+**Last Updated**: 2026-09-19
 
 ## Overview
 
@@ -59,8 +59,8 @@ Phase 1 of spec 018 shipped an org-wide **Transactions** page (`/admin/transacti
 
 ## Testing
 
-- `backend/tests/contract/transactionsReporting.test.js` — customers predicate + aggregates (application-only, mixed, pending excluded, business-name search), detail `applications[]`, analytics `revenue`, dashboard `revenue`, tax report sources / date basis / CSV.
-- `frontend/e2e/transactions-reporting.spec.ts` — customer detail Applications section and combined stats, analytics revenue-by-source, dashboard Gross Revenue card; `admin-tax-settings.spec.ts` covers the source sub-rows and the new CSV columns.
+- `backend/tests/contract/applicationOrdersReporting.test.js` (was `transactionsReporting`) — customers predicate + aggregates (application-only, mixed, pending excluded, business-name search), detail `applications[]`, analytics `revenue`, dashboard `revenue`, tax report sources / date basis / CSV.
+- `frontend/e2e/application-orders-reporting.spec.ts` (was `transactions-reporting`) — customer detail Applications section and combined stats, analytics revenue-by-source, dashboard Gross Revenue card; `admin-tax-settings.spec.ts` covers the source sub-rows and the new CSV columns.
 - `backend/tests/contract/applicationCorrections.test.js` — tier change on SUBMITTED (recompute, dropped add-on, email, approval charges the new amount) and on PAYMENT_DUE (holds move, full tier 409 leaves counters unchanged, session expired); adjustments (floor, add-on shares, removal, locked after PAID); waive (zero snapshot, slot confirmed, WAIVER row, ORGANIZER 403); offline payment (state / amount / role guards, no Stripe calls, slot + add-on holds confirmed, manual refund, customers count it); role matrix. `tests/unit/applicationFormService.test.js` pins the adjustment fold.
 - `frontend/e2e/applications-corrections.spec.ts` — change tier with the dropped-add-on warning, add / remove adjustment, ADMIN waive, ADMIN offline payment then a recorded refund.
 

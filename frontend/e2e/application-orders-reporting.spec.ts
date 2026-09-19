@@ -1,7 +1,8 @@
-// Transactions phase 2 (spec 018): application money on the customer detail
-// page, the analytics revenue-by-source block and the dashboard gross card.
-// Backend mocked at the network layer; the sums are covered by
-// backend/tests/contract/transactionsReporting.test.js.
+// Application money on the customer detail page, the analytics
+// revenue-by-source block and the dashboard gross card (spec 018 phase 2,
+// read from application orders since spec 024). Backend mocked at the
+// network layer; the sums are covered by
+// backend/tests/contract/applicationOrdersReporting.test.js.
 
 import { expect, test } from '@playwright/test';
 import { signInAsStaff } from './helpers/session';

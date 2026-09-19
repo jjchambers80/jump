@@ -272,7 +272,7 @@ export default function AddOnsSection({ orgId, eventId, priceTiers, taxRate, tax
                   <button type="button" onClick={() => setActive(a, !a.isActive)} disabled={busyId === a.id} className="px-2 py-1 text-xs font-medium text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded">
                     {a.isActive ? 'Deactivate' : 'Activate'}
                   </button>
-                  {a.orderLineCount + a.applicationLineCount === 0 && (
+                  {a.orderLineCount === 0 && (
                     <button type="button" onClick={() => remove(a)} disabled={busyId === a.id} className="px-2 py-1 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded">Delete</button>
                   )}
                 </div>

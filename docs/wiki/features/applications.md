@@ -76,7 +76,7 @@ Photos use the existing image storage (bucket or local `uploads/`), max 6 profil
 
 ### Refunds and the overdue sweep
 
-`POST …/applications/:id/refund { amount?, reason? }` (ADMIN) — partial or the remaining balance, `ApplicationRefund` row, Stripe refund via `createStripeRefund` with `reverse_transfer` + `refund_application_fee` when the charge was routed to a connected account; `paymentStatus` becomes `PARTIALLY_REFUNDED` / `REFUNDED`, review status untouched (withdraw separately to free the slot). Refunds made in the Stripe dashboard arrive as `charge.refunded` and are reconciled by `stripeRefundId`.
+`POST …/applications/:id/refund { amount?, reason? }` (ADMIN) — partial or the remaining balance, a `Refund` row on the application's order (spec 024; `RefundService.refundOrder`), Stripe refund via `createStripeRefund` with `reverse_transfer` + `refund_application_fee` when the charge was routed to a connected account; `paymentStatus` becomes `PARTIALLY_REFUNDED` / `REFUNDED`, review status untouched (withdraw separately to free the slot). Refunds made in the Stripe dashboard arrive as `charge.refunded` and are reconciled by `stripeRefundId`.
 
 `sweepOverdue()` (hourly, `unref`) finds `APPROVED + PAYMENT_DUE` rows past `paymentDueAt`: form policy `WITHDRAW` → `WITHDRAWN` by `SYSTEM` (`payment_overdue`), slot released, WITHDRAWN email; `HOLD` → `overdue = true`, shown in red on the admin detail; organizer decides.
 

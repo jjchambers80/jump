@@ -180,6 +180,8 @@ export interface AnswerView {
 
 export interface ApplicantApplication {
   id: string;
+  /** Order number of the application's order (spec 024); null on FREE forms. */
+  orderRef: string | null;
   form: { id: string; name: string; kind: FormKind };
   event: { id: string; name: string; date: string };
   organization: { id: string; name: string } | null;
@@ -212,6 +214,9 @@ export interface ApplicationRow {
   id: string;
   /** Tail of the id shown on list rows and searchable (spec 019). */
   shortId: string;
+  /** The application's order (spec 024); null on FREE forms. */
+  orderId: string | null;
+  orderRef: string | null;
   eventId: string;
   event: { id: string; name: string; date: string } | null;
   /** Unscoped (SYSTEM_ADMIN) callers only. */
@@ -361,6 +366,9 @@ export const ACTION_LABEL: Record<string, string> = {
 
 export interface AdminApplication {
   id: string;
+  /** The application's order (spec 024); null on FREE forms. */
+  orderId: string | null;
+  orderRef: string | null;
   form: { id: string; name: string; slug: string; kind: FormKind; chargeTiming: 'SUBMIT' | 'APPROVAL'; feeMode: string; paymentDueDays: number; overduePolicy: 'WITHDRAW' | 'HOLD' };
   event: { id: string; name: string; date: string };
   status: ApplicationStatus;

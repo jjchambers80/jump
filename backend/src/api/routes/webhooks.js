@@ -68,10 +68,11 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
     }
 
     // Application payments (spec 011 phase 2) share this endpoint. Dispatch
-    // strictly on metadata.applicationId (ticket sessions never carry it);
-    // charge.refunded needs a row lookup because the charge has no metadata
-    // of its own when the refund was made from the dashboard.
-    if (ApplicationPaymentService.isApplicationEvent(event) || (await ApplicationPaymentService.isApplicationRefundEvent(event))) {
+    // strictly on metadata.applicationId (ticket sessions never carry it).
+    // charge.refunded is not dispatched here: every refund resolves through
+    // the order's PaymentTransaction in RefundService (spec 024), whatever
+    // the order kind.
+    if (ApplicationPaymentService.isApplicationEvent(event)) {
       await ApplicationPaymentService.handleEvent(event);
       return res.json({ received: true });
     }

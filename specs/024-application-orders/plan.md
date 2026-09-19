@@ -1,6 +1,6 @@
 # Implementation Plan: Application orders (spec 024)
 
-**Status**: Planned 2026-09-19. Not built.
+**Status**: Planned 2026-09-19. **Phase 1 built 2026-09-19** on `feat/024-application-orders-phase-1` (ledger migration pair, services, reporting collapse, backfill script + replay test). Phases 2–3 not built.
 **Spec**: [spec.md](./spec.md). Depends on spec 011 (all phases on `main`), spec 012 (all phases), spec 018 phases 2–3 (on `main`; phase 1 removed), spec 007 (checkout opt-ins, buyer accounts). Builds the `LegalAcceptance` model from spec 023 §8.1 (spec 023 itself stays proposed).
 **Branches**: plan on `plan/024-application-orders`; phases on `feat/024-application-orders-phase-1` → `-phase-2` → `-phase-3`, each merged to `main` alone (spec 012 lesson: never merge a phase branch that contains an unmerged earlier phase).
 **Research**: session 2026-09-19 — read `schema.prisma` (`Order`, `OrderItem`, `OrderAddOn`, `PaymentTransaction`, `Refund`, `Application*`), `OrderService.createOrder`, `PaymentService.handleCheckoutCompleted / _applyOptIns`, `ApplicationService.submit / _rewriteSnapshot / _serializeAdmin`, `ApplicationPaymentService` (sessions, `chargeOnApproval`, `_markPaid`, `refund`), `RefundService`, `CustomerService`, spec 018 plan §2, spec 023 §6–8, `frontend/src/app/admin/orders/page.tsx` (ticket rows), the apply and checkout pages.
@@ -131,7 +131,9 @@ Order of statements inside the one migration:
 8. Ticket orders: `orgReceives = subtotalAmount`, `paidAt = COALESCE(PaymentTransaction.createdAt, Order.createdAt)` where `status ∈ PAID_ORDER_STATUSES`, `OrderItem.kind = 'TICKET_TIER'`.
 9. `DROP TABLE` ×3, `ALTER TABLE "Application" DROP COLUMN` ×15, drop the function.
 
-`backend/src/scripts/backfill-application-orders.js` is the same logic in Prisma for `db push` environments (dev DB syncs with `db push` — memory), guarded by `WHERE applicationId IS NULL` so it is idempotent; it runs *before* `db push` drops the columns (documented in the script header and `backend/CLAUDE.md`). Contract test `applicationOrdersBackfill.test.js` seeds the pre-migration shape through raw SQL into a scratch schema and asserts the script's output equals the migration's.
+`backend/src/scripts/backfill-application-orders.js` (`npm run db:backfill:024`) serves `db push` environments (dev DB syncs with `db push` — memory). As built it does **not** reimplement the backfill in Prisma: a `db push` database has neither the new columns nor a migration history, so the script applies the same two migration files through `prisma db execute` (guarded: it does nothing once `Order.kind` exists) and must run *before* `db push`, which then finds nothing left to change. One implementation of the backfill, not two. Contract test `applicationOrdersBackfill.test.js` replays every migration before the cutover on a scratch database, seeds every pre-024 money shape through raw SQL, applies the two 024 files and asserts the orders, lines, payments, refunds and the dropped tables.
+
+Built as two migrations, not one: Postgres refuses to use an enum value in the transaction that adds it (`ALTER TYPE "OrderStatus" ADD VALUE 'CANCELLED'` then the backfill writing `'CANCELLED'`), so `20260930000000_application_orders_enums` ships the enum values and `20260930000001_application_orders` the rest.
 
 ### 2.3 Status mapping — one function
 

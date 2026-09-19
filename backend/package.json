@@ -17,6 +17,7 @@
     "db:seed": "node src/database/seeds/seed.js",
     "db:reset": "prisma migrate reset",
     "db:studio": "prisma studio",
+    "db:backfill:024": "node src/scripts/backfill-application-orders.js",
     "lint": "eslint src tests --ext .js",
     "format": "prettier --write \"src/**/*.js\" \"tests/**/*.js\""
   },

@@ -15,6 +15,7 @@ jest.unstable_mockModule('../../src/config/resend.js', () => ({
 
 const { default: app } = await import('../../src/api/server.js');
 const { prisma } = await import('@jump/db');
+const { attachOrder, cleanupApplicationOrders } = await import('../helpers/applicationRow.js');
 const { shortId } = await import('../../src/services/ApplicationService.js');
 
 const TAG = 'participants-ct';
@@ -50,7 +51,7 @@ describe('Participants contract (spec 019 phase 1)', () => {
     const contact = await prisma.contact.create({ data: { organizationId, email: email ?? `p${seq}@${TAG}.test`, firstName, lastName: lastName ?? `Person${seq}` } });
     const profile = await prisma.applicantProfile.create({ data: { organizationId, contactId: contact.id, businessName } });
     const t = form.tiers?.[0];
-    return prisma.application.create({
+    const row = await prisma.application.create({
       data: {
         formId: form.id,
         eventId,
@@ -63,19 +64,11 @@ describe('Participants contract (spec 019 phase 1)', () => {
         submittedAt: submittedAt ?? new Date(Date.UTC(2026, 8, 1 + seq)),
         statusTokenHash: `hash-${TAG}-${seq}`,
         boothLabel,
-        ...(t
-          ? {
-              subtotal: t.amounts.subtotal,
-              platformFee: t.amounts.platformFee,
-              processingFee: t.amounts.processingFee,
-              tax: t.amounts.tax,
-              applicantPays: t.amounts.applicantPays,
-              orgReceives: t.amounts.orgReceives,
-              feeMode: t.amounts.feeMode,
-            }
-          : {}),
       },
     });
+    // Spec 024: PAID-form fixtures carry their amount snapshot on an order.
+    if (t) await attachOrder(row.id);
+    return row;
   }
 
   beforeAll(async () => {
