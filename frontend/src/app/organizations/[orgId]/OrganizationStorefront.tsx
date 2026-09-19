@@ -5,7 +5,7 @@ import { api } from '../../../services/api';
 import { resolveAssetUrl } from '../../../lib/assets';
 import EventCard, { EventSummary } from '../../../components/EventCard';
 import BrandScope from '../../../components/BrandScope';
-import LogoBox from '../../../components/LogoBox';
+import OrganizationHeader from '../../../components/OrganizationHeader';
 import StorefrontPasswordGate from '../../../components/StorefrontPasswordGate';
 import type { ThemeMode } from '@/lib/theme';
 
@@ -102,7 +102,6 @@ export default function OrganizationStorefront({ orgId }: { orgId: string }) {
 
   const { organization, events } = data;
   const coverSrc = resolveAssetUrl(organization.coverUrl);
-  const logoSrc = resolveAssetUrl(organization.logoUrl);
   const hasCover = Boolean(coverSrc);
 
   if (data.locked) {
@@ -155,23 +154,7 @@ export default function OrganizationStorefront({ orgId }: { orgId: string }) {
   // The full-width header keeps the organization identity consistent at every size.
   return (
     <BrandScope color={organization.brandColor} themeMode={organization.themeMode} className="min-h-screen bg-gray-50 dark:bg-slate-900">
-      <header
-        data-testid="organization-header"
-        className="w-full border-b border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-800"
-      >
-        <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-4 sm:gap-6 sm:px-6 sm:py-6 lg:px-8">
-          {logoSrc && (
-            <LogoBox
-              src={logoSrc}
-              alt={`${organization.name} logo`}
-              className="w-20 shrink-0 rounded-lg shadow-sm sm:w-24"
-            />
-          )}
-          <h1 className="min-w-0 break-words text-2xl font-bold text-gray-900 dark:text-slate-100 sm:text-3xl">
-            {organization.name}
-          </h1>
-        </div>
-      </header>
+      <OrganizationHeader organization={organization} as="h1" />
 
       {/* Mobile cover image */}
       {hasCover && (

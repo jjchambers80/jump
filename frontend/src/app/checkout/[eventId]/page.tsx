@@ -14,6 +14,7 @@ import ExpandCollapseAll from '../../../components/ExpandCollapseAll';
 import { computeOrderFees, formatPrice } from '../../../lib/fees';
 import { parseAddOnLines, type AddOn } from '../../../lib/addOns';
 import BrandScope from '../../../components/BrandScope';
+import OrganizationHeader from '../../../components/OrganizationHeader';
 import type { ThemeMode } from '../../../lib/theme';
 
 interface EventVenue {
@@ -43,6 +44,7 @@ interface Event {
   addOns?: AddOn[];
   organizationId?: string | null;
   organizationName?: string | null;
+  organizationLogoUrl?: string | null;
   organizationBrandColor?: string | null;
   organizationThemeMode?: ThemeMode | null;
 }
@@ -332,9 +334,14 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
     <BrandScope
       color={event.organizationBrandColor}
       themeMode={event.organizationThemeMode}
-      className="min-h-screen bg-gray-50 dark:bg-slate-900 py-12"
+      className="min-h-screen bg-gray-50 dark:bg-slate-900"
     >
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+      {event.organizationName && (
+        <OrganizationHeader
+          organization={{ id: event.organizationId, name: event.organizationName, logoUrl: event.organizationLogoUrl }}
+        />
+      )}
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <button
           onClick={() => router.push(`/events/${params.eventId}`)}
           className="mb-6 text-brand-link hover:opacity-80 font-semibold flex items-center transition-opacity duration-200"

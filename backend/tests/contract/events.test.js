@@ -245,6 +245,18 @@ describe('Events API Contract Tests', () => {
       }
     });
 
+    it('should include the organization logo for the storefront header', async () => {
+      if (!publishedEventId) return;
+
+      await prisma.organization.update({ where: { id: testOrgId }, data: { logoUrl: '/uploads/org-logo.png' } });
+      try {
+        const res = await request(app).get(`/events/${publishedEventId}`).expect(200);
+        expect(res.body.organizationLogoUrl).toBe('/uploads/org-logo.png');
+      } finally {
+        await prisma.organization.update({ where: { id: testOrgId }, data: { logoUrl: null } });
+      }
+    });
+
     it('should include the organization theme mode', async () => {
       if (!publishedEventId) return;
 

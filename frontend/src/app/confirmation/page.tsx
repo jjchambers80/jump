@@ -11,6 +11,7 @@ import { useSearchParams } from 'next/navigation';
 import { api } from '../../services/api';
 import { resolveAssetUrl } from '../../lib/assets';
 import BrandScope from '../../components/BrandScope';
+import OrganizationHeader from '../../components/OrganizationHeader';
 import type { ThemeMode } from '../../lib/theme';
 
 interface TicketInfo {
@@ -43,6 +44,7 @@ interface OrderDetail {
     name: string;
     date: string;
     logoUrl?: string | null;
+    organizationId?: string | null;
     organizationName?: string | null;
     organizationLogoUrl?: string | null;
     organizationBrandColor?: string | null;
@@ -243,21 +245,19 @@ function ConfirmationContent() {
     <BrandScope
       color={order.event.organizationBrandColor}
       themeMode={order.event.organizationThemeMode}
-      className="min-h-screen bg-gray-50 dark:bg-slate-900 py-12"
+      className="min-h-screen bg-gray-50 dark:bg-slate-900"
     >
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+      {order.event.organizationName && (
+        <OrganizationHeader
+          organization={{
+            id: order.event.organizationId,
+            name: order.event.organizationName,
+            logoUrl: order.event.organizationLogoUrl,
+          }}
+        />
+      )}
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg dark:shadow-lg dark:shadow-black/20 p-8 mb-8">
-          {/* Organization logo */}
-          {order.event.organizationLogoUrl && (
-            <div className="flex justify-center mb-8">
-              <img
-                src={resolveAssetUrl(order.event.organizationLogoUrl) || undefined}
-                alt={order.event.organizationName || 'Organizer logo'}
-                className="max-h-20 w-auto max-w-[240px] object-contain"
-              />
-            </div>
-          )}
-
           {/* Success / Pending Header */}
           <div className="text-center mb-8">
             {isCompleted ? (
