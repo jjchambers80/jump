@@ -227,6 +227,17 @@ export interface PaginatedResponse<T> {
   };
 }
 
+// ===== Online Store Pages =====
+
+export interface OnlineStorePage {
+  id: string;
+  title: string;
+  content: string;
+  isVisible: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ===== Ticket Scanning & Redemption =====
 
 export interface TicketPreview {
