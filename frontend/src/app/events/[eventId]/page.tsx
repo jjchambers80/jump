@@ -12,6 +12,7 @@ import { api } from '../../../services/api';
 import { resolveAssetUrl } from '../../../lib/assets';
 import BrandScope from '../../../components/BrandScope';
 import OrganizationHeader from '../../../components/OrganizationHeader';
+import StorefrontFooter from '../../../components/storefront/StorefrontFooter';
 import GetInvolved from './GetInvolved';
 import CartLineItem from '../../../components/CartLineItem';
 import OrderTotals from '../../../components/OrderTotals';
@@ -266,6 +267,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
       {event.organizationName && (
         <OrganizationHeader
           organization={{ id: event.organizationId, name: event.organizationName, logoUrl: event.organizationLogoUrl }}
+          nav
         />
       )}
       <div className="max-w-6xl mx-auto px-0 sm:px-6 lg:px-8 py-0 sm:py-12 lg:flex lg:gap-6 lg:items-start">
@@ -893,6 +895,9 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
             </div>
           </div>
         </div>
+      )}
+      {event.organizationId && event.organizationName && (
+        <StorefrontFooter organization={{ id: event.organizationId, name: event.organizationName }} />
       )}
     </BrandScope>
   );

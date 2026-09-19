@@ -22,6 +22,7 @@ import { validateStorefrontUnlock } from '../validators/storefrontPreferencesVal
 import { gateByOrgParam } from '../../middleware/storefrontGate.js';
 import blogPostService from '../../services/BlogPostService.js';
 import pageService from '../../services/PageService.js';
+import menuService from '../../services/MenuService.js';
 
 const router = Router();
 
@@ -181,6 +182,17 @@ router.get('/:id/public/blogs/:blogHandle/:postHandle', gateByOrgParam, async (r
     const organization = await publicOrganizationIdentity(req.params.id);
     const post = await blogPostService.publicGet(req.params.id, req.params.blogHandle, req.params.postHandle);
     res.json({ organization, post });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** GET /organizations/:id/public/menus — main + footer navigation (spec 027). */
+router.get('/:id/public/menus', gateByOrgParam, async (req, res, next) => {
+  try {
+    await publicOrganizationIdentity(req.params.id);
+    res.set('Cache-Control', 'public, max-age=60');
+    res.json(await menuService.publicMenus(req.params.id));
   } catch (error) {
     next(error);
   }

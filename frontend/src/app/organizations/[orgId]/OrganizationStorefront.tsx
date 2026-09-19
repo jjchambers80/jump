@@ -7,6 +7,7 @@ import EventCard, { EventSummary } from '../../../components/EventCard';
 import BrandScope from '../../../components/BrandScope';
 import OrganizationHeader from '../../../components/OrganizationHeader';
 import StorefrontPasswordGate from '../../../components/StorefrontPasswordGate';
+import StorefrontFooter from '../../../components/storefront/StorefrontFooter';
 import type { ThemeMode } from '@/lib/theme';
 
 interface OrganizationPublic {
@@ -62,7 +63,14 @@ export default function OrganizationStorefront({ orgId }: { orgId: string }) {
             fill="none"
             viewBox="0 0 24 24"
           >
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <circle
+              className="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              strokeWidth="4"
+            />
             <path
               className="opacity-75"
               fill="currentColor"
@@ -80,7 +88,12 @@ export default function OrganizationStorefront({ orgId }: { orgId: string }) {
       <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center p-4">
         <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-8 max-w-md w-full text-center">
           <div className="text-red-600 dark:text-red-400 mb-4">
-            <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              className="w-16 h-16 mx-auto"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -153,8 +166,17 @@ export default function OrganizationStorefront({ orgId }: { orgId: string }) {
   // Desktop without cover: centered single column
   // The full-width header keeps the organization identity consistent at every size.
   return (
-    <BrandScope color={organization.brandColor} themeMode={organization.themeMode} className="min-h-screen bg-gray-50 dark:bg-slate-900">
-      <OrganizationHeader organization={organization} as="h1" layout={hasCover ? 'two-column' : 'centered'} />
+    <BrandScope
+      color={organization.brandColor}
+      themeMode={organization.themeMode}
+      className="min-h-screen bg-gray-50 dark:bg-slate-900"
+    >
+      <OrganizationHeader
+        organization={organization}
+        as="h1"
+        layout={hasCover ? 'two-column' : 'centered'}
+        nav
+      />
 
       {/* Mobile cover image */}
       {hasCover && (
@@ -174,9 +196,7 @@ export default function OrganizationStorefront({ orgId }: { orgId: string }) {
         <div className="xl:flex min-h-screen">
           {/* Left: event content — full width below xl, pushed right at xl+ */}
           <div className="flex-1 xl:flex xl:justify-end">
-            <div className="w-full px-4 py-8 sm:px-6 xl:max-w-4xl xl:py-12">
-              {eventList}
-            </div>
+            <div className="w-full px-4 py-8 sm:px-6 xl:max-w-4xl xl:py-12">{eventList}</div>
           </div>
 
           {/* Right: cover image, flush to window edge */}
@@ -190,10 +210,9 @@ export default function OrganizationStorefront({ orgId }: { orgId: string }) {
         </div>
       ) : (
         /* Centered single column */
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 xl:py-12">
-          {eventList}
-        </div>
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 xl:py-12">{eventList}</div>
       )}
+      <StorefrontFooter organization={organization} />
     </BrandScope>
   );
 }
