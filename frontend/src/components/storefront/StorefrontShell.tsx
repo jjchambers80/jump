@@ -9,6 +9,7 @@ import type { ReactNode } from 'react';
 import BrandScope from '@/components/BrandScope';
 import OrganizationHeader from '@/components/OrganizationHeader';
 import StorefrontPasswordGate from '@/components/StorefrontPasswordGate';
+import StorefrontFooter from './StorefrontFooter';
 import type { ThemeMode } from '@/lib/theme';
 import type { StorefrontContentState } from './useStorefrontContent';
 
@@ -90,8 +91,9 @@ export default function StorefrontShell<T extends { organization: StorefrontOrga
       themeMode={organization.themeMode}
       className="min-h-screen bg-gray-50 dark:bg-slate-900"
     >
-      <OrganizationHeader organization={organization} as="link" />
+      <OrganizationHeader organization={organization} as="link" nav />
       {children(data)}
+      <StorefrontFooter organization={organization} />
     </BrandScope>
   );
 }

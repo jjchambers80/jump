@@ -36,6 +36,7 @@ const navItems: NavItem[] = [
   { label: 'Preferences', href: '/admin/online-store/preferences', nested: true },
   { label: 'Content', href: '/admin/content' },
   { label: 'Files', href: '/admin/content/files', nested: true },
+  { label: 'Menus', href: '/admin/content/menus', nested: true },
   { label: 'Blog posts', href: '/admin/content/blog-posts', nested: true },
 ];
 

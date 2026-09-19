@@ -192,6 +192,56 @@ model BlogPost {
   @@index([blogId, isVisible, publishedAt])
 }
 
+// Spec 027: Content › Menus — storefront navigation. main-menu renders in the
+// organization header, footer-menu in the storefront footer; both are created
+// lazily per organization and cannot be deleted. Items form a tree (3 levels).
+enum MenuLinkType {
+  HOME
+  EVENTS
+  EVENT
+  VENUE
+  PAGE
+  BLOG
+  BLOG_POST
+  ACCOUNT
+  EXTERNAL
+}
+
+model Menu {
+  id             String   @id @default(cuid())
+  organizationId String
+  title          String
+  handle         String
+  isDefault      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  items        MenuItem[]
+
+  @@unique([organizationId, handle])
+}
+
+// targetId has no foreign key on purpose: a deleted page must not delete the
+// menu item — the editor shows "Broken link" and the storefront skips it.
+model MenuItem {
+  id       String       @id @default(cuid())
+  menuId   String
+  parentId String?
+  position Int
+  label    String
+  linkType MenuLinkType
+  targetId String?
+  url      String?
+  newTab   Boolean      @default(false)
+
+  menu     Menu       @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  parent   MenuItem?  @relation("MenuItemChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children MenuItem[] @relation("MenuItemChildren")
+
+  @@index([menuId, parentId, position])
+}
+
 enum ContentRefKind {
   PAGE
   BLOG_POST
@@ -299,6 +349,7 @@ model Organization {
   storeFiles               StoreFile[]
   blogs                    Blog[]
   blogPosts                BlogPost[]
+  menus                    Menu[]
 }
 
 // Custom content pages managed under Online Store. Content is stored as the

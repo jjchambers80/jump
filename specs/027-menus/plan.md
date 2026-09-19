@@ -1,6 +1,6 @@
 # Implementation Plan: Content › Menus (spec 027)
 
-**Status**: Planned 2026-09-19. Not built.
+**Status**: Built 2026-09-19 on `feat/027-menus`.
 **Spec**: [spec.md](./spec.md). Depends on 026 Blog posts on `main` (public page / blog routes, `StorefrontContentShell`, `uniqueHandle`, `SaveBar`, `useUnsavedChanges`).
 **Branch**: `feat/027-menus`, merged to `main` alone.
 
