@@ -27,6 +27,11 @@ Loads when agent touches `backend/` files. For root-level commands and env vars,
 - Rate limiting behind the Next proxy: key on `clientIpForRateLimit(req)` (signed `X-Jump-Client-Ip`), not `req.ip`.
 - Storefront URLs in emails and Stripe redirects come from `utils/storefrontUrl.js`, which is async and per organization: an ACTIVE custom domain (`DomainService.primaryHostname`) wins, else the first `FRONTEND_URL` entry. On a custom host the org page is `/` and the buyer account page is `/account`.
 
+## Online Store › Preferences
+
+- `StorefrontPreferencesService`: `GET/PATCH /admin/online-store/preferences` (PATCH is ADMIN; partial; `password` string sets / `null` clears the scrypt hash; private mode requires a password and the two are only cleared together). The hash is omitted by the Prisma client globally — opt in with `omit: { storefrontPasswordHash: false }` or a `select`.
+- `GET /organizations/:id/public` returns `locked: true` + `message` and no events when the store is private and the request lacks a valid `X-Storefront-Access` token (HS256 JWT bound to the org id and a fingerprint of the current hash, minted by `POST /organizations/:id/storefront-access`, rate limited 10 / 15 min per IP + org). Only the org home is gated; event/venue/checkout pages are not. `GET /organizations/:id/public/meta` feeds the storefront `generateMetadata`. See `docs/wiki/features/online-store-preferences.md`.
+
 ## Custom Domains (spec 007 phase 3)
 
 - `OrganizationDomain` rows: PENDING → VERIFIED → ACTIVE → FAILED. `DomainService.verifyDomain` checks `TXT _jump-verify.<host>` and the CNAME; with `lib/railwayDomains.js` configured it also waits for the certificate, otherwise DNS proof activates. `server.js` sweeps every 10 min (active domains daily) with an unref'd timer.

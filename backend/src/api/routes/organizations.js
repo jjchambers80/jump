@@ -3,6 +3,7 @@
 // All routes require ADMIN role
 
 import { Router } from 'express';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireAdmin, requireOrganizer, requireSystemAdmin } from '../../middleware/rbac.js';
 import onboardingService from '../../services/OnboardingService.js';
@@ -15,10 +16,23 @@ import organizationService from '../../services/OrganizationService.js';
 import { NotFoundError } from '../../middleware/errorHandler.js';
 import { uploadImage } from '../../middleware/imageUpload.js';
 import imageService from '../../services/ImageService.js';
+import storefrontPreferencesService from '../../services/StorefrontPreferencesService.js';
+import { validateStorefrontUnlock } from '../validators/storefrontPreferencesValidators.js';
 
 const router = Router();
 
 const verifyOrgOwnership = requireOrgMembership('id');
+
+// Storefront password guesses: browsers call this directly, so req.ip is the
+// visitor (trust proxy is set in server.js). Keyed per organization too.
+const unlockLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  keyGenerator: (req) => `${ipKeyGenerator(req.ip)}:${req.params.id}`,
+  message: { message: 'Too many attempts. Try again later.' },
+});
 
 /**
  * POST /organizations
@@ -112,8 +126,35 @@ router.patch(
  */
 router.get('/:id/public', async (req, res, next) => {
   try {
-    const result = await organizationService.getPublicOrganization(req.params.id);
+    const result = await organizationService.getPublicOrganization(req.params.id, {
+      accessToken: req.get('x-storefront-access') || null,
+    });
     res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /organizations/:id/public/meta
+ * Storefront homepage <title> / meta description / sharing image (no auth).
+ * Used by the frontend's generateMetadata; works whether or not the store is private.
+ */
+router.get('/:id/public/meta', async (req, res, next) => {
+  try {
+    res.json(await organizationService.getPublicMeta(req.params.id));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /organizations/:id/storefront-access
+ * Exchange the store password for an access token (private mode). No auth.
+ */
+router.post('/:id/storefront-access', unlockLimiter, validateStorefrontUnlock, async (req, res, next) => {
+  try {
+    res.json(await storefrontPreferencesService.unlock(req.params.id, req.body.password));
   } catch (error) {
     next(error);
   }

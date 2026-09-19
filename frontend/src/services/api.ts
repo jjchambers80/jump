@@ -254,6 +254,27 @@ export interface OnlineStorePageInput {
   seoDescription: string | null;
 }
 
+// ===== Online Store Preferences =====
+
+/** GET/PATCH /admin/online-store/preferences. The password itself is never returned. */
+export interface StorefrontPreferences {
+  /** Visitors need the store password to see the storefront. */
+  storefrontPrivate: boolean;
+  hasPassword: boolean;
+  /** Shown on the password page; null falls back to a default line. */
+  storefrontMessage: string | null;
+  /** Homepage <title> / meta description; null falls back to the store name / none. */
+  seoTitle: string | null;
+  seoDescription: string | null;
+  /** Redirect visitors to the language matching their browser when available. */
+  autoRedirectLanguage: boolean;
+}
+
+/** Partial body for PATCH /admin/online-store/preferences. `password: null` clears it. */
+export type StorefrontPreferencesInput = Partial<
+  Omit<StorefrontPreferences, 'hasPassword'> & { password: string | null }
+>;
+
 // ===== Ticket Scanning & Redemption =====
 
 export interface TicketPreview {

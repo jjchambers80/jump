@@ -3,6 +3,7 @@
 
 import { prisma } from '@jump/db';
 import logger from '../utils/logger.js';
+import storefrontPreferencesService from './StorefrontPreferencesService.js';
 import { ConflictError, NotFoundError } from '../middleware/errorHandler.js';
 import { formatEventSummary } from '../utils/eventSummary.js';
 import { slugify } from '../utils/slug.js';
@@ -200,8 +201,30 @@ class OrganizationService {
     return serializeBusinessDetails(organization);
   }
 
-  /** Get public organization info with published events. */
-  async getPublicOrganization(id) {
+  /** Storefront homepage listing: falls back to the store name / no description. */
+  async getPublicMeta(id) {
+    const org = await prisma.organization.findFirst({
+      where: { id, status: 'ACTIVE' },
+      select: { id: true, name: true, seoTitle: true, seoDescription: true, coverUrl: true },
+    });
+    if (!org) throw new NotFoundError('Organization not found');
+    return {
+      id: org.id,
+      name: org.name,
+      title: org.seoTitle || org.name,
+      description: org.seoDescription,
+      // Social sharing image: the cover from Online store › Branding.
+      imageUrl: org.coverUrl,
+    };
+  }
+
+  /**
+   * Get public organization info with published events.
+   * A private storefront (Online Store › Preferences) without a valid
+   * X-Storefront-Access token returns `locked: true`, the visitor message and
+   * no events; branding stays so the password page can be styled.
+   */
+  async getPublicOrganization(id, { accessToken = null } = {}) {
     const org = await prisma.organization.findFirst({
       where: { id, status: 'ACTIVE' },
       select: {
@@ -211,6 +234,9 @@ class OrganizationService {
         coverUrl: true,
         brandColor: true,
         themeMode: true,
+        storefrontPrivate: true,
+        storefrontPasswordHash: true,
+        storefrontMessage: true,
         venues: {
           select: {
             events: {
@@ -243,20 +269,23 @@ class OrganizationService {
       throw new NotFoundError('Organization not found');
     }
 
+    const organization = {
+      id: org.id,
+      name: org.name,
+      logoUrl: org.logoUrl,
+      coverUrl: org.coverUrl,
+      brandColor: org.brandColor,
+      themeMode: org.themeMode,
+    };
+
+    if (!storefrontPreferencesService.hasAccess(org, accessToken)) {
+      return { organization, locked: true, message: org.storefrontMessage, events: [] };
+    }
+
     const events = org.venues.flatMap((v) => v.events).map(formatEventSummary);
     events.sort((a, b) => new Date(a.date) - new Date(b.date));
 
-    return {
-      organization: {
-        id: org.id,
-        name: org.name,
-        logoUrl: org.logoUrl,
-        coverUrl: org.coverUrl,
-        brandColor: org.brandColor,
-        themeMode: org.themeMode,
-      },
-      events,
-    };
+    return { organization, locked: false, events };
   }
 
   /** Set or clear organization logo. */
