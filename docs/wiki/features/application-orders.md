@@ -1,6 +1,6 @@
 # Application orders — one ledger under Orders
 
-**Status**: Phase 1 implemented 2026-09-19 (ledger migration, services, reporting over one ledger). Phase 2 implemented 2026-09-19 (order-level Orders page with a Tickets toggle, CSV export, order detail for application orders with amount-based refunds, order number on every application surface and template, buyer order list, receipt email). Phase 3 implemented 2026-09-19 (apply-form account and marketing opt-ins applied at SUBMITTED, required data-collection consent and card-on-file authorization, `LegalAcceptance` trail on apply and checkout, marketing provenance, welcome sign-in link in the RECEIVED email). Spec: `specs/024-application-orders/`.
+**Status**: Shipped to prod 2026-09-19 (PRs #92 / #93 / #95; backfill verified — 4 application orders, 8 payments, 2 refunds). Phase 1 implemented 2026-09-19 (ledger migration, services, reporting over one ledger). Phase 2 implemented 2026-09-19 (order-level Orders page with a Tickets toggle, CSV export, order detail for application orders with amount-based refunds, order number on every application surface and template, buyer order list, receipt email). Phase 3 implemented 2026-09-19 (apply-form account and marketing opt-ins applied at SUBMITTED, required data-collection consent and card-on-file authorization, `LegalAcceptance` trail on apply and checkout, marketing provenance, welcome sign-in link in the RECEIVED email). Spec: `specs/024-application-orders/`.
 **Last Updated**: 2026-09-19
 
 ## Overview
