@@ -18,6 +18,7 @@ import applicationService from '../../services/ApplicationService.js';
 import { MAX_FILES_PER_SUBMISSION, MAX_PHOTO_MB } from '../../config/applications.js';
 import { ValidationError } from '../../middleware/errorHandler.js';
 import { clientIpForRateLimit } from './buyerAuth.js';
+import { requestMeta } from '../../services/LegalAcceptanceService.js';
 import { gateByEventParam } from '../../middleware/storefrontGate.js';
 
 export const eventApplicationsRouter = express.Router({ mergeParams: true });
@@ -90,7 +91,8 @@ eventApplicationsRouter.get('/forms/:slug', gateByEventParam, async (req, res, n
 
 eventApplicationsRouter.post('/', submitLimiter, gateByEventParam, parseSubmission, async (req, res, next) => {
   try {
-    const result = await applicationService.submit(req.params.eventId, req.submission.body, req.submission.files);
+    // The consent trail records a hashed IP and the user agent (spec 024 phase 3).
+    const result = await applicationService.submit(req.params.eventId, req.submission.body, req.submission.files, { requestMeta: requestMeta(req) });
     res.status(201).json(result);
   } catch (error) {
     next(error);

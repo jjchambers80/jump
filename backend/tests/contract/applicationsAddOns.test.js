@@ -9,6 +9,7 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
 import { staffToken, joinOrgByToken, cleanupStaff } from '../helpers/staff.js';
+import { allAcceptances } from '../helpers/legal.js';
 
 const sentEmails = [];
 jest.unstable_mockModule('../../src/config/resend.js', () => ({
@@ -113,7 +114,7 @@ describe('Applications with add-ons (spec 012 phase 2)', () => {
   const submit = (formSlug, tierId, email, addOns, businessName = 'Hidden Block Games') =>
     request(app)
       .post(`/events/${eventId}/applications`)
-      .send({ formSlug, tierId, contact: { email, firstName: 'Vee', lastName: 'Vendor' }, profile: { businessName }, answers: {}, ...(addOns !== undefined && { addOns }) });
+      .send({ formSlug, tierId, contact: { email, firstName: 'Vee', lastName: 'Vendor' }, acceptances: allAcceptances(), profile: { businessName }, answers: {}, ...(addOns !== undefined && { addOns }) });
 
   const appRow = (id) => loadRow(id, { tier: true, contact: true, decisions: true });
   const addOnRow = (id) => prisma.addOn.findUnique({ where: { id } });
@@ -270,7 +271,7 @@ describe('Applications with add-ons (spec 012 phase 2)', () => {
       for (const [body, status, re] of cases) {
         const res = await request(app)
           .post(`/events/${eventId}/applications`)
-          .send({ contact: { email: `bad@${TAG}.test`, firstName: 'B', lastName: 'B' }, profile: { businessName: 'Bad' }, answers: {}, ...body });
+          .send({ contact: { email: `bad@${TAG}.test`, firstName: 'B', lastName: 'B' }, acceptances: allAcceptances(), profile: { businessName: 'Bad' }, answers: {}, ...body });
         expect([res.status, res.body.message]).toEqual([status, expect.stringMatching(re)]);
       }
       expect(await prisma.application.count({ where: { organizationId: org.id } })).toBe(0);

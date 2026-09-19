@@ -6,6 +6,7 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
 import { staffToken, joinOrgByToken, cleanupStaff } from '../helpers/staff.js';
+import { allAcceptances } from '../helpers/legal.js';
 
 const sentEmails = [];
 jest.unstable_mockModule('../../src/config/resend.js', () => ({
@@ -85,7 +86,7 @@ describe('Application corrections contract (spec 018 phase 3)', () => {
         formSlug: form.slug,
         tierId,
         contact: { email, firstName: 'Vee', lastName: 'Vendor' },
-        profile: { businessName },
+        acceptances: allAcceptances(), profile: { businessName },
         answers: {},
         ...(addOns !== undefined && { addOns }),
       });

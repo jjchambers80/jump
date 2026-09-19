@@ -23,6 +23,7 @@ import paymentSettingsService, { stripeMode } from './PaymentSettingsService.js'
 import { statusUrlFor } from './applicationLinks.js';
 import { buyerAccountUrl } from '../utils/storefrontUrl.js';
 import emailService from './EmailService.js';
+import contactOptInService from './ContactOptInService.js';
 import { ORDER_INCLUDE, adjustmentItems, buyerLineTotal, tierItem } from './OrderLineService.js';
 import { orderStatusFor } from './applicationOrderStatus.js';
 import logger from '../utils/logger.js';
@@ -654,8 +655,19 @@ class ApplicationPaymentService {
     return prisma.application.findUnique({ where: { id: applicationId }, include: PAYMENT_INCLUDE });
   }
 
+  /**
+   * The RECEIVED email for a PAID form, once the card step made the
+   * application SUBMITTED. Applies the apply-form opt-ins first (idempotent on
+   * `optInsAppliedAt`) so a just-created account gets its sign-in link in the
+   * same email (spec 024 phase 3).
+   */
   async _sendReceived(applicationId) {
-    return this._send(applicationId, 'RECEIVED');
+    const optIns = await contactOptInService.applyForApplication(prisma, applicationId);
+    const application = await this._load(applicationId);
+    if (!application) return null;
+    const accountUrl = optIns.accountJustCreated ? await contactOptInService.welcomeUrl(application.contactId) : null;
+    const statusUrl = await statusUrlFor(application);
+    return applicationTemplateService.send(application.organizationId, 'RECEIVED', { ...application, statusUrl }, { payNowUrl: statusUrl, accountUrl, accountCreated: Boolean(accountUrl) });
   }
 
   /**

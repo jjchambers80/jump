@@ -244,10 +244,12 @@ describe('Participants contract (spec 019 phase 1)', () => {
     });
 
     it('the list query can use the (organizationId, submittedAt) index', async () => {
-      // The test table is tiny, so the planner prefers a seq scan; disable it
-      // for this transaction to prove the index exists and fits the query.
-      const [, plan] = await prisma.$transaction([
+      // The test table is tiny, so the planner prefers a seq scan (or the
+      // narrower organizationId index plus a sort); disable both for this
+      // transaction to prove the ordered index exists and fits the query.
+      const [, , plan] = await prisma.$transaction([
         prisma.$executeRawUnsafe('SET LOCAL enable_seqscan = off'),
+        prisma.$executeRawUnsafe('SET LOCAL enable_sort = off'),
         prisma.$queryRawUnsafe(`EXPLAIN SELECT id FROM "Application" WHERE "organizationId" = $1 AND status <> 'DRAFT' ORDER BY "submittedAt" DESC LIMIT 25`, org.id),
       ]);
       const text = plan.map((r) => r['QUERY PLAN']).join('\n');

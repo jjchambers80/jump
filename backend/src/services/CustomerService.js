@@ -7,6 +7,7 @@
 import { prisma } from '@jump/db';
 import { NotFoundError } from '../middleware/errorHandler.js';
 import { PAID_ORDER_STATUSES } from './paidStatuses.js';
+import contactOptInService from './ContactOptInService.js';
 
 const round = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
 const sum = (rows, pick) => rows.reduce((total, r) => total + Number(pick(r) || 0), 0);
@@ -236,8 +237,9 @@ class CustomerService {
     const allowed = {};
     if (updates.note !== undefined) allowed.note = updates.note;
     if (updates.location !== undefined) allowed.location = updates.location;
+    // Marketing edits by staff carry provenance ADMIN (spec 023 LR-07 via spec 024 phase 3).
     if (updates.emailSubscribed !== undefined)
-      allowed.emailSubscribed = Boolean(updates.emailSubscribed);
+      Object.assign(allowed, contactOptInService.marketingChangeData(contact, Boolean(updates.emailSubscribed)));
 
     return prisma.contact.update({
       where: { id: contactId },

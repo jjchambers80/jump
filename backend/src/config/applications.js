@@ -52,7 +52,8 @@ export const MERGE_FIELDS = [
   ['payment.dueDate', 'Payment due date'],
   ['links.status', 'Link to the application status page'],
   ['links.payNow', 'Link to pay an outstanding balance'],
-  ['links.account', 'Link to the applicant account page'],
+  ['links.account', 'Link to the applicant account page (on the RECEIVED email, a one-time sign-in link when the applicant just created an account)'],
+  ['account.created', 'Section flag: true on the RECEIVED email when the applicant chose to create an account'],
 ];
 
 /** Actions that have a template. PAYMENT_DUE is used from phase 2; ADD_ONS_CHANGED from spec 012; TIER_CHANGED / WAIVED / OFFLINE_PAID from spec 018. */
@@ -71,6 +72,10 @@ Add-ons: {{addOns.summary}}
 Order number: {{order.ref}}
 {{/order.ref}}
 You can check its status any time: {{links.status}}
+{{#account.created}}
+
+Your account with {{organization.name}} is ready — no password needed. Sign in any time from this link (it works once and expires in 7 days): {{links.account}}
+{{/account.created}}
 
 {{organization.name}}`,
   },

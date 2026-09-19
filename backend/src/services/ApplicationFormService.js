@@ -742,6 +742,9 @@ class ApplicationFormService {
       acceptance: this.acceptance(form),
       chargeTiming: form.kind === 'PAID' ? form.chargeTiming : null,
       feeMode: form.kind === 'PAID' ? form.feeMode : null,
+      // Spec 024 phase 3: the card-authorization label names the pay-now window.
+      paymentDueDays: form.kind === 'PAID' ? form.paymentDueDays : null,
+      organizationName: organization?.name ?? null,
       tiers: (form.tiers || [])
         .filter((t) => t.isActive)
         .map((t) => {

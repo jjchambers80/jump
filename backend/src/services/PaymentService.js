@@ -11,6 +11,7 @@ import { prisma } from '@jump/db';
 import OrderService from './OrderService.js';
 import TicketService from './TicketService.js';
 import BuyerAuthService from './BuyerAuthService.js';
+import ContactOptInService from './ContactOptInService.js';
 import { buyerVerifyUrl } from '../utils/storefrontUrl.js';
 import EmailService from './EmailService.js';
 import { recordPaymentStatus } from '../utils/metrics.js';
@@ -108,23 +109,9 @@ class PaymentService {
   async _applyOptIns(order) {
     if (!order.optInAccount && !order.optInMarketing) return;
     try {
-      const contact = await prisma.contact.findUnique({
-        where: { id: order.contactId },
-        select: { accountCreatedAt: true, emailSubscribed: true },
-      });
-      if (!contact) return;
-      const data = {
-        ...(order.optInAccount && !contact.accountCreatedAt && { accountCreatedAt: new Date() }),
-        ...(order.optInMarketing && !contact.emailSubscribed && { emailSubscribed: true }),
-      };
-      if (Object.keys(data).length === 0) return;
-      await prisma.contact.update({ where: { id: order.contactId }, data });
-      logger.info('Checkout opt-ins applied', {
-        event: 'buyer_opt_ins_applied',
-        orderId: order.id,
-        contactId: order.contactId,
-        ...data,
-      });
+      // One implementation for checkout and apply-form opt-ins (spec 024 phase 3),
+      // with marketing provenance (spec 023 LR-07).
+      await ContactOptInService.apply(prisma, order.contactId, { account: order.optInAccount, marketing: order.optInMarketing, source: 'CHECKOUT' });
     } catch (error) {
       logger.error('Failed to apply checkout opt-ins', { orderId: order.id, error: error.message });
     }

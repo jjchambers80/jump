@@ -13,6 +13,7 @@ import { requireAuth, optionalAuth } from '../../middleware/auth.js';
 import { requireOrganizer } from '../../middleware/rbac.js';
 import { validateCreateOrder, validateOrderLookup } from '../validators/orderValidators.js';
 import { gateByEventBody } from '../../middleware/storefrontGate.js';
+import { requestMeta } from '../../services/LegalAcceptanceService.js';
 
 const router = express.Router();
 
@@ -23,7 +24,7 @@ const router = express.Router();
  */
 router.post('/', validateCreateOrder, gateByEventBody, async (req, res, next) => {
   try {
-    const { eventId, items, priceTierId, quantity, contact, createAccount, emailSubscribed, addOns } = req.body;
+    const { eventId, items, priceTierId, quantity, contact, createAccount, emailSubscribed, addOns, acceptances } = req.body;
 
     const result = await orderService.createOrder({
       eventId,
@@ -32,6 +33,8 @@ router.post('/', validateCreateOrder, gateByEventBody, async (req, res, next) =>
       contact,
       createAccount: createAccount === true,
       emailSubscribed: emailSubscribed === true,
+      acceptances,
+      requestMeta: requestMeta(req),
     });
 
     res.status(201).json(result);

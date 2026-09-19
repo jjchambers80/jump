@@ -8,6 +8,7 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
 import { staffToken, joinOrgByToken, cleanupStaff } from '../helpers/staff.js';
+import { allAcceptances } from '../helpers/legal.js';
 
 const sentEmails = [];
 jest.unstable_mockModule('../../src/config/resend.js', () => ({
@@ -115,7 +116,7 @@ describe('Application payments contract (spec 011 phase 2)', () => {
   const submit = (formSlug, tierId, email, businessName = 'Hidden Block Games') =>
     request(app)
       .post(`/events/${eventId}/applications`)
-      .send({ formSlug, tierId, contact: { email, firstName: 'Vee', lastName: 'Vendor' }, profile: { businessName }, answers: {} });
+      .send({ formSlug, tierId, contact: { email, firstName: 'Vee', lastName: 'Vendor' }, acceptances: allAcceptances(), profile: { businessName }, answers: {} });
 
   const appRow = (id) => loadRow(id, { tier: true, contact: true });
 

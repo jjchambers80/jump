@@ -13,6 +13,8 @@ import PaymentSettingsService from './PaymentSettingsService.js';
 import addOnService from './AddOnService.js';
 import { confirmationUrl, eventUrl } from '../utils/storefrontUrl.js';
 import orderLineService, { ORDER_INCLUDE } from './OrderLineService.js';
+import legalAcceptanceService from './LegalAcceptanceService.js';
+import { checkoutAcceptanceRequired } from '../config/legal.js';
 
 /** Include for org-wide order rows (spec 024 phase 2): enough to describe either kind without a second query. */
 const LIST_INCLUDE = {
@@ -137,11 +139,23 @@ class OrderService {
    * @param {Object} params.contact - { email, firstName, lastName }
    * @param {boolean} [params.createAccount] - Buyer opted into a login-enabled account at this org
    * @param {boolean} [params.emailSubscribed] - Buyer opted into marketing email from this org
+   * @param {Array<{ document: string, version: string }>} [params.acceptances] - Legal versions the checkout showed (spec 024 phase 3)
+   * @param {{ ipHash: string|null, userAgent: string|null }} [params.requestMeta]
    * @returns {Promise<{ orderId, orderRef, stripeCheckoutUrl }>}
    */
-  async createOrder({ eventId, items, addOns = [], contact, createAccount = false, emailSubscribed = false }) {
+  async createOrder({ eventId, items, addOns = [], contact, createAccount = false, emailSubscribed = false, acceptances = undefined, requestMeta = { ipHash: null, userAgent: null } }) {
     // Generate order ref outside transaction to avoid retry collisions
     let orderRef = this._generateOrderRef();
+
+    // Consent trail (spec 024 phase 3): the checkout page always sends the
+    // versions it showed; a client that sends none is refused only once the
+    // legal pages are live (LEGAL_ACCEPTANCE_REQUIRED), logged until then.
+    let accepted = [];
+    if (acceptances !== undefined || checkoutAcceptanceRequired()) {
+      accepted = legalAcceptanceService.assertCurrent(acceptances, ['TERMS', 'PRIVACY']);
+    } else {
+      logger.warn('Checkout without legal acceptances', { event: 'legal_acceptance_missing', eventId, email: contact?.email });
+    }
 
     // Add-on lines (spec 012): validated against scope / attachment / max
     // before the transaction; quantity is reserved inside it, after the tiers.
@@ -327,6 +341,14 @@ class OrderService {
       });
 
       // 6. Inventory already reserved atomically in step 2 above
+
+      if (accepted.length) {
+        await legalAcceptanceService.record(
+          tx,
+          { subjectType: 'CONTACT', subjectId: contactRecord.id, email, organizationId, source: 'CHECKOUT', referenceType: 'Order', referenceId: order.id, ...requestMeta },
+          accepted
+        );
+      }
 
       return { order, event, tiers, contactRecord, fees };
     });

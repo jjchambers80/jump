@@ -88,7 +88,7 @@ class ApplicationTemplateService {
    * Merge context for one application. `application` must include contact,
    * profile, event (with venue.organization), form, tier.
    */
-  async contextFor(application, { payNowUrl = null } = {}) {
+  async contextFor(application, { payNowUrl = null, accountUrl = null, accountCreated = false } = {}) {
     const organization = application.event?.venue?.organization || {};
     const { base } = await storefrontFor(organization.id || application.organizationId);
     const statusUrl =
@@ -121,10 +121,13 @@ class ApplicationTemplateService {
       amount: { applicantPays: formatMoney(money.applicantPays) },
       payment: { dueDate: formatDate(money.paymentDueAt) },
       order: { ref: money.orderRef || '' },
+      // Spec 024 phase 3: `account.created` is true on the RECEIVED email that
+      // carries the applicant's first sign-in link (`links.account` is then that link).
+      account: { created: accountCreated === true },
       links: {
         status: statusUrl,
         payNow: payNowUrl || '',
-        account: await buyerAccountUrl(organization.id || application.organizationId),
+        account: accountUrl || (await buyerAccountUrl(organization.id || application.organizationId)),
       },
     };
   }
@@ -151,10 +154,10 @@ class ApplicationTemplateService {
    * one-off edit from the decision dialog, already rendered text.
    * Never throws: a failed email must not undo a decision.
    */
-  async send(organizationId, action, application, { override = null, payNowUrl = null } = {}) {
+  async send(organizationId, action, application, { override = null, payNowUrl = null, accountUrl = null, accountCreated = false } = {}) {
     let message;
     try {
-      message = override && override.subject && override.body ? override : await this.render(organizationId, action, application, { payNowUrl });
+      message = override && override.subject && override.body ? override : await this.render(organizationId, action, application, { payNowUrl, accountUrl, accountCreated });
       await emailService.sendApplicationMessage({
         to: application.contact.email,
         subject: message.subject,
