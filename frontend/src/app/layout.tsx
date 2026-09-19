@@ -1,5 +1,6 @@
 import { Inter } from 'next/font/google';
 import './globals.css';
+import '../styles/content.css';
 import { SessionProvider } from 'next-auth/react';
 import { ThemeProvider } from '../components/ThemeProvider';
 

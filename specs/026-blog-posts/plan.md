@@ -1,6 +1,6 @@
 # Implementation Plan: Content › Blog posts (spec 026)
 
-**Status**: Planned 2026-09-19. Not built.
+**Status**: Built 2026-09-19 on `feat/026-blog-posts`.
 **Spec**: [spec.md](./spec.md). Depends on 025 Files on `main` (`StoreFile`, `StoreFileReference`, `useFilesApi`, `CopyLinkButton`, `Toast`).
 **Branch**: `feat/026-blog-posts`, merged to `main` alone. Phases below are commits / review checkpoints inside one PR; split into PRs only if review size demands it (phase 3 is the natural cut).
 

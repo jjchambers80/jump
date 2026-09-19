@@ -138,10 +138,58 @@ model StoreFile {
   file         File                 @relation(fields: [fileId], references: [id])
   image        Image?               @relation(fields: [imageId], references: [id])
   references   StoreFileReference[]
+  featuredIn   BlogPost[]
 
   @@index([organizationId, createdAt])
   @@index([organizationId, name])
   @@index([fileId])
+}
+
+// Spec 026: Content › Blog posts. A Blog is the Shopify-style container
+// (the organizer's "category") with its own handle and listing URL
+// /organizations/:orgId/blogs/:handle; every organization gets "News" lazily.
+model Blog {
+  id             String   @id @default(cuid())
+  organizationId String
+  title          String
+  handle         String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  posts        BlogPost[]
+
+  @@unique([organizationId, handle])
+}
+
+// content / excerpt are server-sanitised HTML snapshots from the editor.
+// Public when isVisible and publishedAt is null or in the past; a future
+// publishedAt is "Scheduled".
+model BlogPost {
+  id             String    @id @default(cuid())
+  organizationId String
+  blogId         String
+  title          String
+  handle         String
+  content        String
+  excerpt        String?
+  authorName     String
+  tags           String[]  @default([])
+  featuredFileId String?
+  isVisible      Boolean   @default(false)
+  publishedAt    DateTime?
+  seoTitle       String?
+  seoDescription String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  blog         Blog         @relation(fields: [blogId], references: [id])
+  featuredFile StoreFile?   @relation(fields: [featuredFileId], references: [id], onDelete: SetNull)
+
+  @@unique([blogId, handle])
+  @@index([organizationId, updatedAt])
+  @@index([blogId, isVisible, publishedAt])
 }
 
 enum ContentRefKind {
@@ -249,6 +297,8 @@ model Organization {
   stripeAccounts           OrganizationStripeAccount[]
   pages                    Page[]
   storeFiles               StoreFile[]
+  blogs                    Blog[]
+  blogPosts                BlogPost[]
 }
 
 // Custom content pages managed under Online Store. Content is stored as the

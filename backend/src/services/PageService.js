@@ -2,6 +2,7 @@ import { prisma } from '@jump/db';
 import { slugify } from '../utils/slug.js';
 import { ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import storeFileService from './StoreFileService.js';
+import { sanitizeContentHtml } from '../utils/sanitizeHtml.js';
 
 /** Optional text field: trims, and stores an empty string as null. */
 function optionalText(value) {
@@ -26,6 +27,24 @@ class PageService {
     return page;
   }
 
+  /** Storefront: a visible page by handle; hidden pages are 404. */
+  async getPublic(organizationId, slug) {
+    const page = await prisma.page.findFirst({
+      where: { organizationId, slug, isVisible: true },
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        content: true,
+        seoTitle: true,
+        seoDescription: true,
+        updatedAt: true,
+      },
+    });
+    if (!page) throw new NotFoundError('Page not found');
+    return page;
+  }
+
   async create(organizationId, data) {
     const title = data.title.trim();
     const page = await prisma.page.create({
@@ -33,7 +52,7 @@ class PageService {
         organizationId,
         title,
         slug: await this._uniqueSlug(organizationId, data.slug || title),
-        content: data.content.trim(),
+        content: sanitizeContentHtml(data.content),
         isVisible: data.isVisible ?? true,
         seoTitle: optionalText(data.seoTitle) ?? null,
         seoDescription: optionalText(data.seoDescription) ?? null,
@@ -54,7 +73,7 @@ class PageService {
     const existing = await this.get(organizationId, pageId);
     const patch = {};
     if (data.title !== undefined) patch.title = data.title.trim();
-    if (data.content !== undefined) patch.content = data.content.trim();
+    if (data.content !== undefined) patch.content = sanitizeContentHtml(data.content);
     if (data.isVisible !== undefined) patch.isVisible = data.isVisible;
     if (data.seoTitle !== undefined) patch.seoTitle = optionalText(data.seoTitle);
     if (data.seoDescription !== undefined) patch.seoDescription = optionalText(data.seoDescription);

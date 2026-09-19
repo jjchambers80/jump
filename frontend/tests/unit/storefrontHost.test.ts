@@ -45,6 +45,13 @@ describe('routeForTenantHost', () => {
     expect(route('/account/verify')).toEqual({ kind: 'rewrite', pathname: '/organizations/org_1/account/verify' });
   });
 
+  it('maps content short paths onto the organization (spec 026)', () => {
+    expect(route('/pages/faq')).toEqual({ kind: 'rewrite', pathname: '/organizations/org_1/pages/faq' });
+    expect(route('/blogs/news')).toEqual({ kind: 'rewrite', pathname: '/organizations/org_1/blogs/news' });
+    expect(route('/blogs/news/recap-2026')).toEqual({ kind: 'rewrite', pathname: '/organizations/org_1/blogs/news/recap-2026' });
+    expect(route('/blogs')).toEqual({ kind: 'rewrite', pathname: '/organizations/org_1/blogs' });
+  });
+
   it('passes the organization own paths and public storefront paths', () => {
     expect(route('/organizations/org_1')).toEqual({ kind: 'pass' });
     expect(route('/organizations/org_1/account')).toEqual({ kind: 'pass' });

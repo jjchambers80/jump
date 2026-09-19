@@ -65,6 +65,10 @@ export function routeForTenantHost(pathname: string, orgId: string): StorefrontR
   const account = path.match(/^\/account(\/.*)?$/);
   if (account) return { kind: 'rewrite', pathname: `/organizations/${orgId}/account${account[1] || ''}` };
 
+  // Content (specs 015 / 026): /pages/:slug and /blogs/:blog[/:post] are org-relative.
+  const content = path.match(/^\/(pages|blogs)(\/.*)?$/);
+  if (content) return { kind: 'rewrite', pathname: `/organizations/${orgId}/${content[1]}${content[2] || ''}` };
+
   const org = path.match(/^\/organizations\/([^/]+)(\/.*)?$/);
   if (org) return org[1] === orgId ? { kind: 'pass' } : { kind: 'notFound' };
 

@@ -291,6 +291,10 @@ describe('Content › Files contract', () => {
   });
 
   it('deletes one file and bulk-deletes the rest', async () => {
+    const row = await prisma.storeFile.findUnique({
+      where: { id: png.id },
+      select: { imageId: true },
+    });
     const one = await request(app)
       .delete(`/admin/files/${png.id}`)
       .set(...auth(organizerToken));
@@ -302,9 +306,7 @@ describe('Content › Files contract', () => {
           .set(...auth(organizerToken))
       ).status
     ).toBe(404);
-    expect(
-      await prisma.image.count({ where: { usageType: 'store_file', storeFile: { is: null } } })
-    ).toBe(0);
+    expect(await prisma.image.findUnique({ where: { id: row.imageId } })).toBeNull();
 
     const bulk = await request(app)
       .post('/admin/files/bulk-delete')

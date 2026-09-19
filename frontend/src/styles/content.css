@@ -1,0 +1,124 @@
+/* Organizer-authored HTML (blog posts, pages): shared by the editor and the
+   storefront so what is written is what is rendered. Storefront links use the
+   brand tokens set by BrandScope; the admin editor falls back to indigo. */
+
+.jump-prose {
+  font-size: 1rem;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.jump-prose > * + * {
+  margin-top: 1em;
+}
+.jump-prose h2,
+.jump-prose h3,
+.jump-prose h4 {
+  font-weight: 700;
+  line-height: 1.25;
+  margin-top: 1.6em;
+}
+.jump-prose h2 {
+  font-size: 1.5rem;
+}
+.jump-prose h3 {
+  font-size: 1.25rem;
+}
+.jump-prose h4 {
+  font-size: 1.05rem;
+}
+.jump-prose ul,
+.jump-prose ol {
+  padding-left: 1.5rem;
+}
+.jump-prose ul {
+  list-style: disc;
+}
+.jump-prose ol {
+  list-style: decimal;
+}
+.jump-prose li + li {
+  margin-top: 0.25em;
+}
+.jump-prose blockquote {
+  border-left: 3px solid currentColor;
+  opacity: 0.85;
+  padding-left: 1rem;
+  font-style: italic;
+}
+.jump-prose hr {
+  border: 0;
+  border-top: 1px solid rgb(209 213 219);
+  margin: 2em 0;
+}
+.dark .jump-prose hr {
+  border-top-color: rgb(51 65 85);
+}
+.jump-prose a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.jump-prose img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+}
+.jump-prose pre {
+  background: rgb(243 244 246);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+  font-size: 0.875rem;
+}
+.dark .jump-prose pre {
+  background: rgb(15 23 42);
+}
+.jump-prose code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+}
+.jump-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+.jump-prose th,
+.jump-prose td {
+  border: 1px solid rgb(209 213 219);
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+}
+.dark .jump-prose th,
+.dark .jump-prose td {
+  border-color: rgb(51 65 85);
+}
+
+/* Storefront: links in the organization's brand color. */
+.jump-prose--storefront a {
+  color: var(--brand-link);
+}
+
+/* Admin editor: indigo links, ProseMirror chrome. */
+.jump-prose--editor a {
+  color: rgb(79 70 229);
+}
+.dark .jump-prose--editor a {
+  color: rgb(165 180 252);
+}
+.jump-prose--editor .ProseMirror {
+  outline: none;
+  min-height: 14rem;
+}
+.jump-prose--editor.jump-prose--compact .ProseMirror {
+  min-height: 6rem;
+}
+.jump-prose--editor .ProseMirror p.is-editor-empty:first-child::before {
+  color: rgb(156 163 175);
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+.jump-prose--editor .ProseMirror-selectednode {
+  outline: 2px solid rgb(99 102 241);
+  outline-offset: 2px;
+}
