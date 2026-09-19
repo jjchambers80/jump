@@ -298,7 +298,8 @@ export default function PreferencesPage() {
             <label htmlFor="private-mode" className={label}>
               Private mode
               <span className="mt-0.5 block text-xs font-normal text-gray-500 dark:text-slate-400">
-                Visitors see a password page instead of your events.
+                Visitors see a password page instead of your events. Off means the store is
+                public even if a password is saved.
               </span>
             </label>
             <Toggle id="private-mode" checked={privateMode} onChange={setPrivateMode} label="Private mode" />
@@ -312,7 +313,12 @@ export default function PreferencesPage() {
               id="store-password"
               type="password"
               value={password}
-              onChange={(event) => setPassword(event.target.value)}
+              onChange={(event) => {
+                setPassword(event.target.value);
+                // A password only matters while the store is private; typing
+                // one is the intent to lock the store, so flip the switch too.
+                if (event.target.value && !privateMode) setPrivateMode(true);
+              }}
               autoComplete="new-password"
               minLength={PASSWORD_MIN}
               maxLength={PASSWORD_MAX}
@@ -321,8 +327,10 @@ export default function PreferencesPage() {
             />
             <p className={hint}>
               {prefs.hasPassword
-                ? 'A password is set. Enter a new one to change it.'
-                : `At least ${PASSWORD_MIN} characters. Required to turn on private mode.`}
+                ? prefs.storefrontPrivate
+                  ? 'A password is set. Enter a new one to change it.'
+                  : 'A password is saved but private mode is off, so visitors can still see your store. Turn on private mode and save to protect it.'
+                : `At least ${PASSWORD_MIN} characters. Entering one turns on private mode.`}
             </p>
           </div>
 

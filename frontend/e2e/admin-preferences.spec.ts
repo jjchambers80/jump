@@ -120,11 +120,16 @@ test('private mode needs a password, then saves it with the visitor message', as
 
   const access = page.getByTestId('store-access');
   const save = page.getByTestId('store-access-save');
-  await access.getByRole('switch', { name: 'Private mode' }).click();
+  const privateMode = access.getByRole('switch', { name: 'Private mode' });
+  await privateMode.click();
   await expect(save).toBeDisabled();
   await expect(access.getByText('Set a password to turn on private mode.')).toBeVisible();
+  await privateMode.click();
+  await expect(privateMode).toHaveAttribute('aria-checked', 'false');
 
+  // Typing a password is the intent to lock the store: the switch follows.
   await access.getByLabel('Password').fill('abc');
+  await expect(privateMode).toHaveAttribute('aria-checked', 'true');
   await expect(save).toBeDisabled();
   await access.getByLabel('Password').fill('retro-1985');
   await access.getByLabel('Custom message to your visitors').fill('Opening soon!');
@@ -139,6 +144,16 @@ test('private mode needs a password, then saves it with the visitor message', as
   await expect(access.getByLabel('Password')).toHaveValue('');
   await expect(access.getByText('A password is set. Enter a new one to change it.')).toBeVisible();
   await expect(page.getByTestId('store-password-remove')).toBeVisible();
+});
+
+test('warns when a password is saved but private mode is off', async ({ page }) => {
+  await mockPreferencesApi(page, { storefrontPrivate: false, hasPassword: true });
+  await page.goto('/admin/online-store/preferences');
+
+  await expect(page.getByTestId('store-access-status')).toHaveText('Public');
+  await expect(
+    page.getByText('A password is saved but private mode is off, so visitors can still see your store.', { exact: false })
+  ).toBeVisible();
 });
 
 test('removing the password makes the store public and never echoes the password', async ({ page }) => {
