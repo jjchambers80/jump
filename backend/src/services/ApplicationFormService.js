@@ -51,7 +51,14 @@ export function applicationAmounts(lines, form, event, organization) {
     // ABSORB: the applicant pays the listed price (plus tax on top unless it
     // is already inside the price); PASS: the allocated all-in line total.
     const applicantPays = absorb ? round(listed + (taxInclusive ? 0 : b.tax)) : b.lineTotal;
-    return { ...lines[i], applicantPays };
+    // Per-line fee and tax shares (spec 024): written to the order lines.
+    return {
+      ...lines[i],
+      applicantPays,
+      platformFee: b.platformFee,
+      processingFee: b.processingFee,
+      tax: b.tax,
+    };
   });
   if (absorb) {
     return {

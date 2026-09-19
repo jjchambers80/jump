@@ -33,7 +33,12 @@ export default async function globalSetup() {
       throw new Error(`prisma migrate deploy failed for ${testUrl}:\n${out}`);
     }
     // Database missing: create it via the maintenance database, then migrate.
-    prisma(['db', 'execute', '--stdin', '--url', maintenanceUrl(testUrl)], testUrl, `CREATE DATABASE "${TEST_DB_NAME}";`);
+    const dbName = new URL(testUrl).pathname.replace(/^\//, '') || TEST_DB_NAME;
+    prisma(
+      ['db', 'execute', '--stdin', '--url', maintenanceUrl(testUrl)],
+      testUrl,
+      `CREATE DATABASE "${dbName}";`
+    );
     prisma(['migrate', 'deploy'], testUrl);
   }
 }

@@ -1,22 +1,42 @@
 // Refund Service
-// Handles full-order and per-ticket refunds via Stripe
-// Creates append-only Refund ledger records, voids tickets, restores inventory
+// Handles full-order, per-ticket, per-add-on-line and application-order
+// refunds via Stripe. Creates append-only Refund ledger records, voids
+// tickets, restores inventory. Spec 024: application orders (kind
+// APPLICATION) are refunded by amount — partial or full, no tickets, no
+// capacity change — and an offline-paid one records a manual refund without
+// a Stripe call.
 
 import { prisma } from '@jump/db';
 import { createStripeRefund } from './stripeRefund.js';
 import addOnService from './AddOnService.js';
 import logger from '../utils/logger.js';
 import { NotFoundError, ConflictError, ValidationError } from '../middleware/errorHandler.js';
+import { orderStatusFor } from './applicationOrderStatus.js';
+
+const round = (v) => Math.round((v + Number.EPSILON) * 100) / 100;
 
 class RefundService {
   /**
    * Refund an entire order: all tickets voided, full amount returned.
+   * Application orders (spec 024) take an optional `amount` for a partial refund.
    *
    * @param {string} orderId
-   * @param {{ reason?: string, initiatedBy?: string }} options
+   * @param {{ amount?: number|null, reason?: string, initiatedBy?: string }} options
    * @returns {Promise<Object>} Refund record
    */
-  async refundOrder(orderId, { reason = null, initiatedBy = null } = {}) {
+  async refundOrder(orderId, { amount = null, reason = null, initiatedBy = null } = {}) {
+    const kindRow = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { kind: true },
+    });
+    if (!kindRow) throw new NotFoundError('Order not found');
+    if (kindRow.kind === 'APPLICATION')
+      return this._refundApplicationOrder(orderId, { amount, reason, initiatedBy });
+    if (amount !== null && amount !== undefined)
+      throw new ValidationError(
+        'Ticket orders are refunded per ticket, per add-on line, or in full'
+      );
+
     // Everything inside one transaction: lock, validate, create PENDING record, call Stripe, finalize
     const result = await prisma.$transaction(async (tx) => {
       // Lock the order row to prevent concurrent refunds
@@ -142,6 +162,130 @@ class RefundService {
     });
 
     return this._formatRefund(result.refund, result.order);
+  }
+
+  /**
+   * Spec 024: amount-based refund of an application order. The review status
+   * is untouched — withdraw separately to release the slot. Offline-paid
+   * orders record the refund the organizer made outside Jump (`manual`).
+   */
+  async _refundApplicationOrder(
+    orderId,
+    { amount = null, reason = null, initiatedBy = null } = {}
+  ) {
+    const prepared = await prisma.$transaction(async (tx) => {
+      const [order] = await tx.$queryRaw`
+        SELECT o.*, p."stripePaymentIntentId", p."status" AS "paymentStatus", p."stripeAccountId", p."source" AS "paymentSource"
+        FROM "Order" o
+        LEFT JOIN "PaymentTransaction" p ON p."orderId" = o."id"
+        WHERE o."id" = ${orderId}
+        FOR UPDATE OF o
+      `;
+      if (!order) throw new NotFoundError('Order not found');
+      const offline = order.paymentSource === 'OFFLINE';
+      if (
+        !['COMPLETED', 'PARTIALLY_REFUNDED'].includes(order.status) ||
+        (!offline && (!order.stripePaymentIntentId || order.paymentStatus !== 'SUCCEEDED'))
+      ) {
+        throw new ConflictError('Only paid applications can be refunded');
+      }
+      const [{ total: alreadyRaw }] = await tx.$queryRaw`
+        SELECT COALESCE(SUM("amount"), 0) AS total FROM "Refund" WHERE "orderId" = ${orderId} AND "status" = 'SUCCEEDED'::"RefundStatus"
+      `;
+      const remaining = round(Number(order.totalAmount) - Number(alreadyRaw));
+      const value = amount == null ? remaining : round(Number(amount));
+      if (!Number.isFinite(value) || value <= 0)
+        throw new ValidationError('amount must be a positive number');
+      if (value > remaining + 1e-9)
+        throw new ValidationError(`amount cannot exceed the remaining ${remaining.toFixed(2)}`);
+
+      if (offline) {
+        const manual = await tx.refund.create({
+          data: { orderId, amount: value, reason, status: 'SUCCEEDED', manual: true, initiatedBy },
+        });
+        await this._recomputeApplicationOrderStatus(tx, orderId);
+        logger.info('Application refund recorded (offline)', {
+          event: 'application_refund_manual',
+          orderId,
+          applicationId: order.applicationId,
+          amount: value,
+          initiatedBy,
+        });
+        return { refund: manual, order, done: true };
+      }
+      const pending = await tx.refund.create({
+        data: { orderId, amount: value, reason, status: 'PENDING', initiatedBy },
+      });
+      return { refund: pending, order, done: false, value };
+    });
+    if (prepared.done) return this._formatRefund(prepared.refund, prepared.order);
+
+    // Stripe outside the lock, like ApplicationPaymentService.refund did (spec 011).
+    const { refund, order, value } = prepared;
+    let stripeRefund;
+    try {
+      stripeRefund = await createStripeRefund({
+        paymentIntentId: order.stripePaymentIntentId,
+        amount: value,
+        reason,
+        connected: Boolean(order.stripeAccountId),
+        metadata: { orderId, applicationId: order.applicationId },
+      });
+    } catch (error) {
+      await prisma.refund.update({ where: { id: refund.id }, data: { status: 'FAILED' } });
+      throw error;
+    }
+    const finished = await prisma.$transaction(async (tx) => {
+      const row = await tx.refund.update({
+        where: { id: refund.id },
+        data: { status: 'SUCCEEDED', stripeRefundId: stripeRefund.id },
+      });
+      await this._recomputeApplicationOrderStatus(tx, orderId);
+      return row;
+    });
+    logger.info('Application refunded', {
+      event: 'application_refunded',
+      orderId,
+      applicationId: order.applicationId,
+      amount: value,
+      stripeRefundId: stripeRefund.id,
+      initiatedBy,
+    });
+    return this._formatRefund(finished, order);
+  }
+
+  /**
+   * After a refund on an application order: Order.status and the
+   * application's paymentStatus move to REFUNDED / PARTIALLY_REFUNDED together.
+   */
+  async _recomputeApplicationOrderStatus(tx, orderId) {
+    const order = await tx.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        totalAmount: true,
+        applicationId: true,
+        refunds: { where: { status: 'SUCCEEDED' }, select: { amount: true } },
+      },
+    });
+    if (!order) return;
+    const refunded = order.refunds.reduce((sum, r) => sum + Number(r.amount), 0);
+    if (refunded <= 0) return;
+    const paymentStatus =
+      refunded + 1e-9 >= Number(order.totalAmount) ? 'REFUNDED' : 'PARTIALLY_REFUNDED';
+    if (order.applicationId) {
+      const application = await tx.application.update({
+        where: { id: order.applicationId },
+        data: { paymentStatus },
+        select: { status: true, paymentStatus: true },
+      });
+      await tx.order.update({
+        where: { id: orderId },
+        data: { status: orderStatusFor(application) },
+      });
+    } else {
+      await tx.order.update({ where: { id: orderId }, data: { status: paymentStatus } });
+    }
   }
 
   /**
@@ -365,7 +509,7 @@ class RefundService {
    */
   async handleExternalRefund(paymentIntentId, stripeRefund) {
     // Check if we already recorded this refund
-    const existing = await prisma.refund.findUnique({
+    const existing = await prisma.refund.findFirst({
       where: { stripeRefundId: stripeRefund.id },
     });
     if (existing) {
@@ -391,6 +535,31 @@ class RefundService {
 
     const order = payment.order;
     const refundAmount = stripeRefund.amount / 100; // Stripe uses cents
+
+    if (order.kind === 'APPLICATION') {
+      // Spec 024: nothing to void; record the refund and move both statuses.
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT 1 FROM "Order" WHERE "id" = ${order.id} FOR UPDATE`;
+        await tx.refund.create({
+          data: {
+            orderId: order.id,
+            stripeRefundId: stripeRefund.id,
+            amount: refundAmount,
+            reason: stripeRefund.reason || 'external',
+            status: 'SUCCEEDED',
+            initiatedBy: null,
+          },
+        });
+        await this._recomputeApplicationOrderStatus(tx, order.id);
+      });
+      logger.info('External application refund processed', {
+        orderId: order.id,
+        applicationId: order.applicationId,
+        stripeRefundId: stripeRefund.id,
+        amount: refundAmount,
+      });
+      return;
+    }
 
     await prisma.$transaction(async (tx) => {
       // Lock order row
@@ -501,6 +670,7 @@ class RefundService {
         : null,
       addOn: r.orderAddOn ? { id: r.orderAddOn.id, name: r.orderAddOn.addOn?.name ?? null, quantity: r.orderAddOn.quantity } : null,
       initiatedBy: r.initiatedBy,
+      manual: r.manual === true,
       createdAt: r.createdAt,
     }));
   }
@@ -528,6 +698,7 @@ class RefundService {
       reason: refund.reason,
       status: refund.status,
       stripeRefundId: refund.stripeRefundId,
+      manual: refund.manual === true,
       orderRef: order.orderRef,
       createdAt: refund.createdAt,
     };

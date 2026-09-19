@@ -17,6 +17,7 @@ jest.unstable_mockModule('../../src/config/resend.js', () => ({
 
 const { default: app } = await import('../../src/api/server.js');
 const { prisma } = await import('@jump/db');
+const { attachOrder, cleanupApplicationOrders } = await import('../helpers/applicationRow.js');
 const { default: buyerAuthService } = await import('../../src/services/BuyerAuthService.js');
 const { default: applicationDigestService } = await import('../../src/services/ApplicationDigestService.js');
 
@@ -46,7 +47,7 @@ describe('Applications contract (spec 011 phase 3)', () => {
     const contact = await prisma.contact.create({ data: { organizationId: org.id, email: `vendor${seq}@${TAG}.test`, firstName: 'V', lastName: `${seq}` } });
     const profile = await prisma.applicantProfile.create({ data: { organizationId: org.id, contactId: contact.id, businessName: `Booth ${seq}` } });
     const t = paidForm.tiers[0];
-    return prisma.application.create({
+    const row = await prisma.application.create({
       data: {
         formId: paidForm.id,
         eventId,
@@ -58,16 +59,12 @@ describe('Applications contract (spec 011 phase 3)', () => {
         paymentStatus: 'NOT_REQUIRED',
         submittedAt: new Date(),
         statusTokenHash: `hash-${TAG}-${seq}`,
-        subtotal: t.amounts.subtotal,
-        platformFee: t.amounts.platformFee,
-        processingFee: t.amounts.processingFee,
-        tax: t.amounts.tax,
-        applicantPays: t.amounts.applicantPays,
-        orgReceives: t.amounts.orgReceives,
-        feeMode: t.amounts.feeMode,
         ...overrides,
       },
     });
+    // Spec 024: the amount snapshot is the application's order.
+    await attachOrder(row.id);
+    return row;
   }
 
   beforeAll(async () => {

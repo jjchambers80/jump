@@ -8,6 +8,7 @@
 import { prisma } from '@jump/db';
 import { ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import logger from '../utils/logger.js';
+import { buyerLineTotal } from './orderLines.js';
 
 /** Common add-ons an organizer can create in one click. Prices are starting points. */
 export const ADD_ON_PRESETS = [
@@ -23,7 +24,8 @@ const SCOPES = new Set(['TICKET', 'APPLICATION', 'BOTH']);
 const ADMIN_INCLUDE = {
   priceTiers: { select: { priceTierId: true } },
   applicationTiers: { select: { applicationTierId: true } },
-  _count: { select: { orderLines: true, applicationLines: true } },
+  // Spec 024: application add-on lines are OrderAddOn rows on the application's order.
+  _count: { select: { orderLines: true } },
 };
 
 class AddOnService {
@@ -115,7 +117,7 @@ class AddOnService {
   /** Delete only while nothing has been sold; otherwise deactivate (spec FR-016). */
   async remove(orgId, eventId, addOnId) {
     const addOn = await this._requireAddOn(orgId, eventId, addOnId);
-    if (addOn._count.orderLines > 0 || addOn._count.applicationLines > 0) {
+    if (addOn._count.orderLines > 0) {
       throw new ConflictError('This add-on has been sold; deactivate it instead of deleting');
     }
     await prisma.addOn.delete({ where: { id: addOnId } });
@@ -317,18 +319,6 @@ class AddOnService {
     });
   }
 
-  /** Application line as shown to the applicant and the organizer. */
-  serializeApplicationLine(line) {
-    return {
-      id: line.id,
-      addOnId: line.addOnId,
-      name: line.addOn?.name ?? null,
-      quantity: line.quantity,
-      unitPrice: Number(line.unitPrice),
-      applicantPays: Number(line.applicantPays),
-    };
-  }
-
   /** Compact "Power ×1, Badge ×2" for list rows, CSV cells and emails. */
   summarizeLines(lines) {
     return (lines || []).map((l) => `${l.addOn?.name ?? l.name} ×${l.quantity}`).join(', ');
@@ -434,28 +424,53 @@ class AddOnService {
    */
   async sales(orgId, eventId) {
     await this._requireEvent(orgId, eventId);
+    // Spec 024: one line table. Ticket lines are on TICKET orders; application
+    // lines are on APPLICATION orders and are read with the application's state.
     const addOns = await prisma.addOn.findMany({
       where: { eventId },
       include: {
-        orderLines: { where: { refundedAt: null, order: { status: { in: ['COMPLETED', 'PARTIALLY_REFUNDED'] } } }, select: { quantity: true, unitPrice: true } },
-        applicationLines: {
-          where: { application: { status: { not: 'DRAFT' } } },
-          select: { quantity: true, unitPrice: true, application: { select: { status: true, paymentStatus: true, capacitySlot: true } } },
+        orderLines: {
+          where: {
+            OR: [
+              {
+                refundedAt: null,
+                order: { kind: 'TICKET', status: { in: ['COMPLETED', 'PARTIALLY_REFUNDED'] } },
+              },
+              { order: { kind: 'APPLICATION', application: { status: { not: 'DRAFT' } } } },
+            ],
+          },
+          select: {
+            quantity: true,
+            unitPrice: true,
+            order: {
+              select: {
+                kind: true,
+                application: { select: { status: true, paymentStatus: true, capacitySlot: true } },
+              },
+            },
+          },
         },
       },
       orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
     });
     const round = (v) => Math.round((v + Number.EPSILON) * 100) / 100;
     const rows = addOns.map((a) => {
-      const orders = { quantity: 0, revenue: 0, lines: a.orderLines.length };
-      for (const l of a.orderLines) {
+      const ticketLines = a.orderLines.filter((l) => l.order.kind === 'TICKET');
+      const applicationLines = a.orderLines.filter(
+        (l) => l.order.kind === 'APPLICATION' && l.order.application
+      );
+      const orders = { quantity: 0, revenue: 0, lines: ticketLines.length };
+      for (const l of ticketLines) {
         orders.quantity += l.quantity;
         orders.revenue += Number(l.unitPrice) * l.quantity;
       }
       const applications = { quantity: 0, revenue: 0, lines: 0, held: 0, pending: 0 };
-      for (const l of a.applicationLines) {
-        const app = l.application;
-        if (['PAID', 'PARTIALLY_REFUNDED'].includes(app.paymentStatus) && app.capacitySlot === 'APPROVED') {
+      for (const l of applicationLines) {
+        const app = l.order.application;
+        if (
+          ['PAID', 'PARTIALLY_REFUNDED'].includes(app.paymentStatus) &&
+          app.capacitySlot === 'APPROVED'
+        ) {
           applications.quantity += l.quantity;
           applications.revenue += Number(l.unitPrice) * l.quantity;
           applications.lines += 1;
@@ -495,34 +510,43 @@ class AddOnService {
   /** One CSV row per add-on line, ticket orders and applications alike. */
   async purchasersCsv(orgId, eventId) {
     await this._requireEvent(orgId, eventId);
-    const [orderLines, applicationLines] = await Promise.all([
-      prisma.orderAddOn.findMany({
-        where: { addOn: { eventId }, order: { status: { not: 'PENDING' } } },
-        include: {
-          addOn: { select: { name: true, displayOrder: true } },
-          order: { select: { id: true, status: true, createdAt: true, contact: { select: { email: true, firstName: true, lastName: true } } } },
-        },
-      }),
-      prisma.applicationAddOn.findMany({
-        where: { addOn: { eventId }, application: { status: { not: 'DRAFT' } } },
-        include: {
-          addOn: { select: { name: true, displayOrder: true } },
-          application: {
-            select: {
-              id: true,
-              status: true,
-              paymentStatus: true,
-              submittedAt: true,
-              boothLabel: true,
-              contact: { select: { email: true, firstName: true, lastName: true } },
-              profile: { select: { businessName: true } },
-              tier: { select: { name: true } },
-              form: { select: { name: true } },
+    const lines = await prisma.orderAddOn.findMany({
+      where: {
+        addOn: { eventId },
+        OR: [
+          { order: { kind: 'TICKET', status: { not: 'PENDING' } } },
+          { order: { kind: 'APPLICATION', application: { status: { not: 'DRAFT' } } } },
+        ],
+      },
+      include: {
+        addOn: { select: { name: true, displayOrder: true } },
+        order: {
+          select: {
+            id: true,
+            kind: true,
+            status: true,
+            createdAt: true,
+            contact: { select: { email: true, firstName: true, lastName: true } },
+            application: {
+              select: {
+                id: true,
+                status: true,
+                paymentStatus: true,
+                submittedAt: true,
+                boothLabel: true,
+                profile: { select: { businessName: true } },
+                tier: { select: { name: true } },
+                form: { select: { name: true } },
+              },
             },
           },
         },
-      }),
-    ]);
+      },
+    });
+    const orderLines = lines.filter((l) => l.order.kind === 'TICKET');
+    const applicationLines = lines
+      .filter((l) => l.order.kind === 'APPLICATION' && l.order.application)
+      .map((l) => ({ ...l, application: { ...l.order.application, contact: l.order.contact } }));
     const csvCell = (value) => {
       if (value === null || value === undefined) return '';
       const s = String(value);
@@ -563,7 +587,6 @@ class AddOnService {
       isActive: a.isActive,
       displayOrder: a.displayOrder,
       orderLineCount: a._count?.orderLines ?? 0,
-      applicationLineCount: a._count?.applicationLines ?? 0,
       createdAt: a.createdAt,
       updatedAt: a.updatedAt,
     };
@@ -586,8 +609,12 @@ class AddOnService {
     };
   }
 
-  /** Order line as shown on confirmations, admin order detail and scan results. */
-  serializeOrderLine(line) {
+  /**
+   * Order line as shown on confirmations, admin order detail and scan results.
+   * `feeMode` (spec 024): under ABSORB the buyer pays the listed price and the
+   * fee shares are the organization's cost, so `lineTotal` excludes them.
+   */
+  serializeOrderLine(line, feeMode = 'PASS') {
     const unitPrice = Number(line.unitPrice);
     const platformFee = Number(line.platformFee);
     const processingFee = Number(line.processingFee);
@@ -601,7 +628,7 @@ class AddOnService {
       platformFee,
       processingFee,
       tax,
-      lineTotal: Math.round((unitPrice * line.quantity + platformFee + processingFee + tax) * 100) / 100,
+      lineTotal: buyerLineTotal(line, feeMode),
       refundedAt: line.refundedAt,
     };
   }

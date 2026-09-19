@@ -8,6 +8,7 @@
 // value is truthy). Unknown paths render empty.
 
 import { prisma } from '@jump/db';
+import { moneyOf } from './applicationMoney.js';
 import { DEFAULT_TEMPLATES, MERGE_FIELDS, TEMPLATE_ACTIONS } from '../config/applications.js';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import emailService from './EmailService.js';
@@ -90,7 +91,10 @@ class ApplicationTemplateService {
   async contextFor(application, { payNowUrl = null } = {}) {
     const organization = application.event?.venue?.organization || {};
     const { base } = await storefrontFor(organization.id || application.organizationId);
-    const statusUrl = application.statusUrl || `${base}/events/${application.eventId}/apply/status/${application.id}`;
+    const statusUrl =
+      application.statusUrl ||
+      `${base}/events/${application.eventId}/apply/status/${application.id}`;
+    const money = moneyOf(application, { taxInclusive: organization.taxInclusivePricing === true });
     return {
       applicant: {
         firstName: application.contact?.firstName || '',
@@ -103,11 +107,20 @@ class ApplicationTemplateService {
       form: { name: application.form?.name || '' },
       tier: application.tier ? { name: application.tier.name } : null,
       // Spec 012: null when there are no lines so {{#addOns}} sections hide.
-      addOns: application.addOns?.length
-        ? { summary: application.addOns.map((l) => `${l.addOn?.name ?? l.name} ×${l.quantity} (${formatMoney(l.applicantPays)})`).join(', '), count: application.addOns.length }
+      // Spec 024: money comes from the application's order.
+      addOns: money.addOns.length
+        ? {
+            summary: money.addOns
+              .map(
+                (l) => `${l.name ?? l.addOn?.name} ×${l.quantity} (${formatMoney(l.applicantPays)})`
+              )
+              .join(', '),
+            count: money.addOns.length,
+          }
         : null,
-      amount: { applicantPays: formatMoney(application.applicantPays) },
-      payment: { dueDate: formatDate(application.paymentDueAt) },
+      amount: { applicantPays: formatMoney(money.applicantPays) },
+      payment: { dueDate: formatDate(money.paymentDueAt) },
+      order: { ref: money.orderRef || '' },
       links: {
         status: statusUrl,
         payNow: payNowUrl || '',

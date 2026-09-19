@@ -37,7 +37,7 @@ import setupGuideService from '../../services/SetupGuideService.js';
 import billingService from '../../services/BillingService.js';
 import pageService from '../../services/PageService.js';
 import storefrontPreferencesService from '../../services/StorefrontPreferencesService.js';
-import { PAID_ORDER_STATUSES, PAID_APPLICATION_STATUSES } from '../../services/paidStatuses.js';
+import { PAID_ORDER_STATUSES } from '../../services/paidStatuses.js';
 
 const router = express.Router();
 
@@ -804,16 +804,20 @@ router.get('/dashboard/stats', async (req, res, next) => {
     const paymentSuccessRate =
       totalOrders > 0 ? Math.round((completedOrders / totalOrders) * 100) : 100;
 
-    // Gross revenue by source (spec 018 phase 2): orders through the venue
-    // scope, applications through their own organizationId.
-    const orgId = isUnscoped(scope) ? null : scope.organizationId;
+    // Gross revenue by source (spec 018 phase 2; one ledger since spec 024).
     const [orderRevenue, applicationRevenue] = await Promise.all([
-      prisma.order.aggregate({ where: { status: { in: PAID_ORDER_STATUSES }, event: venueFilter }, _sum: { totalAmount: true } }),
-      prisma.application.aggregate({ where: { paymentStatus: { in: PAID_APPLICATION_STATUSES }, ...(orgId && { organizationId: orgId }) }, _sum: { applicantPays: true } }),
+      prisma.order.aggregate({
+        where: { kind: 'TICKET', status: { in: PAID_ORDER_STATUSES }, event: venueFilter },
+        _sum: { totalAmount: true },
+      }),
+      prisma.order.aggregate({
+        where: { kind: 'APPLICATION', status: { in: PAID_ORDER_STATUSES }, event: venueFilter },
+        _sum: { totalAmount: true },
+      }),
     ]);
     const round = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
     const ordersGross = round(Number(orderRevenue._sum.totalAmount || 0));
-    const applicationsGross = round(Number(applicationRevenue._sum.applicantPays || 0));
+    const applicationsGross = round(Number(applicationRevenue._sum.totalAmount || 0));
 
     res.json({
       totalCapacity,
@@ -1171,7 +1175,14 @@ router.post('/orders/:orderId/refund', requireAdmin, async (req, res, next) => {
       }
     }
 
+    // `amount` (spec 024): partial refund of an application order; ticket
+    // orders are refunded per ticket, per add-on line, or in full.
+    const amount =
+      req.body.amount === undefined || req.body.amount === null ? null : Number(req.body.amount);
+    if (amount !== null && (!Number.isFinite(amount) || amount <= 0))
+      throw new ValidationError('amount must be a positive number');
     const result = await refundService.refundOrder(req.params.orderId, {
+      amount,
       reason: req.body.reason || null,
       initiatedBy: req.user.id,
     });

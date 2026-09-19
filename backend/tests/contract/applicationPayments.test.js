@@ -37,6 +37,11 @@ const { prisma } = await import('@jump/db');
 const { default: paymentSettingsService } = await import('../../src/services/PaymentSettingsService.js');
 const { default: applicationPaymentService } = await import('../../src/services/ApplicationPaymentService.js');
 const { statusToken } = await import('../../src/services/applicationLinks.js');
+const {
+  appRow: loadRow,
+  setDueAt,
+  cleanupApplicationOrders,
+} = await import('../helpers/applicationRow.js');
 
 const TAG = 'apppay-ct';
 const ACCT = 'acct_apppay_ct';
@@ -112,7 +117,7 @@ describe('Application payments contract (spec 011 phase 2)', () => {
       .post(`/events/${eventId}/applications`)
       .send({ formSlug, tierId, contact: { email, firstName: 'Vee', lastName: 'Vendor' }, profile: { businessName }, answers: {} });
 
-  const appRow = (id) => prisma.application.findUnique({ where: { id }, include: { tier: true, refunds: true, contact: true } });
+  const appRow = (id) => loadRow(id, { tier: true, contact: true });
 
   /** Drive a DRAFT card-on-file application to SUBMITTED via the setup webhook. */
   async function cardOnFile(applicationId) {
@@ -165,7 +170,7 @@ describe('Application payments contract (spec 011 phase 2)', () => {
   afterAll(async () => {
     delete process.env.APPLICATIONS_PAYMENTS_ENABLED;
     delete process.env.STRIPE_CONNECT_ENABLED;
-    await prisma.applicationRefund.deleteMany({ where: { application: { organizationId: org.id } } }).catch(() => {});
+    await cleanupApplicationOrders(org.id);
     await prisma.application.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
     await prisma.applicantProfile.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
     await prisma.applicationForm.deleteMany({ where: { eventId } }).catch(() => {});
@@ -240,7 +245,16 @@ describe('Application payments contract (spec 011 phase 2)', () => {
     const again = await submit('vendor-space', tier.id, `vendor1@${TAG}.test`);
     expect(again.status).toBe(201);
     expect(again.body.applicationId).not.toBe(cardApp);
-    expect(await prisma.application.findUnique({ where: { id: cardApp } })).toBeNull();
+    // Spec 024: the replaced DRAFT is withdrawn, never deleted; its order is CANCELLED.
+    const replaced = await appRow(cardApp);
+    expect(replaced).toMatchObject({
+      status: 'WITHDRAWN',
+      withdrawnBy: 'SYSTEM',
+      withdrawReason: 'replaced',
+      orderStatus: 'CANCELLED',
+    });
+    expect(again.body.orderRef).toMatch(/^JMP-[A-Z2-9]{6}$/);
+    expect((await appRow(again.body.applicationId)).orderStatus).toBe('PENDING');
     cardApp = again.body.applicationId;
   });
 
@@ -575,8 +589,11 @@ describe('Application payments contract (spec 011 phase 2)', () => {
       const created = await submit(slug, tierId, email, `Overdue ${email}`);
       await cardOnFile(created.body.applicationId);
       mockIntentsCreate.mockRejectedValueOnce(cardDecline());
-      await request(app).post(`${adminBase()}/applications/${created.body.applicationId}/decision`).set(...auth(organizerToken)).send({ decision: 'APPROVE' });
-      await prisma.application.update({ where: { id: created.body.applicationId }, data: { paymentDueAt: new Date(Date.now() - 60_000) } });
+      await request(app)
+        .post(`${adminBase()}/applications/${created.body.applicationId}/decision`)
+        .set(...auth(organizerToken))
+        .send({ decision: 'APPROVE' });
+      await setDueAt(created.body.applicationId, new Date(Date.now() - 60_000));
       return created.body.applicationId;
     };
     const withdrawId = await mk('vendor-space', tier.id, `overdue1@${TAG}.test`);

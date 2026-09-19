@@ -36,9 +36,13 @@ jest.unstable_mockModule('../../src/config/stripe.js', () => ({
 
 const { default: app } = await import('../../src/api/server.js');
 const { prisma } = await import('@jump/db');
-const { default: paymentSettingsService } = await import('../../src/services/PaymentSettingsService.js');
-const { default: applicationPaymentService } = await import('../../src/services/ApplicationPaymentService.js');
-const { default: applicationDigestService } = await import('../../src/services/ApplicationDigestService.js');
+const { appRow: loadRow, cleanupApplicationOrders } = await import('../helpers/applicationRow.js');
+const { default: paymentSettingsService } =
+  await import('../../src/services/PaymentSettingsService.js');
+const { default: applicationPaymentService } =
+  await import('../../src/services/ApplicationPaymentService.js');
+const { default: applicationDigestService } =
+  await import('../../src/services/ApplicationDigestService.js');
 const { default: paymentService } = await import('../../src/services/PaymentService.js');
 const { default: feeService } = await import('../../src/services/FeeService.js');
 const { applicationAmounts } = await import('../../src/services/ApplicationFormService.js');
@@ -111,7 +115,7 @@ describe('Applications with add-ons (spec 012 phase 2)', () => {
       .post(`/events/${eventId}/applications`)
       .send({ formSlug, tierId, contact: { email, firstName: 'Vee', lastName: 'Vendor' }, profile: { businessName }, answers: {}, ...(addOns !== undefined && { addOns }) });
 
-  const appRow = (id) => prisma.application.findUnique({ where: { id }, include: { tier: true, contact: true, addOns: { include: { addOn: true } }, decisions: true } });
+  const appRow = (id) => loadRow(id, { tier: true, contact: true, decisions: true });
   const addOnRow = (id) => prisma.addOn.findUnique({ where: { id } });
   const tierRow = (id) => prisma.applicationTier.findUnique({ where: { id } });
 
@@ -172,10 +176,16 @@ describe('Applications with add-ons (spec 012 phase 2)', () => {
 
   afterAll(async () => {
     delete process.env.APPLICATIONS_PAYMENTS_ENABLED;
-    await prisma.paymentTransaction.deleteMany({ where: { order: { event: { venue: { organizationId: org.id } } } } }).catch(() => {});
-    await prisma.ticket.deleteMany({ where: { event: { venue: { organizationId: org.id } } } }).catch(() => {});
-    await prisma.order.deleteMany({ where: { event: { venue: { organizationId: org.id } } } }).catch(() => {});
-    await prisma.applicationRefund.deleteMany({ where: { application: { organizationId: org.id } } }).catch(() => {});
+    await prisma.paymentTransaction
+      .deleteMany({ where: { order: { event: { venue: { organizationId: org.id } } } } })
+      .catch(() => {});
+    await prisma.ticket
+      .deleteMany({ where: { event: { venue: { organizationId: org.id } } } })
+      .catch(() => {});
+    await prisma.order
+      .deleteMany({ where: { event: { venue: { organizationId: org.id } } } })
+      .catch(() => {});
+    await cleanupApplicationOrders(org.id);
     await prisma.application.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
     await prisma.applicantProfile.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
     await prisma.event.deleteMany({ where: { venue: { organizationId: org.id } } }).catch(() => {});

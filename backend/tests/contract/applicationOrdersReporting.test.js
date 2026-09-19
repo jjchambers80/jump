@@ -1,7 +1,8 @@
-// Contract tests for Transactions phase 2 (spec 018): application money in
-// the customers list and detail, event analytics revenue breakdown, dashboard
-// gross revenue and the collected-tax report. Fixtures are written straight
-// to Postgres; the money paths are covered by their own suites.
+// Contract tests for reporting over the one ledger (spec 018 phase 2, moved
+// onto application orders by spec 024): application money in the customers
+// list and detail, event analytics revenue breakdown, dashboard gross revenue
+// and the collected-tax report. Fixtures are written straight to Postgres;
+// the money paths are covered by their own suites.
 
 import { jest } from '@jest/globals';
 import request from 'supertest';
@@ -31,7 +32,7 @@ const auth = (token) => ['Authorization', `Bearer ${token}`];
 const sha = (s) => createHash('sha256').update(s).digest('hex');
 const T = (day, hour = 12) => new Date(Date.UTC(2026, 8, day, hour));
 
-describe('Transactions reporting contract (spec 018 phase 2)', () => {
+describe('Application orders reporting contract (spec 024)', () => {
   let adminToken;
   let org;
   let event;
@@ -66,9 +67,11 @@ describe('Transactions reporting contract (spec 018 phase 2)', () => {
     return row;
   }
 
-  async function application({ form, contact, profile, paymentStatus, subtotal, tax = 0, paidAt = T(2), refund = 0 }) {
+  /** An APPROVED application with its APPLICATION order (spec 024): totals, tier line, payment, optional refund. */
+  async function application({ form, contact, profile, paymentStatus, subtotal, tax = 0, paidAt = T(2), refund = 0, orderStatus = null, dueAt = null, intent = true }) {
     seq += 1;
     const applicantPays = Math.round((subtotal + tax + 1) * 100) / 100; // +1 processing fee
+    const submittedAt = new Date((paidAt ?? dueAt ?? T(6)).getTime() - 3_600_000);
     const row = await prisma.application.create({
       data: {
         formId: form.id,
@@ -79,18 +82,33 @@ describe('Transactions reporting contract (spec 018 phase 2)', () => {
         tierId: form.tiers[0].id,
         status: 'APPROVED',
         paymentStatus,
-        capacitySlot: 'APPROVED',
-        subtotal,
-        platformFee: 0,
-        processingFee: 1,
-        tax,
-        applicantPays,
+        capacitySlot: paymentStatus === 'PAYMENT_DUE' ? 'RESERVED' : 'APPROVED',
+        submittedAt,
+        statusTokenHash: sha(`${TAG}-${seq}`),
+      },
+    });
+    const money = { PAID: 'COMPLETED', PARTIALLY_REFUNDED: 'PARTIALLY_REFUNDED', REFUNDED: 'REFUNDED' };
+    await prisma.order.create({
+      data: {
+        kind: 'APPLICATION',
+        eventId: event.id,
+        contactId: contact.id,
+        applicationId: row.id,
+        orderRef: `${TAG.toUpperCase()}-A${seq}`,
+        totalAmount: applicantPays,
+        subtotalAmount: subtotal,
+        platformFeeAmount: 0,
+        processingFeeAmount: 1,
+        taxAmount: tax,
         orgReceives: subtotal,
         feeMode: 'PASS',
-        stripePaymentIntentId: `pi_${TAG}_app_${seq}`,
+        quantity: 1,
+        status: orderStatus ?? money[paymentStatus] ?? 'PENDING',
         paidAt,
-        submittedAt: new Date(paidAt.getTime() - 3_600_000),
-        statusTokenHash: sha(`${TAG}-${seq}`),
+        dueAt,
+        createdAt: submittedAt,
+        items: { create: { kind: 'APPLICATION_TIER', applicationTierId: form.tiers[0].id, description: form.tiers[0].name, quantity: 1, unitPrice: form.tiers[0].price, processingFee: 1, tax } },
+        ...(intent && { payment: { create: { stripePaymentIntentId: `pi_${TAG}_app_${seq}`, amount: applicantPays, status: paidAt ? 'SUCCEEDED' : 'FAILED' } } }),
         ...(refund > 0 && { refunds: { create: { amount: refund, status: 'SUCCEEDED', stripeRefundId: `re_${TAG}_${seq}` } } }),
       },
     });
@@ -129,18 +147,11 @@ describe('Transactions reporting contract (spec 018 phase 2)', () => {
     await application({ form: taxableForm, contact: contacts.vendor, profile: profiles.vendor, paymentStatus: 'PAID', subtotal: 200, tax: 14.5, paidAt: T(2) });
     await application({ form: untaxedForm, contact: contacts.vendor, profile: profiles.vendor, paymentStatus: 'PARTIALLY_REFUNDED', subtotal: 500, paidAt: T(4), refund: 100 });
     await application({ form: taxableForm, contact: contacts.both, profile: profiles.both, paymentStatus: 'PAID', subtotal: 200, tax: 14.5, paidAt: T(5) });
-    seq += 1;
-    await prisma.application.create({
-      data: {
-        formId: taxableForm.id, eventId: event.id, organizationId: org.id, contactId: contacts.pending.id, profileId: profiles.pending.id, tierId: taxableForm.tiers[0].id,
-        status: 'APPROVED', paymentStatus: 'PAYMENT_DUE', capacitySlot: 'RESERVED', subtotal: 200, tax: 14.5, applicantPays: 215.5, orgReceives: 200,
-        submittedAt: T(6), paymentDueAt: T(12), statusTokenHash: sha(`${TAG}-${seq}`),
-      },
-    });
+    await application({ form: taxableForm, contact: contacts.pending, profile: profiles.pending, paymentStatus: 'PAYMENT_DUE', subtotal: 200, tax: 14.5, paidAt: null, dueAt: T(12) });
   });
 
   afterAll(async () => {
-    await prisma.applicationRefund.deleteMany({ where: { application: { organizationId: org.id } } }).catch(() => {});
+    await prisma.refund.deleteMany({ where: { order: { eventId: event.id } } }).catch(() => {});
     await prisma.application.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
     await prisma.applicantProfile.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
     await prisma.applicationForm.deleteMany({ where: { eventId: event.id } }).catch(() => {});
@@ -182,7 +193,9 @@ describe('Transactions reporting contract (spec 018 phase 2)', () => {
   it('customer detail lists applications beside orders; an application-only contact resolves', async () => {
     const both = await request(app).get(`/admin/customers/${contacts.both.id}`).set(...auth(adminToken));
     expect(both.status).toBe(200);
-    expect(both.body.orders).toHaveLength(1);
+    // Spec 024: one order list, both kinds; `applications` keeps the review-side view.
+    expect(both.body.orders.map((o) => o.kind).sort()).toEqual(['APPLICATION', 'TICKET']);
+    expect(both.body.orders.find((o) => o.kind === 'APPLICATION')).toMatchObject({ applicationId: both.body.applications[0].id, totalAmount: 215.5 });
     expect(both.body.applications).toHaveLength(1);
     expect(both.body.applications[0]).toMatchObject({
       form: { name: 'Vendors', kind: 'PAID' },
@@ -199,7 +212,8 @@ describe('Transactions reporting contract (spec 018 phase 2)', () => {
 
     const vendor = await request(app).get(`/admin/customers/${contacts.vendor.id}`).set(...auth(adminToken));
     expect(vendor.status).toBe(200);
-    expect(vendor.body.orders).toEqual([]);
+    expect(vendor.body.orders.every((o) => o.kind === 'APPLICATION')).toBe(true);
+    expect(vendor.body.orders).toHaveLength(2);
     expect(vendor.body.applications).toHaveLength(2);
     expect(vendor.body.applications[0]).toMatchObject({ paymentStatus: 'PARTIALLY_REFUNDED', refunded: 100 }); // newest first
     expect(vendor.body.totalRefunded).toBe(100);

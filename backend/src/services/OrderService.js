@@ -12,6 +12,7 @@ import feeService from './FeeService.js';
 import PaymentSettingsService from './PaymentSettingsService.js';
 import addOnService from './AddOnService.js';
 import { confirmationUrl, eventUrl } from '../utils/storefrontUrl.js';
+import orderLineService, { ORDER_INCLUDE } from './OrderLineService.js';
 
 class OrderService {
   /**
@@ -44,6 +45,43 @@ class OrderService {
       code += charset[bytes[i] % charset.length];
     }
     return `JMP-${code}`;
+  }
+
+  /** A fresh orderRef that no order holds, checked inside `tx`. */
+  async _uniqueOrderRef(tx) {
+    let orderRef = this._generateOrderRef();
+    while (await tx.order.findUnique({ where: { orderRef }, select: { id: true } }))
+      orderRef = this._generateOrderRef();
+    return orderRef;
+  }
+
+  /**
+   * Spec 024: the order for a PAID-form application, created inside the
+   * submission transaction. PENDING until the charge succeeds; the lines are
+   * the amount snapshot (tier, add-ons, adjustments). No inventory here — the
+   * application's tier slot and add-on holds are taken at approval.
+   *
+   * @param {import('@prisma/client').Prisma.TransactionClient} tx
+   * @param {{ application: { id, eventId, contactId }, data: { amounts, items, addOns }, currency?: string }} params
+   */
+  async createApplicationOrder(tx, { application, data, currency = 'usd' }) {
+    const orderRef = await this._uniqueOrderRef(tx);
+    return tx.order.create({
+      data: {
+        kind: 'APPLICATION',
+        eventId: application.eventId,
+        contactId: application.contactId,
+        applicationId: application.id,
+        orderRef,
+        ...orderLineService.totalsData(data.amounts),
+        currency,
+        quantity: 1,
+        status: 'PENDING',
+        items: { create: data.items },
+        addOns: { create: data.addOns },
+      },
+      include: ORDER_INCLUDE,
+    });
   }
 
   /**
@@ -203,15 +241,13 @@ class OrderService {
       });
 
       // Ensure unique orderRef
-      let existingRef = await tx.order.findUnique({ where: { orderRef } });
-      while (existingRef) {
-        orderRef = this._generateOrderRef();
-        existingRef = await tx.order.findUnique({ where: { orderRef } });
-      }
+      if (await tx.order.findUnique({ where: { orderRef }, select: { id: true } }))
+        orderRef = await this._uniqueOrderRef(tx);
 
       // 5. Create order with fee breakdown
       const order = await tx.order.create({
         data: {
+          kind: 'TICKET',
           eventId,
           contactId: contactRecord.id,
           orderRef,
@@ -220,6 +256,8 @@ class OrderService {
           platformFeeAmount: fees.platformFee,
           processingFeeAmount: fees.processingFee,
           taxAmount: fees.tax,
+          orgReceives: fees.subtotal, // ticket fees are always passed to the buyer
+          feeMode: 'PASS',
           currency: 'usd',
           quantity,
           status: 'PENDING',
@@ -227,11 +265,14 @@ class OrderService {
           optInMarketing: emailSubscribed === true,
           items: {
             create: items.map((item, idx) => ({
+              kind: 'TICKET_TIER',
               priceTierId: item.priceTierId,
+              description: tierById.get(item.priceTierId).name,
               quantity: item.quantity,
               unitPrice: tierById.get(item.priceTierId).price,
               platformFee: fees.itemBreakdowns[idx].platformFee,
               processingFee: fees.itemBreakdowns[idx].processingFee,
+              tax: fees.itemBreakdowns[idx].tax,
             })),
           },
           addOns: {
@@ -418,7 +459,10 @@ class OrderService {
           orderBy: { createdAt: 'asc' },
         },
         items: {
-          include: { priceTier: { select: { name: true } } },
+          include: {
+            priceTier: { select: { name: true } },
+            applicationTier: { select: { name: true } },
+          },
           orderBy: { createdAt: 'asc' },
         },
         addOns: {
@@ -426,6 +470,18 @@ class OrderService {
           orderBy: { createdAt: 'asc' },
         },
         payment: true,
+        application: {
+          select: {
+            id: true,
+            eventId: true,
+            status: true,
+            paymentStatus: true,
+            capacitySlot: true,
+            form: { select: { id: true, name: true, kind: true } },
+            tier: { select: { id: true, name: true } },
+            profile: { select: { businessName: true } },
+          },
+        },
       },
     });
 
@@ -442,7 +498,8 @@ class OrderService {
    * @param {Object} pagination
    */
   async getOrdersForContact(contactId, pagination = {}) {
-    return this.listOrders({ contactId }, pagination);
+    // Ticket orders only until the account page renders application orders (spec 024 phase 2).
+    return this.listOrders({ contactId, kind: 'TICKET' }, pagination);
   }
 
   /**
@@ -618,7 +675,7 @@ class OrderService {
     await prisma.$transaction(async (tx) => {
       await tx.order.update({
         where: { id: orderId },
-        data: { status: 'COMPLETED' },
+        data: { status: 'COMPLETED', paidAt: new Date() },
       });
       // Add-on reservations → sold (tiers move in TicketService.createTicketsForOrder)
       const addOns = await tx.orderAddOn.findMany({ where: { orderId }, select: { addOnId: true, quantity: true } });
@@ -868,25 +925,42 @@ class OrderService {
           : undefined,
       },
       contact: order.contact,
+      kind: order.kind,
       quantity: order.quantity,
       items: (order.items || []).map((item) => ({
+        id: item.id,
+        kind: item.kind,
         priceTierId: item.priceTierId,
-        priceTierName: item.priceTier?.name,
+        priceTierName: item.priceTier?.name ?? item.applicationTier?.name ?? null,
+        applicationTierId: item.applicationTierId,
+        description: item.description,
         quantity: item.quantity,
         unitPrice: Number(item.unitPrice),
         platformFee: Number(item.platformFee),
         processingFee: Number(item.processingFee),
-        lineTotal: Number(item.unitPrice) * item.quantity + Number(item.platformFee) + Number(item.processingFee),
+        tax: Number(item.tax),
+        lineTotal:
+          Number(item.unitPrice) * item.quantity +
+          Number(item.platformFee) +
+          Number(item.processingFee),
+        createdById: item.createdById,
+        createdAt: item.createdAt,
       })),
       // Add-on lines (spec 012) — never tickets, never in `quantity`
-      addOns: (order.addOns || []).map((line) => addOnService.serializeOrderLine(line)),
+      addOns: (order.addOns || []).map((line) =>
+        addOnService.serializeOrderLine(line, order.feeMode)
+      ),
       subtotalAmount: Number(order.subtotalAmount),
       platformFeeAmount: Number(order.platformFeeAmount),
       processingFeeAmount: Number(order.processingFeeAmount),
       taxAmount: Number(order.taxAmount),
       totalAmount: Number(order.totalAmount),
+      orgReceives: Number(order.orgReceives),
+      feeMode: order.feeMode,
       currency: order.currency,
       status: order.status,
+      paidAt: order.paidAt,
+      dueAt: order.dueAt,
       tickets,
       payment: order.payment
         ? {
@@ -895,7 +969,25 @@ class OrderService {
             currency: order.payment.currency,
             status: order.payment.status,
             failureReason: order.payment.failureReason,
+            source: order.payment.source,
+            offlineMethod: order.payment.offlineMethod,
+            offlineReference: order.payment.offlineReference,
+            stripePaymentIntentId: order.payment.stripePaymentIntentId,
             createdAt: order.payment.createdAt,
+          }
+        : null,
+      // Spec 024: the application behind an APPLICATION order
+      application: order.application
+        ? {
+            id: order.application.id,
+            eventId: order.application.eventId,
+            status: order.application.status,
+            paymentStatus: order.application.paymentStatus,
+            capacitySlot: order.application.capacitySlot,
+            formName: order.application.form?.name ?? null,
+            formKind: order.application.form?.kind ?? null,
+            tierName: order.application.tier?.name ?? null,
+            businessName: order.application.profile?.businessName ?? null,
           }
         : null,
       createdAt: order.createdAt,
@@ -906,6 +998,8 @@ class OrderService {
     return {
       id: order.id,
       orderRef: order.orderRef,
+      kind: order.kind,
+      applicationId: order.applicationId ?? null,
       eventName: order.event?.name,
       eventDate: order.event?.date,
       quantity: order.quantity,
@@ -916,6 +1010,7 @@ class OrderService {
       totalAmount: Number(order.totalAmount),
       currency: order.currency,
       status: order.status,
+      paidAt: order.paidAt ?? null,
       contact: order.contact
         ? {
             firstName: order.contact.firstName,
