@@ -61,7 +61,7 @@ Wiki pages live under `docs/wiki/features/` and cover what the feature does, how
 
 ## Active task tracking
 
-The Hermes Kanban board at `~/.hermes/kanban/boards/jump/` manages task lifecycle: dispatch, assignments, review, completion. Tasks map to spec phases or discrete implementation chunks.
+The Hermes Kanban board at `~/.hermes/kanban/boards/jump/` manages task lifecycle: dispatch, assignments, review, completion. Tasks map to spec phases or discrete implementation chunks. The operating contract is [`docs/development/kanban-workflow.md`](development/kanban-workflow.md): triage → specify/decompose → Claude Code implementation → PR review → merge → done.
 
 ---
 
