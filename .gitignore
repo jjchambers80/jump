@@ -64,3 +64,7 @@ graphify-out/
 
 # Worktrees created by Hermes Kanban workers
 .worktrees/
+
+# Locally installed agent skills (ui-ux-pro-max etc.)
+.claude/skills/
+skills-lock.json

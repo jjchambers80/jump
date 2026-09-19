@@ -73,7 +73,7 @@ Review the feature's impact and determine if any agent instruction files need up
 - Changes the tech stack (new dependency, new service)
 - Alters commit conventions or common task workflows
 
-**Root `CLAUDE.md`** — Update if the feature:
+**Root `AGENTS.md`** — Update if the feature:
 - Adds new npm scripts or commands
 - Introduces new required environment variables
 - Changes deployment configuration
@@ -99,5 +99,5 @@ For each file that needs updating, make minimal targeted edits — don't rewrite
 ### Step 6: Confirm
 Show the user:
 - Wiki page file path and brief summary
-- Which AGENTS.md/CLAUDE.md files were updated (if any) and what changed
+- Which AGENTS.md files were updated (if any) and what changed
 - If no agent files needed updates, state that explicitly

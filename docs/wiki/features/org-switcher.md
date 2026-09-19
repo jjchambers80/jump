@@ -23,7 +23,7 @@ The admin header has an organization switcher. Whatever it selects becomes the *
 
 ## Configuration
 
-No new environment variables. `AUTH_SECRET` must match between frontend and backend as before (`CLAUDE.md`).
+No new environment variables. `AUTH_SECRET` must match between frontend and backend as before (`AGENTS.md`).
 
 ## How It Works
 
