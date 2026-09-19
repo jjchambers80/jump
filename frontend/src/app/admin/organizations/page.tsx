@@ -5,17 +5,17 @@
 // AdminRoute guard provided by admin layout.tsx
 
 import React, { useEffect, useState, useCallback } from 'react';
+import { useSession } from 'next-auth/react';
 import api from '@/services/api';
-import ImageUploader from '@/components/ImageUploader';
-import BrandColorPicker from '@/components/BrandColorPicker';
-import ThemeModePicker from '@/components/ThemeModePicker';
+import OnlineStoreSettings from '@/components/OnlineStoreSettings';
 import { resolveAssetUrl } from '@/lib/assets';
-import { evaluateBrandColor } from '@/lib/color';
-import { DEFAULT_THEME_MODE, type ThemeMode } from '@/lib/theme';
+import type { ThemeMode } from '@/lib/theme';
+import { surveyLabel, type OnboardingFunnel, type OnboardingSummary } from '@/lib/onboarding';
 
 interface Organization {
   id: string;
   name: string;
+  slug: string;
   status: 'ACTIVE' | 'INACTIVE';
   logoUrl?: string | null;
   coverUrl?: string | null;
@@ -23,32 +23,95 @@ interface Organization {
   themeMode?: ThemeMode;
   createdAt: string;
   updatedAt: string;
+  /** null while the organization is still in the /signup flow (spec 022) */
+  onboardingCompletedAt?: string | null;
+  /** SYSTEM_ADMIN only (spec 022 phase 3) */
+  plan?: 'FREE' | 'STARTER';
+  subscriptionStatus?: string | null;
+  onboarding?: OnboardingSummary | null;
   _count?: {
     venues: number;
     users: number;
   };
 }
 
+/** One-line survey summary for a row: goals · event types · size · moving from. */
+function SurveyChips({ summary }: { summary: OnboardingSummary }) {
+  if (summary.surveySkipped && summary.goals.length === 0 && summary.eventTypes.length === 0) {
+    return <span className="text-xs text-gray-400 dark:text-slate-500">Survey skipped</span>;
+  }
+  const chips = [
+    ...summary.goals.map((g) => surveyLabel('goals', g)),
+    ...summary.eventTypes.map((t) => surveyLabel('eventTypes', t)),
+    surveyLabel('eventsPerYear', summary.eventsPerYear) && `${surveyLabel('eventsPerYear', summary.eventsPerYear)} / yr`,
+    surveyLabel('attendance', summary.attendance) && `${surveyLabel('attendance', summary.attendance)} attendees`,
+    surveyLabel('movingFrom', summary.movingFrom) && `from ${surveyLabel('movingFrom', summary.movingFrom)}`,
+  ].filter((c): c is string => Boolean(c));
+  if (chips.length === 0) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-1" data-testid="org-survey">
+      {chips.map((chip) => (
+        <span key={chip} className="inline-flex items-center rounded-full bg-gray-100 dark:bg-slate-700 px-2 py-0.5 text-xs text-gray-700 dark:text-slate-300">
+          {chip}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function FunnelCard({ funnel }: { funnel: OnboardingFunnel }) {
+  const windows = Object.keys(funnel.windows).sort((a, b) => Number(a) - Number(b));
+  return (
+    <section className="mb-8 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4" aria-labelledby="funnel-heading" data-testid="onboarding-funnel">
+      <div className="flex items-center justify-between">
+        <h2 id="funnel-heading" className="text-base font-semibold text-gray-900 dark:text-white">Onboarding</h2>
+        <span className="text-xs text-gray-500 dark:text-slate-400">{funnel.pending} pending now</span>
+      </div>
+      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {windows.map((days) => {
+          const w = funnel.windows[days];
+          return (
+            <div key={days} className="rounded-md bg-gray-50 dark:bg-slate-700/40 p-3" data-testid={`funnel-${days}`}>
+              <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-slate-400">Last {days} days</p>
+              <dl className="mt-2 grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <dt className="text-xs text-gray-500 dark:text-slate-400">Started</dt>
+                  <dd className="text-lg font-semibold text-gray-900 dark:text-white">{w.started}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-gray-500 dark:text-slate-400">Completed</dt>
+                  <dd className="text-lg font-semibold text-gray-900 dark:text-white">{w.completed}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-gray-500 dark:text-slate-400">Subscribed</dt>
+                  <dd className="text-lg font-semibold text-gray-900 dark:text-white">{w.subscribed}</dd>
+                </div>
+              </dl>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 export default function OrganizationsPage() {
+  const { data: session } = useSession();
+  const isSystemAdmin = (session?.user as { role?: string } | undefined)?.role === 'SYSTEM_ADMIN';
+  const [funnel, setFunnel] = useState<OnboardingFunnel | null>(null);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState<string | null>(null);
-  const [editBrandColor, setEditBrandColor] = useState<string | null>(null);
-  const [savingBrandColor, setSavingBrandColor] = useState(false);
-  const [editThemeMode, setEditThemeMode] = useState<ThemeMode>(DEFAULT_THEME_MODE);
-  const [savingThemeMode, setSavingThemeMode] = useState(false);
 
   const fetchOrganizations = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await api.get<Organization[]>('/organizations');
+      // SYSTEM_ADMIN also sees organizations whose signup was never finished
+      const data = await api.get<Organization[]>('/organizations?includePending=1');
       setOrganizations(data);
     } catch (err: any) {
       setError(err.message || 'Failed to load organizations');
@@ -60,6 +123,26 @@ export default function OrganizationsPage() {
   useEffect(() => {
     fetchOrganizations();
   }, [fetchOrganizations]);
+
+  // Signup funnel (spec 022 phase 3), SYSTEM_ADMIN only; errors just hide the card
+  useEffect(() => {
+    if (!isSystemAdmin) return;
+    api
+      .get<OnboardingFunnel>('/organizations/onboarding/funnel')
+      .then(setFunnel)
+      .catch(() => setFunnel(null));
+  }, [isSystemAdmin]);
+
+  const handleDiscard = async (org: Organization) => {
+    if (!window.confirm(`Discard the unfinished signup for "${org.name}"? This cannot be undone.`)) return;
+    try {
+      setError(null);
+      await api.delete(`/signup/${org.id}`);
+      await fetchOrganizations();
+    } catch (err: any) {
+      setError(err.message || 'Failed to discard organization');
+    }
+  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,90 +158,6 @@ export default function OrganizationsPage() {
       setError(err.message || 'Failed to create organization');
     } finally {
       setCreating(false);
-    }
-  };
-
-  const handleEdit = (org: Organization) => {
-    setEditingId(org.id);
-    setEditName(org.name);
-    setEditBrandColor(org.brandColor ?? null);
-    setEditThemeMode(org.themeMode ?? DEFAULT_THEME_MODE);
-  };
-
-  const handleCancelEdit = () => {
-    setEditingId(null);
-    setEditName('');
-    setEditBrandColor(null);
-    setEditThemeMode(DEFAULT_THEME_MODE);
-  };
-
-  const handleSaveThemeMode = async (orgId: string) => {
-    try {
-      setSavingThemeMode(true);
-      setError(null);
-      await api.patch(`/organizations/${orgId}`, { themeMode: editThemeMode });
-      await fetchOrganizations();
-    } catch (err: any) {
-      setError(err.message || 'Failed to update theme mode');
-    } finally {
-      setSavingThemeMode(false);
-    }
-  };
-
-  const handleSaveBrandColor = async (orgId: string) => {
-    try {
-      setSavingBrandColor(true);
-      setError(null);
-      await api.patch(`/organizations/${orgId}`, { brandColor: editBrandColor });
-      await fetchOrganizations();
-    } catch (err: any) {
-      setError(err.message || 'Failed to update brand color');
-    } finally {
-      setSavingBrandColor(false);
-    }
-  };
-
-  const handleSaveEdit = async (orgId: string) => {
-    if (!editName.trim()) return;
-    try {
-      setSaving(true);
-      setError(null);
-      await api.patch(`/organizations/${orgId}`, { name: editName.trim() });
-      setEditingId(null);
-      setEditName('');
-      await fetchOrganizations();
-    } catch (err: any) {
-      setError(err.message || 'Failed to update organization');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleImageUpload = async (orgId: string, type: 'logo' | 'cover', file: File) => {
-    try {
-      setUploading(`${orgId}-${type}`);
-      setError(null);
-      const formData = new FormData();
-      formData.append('logo', file);
-      await api.upload(`/organizations/${orgId}/${type}`, formData);
-      await fetchOrganizations();
-    } catch (err: any) {
-      setError(err.message || `Failed to upload ${type}`);
-    } finally {
-      setUploading(null);
-    }
-  };
-
-  const handleImageRemove = async (orgId: string, type: 'logo' | 'cover') => {
-    try {
-      setUploading(`${orgId}-${type}`);
-      setError(null);
-      await api.delete(`/organizations/${orgId}/${type}`);
-      await fetchOrganizations();
-    } catch (err: any) {
-      setError(err.message || `Failed to remove ${type}`);
-    } finally {
-      setUploading(null);
     }
   };
 
@@ -210,6 +209,8 @@ export default function OrganizationsPage() {
         </div>
       )}
 
+      {funnel && <FunnelCard funnel={funnel} />}
+
       {/* Organization List */}
       {!loading && organizations.length === 0 && (
         <p className="text-gray-500 dark:text-slate-400 text-center py-8">
@@ -256,6 +257,14 @@ export default function OrganizationsPage() {
                       >
                         {org.status}
                       </span>
+                      {org.onboardingCompletedAt === null && (
+                        <span
+                          className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+                          title="The signup flow was started but not finished; hidden from the org switcher"
+                        >
+                          Pending setup
+                        </span>
+                      )}
                       {org._count && (
                         <>
                           <span>
@@ -266,21 +275,34 @@ export default function OrganizationsPage() {
                           </span>
                         </>
                       )}
+                      {org.plan === 'STARTER' && (
+                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300" data-testid="org-plan">
+                          Starter{org.subscriptionStatus === 'trialing' ? ' · trial' : org.subscriptionStatus === 'past_due' ? ' · past due' : ''}
+                        </span>
+                      )}
                     </div>
+                    {org.onboarding && <SurveyChips summary={org.onboarding} />}
                   </div>
                 </div>
 
                 <div className="ml-4">
-                  {editingId !== org.id ? (
+                  {org.onboardingCompletedAt === null ? (
                     <button
-                      onClick={() => handleEdit(org)}
+                      onClick={() => handleDiscard(org)}
+                      className="text-sm font-medium text-red-600 dark:text-red-400 hover:text-red-500"
+                    >
+                      Discard
+                    </button>
+                  ) : editingId !== org.id ? (
+                    <button
+                      onClick={() => setEditingId(org.id)}
                       className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300"
                     >
                       Edit
                     </button>
                   ) : (
                     <button
-                      onClick={handleCancelEdit}
+                      onClick={() => setEditingId(null)}
                       className="text-sm font-medium text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-300"
                     >
                       Done
@@ -292,117 +314,7 @@ export default function OrganizationsPage() {
               {/* Edit section — name + branding */}
               {editingId === org.id && (
                 <div className="border-t border-gray-200 dark:border-slate-700 p-4 bg-gray-50 dark:bg-slate-800/50">
-                  {/* Name edit */}
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      handleSaveEdit(org.id);
-                    }}
-                    className="flex items-center gap-2 mb-6"
-                  >
-                    <label className="text-sm font-medium text-gray-600 dark:text-slate-400 flex-shrink-0">
-                      Name
-                    </label>
-                    <input
-                      type="text"
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      className="flex-1 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-1.5 text-sm text-gray-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      autoFocus
-                    />
-                    <button
-                      type="submit"
-                      disabled={saving || !editName.trim()}
-                      className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-500 disabled:opacity-50"
-                    >
-                      {saving ? 'Saving…' : 'Save'}
-                    </button>
-                  </form>
-
-                  {/* Theme */}
-                  <h4 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1">
-                    Theme
-                  </h4>
-                  <p className="text-xs text-gray-500 dark:text-slate-400 mb-3">
-                    Controls light or dark mode on your public event, venue, and organization pages.
-                  </p>
-                  <ThemeModePicker value={editThemeMode} onChange={setEditThemeMode} />
-                  <div className="mt-3 mb-6">
-                    <button
-                      type="button"
-                      onClick={() => handleSaveThemeMode(org.id)}
-                      disabled={savingThemeMode || editThemeMode === (org.themeMode ?? DEFAULT_THEME_MODE)}
-                      data-testid="theme-mode-save"
-                      className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-500 disabled:opacity-50"
-                    >
-                      {savingThemeMode ? 'Saving…' : 'Save theme'}
-                    </button>
-                  </div>
-
-                  {/* Branding */}
-                  <h4 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-4">
-                    Branding
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-600 dark:text-slate-400 mb-2">
-                        Logo
-                      </label>
-                      <ImageUploader
-                        currentPreview={resolveAssetUrl(org.logoUrl)}
-                        onFileSelect={(file) => handleImageUpload(org.id, 'logo', file)}
-                        onRemove={() => handleImageRemove(org.id, 'logo')}
-                        uploading={uploading === `${org.id}-logo`}
-                        label="logo"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-600 dark:text-slate-400 mb-2">
-                        Cover Image
-                      </label>
-                      <ImageUploader
-                        currentPreview={resolveAssetUrl(org.coverUrl)}
-                        onFileSelect={(file) => handleImageUpload(org.id, 'cover', file)}
-                        onRemove={() => handleImageRemove(org.id, 'cover')}
-                        uploading={uploading === `${org.id}-cover`}
-                        label="cover image"
-                      />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-600 dark:text-slate-400 mb-2">
-                        Brand color
-                      </label>
-                      <BrandColorPicker value={editBrandColor} onChange={setEditBrandColor} />
-                      {(() => {
-                        const dirty = editBrandColor !== (org.brandColor ?? null);
-                        const passes = editBrandColor
-                          ? evaluateBrandColor(editBrandColor).passesAA
-                          : true;
-                        return (
-                          <div className="mt-3 flex flex-wrap items-center gap-3">
-                            <button
-                              type="button"
-                              onClick={() => handleSaveBrandColor(org.id)}
-                              disabled={savingBrandColor || !dirty}
-                              data-testid="brand-color-save"
-                              className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-500 disabled:opacity-50"
-                            >
-                              {savingBrandColor ? 'Saving…' : 'Save brand color'}
-                            </button>
-                            {!passes && (
-                              <span className="text-xs text-red-600 dark:text-red-400" data-testid="brand-color-warning">
-                                You can save this color, but it may not meet ADA requirements.
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  </div>
-
-                  <div className="mt-4 text-xs text-gray-400 dark:text-slate-500">
-                    Created {new Date(org.createdAt).toLocaleDateString()}
-                  </div>
+                  <OnlineStoreSettings org={org} onSaved={fetchOrganizations} onError={setError} />
                 </div>
               )}
             </div>

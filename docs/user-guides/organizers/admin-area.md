@@ -10,7 +10,7 @@ The admin area is accessible at `/admin` and is restricted to users with **Admin
 2. Click the **Admin** link in the top navigation bar
 3. You'll be redirected to the admin dashboard
 
-> **Note**: The "Admin" link only appears for users with Admin or Organizer roles. Customer accounts cannot access the admin area.
+> **Note**: The "Admin" link only appears for users with Admin or Organizer roles. A signed-in account with no organization yet is taken to signup instead — see [Getting started](getting-started.md).
 
 ## Navigation
 
@@ -21,12 +21,16 @@ The sidebar appears on the left side of every admin page and provides quick navi
 | Section       | Path                   | Description                        | Access           |
 | ------------- | ---------------------- | ---------------------------------- | ---------------- |
 | Dashboard     | `/admin/dashboard`     | Overview and quick actions         | Admin, Organizer |
-| Organizations | `/admin/organizations` | Manage organizations               | Admin, Organizer |
 | Venues        | `/admin/venues`        | Manage venues                      | Admin, Organizer |
 | Events        | `/admin/events`        | Manage events and create new ones  | Admin, Organizer |
 | Analytics     | `/admin/analytics`     | View ticket sales and revenue data | Admin, Organizer |
+| Online store  | `/admin/online-store`  | Store name, handle, public theme, logo, cover image, brand color for the active organization | Admin, Organizer |
 | Scan          | `/admin/scan`          | Scan and validate tickets at entry | Admin, Organizer |
 | Settings      | `/admin/settings`      | Business details, domains, and (admins) user accounts | Admin, Organizer |
+
+### Organization Switcher
+
+The organization menu in the top-right corner lists every organization you belong to. Picking one makes it the active organization: every admin page (events, orders, Online store, Settings, …) then shows that organization's data. The same menu creates new organizations.
 
 ### Pinned Settings Link
 

@@ -80,6 +80,16 @@ Reviewed 2026-09-18 against `main`: production has no edge layer (Railway only, 
 - [ ] **Staff invite-first flow recorded** (plan §7.3): invite staff through Settings › People before magic-link sign-in; unknown/deleted addresses receive the same success-shaped response but no email and no `User` row. Google sign-in is unaffected.
 - [ ] Optional: `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` on checkout, buyer sign-in and application submit — works without moving DNS to Cloudflare.
 
+## Jump subscriptions (spec 022 phase 2)
+
+Code and tests shipped 2026-09-18 behind `BILLING_ENABLED` (default off). Until it is on, `/signup` skips the subscribe step and Settings › Plan is hidden from the nav (it renders the FREE state if opened directly). All of this lives in **Jump's own Stripe account** — the same `STRIPE_SECRET_KEY` — never in an organization's connected account. Open decisions in `specs/022-organization-onboarding/plan.md` §9: the price, whether the plan gates anything (built: no), whether a subscription lowers the platform fee.
+
+- [ ] **Decide the STARTER price** (§9.1) and create the recurring Product/Price in the live Jump account (and in the Jump sandbox for staging). Name the product — it is shown as the plan name on Settings › Plan.
+- [ ] **Customer portal**: Settings › Billing › Customer portal — enable cancel, payment-method update and invoice history. Jump links there for every "Manage billing" action.
+- [ ] **Add the billing webhook endpoint**: `https://<backend>/webhooks/stripe/billing` with `checkout.session.completed`, `customer.subscription.created|updated|deleted`, `invoice.payment_failed`; copy the secret to `STRIPE_BILLING_WEBHOOK_SECRET`.
+- [ ] Backend: `BILLING_ENABLED=true`, `JUMP_STARTER_PRICE_ID`, `BILLING_TRIAL_DAYS` (default 30). Frontend: `NEXT_PUBLIC_BILLING_ENABLED=true`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (Jump account). Redeploy both; the backend startup log `Stripe webhook configuration` should show `billingSecret: true, billingEnabled: true`.
+- [ ] **Verify with one internal organization**: org switcher › Create organization → subscribe screen shows the trial ledger and the embedded card form → subscribe with a test card → returns to the survey → Settings › Plan shows *Free trial* with the trial end → *Manage billing* opens the portal → cancel there and confirm the plan flips to Free after the `customer.subscription.deleted` event.
+- [ ] Decide dunning copy beyond the dashboard banner (`past_due` / `unpaid`); nothing is gated on the plan today.
 ## Related
 
 - [Tax Settings](../features/tax-settings.md), [Tax Calculation](../features/tax-calculation.md)

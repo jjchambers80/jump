@@ -12,6 +12,7 @@
 import { timingSafeEqual } from 'crypto';
 import jwt from 'jsonwebtoken';
 import { AuthenticationError, ForbiddenError } from './errorHandler.js';
+import { resolveOrgScope } from './orgScope.js';
 
 const STAFF_ROLES = new Set(['ORGANIZER', 'ADMIN', 'SYSTEM_ADMIN']);
 
@@ -49,3 +50,21 @@ export const requireScannerOrStaff = (req, res, next) => {
     next(error);
   }
 };
+
+/** Sentinel scope for staff without a membership: matches no organization. */
+export const NO_ORG_SCOPE = '__no-organization__';
+
+/**
+ * Organization scope for the door endpoints (spec 022): staff see only their
+ * own organization's tickets. Hardware readers (shared SCANNER_API_KEY) are
+ * unscoped (`organizationId: null`); so is SYSTEM_ADMIN without an
+ * X-Jump-Org header, but with one they scan only that organization. A staff
+ * user with no membership gets a scope no ticket matches.
+ */
+export async function scannerOrgScope(req) {
+  const scanner = req.scanner;
+  if (!scanner || scanner.kind !== 'staff') return { organizationId: null };
+  const scope = await resolveOrgScope(scanner.userId, scanner.role, req.get('x-jump-org') || undefined);
+  if (scanner.role === 'SYSTEM_ADMIN') return { organizationId: scope.organizationId };
+  return { organizationId: scope.organizationId || NO_ORG_SCOPE };
+}

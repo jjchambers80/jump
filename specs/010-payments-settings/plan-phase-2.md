@@ -389,3 +389,5 @@ The owner's stated intent is "the organizer provides their Stripe account; platf
 | C. Standard via OAuth, direct charges | as B | direct on the organizer's account with `application_fee_amount` | organizer | Checkout Sessions, PaymentIntents, refunds, webhooks, Stripe Tax and statement descriptors all move to the connected account; spec 009 seller-of-record decision flips; application charges (spec 011) follow |
 
 Decision blocks the Connect steps in the launch checklist. Not blocking anything else on main.
+
+**2026-09-18 input** (spec 022 planning): production has Jump's Stripe account plus each organization's *own* Stripe account; test mirrors it with a Jump sandbox and a client sandbox. That rules out A. B is the smallest change (onboarding only); C is a separate spec. See `specs/022-organization-onboarding/plan.md` §3.3.

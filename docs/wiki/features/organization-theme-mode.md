@@ -21,7 +21,7 @@ Each organization chooses how its public pages (organization, venue, event detai
 | `frontend/src/components/BrandScope.tsx` | `themeMode` prop forces the theme while mounted, releases on unmount |
 | `frontend/src/components/ThemeToggle.tsx` | Hidden while a theme is forced |
 | `frontend/src/components/ThemeModePicker.tsx` | Radio-card group for the admin panel |
-| `frontend/src/app/admin/organizations/page.tsx` | Theme section with **Save theme** button |
+| `frontend/src/components/OnlineStoreSettings.tsx` | Theme section with **Save theme** button (rendered on **Online store** `/admin/online-store` for the active org, and on the legacy `/admin/organizations` list) |
 | `frontend/e2e/admin-org-theme-mode.spec.ts` | Playwright: picker, save, forcing on each public page, release on client navigation |
 
 ## Configuration

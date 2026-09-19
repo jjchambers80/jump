@@ -4,7 +4,8 @@
 
 import { Router } from 'express';
 import { requireAuth } from '../../middleware/auth.js';
-import { requireAdmin, requireOrganizer } from '../../middleware/rbac.js';
+import { requireAdmin, requireOrganizer, requireSystemAdmin } from '../../middleware/rbac.js';
+import onboardingService from '../../services/OnboardingService.js';
 import { requireOrgMembership } from '../../middleware/orgScope.js';
 import {
   validateCreateOrganization,
@@ -25,7 +26,10 @@ const verifyOrgOwnership = requireOrgMembership('id');
  */
 router.post('/', requireAuth, requireAdmin, validateCreateOrganization, async (req, res, next) => {
   try {
-    const organization = await organizationService.createOrganization(req.body);
+    // SYSTEM_ADMIN has no memberships and sees every organization anyway;
+    // an ADMIN needs the membership to see the organization they created.
+    const creatorUserId = req.user.role === 'SYSTEM_ADMIN' ? null : req.user.id;
+    const organization = await organizationService.createOrganization(req.body, creatorUserId);
     res.status(201).json(organization);
   } catch (error) {
     next(error);
@@ -42,9 +46,21 @@ router.get('/', requireAuth, requireOrganizer, async (req, res, next) => {
     // (this list feeds the admin org switcher).
     const organizations =
       req.user.role === 'SYSTEM_ADMIN'
-        ? await organizationService.listOrganizations()
+        ? await organizationService.listOrganizations({ includePending: req.query.includePending === '1', withOnboarding: true })
         : await organizationService.listOrganizationsForUser(req.user.id);
     res.json(organizations);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /organizations/onboarding/funnel
+ * Signup funnel counts for the last 7 / 30 days (spec 022 phase 3). SYSTEM_ADMIN only.
+ */
+router.get('/onboarding/funnel', requireAuth, requireSystemAdmin, async (req, res, next) => {
+  try {
+    res.json(await onboardingService.funnel());
   } catch (error) {
     next(error);
   }

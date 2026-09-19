@@ -9,6 +9,7 @@
 // slug is unique per event.
 
 import { prisma } from '@jump/db';
+import { slugify } from '../utils/slug.js';
 import { ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import { CHOICE_TYPES, MAX_OPTIONS, MAX_PINNED_QUESTIONS, QUESTION_TYPES } from '../config/applications.js';
 import feeService from './FeeService.js';
@@ -25,13 +26,7 @@ export function paymentsEnabled() {
   return String(process.env.APPLICATIONS_PAYMENTS_ENABLED || '').toLowerCase() === 'true';
 }
 
-export function slugify(name) {
-  return String(name || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60);
-}
+export { slugify };
 
 /**
  * What the applicant pays and what the organization receives for a set of

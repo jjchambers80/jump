@@ -11,6 +11,8 @@ import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import adminService, { AdminEvent, DashboardStats } from '@/services/adminService';
 import PayoutsBanner from './PayoutsBanner';
+import SetupGuide from './SetupGuide';
+import PlanBanner from './PlanBanner';
 
 function DashboardContent() {
   const router = useRouter();
@@ -74,6 +76,9 @@ function DashboardContent() {
           <p className="text-sm text-gray-500 dark:text-slate-500">Welcome, {user?.name}</p>
         </div>
         <PayoutsBanner />
+        <PlanBanner />
+        {/* Spec 022: setup cards for a new organization; hides itself once dismissed */}
+        <SetupGuide />
         {error && (
           <div className="mb-6 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-slate-700 text-red-700 dark:text-red-400 px-4 py-3 rounded-md">
             {error}

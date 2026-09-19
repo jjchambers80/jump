@@ -46,6 +46,19 @@ stripe listen --forward-to localhost:3000/webhooks/stripe \
 
 and `STRIPE_CONNECT_ENABLED=true` in `backend/.env`. The CLI signs both streams with the same `whsec_...`; set it as `STRIPE_CONNECT_WEBHOOK_SECRET` too (or leave it unset locally to skip verification).
 
+### Two accounts: Jump's and the organization's (spec 022)
+
+Production has **Jump's Stripe account** (subscriptions, the platform fee, and the Connect platform) and **each organization's own Stripe account** connected to it. Test mirrors that with a **Jump sandbox** and a **client sandbox**: `STRIPE_SECRET_KEY` in `backend/.env` is the Jump sandbox key; the client sandbox is only ever reached through Connect (`OrganizationStripeAccount.stripeAccountId`) and never has a key in Jump.
+
+Jump's own subscriptions (spec 022 phase 2) use the same key but a separate webhook endpoint so subscription events never touch the order dispatch:
+
+```bash
+stripe listen --forward-to localhost:3000/webhooks/stripe/billing \
+  --events checkout.session.completed,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.payment_failed
+```
+
+Set the `whsec_...` as `STRIPE_BILLING_WEBHOOK_SECRET` (or leave it unset locally). Then in the Jump sandbox create a recurring Product/Price and set `BILLING_ENABLED=true`, `JUMP_STARTER_PRICE_ID=price_...`, `BILLING_TRIAL_DAYS=30` (backend) and `NEXT_PUBLIC_BILLING_ENABLED=true`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...` (frontend, the Jump sandbox's publishable key — embedded Checkout mounts with it). Enable the customer portal under Settings › Billing › Customer portal.
+
 ### 3. Test Cards
 
 | Card Number | Scenario |
@@ -76,6 +89,17 @@ Only when `STRIPE_CONNECT_ENABLED=true`. Connected-account events arrive on a se
 
 Destination-charge events (`checkout.session.*`, `charge.refunded`) keep arriving on the platform endpoint above; do not add them here. The backend logs which secrets are configured at startup (`Stripe webhook configuration`).
 
+### Billing Webhook Configuration (spec 022 phase 2)
+
+Only when `BILLING_ENABLED=true`. Jump's subscription events arrive on a third endpoint on the **same** Jump account:
+
+1. Stripe Dashboard → Developers → Webhooks → Add endpoint (events on your account)
+2. Endpoint: `https://your-backend-domain.up.railway.app/webhooks/stripe/billing`
+3. Events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`
+4. Copy the signing secret to `STRIPE_BILLING_WEBHOOK_SECRET` on Railway
+
+An order event posted here is acknowledged and ignored, and a subscription event posted to the platform endpoint is ignored there (`BillingService.isBillingEvent`); registering the subscription events on the platform endpoint as well is harmless but pointless.
+
 ### Tax Configuration
 
 Tax rates are fetched via the Stripe Tax API using venue postal codes (tax code `txcd_20060057`, event admissions) for regions an organization sets to *Stripe Tax* on Settings › Tax. **Stripe Tax must be activated on the platform account and registered per state**, otherwise lookups fail and new events get 0% (existing cached rates are kept). Organizations can use a manual rate per state instead. See [Production Launch Checklist](production-launch-checklist.md) and [Tax Settings](../features/tax-settings.md).
@@ -88,6 +112,7 @@ Tax rates are fetched via the Stripe Tax API using venue postal codes (tax code 
 | `checkout.session.expired` | Mark order FAILED, release reserved tier inventory (application DRAFTs stay resumable) |
 | `payment_intent.succeeded` / `payment_failed` / `canceled` | Application off-session charge outcome (`metadata.applicationId` only; ticket orders ignore these) |
 | `charge.refunded` | Reconcile refunds made in the dashboard — orders via `RefundService`, applications via `ApplicationPaymentService` |
+| `customer.subscription.created` / `updated` / `deleted`, `checkout.session.completed` (`mode: subscription`), `invoice.payment_failed` — **billing endpoint only** | Mirror the Jump subscription onto `PlatformCustomer` (`plan`, `subscriptionStatus`, `trialEndsAt`, `currentPeriodEndsAt`) — see [Organization Onboarding](../features/organization-onboarding.md) |
 
 ## Key Files
 

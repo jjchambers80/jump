@@ -27,6 +27,13 @@ export default function AdminRoute({ children }: AdminRouteProps) {
     }
   }, [loading, isAuthenticated, router]);
 
+  // A signed-in user with no staff role has no organization yet: the
+  // self-serve path is /signup (spec 022), not an Access Denied screen.
+  const needsSignup = !loading && isAuthenticated && userRole === 'UNASSIGNED';
+  useEffect(() => {
+    if (needsSignup) router.replace('/signup');
+  }, [needsSignup, router]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -35,7 +42,7 @@ export default function AdminRoute({ children }: AdminRouteProps) {
     );
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated || needsSignup) {
     return null;
   }
 

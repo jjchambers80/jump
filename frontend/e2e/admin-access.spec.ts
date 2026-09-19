@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { signInAsStaff } from './helpers/session';
 
 // ============================================================================
 // Admin Access E2E Tests (T100-T106)
@@ -32,15 +33,16 @@ test.describe('US1 - Admin accesses the admin area', () => {
     // Sidebar should contain all expected links
     const expectedLinks = [
       'Dashboard',
-      'Organizations',
       'Venues',
       'Events',
       'Analytics',
       'Scan',
       'Settings',
     ];
-    // Users lives under Settings › Users, not the main list.
+    // Users lives under Settings › Users, not the main list. Organization
+    // settings open from the header org switcher, not the sidebar.
     await expect(sidebar.getByRole('link', { name: 'Users' })).toHaveCount(0);
+    await expect(sidebar.getByRole('link', { name: 'Organizations' })).toHaveCount(0);
     for (const linkText of expectedLinks) {
       await expect(sidebar.getByRole('link', { name: linkText })).toBeVisible();
     }
@@ -55,7 +57,6 @@ test.describe('US1 - Admin accesses the admin area', () => {
 
     const sidebarLinks = [
       { name: 'Dashboard', url: '/admin/dashboard' },
-      { name: 'Organizations', url: '/admin/organizations' },
       { name: 'Venues', url: '/admin/venues' },
       { name: 'Events', url: '/admin/events' },
       { name: 'Analytics', url: '/admin/analytics' },
@@ -159,18 +160,16 @@ test.describe('US3 - Unauthorized user is denied access', () => {
     expect(url).toContain('callbackUrl');
   });
 
-  // T106: CUSTOMER sees 403 access denied
-  test('T106: CUSTOMER navigates to /admin, sees access denied with back-to-events', async ({
-    page,
-  }) => {
-    // Log in as CUSTOMER, then navigate to /admin
+  // T106 (revised by spec 022): a signed-in user with no staff role has no
+  // organization yet, so /admin sends them to the self-serve signup instead of
+  // an Access Denied screen.
+  test('T106: UNASSIGNED user navigates to /admin, is sent to /signup', async ({ page, baseURL }) => {
+    await signInAsStaff(page, { id: 'newcomer', email: 'newcomer@test.com', role: 'UNASSIGNED' }, baseURL!);
+    await page.route('http://localhost:3002/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ organization: null, billingEnabled: false }) })
+    );
     await page.goto('/admin');
-
-    // Should see access denied
-    await expect(page.getByText(/Access Denied/i)).toBeVisible();
-    // Should see correct role requirement message
-    await expect(page.getByText(/Admin or Organizer role is required/i)).toBeVisible();
-    // Should have a back to events button
-    await expect(page.getByRole('button', { name: /Back to Events/i })).toBeVisible();
+    await expect(page).toHaveURL(/\/signup$/);
+    await expect(page.getByRole('heading', { name: 'Name your organization' })).toBeVisible();
   });
 });

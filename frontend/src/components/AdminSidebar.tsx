@@ -1,6 +1,8 @@
 // Admin Sidebar navigation component (T003, T018, T024)
-// Links per FR-005 (Dashboard, Orgs, Venues, Events, Analytics), with
-// Settings pinned to the footer. Users (FR-006, ADMIN only) lives under
+// Links per FR-005 (Dashboard, Venues, Events, Analytics), with Settings
+// pinned to the footer. "Online store" edits the active organization's public
+// storefront (name, handle, theme, branding); the org itself is picked in the
+// header switcher. Users (FR-006, ADMIN only) lives under
 // Settings › Users rather than in the main list.
 // Active state via usePathname(), mobile-responsive with toggle
 
@@ -19,7 +21,6 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/admin/dashboard' },
-  { label: 'Organizations', href: '/admin/organizations' },
   { label: 'Venues', href: '/admin/venues' },
   { label: 'Events', href: '/admin/events' },
   { label: 'Tickets', href: '/admin/tickets' },
@@ -28,6 +29,7 @@ const navItems: NavItem[] = [
   { label: 'Participants', href: '/admin/participants' },
   { label: 'Check In', href: '/admin/orders/scan' },
   { label: 'Analytics', href: '/admin/analytics' },
+  { label: 'Online store', href: '/admin/online-store' },
 ];
 
 interface AdminSidebarProps {

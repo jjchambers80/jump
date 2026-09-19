@@ -25,6 +25,9 @@ import { eventApplicationsRouter, applicationStatusRouter } from './routes/appli
 import adminRouter from './routes/admin.js';
 import customersRouter from './routes/customers.js';
 import organizationsRouter from './routes/organizations.js';
+import signupRouter from './routes/signup.js';
+import { billingEnabled } from '../config/billing.js';
+import onboardingService from '../services/OnboardingService.js';
 import venuesRouter, { orgVenuesRouter } from './routes/venues.js';
 import ordersRouter, { eventOrdersRouter } from './routes/orders.js';
 import usersRouter from './routes/users.js';
@@ -134,6 +137,7 @@ app.use('/events/:eventId/applications', eventApplicationsRouter);
 app.use('/applications', applicationStatusRouter);
 app.use('/events', eventsRouter);
 app.use('/venues', venuesRouter);
+app.use('/signup', signupRouter);
 app.use('/organizations', organizationsRouter);
 app.use('/organizations/:orgId/venues', orgVenuesRouter);
 app.use('/organizations/:orgId/events', orgEventsRouter);
@@ -163,6 +167,9 @@ if (process.env.NODE_ENV !== 'test') {
       platformSecret: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
       connectSecret: Boolean(process.env.STRIPE_CONNECT_WEBHOOK_SECRET),
       connectEnabled: String(process.env.STRIPE_CONNECT_ENABLED || '').toLowerCase() === 'true',
+      // Spec 022 phase 2: Jump subscriptions on POST /webhooks/stripe/billing
+      billingSecret: Boolean(process.env.STRIPE_BILLING_WEBHOOK_SECRET),
+      billingEnabled: billingEnabled(),
     });
     console.log(`🚀 Jump Backend API running on http://localhost:${PORT}`);
     console.log(`📊 Metrics available at http://localhost:${PORT}/metrics`);
@@ -187,6 +194,13 @@ if (process.env.NODE_ENV !== 'test') {
   };
   setTimeout(applicationSweep, 30 * 1000).unref();
   setInterval(applicationSweep, APPLICATION_SWEEP_MS).unref();
+
+  // Onboarding sweep (spec 022 phase 3): unfinished signups older than
+  // ONBOARDING_ABANDON_AFTER_MS (7 d) with no events and no subscription are
+  // deleted so pending organizations never pile up.
+  const ONBOARDING_SWEEP_MS = Number(process.env.ONBOARDING_SWEEP_INTERVAL_MS) || 60 * 60 * 1000;
+  setTimeout(() => onboardingService.sweepAbandoned().catch(() => {}), 45 * 1000).unref();
+  setInterval(() => onboardingService.sweepAbandoned().catch(() => {}), ONBOARDING_SWEEP_MS).unref();
 }
 
 export default app;

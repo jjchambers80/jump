@@ -59,6 +59,10 @@ cd frontend && npm run test:unit    # Vitest unit tests (lib/color.ts)
 | `APPLICATION_SWEEP_INTERVAL_MS` | backend | Optional. Application sweep interval (default 1 h): overdue pay-now check + organizer daily digest (spec 011 phase 3) |
 | `STRIPE_CONNECT_ENABLED` | backend | Optional. `true` routes charges for organizations with an active Stripe Connect account as destination charges (spec 010 phase 2). Default off; code deploys dark |
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | backend | Optional. Signing secret for `POST /webhooks/stripe/connect` (connected-account events). Separate from `STRIPE_WEBHOOK_SECRET` |
+| `BILLING_ENABLED` | backend | Optional. `true` inserts the subscribe step into `/signup` and opens Settings › Plan (spec 022 phase 2: Stripe Billing on Jump's own Stripe account, embedded Checkout, customer portal). Default off: name → survey → done only |
+| `STRIPE_BILLING_WEBHOOK_SECRET`, `JUMP_STARTER_PRICE_ID`, `BILLING_TRIAL_DAYS` | backend | With `BILLING_ENABLED`: signing secret for `POST /webhooks/stripe/billing`, the Price id of the STARTER plan (required, else billing stays off), trial length (default 30) |
+| `NEXT_PUBLIC_BILLING_ENABLED`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | frontend | With billing: shows Settings › Plan in the nav; Jump-account publishable key for embedded Checkout. Build-time |
+| `ONBOARDING_SWEEP_INTERVAL_MS`, `ONBOARDING_ABANDON_AFTER_MS` | backend | Optional. Abandoned-signup sweep (default 1 h) and the age after which an unfinished signup with no events and no subscription is deleted (default 7 d) |
 | `SCANNER_API_KEY` | backend | Optional. Shared key for hardware ticket readers calling `POST /tickets/scan` / `/redeem` via `X-Scanner-Key`. Unset: only staff sessions can scan |
 
 ## Deployment

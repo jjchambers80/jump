@@ -48,7 +48,33 @@ export interface DashboardStats {
   revenue?: { orders: number; applications: number; gross: number };
 }
 
+export type SetupTaskId = 'event' | 'design' | 'payments' | 'business' | 'domain' | 'applications' | 'checkin';
+
+export interface SetupTask {
+  id: SetupTaskId;
+  done: boolean;
+  href: string;
+  shown: boolean;
+  /** payments only: 'connect' when the org connects its own Stripe account */
+  state?: 'connect' | 'platform';
+}
+
+/** Spec 022: dashboard setup guide for the active organization. */
+export interface SetupGuide {
+  dismissedAt: string | null;
+  tasks: SetupTask[];
+  onboarding: { goals: string[] } | null;
+}
+
 const adminService = {
+  async getSetupGuide(): Promise<SetupGuide> {
+    return api.get<SetupGuide>('/admin/setup-guide');
+  },
+
+  async dismissSetupGuide(): Promise<{ dismissedAt: string }> {
+    return api.patch<{ dismissedAt: string }>('/admin/setup-guide', { dismissed: true });
+  },
+
   /**
    * Create a new event (DRAFT status)
    */

@@ -3,8 +3,9 @@
 
 import { prisma } from '@jump/db';
 import logger from '../utils/logger.js';
-import { NotFoundError } from '../middleware/errorHandler.js';
+import { ConflictError, NotFoundError } from '../middleware/errorHandler.js';
 import { formatEventSummary } from '../utils/eventSummary.js';
+import { slugify } from '../utils/slug.js';
 
 export const serializeBusinessDetails = (organization) => {
   const { ein, ...businessDetails } = organization;
@@ -26,21 +27,47 @@ const withUserCount = ({ _count, ...org }) => ({
 
 class OrganizationService {
   /**
-   * Create a new organization
+   * First free slug derived from `raw` ("acme", then "acme-2", "acme-3", ...).
+   * @param {string} raw - Name or requested slug
+   * @param {string|null} exceptOrganizationId - Ignore this org's own slug (updates)
+   */
+  async uniqueSlug(raw, exceptOrganizationId = null) {
+    const base = slugify(raw) || 'org';
+    let slug = base;
+    for (let i = 2; i < 1000; i += 1) {
+      const clash = await prisma.organization.findFirst({
+        where: { slug, NOT: exceptOrganizationId ? { id: exceptOrganizationId } : undefined },
+        select: { id: true },
+      });
+      if (!clash) return slug;
+      slug = `${base}-${i}`;
+    }
+    throw new ConflictError('Could not find a free organization slug');
+  }
+
+  /**
+   * Create a new organization, already onboarded (the /signup flow is the
+   * self-serve path; this one is for SYSTEM_ADMIN tooling, seeds and tests).
+   * The creator becomes an ADMIN member so the organization shows up in
+   * their switcher (spec 022).
    * @param {Object} data - { name }
+   * @param {string} [creatorUserId] - User to add as ADMIN member
    * @returns {Promise<Object>} Created organization
    */
-  async createOrganization(data) {
+  async createOrganization(data, creatorUserId = null) {
     const organization = await prisma.organization.create({
       data: {
         name: data.name,
+        slug: await this.uniqueSlug(data.name),
+        ...(creatorUserId ? { members: { create: { userId: creatorUserId, role: 'ADMIN' } } } : {}),
       },
     });
 
     logger.info('Organization created', {
       event: 'organization_created',
       organizationId: organization.id,
-      name: organization.name,
+      name: data.name,
+      creatorUserId,
     });
 
     return organization;
@@ -63,12 +90,39 @@ class OrganizationService {
    * List all organizations
    * @returns {Promise<Array>} List of organizations
    */
-  async listOrganizations() {
+  async listOrganizations({ includePending = false, withOnboarding = false } = {}) {
     const orgs = await prisma.organization.findMany({
+      // Spec 022: organizations still in /signup are hidden from the switcher
+      where: includePending ? undefined : { onboardingCompletedAt: { not: null } },
       orderBy: { createdAt: 'desc' },
-      include: { _count: { select: { venues: true, members: true } } },
+      include: {
+        _count: { select: { venues: true, members: true } },
+        // Spec 022 phase 3: survey answers and plan for the SYSTEM_ADMIN list only
+        ...(withOnboarding ? { platformCustomer: { select: { plan: true, subscriptionStatus: true, onboarding: true } } } : {}),
+      },
     });
-    return orgs.map(withUserCount);
+    return orgs.map((org) => {
+      const { platformCustomer, ...rest } = org;
+      const base = withUserCount(rest);
+      if (!withOnboarding) return base;
+      const survey = platformCustomer?.onboarding ?? null;
+      return {
+        ...base,
+        plan: platformCustomer?.plan ?? 'FREE',
+        subscriptionStatus: platformCustomer?.subscriptionStatus ?? null,
+        onboarding: survey
+          ? {
+              source: survey.source ?? null,
+              goals: survey.goals ?? [],
+              eventTypes: survey.eventTypes ?? [],
+              eventsPerYear: survey.eventsPerYear ?? null,
+              attendance: survey.attendance ?? null,
+              movingFrom: survey.movingFrom ?? null,
+              surveySkipped: Boolean(survey.surveySkippedAt),
+            }
+          : null,
+      };
+    });
   }
 
   /**
@@ -77,7 +131,7 @@ class OrganizationService {
    */
   async listOrganizationsForUser(userId) {
     const memberships = await prisma.organizationMember.findMany({
-      where: { userId },
+      where: { userId, organization: { onboardingCompletedAt: { not: null } } },
       orderBy: { createdAt: 'asc' },
       include: { organization: { include: { _count: { select: { venues: true, members: true } } } } },
     });
@@ -87,12 +141,22 @@ class OrganizationService {
   /**
    * Update an organization
    * @param {string} id - Organization ID
-   * @param {Object} data - Fields to update { name?, status?, brandColor?, themeMode? }
+   * @param {Object} data - Fields to update { name?, slug?, status?, brandColor?, themeMode? }
    * @returns {Promise<Object>} Updated organization
    */
   async updateOrganization(id, data) {
     const updateData = {};
     if (data.name !== undefined) updateData.name = data.name;
+    // The slug does not follow renames (URLs stay stable); it only changes
+    // when set explicitly, and must be free.
+    if (data.slug !== undefined) {
+      const clash = await prisma.organization.findFirst({
+        where: { slug: data.slug, NOT: { id } },
+        select: { id: true },
+      });
+      if (clash) throw new ConflictError('That slug is already in use');
+      updateData.slug = data.slug;
+    }
     if (data.status !== undefined) updateData.status = data.status;
     if (data.brandColor !== undefined) updateData.brandColor = data.brandColor;
     if (data.themeMode !== undefined) updateData.themeMode = data.themeMode;
