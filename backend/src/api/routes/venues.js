@@ -11,13 +11,14 @@ import venueService from '../../services/VenueService.js';
 import { NotFoundError } from '../../middleware/errorHandler.js';
 import { uploadImage } from '../../middleware/imageUpload.js';
 import imageService from '../../services/ImageService.js';
+import { gateByVenueParam } from '../../middleware/storefrontGate.js';
 
 const verifyOrgOwnership = requireOrgMembership('orgId');
 
 const publicRouter = Router();
 const orgRouter = Router({ mergeParams: true });
 
-publicRouter.get('/:venueId', async (req, res, next) => {
+publicRouter.get('/:venueId', gateByVenueParam, async (req, res, next) => {
   try {
     const result = await venueService.getPublicVenueById(req.params.venueId);
     res.json(result);

@@ -18,6 +18,7 @@ import applicationService from '../../services/ApplicationService.js';
 import { MAX_FILES_PER_SUBMISSION, MAX_PHOTO_MB } from '../../config/applications.js';
 import { ValidationError } from '../../middleware/errorHandler.js';
 import { clientIpForRateLimit } from './buyerAuth.js';
+import { gateByEventParam } from '../../middleware/storefrontGate.js';
 
 export const eventApplicationsRouter = express.Router({ mergeParams: true });
 export const applicationStatusRouter = express.Router();
@@ -71,7 +72,7 @@ function parseSubmission(req, res, next) {
   });
 }
 
-eventApplicationsRouter.get('/forms', async (req, res, next) => {
+eventApplicationsRouter.get('/forms', gateByEventParam, async (req, res, next) => {
   try {
     res.json({ data: await applicationFormService.publicForms(req.params.eventId) });
   } catch (error) {
@@ -79,7 +80,7 @@ eventApplicationsRouter.get('/forms', async (req, res, next) => {
   }
 });
 
-eventApplicationsRouter.get('/forms/:slug', async (req, res, next) => {
+eventApplicationsRouter.get('/forms/:slug', gateByEventParam, async (req, res, next) => {
   try {
     res.json(await applicationFormService.publicForm(req.params.eventId, req.params.slug));
   } catch (error) {
@@ -87,7 +88,7 @@ eventApplicationsRouter.get('/forms/:slug', async (req, res, next) => {
   }
 });
 
-eventApplicationsRouter.post('/', submitLimiter, parseSubmission, async (req, res, next) => {
+eventApplicationsRouter.post('/', submitLimiter, gateByEventParam, parseSubmission, async (req, res, next) => {
   try {
     const result = await applicationService.submit(req.params.eventId, req.submission.body, req.submission.files);
     res.status(201).json(result);

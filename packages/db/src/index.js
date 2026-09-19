@@ -5,7 +5,11 @@ import { PrismaClient } from "../generated/client/index.js";
 
 const globalForPrisma = globalThis;
 
-export const prisma = globalForPrisma.__prisma ?? new PrismaClient();
+// Secrets never leave the database unless a query opts in
+// (`omit: { storefrontPasswordHash: false }` or an explicit `select`).
+const clientOptions = { omit: { organization: { storefrontPasswordHash: true } } };
+
+export const prisma = globalForPrisma.__prisma ?? new PrismaClient(clientOptions);
 
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.__prisma = prisma;

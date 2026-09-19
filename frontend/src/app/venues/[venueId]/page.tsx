@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import StorefrontPasswordGate from '@/components/StorefrontPasswordGate';
+import { storefrontLockFrom, type StorefrontLock } from '@/lib/storefrontAccess';
 import Link from 'next/link';
 import EventCard, { type EventSummary } from '@/components/EventCard';
 import { resolveAssetUrl } from '@/lib/assets';
@@ -27,6 +29,8 @@ export default function PublicVenuePage({ params }: { params: { venueId: string 
   const [data, setData] = useState<PublicVenueResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lock, setLock] = useState<StorefrontLock | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -36,9 +40,17 @@ export default function PublicVenuePage({ params }: { params: { venueId: string 
         setLoading(true);
         setError(null);
         const response = await api.get<PublicVenueResponse>(`/venues/${params.venueId}`);
-        if (active) setData(response);
+        if (active) {
+          setData(response);
+          setLock(null);
+        }
       } catch (requestError: any) {
         if (active) {
+          const locked = storefrontLockFrom(requestError);
+          if (locked) {
+            setLock(locked);
+            return;
+          }
           setError(
             requestError.status === 404
               ? 'This venue is not available.'
@@ -54,7 +66,17 @@ export default function PublicVenuePage({ params }: { params: { venueId: string 
     return () => {
       active = false;
     };
-  }, [params.venueId]);
+  }, [params.venueId, attempt]);
+
+  if (lock) {
+    return (
+      <StorefrontPasswordGate
+        organization={lock.organization}
+        message={lock.message}
+        onUnlocked={() => setAttempt((n) => n + 1)}
+      />
+    );
+  }
 
   if (loading) {
     return (

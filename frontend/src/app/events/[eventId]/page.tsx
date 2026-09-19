@@ -4,6 +4,8 @@
 // Uses new schema: venue object, priceTiers array, computed quantityAvailable
 
 import React, { useState, useEffect } from 'react';
+import StorefrontPasswordGate from '../../../components/StorefrontPasswordGate';
+import { storefrontLockFrom, type StorefrontLock } from '../../../lib/storefrontAccess';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '../../../services/api';
@@ -71,6 +73,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lock, setLock] = useState<StorefrontLock | null>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [addOnQuantities, setAddOnQuantities] = useState<Record<string, number>>({});
   const [showDescription, setShowDescription] = useState(false);
@@ -92,7 +95,13 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
 
       const data = await api.get<Event>(`/events/${params.eventId}`);
       setEvent(data);
+      setLock(null);
     } catch (err: any) {
+      const locked = storefrontLockFrom(err);
+      if (locked) {
+        setLock(locked);
+        return;
+      }
       setError(err.message || 'Failed to load event details');
       console.error('Error fetching event:', err);
     } finally {
@@ -133,6 +142,10 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
       router.push(`/checkout/${params.eventId}?${search.toString()}`);
     }
   };
+
+  if (lock) {
+    return <StorefrontPasswordGate organization={lock.organization} message={lock.message} onUnlocked={fetchEventDetails} />;
+  }
 
   if (loading) {
     return (

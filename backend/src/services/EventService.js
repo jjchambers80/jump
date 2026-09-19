@@ -383,7 +383,8 @@ class EventService {
     const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 20));
     const skip = (pageNum - 1) * limitNum;
 
-    const where = { status: 'PUBLISHED' };
+    // Private storefronts (Online Store › Preferences) never appear in discovery.
+    const where = { status: 'PUBLISHED', venue: { organization: { storefrontPrivate: false } } };
     if (category) where.category = category;
     if (dateFrom || dateTo) {
       where.date = {};

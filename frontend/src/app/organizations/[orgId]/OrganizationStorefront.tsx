@@ -1,0 +1,216 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { api } from '../../../services/api';
+import { resolveAssetUrl } from '../../../lib/assets';
+import EventCard, { EventSummary } from '../../../components/EventCard';
+import BrandScope from '../../../components/BrandScope';
+import LogoBox from '../../../components/LogoBox';
+import StorefrontPasswordGate from '../../../components/StorefrontPasswordGate';
+import type { ThemeMode } from '@/lib/theme';
+
+interface OrganizationPublic {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+  coverUrl: string | null;
+  brandColor?: string | null;
+  themeMode?: ThemeMode | null;
+}
+
+interface OrgPageData {
+  organization: OrganizationPublic;
+  events: EventSummary[];
+  /** Private mode (Online store › Preferences) and no valid access token. */
+  locked?: boolean;
+  /** Organizer's message for the password page. */
+  message?: string | null;
+}
+
+/** Client half of /organizations/[orgId]; page.tsx wraps it with generateMetadata. */
+export default function OrganizationStorefront({ orgId }: { orgId: string }) {
+  const [data, setData] = useState<OrgPageData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchOrg = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      // services/api.ts attaches any stored X-Storefront-Access tokens.
+      const result = await api.get<OrgPageData>(`/organizations/${orgId}/public`);
+      setData(result);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load organization');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void fetchOrg();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgId]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <svg
+            className="animate-spin h-12 w-12 text-brand-link mx-auto mb-4"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path
+              className="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+            />
+          </svg>
+          <p className="text-gray-600 dark:text-slate-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-8 max-w-md w-full text-center">
+          <div className="text-red-600 dark:text-red-400 mb-4">
+            <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-slate-100 mb-2">
+            Organization Not Found
+          </h2>
+          <p className="text-gray-600 dark:text-slate-400">
+            {error || 'This organization does not exist or is inactive.'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const { organization, events } = data;
+  const coverSrc = resolveAssetUrl(organization.coverUrl);
+  const logoSrc = resolveAssetUrl(organization.logoUrl);
+  const hasCover = Boolean(coverSrc);
+
+  if (data.locked) {
+    return (
+      <StorefrontPasswordGate
+        organization={organization}
+        message={data.message ?? null}
+        onUnlocked={fetchOrg}
+      />
+    );
+  }
+
+  const eventList = (
+    <>
+      {/* Event cards */}
+      {events.length === 0 ? (
+        <div className="text-center py-16">
+          <svg
+            className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-slate-600"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.5}
+              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+            />
+          </svg>
+          <h3 className="text-lg font-semibold text-gray-700 dark:text-slate-300 mb-2">
+            No upcoming events
+          </h3>
+          <p className="text-sm text-gray-500 dark:text-slate-400">
+            Check back later for new events from {organization.name}.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {events.map((event) => (
+            <EventCard key={event.id} event={event} />
+          ))}
+        </div>
+      )}
+    </>
+  );
+
+  // Desktop with cover: two-column, image flush right
+  // Desktop without cover: centered single column
+  // The full-width header keeps the organization identity consistent at every size.
+  return (
+    <BrandScope color={organization.brandColor} themeMode={organization.themeMode} className="min-h-screen bg-gray-50 dark:bg-slate-900">
+      <header
+        data-testid="organization-header"
+        className="w-full border-b border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-800"
+      >
+        <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-4 sm:gap-6 sm:px-6 sm:py-6 lg:px-8">
+          {logoSrc && (
+            <LogoBox
+              src={logoSrc}
+              alt={`${organization.name} logo`}
+              className="w-20 shrink-0 rounded-lg shadow-sm sm:w-24"
+            />
+          )}
+          <h1 className="min-w-0 break-words text-2xl font-bold text-gray-900 dark:text-slate-100 sm:text-3xl">
+            {organization.name}
+          </h1>
+        </div>
+      </header>
+
+      {/* Mobile cover image */}
+      {hasCover && (
+        <div className="xl:hidden w-full">
+          <div className="w-full" style={{ aspectRatio: '16/9' }}>
+            <img
+              src={coverSrc!}
+              alt={`${organization.name} cover`}
+              className="w-full h-full object-cover"
+            />
+          </div>
+        </div>
+      )}
+
+      {hasCover ? (
+        /* Two-column desktop layout */
+        <div className="xl:flex min-h-screen">
+          {/* Left: event content — full width below xl, pushed right at xl+ */}
+          <div className="flex-1 xl:flex xl:justify-end">
+            <div className="w-full px-4 py-8 sm:px-6 xl:max-w-4xl xl:py-12">
+              {eventList}
+            </div>
+          </div>
+
+          {/* Right: cover image, flush to window edge */}
+          <div className="hidden xl:block w-[55%] max-w-3xl sticky top-0 h-screen">
+            <img
+              src={coverSrc!}
+              alt={`${organization.name} cover`}
+              className="w-full h-full object-cover"
+            />
+          </div>
+        </div>
+      ) : (
+        /* Centered single column */
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 xl:py-12">
+          {eventList}
+        </div>
+      )}
+    </BrandScope>
+  );
+}

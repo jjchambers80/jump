@@ -14,6 +14,7 @@ import { validateTaxRegionParams, validateUpsertTaxRegion, validateUpdateTaxSett
 import { validateFormBody, validateTierBody, validateQuestionBody, validateDecisionBody, validateBulkBody, validateTemplateBody, validateRefundBody, validateAddOnLinesBody, validateTierAddOnsBody, validateTierChangeBody, validateAdjustmentBody, validateWaiveBody, validateOfflinePaymentBody, validateFormTemplateBody, validateSaveAsTemplateBody, validateMetaBody } from '../validators/applicationValidators.js';
 import { validateUpdatePaymentSettings, validateUpdatePayoutSettings } from '../validators/paymentValidators.js';
 import { validateCreatePage, validateUpdatePage } from '../validators/pageValidators.js';
+import { validateUpdateStorefrontPreferences } from '../validators/storefrontPreferencesValidators.js';
 import organizationService from '../../services/OrganizationService.js';
 import organizationPersonService from '../../services/OrganizationPersonService.js';
 import orderService from '../../services/OrderService.js';
@@ -35,6 +36,7 @@ import applicationDigestService from '../../services/ApplicationDigestService.js
 import setupGuideService from '../../services/SetupGuideService.js';
 import billingService from '../../services/BillingService.js';
 import pageService from '../../services/PageService.js';
+import storefrontPreferencesService from '../../services/StorefrontPreferencesService.js';
 import { PAID_ORDER_STATUSES, PAID_APPLICATION_STATUSES } from '../../services/paidStatuses.js';
 
 const router = express.Router();
@@ -121,6 +123,29 @@ router.put('/pages/:pageId', validateUpdatePage, async (req, res, next) => {
     next(error);
   }
 });
+
+/** GET /admin/online-store/preferences — store access, homepage SEO, redirection. */
+router.get('/online-store/preferences', async (req, res, next) => {
+  try {
+    res.json(await storefrontPreferencesService.get(await activeOrgFor(req)));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** PATCH /admin/online-store/preferences — partial update (ADMIN: it can lock the storefront). */
+router.patch(
+  '/online-store/preferences',
+  requireAdmin,
+  validateUpdateStorefrontPreferences,
+  async (req, res, next) => {
+    try {
+      res.json(await storefrontPreferencesService.update(await activeOrgFor(req), req.body));
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 /** GET /admin/setup-guide — dashboard setup tasks for the active organization (spec 022). */
 router.get('/setup-guide', async (req, res, next) => {

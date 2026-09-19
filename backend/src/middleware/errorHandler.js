@@ -56,6 +56,20 @@ export class ForbiddenError extends Error {
   }
 }
 
+/**
+ * Private storefront (Online Store › Preferences) and no valid access token.
+ * 403 with `details: { locked: true, organization, message }` so storefront
+ * pages can render the password gate and retry.
+ */
+export class StorefrontLockedError extends Error {
+  constructor(organization, message) {
+    super('This store is private');
+    this.name = 'StorefrontLockedError';
+    this.statusCode = 403;
+    this.details = { locked: true, organization, message };
+  }
+}
+
 export class NotFoundError extends Error {
   constructor(message = 'Resource not found') {
     super(message);

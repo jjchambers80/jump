@@ -46,6 +46,7 @@ Generated and maintained by running `/doc-feature` after completing feature work
 - [Organization Theme Mode](features/organization-theme-mode.md) — Per-org light/dark/system enforcement on public org pages
 - [Organization Logo Box](features/organization-logo-box.md) — Public org page logo: square box straddling the mobile cover, plain logo on desktop, blurred backdrop for non-square logos
 - [Online Store Pages](features/online-store-pages.md) — Online store › Pages: create/edit custom pages, visibility, search engine listing (SEO title, meta description, URL handle)
+- [Online Store Preferences](features/online-store-preferences.md) — Online store › Preferences: store access (private mode + password gate on every public storefront page), homepage SEO title/description + Open Graph
 - [Venue Management](features/venue-management.md) — CRUD, logo uploads, timezone config
 - [User Management](features/user-management.md) — Role assignment, account listing
 
