@@ -48,6 +48,7 @@ Candidate specs surfaced by the 2026-09-15 Eventeny organizer interview ([analys
 | check-in role | `SCANNER` role, kiosk mode, unlimited free scanner seats, PII masking | Owner dashboard exposed on volunteer iPads; 10-seat cap |
 | 014 floor map | Builder with snapping and row duplication, booth ↔ vendor assignment, public map with profiles, vector PDF export, cache invalidation on write | Eventeny's map is the $360/mo tier driver and serves stale assignments |
 | 015 pages | Simple CMS pages, org landing page, day-of mobile page on the custom domain | Organizer runs WordPress only to link out to the platform |
+| 025–028 content | **Planned 2026-09-19** — `specs/025-content-files/`, `026-blog-posts/`, `027-menus/`, `028-url-redirects/`: Content sidebar with Files (public links), Blog posts (Tiptap, storefront rendering, public Pages route), Menus (header nav + footer), URL redirects | Pages shipped unlisted and unrendered; storefront has no navigation or publishing surface |
 
 ---
 
