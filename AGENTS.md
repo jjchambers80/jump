@@ -111,6 +111,7 @@ Auth.js v5 (JWT HS256) · Resend email · Redis caching · Railway deployment
 - **Client components**: Use `'use client'` directive; wrap `useSearchParams()` in `<Suspense>`
 - **Admin pages**: Add to sidebar nav, protect with session check
 - **UI/UX skill**: `ui-ux-pro-max` (`.claude/skills/`, gitignored — install with `npx ui-ux-pro-max-cli init --ai claude`) is available locally for layout, UX guidelines, accessibility, typography and chart choices when building or reviewing pages and components. It is advisory: public storefront colors always come from the org's `brand` tokens via `BrandScope` (Gotcha 6), admin pages keep the existing Tailwind/shadcn conventions, and nothing from the skill's generated design systems is hardcoded into shared components
+- **Motion skill**: `design-motion-principles` (`.claude/skills/`, gitignored — install with `npx skills add kylezantos/design-motion-principles`) for transitions, hover states, micro-interactions and enter/exit animations. "add/animate" = create mode, "audit/review" = audit mode. Keep Jump's restraint: short durations, respect `prefers-reduced-motion`, no motion on storefront checkout steps that could delay or mask capacity/payment state
 
 ## Commit Rules
 
