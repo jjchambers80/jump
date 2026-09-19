@@ -38,6 +38,7 @@ import billingService from '../../services/BillingService.js';
 import pageService from '../../services/PageService.js';
 import storefrontPreferencesService from '../../services/StorefrontPreferencesService.js';
 import { PAID_ORDER_STATUSES, PAID_APPLICATION_STATUSES } from '../../services/paidStatuses.js';
+import { activeOrgFor } from './adminScope.js';
 
 const router = express.Router();
 
@@ -45,20 +46,7 @@ const router = express.Router();
 router.use(requireAuth);
 router.use(requireOrganizer);
 
-/**
- * Organization the Settings pages act on. Members: the org the switcher sent
- * as X-Jump-Org when they belong to it, else their first membership.
- * SYSTEM_ADMIN has no memberships, so honor the switcher header, then an
- * explicit ?organizationId= / body.organizationId.
- */
-async function activeOrgFor(req) {
-  const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
-  const orgId = isUnscoped(scope)
-    ? req.user.organizationId || req.query.organizationId || req.body?.organizationId
-    : scope.organizationId;
-  if (!orgId) throw new NotFoundError('No organization is assigned to this user');
-  return orgId;
-}
+// Organization the Settings pages act on — see routes/adminScope.js.
 
 /** GET /admin/settings/business-details — current user's assigned organization. */
 router.get('/settings/business-details', async (req, res, next) => {

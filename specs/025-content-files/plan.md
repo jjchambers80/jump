@@ -1,6 +1,6 @@
 # Implementation Plan: Content › Files (spec 025)
 
-**Status**: Planned 2026-09-19. Not built.
+**Status**: Built 2026-09-19 on `feat/025-content-files`.
 **Spec**: [spec.md](./spec.md). Depends on nothing new; reuses the image pipeline from `ImageService` and the Pages routes.
 **Branch**: plan on `plan/025-028-content`; implementation on `feat/025-content-files`, merged to `main` alone (stacked-merge lesson from spec 012).
 **Order**: 025 Files → 026 Blog posts → 027 Menus → 028 URL redirects. Blog posts need Files (featured image, editor images); Menus need Pages and Blog posts to link to.

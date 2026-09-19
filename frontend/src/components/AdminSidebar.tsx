@@ -34,6 +34,8 @@ const navItems: NavItem[] = [
   { label: 'Online store', href: '/admin/online-store' },
   { label: 'Pages', href: '/admin/online-store/pages', nested: true },
   { label: 'Preferences', href: '/admin/online-store/preferences', nested: true },
+  { label: 'Content', href: '/admin/content' },
+  { label: 'Files', href: '/admin/content/files', nested: true },
 ];
 
 interface AdminSidebarProps {

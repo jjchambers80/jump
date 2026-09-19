@@ -34,6 +34,7 @@ import usersRouter from './routes/users.js';
 import imagesRouter from './routes/images.js';
 import buyerRouter from './routes/buyerAuth.js';
 import domainsRouter from './routes/domains.js';
+import { adminFilesRouter, publicFilesRouter } from './routes/storeFiles.js';
 import domainService from '../services/DomainService.js';
 import applicationPaymentService from '../services/ApplicationPaymentService.js';
 import applicationDigestService from '../services/ApplicationDigestService.js';
@@ -131,6 +132,7 @@ app.get('/health', (req, res) => {
 app.get('/metrics', metricsHandler);
 
 // API routes
+app.use('/admin/files', adminFilesRouter);
 app.use('/admin', adminRouter);
 app.use('/customers', customersRouter);
 app.use('/events/:eventId/applications', eventApplicationsRouter);
@@ -151,6 +153,7 @@ app.use('/buyer', buyerRouter);
 app.use('/domains', domainsRouter);
 app.use('/users', usersRouter);
 app.use('/images', imagesRouter);
+app.use('/files', publicFilesRouter);
 app.use('/webhooks', webhooksRouter);
 
 // Error handling (must be last)

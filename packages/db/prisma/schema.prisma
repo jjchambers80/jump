@@ -89,7 +89,8 @@ model File {
   originalName String?
   createdAt    DateTime @default(now())
 
-  images Image[]
+  images     Image[]
+  storeFiles StoreFile[]
 }
 
 model Image {
@@ -108,9 +109,60 @@ model Image {
   organizationCovers     Organization[]          @relation("OrgCover")
   applicantProfileImages ApplicantProfileImage[]
   applicationAnswers     ApplicationAnswer[]
+  storeFile              StoreFile?
 
   @@index([fileId])
   @@index([usageType])
+}
+
+// Spec 025: Content › Files. An organization's uploaded asset (image or PDF)
+// with a public, hash-protected URL. Bytes live in the shared content-addressed
+// File table (two organizations uploading the same PDF share one File); images
+// also get an Image row for variants and the focal point.
+model StoreFile {
+  id             String   @id @default(cuid())
+  organizationId String
+  fileId         String
+  imageId        String?  @unique
+  // Display name without extension; the extension comes from the sniffed type.
+  name           String
+  extension      String
+  altText        String?
+  width          Int?
+  height         Int?
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  file         File                 @relation(fields: [fileId], references: [id])
+  image        Image?               @relation(fields: [imageId], references: [id])
+  references   StoreFileReference[]
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, name])
+  @@index([fileId])
+}
+
+enum ContentRefKind {
+  PAGE
+  BLOG_POST
+}
+
+// Which content records use a file (featured image, or an <img>/<a> inside
+// stored HTML). Rebuilt on every save of the referencing record; rows die
+// with the file (cascade) and with the record (service delete).
+model StoreFileReference {
+  id       String         @id @default(cuid())
+  fileId   String
+  kind     ContentRefKind
+  targetId String
+  field    String
+
+  file StoreFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@unique([fileId, kind, targetId, field])
+  @@index([kind, targetId])
 }
 
 // ──────────────────────────────────────────────
@@ -196,6 +248,7 @@ model Organization {
   applicationFormTemplates ApplicationFormTemplate[]
   stripeAccounts       OrganizationStripeAccount[]
   pages                 Page[]
+  storeFiles            StoreFile[]
 }
 
 // Custom content pages managed under Online Store. Content is stored as the
