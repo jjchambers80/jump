@@ -1,30 +1,25 @@
 'use client';
 
 import Link from 'next/link';
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, useRef, useState } from 'react';
 import { useOrg } from '@/components/OrgContext';
+import FilePickerDialog from '@/components/content/FilePickerDialog';
+import SeoListingCard, {
+  SEO_DESCRIPTION_MAX,
+  SEO_TITLE_MAX,
+  previewHandle,
+} from '@/components/content/SeoListingCard';
+import RichTextEditorField from '@/components/editor/RichTextEditorField';
+import { htmlToText } from '@/lib/html';
 import type { OnlineStorePage, OnlineStorePageInput } from '@/services/api';
 
-// Search engine listing limits, mirrored from backend/src/utils/pageLimits.js.
-export const SEO_TITLE_MAX = 70;
-export const SEO_DESCRIPTION_MAX = 160;
+// Limits and the handle preview now live in the shared SEO card (spec 026).
+export { SEO_DESCRIPTION_MAX, SEO_TITLE_MAX, previewHandle };
 
 const field =
   'mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white';
 const label = 'block text-sm font-medium text-gray-700 dark:text-slate-300';
 const hint = 'mt-1 text-xs text-gray-500 dark:text-slate-400';
-
-/** Client-side preview of the handle the backend derives from a title. */
-export function previewHandle(value: string) {
-  return value
-    .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60)
-    .replace(/-+$/g, '');
-}
 
 interface PageFormProps {
   /** Existing page when editing; omitted when creating. */
@@ -34,9 +29,15 @@ interface PageFormProps {
   onSubmit: (input: OnlineStorePageInput) => Promise<void>;
 }
 
-export default function PageForm({ initial, submitLabel, submittingLabel, onSubmit }: PageFormProps) {
+export default function PageForm({
+  initial,
+  submitLabel,
+  submittingLabel,
+  onSubmit,
+}: PageFormProps) {
   const { selectedOrgId } = useOrg();
-  const editorRef = useRef<HTMLDivElement>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const pickImage = useRef<((file: { url: string; alt: string } | null) => void) | null>(null);
   const [title, setTitle] = useState(initial?.title ?? '');
   const [content, setContent] = useState(initial?.content ?? '');
   const [isVisible, setIsVisible] = useState(initial?.isVisible ?? false);
@@ -47,26 +48,11 @@ export default function PageForm({ initial, submitLabel, submittingLabel, onSubm
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // contentEditable owns its DOM: seed it once from the saved HTML.
-  useEffect(() => {
-    if (editorRef.current && initial?.content) editorRef.current.innerHTML = initial.content;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const format = (command: 'bold' | 'italic' | 'insertUnorderedList') => {
-    editorRef.current?.focus();
-    document.execCommand(command);
-    setContent(editorRef.current?.innerHTML ?? '');
-  };
-
-  const effectiveHandle = previewHandle(slug || title);
   const origin = typeof window === 'undefined' ? '' : window.location.origin;
-  const pageUrl = `${origin}/organizations/${selectedOrgId ?? ''}/pages/${effectiveHandle}`;
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const plainContent = editorRef.current?.textContent?.trim() ?? '';
-    if (!title.trim() || !plainContent || !selectedOrgId) return;
+    if (!title.trim() || !htmlToText(content) || !selectedOrgId) return;
 
     setSubmitting(true);
     setError(null);
@@ -114,47 +100,23 @@ export default function PageForm({ initial, submitLabel, submittingLabel, onSubm
 
           <div>
             <span className={label}>Page content</span>
-            <div
-              role="toolbar"
-              aria-label="Text formatting"
-              className="mt-1 flex gap-1 rounded-t-md border border-b-0 border-gray-300 bg-gray-50 p-2 dark:border-slate-600 dark:bg-slate-900"
-            >
-              <button
-                type="button"
-                onClick={() => format('bold')}
-                aria-label="Bold"
-                className="rounded px-3 py-1 text-sm font-bold text-gray-700 hover:bg-gray-200 dark:text-slate-200 dark:hover:bg-slate-700"
-              >
-                B
-              </button>
-              <button
-                type="button"
-                onClick={() => format('italic')}
-                aria-label="Italic"
-                className="rounded px-3 py-1 text-sm italic text-gray-700 hover:bg-gray-200 dark:text-slate-200 dark:hover:bg-slate-700"
-              >
-                I
-              </button>
-              <button
-                type="button"
-                onClick={() => format('insertUnorderedList')}
-                aria-label="Bulleted list"
-                className="rounded px-3 py-1 text-sm text-gray-700 hover:bg-gray-200 dark:text-slate-200 dark:hover:bg-slate-700"
-              >
-                List
-              </button>
+            <div className="mt-1">
+              <RichTextEditorField
+                value={content}
+                onChange={setContent}
+                aria-label="Page content"
+                placeholder="Write the page content…"
+                onInsertImage={() =>
+                  new Promise((resolve) => {
+                    pickImage.current = resolve;
+                    setPickerOpen(true);
+                  })
+                }
+              />
             </div>
-            <div
-              ref={editorRef}
-              role="textbox"
-              aria-label="Page content"
-              aria-multiline="true"
-              contentEditable
-              suppressContentEditableWarning
-              onInput={(event) => setContent(event.currentTarget.innerHTML)}
-              className="min-h-56 rounded-b-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
-            />
-            <p className={hint}>Use the toolbar to format the content shown on your online store.</p>
+            <p className={hint}>
+              Use the toolbar to format the content shown on your online store.
+            </p>
           </div>
 
           <label className="flex items-center justify-between gap-4 rounded-md border border-gray-200 p-4 dark:border-slate-700">
@@ -175,92 +137,17 @@ export default function PageForm({ initial, submitLabel, submittingLabel, onSubm
           </label>
         </section>
 
-        <section
-          aria-labelledby="seo-heading"
-          data-testid="search-engine-listing"
-          className="space-y-5 rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-6"
-        >
-          <div>
-            <h2 id="seo-heading" className="text-base font-semibold text-gray-900 dark:text-white">
-              Search engine listing
-            </h2>
-            <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-              Add a title and description to see how this page might appear in a search engine
-              listing.
-            </p>
-          </div>
-
-          {/* Google-style preview of the listing */}
-          <div
-            data-testid="seo-preview"
-            className="rounded-md border border-gray-200 bg-gray-50 p-4 dark:border-slate-700 dark:bg-slate-900"
-          >
-            <p className="truncate text-xs text-gray-600 dark:text-slate-400">{pageUrl}</p>
-            <p className="mt-1 truncate text-lg text-blue-700 dark:text-blue-400">
-              {seoTitle.trim() || title.trim() || 'Page title'}
-            </p>
-            <p className="mt-1 line-clamp-2 text-sm text-gray-600 dark:text-slate-300">
-              {seoDescription.trim() || 'Add a meta description to control the snippet shown under the title.'}
-            </p>
-          </div>
-
-          <div>
-            <label htmlFor="seo-title" className={label}>
-              Page title
-            </label>
-            <input
-              id="seo-title"
-              value={seoTitle}
-              onChange={(event) => setSeoTitle(event.target.value)}
-              maxLength={SEO_TITLE_MAX}
-              placeholder={title.trim() || undefined}
-              className={field}
-            />
-            <p className={hint}>
-              {seoTitle.length} of {SEO_TITLE_MAX} characters used
-            </p>
-          </div>
-
-          <div>
-            <label htmlFor="seo-description" className={label}>
-              Meta description
-            </label>
-            <textarea
-              id="seo-description"
-              value={seoDescription}
-              onChange={(event) => setSeoDescription(event.target.value)}
-              maxLength={SEO_DESCRIPTION_MAX}
-              rows={3}
-              className={field}
-            />
-            <p className={hint}>
-              {seoDescription.length} of {SEO_DESCRIPTION_MAX} characters used
-            </p>
-          </div>
-
-          <div>
-            <label htmlFor="seo-handle" className={label}>
-              URL handle
-            </label>
-            <div className="mt-1 flex rounded-md shadow-sm">
-              <span className="inline-flex items-center rounded-l-md border border-r-0 border-gray-300 bg-gray-50 px-3 text-sm text-gray-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-400">
-                pages/
-              </span>
-              <input
-                id="seo-handle"
-                value={slug}
-                onChange={(event) => setSlug(event.target.value)}
-                onBlur={() => setSlug((current) => previewHandle(current))}
-                maxLength={60}
-                placeholder={previewHandle(title) || 'about-us'}
-                className="block w-full rounded-r-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
-              />
-            </div>
-            <p className={hint} data-testid="seo-url">
-              {pageUrl}
-            </p>
-          </div>
-        </section>
+        <SeoListingCard
+          title={title}
+          seoTitle={seoTitle}
+          seoDescription={seoDescription}
+          handle={slug}
+          handlePrefix="pages/"
+          urlFor={(handle) => `${origin}/organizations/${selectedOrgId ?? ''}/pages/${handle}`}
+          onSeoTitleChange={setSeoTitle}
+          onSeoDescriptionChange={setSeoDescription}
+          onHandleChange={setSlug}
+        />
 
         {!selectedOrgId && (
           <p className="text-sm text-amber-700 dark:text-amber-300">
@@ -284,6 +171,19 @@ export default function PageForm({ initial, submitLabel, submittingLabel, onSubm
           </button>
         </div>
       </form>
+      {pickerOpen && (
+        <FilePickerDialog
+          title="Insert image"
+          onClose={() => {
+            pickImage.current?.(null);
+            setPickerOpen(false);
+          }}
+          onPick={(file) => {
+            pickImage.current?.({ url: file.url, alt: file.altText ?? file.name });
+            setPickerOpen(false);
+          }}
+        />
+      )}
     </>
   );
 }

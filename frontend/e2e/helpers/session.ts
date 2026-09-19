@@ -43,7 +43,7 @@ export async function signInAsStaff(page: Page, user: StaffUser, baseURL: string
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ user: { id: user.id, email: user.email, role: user.role }, accessToken: token, expires: '2099-01-01T00:00:00.000Z' }),
+      body: JSON.stringify({ user: { id: user.id, email: user.email, role: user.role, name: user.name ?? 'Test Staff' }, accessToken: token, expires: '2099-01-01T00:00:00.000Z' }),
     })
   );
   return token;

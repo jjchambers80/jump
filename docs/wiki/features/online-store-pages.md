@@ -1,13 +1,13 @@
 # Online Store Pages
 
 **Status:** Implemented
-**Last Updated:** 2026-09-19
+**Last Updated:** 2026-09-19 (spec 026: Tiptap editor, sanitisation, public route)
 
 ## Overview
 
 Organizers create custom content pages (About, FAQ, policies) under **Online store › Pages** in the admin. Pages are organization-scoped (`Page.organizationId`), carry a WYSIWYG HTML `content` snapshot, a visibility toggle, and a Shopify-style **search engine listing**: SEO page title (≤ 70 chars), meta description (≤ 160 chars) and a URL handle (`slug`, unique per organization). The list links each row to an edit form that shares one `PageForm` component with the create form.
 
-Storefront rendering of pages (`/organizations/:orgId/pages/:slug`) is not built yet; the URL is shown as a preview in the form only.
+Pages render publicly at `/organizations/:orgId/pages/:slug` (`/pages/:slug` on a custom domain) through `components/storefront/StorefrontPageView.tsx` (spec 026); hidden pages are 404. Content is sanitised on write (`backend/src/utils/sanitizeHtml.js`) and the form uses the shared Tiptap `RichTextEditorField` + `SeoListingCard` — see [Blog posts](blog-posts.md).
 
 ## Key Files
 

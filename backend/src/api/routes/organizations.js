@@ -3,6 +3,7 @@
 // All routes require ADMIN role
 
 import { Router } from 'express';
+import { prisma } from '@jump/db';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireAdmin, requireOrganizer, requireSystemAdmin } from '../../middleware/rbac.js';
@@ -18,6 +19,9 @@ import { uploadImage } from '../../middleware/imageUpload.js';
 import imageService from '../../services/ImageService.js';
 import storefrontPreferencesService from '../../services/StorefrontPreferencesService.js';
 import { validateStorefrontUnlock } from '../validators/storefrontPreferencesValidators.js';
+import { gateByOrgParam } from '../../middleware/storefrontGate.js';
+import blogPostService from '../../services/BlogPostService.js';
+import pageService from '../../services/PageService.js';
 
 const router = Router();
 
@@ -143,6 +147,50 @@ router.get('/:id/public', async (req, res, next) => {
 router.get('/:id/public/meta', async (req, res, next) => {
   try {
     res.json(await organizationService.getPublicMeta(req.params.id));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Public storefront content (specs 026 / 015): blog listing, blog post and
+ * page. Gated by private store mode; hidden / scheduled records are 404.
+ * Each payload carries the organization identity for the storefront shell.
+ */
+async function publicOrganizationIdentity(id) {
+  const org = await prisma.organization.findFirst({
+    where: { id, status: 'ACTIVE' },
+    select: { id: true, name: true, logoUrl: true, coverUrl: true, brandColor: true, themeMode: true },
+  });
+  if (!org) throw new NotFoundError('Organization not found');
+  return org;
+}
+
+router.get('/:id/public/blogs/:blogHandle', gateByOrgParam, async (req, res, next) => {
+  try {
+    const organization = await publicOrganizationIdentity(req.params.id);
+    const result = await blogPostService.publicList(req.params.id, req.params.blogHandle, req.query.page);
+    res.json({ organization, ...result });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/:id/public/blogs/:blogHandle/:postHandle', gateByOrgParam, async (req, res, next) => {
+  try {
+    const organization = await publicOrganizationIdentity(req.params.id);
+    const post = await blogPostService.publicGet(req.params.id, req.params.blogHandle, req.params.postHandle);
+    res.json({ organization, post });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/:id/public/pages/:slug', gateByOrgParam, async (req, res, next) => {
+  try {
+    const organization = await publicOrganizationIdentity(req.params.id);
+    const page = await pageService.getPublic(req.params.id, req.params.slug);
+    res.json({ organization, page });
   } catch (error) {
     next(error);
   }

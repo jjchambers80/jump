@@ -25,3 +25,4 @@ export function gateStorefront(resolve) {
 export const gateByEventParam = gateStorefront((req) => ({ eventId: req.params.eventId }));
 export const gateByVenueParam = gateStorefront((req) => ({ venueId: req.params.venueId }));
 export const gateByEventBody = gateStorefront((req) => ({ eventId: req.body?.eventId }));
+export const gateByOrgParam = gateStorefront((req) => ({ organizationId: req.params.id }));
