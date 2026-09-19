@@ -242,6 +242,23 @@ model MenuItem {
   @@index([menuId, parentId, position])
 }
 
+// Spec 028: Content › URL redirects. A storefront request that would 404 on
+// the organization's storefront is answered with a 301 to `toPath` (a
+// storefront path such as /pages/faq, or an absolute http(s) URL).
+// fromPath is normalised: lowercase, leading "/", no trailing "/".
+model UrlRedirect {
+  id             String   @id @default(cuid())
+  organizationId String
+  fromPath       String
+  toPath         String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, fromPath])
+}
+
 enum ContentRefKind {
   PAGE
   BLOG_POST
@@ -350,6 +367,7 @@ model Organization {
   blogs                    Blog[]
   blogPosts                BlogPost[]
   menus                    Menu[]
+  urlRedirects             UrlRedirect[]
 }
 
 // Custom content pages managed under Online Store. Content is stored as the

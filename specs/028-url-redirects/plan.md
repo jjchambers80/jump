@@ -1,6 +1,6 @@
 # Implementation Plan: Content › URL redirects (spec 028)
 
-**Status**: Planned 2026-09-19. Not built.
+**Status**: Built 2026-09-19 on `feat/028-url-redirects`.
 **Spec**: [spec.md](./spec.md). Depends on 027 Menus on `main`.
 **Branch**: `feat/028-url-redirects`, merged to `main` alone.
 

@@ -23,6 +23,7 @@ import { gateByOrgParam } from '../../middleware/storefrontGate.js';
 import blogPostService from '../../services/BlogPostService.js';
 import pageService from '../../services/PageService.js';
 import menuService from '../../services/MenuService.js';
+import urlRedirectService from '../../services/UrlRedirectService.js';
 
 const router = Router();
 
@@ -182,6 +183,21 @@ router.get('/:id/public/blogs/:blogHandle/:postHandle', gateByOrgParam, async (r
     const organization = await publicOrganizationIdentity(req.params.id);
     const post = await blogPostService.publicGet(req.params.id, req.params.blogHandle, req.params.postHandle);
     res.json({ organization, post });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /organizations/:id/public/redirect?path= — URL redirect lookup (spec 028).
+ * Not gated: a redirect reveals only a target path, which is gated itself.
+ */
+router.get('/:id/public/redirect', async (req, res, next) => {
+  try {
+    const hit = await urlRedirectService.resolve(req.params.id, req.query.path);
+    if (!hit) throw new NotFoundError('No redirect');
+    res.set('Cache-Control', 'public, max-age=60');
+    res.json(hit);
   } catch (error) {
     next(error);
   }

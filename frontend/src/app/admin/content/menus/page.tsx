@@ -13,8 +13,8 @@ import { useMenusApi } from './useMenusApi';
 
 const th =
   'px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400';
-// URL redirects arrive with spec 028; keep the header slot ready.
-const URL_REDIRECTS_ENABLED = false;
+// URL redirects (spec 028) live under Menus, as in Shopify.
+const URL_REDIRECTS_ENABLED = true;
 
 export default function MenusPage() {
   const router = useRouter();

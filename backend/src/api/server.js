@@ -38,6 +38,7 @@ import domainsRouter from './routes/domains.js';
 import { adminFilesRouter, publicFilesRouter } from './routes/storeFiles.js';
 import blogsRouter from './routes/blogs.js';
 import menusRouter from './routes/menus.js';
+import redirectsRouter from './routes/redirects.js';
 import domainService from '../services/DomainService.js';
 import applicationPaymentService from '../services/ApplicationPaymentService.js';
 import applicationDigestService from '../services/ApplicationDigestService.js';
@@ -142,6 +143,7 @@ app.get('/metrics', metricsHandler);
 // API routes
 app.use('/admin/files', adminFilesRouter);
 app.use('/admin/menus', menusRouter);
+app.use('/admin/redirects', redirectsRouter);
 app.use('/admin', blogsRouter);
 app.use('/admin', adminRouter);
 app.use('/events/:eventId/applications', eventApplicationsRouter);

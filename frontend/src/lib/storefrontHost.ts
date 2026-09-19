@@ -52,8 +52,23 @@ export function platformHostsFromEnv(env: Record<string, string | undefined>): s
 
 // `/legal/*` is Jump's own text on every host (spec 023 LR-04); the tenant
 // middleware must never rewrite it to a storefront route.
-const PUBLIC_PASS = [/^\/events(\/|$)/, /^\/checkout(\/|$)/, /^\/confirmation(\/|$)/, /^\/orders\/[^/]+$/, /^\/tickets(\/|$)/, /^\/venues(\/|$)/, /^\/legal(\/|$)/];
-const PLATFORM_ONLY = [/^\/admin(\/|$)/, /^\/auth(\/|$)/, /^\/dashboard(\/|$)/, /^\/my-tickets(\/|$)/, /^\/orders\/?$/, /^\/orders\/lookup(\/|$)/];
+const PUBLIC_PASS = [
+  /^\/events(\/|$)/,
+  /^\/checkout(\/|$)/,
+  /^\/confirmation(\/|$)/,
+  /^\/orders\/[^/]+$/,
+  /^\/tickets(\/|$)/,
+  /^\/venues(\/|$)/,
+  /^\/legal(\/|$)/,
+];
+const PLATFORM_ONLY = [
+  /^\/admin(\/|$)/,
+  /^\/auth(\/|$)/,
+  /^\/dashboard(\/|$)/,
+  /^\/my-tickets(\/|$)/,
+  /^\/orders\/?$/,
+  /^\/orders\/lookup(\/|$)/,
+];
 
 /**
  * Decide what a path means on a tenant host for `orgId`.
@@ -65,11 +80,16 @@ export function routeForTenantHost(pathname: string, orgId: string): StorefrontR
   if (path === '/' || path === '') return { kind: 'rewrite', pathname: `/organizations/${orgId}` };
 
   const account = path.match(/^\/account(\/.*)?$/);
-  if (account) return { kind: 'rewrite', pathname: `/organizations/${orgId}/account${account[1] || ''}` };
+  if (account)
+    return { kind: 'rewrite', pathname: `/organizations/${orgId}/account${account[1] || ''}` };
 
   // Content (specs 015 / 026): /pages/:slug and /blogs/:blog[/:post] are org-relative.
   const content = path.match(/^\/(pages|blogs)(\/.*)?$/);
-  if (content) return { kind: 'rewrite', pathname: `/organizations/${orgId}/${content[1]}${content[2] || ''}` };
+  if (content)
+    return {
+      kind: 'rewrite',
+      pathname: `/organizations/${orgId}/${content[1]}${content[2] || ''}`,
+    };
 
   const org = path.match(/^\/organizations\/([^/]+)(\/.*)?$/);
   if (org) return org[1] === orgId ? { kind: 'pass' } : { kind: 'notFound' };
@@ -89,12 +109,16 @@ const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
  * middleware confirms it belongs to the tenant host's organization so that
  * tickets.a.com cannot render org B's event, checkout, order or venue pages.
  */
-export function tenantResourceFor(pathname: string, searchParams: URLSearchParams): TenantResource | null {
+export function tenantResourceFor(
+  pathname: string,
+  searchParams: URLSearchParams
+): TenantResource | null {
   const m = pathname.match(/^\/(events|checkout|orders|venues)\/([^/]+)\/?$/);
   if (m) {
     const id = decodeURIComponent(m[2]);
     if (!ID_RE.test(id)) return null;
-    const kind = m[1] === 'events' || m[1] === 'checkout' ? 'event' : m[1] === 'orders' ? 'order' : 'venue';
+    const kind =
+      m[1] === 'events' || m[1] === 'checkout' ? 'event' : m[1] === 'orders' ? 'order' : 'venue';
     return { kind, id };
   }
   if (pathname === '/confirmation') {
@@ -102,4 +126,20 @@ export function tenantResourceFor(pathname: string, searchParams: URLSearchParam
     if (id && ID_RE.test(id)) return { kind: 'order', id };
   }
   return null;
+}
+
+/**
+ * Where a URL redirect target (spec 028) lands on the current host. Relative
+ * targets are storefront paths (/pages/faq, /blogs/news, /account, /):
+ * on a tenant host they are used as-is; on the platform host the
+ * organization-relative ones are prefixed with /organizations/:orgId.
+ * Absolute http(s) URLs pass through unchanged.
+ */
+export function hostifyRedirectTarget(to: string, orgId: string, tenantHost: boolean): string {
+  if (/^https?:\/\//i.test(to)) return to;
+  const path = to.startsWith('/') ? to : `/${to}`;
+  if (tenantHost) return path;
+  if (path === '/') return `/organizations/${orgId}`;
+  if (/^\/(pages|blogs|account)(\/|$)/.test(path)) return `/organizations/${orgId}${path}`;
+  return path;
 }
