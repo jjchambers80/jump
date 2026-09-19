@@ -678,6 +678,8 @@ model Order {
   @@index([orderRef])
   @@index([kind, status])
   @@index([createdAt])
+  @@index([status, createdAt]) // spec 020: abandoned-checkout sweep
+  @@index([contactId, eventId, status]) // spec 020: per-buyer hold cap
 }
 
 // A line on an order: a ticket tier, an application tier (spec 024), or a

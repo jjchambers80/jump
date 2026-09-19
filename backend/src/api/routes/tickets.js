@@ -9,6 +9,7 @@ import ticketService from '../../services/TicketService.js';
 import refundService from '../../services/RefundService.js';
 import qrService from '../../services/QRService.js';
 import { requireScannerOrStaff, scannerOrgScope } from '../../middleware/scannerAuth.js';
+import { LIMITS, makeLimiter } from '../../middleware/rateLimit.js';
 
 const router = express.Router();
 
@@ -39,7 +40,11 @@ function handleRedemptionError(error, res, next) {
  * Body: { payload: string }
  * 200 → ticket preview info
  */
-router.post('/scan', requireScannerOrStaff, async (req, res, next) => {
+// Spec 020: failed scanner sign-ins (401/403 from requireScannerOrStaff) count
+// against the address; successful scans never do.
+const scannerAuthLimiter = makeLimiter('SCANNER_AUTH', { ...LIMITS.SCANNER_AUTH, countStatuses: [401, 403] });
+
+router.post('/scan', scannerAuthLimiter, requireScannerOrStaff, async (req, res, next) => {
   try {
     const { payload } = req.body;
 
@@ -99,7 +104,7 @@ router.post('/scan', requireScannerOrStaff, async (req, res, next) => {
  * 409 → already redeemed / voided
  * 410 → expired
  */
-router.post('/redeem', requireScannerOrStaff, async (req, res, next) => {
+router.post('/redeem', scannerAuthLimiter, requireScannerOrStaff, async (req, res, next) => {
   try {
     const { qrPayload, barcode, eventId } = req.body;
     const scope = await scannerOrgScope(req);

@@ -50,7 +50,9 @@ export function platformHostsFromEnv(env: Record<string, string | undefined>): s
   return [...hosts];
 }
 
-const PUBLIC_PASS = [/^\/events(\/|$)/, /^\/checkout(\/|$)/, /^\/confirmation(\/|$)/, /^\/orders\/[^/]+$/, /^\/tickets(\/|$)/, /^\/venues(\/|$)/];
+// `/legal/*` is Jump's own text on every host (spec 023 LR-04); the tenant
+// middleware must never rewrite it to a storefront route.
+const PUBLIC_PASS = [/^\/events(\/|$)/, /^\/checkout(\/|$)/, /^\/confirmation(\/|$)/, /^\/orders\/[^/]+$/, /^\/tickets(\/|$)/, /^\/venues(\/|$)/, /^\/legal(\/|$)/];
 const PLATFORM_ONLY = [/^\/admin(\/|$)/, /^\/auth(\/|$)/, /^\/dashboard(\/|$)/, /^\/my-tickets(\/|$)/, /^\/orders\/?$/, /^\/orders\/lookup(\/|$)/];
 
 /**

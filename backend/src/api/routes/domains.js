@@ -8,13 +8,17 @@
 // public storefront pages already do.
 
 import express from 'express';
+import { LIMITS, makeLimiter } from '../../middleware/rateLimit.js';
 import { prisma } from '@jump/db';
 import domainService from '../../services/DomainService.js';
 import { NotFoundError, ValidationError } from '../../middleware/errorHandler.js';
 
 const router = express.Router();
 
-router.get('/resolve', async (req, res, next) => {
+// Spec 020: the public host → tenant lookups are cheap but unauthenticated; cap per address.
+const resolveLimiter = makeLimiter('DOMAIN_RESOLVE', LIMITS.DOMAIN_RESOLVE);
+
+router.get('/resolve', resolveLimiter, async (req, res, next) => {
   try {
     const host = String(req.query.host || '').trim().toLowerCase();
     if (!host || host.length > 253) throw new ValidationError('host is required');
@@ -30,7 +34,7 @@ router.get('/resolve', async (req, res, next) => {
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 /** Organization that owns an event, order, or venue (whichever query param is given). */
-router.get('/owner', async (req, res, next) => {
+router.get('/owner', resolveLimiter, async (req, res, next) => {
   try {
     const { eventId, orderId, venueId } = req.query;
     let organizationId = null;

@@ -12,12 +12,11 @@
 
 import express from 'express';
 import multer from 'multer';
-import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import applicationFormService from '../../services/ApplicationFormService.js';
 import applicationService from '../../services/ApplicationService.js';
 import { MAX_FILES_PER_SUBMISSION, MAX_PHOTO_MB } from '../../config/applications.js';
 import { ValidationError } from '../../middleware/errorHandler.js';
-import { clientIpForRateLimit } from './buyerAuth.js';
+import { LIMITS, makeLimiter } from '../../middleware/rateLimit.js';
 import { requestMeta } from '../../services/LegalAcceptanceService.js';
 import { gateByEventParam } from '../../middleware/storefrontGate.js';
 
@@ -26,14 +25,8 @@ export const applicationStatusRouter = express.Router();
 
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
 
-const submitLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  limit: 30,
-  standardHeaders: 'draft-7',
-  legacyHeaders: false,
-  keyGenerator: (req) => ipKeyGenerator(clientIpForRateLimit(req)),
-  message: { error: 'Too many applications from this address. Try again later.' },
-});
+// Per-IP cap on submissions (spec 020 factory; RATE_LIMIT_APPLICATION_SUBMIT_* overrides).
+const submitLimiter = makeLimiter('APPLICATION_SUBMIT', LIMITS.APPLICATION_SUBMIT);
 
 const upload = multer({
   storage: multer.memoryStorage(),
