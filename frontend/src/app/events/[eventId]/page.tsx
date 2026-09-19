@@ -16,6 +16,7 @@ import GetInvolved from './GetInvolved';
 import CartLineItem from '../../../components/CartLineItem';
 import OrderTotals from '../../../components/OrderTotals';
 import ExpandCollapseAll from '../../../components/ExpandCollapseAll';
+import EmptyCart from '../../../components/EmptyCart';
 import { computeOrderFees, computeTierAllInPrice, formatPrice } from '../../../lib/fees';
 import AddOnPicker from '../../../components/AddOnPicker';
 import { offeredAddOns, addOnMaxQuantity, type AddOn } from '../../../lib/addOns';
@@ -592,17 +593,20 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
         <div className="hidden lg:block lg:w-80 flex-shrink-0">
           <div className="sticky top-8">
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg dark:shadow-lg dark:shadow-black/20 p-6">
-              <div className="flex items-center justify-between gap-4 mb-4">
-                <h3 className="text-lg font-bold text-gray-900 dark:text-slate-100">Order Summary</h3>
-                <ExpandCollapseAll
-                  allOpen={allLinesOpen}
-                  onToggle={toggleAllLines}
-                  disabled={cartLines.length === 0}
-                />
+              <div className="mb-4">
+                <div className="flex items-center justify-between gap-4">
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-slate-100">Order Summary</h3>
+                  <ExpandCollapseAll
+                    allOpen={allLinesOpen}
+                    onToggle={toggleAllLines}
+                    disabled={cartLines.length === 0}
+                  />
+                </div>
+                <p className="text-sm text-gray-500 dark:text-slate-400">Review your selection</p>
               </div>
 
               {cartItems.length === 0 ? (
-                <p className="text-sm text-gray-500 dark:text-slate-400 mb-4">Select tickets to get started</p>
+                <EmptyCart />
               ) : (
                 <div className="space-y-3 mb-4" data-testid="cart-lines-desktop">
                   {cartLines.map((line, index) => (
@@ -619,19 +623,22 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                 </div>
               )}
 
-              <OrderTotals
-                fees={cartFees}
-                totalLabel={`Total (${totalQuantity} ${totalQuantity === 1 ? 'ticket' : 'tickets'})`}
-                className="border-t border-gray-200 dark:border-slate-700 pt-4 mb-4"
-              />
+              {cartItems.length > 0 && (
+                <>
+                  <OrderTotals
+                    fees={cartFees}
+                    totalLabel={`Total (${totalQuantity} ${totalQuantity === 1 ? 'ticket' : 'tickets'})`}
+                    className="border-t border-gray-200 dark:border-slate-700 pt-4 mb-4"
+                  />
 
-              <button
-                onClick={handleProceedToCheckout}
-                disabled={cartItems.length === 0}
-                className="w-full bg-brand hover:bg-brand-hover disabled:bg-gray-400 disabled:cursor-not-allowed text-brand-fg disabled:text-white font-bold py-3 px-6 rounded-lg transition-colors duration-200 text-lg"
-              >
-                Proceed to Checkout
-              </button>
+                  <button
+                    onClick={handleProceedToCheckout}
+                    className="w-full bg-brand hover:bg-brand-hover text-brand-fg font-bold py-3 px-6 rounded-lg transition-colors duration-200 text-lg"
+                  >
+                    Proceed to Checkout
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -712,7 +719,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
             </div>
             <div className="px-4 pb-6 overflow-y-auto">
               {cartItems.length === 0 ? (
-                <p className="text-gray-500 dark:text-slate-400 text-center py-6">No tickets selected</p>
+                <EmptyCart />
               ) : (
                 <div data-testid="cart-lines-mobile">
                   {cartLines.map((line, index) => (
