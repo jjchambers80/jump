@@ -23,6 +23,8 @@ export const errorHandler = (err, req, res, next) => {
   const errorResponse = {
     error: err.name || 'Error',
     message: err.message || 'An unexpected error occurred',
+    // Machine-readable code for clients that branch on it (e.g. LEGAL_VERSION_STALE → reload the versions)
+    ...(typeof err.code === 'string' && err.code && { code: err.code }),
     ...(err.details && { details: err.details }),
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
   };

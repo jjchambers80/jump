@@ -8,6 +8,7 @@
 // value is truthy). Unknown paths render empty.
 
 import { prisma } from '@jump/db';
+import { moneyOf } from './applicationMoney.js';
 import { DEFAULT_TEMPLATES, MERGE_FIELDS, TEMPLATE_ACTIONS } from '../config/applications.js';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import emailService from './EmailService.js';
@@ -87,10 +88,13 @@ class ApplicationTemplateService {
    * Merge context for one application. `application` must include contact,
    * profile, event (with venue.organization), form, tier.
    */
-  async contextFor(application, { payNowUrl = null } = {}) {
+  async contextFor(application, { payNowUrl = null, accountUrl = null, accountCreated = false } = {}) {
     const organization = application.event?.venue?.organization || {};
     const { base } = await storefrontFor(organization.id || application.organizationId);
-    const statusUrl = application.statusUrl || `${base}/events/${application.eventId}/apply/status/${application.id}`;
+    const statusUrl =
+      application.statusUrl ||
+      `${base}/events/${application.eventId}/apply/status/${application.id}`;
+    const money = moneyOf(application, { taxInclusive: organization.taxInclusivePricing === true });
     return {
       applicant: {
         firstName: application.contact?.firstName || '',
@@ -103,15 +107,27 @@ class ApplicationTemplateService {
       form: { name: application.form?.name || '' },
       tier: application.tier ? { name: application.tier.name } : null,
       // Spec 012: null when there are no lines so {{#addOns}} sections hide.
-      addOns: application.addOns?.length
-        ? { summary: application.addOns.map((l) => `${l.addOn?.name ?? l.name} ×${l.quantity} (${formatMoney(l.applicantPays)})`).join(', '), count: application.addOns.length }
+      // Spec 024: money comes from the application's order.
+      addOns: money.addOns.length
+        ? {
+            summary: money.addOns
+              .map(
+                (l) => `${l.name ?? l.addOn?.name} ×${l.quantity} (${formatMoney(l.applicantPays)})`
+              )
+              .join(', '),
+            count: money.addOns.length,
+          }
         : null,
-      amount: { applicantPays: formatMoney(application.applicantPays) },
-      payment: { dueDate: formatDate(application.paymentDueAt) },
+      amount: { applicantPays: formatMoney(money.applicantPays) },
+      payment: { dueDate: formatDate(money.paymentDueAt) },
+      order: { ref: money.orderRef || '' },
+      // Spec 024 phase 3: `account.created` is true on the RECEIVED email that
+      // carries the applicant's first sign-in link (`links.account` is then that link).
+      account: { created: accountCreated === true },
       links: {
         status: statusUrl,
         payNow: payNowUrl || '',
-        account: await buyerAccountUrl(organization.id || application.organizationId),
+        account: accountUrl || (await buyerAccountUrl(organization.id || application.organizationId)),
       },
     };
   }
@@ -138,10 +154,10 @@ class ApplicationTemplateService {
    * one-off edit from the decision dialog, already rendered text.
    * Never throws: a failed email must not undo a decision.
    */
-  async send(organizationId, action, application, { override = null, payNowUrl = null } = {}) {
+  async send(organizationId, action, application, { override = null, payNowUrl = null, accountUrl = null, accountCreated = false } = {}) {
     let message;
     try {
-      message = override && override.subject && override.body ? override : await this.render(organizationId, action, application, { payNowUrl });
+      message = override && override.subject && override.body ? override : await this.render(organizationId, action, application, { payNowUrl, accountUrl, accountCreated });
       await emailService.sendApplicationMessage({
         to: application.contact.email,
         subject: message.subject,

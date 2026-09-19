@@ -15,6 +15,7 @@ import { validateFormBody, validateTierBody, validateQuestionBody, validateDecis
 import { validateUpdatePaymentSettings, validateUpdatePayoutSettings } from '../validators/paymentValidators.js';
 import { validateCreatePage, validateUpdatePage } from '../validators/pageValidators.js';
 import { validateUpdateStorefrontPreferences } from '../validators/storefrontPreferencesValidators.js';
+import { validateOrderListQuery } from '../validators/orderValidators.js';
 import organizationService from '../../services/OrganizationService.js';
 import organizationPersonService from '../../services/OrganizationPersonService.js';
 import orderService from '../../services/OrderService.js';
@@ -37,7 +38,7 @@ import setupGuideService from '../../services/SetupGuideService.js';
 import billingService from '../../services/BillingService.js';
 import pageService from '../../services/PageService.js';
 import storefrontPreferencesService from '../../services/StorefrontPreferencesService.js';
-import { PAID_ORDER_STATUSES, PAID_APPLICATION_STATUSES } from '../../services/paidStatuses.js';
+import { PAID_ORDER_STATUSES } from '../../services/paidStatuses.js';
 import { activeOrgFor } from './adminScope.js';
 
 const router = express.Router();
@@ -792,16 +793,20 @@ router.get('/dashboard/stats', async (req, res, next) => {
     const paymentSuccessRate =
       totalOrders > 0 ? Math.round((completedOrders / totalOrders) * 100) : 100;
 
-    // Gross revenue by source (spec 018 phase 2): orders through the venue
-    // scope, applications through their own organizationId.
-    const orgId = isUnscoped(scope) ? null : scope.organizationId;
+    // Gross revenue by source (spec 018 phase 2; one ledger since spec 024).
     const [orderRevenue, applicationRevenue] = await Promise.all([
-      prisma.order.aggregate({ where: { status: { in: PAID_ORDER_STATUSES }, event: venueFilter }, _sum: { totalAmount: true } }),
-      prisma.application.aggregate({ where: { paymentStatus: { in: PAID_APPLICATION_STATUSES }, ...(orgId && { organizationId: orgId }) }, _sum: { applicantPays: true } }),
+      prisma.order.aggregate({
+        where: { kind: 'TICKET', status: { in: PAID_ORDER_STATUSES }, event: venueFilter },
+        _sum: { totalAmount: true },
+      }),
+      prisma.order.aggregate({
+        where: { kind: 'APPLICATION', status: { in: PAID_ORDER_STATUSES }, event: venueFilter },
+        _sum: { totalAmount: true },
+      }),
     ]);
     const round = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
     const ordersGross = round(Number(orderRevenue._sum.totalAmount || 0));
-    const applicationsGross = round(Number(applicationRevenue._sum.applicantPays || 0));
+    const applicationsGross = round(Number(applicationRevenue._sum.totalAmount || 0));
 
     res.json({
       totalCapacity,
@@ -881,10 +886,12 @@ router.get('/events', async (req, res, next) => {
 
 /**
  * GET /admin/orders
- * List orders across all events for the user's organization.
- * Query: page, limit, status, eventId, search
+ * Org-wide order list, both kinds (spec 024 phase 2). Query (validated):
+ * page, limit, kind, status (comma list; default hides FAILED + CANCELLED),
+ * eventId, from, to, search (order ref / name / email / business, or a
+ * Stripe id), sort, dir. SYSTEM_ADMIN is unscoped and rows carry `organization`.
  */
-router.get('/orders', async (req, res, next) => {
+router.get('/orders', validateOrderListQuery, async (req, res, next) => {
   try {
     const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
 
@@ -892,17 +899,30 @@ router.get('/orders', async (req, res, next) => {
       return res.json({ data: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } });
     }
 
-    const { page, limit, status, eventId, search } = req.query;
-    const result = await orderService.getOrdersByOrganization(scope.organizationId, {
-      page: page ? parseInt(page) : 1,
-      limit: limit ? parseInt(limit) : 20,
-      status: status || undefined,
-      eventId: eventId || undefined,
-      search: search || undefined,
-    });
-
-    res.json(result);
+    res.json(await orderService.getOrdersByOrganization(scope.organizationId, req.orderQuery));
   } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /admin/orders/export.csv
+ * The same rows as the list (every filter, no paging) plus fee / tax
+ * breakdown, Stripe ids and one `refund` line per succeeded refund.
+ */
+router.get('/orders/export.csv', validateOrderListQuery, async (req, res, next) => {
+  try {
+    const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
+    if (!isUnscoped(scope) && !scope.organizationId) throw new NotFoundError('Organization not found');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="orders-${new Date().toISOString().slice(0, 10)}.csv"`);
+    await orderService.exportOrdersCsv(scope.organizationId, req.orderQuery, (chunk) => res.write(chunk));
+    res.end();
+  } catch (error) {
+    if (res.headersSent) {
+      res.end();
+      return;
+    }
     next(error);
   }
 });
@@ -1159,7 +1179,14 @@ router.post('/orders/:orderId/refund', requireAdmin, async (req, res, next) => {
       }
     }
 
+    // `amount` (spec 024): partial refund of an application order; ticket
+    // orders are refunded per ticket, per add-on line, or in full.
+    const amount =
+      req.body.amount === undefined || req.body.amount === null ? null : Number(req.body.amount);
+    if (amount !== null && (!Number.isFinite(amount) || amount <= 0))
+      throw new ValidationError('amount must be a positive number');
     const result = await refundService.refundOrder(req.params.orderId, {
+      amount,
       reason: req.body.reason || null,
       initiatedBy: req.user.id,
     });

@@ -38,7 +38,7 @@ model User {
 
   // Domain relations. Staff belong to organizations via OrganizationMember;
   // buyers are Contact rows and never link here (spec 007).
-  memberships OrganizationMember[]
+  memberships       OrganizationMember[]
   // Spec 022: organizations this user signed up (owner of the Jump account)
   platformCustomers PlatformCustomer[]
 
@@ -233,22 +233,22 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  platformCustomer     PlatformCustomer?
-  logoImage            Image?                       @relation("OrgLogo", fields: [logoImageId], references: [id])
-  coverImage           Image?                       @relation("OrgCover", fields: [coverImageId], references: [id])
-  venues               Venue[]
-  members              OrganizationMember[]
-  contacts             Contact[]
-  domains              OrganizationDomain[]
-  people               OrganizationPerson[]
-  tierPresets          TierPreset[]
-  taxRegions           TaxRegion[]
-  applicantProfiles    ApplicantProfile[]
-  applicationTemplates ApplicationMessageTemplate[]
+  platformCustomer         PlatformCustomer?
+  logoImage                Image?                       @relation("OrgLogo", fields: [logoImageId], references: [id])
+  coverImage               Image?                       @relation("OrgCover", fields: [coverImageId], references: [id])
+  venues                   Venue[]
+  members                  OrganizationMember[]
+  contacts                 Contact[]
+  domains                  OrganizationDomain[]
+  people                   OrganizationPerson[]
+  tierPresets              TierPreset[]
+  taxRegions               TaxRegion[]
+  applicantProfiles        ApplicantProfile[]
+  applicationTemplates     ApplicationMessageTemplate[]
   applicationFormTemplates ApplicationFormTemplate[]
-  stripeAccounts       OrganizationStripeAccount[]
-  pages                 Page[]
-  storeFiles            StoreFile[]
+  stripeAccounts           OrganizationStripeAccount[]
+  pages                    Page[]
+  storeFiles               StoreFile[]
 }
 
 // Custom content pages managed under Online Store. Content is stored as the
@@ -425,16 +425,20 @@ model Venue {
 // Buyer record, scoped per organization. The same email at two organizations is
 // two rows with separate notes, consent, and order history. Buyers never live in User.
 model Contact {
-  id               String    @id @default(cuid())
-  organizationId   String
-  email            String
-  firstName        String
-  lastName         String
-  location         String?
-  note             String?
-  emailSubscribed  Boolean   @default(false)
-  accountCreatedAt DateTime? // null = guest checkout; set = login-enabled buyer account
-  stripeCustomerId String?   @unique // spec 011: platform-account Customer holding the applicant's saved card
+  id                    String                 @id @default(cuid())
+  organizationId        String
+  email                 String
+  firstName             String
+  lastName              String
+  location              String?
+  note                  String?
+  emailSubscribed       Boolean                @default(false)
+  // Marketing consent provenance (spec 023 LR-07, built by spec 024 phase 3)
+  emailSubscribedAt     DateTime?
+  emailSubscribedSource EmailSubscribedSource?
+  emailUnsubscribedAt   DateTime?
+  accountCreatedAt      DateTime? // null = guest checkout; set = login-enabled buyer account
+  stripeCustomerId      String?                @unique // spec 011: platform-account Customer holding the applicant's saved card
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -575,10 +579,16 @@ model TierPreset {
   @@index([organizationId])
 }
 
+// One row per transaction: a ticket purchase (kind TICKET) or a paid
+// application (kind APPLICATION, spec 024). The application keeps its review
+// lifecycle on Application; every money column, the Stripe payment and the
+// refunds live here. FREE-form applications have no order.
 model Order {
   id                  String      @id @default(cuid())
+  kind                OrderKind   @default(TICKET)
   eventId             String
   contactId           String
+  applicationId       String?     @unique
   stripeSessionId     String?     @unique
   orderRef            String      @unique
   totalAmount         Decimal     @db.Decimal(10, 2)
@@ -586,9 +596,14 @@ model Order {
   platformFeeAmount   Decimal     @default(0) @db.Decimal(10, 2)
   processingFeeAmount Decimal     @default(0) @db.Decimal(10, 2)
   taxAmount           Decimal     @default(0) @db.Decimal(10, 2)
+  // What the organization keeps: subtotal under PASS, subtotal minus fees under ABSORB
+  orgReceives         Decimal     @default(0) @db.Decimal(10, 2)
+  feeMode             FeeMode     @default(PASS)
   currency            String      @default("usd")
   quantity            Int
   status              OrderStatus @default(PENDING)
+  paidAt              DateTime? // when the money moved (COMPLETED)
+  dueAt               DateTime? // application PAYMENT_DUE clock
   // Checkout opt-ins (spec 007). Recorded here and applied to the Contact only
   // once payment completes, so an abandoned or forged checkout can never
   // create an account or consent for someone else's email.
@@ -598,36 +613,49 @@ model Order {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  event   Event               @relation(fields: [eventId], references: [id])
-  contact Contact             @relation(fields: [contactId], references: [id])
-  tickets Ticket[]
-  items   OrderItem[]
-  addOns  OrderAddOn[]
-  payment PaymentTransaction?
-  refunds Refund[]
+  event       Event               @relation(fields: [eventId], references: [id])
+  contact     Contact             @relation(fields: [contactId], references: [id])
+  application Application?        @relation(fields: [applicationId], references: [id])
+  tickets     Ticket[]
+  items       OrderItem[]
+  addOns      OrderAddOn[]
+  payment     PaymentTransaction?
+  refunds     Refund[]
 
   @@index([eventId])
   @@index([contactId])
   @@index([status])
   @@index([orderRef])
+  @@index([kind, status])
+  @@index([createdAt])
 }
 
+// A line on an order: a ticket tier, an application tier (spec 024), or a
+// signed adjustment / waiver on an application order (unitPrice × 1,
+// description = reason). Exactly one tier line per application order.
 model OrderItem {
-  id            String   @id @default(cuid())
-  orderId       String
-  priceTierId   String
-  quantity      Int
-  unitPrice     Decimal  @db.Decimal(10, 2)
-  platformFee   Decimal  @default(0) @db.Decimal(10, 2)
-  processingFee Decimal  @default(0) @db.Decimal(10, 2)
-  createdAt     DateTime @default(now())
+  id                String        @id @default(cuid())
+  orderId           String
+  kind              OrderItemKind @default(TICKET_TIER)
+  priceTierId       String?
+  applicationTierId String?
+  description       String? // tier name snapshot, adjustment reason
+  quantity          Int
+  unitPrice         Decimal       @db.Decimal(10, 2)
+  platformFee       Decimal       @default(0) @db.Decimal(10, 2)
+  processingFee     Decimal       @default(0) @db.Decimal(10, 2)
+  tax               Decimal       @default(0) @db.Decimal(10, 2)
+  createdById       String? // adjustment author
+  createdAt         DateTime      @default(now())
 
-  order     Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  priceTier PriceTier @relation(fields: [priceTierId], references: [id])
+  order           Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  priceTier       PriceTier?       @relation(fields: [priceTierId], references: [id])
+  applicationTier ApplicationTier? @relation(fields: [applicationTierId], references: [id])
 
   @@unique([orderId, priceTierId])
   @@index([orderId])
   @@index([priceTierId])
+  @@index([applicationTierId])
 }
 
 model Ticket {
@@ -662,17 +690,23 @@ model Ticket {
 }
 
 model PaymentTransaction {
-  id                    String        @id @default(cuid())
-  orderId               String        @unique
-  stripePaymentIntentId String?       @unique
-  amount                Decimal       @db.Decimal(10, 2)
-  currency              String        @default("usd")
-  status                PaymentStatus @default(PENDING)
+  id                    String                @id @default(cuid())
+  orderId               String                @unique
+  stripePaymentIntentId String?               @unique
+  amount                Decimal               @db.Decimal(10, 2)
+  currency              String                @default("usd")
+  status                PaymentStatus         @default(PENDING)
   failureReason         String?
   // Spec 010 phase 2: destination charge routing, set at creation only.
   // null stripeAccountId = charged on the platform account (every pre-Connect order).
   stripeAccountId       String?
-  applicationFee        Decimal?      @db.Decimal(10, 2) // dollars kept by the platform (fees + tax)
+  applicationFee        Decimal?              @db.Decimal(10, 2) // dollars kept by the platform (fees + tax)
+  // Spec 024: a payment recorded outside Stripe (cheque, cash, comped) on an
+  // application order has no Stripe id and carries the method instead.
+  source                PaymentSource         @default(STRIPE)
+  offlineMethod         OfflinePaymentMethod?
+  offlineReference      String?
+  recordedById          String?
 
   createdAt DateTime @default(now())
   // NO updatedAt — append-only per constitution
@@ -693,6 +727,7 @@ model Refund {
   reason         String?
   status         RefundStatus @default(PENDING)
   initiatedBy    String? // userId of admin who initiated, null for customer self-service
+  manual         Boolean      @default(false) // recorded refund on an offline-paid order, no Stripe call (spec 024)
 
   createdAt DateTime @default(now())
   // NO updatedAt — append-only ledger
@@ -771,8 +806,21 @@ enum OrderStatus {
   PENDING
   COMPLETED
   FAILED
+  CANCELLED // application order closed before any charge (rejected, withdrawn, replaced draft)
   REFUNDED
   PARTIALLY_REFUNDED
+}
+
+enum OrderKind {
+  TICKET
+  APPLICATION
+}
+
+enum OrderItemKind {
+  TICKET_TIER
+  APPLICATION_TIER
+  ADJUSTMENT // signed manual line on an application order (negative = discount)
+  WAIVER // the waived balance, recorded when the balance is waived
 }
 
 enum TierVisibility {
@@ -886,6 +934,65 @@ enum ApplicationAction {
   MANUAL_REFUND // spec 018 phase 3: refund recorded on an offline-paid application
 }
 
+enum EmailSubscribedSource {
+  CHECKOUT
+  APPLY
+  ADMIN
+  IMPORT
+}
+
+// ─── Legal acceptances (spec 023 §8.1, built by spec 024 phase 3) ───────────
+// Who accepted which document version, when, from where. Append-only, like
+// PaymentTransaction: never updated, kept for the life of the related ledger
+// row. `ipHash` is sha256(ip + day + salt); the raw IP is never stored.
+
+enum LegalSubject {
+  USER
+  CONTACT
+  ANONYMOUS_EMAIL
+}
+
+enum LegalDocument {
+  TERMS
+  PRIVACY
+  ORGANIZER_TERMS
+  CARD_AUTHORIZATION
+  SUBSCRIPTION_TERMS
+  CONNECT_TERMS
+  MARKETING
+}
+
+enum LegalSource {
+  CHECKOUT
+  APPLY
+  SIGNUP
+  SUBSCRIBE
+  CONNECT
+  ACCOUNT
+  ADMIN_INTERSTITIAL
+}
+
+model LegalAcceptance {
+  id             String        @id @default(cuid())
+  subjectType    LegalSubject
+  subjectId      String? // User.id or Contact.id; null when only an email is known
+  email          String // as entered; lets a pending checkout be matched later
+  organizationId String? // tenant context
+  document       LegalDocument
+  version        String
+  source         LegalSource
+  referenceType  String? // 'Order' | 'Application' | 'Organization' | 'CheckoutSession'
+  referenceId    String?
+  ipHash         String? // sha256(ip + daily salt); never the raw IP
+  userAgent      String? // truncated to 255
+  presentedText  String? // exact label shown for CARD_AUTHORIZATION (amount, trigger, window)
+  acceptedAt     DateTime      @default(now())
+
+  @@index([email, document])
+  @@index([subjectType, subjectId])
+  @@index([referenceType, referenceId])
+}
+
 enum PaymentSource {
   STRIPE
   OFFLINE
@@ -899,11 +1006,6 @@ enum OfflinePaymentMethod {
   OTHER
 }
 
-enum AdjustmentKind {
-  ADJUSTMENT
-  WAIVER
-}
-
 enum WithdrawnBy {
   ORGANIZER
   APPLICANT
@@ -911,21 +1013,21 @@ enum WithdrawnBy {
 }
 
 model ApplicationForm {
-  id             String                @id @default(cuid())
-  eventId        String
-  kind           ApplicationFormKind
-  name           String
-  slug           String
-  intro          String?
-  status         ApplicationFormStatus @default(DRAFT)
-  opensAt        DateTime?
-  closesAt       DateTime?
-  chargeTiming   ChargeTiming          @default(APPROVAL)
-  feeMode        FeeMode               @default(PASS)
-  taxable        Boolean               @default(false)
-  paymentDueDays Int                   @default(7)
-  overduePolicy  OverduePolicy         @default(WITHDRAW)
-  displayOrder   Int                   @default(0)
+  id                    String                @id @default(cuid())
+  eventId               String
+  kind                  ApplicationFormKind
+  name                  String
+  slug                  String
+  intro                 String?
+  status                ApplicationFormStatus @default(DRAFT)
+  opensAt               DateTime?
+  closesAt              DateTime?
+  chargeTiming          ChargeTiming          @default(APPROVAL)
+  feeMode               FeeMode               @default(PASS)
+  taxable               Boolean               @default(false)
+  paymentDueDays        Int                   @default(7)
+  overduePolicy         OverduePolicy         @default(WITHDRAW)
+  displayOrder          Int                   @default(0)
   createdFromTemplateId String? // spec 019: informational, no relation
 
   createdAt DateTime @default(now())
@@ -958,6 +1060,7 @@ model ApplicationTier {
   form         ApplicationForm        @relation(fields: [formId], references: [id], onDelete: Cascade)
   applications Application[]
   addOns       ApplicationTierAddOn[]
+  orderItems   OrderItem[]
 
   @@index([formId])
 }
@@ -1023,35 +1126,26 @@ model Application {
   profileId      String
   tierId         String?
   status         ApplicationStatus  @default(DRAFT)
+  // Fine-grained payment state machine; the coarse money state is Order.status
+  // (spec 024), written in the same transaction through orderStatusFor().
   paymentStatus  ApplicationPayment @default(NOT_REQUIRED)
   capacitySlot   CapacitySlot       @default(NONE)
 
-  // Amount snapshot (dollars) taken at submission — the only amount ever charged
-  subtotal      Decimal @default(0) @db.Decimal(10, 2)
-  platformFee   Decimal @default(0) @db.Decimal(10, 2)
-  processingFee Decimal @default(0) @db.Decimal(10, 2)
-  tax           Decimal @default(0) @db.Decimal(10, 2)
-  applicantPays Decimal @default(0) @db.Decimal(10, 2)
-  orgReceives   Decimal @default(0) @db.Decimal(10, 2)
-  feeMode       FeeMode @default(PASS)
-  currency      String  @default("usd")
+  // Money lives on `order` (spec 024): amount snapshot as order lines,
+  // PaymentTransaction, Refund. PAID forms only; FREE forms have no order.
 
-  // Stripe objects on the platform account (phase 2)
-  stripeCheckoutSessionId String?   @unique
+  // Apply-form opt-ins (spec 024 phase 3): recorded at submission, applied to
+  // the Contact once the application first reaches SUBMITTED (never for an
+  // abandoned DRAFT). Both only ever turn the contact's flags on.
+  optInAccount    Boolean   @default(false)
+  optInMarketing  Boolean   @default(false)
+  optInsAppliedAt DateTime?
+
+  // Card on file (spec 011 phase 2)
+  stripeCheckoutSessionId String? @unique
   stripePaymentMethodId   String?
-  stripePaymentIntentId   String?   @unique
-  stripeAccountId         String? // destination account when routed (spec 010)
-  applicationFee          Decimal?  @db.Decimal(10, 2)
-  chargeAttempts          Int       @default(0)
-  paidAt                  DateTime?
-  paymentDueAt            DateTime?
-  overdue                 Boolean   @default(false)
-
-  // Spec 018 phase 3: money recorded outside Stripe (offline payment, waived balance)
-  paymentSource              PaymentSource         @default(STRIPE)
-  offlinePaymentMethod       OfflinePaymentMethod?
-  offlinePaymentReference    String?
-  offlinePaymentRecordedById String?
+  chargeAttempts          Int     @default(0)
+  overdue                 Boolean @default(false) // set by the sweep when order.dueAt passes
 
   // Review
   submittedAt     DateTime?
@@ -1076,16 +1170,14 @@ model Application {
   tier      ApplicationTier?      @relation(fields: [tierId], references: [id])
   answers   ApplicationAnswer[]
   decisions ApplicationDecision[]
-  refunds     ApplicationRefund[]
-  addOns      ApplicationAddOn[]
-  adjustments ApplicationAdjustment[]
+  order     Order?
 
   @@index([eventId, status])
   @@index([formId, status])
   @@index([contactId])
   @@index([organizationId])
   @@index([organizationId, submittedAt]) // spec 019: org-wide Participants list
-  @@index([paymentStatus, paymentDueAt])
+  @@index([paymentStatus])
   @@index([tags], type: Gin)
 }
 
@@ -1113,39 +1205,6 @@ model ApplicationDecision {
   emailSubject  String?
   emailBody     String?
   createdAt     DateTime          @default(now())
-
-  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-
-  @@index([applicationId])
-}
-
-model ApplicationRefund {
-  id             String       @id @default(cuid())
-  applicationId  String
-  amount         Decimal      @db.Decimal(10, 2)
-  reason         String?
-  status         RefundStatus @default(PENDING)
-  stripeRefundId String?      @unique
-  initiatedBy    String?
-  manual         Boolean      @default(false) // spec 018: recorded refund on an offline-paid application, no Stripe call
-  createdAt      DateTime     @default(now())
-
-  application Application @relation(fields: [applicationId], references: [id])
-
-  @@index([applicationId])
-}
-
-// Spec 018 phase 3: signed line on an application's amount snapshot — a
-// discount, a late fee, or the waived balance. Removed and re-added rather
-// than edited; the snapshot is recomputed on every change.
-model ApplicationAdjustment {
-  id            String         @id @default(cuid())
-  applicationId String
-  kind          AdjustmentKind @default(ADJUSTMENT)
-  amount        Decimal        @db.Decimal(10, 2) // signed; negative = discount
-  reason        String
-  createdById   String?
-  createdAt     DateTime       @default(now())
 
   application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
@@ -1220,7 +1279,6 @@ model AddOn {
   priceTiers       PriceTierAddOn[]
   applicationTiers ApplicationTierAddOn[]
   orderLines       OrderAddOn[]
-  applicationLines ApplicationAddOn[]
 
   @@index([eventId, isActive])
 }
@@ -1259,27 +1317,11 @@ model OrderAddOn {
   refundedAt    DateTime?
   createdAt     DateTime  @default(now())
 
+  // Add-on lines of ticket orders and application orders alike (spec 024).
   order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   addOn   AddOn    @relation(fields: [addOnId], references: [id])
   refunds Refund[]
 
   @@unique([orderId, addOnId])
-  @@index([addOnId])
-}
-
-model ApplicationAddOn {
-  id            String   @id @default(cuid())
-  applicationId String
-  addOnId       String
-  quantity      Int
-  unitPrice     Decimal  @db.Decimal(10, 2) // listed price in the current snapshot
-  applicantPays Decimal  @default(0) @db.Decimal(10, 2) // this line's share of Application.applicantPays (fees + tax allocated)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  addOn       AddOn       @relation(fields: [addOnId], references: [id])
-
-  @@unique([applicationId, addOnId])
   @@index([addOnId])
 }

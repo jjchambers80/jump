@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { LEGAL_VERSIONS, mockLegalVersions } from './helpers/legal';
 
 // Add-ons on the storefront (spec 012 phase 1): the picker appears once a
 // ticket that offers an add-on is in the cart, add-on lines join the cart
@@ -133,6 +134,7 @@ test.describe('storefront add-ons', () => {
 
   test('checkout shows add-on lines and sends them to POST /orders', async ({ page }) => {
     await mockEvent(page);
+    await mockLegalVersions(page, API);
     let orderBody: Record<string, unknown> | null = null;
     await page.route(`${API}/orders`, async (route) => {
       orderBody = route.request().postDataJSON();
@@ -156,6 +158,10 @@ test.describe('storefront add-ons', () => {
     // 100 + 80 + 15 = 195 listed; tax on 115 = 11.50; platform 9.75; processing (204.75 × 2.9% + 0.30) = 6.24; total 222.49
     await expect(page.getByRole('button', { name: 'Proceed to Payment — $222.49' })).toBeVisible();
 
+    // The legal pages are dark: the sentence names them without linking to a 404 (spec 024 phase 3)
+    await expect(page.getByTestId('checkout-terms')).toContainText('Terms of Service');
+    await expect(page.getByTestId('checkout-terms').getByRole('link')).toHaveCount(0);
+
     await page.getByLabel('First Name').fill('Ada');
     await page.getByLabel('Last Name').fill('Buyer');
     await page.getByLabel('Email Address').fill('ada@example.com');
@@ -168,6 +174,11 @@ test.describe('storefront add-ons', () => {
       addOns: [
         { addOnId: LOUNGE.id, quantity: 2 },
         { addOnId: PARKING.id, quantity: 1 },
+      ],
+      // Spec 024 phase 3: the versions the terms sentence showed ride on the order
+      acceptances: [
+        { document: 'TERMS', version: LEGAL_VERSIONS.terms },
+        { document: 'PRIVACY', version: LEGAL_VERSIONS.privacy },
       ],
     });
   });
@@ -202,7 +213,6 @@ function adminAddOn(overrides: Record<string, unknown> = {}) {
     isActive: true,
     displayOrder: 0,
     orderLineCount: 3,
-    applicationLineCount: 0,
     createdAt: '2026-09-17T00:00:00.000Z',
     updatedAt: '2026-09-17T00:00:00.000Z',
     ...overrides,

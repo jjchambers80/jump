@@ -51,7 +51,14 @@ export function applicationAmounts(lines, form, event, organization) {
     // ABSORB: the applicant pays the listed price (plus tax on top unless it
     // is already inside the price); PASS: the allocated all-in line total.
     const applicantPays = absorb ? round(listed + (taxInclusive ? 0 : b.tax)) : b.lineTotal;
-    return { ...lines[i], applicantPays };
+    // Per-line fee and tax shares (spec 024): written to the order lines.
+    return {
+      ...lines[i],
+      applicantPays,
+      platformFee: b.platformFee,
+      processingFee: b.processingFee,
+      tax: b.tax,
+    };
   });
   if (absorb) {
     return {
@@ -735,6 +742,9 @@ class ApplicationFormService {
       acceptance: this.acceptance(form),
       chargeTiming: form.kind === 'PAID' ? form.chargeTiming : null,
       feeMode: form.kind === 'PAID' ? form.feeMode : null,
+      // Spec 024 phase 3: the card-authorization label names the pay-now window.
+      paymentDueDays: form.kind === 'PAID' ? form.paymentDueDays : null,
+      organizationName: organization?.name ?? null,
       tiers: (form.tiers || [])
         .filter((t) => t.isActive)
         .map((t) => {

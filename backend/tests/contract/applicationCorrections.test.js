@@ -6,6 +6,7 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
 import { staffToken, joinOrgByToken, cleanupStaff } from '../helpers/staff.js';
+import { allAcceptances } from '../helpers/legal.js';
 
 const sentEmails = [];
 jest.unstable_mockModule('../../src/config/resend.js', () => ({
@@ -31,8 +32,11 @@ jest.unstable_mockModule('../../src/config/stripe.js', () => ({
 
 const { default: app } = await import('../../src/api/server.js');
 const { prisma } = await import('@jump/db');
-const { default: paymentSettingsService } = await import('../../src/services/PaymentSettingsService.js');
-const { applicationAmounts, applicationLines } = await import('../../src/services/ApplicationFormService.js');
+const { appRow: loadRow, cleanupApplicationOrders } = await import('../helpers/applicationRow.js');
+const { default: paymentSettingsService } =
+  await import('../../src/services/PaymentSettingsService.js');
+const { applicationAmounts, applicationLines } =
+  await import('../../src/services/ApplicationFormService.js');
 
 const TAG = 'appcorr';
 paymentSettingsService._statusCache = {
@@ -78,9 +82,16 @@ describe('Application corrections contract (spec 018 phase 3)', () => {
   const submit = (tierId, email, addOns, businessName = 'Pixel Pins') =>
     request(app)
       .post(`/events/${eventId}/applications`)
-      .send({ formSlug: form.slug, tierId, contact: { email, firstName: 'Vee', lastName: 'Vendor' }, profile: { businessName }, answers: {}, ...(addOns !== undefined && { addOns }) });
+      .send({
+        formSlug: form.slug,
+        tierId,
+        contact: { email, firstName: 'Vee', lastName: 'Vendor' },
+        acceptances: allAcceptances(), profile: { businessName },
+        answers: {},
+        ...(addOns !== undefined && { addOns }),
+      });
 
-  const appRow = (id) => prisma.application.findUnique({ where: { id }, include: { tier: true, contact: true, addOns: { include: { addOn: true } }, decisions: true, adjustments: true, refunds: true } });
+  const appRow = (id) => loadRow(id, { tier: true, contact: true, decisions: true });
   const tierRow = (id) => prisma.applicationTier.findUnique({ where: { id } });
   const addOnRow = (id) => prisma.addOn.findUnique({ where: { id } });
 
@@ -153,7 +164,7 @@ describe('Application corrections contract (spec 018 phase 3)', () => {
 
   afterAll(async () => {
     delete process.env.APPLICATIONS_PAYMENTS_ENABLED;
-    await prisma.applicationRefund.deleteMany({ where: { application: { organizationId: org.id } } }).catch(() => {});
+    await cleanupApplicationOrders(org.id);
     await prisma.application.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
     await prisma.applicantProfile.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
     await prisma.event.deleteMany({ where: { venue: { organizationId: org.id } } }).catch(() => {});
@@ -367,11 +378,22 @@ describe('Application corrections contract (spec 018 phase 3)', () => {
     expect(res.body.payment.paymentDueAt).toBeNull();
     expect(res.body.payment).toMatchObject({ canRefund: true, manualRefund: true, canRetryCharge: false });
     expect(res.body.decisions.at(-1)).toMatchObject({ action: 'OFFLINE_PAID', note: `Cheque #1042, $${due.toFixed(2)}` });
-    expect(sentEmails).toHaveLength(1);
-    expect(sentEmails[0].subject).toContain('Payment received');
-    // The declined intent id from the approval attempt stays as history; no new Stripe object.
+    // Spec 024 phase 2: Jump's receipt (cheque method) then the organizer's OFFLINE_PAID template.
+    expect(sentEmails.map((e) => e.subject)).toEqual([expect.stringMatching(/^Receipt for/), expect.stringContaining('Payment received')]);
+    expect(sentEmails[0].text).toContain('Payment method: Cheque #1042');
+    // Spec 024: the payment row is the offline record — no Stripe id (the
+    // declined attempt stays in the decision log); no new Stripe object.
     const row = await appRow(id);
-    expect(row.stripePaymentIntentId).toBe(declinedIntent);
+    expect(row.stripePaymentIntentId).toBeNull();
+    expect(row.orderStatus).toBe('COMPLETED');
+    expect(row.order.payment).toMatchObject({
+      source: 'OFFLINE',
+      offlineMethod: 'CHEQUE',
+      offlineReference: '#1042',
+      status: 'SUCCEEDED',
+      stripePaymentIntentId: null,
+    });
+    expect(declinedIntent).toMatch(/^pi_/);
     expect(mockIntentsCreate).not.toHaveBeenCalled();
     expect(mockSessionsCreate).not.toHaveBeenCalled();
     const boothAfter = await tierRow(booth.id);

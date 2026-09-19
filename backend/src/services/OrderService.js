@@ -12,6 +12,44 @@ import feeService from './FeeService.js';
 import PaymentSettingsService from './PaymentSettingsService.js';
 import addOnService from './AddOnService.js';
 import { confirmationUrl, eventUrl } from '../utils/storefrontUrl.js';
+import orderLineService, { ORDER_INCLUDE } from './OrderLineService.js';
+import legalAcceptanceService from './LegalAcceptanceService.js';
+import { checkoutAcceptanceRequired } from '../config/legal.js';
+
+/** Include for org-wide order rows (spec 024 phase 2): enough to describe either kind without a second query. */
+const LIST_INCLUDE = {
+  event: { select: { id: true, name: true, date: true, venue: { select: { organization: { select: { id: true, name: true } } } } } },
+  contact: { select: { id: true, firstName: true, lastName: true, email: true } },
+  payment: { select: { source: true, stripePaymentIntentId: true, stripeAccountId: true, status: true } },
+  items: { select: { kind: true, quantity: true, description: true, unitPrice: true, priceTier: { select: { name: true } } }, orderBy: { createdAt: 'asc' } },
+  addOns: { select: { quantity: true, addOn: { select: { name: true } } } },
+  refunds: { where: { status: 'SUCCEEDED' }, select: { id: true, amount: true, stripeRefundId: true, manual: true, createdAt: true } },
+  application: {
+    select: {
+      id: true,
+      status: true,
+      paymentStatus: true,
+      stripeCheckoutSessionId: true,
+      profile: { select: { businessName: true } },
+      tier: { select: { name: true } },
+      form: { select: { name: true } },
+    },
+  },
+};
+
+const APPLICATION_PAYMENT_LABEL = {
+  AWAITING_CARD: 'Awaiting card',
+  CARD_ON_FILE: 'Card on file',
+  PROCESSING: 'Processing',
+  PAYMENT_DUE: 'Payment due',
+  NOT_REQUIRED: 'Waived',
+};
+
+function csvCell(value) {
+  if (value === null || value === undefined) return '';
+  const str = String(value);
+  return /[",\n\r]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+}
 
 class OrderService {
   /**
@@ -46,6 +84,43 @@ class OrderService {
     return `JMP-${code}`;
   }
 
+  /** A fresh orderRef that no order holds, checked inside `tx`. */
+  async _uniqueOrderRef(tx) {
+    let orderRef = this._generateOrderRef();
+    while (await tx.order.findUnique({ where: { orderRef }, select: { id: true } }))
+      orderRef = this._generateOrderRef();
+    return orderRef;
+  }
+
+  /**
+   * Spec 024: the order for a PAID-form application, created inside the
+   * submission transaction. PENDING until the charge succeeds; the lines are
+   * the amount snapshot (tier, add-ons, adjustments). No inventory here — the
+   * application's tier slot and add-on holds are taken at approval.
+   *
+   * @param {import('@prisma/client').Prisma.TransactionClient} tx
+   * @param {{ application: { id, eventId, contactId }, data: { amounts, items, addOns }, currency?: string }} params
+   */
+  async createApplicationOrder(tx, { application, data, currency = 'usd' }) {
+    const orderRef = await this._uniqueOrderRef(tx);
+    return tx.order.create({
+      data: {
+        kind: 'APPLICATION',
+        eventId: application.eventId,
+        contactId: application.contactId,
+        applicationId: application.id,
+        orderRef,
+        ...orderLineService.totalsData(data.amounts),
+        currency,
+        quantity: 1,
+        status: 'PENDING',
+        items: { create: data.items },
+        addOns: { create: data.addOns },
+      },
+      include: ORDER_INCLUDE,
+    });
+  }
+
   /**
    * Create a new order with atomic inventory reservation.
    *
@@ -64,11 +139,23 @@ class OrderService {
    * @param {Object} params.contact - { email, firstName, lastName }
    * @param {boolean} [params.createAccount] - Buyer opted into a login-enabled account at this org
    * @param {boolean} [params.emailSubscribed] - Buyer opted into marketing email from this org
+   * @param {Array<{ document: string, version: string }>} [params.acceptances] - Legal versions the checkout showed (spec 024 phase 3)
+   * @param {{ ipHash: string|null, userAgent: string|null }} [params.requestMeta]
    * @returns {Promise<{ orderId, orderRef, stripeCheckoutUrl }>}
    */
-  async createOrder({ eventId, items, addOns = [], contact, createAccount = false, emailSubscribed = false }) {
+  async createOrder({ eventId, items, addOns = [], contact, createAccount = false, emailSubscribed = false, acceptances = undefined, requestMeta = { ipHash: null, userAgent: null } }) {
     // Generate order ref outside transaction to avoid retry collisions
     let orderRef = this._generateOrderRef();
+
+    // Consent trail (spec 024 phase 3): the checkout page always sends the
+    // versions it showed; a client that sends none is refused only once the
+    // legal pages are live (LEGAL_ACCEPTANCE_REQUIRED), logged until then.
+    let accepted = [];
+    if (acceptances !== undefined || checkoutAcceptanceRequired()) {
+      accepted = legalAcceptanceService.assertCurrent(acceptances, ['TERMS', 'PRIVACY']);
+    } else {
+      logger.warn('Checkout without legal acceptances', { event: 'legal_acceptance_missing', eventId, email: contact?.email });
+    }
 
     // Add-on lines (spec 012): validated against scope / attachment / max
     // before the transaction; quantity is reserved inside it, after the tiers.
@@ -203,15 +290,13 @@ class OrderService {
       });
 
       // Ensure unique orderRef
-      let existingRef = await tx.order.findUnique({ where: { orderRef } });
-      while (existingRef) {
-        orderRef = this._generateOrderRef();
-        existingRef = await tx.order.findUnique({ where: { orderRef } });
-      }
+      if (await tx.order.findUnique({ where: { orderRef }, select: { id: true } }))
+        orderRef = await this._uniqueOrderRef(tx);
 
       // 5. Create order with fee breakdown
       const order = await tx.order.create({
         data: {
+          kind: 'TICKET',
           eventId,
           contactId: contactRecord.id,
           orderRef,
@@ -220,6 +305,8 @@ class OrderService {
           platformFeeAmount: fees.platformFee,
           processingFeeAmount: fees.processingFee,
           taxAmount: fees.tax,
+          orgReceives: fees.subtotal, // ticket fees are always passed to the buyer
+          feeMode: 'PASS',
           currency: 'usd',
           quantity,
           status: 'PENDING',
@@ -227,11 +314,14 @@ class OrderService {
           optInMarketing: emailSubscribed === true,
           items: {
             create: items.map((item, idx) => ({
+              kind: 'TICKET_TIER',
               priceTierId: item.priceTierId,
+              description: tierById.get(item.priceTierId).name,
               quantity: item.quantity,
               unitPrice: tierById.get(item.priceTierId).price,
               platformFee: fees.itemBreakdowns[idx].platformFee,
               processingFee: fees.itemBreakdowns[idx].processingFee,
+              tax: fees.itemBreakdowns[idx].tax,
             })),
           },
           addOns: {
@@ -251,6 +341,14 @@ class OrderService {
       });
 
       // 6. Inventory already reserved atomically in step 2 above
+
+      if (accepted.length) {
+        await legalAcceptanceService.record(
+          tx,
+          { subjectType: 'CONTACT', subjectId: contactRecord.id, email, organizationId, source: 'CHECKOUT', referenceType: 'Order', referenceId: order.id, ...requestMeta },
+          accepted
+        );
+      }
 
       return { order, event, tiers, contactRecord, fees };
     });
@@ -418,7 +516,10 @@ class OrderService {
           orderBy: { createdAt: 'asc' },
         },
         items: {
-          include: { priceTier: { select: { name: true } } },
+          include: {
+            priceTier: { select: { name: true } },
+            applicationTier: { select: { name: true } },
+          },
           orderBy: { createdAt: 'asc' },
         },
         addOns: {
@@ -426,6 +527,18 @@ class OrderService {
           orderBy: { createdAt: 'asc' },
         },
         payment: true,
+        application: {
+          select: {
+            id: true,
+            eventId: true,
+            status: true,
+            paymentStatus: true,
+            capacitySlot: true,
+            form: { select: { id: true, name: true, kind: true } },
+            tier: { select: { id: true, name: true } },
+            profile: { select: { businessName: true } },
+          },
+        },
       },
     });
 
@@ -442,7 +555,8 @@ class OrderService {
    * @param {Object} pagination
    */
   async getOrdersForContact(contactId, pagination = {}) {
-    return this.listOrders({ contactId }, pagination);
+    // Both kinds (spec 024 phase 2): application orders link to the status page through `applicationId`.
+    return this.listOrders({ contactId, status: { notIn: ['FAILED', 'CANCELLED'] } }, pagination);
   }
 
   /**
@@ -454,11 +568,7 @@ class OrderService {
     const [orders, total] = await Promise.all([
       prisma.order.findMany({
         where,
-        include: {
-          event: {
-            select: { name: true, date: true },
-          },
-        },
+        include: LIST_INCLUDE,
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,
         take: limit,
@@ -467,7 +577,7 @@ class OrderService {
     ]);
 
     return {
-      data: orders.map((o) => this._formatOrderSummary(o)),
+      data: orders.map((o) => this._formatOrderRow(o)),
       pagination: {
         page,
         limit,
@@ -534,29 +644,14 @@ class OrderService {
    * @param {Object} options - { page, limit, status, eventId, search }
    * @returns {Promise<{ data: OrderSummary[], pagination }>}
    */
-  async getOrdersByOrganization(organizationId, { page = 1, limit = 20, status, eventId, search } = {}) {
-    const where = {
-      ...(organizationId && { event: { venue: { organizationId } } }),
-      ...(status && { status }),
-      ...(eventId && { eventId }),
-      ...(search && {
-        OR: [
-          { orderRef: { contains: search.toUpperCase(), mode: 'insensitive' } },
-          { contact: { email: { contains: search.toLowerCase(), mode: 'insensitive' } } },
-          { contact: { firstName: { contains: search, mode: 'insensitive' } } },
-          { contact: { lastName: { contains: search, mode: 'insensitive' } } },
-        ],
-      }),
-    };
-
+  async getOrdersByOrganization(organizationId, query = {}) {
+    const { page = 1, limit = 20, sort = 'createdAt', dir = 'desc' } = query;
+    const where = this._orgOrdersWhere(organizationId, query);
     const [orders, total] = await Promise.all([
       prisma.order.findMany({
         where,
-        include: {
-          event: { select: { name: true, date: true } },
-          contact: { select: { firstName: true, lastName: true, email: true } },
-        },
-        orderBy: { createdAt: 'desc' },
+        include: LIST_INCLUDE,
+        orderBy: [{ [sort]: sort === 'paidAt' ? { sort: dir, nulls: 'last' } : dir }, { id: 'desc' }],
         skip: (page - 1) * limit,
         take: limit,
       }),
@@ -564,9 +659,102 @@ class OrderService {
     ]);
 
     return {
-      data: orders.map((o) => this._formatOrderSummary(o)),
+      data: orders.map((o) => this._formatOrderRow(o, { unscoped: !organizationId })),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
+  }
+
+  /**
+   * Prisma `where` for the org-wide order list (spec 024 phase 2). Both kinds
+   * scope through `event.venue.organizationId`. `status` omitted hides FAILED
+   * and CANCELLED; a Stripe id (`pi_`, `re_`, `pyr_`, `cs_`) is matched by
+   * equality against the payment, the refunds and the Checkout sessions, any
+   * other search term by ILIKE on the order ref, the contact and the business.
+   */
+  _orgOrdersWhere(organizationId, { kind, status, eventId, from, to, search } = {}) {
+    const where = {
+      ...(organizationId && { event: { venue: { organizationId } } }),
+      ...(kind && { kind }),
+      status: status && status.length ? { in: status } : { notIn: ['FAILED', 'CANCELLED'] },
+      ...(eventId && { eventId }),
+      ...((from || to) && { createdAt: { ...(from && { gte: from }), ...(to && { lte: to }) } }),
+    };
+    if (search) {
+      const term = search.trim();
+      if (/^(pi|re|pyr|cs)_/.test(term)) {
+        where.OR = [
+          { payment: { stripePaymentIntentId: term } },
+          { refunds: { some: { stripeRefundId: term } } },
+          { stripeSessionId: term },
+          { application: { stripeCheckoutSessionId: term } },
+        ];
+      } else {
+        where.OR = [
+          { orderRef: { contains: term.toUpperCase(), mode: 'insensitive' } },
+          { contact: { email: { contains: term.toLowerCase(), mode: 'insensitive' } } },
+          { contact: { firstName: { contains: term, mode: 'insensitive' } } },
+          { contact: { lastName: { contains: term, mode: 'insensitive' } } },
+          { application: { profile: { businessName: { contains: term, mode: 'insensitive' } } } },
+        ];
+      }
+    }
+    return where;
+  }
+
+  /**
+   * CSV of the same rows plus the fee / tax breakdown, Stripe ids and one
+   * `refund` line per succeeded refund. Streams pages of 500 through
+   * `onChunk(text)`; honours every list filter, ignores paging.
+   */
+  async exportOrdersCsv(organizationId, query, onChunk) {
+    const unscoped = !organizationId;
+    const where = this._orgOrdersWhere(organizationId, query);
+    const header = [
+      'line', 'orderRef', 'kind', 'status', 'statusDetail', 'paymentSource', 'contactName', 'contactEmail', 'businessName',
+      ...(unscoped ? ['organization'] : []),
+      'event', 'eventDate', 'description', 'quantity', 'subtotal', 'platformFee', 'processingFee', 'tax', 'total', 'refunded', 'net',
+      'stripePaymentIntentId', 'stripeCheckoutSessionId', 'stripeRefundId', 'stripeAccountId', 'createdAt', 'paidAt', 'applicationId',
+    ];
+    onChunk(`${header.map(csvCell).join(',')}\r\n`);
+    const PAGE = 500;
+    let cursor = null;
+    for (;;) {
+      const rows = await prisma.order.findMany({
+        where,
+        include: { ...LIST_INCLUDE, refunds: { where: { status: 'SUCCEEDED' }, orderBy: { createdAt: 'asc' } } },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: PAGE,
+        ...(cursor && { cursor: { id: cursor }, skip: 1 }),
+      });
+      if (rows.length === 0) break;
+      const lines = [];
+      for (const o of rows) {
+        const row = this._formatOrderRow(o, { unscoped });
+        const base = [
+          row.orderRef, row.kind, row.status, row.statusDetail?.label ?? '', row.paymentSource,
+          `${row.contact?.firstName ?? ''} ${row.contact?.lastName ?? ''}`.trim(), row.contact?.email ?? '', row.businessName ?? '',
+          ...(unscoped ? [row.organization?.name ?? ''] : []),
+          row.eventName ?? '', o.event?.date?.toISOString() ?? '', row.description, row.quantity,
+        ];
+        lines.push([
+          'order', ...base,
+          row.subtotalAmount.toFixed(2), row.platformFeeAmount.toFixed(2), row.processingFeeAmount.toFixed(2), row.taxAmount.toFixed(2), row.totalAmount.toFixed(2), row.refunded.toFixed(2), row.net.toFixed(2),
+          o.payment?.stripePaymentIntentId ?? '', o.stripeSessionId ?? o.application?.stripeCheckoutSessionId ?? '', '', o.payment?.stripeAccountId ?? '',
+          o.createdAt.toISOString(), o.paidAt?.toISOString() ?? '', o.applicationId ?? '',
+        ]);
+        for (const r of o.refunds || []) {
+          lines.push([
+            'refund', ...base,
+            '', '', '', '', '', Number(r.amount).toFixed(2), '',
+            o.payment?.stripePaymentIntentId ?? '', '', r.stripeRefundId ?? (r.manual ? 'manual' : ''), o.payment?.stripeAccountId ?? '',
+            r.createdAt.toISOString(), '', o.applicationId ?? '',
+          ]);
+        }
+      }
+      onChunk(`${lines.map((cells) => cells.map(csvCell).join(',')).join('\r\n')}\r\n`);
+      if (rows.length < PAGE) break;
+      cursor = rows[rows.length - 1].id;
+    }
   }
 
   /**
@@ -618,7 +806,7 @@ class OrderService {
     await prisma.$transaction(async (tx) => {
       await tx.order.update({
         where: { id: orderId },
-        data: { status: 'COMPLETED' },
+        data: { status: 'COMPLETED', paidAt: new Date() },
       });
       // Add-on reservations → sold (tiers move in TicketService.createTicketsForOrder)
       const addOns = await tx.orderAddOn.findMany({ where: { orderId }, select: { addOnId: true, quantity: true } });
@@ -868,25 +1056,42 @@ class OrderService {
           : undefined,
       },
       contact: order.contact,
+      kind: order.kind,
       quantity: order.quantity,
       items: (order.items || []).map((item) => ({
+        id: item.id,
+        kind: item.kind,
         priceTierId: item.priceTierId,
-        priceTierName: item.priceTier?.name,
+        priceTierName: item.priceTier?.name ?? item.applicationTier?.name ?? null,
+        applicationTierId: item.applicationTierId,
+        description: item.description,
         quantity: item.quantity,
         unitPrice: Number(item.unitPrice),
         platformFee: Number(item.platformFee),
         processingFee: Number(item.processingFee),
-        lineTotal: Number(item.unitPrice) * item.quantity + Number(item.platformFee) + Number(item.processingFee),
+        tax: Number(item.tax),
+        lineTotal:
+          Number(item.unitPrice) * item.quantity +
+          Number(item.platformFee) +
+          Number(item.processingFee),
+        createdById: item.createdById,
+        createdAt: item.createdAt,
       })),
       // Add-on lines (spec 012) — never tickets, never in `quantity`
-      addOns: (order.addOns || []).map((line) => addOnService.serializeOrderLine(line)),
+      addOns: (order.addOns || []).map((line) =>
+        addOnService.serializeOrderLine(line, order.feeMode)
+      ),
       subtotalAmount: Number(order.subtotalAmount),
       platformFeeAmount: Number(order.platformFeeAmount),
       processingFeeAmount: Number(order.processingFeeAmount),
       taxAmount: Number(order.taxAmount),
       totalAmount: Number(order.totalAmount),
+      orgReceives: Number(order.orgReceives),
+      feeMode: order.feeMode,
       currency: order.currency,
       status: order.status,
+      paidAt: order.paidAt,
+      dueAt: order.dueAt,
       tickets,
       payment: order.payment
         ? {
@@ -895,10 +1100,56 @@ class OrderService {
             currency: order.payment.currency,
             status: order.payment.status,
             failureReason: order.payment.failureReason,
+            source: order.payment.source,
+            offlineMethod: order.payment.offlineMethod,
+            offlineReference: order.payment.offlineReference,
+            stripePaymentIntentId: order.payment.stripePaymentIntentId,
             createdAt: order.payment.createdAt,
           }
         : null,
+      // Spec 024: the application behind an APPLICATION order
+      application: order.application
+        ? {
+            id: order.application.id,
+            eventId: order.application.eventId,
+            status: order.application.status,
+            paymentStatus: order.application.paymentStatus,
+            capacitySlot: order.application.capacitySlot,
+            formName: order.application.form?.name ?? null,
+            formKind: order.application.form?.kind ?? null,
+            tierName: order.application.tier?.name ?? null,
+            businessName: order.application.profile?.businessName ?? null,
+          }
+        : null,
       createdAt: order.createdAt,
+    };
+  }
+
+  /**
+   * Org-wide list row (spec 024 phase 2): the summary plus what tells the two
+   * kinds apart — description, business name, the application's fine-grained
+   * payment state while the order is PENDING, refunded / net, payment source.
+   */
+  _formatOrderRow(order, { unscoped = false } = {}) {
+    const refunded = (order.refunds || []).reduce((sum, r) => sum + Number(r.amount), 0);
+    const total = Number(order.totalAmount);
+    const application = order.application || null;
+    const pendingDetail =
+      order.kind === 'APPLICATION' && order.status === 'PENDING' && application
+        ? { paymentStatus: application.paymentStatus, label: APPLICATION_PAYMENT_LABEL[application.paymentStatus] || application.paymentStatus, dueAt: order.dueAt }
+        : null;
+    const waived = order.kind === 'APPLICATION' && application?.paymentStatus === 'NOT_REQUIRED' && order.status === 'COMPLETED';
+    return {
+      ...this._formatOrderSummary(order),
+      eventId: order.eventId,
+      description: orderLineService.describe(order),
+      businessName: application?.profile?.businessName ?? null,
+      statusDetail: pendingDetail || (waived ? { paymentStatus: 'NOT_REQUIRED', label: 'Waived', dueAt: null } : null),
+      paymentSource: order.payment?.source === 'OFFLINE' || waived ? 'offline' : 'stripe',
+      refunded: Math.round(refunded * 100) / 100,
+      net: Math.round((total - refunded) * 100) / 100,
+      application: application ? { id: application.id, status: application.status, paymentStatus: application.paymentStatus, formName: application.form?.name ?? null, tierName: application.tier?.name ?? null } : null,
+      ...(unscoped && order.event?.venue?.organization ? { organization: order.event.venue.organization } : {}),
     };
   }
 
@@ -906,6 +1157,8 @@ class OrderService {
     return {
       id: order.id,
       orderRef: order.orderRef,
+      kind: order.kind,
+      applicationId: order.applicationId ?? null,
       eventName: order.event?.name,
       eventDate: order.event?.date,
       quantity: order.quantity,
@@ -916,6 +1169,7 @@ class OrderService {
       totalAmount: Number(order.totalAmount),
       currency: order.currency,
       status: order.status,
+      paidAt: order.paidAt ?? null,
       contact: order.contact
         ? {
             firstName: order.contact.firstName,

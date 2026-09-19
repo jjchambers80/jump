@@ -48,10 +48,12 @@ export const MERGE_FIELDS = [
   ['tier.name', 'Selected tier'],
   ['addOns.summary', 'Add-ons chosen, e.g. "Booth power ×1 ($125.00), Extra badge ×2 ($20.00)" (empty when none)'],
   ['amount.applicantPays', 'Amount charged to the applicant'],
+  ['order.ref', 'Order number of the application (e.g. JMP-K7M2PQ); empty on free forms'],
   ['payment.dueDate', 'Payment due date'],
   ['links.status', 'Link to the application status page'],
   ['links.payNow', 'Link to pay an outstanding balance'],
-  ['links.account', 'Link to the applicant account page'],
+  ['links.account', 'Link to the applicant account page (on the RECEIVED email, a one-time sign-in link when the applicant just created an account)'],
+  ['account.created', 'Section flag: true on the RECEIVED email when the applicant chose to create an account'],
 ];
 
 /** Actions that have a template. PAYMENT_DUE is used from phase 2; ADD_ONS_CHANGED from spec 012; TIER_CHANGED / WAIVED / OFFLINE_PAID from spec 018. */
@@ -66,7 +68,14 @@ Thanks for applying to {{event.name}} as {{form.name}}{{#tier}} ({{tier.name}}){
 {{#addOns}}
 Add-ons: {{addOns.summary}}
 {{/addOns}}
+{{#order.ref}}
+Order number: {{order.ref}}
+{{/order.ref}}
 You can check its status any time: {{links.status}}
+{{#account.created}}
+
+Your account with {{organization.name}} is ready — no password needed. Sign in any time from this link (it works once and expires in 7 days): {{links.account}}
+{{/account.created}}
 
 {{organization.name}}`,
   },
@@ -75,7 +84,9 @@ You can check its status any time: {{links.status}}
     body: `Hi {{applicant.firstName}},
 
 Good news — {{profile.businessName}} is approved for {{event.name}}{{#tier}} ({{tier.name}}){{/tier}}.
-
+{{#order.ref}}
+Order number: {{order.ref}}
+{{/order.ref}}
 We will follow up with logistics closer to the event. Your application: {{links.status}}
 
 See you there,
@@ -111,7 +122,7 @@ Your application for {{event.name}} ({{form.name}}) has been withdrawn. If this 
     subject: 'Payment needed to confirm your spot at {{event.name}}',
     body: `Hi {{applicant.firstName}},
 
-{{profile.businessName}} is approved for {{event.name}}{{#tier}} ({{tier.name}}){{/tier}}, but we could not charge the card on file. Please pay {{amount.applicantPays}} by {{payment.dueDate}} to keep your spot:
+{{profile.businessName}} is approved for {{event.name}}{{#tier}} ({{tier.name}}){{/tier}}, but we could not charge the card on file. Please pay {{amount.applicantPays}} by {{payment.dueDate}} to keep your spot{{#order.ref}} (order {{order.ref}}){{/order.ref}}:
 
 {{links.payNow}}
 
@@ -158,7 +169,7 @@ Your application: {{links.status}}
     subject: 'Payment received for {{event.name}}',
     body: `Hi {{applicant.firstName}},
 
-We recorded your payment of {{amount.applicantPays}} for {{profile.businessName}}'s application to {{event.name}}{{#tier}} ({{tier.name}}){{/tier}}. Your spot is confirmed.
+We recorded your payment of {{amount.applicantPays}} for {{profile.businessName}}'s application to {{event.name}}{{#tier}} ({{tier.name}}){{/tier}}{{#order.ref}} (order {{order.ref}}){{/order.ref}}. Your spot is confirmed.
 
 Your application: {{links.status}}
 

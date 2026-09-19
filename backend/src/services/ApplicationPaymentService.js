@@ -5,9 +5,12 @@
 //   - the off-session charge at approval, routed like ticket orders (spec 010:
 //     statement descriptor, Connect destination + application fee)
 //   - webhook handlers keyed on metadata.applicationId (idempotent)
-//   - refunds, and the overdue sweep for PAYMENT_DUE applications
+//   - the overdue sweep for PAYMENT_DUE applications
 //
-// The amount snapshot on the application row is the only amount ever charged.
+// Spec 024: the application's order is the amount snapshot and the ledger —
+// its lines are the Stripe line items, its PaymentTransaction is the charge,
+// and Order.status is written beside every paymentStatus change through
+// orderStatusFor(). Refunds live in RefundService for every order kind.
 // Capacity: approval reserves a slot (quantityReserved); PAID moves it to
 // quantityApproved; a failed / overdue payment releases it.
 
@@ -17,8 +20,12 @@ import { ConflictError, NotFoundError, ValidationError } from '../middleware/err
 import addOnService from './AddOnService.js';
 import applicationTemplateService from './ApplicationTemplateService.js';
 import paymentSettingsService, { stripeMode } from './PaymentSettingsService.js';
-import { createStripeRefund } from './stripeRefund.js';
 import { statusUrlFor } from './applicationLinks.js';
+import { buyerAccountUrl } from '../utils/storefrontUrl.js';
+import emailService from './EmailService.js';
+import contactOptInService from './ContactOptInService.js';
+import { ORDER_INCLUDE, adjustmentItems, buyerLineTotal, tierItem } from './OrderLineService.js';
+import { orderStatusFor } from './applicationOrderStatus.js';
 import logger from '../utils/logger.js';
 
 const SESSION_TTL_SECONDS = 30 * 60;
@@ -33,10 +40,22 @@ const PAYMENT_INCLUDE = {
   form: true,
   event: { select: { id: true, name: true, date: true, venue: { select: { organizationId: true, organization: true } } } },
   answers: { include: { question: true, image: { include: { file: true } } } },
-  addOns: { include: { addOn: true }, orderBy: { addOn: { displayOrder: 'asc' } } },
   decisions: { orderBy: { createdAt: 'asc' } },
-  refunds: { orderBy: { createdAt: 'asc' } },
+  order: { include: ORDER_INCLUDE },
 };
+
+/** Stripe metadata that ties a session or intent to the application and its order. */
+function metadataFor(application, purpose) {
+  return {
+    applicationId: application.id,
+    organizationId: application.organizationId,
+    ...(application.order && {
+      orderId: application.order.id,
+      orderRef: application.order.orderRef,
+    }),
+    purpose,
+  };
+}
 
 /** Stripe declines that a hosted pay-now page can recover from (3DS etc.). */
 function isCardFailure(error) {
@@ -102,9 +121,12 @@ class ApplicationPaymentService {
       mode: 'setup',
       customer,
       payment_method_types: ['card'],
-      metadata: { applicationId: application.id, organizationId: application.organizationId, purpose },
-      setup_intent_data: { metadata: { applicationId: application.id, organizationId: application.organizationId, purpose } },
-      success_url: this._returnUrl(statusUrl, purpose === 'update_card' ? 'card_updated' : 'submitted'),
+      metadata: metadataFor(application, purpose),
+      setup_intent_data: { metadata: metadataFor(application, purpose) },
+      success_url: this._returnUrl(
+        statusUrl,
+        purpose === 'update_card' ? 'card_updated' : 'submitted'
+      ),
       cancel_url: this._returnUrl(statusUrl, 'cancelled'),
       expires_at: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
     });
@@ -115,19 +137,57 @@ class ApplicationPaymentService {
     const customer = await this.ensureCustomer(application.contact);
     const charge = this._chargeFor(application);
     const checkoutOptions = await paymentSettingsService.checkoutOptionsFor(organization, charge);
-    return stripe.checkout.sessions.create({
+    const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       ...checkoutOptions,
       payment_intent_data: {
         ...checkoutOptions.payment_intent_data,
-        metadata: { applicationId: application.id, organizationId: application.organizationId, purpose },
+        metadata: metadataFor(application, purpose),
       },
       customer,
       line_items: charge.lineItems,
-      metadata: { applicationId: application.id, organizationId: application.organizationId, purpose },
+      metadata: metadataFor(application, purpose),
       success_url: this._returnUrl(statusUrl, purpose === 'pay_now' ? 'paid' : 'submitted'),
       cancel_url: this._returnUrl(statusUrl, 'cancelled'),
       expires_at: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
+    });
+    // The pending payment row, as OrderService.createOrder writes for a ticket
+    // checkout; the webhook fills in the intent id and the outcome.
+    const routedTo = checkoutOptions.payment_intent_data?.transfer_data?.destination || null;
+    const applicationFeeCents = checkoutOptions.payment_intent_data?.application_fee_amount;
+    await this._upsertPayment(prisma, application.order, {
+      stripePaymentIntentId:
+        typeof session.payment_intent === 'string' ? session.payment_intent : null,
+      status: 'PENDING',
+      failureReason: null,
+      stripeAccountId: routedTo,
+      applicationFee: routedTo && applicationFeeCents != null ? applicationFeeCents / 100 : null,
+    });
+    return session;
+  }
+
+  /**
+   * One PaymentTransaction per order (plan decision 7.1): created on the first
+   * charge attempt, updated in place by later attempts and the webhooks.
+   */
+  async _upsertPayment(db, order, data) {
+    return db.paymentTransaction.upsert({
+      where: { orderId: order.id },
+      create: {
+        orderId: order.id,
+        amount: order.totalAmount,
+        currency: order.currency,
+        source: 'STRIPE',
+        ...data,
+      },
+      update: {
+        amount: order.totalAmount,
+        source: 'STRIPE',
+        offlineMethod: null,
+        offlineReference: null,
+        recordedById: null,
+        ...data,
+      },
     });
   }
 
@@ -137,21 +197,38 @@ class ApplicationPaymentService {
    * (spec 012) do not, so the Stripe page itemises exactly the snapshot total.
    */
   _chargeFor(application) {
-    const currency = application.currency || 'usd';
-    const addOns = application.addOns || [];
-    const addOnTotal = addOns.reduce((sum, l) => sum + Number(l.applicantPays), 0);
-    const tierAmount = Math.round((Number(application.applicantPays) - addOnTotal) * 100) / 100;
+    const order = application.order;
+    const currency = order.currency || 'usd';
+    const taxInclusive = application.event?.venue?.organization?.taxInclusivePricing === true;
+    const addOns = order.addOns || [];
+    const addOnTotal = addOns.reduce(
+      (sum, l) => sum + buyerLineTotal(l, order.feeMode, { taxInclusive }),
+      0
+    );
+    // The tier line carries whatever the add-on lines do not (adjustments included).
+    const tierAmount = Math.round((Number(order.totalAmount) - addOnTotal) * 100) / 100;
     const line = (name, amount, description) => ({
       price_data: { currency, product_data: { name, ...(description && { description }) }, unit_amount: cents(amount) },
       quantity: 1,
     });
     const lineItems = [
-      line(this._tierLabel(application), tierAmount, application.profile?.businessName || undefined),
-      ...addOns.map((l) => line(`${l.addOn?.name ?? 'Add-on'} ×${l.quantity}`, Number(l.applicantPays))),
+      line(
+        this._tierLabel(application),
+        tierAmount,
+        application.profile?.businessName || undefined
+      ),
+      ...addOns.map((l) =>
+        line(
+          `${l.addOn?.name ?? 'Add-on'} ×${l.quantity}`,
+          buyerLineTotal(l, order.feeMode, { taxInclusive })
+        )
+      ),
     ].filter((l) => l.price_data.unit_amount > 0);
     return {
-      fees: { subtotal: Number(application.orgReceives) },
-      lineItems: lineItems.length ? lineItems : [line(this._tierLabel(application), Number(application.applicantPays))],
+      fees: { subtotal: Number(order.orgReceives) },
+      lineItems: lineItems.length
+        ? lineItems
+        : [line(this._tierLabel(application), Number(order.totalAmount))],
     };
   }
 
@@ -161,8 +238,12 @@ class ApplicationPaymentService {
 
   /** PaymentIntent description: the tier line plus a compact add-on summary. */
   _chargeDescription(application) {
-    const summary = addOnService.summarizeLines(application.addOns);
-    return `${this._tierLabel(application)}${summary ? ` + ${summary}` : ''}`.slice(0, 1000);
+    const summary = addOnService.summarizeLines(application.order?.addOns);
+    const adjusted = adjustmentItems(application.order).length > 0 ? ' (adjusted)' : '';
+    return `${this._tierLabel(application)}${summary ? ` + ${summary}` : ''}${adjusted}`.slice(
+      0,
+      1000
+    );
   }
 
   /**
@@ -204,7 +285,7 @@ class ApplicationPaymentService {
     const customer = await this.ensureCustomer(application.contact);
     const options = await paymentSettingsService.checkoutOptionsFor(organization, this._chargeFor(application));
     const routing = options.payment_intent_data || {};
-    const amount = cents(application.applicantPays);
+    const amount = cents(application.order.totalAmount);
     let intent;
     try {
       intent = await stripe.paymentIntents.create(
@@ -217,9 +298,14 @@ class ApplicationPaymentService {
           confirm: true,
           payment_method_types: ['card'],
           description: this._chargeDescription(application),
-          ...(routing.statement_descriptor_suffix && { statement_descriptor_suffix: routing.statement_descriptor_suffix }),
-          ...(routing.transfer_data && { transfer_data: routing.transfer_data, application_fee_amount: routing.application_fee_amount }),
-          metadata: { applicationId: application.id, organizationId: application.organizationId, purpose: 'approval' },
+          ...(routing.statement_descriptor_suffix && {
+            statement_descriptor_suffix: routing.statement_descriptor_suffix,
+          }),
+          ...(routing.transfer_data && {
+            transfer_data: routing.transfer_data,
+            application_fee_amount: routing.application_fee_amount,
+          }),
+          metadata: metadataFor(application, 'approval'),
         },
         { idempotencyKey: `application:${application.id}:charge:${application.chargeAttempts}` }
       );
@@ -241,13 +327,12 @@ class ApplicationPaymentService {
     }
 
     const routedTo = routing.transfer_data?.destination || null;
-    await prisma.application.update({
-      where: { id: application.id },
-      data: {
-        stripePaymentIntentId: intent.id,
-        stripeAccountId: routedTo,
-        applicationFee: routedTo ? routing.application_fee_amount / 100 : null,
-      },
+    await this._upsertPayment(prisma, application.order, {
+      stripePaymentIntentId: intent.id,
+      status: intent.status === 'succeeded' ? 'SUCCEEDED' : 'PENDING',
+      failureReason: null,
+      stripeAccountId: routedTo,
+      applicationFee: routedTo ? routing.application_fee_amount / 100 : null,
     });
     if (intent.status === 'succeeded') {
       await this._markPaid(application.id, intent.id, { source: 'approval' });
@@ -266,16 +351,29 @@ class ApplicationPaymentService {
    * paymentStatus. Returns true when the transition happened now.
    */
   async _markPaid(applicationId, paymentIntentId, { source }) {
+    const changed = await this._markPaidTx(applicationId, paymentIntentId, { source });
+    // The receipt (spec 024 phase 2) follows the transition, once, after commit.
+    if (changed) await this.sendReceipt(applicationId);
+    return changed;
+  }
+
+  async _markPaidTx(applicationId, paymentIntentId, { source }) {
     return prisma.$transaction(async (tx) => {
       const rows = await tx.$queryRaw`SELECT * FROM "Application" WHERE "id" = ${applicationId} FOR UPDATE`;
       const application = rows[0];
-      if (!application || ['PAID', 'REFUNDED', 'PARTIALLY_REFUNDED'].includes(application.paymentStatus)) return false;
-      const data = { paymentStatus: 'PAID', paidAt: new Date(), overdue: false, paymentDueAt: null };
-      if (paymentIntentId && application.stripePaymentIntentId !== paymentIntentId) data.stripePaymentIntentId = paymentIntentId;
+      if (
+        !application ||
+        ['PAID', 'REFUNDED', 'PARTIALLY_REFUNDED'].includes(application.paymentStatus)
+      )
+        return false;
+      const data = { paymentStatus: 'PAID', overdue: false };
       if (application.tierId && application.capacitySlot === 'RESERVED') {
         await tx.$executeRaw`UPDATE "ApplicationTier" SET "quantityReserved" = GREATEST("quantityReserved" - 1, 0), "quantityApproved" = "quantityApproved" + 1 WHERE "id" = ${application.tierId}`;
         // Add-on holds become sales with the slot (spec 012).
-        const lines = await tx.applicationAddOn.findMany({ where: { applicationId }, select: { addOnId: true, quantity: true } });
+        const lines = await tx.orderAddOn.findMany({
+          where: { order: { applicationId } },
+          select: { addOnId: true, quantity: true },
+        });
         if (lines.length) await addOnService.commit(tx, lines);
         data.capacitySlot = 'APPROVED';
       }
@@ -284,8 +382,36 @@ class ApplicationPaymentService {
         data.status = 'SUBMITTED';
         data.submittedAt = new Date();
       }
-      await tx.application.update({ where: { id: applicationId }, data });
-      logger.info('Application paid', { event: 'application_paid', applicationId, paymentIntentId, source });
+      const row = await tx.application.update({
+        where: { id: applicationId },
+        data,
+        select: {
+          status: true,
+          paymentStatus: true,
+          order: { select: { id: true, totalAmount: true, currency: true } },
+        },
+      });
+      if (row.order) {
+        await tx.order.update({
+          where: { id: row.order.id },
+          data: { status: orderStatusFor(row), paidAt: new Date(), dueAt: null },
+        });
+        // Stripe-paid: the payment row reflects the intent that settled (an
+        // external intent id can differ from the one we stored — the webhook wins).
+        if (paymentIntentId) {
+          await this._upsertPayment(tx, row.order, {
+            stripePaymentIntentId: paymentIntentId,
+            status: 'SUCCEEDED',
+            failureReason: null,
+          });
+        }
+      }
+      logger.info('Application paid', {
+        event: 'application_paid',
+        applicationId,
+        paymentIntentId,
+        source,
+      });
       return true;
     });
   }
@@ -293,14 +419,28 @@ class ApplicationPaymentService {
   /** Charge failed: keep the reserved slot, start the pay-now clock. */
   async _markPaymentDue(application, reason, paymentIntentId = null) {
     const dueDays = application.form?.paymentDueDays ?? 7;
-    const paymentDueAt = application.paymentDueAt || new Date(Date.now() + dueDays * 86_400_000);
-    await prisma.application.update({
-      where: { id: application.id },
-      data: {
-        paymentStatus: 'PAYMENT_DUE',
-        paymentDueAt,
+    const paymentDueAt = application.order?.dueAt || new Date(Date.now() + dueDays * 86_400_000);
+    await prisma.$transaction(async (tx) => {
+      const row = await tx.application.update({
+        where: { id: application.id },
+        data: { paymentStatus: 'PAYMENT_DUE' },
+        select: {
+          status: true,
+          paymentStatus: true,
+          order: { select: { id: true, totalAmount: true, currency: true } },
+        },
+      });
+      if (!row.order) return;
+      await tx.order.update({
+        where: { id: row.order.id },
+        data: { status: orderStatusFor(row), dueAt: paymentDueAt },
+      });
+      // The declined attempt is the payment row's failure; a later pay-now overwrites it.
+      await this._upsertPayment(tx, row.order, {
         ...(paymentIntentId && { stripePaymentIntentId: paymentIntentId }),
-      },
+        status: 'FAILED',
+        failureReason: String(reason || '').slice(0, 500) || null,
+      });
     });
     logger.warn('Application payment due', { event: 'application_payment_due', applicationId: application.id, reason, paymentDueAt });
     return 'PAYMENT_DUE';
@@ -339,16 +479,6 @@ class ApplicationPaymentService {
     return Boolean(event.data?.object?.metadata?.applicationId);
   }
 
-  /** charge.refunded needs a row lookup: the charge carries the PaymentIntent id. */
-  async isApplicationRefundEvent(event) {
-    if (event?.type !== 'charge.refunded') return false;
-    const charge = event.data?.object;
-    if (charge?.metadata?.applicationId) return true;
-    if (!charge?.payment_intent) return false;
-    const row = await prisma.application.findUnique({ where: { stripePaymentIntentId: String(charge.payment_intent) }, select: { id: true } });
-    return Boolean(row);
-  }
-
   async handleEvent(event) {
     const object = event.data.object;
     const applicationId = object.metadata?.applicationId;
@@ -368,8 +498,6 @@ class ApplicationPaymentService {
       case 'payment_intent.payment_failed':
       case 'payment_intent.canceled':
         return this._onIntentFailed(applicationId, object);
-      case 'charge.refunded':
-        return this._onChargeRefunded(object);
       default:
         logger.info('Unhandled application Stripe event', { type: event.type, applicationId });
     }
@@ -390,17 +518,34 @@ class ApplicationPaymentService {
       return;
     }
     if (session.payment_status !== 'paid') return;
-    const paymentIntentId = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id;
-    const before = await prisma.application.findUnique({ where: { id: applicationId }, select: { status: true, stripeAccountId: true } });
+    const paymentIntentId =
+      typeof session.payment_intent === 'string'
+        ? session.payment_intent
+        : session.payment_intent?.id;
+    const before = await prisma.application.findUnique({
+      where: { id: applicationId },
+      select: {
+        status: true,
+        order: {
+          select: {
+            id: true,
+            totalAmount: true,
+            currency: true,
+            payment: { select: { stripeAccountId: true } },
+          },
+        },
+      },
+    });
     if (!before) return;
-    if (session.payment_intent && before.stripeAccountId === null) {
+    if (session.payment_intent && before.order && before.order.payment?.stripeAccountId == null) {
       // Destination routing chosen at session time; read it back for the ledger.
       const intent = await stripe.paymentIntents.retrieve(paymentIntentId).catch(() => null);
       const destination = intent?.transfer_data?.destination || null;
       if (destination) {
-        await prisma.application.update({
-          where: { id: applicationId },
-          data: { stripeAccountId: destination, applicationFee: intent.application_fee_amount != null ? intent.application_fee_amount / 100 : null },
+        await this._upsertPayment(prisma, before.order, {
+          stripeAccountId: destination,
+          applicationFee:
+            intent.application_fee_amount != null ? intent.application_fee_amount / 100 : null,
         });
       }
     }
@@ -422,85 +567,6 @@ class ApplicationPaymentService {
     await this._send(applicationId, 'PAYMENT_DUE');
   }
 
-  /** Reconcile refunds made from the Stripe dashboard. */
-  async _onChargeRefunded(charge) {
-    const paymentIntentId = typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent?.id;
-    const application = await prisma.application.findFirst({
-      where: charge.metadata?.applicationId ? { id: charge.metadata.applicationId } : { stripePaymentIntentId: paymentIntentId },
-      include: { refunds: true },
-    });
-    if (!application) return;
-    for (const refund of charge.refunds?.data || []) {
-      if (application.refunds.some((r) => r.stripeRefundId === refund.id)) continue;
-      await prisma.applicationRefund.create({
-        data: { applicationId: application.id, amount: refund.amount / 100, reason: refund.reason || 'external', status: 'SUCCEEDED', stripeRefundId: refund.id, initiatedBy: null },
-      });
-    }
-    await this._recomputeRefundStatus(application.id);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Refunds
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Organizer refund (ADMIN). Partial by default when `amount` is given; the
-   * review status is untouched — withdraw separately to release the slot.
-   */
-  async refund(application, { amount = null, reason = null, initiatedBy = null } = {}) {
-    const offline = application.paymentSource === 'OFFLINE';
-    if (!['PAID', 'PARTIALLY_REFUNDED'].includes(application.paymentStatus) || (!offline && !application.stripePaymentIntentId)) {
-      throw new ConflictError('Only paid applications can be refunded');
-    }
-    const refunded = (application.refunds || []).filter((r) => r.status === 'SUCCEEDED').reduce((sum, r) => sum + Number(r.amount), 0);
-    const remaining = Math.round((Number(application.applicantPays) - refunded) * 100) / 100;
-    const value = amount == null ? remaining : Math.round(Number(amount) * 100) / 100;
-    if (!Number.isFinite(value) || value <= 0) throw new ValidationError('amount must be a positive number');
-    if (value > remaining + 1e-9) throw new ValidationError(`amount cannot exceed the remaining ${remaining.toFixed(2)}`);
-
-    // Spec 018 phase 3: an offline payment has no Stripe charge — record the
-    // refund the organizer made outside Jump and move on.
-    if (offline) {
-      const manual = await prisma.applicationRefund.create({
-        data: { applicationId: application.id, amount: value, reason, status: 'SUCCEEDED', manual: true, initiatedBy },
-      });
-      await prisma.applicationDecision.create({ data: { applicationId: application.id, action: 'MANUAL_REFUND', byUserId: initiatedBy, note: `Recorded refund of $${value.toFixed(2)}${reason ? `: ${reason}` : ''}` } });
-      await this._recomputeRefundStatus(application.id);
-      logger.info('Application refund recorded (offline)', { event: 'application_refund_manual', applicationId: application.id, amount: value, initiatedBy });
-      return manual.id;
-    }
-
-    const row = await prisma.applicationRefund.create({
-      data: { applicationId: application.id, amount: value, reason, status: 'PENDING', initiatedBy },
-    });
-    let stripeRefund;
-    try {
-      stripeRefund = await createStripeRefund({
-        paymentIntentId: application.stripePaymentIntentId,
-        amount: value,
-        reason,
-        connected: Boolean(application.stripeAccountId),
-        metadata: { applicationId: application.id },
-      });
-    } catch (error) {
-      await prisma.applicationRefund.update({ where: { id: row.id }, data: { status: 'FAILED' } });
-      throw error;
-    }
-    await prisma.applicationRefund.update({ where: { id: row.id }, data: { status: 'SUCCEEDED', stripeRefundId: stripeRefund.id } });
-    await this._recomputeRefundStatus(application.id);
-    logger.info('Application refunded', { event: 'application_refunded', applicationId: application.id, amount: value, stripeRefundId: stripeRefund.id, initiatedBy });
-    return row.id;
-  }
-
-  async _recomputeRefundStatus(applicationId) {
-    const application = await prisma.application.findUnique({ where: { id: applicationId }, include: { refunds: true } });
-    if (!application) return;
-    const refunded = application.refunds.filter((r) => r.status === 'SUCCEEDED').reduce((sum, r) => sum + Number(r.amount), 0);
-    if (refunded <= 0) return;
-    const full = refunded + 1e-9 >= Number(application.applicantPays);
-    await prisma.application.update({ where: { id: applicationId }, data: { paymentStatus: full ? 'REFUNDED' : 'PARTIALLY_REFUNDED' } });
-  }
-
   // ---------------------------------------------------------------------------
   // Overdue sweep
   // ---------------------------------------------------------------------------
@@ -512,8 +578,13 @@ class ApplicationPaymentService {
    */
   async sweepOverdue(now = new Date()) {
     const due = await prisma.application.findMany({
-      where: { status: 'APPROVED', paymentStatus: 'PAYMENT_DUE', overdue: false, paymentDueAt: { lt: now } },
-      include: { form: { select: { overduePolicy: true } } },
+      where: {
+        status: 'APPROVED',
+        paymentStatus: 'PAYMENT_DUE',
+        overdue: false,
+        order: { dueAt: { lt: now } },
+      },
+      include: { form: { select: { overduePolicy: true } }, order: { select: { id: true } } },
       take: 500,
     });
     let withdrawn = 0;
@@ -523,12 +594,22 @@ class ApplicationPaymentService {
         if (row.form.overduePolicy === 'WITHDRAW') {
           await prisma.$transaction(async (tx) => {
             if (row.tierId && row.capacitySlot !== 'NONE') {
-              const column = row.capacitySlot === 'APPROVED' ? 'quantityApproved' : 'quantityReserved';
-              await tx.$executeRawUnsafe(`UPDATE "ApplicationTier" SET "${column}" = GREATEST("${column}" - 1, 0) WHERE "id" = $1`, row.tierId);
-              const lines = await tx.applicationAddOn.findMany({ where: { applicationId: row.id }, select: { addOnId: true, quantity: true } });
-              if (lines.length) await (row.capacitySlot === 'APPROVED' ? addOnService.unsell(tx, lines) : addOnService.release(tx, lines));
+              const column =
+                row.capacitySlot === 'APPROVED' ? 'quantityApproved' : 'quantityReserved';
+              await tx.$executeRawUnsafe(
+                `UPDATE "ApplicationTier" SET "${column}" = GREATEST("${column}" - 1, 0) WHERE "id" = $1`,
+                row.tierId
+              );
+              const lines = await tx.orderAddOn.findMany({
+                where: { order: { applicationId: row.id } },
+                select: { addOnId: true, quantity: true },
+              });
+              if (lines.length)
+                await (row.capacitySlot === 'APPROVED'
+                  ? addOnService.unsell(tx, lines)
+                  : addOnService.release(tx, lines));
             }
-            await tx.application.update({
+            const updated = await tx.application.update({
               where: { id: row.id },
               data: {
                 status: 'WITHDRAWN',
@@ -539,7 +620,13 @@ class ApplicationPaymentService {
                 decidedAt: now,
                 decisions: { create: { action: 'WITHDRAWN', byUserId: null, note: 'Payment overdue' } },
               },
+              select: { status: true, paymentStatus: true },
             });
+            if (row.order)
+              await tx.order.update({
+                where: { id: row.order.id },
+                data: { status: orderStatusFor(updated) },
+              });
           });
           await this._send(row.id, 'WITHDRAWN');
           withdrawn += 1;
@@ -568,8 +655,55 @@ class ApplicationPaymentService {
     return prisma.application.findUnique({ where: { id: applicationId }, include: PAYMENT_INCLUDE });
   }
 
+  /**
+   * The RECEIVED email for a PAID form, once the card step made the
+   * application SUBMITTED. Applies the apply-form opt-ins first (idempotent on
+   * `optInsAppliedAt`) so a just-created account gets its sign-in link in the
+   * same email (spec 024 phase 3).
+   */
   async _sendReceived(applicationId) {
-    return this._send(applicationId, 'RECEIVED');
+    const optIns = await contactOptInService.applyForApplication(prisma, applicationId);
+    const application = await this._load(applicationId);
+    if (!application) return null;
+    const accountUrl = optIns.accountJustCreated ? await contactOptInService.welcomeUrl(application.contactId) : null;
+    const statusUrl = await statusUrlFor(application);
+    return applicationTemplateService.send(application.organizationId, 'RECEIVED', { ...application, statusUrl }, { payNowUrl: statusUrl, accountUrl, accountCreated: Boolean(accountUrl) });
+  }
+
+  /**
+   * Spec 024 phase 2: Jump's receipt for a paid application order, sent once
+   * per completion (callers run it only when the PAID transition happened).
+   * Card details come from the payment intent when Stripe can be asked;
+   * offline payments describe the method. Never throws.
+   */
+  async sendReceipt(applicationId) {
+    try {
+      const application = await this._load(applicationId);
+      const order = application?.order;
+      if (!order || order.status !== 'COMPLETED' || Number(order.totalAmount) <= 0) return false;
+      const organization = application.event?.venue?.organization || {};
+      const taxInclusive = organization.taxInclusivePricing === true;
+      const addOns = (order.addOns || []).map((l) => ({ label: `${l.addOn?.name ?? 'Add-on'} ×${l.quantity}`, amount: buyerLineTotal(l, order.feeMode, { taxInclusive }) }));
+      const addOnTotal = addOns.reduce((sum, l) => sum + l.amount, 0);
+      const tier = tierItem(order);
+      const adjusted = adjustmentItems(order).some((i) => i.kind === 'ADJUSTMENT');
+      const lines = [
+        { label: `${application.form?.name ?? 'Application'}${tier?.description ? ` — ${tier.description}` : ''}${adjusted ? ' (adjusted)' : ''}`, amount: Math.round((Number(order.totalAmount) - addOnTotal) * 100) / 100 },
+        ...addOns,
+      ];
+      let paymentMethod = null;
+      if (order.payment?.source !== 'OFFLINE' && order.payment?.stripePaymentIntentId) {
+        const intent = await stripe.paymentIntents.retrieve(order.payment.stripePaymentIntentId, { expand: ['payment_method'] }).catch(() => null);
+        const card = intent?.payment_method?.card;
+        if (card?.brand && card?.last4) paymentMethod = `${card.brand.charAt(0).toUpperCase()}${card.brand.slice(1)} •••• ${card.last4}`;
+      }
+      const statusUrl = await statusUrlFor(application);
+      const accountUrl = application.contact?.accountCreatedAt ? await buyerAccountUrl(application.organizationId) : null;
+      return await emailService.sendApplicationReceipt(application, { statusUrl, accountUrl, paymentMethod, lines });
+    } catch (error) {
+      logger.error('Application receipt failed', { applicationId, error: error.message });
+      return false;
+    }
   }
 
   /** Decision emails from the payment path; the raw status link is rebuilt from the id. */

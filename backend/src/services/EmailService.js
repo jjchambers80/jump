@@ -289,6 +289,89 @@ ${manageTicketsHtml}
       }
     }
   }
+
+  /**
+   * Receipt for a paid application order (spec 024 phase 2): Jump's own
+   * transactional email, sent once when the order reaches COMPLETED through
+   * Stripe or an offline payment. No tickets, no QR; the organizer's own
+   * templated emails (APPROVED, OFFLINE_PAID) are separate. Never throws.
+   *
+   * @param {{ order, contact, event: { name, date, venue: { organization } }, profile, tier, form }} application with its order (lines, add-ons, payment)
+   * @param {{ statusUrl: string, accountUrl?: string|null, paymentMethod?: string|null, lines: Array<{ label: string, amount: number }> }} options
+   */
+  async sendApplicationReceipt(application, { statusUrl, accountUrl = null, paymentMethod = null, lines = [] }) {
+    const order = application.order;
+    const organization = application.event?.venue?.organization || {};
+    const orgName = organization.name || 'the organizer';
+    const to = application.contact?.email;
+    if (!order || !to) return false;
+    const money = (n) => `$${Number(n || 0).toFixed(2)}`;
+    const payment = order.payment;
+    const method =
+      paymentMethod ||
+      (payment?.source === 'OFFLINE'
+        ? `${{ CHEQUE: 'Cheque', CASH: 'Cash', BANK_TRANSFER: 'Bank transfer', COMPED: 'Comped', OTHER: 'Other' }[payment.offlineMethod] || 'Offline'}${payment.offlineReference ? ` ${payment.offlineReference}` : ''}`
+        : 'Card');
+    const rowsHtml = lines
+      .map((l) => `<tr><td style="padding: 6px 0; color: #111827; font-size: 14px;">${escapeHtml(l.label)}</td><td style="padding: 6px 0; text-align: right; color: #111827; font-size: 14px;">${money(l.amount)}</td></tr>`)
+      .join('');
+    // Lines are buyer totals (fees and tax already inside), so only the total follows.
+    const summaryRows = [['Total paid', order.totalAmount]]
+      .map(([label, amount], i, arr) => `<tr><td style="padding: 6px 0; color: #374151; font-size: 14px; ${i === arr.length - 1 ? 'font-weight: bold;' : ''}">${escapeHtml(label)}</td><td style="padding: 6px 0; text-align: right; color: #111827; font-size: 14px; ${i === arr.length - 1 ? 'font-weight: bold;' : ''}">${money(amount)}</td></tr>`)
+      .join('');
+    const textLines = [
+      `Hi ${application.contact?.firstName || 'there'},`,
+      '',
+      `This is your receipt for ${application.profile?.businessName || 'your'} application to ${application.event?.name || 'the event'}${application.tier ? ` (${application.tier.name})` : ''}.`,
+      `Order number: ${order.orderRef}`,
+      '',
+      ...lines.map((l) => `${l.label}: ${money(l.amount)}`),
+      `Total paid: ${money(order.totalAmount)}`,
+      `Payment method: ${method}`,
+      '',
+      `Your application: ${statusUrl}`,
+      ...(accountUrl ? [`Your account: ${accountUrl}`] : []),
+      '',
+      orgName,
+    ];
+    const msg = {
+      to: [to],
+      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      subject: `Receipt for ${application.event?.name || 'your application'} (${order.orderRef})`,
+      text: textLines.join('\n'),
+      html: `
+        <html>
+          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+            <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
+              ${orgLogoHtml(organization.logoUrl, orgName)}
+              <h1 style="color: #333; font-size: 20px; margin: 0;">Payment receipt</h1>
+            </div>
+            <div style="padding: 24px; color: #111827; font-size: 15px;">
+              <p>Hi ${escapeHtml(application.contact?.firstName || 'there')},</p>
+              <p>This is your receipt for <strong>${escapeHtml(application.profile?.businessName || 'your')}</strong>'s application to <strong>${escapeHtml(application.event?.name || 'the event')}</strong>${application.tier ? ` (${escapeHtml(application.tier.name)})` : ''}.</p>
+              <div style="background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 24px 0;">
+                <p style="margin: 0 0 12px; color: #666; font-size: 13px;">Order <strong style="color: #111827;">${escapeHtml(order.orderRef)}</strong> · ${escapeHtml(orgName)}</p>
+                <table style="width: 100%; border-collapse: collapse;">${rowsHtml}<tr><td colspan="2" style="border-top: 1px solid #e5e7eb; padding: 0;"></td></tr>${summaryRows}</table>
+                <p style="margin: 12px 0 0; color: #666; font-size: 13px;">Paid by ${escapeHtml(method)}${order.paidAt ? ` on ${new Date(order.paidAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}` : ''}.</p>
+              </div>
+              <div style="text-align: center; margin: 24px 0;"><a href="${escapeHtml(statusUrl)}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 15px; font-weight: bold; padding: 12px 28px; border-radius: 8px; text-decoration: none;">View your application</a></div>
+              ${accountUrl ? `<p style="color: #666; font-size: 13px; text-align: center;">Manage your applications any time: <a href="${escapeHtml(accountUrl)}" style="color: #2563eb;">your account</a></p>` : ''}
+              <p style="color: #666; font-size: 12px; margin-top: 16px;">Questions about this payment? Reply to this email to reach ${escapeHtml(orgName)}.</p>
+            </div>
+          </body>
+        </html>
+      `,
+      ...(organization.email && { reply_to: organization.email }),
+    };
+    try {
+      await resend.emails.send(msg);
+      logger.info('Application receipt sent', { event: 'application_receipt_sent', orderId: order.id, orderRef: order.orderRef, applicationId: application.id });
+      return true;
+    } catch (error) {
+      logger.error('Failed to send application receipt', { orderId: order.id, applicationId: application.id, error: error.message });
+      return false;
+    }
+  }
 }
 
 export default new EmailService();

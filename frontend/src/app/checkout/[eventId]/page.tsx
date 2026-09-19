@@ -16,6 +16,7 @@ import { parseAddOnLines, type AddOn } from '../../../lib/addOns';
 import BrandScope from '../../../components/BrandScope';
 import OrganizationHeader from '../../../components/OrganizationHeader';
 import type { ThemeMode } from '../../../lib/theme';
+import { acceptancesFor, fetchLegalVersions, LEGAL_PAGES_ENABLED, LEGAL_PATHS, type LegalVersions } from '../../../lib/legal';
 
 interface EventVenue {
   id: string;
@@ -105,6 +106,14 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
   // ticket); marketing consent is never pre-checked (GDPR / ePrivacy / CASL).
   const [createAccount, setCreateAccount] = useState(true);
   const [emailSubscribed, setEmailSubscribed] = useState(false);
+  // Spec 024 phase 3: the versions of the terms and privacy policy this page
+  // shows, echoed on the order so the consent trail names them.
+  const [legalVersions, setLegalVersions] = useState<LegalVersions | null>(null);
+  useEffect(() => {
+    fetchLegalVersions()
+      .then(setLegalVersions)
+      .catch(() => setLegalVersions(null));
+  }, []);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [openLines, setOpenLines] = useState<Record<string, boolean>>({});
 
@@ -180,6 +189,7 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
       setProcessing(true);
       setError(null);
 
+      const versions = legalVersions ?? (await fetchLegalVersions().catch(() => null));
       const response = await api.post<CreateOrderResponse>('/orders', {
         eventId: params.eventId,
         items: selectedItems.map(({ priceTierId, quantity }) => ({ priceTierId, quantity })),
@@ -191,6 +201,7 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
         },
         createAccount,
         emailSubscribed,
+        ...(versions && { acceptances: acceptancesFor(versions) }),
       });
 
       // Redirect to Stripe Checkout
@@ -639,16 +650,24 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
               )}
             </button>
 
-            {/* Terms */}
-            <p className="mt-4 text-xs text-gray-500 dark:text-slate-500 text-center">
+            {/* Terms — recorded as a LegalAcceptance on the order (spec 024 phase 3); the pages link once they exist (spec 023) */}
+            <p className="mt-4 text-xs text-gray-500 dark:text-slate-500 text-center" data-testid="checkout-terms">
               By completing this purchase, you agree to our{' '}
-              <a href="/terms" className="text-brand-link hover:underline">
-                Terms of Service
-              </a>{' '}
+              {LEGAL_PAGES_ENABLED ? (
+                <a href={LEGAL_PATHS.terms} className="text-brand-link hover:underline">
+                  Terms of Service
+                </a>
+              ) : (
+                <span>Terms of Service</span>
+              )}{' '}
               and{' '}
-              <a href="/privacy" className="text-brand-link hover:underline">
-                Privacy Policy
-              </a>
+              {LEGAL_PAGES_ENABLED ? (
+                <a href={LEGAL_PATHS.privacy} className="text-brand-link hover:underline">
+                  Privacy Policy
+                </a>
+              ) : (
+                <span>Privacy Policy</span>
+              )}
             </p>
           </form>
         </div>

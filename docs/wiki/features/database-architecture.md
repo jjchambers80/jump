@@ -30,8 +30,11 @@ Shared `@jump/db` package (`packages/db/`) providing a singleton PrismaClient. T
 - `prisma generate` runs on `postinstall`; if the generated client is stale, re-run `npm install`.
 - Migrations must be applied in order; never manually edit migration files once merged.
 - Railway runs `prisma migrate deploy` at container start, so a data backfill that must precede a NOT NULL or unique constraint belongs **inside the same migration** (single transaction), not in a separate script step — see `20260913000000_contact_per_org_and_membership` and [Tenant Identity](tenant-identity.md).
+- Postgres refuses to use an enum value added in the same transaction (`ALTER TYPE … ADD VALUE` then `INSERT … 'NEW_VALUE'` → "unsafe use of new value"). Ship the enum change as its own migration ahead of the one that writes it — see `20260930000000_application_orders_enums` / `…0001_application_orders` and [Application orders](application-orders.md).
+- Development databases kept in sync with `prisma db push` skip migration SQL, so a migration that copies data before dropping columns needs a script for them (`npm run db:backfill:024` runs the same SQL files; run it **before** `db push`).
 
 ## Related Features
 
 - [Railway Deployment](railway-deployment.md) — database migrations must be run via SSH tunnel in production.
 - [Auth.js Integration](authjs-integration.md) — PrismaAdapter uses the shared client for user/account persistence.
+- [Application orders](application-orders.md) — the spec 024 migration pair and its `db push` backfill script.

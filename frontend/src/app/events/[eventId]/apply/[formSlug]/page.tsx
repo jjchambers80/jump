@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import api from '@/services/api';
 import { acceptanceLine, estimatedApplicantTotal, money, SOCIAL_FIELDS, tierPriceLine, type PublicForm, type Question } from '@/lib/applications';
+import { acceptancesFor, applyConsentText, cardAuthorizationText, fetchLegalVersions, LEGAL_PAGES_ENABLED, LEGAL_PATHS, type LegalVersions } from '@/lib/legal';
 import AddOnPicker from '@/components/AddOnPicker';
 import ApplyShell from '../ApplyShell';
 
@@ -43,9 +44,22 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
   const [photos, setPhotos] = useState<File[]>([]);
   const [answers, setAnswers] = useState<Answers>({});
   const [answerPhotos, setAnswerPhotos] = useState<Record<string, File>>({});
+  // Spec 024 phase 3: account (default on, like checkout), marketing, the
+  // data-collection consent, and the card authorization on forms that charge
+  // the saved card at approval. Versions are echoed so a stale one is refused.
+  const [optInAccount, setOptInAccount] = useState(true);
   const [optInMarketing, setOptInMarketing] = useState(false);
+  const [consent, setConsent] = useState(false);
+  const [cardAuthorized, setCardAuthorized] = useState(false);
+  const [legalVersions, setLegalVersions] = useState<LegalVersions | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchLegalVersions()
+      .then(setLegalVersions)
+      .catch(() => setLegalVersions(null));
+  }, []);
 
   useEffect(() => {
     api
@@ -85,6 +99,8 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
     setPhotos(next);
   };
 
+  const needsCardAuthorization = form?.kind === 'PAID' && form.chargeTiming === 'APPROVAL';
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!form || submitting) return;
@@ -92,9 +108,18 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
       setError('Choose an option to continue.');
       return;
     }
+    if (!consent) {
+      setError('Please agree to the collection and storage of your information to continue.');
+      return;
+    }
+    if (needsCardAuthorization && !cardAuthorized) {
+      setError('Please authorize the charge to the card you are about to save.');
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
+      const versions = legalVersions ?? (await fetchLegalVersions());
       const payload = {
         formSlug: form.slug,
         ...(form.kind === 'PAID' && { tierId }),
@@ -102,7 +127,9 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
         contact,
         profile: { ...profile, socials },
         answers,
+        optInAccount,
         optInMarketing,
+        acceptances: acceptancesFor(versions, { cardAuthorization: needsCardAuthorization }),
       };
       const body = new FormData();
       body.append('payload', JSON.stringify(payload));
@@ -110,7 +137,11 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
       Object.entries(answerPhotos).forEach(([qid, file]) => body.append(`answer:${qid}`, file, file.name));
       const res = await fetch(`${API_URL}/events/${params.eventId}/applications`, { method: 'POST', body });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.message || data.error || 'Could not submit your application');
+      if (!res.ok) {
+        // The versions moved under us: forget the cached ones so the next try shows the current text.
+        if (data.code === 'LEGAL_VERSION_STALE') setLegalVersions(null);
+        throw new Error(data.message || data.error || 'Could not submit your application');
+      }
       if (data.next === 'checkout' && data.checkoutUrl) {
         window.location.assign(data.checkoutUrl);
         return;
@@ -186,6 +217,12 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
                         ? `You will save a card now and be charged ${addOnLines.length > 0 ? money(estimatedTotal) : tierPriceLine(selectedTier, form.feeMode)} only if your application is accepted.`
                         : `You will pay ${addOnLines.length > 0 ? money(estimatedTotal) : tierPriceLine(selectedTier, form.feeMode)} when you submit.`}
                     </p>
+                    {form.chargeTiming === 'APPROVAL' && (
+                      <label className="mt-3 flex items-start gap-2 text-sm text-gray-800 dark:text-slate-200">
+                        <input type="checkbox" required checked={cardAuthorized} onChange={(e) => setCardAuthorized(e.target.checked)} className="mt-1" data-testid="apply-card-authorization" />
+                        <span>{cardAuthorizationText({ amount: estimatedTotal, paymentDueDays: form.paymentDueDays, organizationName: form.organizationName })}</span>
+                      </label>
+                    )}
                   </div>
                 )}
               </fieldset>
@@ -207,9 +244,32 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
                 <label htmlFor="email" className={label}>Email</label>
                 <input id="email" type="email" required autoComplete="email" className={input} value={contact.email} onChange={(e) => setContact({ ...contact, email: e.target.value })} />
               </div>
+              {/* Account + marketing opt-ins — independent; applied once the application is submitted (spec 024 phase 3) */}
               <label className="flex items-start gap-2 text-sm text-gray-700 dark:text-slate-300">
-                <input type="checkbox" checked={optInMarketing} onChange={(e) => setOptInMarketing(e.target.checked)} className="mt-1" />
-                Email me about future events from this organizer
+                <input type="checkbox" checked={optInAccount} onChange={(e) => setOptInAccount(e.target.checked)} className="mt-1" data-testid="apply-opt-in-account" />
+                <span>
+                  <span className="font-semibold">Create an account with {form.organizationName || 'the organizer'} to manage your applications</span>
+                  <span className="block text-gray-500 dark:text-slate-400">No password. We&apos;ll email you a sign-in link.</span>
+                </span>
+              </label>
+              <label className="flex items-start gap-2 text-sm text-gray-700 dark:text-slate-300">
+                <input type="checkbox" checked={optInMarketing} onChange={(e) => setOptInMarketing(e.target.checked)} className="mt-1" data-testid="apply-opt-in-marketing" />
+                Email me about future events from {form.organizationName || 'this organizer'}
+              </label>
+              <label className="flex items-start gap-2 text-sm text-gray-700 dark:text-slate-300">
+                <input type="checkbox" required checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-1" data-testid="apply-consent" />
+                <span>
+                  {applyConsentText(form.organizationName)}
+                  {LEGAL_PAGES_ENABLED && (
+                    <>
+                      {' '}
+                      <a href={LEGAL_PATHS.privacy} target="_blank" rel="noreferrer" className="text-brand-link underline" data-testid="apply-privacy-link">
+                        Read the Privacy Policy
+                      </a>
+                      .
+                    </>
+                  )}
+                </span>
               </label>
             </div>
 

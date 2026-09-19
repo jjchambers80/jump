@@ -9,6 +9,7 @@ import { jest } from '@jest/globals';
 import request from 'supertest';
 import sharp from 'sharp';
 import { staffToken, joinOrgByToken, cleanupStaff } from '../helpers/staff.js';
+import { allAcceptances } from '../helpers/legal.js';
 
 const sentEmails = [];
 jest.unstable_mockModule('../../src/config/resend.js', () => ({
@@ -219,7 +220,7 @@ describe('Applications contract (spec 011 phase 1)', () => {
         .send({
           formSlug: 'press-media',
           contact: { email: `PRESS@${TAG}.test`, firstName: 'Pat', lastName: 'Press' },
-          profile: { businessName: 'Retro Weekly' },
+          acceptances: allAcceptances(), profile: { businessName: 'Retro Weekly' },
           answers: { [q['Outlet name']]: 'Retro Weekly', [q['Coverage type']]: 'Radio' },
         });
       expect(res.status).toBe(400);
@@ -227,7 +228,7 @@ describe('Applications contract (spec 011 phase 1)', () => {
 
       const missing = await request(app)
         .post(`/events/${eventId}/applications`)
-        .send({ formSlug: 'press-media', contact: { email: `press@${TAG}.test`, firstName: 'Pat', lastName: 'Press' }, profile: { businessName: 'Retro Weekly' }, answers: {} });
+        .send({ formSlug: 'press-media', contact: { email: `press@${TAG}.test`, firstName: 'Pat', lastName: 'Press' }, acceptances: allAcceptances(), profile: { businessName: 'Retro Weekly' }, answers: {} });
       expect(missing.status).toBe(400);
       expect(missing.body.message).toMatch(/"Outlet name" is required/);
     });
@@ -245,7 +246,7 @@ describe('Applications contract (spec 011 phase 1)', () => {
           JSON.stringify({
             formSlug: 'press-media',
             contact: { email: `PRESS@${TAG}.test`, firstName: 'Pat', lastName: 'Press' },
-            profile: { businessName: 'Retro Weekly', website: 'retroweekly.example', socials: { instagram: '@retroweekly' } },
+            acceptances: allAcceptances(), profile: { businessName: 'Retro Weekly', website: 'retroweekly.example', socials: { instagram: '@retroweekly' } },
             answers: { [q['Outlet name']]: 'Retro Weekly', [q['Coverage type']]: 'Video', [q['Portfolio URL']]: 'retroweekly.example/work', [q['Agree to media policy']]: true },
             optInMarketing: true,
           })
@@ -278,7 +279,7 @@ describe('Applications contract (spec 011 phase 1)', () => {
         .send({
           formSlug: 'press-media',
           contact: { email: `press@${TAG}.test`, firstName: 'Pat', lastName: 'Press' },
-          profile: { businessName: 'Retro Weekly' },
+          acceptances: allAcceptances(), profile: { businessName: 'Retro Weekly' },
           answers: { [q['Outlet name']]: 'Retro Weekly', [q['Coverage type']]: 'Video', [q['Agree to media policy']]: true },
         });
       expect(res.status).toBe(409);
@@ -302,7 +303,7 @@ describe('Applications contract (spec 011 phase 1)', () => {
       await prisma.applicationForm.update({ where: { id: paidForm.id }, data: { status: 'OPEN' } });
       const res = await request(app)
         .post(`/events/${eventId}/applications`)
-        .send({ formSlug: 'vendor-space', tierId: paidForm.tiers[0].id, contact: { email: `vendor@${TAG}.test`, firstName: 'Vee', lastName: 'Vendor' }, profile: { businessName: 'Hidden Block Games' }, answers: {} });
+        .send({ formSlug: 'vendor-space', tierId: paidForm.tiers[0].id, contact: { email: `vendor@${TAG}.test`, firstName: 'Vee', lastName: 'Vendor' }, acceptances: allAcceptances(), profile: { businessName: 'Hidden Block Games' }, answers: {} });
       expect(res.status).toBe(409);
       expect(res.body.message).toMatch(/not available yet/);
     });
@@ -441,7 +442,7 @@ describe('Applications contract (spec 011 phase 1)', () => {
       const q = Object.fromEntries(freeForm.questions.map((x) => [x.label, x.id]));
       const sub = await request(app)
         .post(`/events/${eventId}/applications`)
-        .send({ formSlug: 'press-media', contact: { email: `panelist@${TAG}.test`, firstName: 'Pia', lastName: 'Panel' }, profile: { businessName: 'Pia Talks' }, answers: { [q['Outlet name']]: 'Pia Talks', [q['Coverage type']]: 'Podcast', [q['Agree to media policy']]: true } });
+        .send({ formSlug: 'press-media', contact: { email: `panelist@${TAG}.test`, firstName: 'Pia', lastName: 'Panel' }, acceptances: allAcceptances(), profile: { businessName: 'Pia Talks' }, answers: { [q['Outlet name']]: 'Pia Talks', [q['Coverage type']]: 'Podcast', [q['Agree to media policy']]: true } });
       expect(sub.status).toBe(201);
 
       const res = await request(app).post(`/admin/events/${eventId}/applications/bulk`).set(...auth(organizerToken)).send({ ids: [paidPending.id, sub.body.applicationId, 'missing'], decision: 'APPROVE' });

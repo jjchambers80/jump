@@ -14,7 +14,7 @@
 | File | Purpose |
 |------|---------|
 | `packages/db/prisma/schema.prisma` (`StoreFile`, `StoreFileReference`, `ContentRefKind`) | Org-scoped asset over the shared content-addressed `File` row; optional `Image` row (variants + focal point); references from content records |
-| `packages/db/prisma/migrations/20260930000000_content_files` | Adds both tables |
+| `packages/db/prisma/migrations/20260930200000_content_files` | Adds both tables |
 | `backend/src/services/StoreFileService.js` | `list` (q, type, sort, page), `get` (resolved references), `createFromBuffer`, `createFromUrl`, `update`, `remove`, `removeMany`, `syncReferences(kind, targetId, fields, orgId)`, `getPublic`, `getData`, `url`, `serialize`; exports `displayName`, `fileIdsInHtml` |
 | `backend/src/utils/safeFetch.js` | `fetchPublicResource(url, { maxBytes })` — SSRF-guarded download for *Upload from URL*: http/https only, no credentials, DNS-resolved address must not be loopback / private / link-local / metadata, re-checked on every redirect (max 3), 15 s timeout, streamed size cap |
 | `backend/src/utils/fileLimits.js` | `MAX_FILE_MB = 20`, `MAX_FILES_PER_UPLOAD = 10`, name / alt limits, allowed MIME → extension (mirrored in `frontend/src/lib/content.ts`) |

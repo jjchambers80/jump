@@ -4,6 +4,7 @@
 // and the form editor's per-tier "Add-ons offered".
 
 import { expect, test, type Page } from '@playwright/test';
+import { LEGAL_VERSIONS, mockLegalVersions } from './helpers/legal';
 import { signInAsStaff } from './helpers/session';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
@@ -178,6 +179,7 @@ async function mockAdmin(page: Page, baseURL: string, role: 'ADMIN' | 'ORGANIZER
 // ─── Public ──────────────────────────────────────────────────────────────────
 
 test('apply form: picker appears with the chosen tier, total line updates, submission carries the lines', async ({ page }) => {
+  await mockLegalVersions(page, API);
   await page.route(`${API}/events/${EVENT_ID}`, (route) => route.fulfill(json(event)));
   await page.route(`${API}/events/${EVENT_ID}/applications/forms/vendor-booth`, (route) => route.fulfill(json(publicForm)));
   let payload: Record<string, unknown> | null = null;
@@ -216,9 +218,26 @@ test('apply form: picker appears with the chosen tier, total line updates, submi
   await page.getByLabel('Last name').fill('Vendor');
   await page.getByRole('textbox', { name: 'Email' }).fill('vee@hiddenblock.example');
   await page.getByLabel('Business or outlet name').fill('Hidden Block Games');
+  // Spec 024 phase 3: the card authorization names the estimated total and the pay-now window
+  const authorization = page.getByTestId('apply-card-authorization');
+  await expect(authorization).toBeVisible();
+  await expect(page.getByText(/charge \$461\.47 to the card I save now, only if my application is approved/)).toBeVisible();
+  await page.getByTestId('apply-consent').check();
+  await page.getByRole('button', { name: 'Continue to save a card' }).click();
+  await expect(page.getByText('Please authorize the charge')).toBeVisible();
+  await authorization.check();
   await page.getByRole('button', { name: 'Continue to save a card' }).click();
   await expect.poll(() => payload).not.toBeNull();
-  expect(payload).toMatchObject({ tierId: boothTier.id, addOns: [{ addOnId: POWER.id, quantity: 1 }, { addOnId: BADGE.id, quantity: 2 }] });
+  expect(payload).toMatchObject({
+    tierId: boothTier.id,
+    addOns: [{ addOnId: POWER.id, quantity: 1 }, { addOnId: BADGE.id, quantity: 2 }],
+    optInAccount: true,
+    acceptances: [
+      { document: 'TERMS', version: LEGAL_VERSIONS.terms },
+      { document: 'PRIVACY', version: LEGAL_VERSIONS.privacy },
+      { document: 'CARD_AUTHORIZATION', version: LEGAL_VERSIONS.cardAuthorization },
+    ],
+  });
 });
 
 test('status page itemises the tier and add-on lines', async ({ page }) => {
