@@ -23,6 +23,8 @@ Complete reference for all environment variables used by the Jump platform.
 | `RATE_LIMIT_<NAME>_LIMIT`, `RATE_LIMIT_<NAME>_WINDOW_MS` | No | Per-limiter overrides (spec 020): `BASELINE` (600 / 5 min, skips `/health`, `/metrics`, `/webhooks/*`), `ORDER_CREATE` (10 created orders / 15 min per IP), `ORDER_LOOKUP` (10 / 15 min), `ORDER_VERIFY` (60 / 15 min), `SCANNER_AUTH` (10 failed scanner sign-ins / 15 min), `DOMAIN_RESOLVE` (120 / min), `BUYER_AUTH_REQUEST` (20 / h), `APPLICATION_SUBMIT` (30 / h). Keyed on the signed `X-Jump-Client-Ip`, else `req.ip`; refused requests count in `rate_limited_total{route}` |
 | `RATE_LIMIT_ENFORCE_IN_TESTS` | No | `1` makes the limiters real under `NODE_ENV=test` (the abuse-protection suite sets it); otherwise every limiter is a pass-through in tests |
 | `ORDER_MAX_PENDING_PER_CONTACT` | No | Open (PENDING) ticket checkouts one email may hold on one event before `POST /orders` answers 409 (default 3) |
+| `LEGAL_ACCEPTANCE_REQUIRED` | No | `true` makes `POST /orders` refuse a checkout without current `acceptances` (400 `LEGAL_ACCEPTANCE_REQUIRED`). Default off until the legal pages go live (spec 023 phase 1); a stale version is always refused (`LEGAL_VERSION_STALE`). The apply form always requires them |
+| `LEGAL_IP_SALT` | No | Salt for the hashed IP on `LegalAcceptance` rows; falls back to `AUTH_SECRET`. The raw IP is never stored |
 | `ORDER_SWEEP_INTERVAL_MS`, `ORDER_SWEEP_GRACE_MS` | No | Abandoned-checkout sweep: how often (default 5 min; first run 60 s after boot) and how long past the 30-minute Checkout session a PENDING order may sit before Stripe is asked (default 5 min); expired → `failOrder` releases the hold, paid-but-missed → completed |
 | `STRIPE_CONNECT_ENABLED` | No | `true` turns on Stripe Connect payouts (spec 010 phase 2): organizations with an active connected account receive destination charges. Default off — the migration and code deploy dark |
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | With Connect | Signing secret for the *Connect* webhook endpoint (`POST /webhooks/stripe/connect`, "listen to events on connected accounts"). Different from `STRIPE_WEBHOOK_SECRET`; unset = unverified (dev/test only) |
@@ -46,6 +48,7 @@ Complete reference for all environment variables used by the Jump platform.
 | `AUTH_SECRET` | Yes | JWT signing secret. **Must match backend value exactly** |
 | `NEXT_PUBLIC_API_URL` | Yes | Backend API base URL. `http://localhost:3000` locally, Railway domain in production |
 | `NEXT_PUBLIC_BILLING_ENABLED` | No | `true` shows Settings › **Plan** in the settings nav (must match the backend's `BILLING_ENABLED`). Build-time |
+| `NEXT_PUBLIC_LEGAL_PAGES_ENABLED` | No | `true` renders `/legal/<slug>` from `frontend/content/legal/<slug>.md` and links the consent texts on checkout / apply to `/legal/terms` and `/legal/privacy` (spec 023). Default off: those paths 404 and the texts show without links. Build-time |
 | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | With billing | Jump's account publishable key (`pk_...`); mounts embedded Checkout on the subscribe step and Settings › Plan. Build-time |
 | `AUTH_RESEND_KEY` | No | Resend key for Auth.js magic link emails |
 | `AUTH_GOOGLE_ID` | No | Google OAuth client ID (for Google sign-in) |
