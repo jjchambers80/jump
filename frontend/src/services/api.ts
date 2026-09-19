@@ -274,8 +274,6 @@ export interface StorefrontPreferences {
   /** Homepage <title> / meta description; null falls back to the store name / none. */
   seoTitle: string | null;
   seoDescription: string | null;
-  /** Redirect visitors to the language matching their browser when available. */
-  autoRedirectLanguage: boolean;
 }
 
 /** Partial body for PATCH /admin/online-store/preferences. `password: null` clears it. */

@@ -69,7 +69,6 @@ describe('StorefrontPreferencesService.update', () => {
       storefrontMessage: null,
       seoTitle: null,
       seoDescription: null,
-      autoRedirectLanguage: false,
       ...data,
     }));
   });
@@ -117,7 +116,6 @@ describe('StorefrontPreferencesService.update', () => {
       storefrontMessage: 'Back soon',
       seoTitle: null,
       seoDescription: null,
-      autoRedirectLanguage: false,
     });
     expect(result).not.toHaveProperty('storefrontPasswordHash');
   });
@@ -152,7 +150,6 @@ describe('StorefrontPreferencesService.update', () => {
 
 describe('validateUpdateStorefrontPreferences', () => {
   it('accepts a partial body of known fields', () => {
-    expect(validate({ autoRedirectLanguage: true })).toBeUndefined();
     expect(validate({ password: null, storefrontPrivate: false })).toBeUndefined();
     expect(validate({ seoTitle: null, seoDescription: 'x'.repeat(160) })).toBeUndefined();
   });

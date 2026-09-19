@@ -168,14 +168,12 @@ model Organization {
   // Online Store › Preferences. Private mode hides the storefront behind a
   // password (scrypt hash; never returned by the API) with an optional message
   // for visitors. seoTitle/seoDescription are the storefront homepage's
-  // <title> and meta description. autoRedirectLanguage is stored for the
-  // day the storefront is localized; nothing reads it yet.
+  // <title> and meta description.
   storefrontPrivate         Boolean            @default(false)
   storefrontPasswordHash    String?
   storefrontMessage         String?
   seoTitle                  String?
   seoDescription            String?
-  autoRedirectLanguage      Boolean            @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

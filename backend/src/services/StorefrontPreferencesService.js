@@ -1,6 +1,5 @@
-// Online Store › Preferences: store access (private mode + password), the
-// storefront homepage's search engine listing, and automatic language
-// redirection. Settings live on Organization; the password is stored as a
+// Online Store › Preferences: store access (private mode + password) and the
+// storefront homepage's search engine listing. Settings live on Organization; the password is stored as a
 // scrypt hash and never leaves the server.
 //
 // Visitors unlock a private storefront with POST /organizations/:id/storefront-access
@@ -58,7 +57,6 @@ export function serializePreferences(org) {
     storefrontMessage: org.storefrontMessage,
     seoTitle: org.seoTitle,
     seoDescription: org.seoDescription,
-    autoRedirectLanguage: org.autoRedirectLanguage,
   };
 }
 
@@ -93,8 +91,6 @@ class StorefrontPreferencesService {
       patch.storefrontMessage = optionalText(data.storefrontMessage);
     if (data.seoTitle !== undefined) patch.seoTitle = optionalText(data.seoTitle);
     if (data.seoDescription !== undefined) patch.seoDescription = optionalText(data.seoDescription);
-    if (data.autoRedirectLanguage !== undefined)
-      patch.autoRedirectLanguage = data.autoRedirectLanguage;
 
     const willBePrivate = patch.storefrontPrivate ?? existing.storefrontPrivate;
     const willHavePassword =
