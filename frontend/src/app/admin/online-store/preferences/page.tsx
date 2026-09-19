@@ -1,9 +1,9 @@
 'use client';
 
 // Online store › Preferences — /admin/online-store/preferences
-// Store access (private mode + password + visitor message) and the storefront
-// homepage's search engine listing for the organization picked in the header
-// org switcher. Each section saves on
+// Store access (private mode + password + visitor message), the storefront
+// homepage's search engine listing, and automatic language redirection for
+// the organization picked in the header org switcher. Each section saves on
 // its own through PATCH /admin/online-store/preferences (partial).
 
 import { FormEvent, useCallback, useEffect, useState } from 'react';
@@ -105,6 +105,11 @@ export default function PreferencesPage() {
   const [seoError, setSeoError] = useState<string | null>(null);
   const [seoSaved, setSeoSaved] = useState(false);
 
+  // Automatic redirection
+  const [redirectSaving, setRedirectSaving] = useState(false);
+  const [redirectError, setRedirectError] = useState<string | null>(null);
+  const [redirectSaved, setRedirectSaved] = useState(false);
+
   const applyPrefs = useCallback((next: StorefrontPreferences) => {
     setPrefs(next);
     setPrivateMode(next.storefrontPrivate);
@@ -124,8 +129,10 @@ export default function PreferencesPage() {
     setLoadError(null);
     setAccessError(null);
     setSeoError(null);
+    setRedirectError(null);
     setAccessSaved(false);
     setSeoSaved(false);
+    setRedirectSaved(false);
     try {
       applyPrefs(await api.get<StorefrontPreferences>('/admin/online-store/preferences'));
     } catch (err: any) {
@@ -193,6 +200,24 @@ export default function PreferencesPage() {
       setSeoError(errorMessage(err, 'Failed to save the search engine listing'));
     } finally {
       setSeoSaving(false);
+    }
+  };
+
+  const toggleRedirect = async (next: boolean) => {
+    if (!prefs) return;
+    const previous = prefs.autoRedirectLanguage;
+    setPrefs({ ...prefs, autoRedirectLanguage: next });
+    setRedirectSaving(true);
+    setRedirectError(null);
+    setRedirectSaved(false);
+    try {
+      await patch({ autoRedirectLanguage: next });
+      setRedirectSaved(true);
+    } catch (err: any) {
+      setPrefs((current) => (current ? { ...current, autoRedirectLanguage: previous } : current));
+      setRedirectError(errorMessage(err, 'Failed to save automatic redirection'));
+    } finally {
+      setRedirectSaving(false);
     }
   };
 
@@ -411,6 +436,34 @@ export default function PreferencesPage() {
           </div>
         </form>
 
+        {/* Automatic redirection */}
+        <section aria-labelledby="redirection-heading" data-testid="automatic-redirection" className={card}>
+          <div>
+            <h2 id="redirection-heading" className="text-base font-semibold text-gray-900 dark:text-white">
+              Automatic redirection
+            </h2>
+            <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
+              Send visitors to the version of your store that fits them.
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <label htmlFor="auto-redirect-language" className={label}>
+              Language
+              <span className="mt-0.5 block text-xs font-normal text-gray-500 dark:text-slate-400">
+                Redirect visitors to the language that matches their browser when available.
+              </span>
+            </label>
+            <Toggle
+              id="auto-redirect-language"
+              checked={prefs.autoRedirectLanguage}
+              onChange={toggleRedirect}
+              disabled={redirectSaving}
+              label="Language"
+            />
+          </div>
+          <SectionStatus error={redirectError} saved={redirectSaved} />
+        </section>
       </div>
     </div>
   );

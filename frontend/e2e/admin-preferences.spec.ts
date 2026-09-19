@@ -1,8 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 import { signInAsStaff } from './helpers/session';
 
-// Online store › Preferences: store access (private mode + password + message)
-// and the homepage search engine listing.
+// Online store › Preferences: store access (private mode + password + message),
+// homepage search engine listing, automatic language redirection.
 
 const API = 'http://localhost:3002';
 const ORG_ID = 'org-prefs';
@@ -13,6 +13,7 @@ interface Prefs {
   storefrontMessage: string | null;
   seoTitle: string | null;
   seoDescription: string | null;
+  autoRedirectLanguage: boolean;
 }
 
 const DEFAULTS: Prefs = {
@@ -21,6 +22,7 @@ const DEFAULTS: Prefs = {
   storefrontMessage: null,
   seoTitle: null,
   seoDescription: null,
+  autoRedirectLanguage: false,
 };
 
 async function mockPreferencesApi(page: Page, initial: Partial<Prefs> = {}) {
@@ -76,7 +78,7 @@ test.beforeEach(async ({ page, baseURL }) => {
   await signInAsStaff(page, { id: 'prefs-admin', email: 'prefs-admin@test.com', role: 'ADMIN' }, baseURL!);
 });
 
-test('Preferences link sits under Online store and opens the two sections', async ({ page }) => {
+test('Preferences link sits under Online store and opens the three sections', async ({ page }) => {
   await mockPreferencesApi(page);
   await page.goto('/admin/online-store');
 
@@ -104,6 +106,12 @@ test('Preferences link sits under Online store and opens the two sections', asyn
   await expect(seo.getByLabel('Homepage title')).toBeVisible();
   await expect(seo.getByLabel('Meta description')).toBeVisible();
   expect((await seo.boundingBox())!.y).toBeGreaterThan((await access.boundingBox())!.y);
+
+  const redirect = page.getByTestId('automatic-redirection');
+  await expect(redirect.getByRole('heading', { name: 'Automatic redirection' })).toBeVisible();
+  await expect(redirect.getByRole('switch', { name: 'Language' })).toHaveAttribute('aria-checked', 'false');
+  await expect(redirect.getByText('Redirect visitors to the language that matches their browser when available.')).toBeVisible();
+  expect((await redirect.boundingBox())!.y).toBeGreaterThan((await seo.boundingBox())!.y);
 });
 
 test('private mode needs a password, then saves it with the visitor message', async ({ page }) => {
@@ -176,6 +184,20 @@ test('search engine listing saves the homepage title and meta description with a
     { seoTitle: 'Retro Nights in Raleigh', seoDescription: 'Tickets for retro gaming nights across the Triangle.' },
   ]);
   await expect(page.getByTestId('seo-save')).toBeDisabled();
+});
+
+test('language redirection toggle saves immediately', async ({ page }) => {
+  const { patches } = await mockPreferencesApi(page);
+  await page.goto('/admin/online-store/preferences');
+
+  const toggle = page.getByRole('switch', { name: 'Language' });
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByTestId('automatic-redirection').getByRole('status')).toHaveText('Saved');
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-checked', 'false');
+  await expect.poll(() => patches.length).toBe(2);
+  expect(patches).toEqual([{ autoRedirectLanguage: true }, { autoRedirectLanguage: false }]);
 });
 
 test('server-side validation errors surface in the section', async ({ page }) => {

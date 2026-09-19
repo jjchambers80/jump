@@ -13,6 +13,7 @@ const FIELDS = new Set([
   'storefrontMessage',
   'seoTitle',
   'seoDescription',
+  'autoRedirectLanguage',
 ]);
 
 function checkOptionalText(errors, body, field, max) {
@@ -37,8 +38,10 @@ export function validateUpdateStorefrontPreferences(req, res, next) {
     errors.push({ field: 'body', message: 'At least one field is required' });
   }
 
-  if (body.storefrontPrivate !== undefined && typeof body.storefrontPrivate !== 'boolean') {
-    errors.push({ field: 'storefrontPrivate', message: 'storefrontPrivate must be a boolean' });
+  for (const field of ['storefrontPrivate', 'autoRedirectLanguage']) {
+    if (body[field] !== undefined && typeof body[field] !== 'boolean') {
+      errors.push({ field, message: `${field} must be a boolean` });
+    }
   }
 
   if (body.password !== undefined && body.password !== null) {

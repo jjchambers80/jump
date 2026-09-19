@@ -10,7 +10,7 @@
 1. **Store access** — *Private mode* toggle, store *password*, and a *custom message to your visitors*. While private, every public storefront surface — the organization page (`/organizations/:orgId`, `/` on a custom domain), event pages, checkout, venue pages and application forms — shows a branded password page instead; a visitor who enters the password gets a token that unlocks the store on that browser. Events of private stores are also hidden from the public `/events` discovery list.
 2. **Social sharing image and SEO** — *Homepage title* and *Meta description* for the storefront homepage, with a Google-style preview. The cover image from Online store › Branding is used as the `og:image`.
 
-Each section saves on its own through one partial `PATCH`. (A third section, *Automatic redirection › Language*, is a separate PR — see Related Features.)
+Each section saves on its own through one partial `PATCH`. The third section, *Automatic redirection › Language*, is documented in [Storefront Language Redirection](storefront-language-redirection.md).
 
 ## Key Files
 
