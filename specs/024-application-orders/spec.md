@@ -130,6 +130,7 @@ The apply form's "Your details" section offers: **Create an account with {organi
 - **FR-011** `/admin/orders/[orderId]` renders application orders: lines, payment (source / method / reference / intent link), refund history, refund action (ADMIN, amount-based), an **Application** panel (form, tier, review status, payment chip, business name, link to the review page). Ticket orders render as today.
 - **FR-012** The order number appears on the application review page, the Participants / per-event Applications lists (column, linked), the applicant status page, the buyer account Applications section, and in the `RECEIVED`, `APPROVED`, `PAYMENT_DUE`, `OFFLINE_PAID` template context (`{{orderRef}}`).
 - **FR-013** Customer detail shows one orders table with kind; the buyer account page's orders list includes application orders.
+- **FR-013a** A receipt email is sent when an application order is paid (Stripe or offline): order number, lines, totals, payment method, link to the status page. Same shell as the ticket confirmation; no tickets; none for waived balances or FREE forms.
 
 **Reporting**
 - **FR-014** `CustomerService`, dashboard stats, `EventService.getEventAnalytics` and `TaxService.collectedReport` query `Order` only; `PAID_APPLICATION_STATUSES` is deleted; response shapes are unchanged (`applicationCount`, `revenue.applications`, tax `source`).
@@ -166,5 +167,5 @@ The apply form's "Your details" section offers: **Create an account with {organi
 - Production holds only smoke-test application rows (2026-09-17); the backfill is still written to be correct for any volume and re-runnable.
 - `APPLICATIONS_PAYMENTS_ENABLED` gates nothing here; FREE forms are simply orderless.
 - Legal text is not part of this spec. `LEGAL_VERSIONS` start at `2026-09-19-draft`; the checkbox labels are engineering copy to be replaced by counsel's wording (spec 023). Because a consent row without a readable document is weak evidence, the version bump and the page publication happen together in spec 023 phase 1; this spec builds the capture so that day is a config change.
-- Phasing (see plan): **phase 1** ledger migration and services, reports collapse (backend, no UI change beyond serializers); **phase 2** Orders surface, order detail, order number everywhere, CSV, customer / buyer pages; **phase 3** apply-form account, marketing provenance, `LegalAcceptance` capture on apply and checkout. Each ships alone.
+- Phasing (see plan): **phase 1** ledger migration and services, reports collapse (backend, no UI change beyond serializers); **phase 2** Orders surface, order detail, order number everywhere, CSV, customer / buyer pages, receipt email; **phase 3** apply-form account, marketing provenance, `LegalAcceptance` capture on apply and checkout. Each ships alone.
 - Spec numbers 013–017 remain reserved; 023 is legal compliance; this is 024.

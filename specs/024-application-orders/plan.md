@@ -226,6 +226,14 @@ Inside the existing transaction, right after `application.create` (the order nee
 
 ---
 
+### 2.11 Receipt email for application orders (phase 2)
+
+When an application order reaches `COMPLETED` through Stripe or an offline payment, `EmailService.sendApplicationReceipt(order)` sends a receipt from the same shell as the ticket order confirmation (`sendOrderConfirmation`): order number, event, organizer, business name, lines (tier, add-ons, adjustments) with buyer totals, fees and tax as shown at checkout, payment method (card brand / last 4 from the payment intent, or the offline method and reference), refund policy sentence, and a link to the application status page (or the buyer account when one exists). No tickets, no QR. A waived balance sends no receipt (nothing was paid). Refunds on application orders reuse the ticket-order refund email path (`sendRefundNotification`) with the application wording.
+
+Trigger points: `_markPaid` (approval charge, pay-now, charge-at-submission webhook) and `recordOfflinePayment`, fire-and-forget after the transaction like the ticket path. The existing organizer-template emails (`APPROVED`, `OFFLINE_PAID`) are unchanged; the receipt is Jump's transactional email and is not editable per organization. Contract test: one receipt per completion (idempotent on `Order.status`), none for waived, none for FREE forms.
+
+---
+
 ## 3. Files
 
 ### Phase 1 — ledger
@@ -268,6 +276,7 @@ Inside the existing transaction, right after `application.create` (the order nee
 | `frontend/src/components/applications/SubmissionsTable.tsx`, `admin/events/[eventId]/applications/[applicationId]/page.tsx`, `events/[eventId]/apply/status/[applicationId]/page.tsx`, `organizations/[orgId]/account/ApplicationsSection.tsx`, `admin/customers/[contactId]/page.tsx` | order number / kind |
 | `backend/src/config/applications.js`, `ApplicationTemplateService.js` | `{{orderRef}}` |
 | `frontend/src/lib/orders.ts` | new types |
+| `backend/src/services/EmailService.js`, `ApplicationPaymentService._markPaid`, `ApplicationService.recordOfflinePayment` | §2.11 receipt email |
 
 ### Phase 3 — account, subscription, consent
 
@@ -310,7 +319,7 @@ Inside the existing transaction, right after `application.create` (the order nee
 
 Phase 1 — contract: `applicationOrders.test.js` (order at submission PAID / none FREE; every `_transition` mapping incl. DRAFT replacement → `CANCELLED`; line rewrite on add-on edit, tier change, adjustment, waive with exact totals; `PaymentTransaction` on approval charge, decline, pay-now, offline; refunds partial / full / manual / external webhook and both statuses; customers / analytics / dashboard / tax over one ledger — port the assertions of `transactionsReporting.test.js` and delete it), `applicationOrdersBackfill.test.js` (script vs migration equivalence, idempotence). Unit: `orderLineService.test.js` (buyer line totals under PASS / ABSORB, allocation remainder on the tier line, adjustment floor), `applicationOrderStatus.test.js`. Existing `applicationPayments`, `applicationCorrections`, `applicationsAddOns`, `applicationsPhase3`, `participants*`, `orders`, `payments` tests: fixtures move from application columns to order rows; assertions unchanged where the serialized shape is unchanged. E2E: `applications-payments.spec.ts`, `applications-corrections.spec.ts`, `transactions-reporting.spec.ts` (renamed `application-orders-reporting.spec.ts`) re-pointed at the new mocks.
 
-Phase 2 — contract: `ordersList.test.js` (every search key incl. Stripe ids, kind / status / date filters, default exclusion, org scope, SYSTEM_ADMIN column, CSV rows + refund lines, pagination), order detail application branch, `GET /me/orders`. E2E: `admin-orders.spec.ts` (toggle, list, detail, refund dialog on an application order), updates to `applications*.spec.ts` for the order-number column.
+Phase 2 — contract: `ordersList.test.js` (every search key incl. Stripe ids, kind / status / date filters, default exclusion, org scope, SYSTEM_ADMIN column, CSV rows + refund lines, pagination), order detail application branch, `GET /me/orders`, `applicationReceipt.test.js` (§2.11). E2E: `admin-orders.spec.ts` (toggle, list, detail, refund dialog on an application order), updates to `applications*.spec.ts` for the order-number column.
 
 Phase 3 — contract: `applyOptIns.test.js` (FREE applied at submit; PAID applied after card / after pay-at-submission; abandoned DRAFT never applied; existing account untouched; WELCOME token + `accountUrl` in RECEIVED), `legalAcceptance.test.js` (rows on apply and checkout with hashed IP, no raw IP anywhere; stale version 400 on both; card authorization presented text equals the server template; `GET /legal/versions`). Unit: `legalAcceptanceService.test.js`. E2E: `apply.spec.ts` checkboxes and link visibility under the flag; `checkout.spec.ts` sends acceptances.
 
@@ -344,12 +353,12 @@ Run: `cd backend && npm test`, `cd frontend && npm run test:unit && npx tsc --no
 
 ---
 
-## 8. Open questions
+## 8. Open questions — resolved 2026-09-19
 
-1. **Prod backfill dry run** — who runs the pre-merge diff against a prod copy (§6.1)? Proposed: same session that merges phase 1, from `pg_dump` via Railway CLI.
-2. **`GET /admin/orders` default status set** — hide only `FAILED` + `CANCELLED` (plan) or also `PENDING` ticket orders? Plan keeps them visible until spec 020's sweep lands; revisit if the list is noisy.
-3. **Order confirmation email for application orders** — none planned (application templates carry `orderRef`); confirm no separate receipt is wanted beyond Stripe's.
-4. **Spec 023 ownership** — this plan builds LR-05 (model + apply / checkout capture) and LR-07 (provenance). 023 should be updated to reference 024 rather than re-plan them.
+1. **Prod backfill dry run** — owned by the session that builds phase 1, before the PR is marked ready: `railway run pg_dump` of prod into a local database, run `db:backfill:024`, diff counts (`Order kind=APPLICATION` = PAID-form applications; `Refund` = old `Refund` + old `ApplicationRefund`; `PaymentTransaction` = ticket rows + applications with an intent or an offline payment), record the numbers in the PR description.
+2. **`GET /admin/orders` default status set** — hide `FAILED` + `CANCELLED` only, as planned; revisit if abandoned ticket checkouts make the list noisy before spec 020's sweep lands.
+3. **Receipt email for application orders** — **yes** (user decision). See §2.11; phase 2.
+4. **Spec 023 ownership** — the phase 3 PR edits `specs/023-legal-compliance/spec.md` to state that LR-05 (model + apply / checkout capture) and LR-07 (provenance) are built by 024 and are not re-planned there.
 
 ---
 
