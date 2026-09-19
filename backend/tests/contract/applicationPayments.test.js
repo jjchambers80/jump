@@ -303,15 +303,17 @@ describe('Application payments contract (spec 011 phase 2)', () => {
 
     const tier = await prisma.applicationTier.findUnique({ where: { id: row.tierId } });
     expect(tier).toMatchObject({ quantityApproved: 1, quantityReserved: 0 });
-    expect(sentEmails).toHaveLength(1);
-    expect(sentEmails[0].subject).toMatch(/approved/);
+    // Spec 024 phase 2: Jump's receipt precedes the organizer's approval email.
+    expect(sentEmails.map((e) => e.subject)).toEqual([expect.stringMatching(/^Receipt for .* \(JMP-[A-Z2-9]{6}\)$/), expect.stringMatching(/approved/)]);
+    expect(sentEmails[0].text).toContain(`Order number: ${res.body.orderRef}`);
+    expect(sentEmails[0].text).toContain(`Total paid: $${res.body.amounts.applicantPays.toFixed(2)}`);
     const decision = res.body.decisions.find((d) => d.action === 'APPROVED');
     expect(decision.emailSubject).toMatch(/approved/);
 
     // payment_intent.succeeded after the fact is idempotent (no second email)
     const hook = await webhook({ id: 'evt_pi_ok', type: 'payment_intent.succeeded', data: { object: { id: `pi_${TAG}_1`, status: 'succeeded', metadata: { applicationId: cardApp, purpose: 'approval' } } } });
     expect(hook.status).toBe(200);
-    expect(sentEmails).toHaveLength(1);
+    expect(sentEmails).toHaveLength(2); // receipt + approval from before; nothing new
     expect((await appRow(cardApp)).paymentStatus).toBe('PAID');
   });
 
@@ -366,8 +368,7 @@ describe('Application payments contract (spec 011 phase 2)', () => {
     expect(after).toMatchObject({ status: 'APPROVED', paymentStatus: 'PAID', capacitySlot: 'APPROVED', stripePaymentIntentId: `pi_${TAG}_paynow`, paymentDueAt: null, overdue: false });
     const tierRow = await prisma.applicationTier.findUnique({ where: { id: after.tierId } });
     expect(tierRow).toMatchObject({ quantityApproved: 2, quantityReserved: 0 });
-    expect(sentEmails).toHaveLength(1);
-    expect(sentEmails[0].subject).toMatch(/approved/);
+    expect(sentEmails.map((e) => e.subject)).toEqual([expect.stringMatching(/^Receipt for/), expect.stringMatching(/approved/)]);
 
     // Pay again → 409, nothing due
     const again = await request(app).post(`/applications/${dueApp}/pay?token=${token}`);
@@ -452,7 +453,7 @@ describe('Application payments contract (spec 011 phase 2)', () => {
     const paid = await appRow(sponsorApp);
     expect(paid).toMatchObject({ status: 'SUBMITTED', paymentStatus: 'PAID', capacitySlot: 'NONE', stripePaymentIntentId: `pi_${TAG}_sponsor` });
     expect(paid.submittedAt).toBeTruthy();
-    expect(sentEmails.map((e) => e.subject)).toEqual([expect.stringMatching(/received your application/)]);
+    expect(sentEmails.map((e) => e.subject)).toEqual([expect.stringMatching(/^Receipt for/), expect.stringMatching(/received your application/)]);
 
     mockIntentsCreate.mockClear();
     const res = await request(app).post(`${adminBase()}/applications/${sponsorApp}/decision`).set(...auth(organizerToken)).send({ decision: 'APPROVE' });

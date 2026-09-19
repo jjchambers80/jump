@@ -21,6 +21,8 @@ import addOnService from './AddOnService.js';
 import applicationTemplateService from './ApplicationTemplateService.js';
 import paymentSettingsService, { stripeMode } from './PaymentSettingsService.js';
 import { statusUrlFor } from './applicationLinks.js';
+import { buyerAccountUrl } from '../utils/storefrontUrl.js';
+import emailService from './EmailService.js';
 import { ORDER_INCLUDE, adjustmentItems, buyerLineTotal, tierItem } from './OrderLineService.js';
 import { orderStatusFor } from './applicationOrderStatus.js';
 import logger from '../utils/logger.js';
@@ -348,6 +350,13 @@ class ApplicationPaymentService {
    * paymentStatus. Returns true when the transition happened now.
    */
   async _markPaid(applicationId, paymentIntentId, { source }) {
+    const changed = await this._markPaidTx(applicationId, paymentIntentId, { source });
+    // The receipt (spec 024 phase 2) follows the transition, once, after commit.
+    if (changed) await this.sendReceipt(applicationId);
+    return changed;
+  }
+
+  async _markPaidTx(applicationId, paymentIntentId, { source }) {
     return prisma.$transaction(async (tx) => {
       const rows = await tx.$queryRaw`SELECT * FROM "Application" WHERE "id" = ${applicationId} FOR UPDATE`;
       const application = rows[0];
@@ -647,6 +656,42 @@ class ApplicationPaymentService {
 
   async _sendReceived(applicationId) {
     return this._send(applicationId, 'RECEIVED');
+  }
+
+  /**
+   * Spec 024 phase 2: Jump's receipt for a paid application order, sent once
+   * per completion (callers run it only when the PAID transition happened).
+   * Card details come from the payment intent when Stripe can be asked;
+   * offline payments describe the method. Never throws.
+   */
+  async sendReceipt(applicationId) {
+    try {
+      const application = await this._load(applicationId);
+      const order = application?.order;
+      if (!order || order.status !== 'COMPLETED' || Number(order.totalAmount) <= 0) return false;
+      const organization = application.event?.venue?.organization || {};
+      const taxInclusive = organization.taxInclusivePricing === true;
+      const addOns = (order.addOns || []).map((l) => ({ label: `${l.addOn?.name ?? 'Add-on'} ×${l.quantity}`, amount: buyerLineTotal(l, order.feeMode, { taxInclusive }) }));
+      const addOnTotal = addOns.reduce((sum, l) => sum + l.amount, 0);
+      const tier = tierItem(order);
+      const adjusted = adjustmentItems(order).some((i) => i.kind === 'ADJUSTMENT');
+      const lines = [
+        { label: `${application.form?.name ?? 'Application'}${tier?.description ? ` — ${tier.description}` : ''}${adjusted ? ' (adjusted)' : ''}`, amount: Math.round((Number(order.totalAmount) - addOnTotal) * 100) / 100 },
+        ...addOns,
+      ];
+      let paymentMethod = null;
+      if (order.payment?.source !== 'OFFLINE' && order.payment?.stripePaymentIntentId) {
+        const intent = await stripe.paymentIntents.retrieve(order.payment.stripePaymentIntentId, { expand: ['payment_method'] }).catch(() => null);
+        const card = intent?.payment_method?.card;
+        if (card?.brand && card?.last4) paymentMethod = `${card.brand.charAt(0).toUpperCase()}${card.brand.slice(1)} •••• ${card.last4}`;
+      }
+      const statusUrl = await statusUrlFor(application);
+      const accountUrl = application.contact?.accountCreatedAt ? await buyerAccountUrl(application.organizationId) : null;
+      return await emailService.sendApplicationReceipt(application, { statusUrl, accountUrl, paymentMethod, lines });
+    } catch (error) {
+      logger.error('Application receipt failed', { applicationId, error: error.message });
+      return false;
+    }
   }
 
   /** Decision emails from the payment path; the raw status link is rebuilt from the id. */

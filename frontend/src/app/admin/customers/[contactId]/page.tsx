@@ -17,6 +17,9 @@ interface OrderEvent {
 interface CustomerOrder {
   id: string;
   orderRef: string;
+  /** TICKET or APPLICATION (spec 024). */
+  kind?: 'TICKET' | 'APPLICATION';
+  applicationId?: string | null;
   totalAmount: number;
   quantity: number;
   status: string;
@@ -41,6 +44,8 @@ interface CustomerApplication {
   createdAt: string;
   event: OrderEvent;
   detailUrl: string;
+  orderId?: string;
+  orderRef?: string;
 }
 
 interface CustomerDetail {
@@ -280,6 +285,11 @@ export default function CustomerDetailPage() {
                       <div className="flex items-center gap-2 mb-0.5">
                         <span className="text-sm font-medium text-gray-900 dark:text-white">#{order.orderRef}</span>
                         <StatusBadge status={order.status} />
+                        {order.kind === 'APPLICATION' && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300" data-testid="customer-order-kind">
+                            Application
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-gray-500 dark:text-slate-400 truncate">
                         {order.event.name} &middot; {formatDate(order.event.date)}
@@ -290,7 +300,7 @@ export default function CustomerDetailPage() {
                     <div className="text-right flex-shrink-0">
                       <p className="text-sm font-medium text-gray-900 dark:text-white">{formatCurrency(order.totalAmount)}</p>
                       <p className="text-xs text-gray-500 dark:text-slate-400">
-                        {order.ticketCount} ticket{order.ticketCount !== 1 ? 's' : ''}
+                        {order.kind === 'APPLICATION' ? 'Application' : `${order.ticketCount} ticket${order.ticketCount !== 1 ? 's' : ''}`}
                       </p>
                     </div>
 

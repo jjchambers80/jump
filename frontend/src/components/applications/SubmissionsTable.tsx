@@ -565,6 +565,13 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
                     ) : (
                       <span className="text-xs text-gray-500 dark:text-slate-400">—</span>
                     )}
+                    {row.orderId && row.orderRef && (
+                      <div className="mt-1">
+                        <Link href={`/admin/orders/${row.orderId}`} className="font-mono text-xs text-indigo-600 hover:underline dark:text-indigo-400" data-testid={`application-order-${row.id}`} onClick={(e) => e.stopPropagation()}>
+                          {row.orderRef}
+                        </Link>
+                      </div>
+                    )}
                   </td>
                   <td className="px-3 py-2 align-top text-xs text-gray-700 dark:text-slate-300" data-testid={`application-add-ons-${row.id}`}>
                     {addOnSummary(row.addOns) || <span className="text-gray-400 dark:text-slate-500">—</span>}

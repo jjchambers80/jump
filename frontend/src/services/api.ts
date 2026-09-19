@@ -12,6 +12,10 @@ let activeOrganizationId: string | null = null;
 export function setActiveOrganizationId(id: string | null) {
   activeOrganizationId = id;
 }
+/** The organization the admin org switcher chose (for direct `fetch` calls such as CSV downloads). */
+export function getActiveOrganizationId(): string | null {
+  return activeOrganizationId;
+}
 
 interface RequestOptions extends RequestInit {
   headers?: Record<string, string>;

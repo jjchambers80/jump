@@ -61,7 +61,7 @@ export default function ApplicationsSection() {
   if (!apps || apps.length === 0) return null;
 
   return (
-    <section data-testid="account-applications">
+    <section id="applications" data-testid="account-applications">
       <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-3">Applications</h2>
       {message && (
         <p role="status" className="mb-3 text-sm text-gray-700 dark:text-slate-300">{message}</p>
@@ -77,6 +77,7 @@ export default function ApplicationsSection() {
                 {formatDate(a.event.date)} · {a.profile.businessName}
                 {a.form.kind === 'PAID' ? ` · ${PAYMENT_LABEL[a.paymentStatus]}${a.amounts.applicantPays > 0 ? ` ${money(a.amounts.applicantPays)}` : ''}${a.paymentStatus === 'PAYMENT_DUE' && a.paymentDueAt ? ` by ${formatDate(a.paymentDueAt)}` : ''}` : ''}
                 {a.boothLabel ? ` · ${a.boothLabel}` : ''}
+                {a.orderRef ? <span className="font-mono"> · Order {a.orderRef}</span> : null}
               </p>
               {a.addOns?.length > 0 && (
                 <p className="text-xs text-gray-500 dark:text-slate-400" data-testid="account-application-add-ons">Add-ons: {addOnSummary(a.addOns)}</p>

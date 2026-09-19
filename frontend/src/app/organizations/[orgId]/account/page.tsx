@@ -32,11 +32,16 @@ interface BuyerProfile {
 interface OrderSummary {
   id: string;
   orderRef: string;
+  /** TICKET or APPLICATION (spec 024): an application order links to the application, not a ticket page. */
+  kind?: 'TICKET' | 'APPLICATION';
+  applicationId?: string | null;
+  description?: string;
   eventName?: string;
   eventDate?: string;
   quantity: number;
   totalAmount: number;
   status: string;
+  statusDetail?: { label: string } | null;
   createdAt: string;
 }
 
@@ -280,17 +285,25 @@ export default function BuyerAccountPage({ params }: { params: { orgId: string }
               ) : (
                 <ul className="space-y-3">
                   {orders.map((o) => (
-                    <li key={o.id} className="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-4 flex items-center justify-between gap-4">
+                    <li key={o.id} className="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-4 flex items-center justify-between gap-4" data-testid="account-order" data-kind={o.kind ?? 'TICKET'}>
                       <div>
                         <p className="font-semibold text-gray-900 dark:text-slate-100">{o.eventName || 'Event'}</p>
                         <p className="text-sm text-gray-600 dark:text-slate-400">
-                          {formatDate(o.eventDate)} · {o.quantity} ticket{o.quantity === 1 ? '' : 's'} · $
+                          {formatDate(o.eventDate)} ·{' '}
+                          {o.kind === 'APPLICATION' ? `Application${o.description ? ` — ${o.description}` : ''}` : `${o.quantity} ticket${o.quantity === 1 ? '' : 's'}`} · $
                           {o.totalAmount.toFixed(2)} · {o.orderRef}
+                          {o.statusDetail ? ` · ${o.statusDetail.label}` : ''}
                         </p>
                       </div>
-                      <Link href={`/orders/${o.id}`} className="text-brand-link hover:underline text-sm font-semibold whitespace-nowrap">
-                        View order
-                      </Link>
+                      {o.kind === 'APPLICATION' && o.applicationId ? (
+                        <a href="#applications" className="text-brand-link hover:underline text-sm font-semibold whitespace-nowrap">
+                          View application
+                        </a>
+                      ) : (
+                        <Link href={`/orders/${o.id}`} className="text-brand-link hover:underline text-sm font-semibold whitespace-nowrap">
+                          View order
+                        </Link>
+                      )}
                     </li>
                   ))}
                 </ul>

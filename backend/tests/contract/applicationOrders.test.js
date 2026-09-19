@@ -303,6 +303,8 @@ describe('Application orders contract (spec 024 phase 1)', () => {
       refunds: [],
       adjustments: [],
     });
+    // FREE forms: the RECEIVED email only, never a receipt (spec 024 phase 2).
+    expect(sentEmails.map((e) => e.subject)).toEqual([expect.stringMatching(/received your application/)]);
   });
 
   // ─── Status mapping across the lifecycle ────────────────────────────────
@@ -337,6 +339,13 @@ describe('Application orders contract (spec 024 phase 1)', () => {
     });
     expect(Number(order.payment.amount)).toBe(Number(order.totalAmount));
     expect(orderStatusFor({ status: 'APPROVED', paymentStatus: 'PAID' })).toBe('COMPLETED');
+    // Receipt (spec 024 phase 2): once, to the applicant, with the order number and the lines.
+    const receipts = sentEmails.filter((e) => /^Receipt for/.test(e.subject));
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0]).toMatchObject({ to: [`lifecycle@${TAG}.test`], subject: `Receipt for ${TAG} Expo (${created.body.orderRef})` });
+    expect(receipts[0].text).toContain('Vendors — 10x10: $');
+    expect(receipts[0].text).toContain(`Total paid: $${Number(order.totalAmount).toFixed(2)}`);
+    expect(receipts[0].text).toContain('Payment method: Card');
 
     // Partial refund from the ORDER route (amount honoured for application orders)
     const partial = await request(app)

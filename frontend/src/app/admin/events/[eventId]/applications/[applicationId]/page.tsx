@@ -223,6 +223,11 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
                   Submitted {formatDate(app.submittedAt, true)}
                   {app.decidedAt ? ` · decided ${formatDate(app.decidedAt, true)}` : ''}
                 </span>
+                {app.orderId && app.orderRef && (
+                  <Link href={`/admin/orders/${app.orderId}`} className="font-mono text-xs text-indigo-600 hover:underline dark:text-indigo-400" data-testid="application-order-link">
+                    Order {app.orderRef}
+                  </Link>
+                )}
               </div>
               {decisions.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-2" data-testid="application-actions">
