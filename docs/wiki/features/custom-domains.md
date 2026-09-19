@@ -79,6 +79,9 @@ An organization can point a subdomain it owns (for example `tickets.venue.com`) 
 
 ## Gotchas
 
+- URL redirects (spec 028): on a tenant host the middleware consults `GET /organizations/:id/public/redirect?path=` only for paths its own routing marks `notFound`, then answers 301 — see `docs/wiki/features/url-redirects.md`.
+
+
 - **Middleware location.** This project uses the `src/` layout, so Next loads `frontend/src/middleware.ts` only. The old `frontend/middleware.ts` at the package root was never executed. Staff protection now runs on the edge: `auth.config.ts` carries the HS256 cookie codec (`lib/authJwt.ts`, `jose`), and the middleware builds its Auth.js instance without the Resend provider — that provider requires a database adapter and would make `Auth()` throw `MissingAdapter` on the edge, silently disabling the check. Tenant hosts 404 `/admin` before any auth check runs.
 - **Subdomains only.** `example.com` is rejected; `tickets.example.com` is required. If an organization insists on an apex, that needs ALIAS/ANAME support at their DNS provider and is not handled here.
 - **Railway GraphQL client is untested against a live token.** Field names follow Railway's public schema; the first real attach will confirm them. Enum values are matched loosely (`ISSUED`/`CERTIFICATE_STATUS_TYPE_VALID`, `VALID`/`DNS_RECORD_STATUS_PROPAGATED`) until an introspection run pins them. Errors surface as `lastError` and in logs; the domain still activates on DNS proof when the client is unconfigured. Railway create failures (plan limits: Trial 1, Hobby 2 per service, Pro 20) come back as 400 with Railway's message so the dialog can show them.

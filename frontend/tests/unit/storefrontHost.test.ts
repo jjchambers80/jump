@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { isPlatformHost, normalizeHost, platformHostsFromEnv, routeForTenantHost, tenantResourceFor } from '@/lib/storefrontHost';
+import {
+  hostifyRedirectTarget,
+  isPlatformHost,
+  normalizeHost,
+  platformHostsFromEnv,
+  routeForTenantHost,
+  tenantResourceFor,
+} from '@/lib/storefrontHost';
 
 describe('normalizeHost', () => {
   it('lowercases and strips port and trailing dot', () => {
@@ -31,7 +38,11 @@ describe('platformHostsFromEnv', () => {
       AUTH_URL: 'https://frontend-production-43e9.up.railway.app',
       NEXTAUTH_URL: 'not a url',
     });
-    expect(hosts.sort()).toEqual(['app.jump.events', 'frontend-production-43e9.up.railway.app', 'www.jump.events']);
+    expect(hosts.sort()).toEqual([
+      'app.jump.events',
+      'frontend-production-43e9.up.railway.app',
+      'www.jump.events',
+    ]);
   });
 });
 
@@ -41,28 +52,61 @@ describe('routeForTenantHost', () => {
 
   it('maps the root and /account onto the organization pages', () => {
     expect(route('/')).toEqual({ kind: 'rewrite', pathname: '/organizations/org_1' });
-    expect(route('/account')).toEqual({ kind: 'rewrite', pathname: '/organizations/org_1/account' });
-    expect(route('/account/verify')).toEqual({ kind: 'rewrite', pathname: '/organizations/org_1/account/verify' });
+    expect(route('/account')).toEqual({
+      kind: 'rewrite',
+      pathname: '/organizations/org_1/account',
+    });
+    expect(route('/account/verify')).toEqual({
+      kind: 'rewrite',
+      pathname: '/organizations/org_1/account/verify',
+    });
   });
 
   it('maps content short paths onto the organization (spec 026)', () => {
-    expect(route('/pages/faq')).toEqual({ kind: 'rewrite', pathname: '/organizations/org_1/pages/faq' });
-    expect(route('/blogs/news')).toEqual({ kind: 'rewrite', pathname: '/organizations/org_1/blogs/news' });
-    expect(route('/blogs/news/recap-2026')).toEqual({ kind: 'rewrite', pathname: '/organizations/org_1/blogs/news/recap-2026' });
+    expect(route('/pages/faq')).toEqual({
+      kind: 'rewrite',
+      pathname: '/organizations/org_1/pages/faq',
+    });
+    expect(route('/blogs/news')).toEqual({
+      kind: 'rewrite',
+      pathname: '/organizations/org_1/blogs/news',
+    });
+    expect(route('/blogs/news/recap-2026')).toEqual({
+      kind: 'rewrite',
+      pathname: '/organizations/org_1/blogs/news/recap-2026',
+    });
     expect(route('/blogs')).toEqual({ kind: 'rewrite', pathname: '/organizations/org_1/blogs' });
   });
 
   it('passes the organization own paths and public storefront paths', () => {
     expect(route('/organizations/org_1')).toEqual({ kind: 'pass' });
     expect(route('/organizations/org_1/account')).toEqual({ kind: 'pass' });
-    for (const p of ['/events/e1', '/checkout/e1', '/confirmation', '/orders/o1', '/tickets/t1', '/venues/v1', '/legal/terms', '/legal/privacy']) {
+    for (const p of [
+      '/events/e1',
+      '/checkout/e1',
+      '/confirmation',
+      '/orders/o1',
+      '/tickets/t1',
+      '/venues/v1',
+      '/legal/terms',
+      '/legal/privacy',
+    ]) {
       expect(route(p)).toEqual({ kind: 'pass' });
     }
   });
 
   it('hides other organizations and every platform-only surface', () => {
     expect(route('/organizations/org_2')).toEqual({ kind: 'notFound' });
-    for (const p of ['/admin', '/admin/events', '/auth/signin', '/dashboard', '/my-tickets', '/orders', '/orders/lookup', '/unknown']) {
+    for (const p of [
+      '/admin',
+      '/admin/events',
+      '/auth/signin',
+      '/dashboard',
+      '/my-tickets',
+      '/orders',
+      '/orders/lookup',
+      '/unknown',
+    ]) {
       expect(route(p)).toEqual({ kind: 'notFound' });
     }
   });
@@ -72,12 +116,18 @@ describe('tenantResourceFor', () => {
   const sp = (q = '') => new URLSearchParams(q);
   it('extracts events, checkout, orders and venues by path', () => {
     expect(tenantResourceFor('/events/ev_1', sp())).toEqual({ kind: 'event', id: 'ev_1' });
-    expect(tenantResourceFor('/checkout/ev_1', sp('items=x'))).toEqual({ kind: 'event', id: 'ev_1' });
+    expect(tenantResourceFor('/checkout/ev_1', sp('items=x'))).toEqual({
+      kind: 'event',
+      id: 'ev_1',
+    });
     expect(tenantResourceFor('/orders/or_1/', sp())).toEqual({ kind: 'order', id: 'or_1' });
     expect(tenantResourceFor('/venues/ve_1', sp())).toEqual({ kind: 'venue', id: 've_1' });
   });
   it('extracts the confirmation order from the query string', () => {
-    expect(tenantResourceFor('/confirmation', sp('orderId=or_9&status=success'))).toEqual({ kind: 'order', id: 'or_9' });
+    expect(tenantResourceFor('/confirmation', sp('orderId=or_9&status=success'))).toEqual({
+      kind: 'order',
+      id: 'or_9',
+    });
     expect(tenantResourceFor('/confirmation', sp())).toBeNull();
   });
   it('returns null for unrelated paths and malformed ids', () => {
@@ -86,5 +136,22 @@ describe('tenantResourceFor', () => {
     expect(tenantResourceFor('/organizations/org_1', sp())).toBeNull();
     expect(tenantResourceFor('/events/not%20an%20id', sp())).toBeNull();
     expect(tenantResourceFor('/events/a/b', sp())).toBeNull();
+  });
+});
+
+describe('hostifyRedirectTarget', () => {
+  it('keeps relative targets on tenant hosts and prefixes org-relative ones on the platform', () => {
+    expect(hostifyRedirectTarget('/pages/faq', 'org_1', true)).toBe('/pages/faq');
+    expect(hostifyRedirectTarget('/', 'org_1', true)).toBe('/');
+    expect(hostifyRedirectTarget('/pages/faq', 'org_1', false)).toBe(
+      '/organizations/org_1/pages/faq'
+    );
+    expect(hostifyRedirectTarget('/blogs/news/recap', 'org_1', false)).toBe(
+      '/organizations/org_1/blogs/news/recap'
+    );
+    expect(hostifyRedirectTarget('/account', 'org_1', false)).toBe('/organizations/org_1/account');
+    expect(hostifyRedirectTarget('/', 'org_1', false)).toBe('/organizations/org_1');
+    expect(hostifyRedirectTarget('/events/e1', 'org_1', false)).toBe('/events/e1');
+    expect(hostifyRedirectTarget('https://x.test/a', 'org_1', false)).toBe('https://x.test/a');
   });
 });

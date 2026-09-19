@@ -11,7 +11,14 @@ import NextAuth from 'next-auth';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import authConfig from './auth.config';
-import { isPlatformHost, normalizeHost, platformHostsFromEnv, routeForTenantHost, tenantResourceFor } from './lib/storefrontHost';
+import {
+  hostifyRedirectTarget,
+  isPlatformHost,
+  normalizeHost,
+  platformHostsFromEnv,
+  routeForTenantHost,
+  tenantResourceFor,
+} from './lib/storefrontHost';
 
 // The email (Resend) provider requires a database adapter, which does not
 // exist on the edge; Auth() would throw MissingAdapter and skip the check.
@@ -19,7 +26,8 @@ import { isPlatformHost, normalizeHost, platformHostsFromEnv, routeForTenantHost
 const { auth } = NextAuth({
   ...authConfig,
   providers: authConfig.providers.filter((provider) => {
-    const resolved = typeof provider === 'function' ? (provider as () => { type: string })() : provider;
+    const resolved =
+      typeof provider === 'function' ? (provider as () => { type: string })() : provider;
     return resolved.type !== 'email';
   }),
 });
@@ -54,7 +62,10 @@ async function resolveTenantHost(host: string): Promise<string | null> {
 const OWNER_TTL_MS = 5 * 60 * 1000;
 const ownerCache = new Map<string, { orgId: string | null; expires: number }>();
 
-async function resourceOwner(kind: 'event' | 'order' | 'venue', id: string): Promise<string | null> {
+async function resourceOwner(
+  kind: 'event' | 'order' | 'venue',
+  id: string
+): Promise<string | null> {
   const key = `${kind}:${id}`;
   const hit = ownerCache.get(key);
   if (hit && hit.expires > Date.now()) return hit.orgId;
@@ -72,6 +83,26 @@ async function resourceOwner(kind: 'event' | 'order' | 'venue', id: string): Pro
   return orgId;
 }
 
+// URL redirects (spec 028): consulted only for paths that would otherwise 404
+// on a tenant host. Fails open to the 404 when the backend is unreachable.
+async function redirectTarget(orgId: string, pathname: string): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `${API_URL}/organizations/${encodeURIComponent(orgId)}/public/redirect?path=${encodeURIComponent(pathname)}`,
+      {
+        headers: { accept: 'application/json' },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(2000),
+      }
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as { to?: string };
+    return typeof data?.to === 'string' && data.to ? data.to : null;
+  } catch {
+    return null;
+  }
+}
+
 function notFound(req: NextRequest) {
   // Rewrite to a path no route serves so the app's not-found page renders on this host
   return NextResponse.rewrite(new URL('/__storefront-not-found', req.url), { status: 404 });
@@ -82,7 +113,9 @@ export default auth(async (req: NextRequest & { auth: unknown }) => {
 
   if (isPlatformHost(host, PLATFORM_HOSTS)) {
     const { pathname } = req.nextUrl;
-    const staffOnly = STAFF_ONLY_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+    const staffOnly = STAFF_ONLY_PREFIXES.some(
+      (p) => pathname === p || pathname.startsWith(`${p}/`)
+    );
     if (staffOnly && !req.auth) {
       const signInUrl = new URL('/auth/signin', req.nextUrl);
       signInUrl.searchParams.set('callbackUrl', pathname + req.nextUrl.search);
@@ -96,7 +129,12 @@ export default auth(async (req: NextRequest & { auth: unknown }) => {
   if (!orgId) return notFound(req);
 
   const route = routeForTenantHost(req.nextUrl.pathname, orgId);
-  if (route.kind === 'notFound') return notFound(req);
+  if (route.kind === 'notFound') {
+    const to = await redirectTarget(orgId, req.nextUrl.pathname);
+    if (to)
+      return NextResponse.redirect(new URL(hostifyRedirectTarget(to, orgId, true), req.url), 301);
+    return notFound(req);
+  }
 
   // A resource in the URL must belong to this organization: tickets.a.com
   // must not render org B's event, checkout, order or venue pages.
@@ -117,5 +155,7 @@ export default auth(async (req: NextRequest & { auth: unknown }) => {
 export const config = {
   // Everything except API routes, Next internals and static files.
   // /api/buyer/* must pass untouched on tenant hosts (same-origin cookie flow).
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|svg|ico|webp|txt|xml)$).*)'],
+  matcher: [
+    '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|svg|ico|webp|txt|xml)$).*)',
+  ],
 };
