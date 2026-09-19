@@ -31,6 +31,7 @@ import onboardingService from '../services/OnboardingService.js';
 import venuesRouter, { orgVenuesRouter } from './routes/venues.js';
 import ordersRouter, { eventOrdersRouter } from './routes/orders.js';
 import legalRouter from './routes/legal.js';
+import { LIMITS, baselineSkip, makeLimiter } from '../middleware/rateLimit.js';
 import usersRouter from './routes/users.js';
 import imagesRouter from './routes/images.js';
 import buyerRouter from './routes/buyerAuth.js';
@@ -39,6 +40,7 @@ import { adminFilesRouter, publicFilesRouter } from './routes/storeFiles.js';
 import domainService from '../services/DomainService.js';
 import applicationPaymentService from '../services/ApplicationPaymentService.js';
 import applicationDigestService from '../services/ApplicationDigestService.js';
+import orderService from '../services/OrderService.js';
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -103,6 +105,10 @@ app.use((req, res, next) => {
   res.setHeader('X-Correlation-ID', req.id);
   next();
 });
+
+// Baseline per-IP cap (spec 020): a wide net under every route except
+// health, metrics and the Stripe webhooks; the money paths carry tighter ones.
+app.use(makeLimiter('BASELINE', { ...LIMITS.BASELINE, skip: baselineSkip }));
 
 // Request logging and metrics
 app.use((req, res, next) => {
@@ -199,6 +205,13 @@ if (process.env.NODE_ENV !== 'test') {
   };
   setTimeout(applicationSweep, 30 * 1000).unref();
   setInterval(applicationSweep, APPLICATION_SWEEP_MS).unref();
+
+  // Abandoned-checkout sweep (spec 020): PENDING ticket orders past the
+  // Checkout session lifetime + grace are settled against Stripe (hold
+  // released, or completed if the webhook was missed).
+  const ORDER_SWEEP_MS = Number(process.env.ORDER_SWEEP_INTERVAL_MS) || 5 * 60 * 1000;
+  setTimeout(() => orderService.sweepAbandoned().catch(() => {}), 60 * 1000).unref();
+  setInterval(() => orderService.sweepAbandoned().catch(() => {}), ORDER_SWEEP_MS).unref();
 
   // Onboarding sweep (spec 022 phase 3): unfinished signups older than
   // ONBOARDING_ABANDON_AFTER_MS (7 d) with no events and no subscription are

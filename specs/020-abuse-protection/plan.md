@@ -1,6 +1,6 @@
 # Implementation Plan: Abuse protection and edge security (spec 020)
 
-**Status**: Planned 2026-09-18. Not built.
+**Status**: Planned 2026-09-18. **Phase 1 built and shipped 2026-09-19** (`feat/020-abuse-protection-phase-1`): limiter factory + every backend limiter, per-buyer hold cap, abandoned-checkout sweep, `20260930200000_order_abuse_indexes`. Built as planned with two notes: `clientIpForRateLimit` lives in `utils/clientIp.js` (moved by spec 024 phase 3; re-exported from `middleware/rateLimit.js` and `routes/buyerAuth.js`), and the scanner limiter counts only 401/403 (`countStatuses`) rather than every non-2xx so an unknown barcode never burns the budget. Phases 2–3 not built.
 **Spec**: [spec.md](./spec.md). Depends on spec 007 (`clientIpForRateLimit`, signed `X-Jump-Client-Ip`), spec 011 (`submitLimiter` pattern), guest checkout (`OrderService.createOrder` / `failOrder`), the Stripe webhook handler.
 **Reference**: Transcript reviewed 2026-09-18 (Cloudflare rate-limiting / bot-management / WAF talk) and the vault note `jump--decision--edge-abuse-protection-spec.md`.
 **Branches**: plan on `plan/020-abuse-protection`; phases on `feat/020-abuse-protection-phase-1` → `-phase-2` → `-phase-3`, each merged to `main` alone (spec 012 lesson: never merge a phase branch that contains an unmerged earlier phase). Phase 3 only exists if the §7.1 decision is "Cloudflare".
