@@ -137,6 +137,9 @@ class ApiClient {
     const headers: Record<string, string> = {
       ...options.headers,
     };
+    if (activeOrganizationId && !headers['X-Jump-Org']) {
+      headers['X-Jump-Org'] = activeOrganizationId;
+    }
 
     if (typeof window !== 'undefined' && !headers['Authorization']) {
       try {

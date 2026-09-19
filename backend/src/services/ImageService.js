@@ -242,7 +242,7 @@ class ImageService {
    */
   async cleanupOrphans() {
     const orphans = await prisma.file.findMany({
-      where: { images: { none: {} } },
+      where: { images: { none: {} }, storeFiles: { none: {} } },
     });
 
     let deleted = 0;
@@ -251,6 +251,10 @@ class ImageService {
       await this.storage.delete(origKey);
       for (const variant of Object.keys(VARIANTS)) {
         await this.storage.delete(variantKey(variant, file.hash));
+      }
+      // Content › Files documents (spec 025) live under documents/<hash>.<ext>.
+      if (file.mimeType === 'application/pdf') {
+        await this.storage.delete(`documents/${file.hash}.pdf`);
       }
       await prisma.file.delete({ where: { id: file.id } });
       deleted++;

@@ -1,6 +1,7 @@
 import { prisma } from '@jump/db';
 import { slugify } from '../utils/slug.js';
 import { ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
+import storeFileService from './StoreFileService.js';
 
 /** Optional text field: trims, and stores an empty string as null. */
 function optionalText(value) {
@@ -27,7 +28,7 @@ class PageService {
 
   async create(organizationId, data) {
     const title = data.title.trim();
-    return prisma.page.create({
+    const page = await prisma.page.create({
       data: {
         organizationId,
         title,
@@ -38,6 +39,14 @@ class PageService {
         seoDescription: optionalText(data.seoDescription) ?? null,
       },
     });
+    // Content › Files "Used in" (spec 025).
+    await storeFileService.syncReferences(
+      'PAGE',
+      page.id,
+      { content: page.content },
+      organizationId
+    );
+    return page;
   }
 
   /** Partial update: only fields present in `data` change. */
@@ -57,7 +66,16 @@ class PageService {
         pageId
       );
     }
-    return prisma.page.update({ where: { id: existing.id }, data: patch });
+    const page = await prisma.page.update({ where: { id: existing.id }, data: patch });
+    if (patch.content !== undefined) {
+      await storeFileService.syncReferences(
+        'PAGE',
+        page.id,
+        { content: page.content },
+        organizationId
+      );
+    }
+    return page;
   }
 
   async _uniqueSlug(organizationId, raw, exceptPageId = null) {

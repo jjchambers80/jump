@@ -8,7 +8,13 @@ const page = {
   update: jest.fn(),
 };
 
-jest.unstable_mockModule('@jump/db', () => ({ prisma: { page } }));
+const storeFile = { findMany: jest.fn().mockResolvedValue([]) };
+const storeFileReference = { deleteMany: jest.fn(), createMany: jest.fn() };
+const $transaction = jest.fn().mockResolvedValue([]);
+
+jest.unstable_mockModule('@jump/db', () => ({
+  prisma: { page, storeFile, storeFileReference, $transaction },
+}));
 
 const { default: pageService } = await import('../../src/services/PageService.js');
 
