@@ -103,6 +103,51 @@ export interface PaymentSettingsResponse {
   canEdit: boolean;
 }
 
+// ─── Finance › Payouts ─────────────────────────────────────────────────────
+
+export type PayoutStatus = 'paid' | 'pending' | 'in_transit' | 'canceled' | 'failed';
+
+export interface PayoutRow {
+  id: string;
+  /** Dollars. */
+  amount: number;
+  currency: string;
+  status: PayoutStatus | string;
+  /** Calendar day the bank should show the deposit (midnight UTC). */
+  arrivalDate: string | null;
+  createdAt: string | null;
+  automatic: boolean;
+  statementDescriptor: string | null;
+  failureMessage: string | null;
+  bank: { name: string | null; last4: string | null } | null;
+}
+
+export interface PayoutActivity {
+  /** Dollars per bucket; null when Stripe could not be reached. */
+  balance: { available: number; pending: number; currency: string } | null;
+  payouts: PayoutRow[];
+  error: string | null;
+}
+
+export interface FinancePayoutsResponse {
+  connect: ConnectState;
+  /** Null until onboarding is complete (or while Connect is off). */
+  activity: PayoutActivity | null;
+  canEdit: boolean;
+}
+
+export const PAYOUT_STATUS: Record<string, { label: string; style: string }> = {
+  paid: { label: 'Paid', style: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' },
+  pending: { label: 'Pending', style: 'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-300' },
+  in_transit: { label: 'In transit', style: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' },
+  canceled: { label: 'Canceled', style: 'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-300' },
+  failed: { label: 'Failed', style: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' },
+};
+
+export function formatMoney(amount: number, currency = 'usd'): string {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: currency.toUpperCase() }).format(amount);
+}
+
 export interface UpdatePaymentSettingsBody {
   statementDescriptorSuffix?: string | null;
   enabledPaymentMethods?: string[];

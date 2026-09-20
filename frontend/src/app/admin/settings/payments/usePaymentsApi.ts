@@ -7,7 +7,7 @@
 import { useMemo } from 'react';
 import api from '@/services/api';
 import { useOrg } from '@/components/OrgContext';
-import type { ConnectState, PaymentSettings, PaymentSettingsResponse, UpdatePaymentSettingsBody, UpdatePayoutSettingsBody } from './types';
+import type { ConnectState, FinancePayoutsResponse, PaymentSettings, PaymentSettingsResponse, UpdatePaymentSettingsBody, UpdatePayoutSettingsBody } from './types';
 
 export function usePaymentsApi() {
   const { selectedOrgId } = useOrg();
@@ -22,6 +22,8 @@ export function usePaymentsApi() {
       loginLink: () => api.post<{ url: string }>(`/admin/settings/payments/connect/login-link${qs}`, {}),
       sync: () => api.post<{ connect: ConnectState }>(`/admin/settings/payments/connect/sync${qs}`, {}),
       updatePayouts: (body: UpdatePayoutSettingsBody) => api.patch<{ connect: ConnectState }>(`/admin/settings/payments/connect/payouts${qs}`, body),
+      // Finance › Payouts: live balance + recent payouts of the connected account
+      financePayouts: () => api.get<FinancePayoutsResponse>(`/admin/finance/payouts${qs}`),
     }),
     [qs]
   );

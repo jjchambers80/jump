@@ -1,11 +1,11 @@
 # Connect Payouts
 
-**Status**: Implemented (spec 010 phase 2, 2026-09-16) — deploys dark behind `STRIPE_CONNECT_ENABLED`; not yet enabled in production. Plan: `specs/010-payments-settings/plan-phase-2.md`.
-**Last Updated**: 2026-09-16
+**Status**: Implemented (spec 010 phase 2, 2026-09-16; Finance section + Payout bank account page 2026-09-19) — deploys dark behind `STRIPE_CONNECT_ENABLED`; not yet enabled in production. Plan: `specs/010-payments-settings/plan-phase-2.md`.
+**Last Updated**: 2026-09-19
 
 ## Overview
 
-Organizations receive ticket revenue in their own bank account through **Stripe Connect Express** accounts. Jump stays the merchant of record: every Checkout Session is still created on the platform Stripe account, and when the organization has an active connected account the session becomes a **destination charge** — Stripe moves the ex-tax ticket subtotal to the organization and the platform keeps the service fee, processing fee and sales tax (`application_fee_amount`). Refunds on those orders reverse the transfer and return the platform's fee pro rata. Organizations onboard on a Stripe-hosted page, manage bank details and payout history in Stripe's Express dashboard, and set their payout schedule and payout statement name from **Settings › Payments › Payouts**. Jump stores no bank numbers beyond a `last4` snapshot.
+Organizations receive ticket revenue in their own bank account through **Stripe Connect Express** accounts. Jump stays the merchant of record: every Checkout Session is still created on the platform Stripe account, and when the organization has an active connected account the session becomes a **destination charge** — Stripe moves the ex-tax ticket subtotal to the organization and the platform keeps the service fee, processing fee and sales tax (`application_fee_amount`). Refunds on those orders reverse the transfer and return the platform's fee pro rata. Organizations connect their bank on a Stripe-hosted onboarding page from **Settings › Payments › Payout bank account** (empty state → *Connect account*; afterwards bank name + last four, *Change bank* → Express dashboard, payout schedule), and watch balance and payout history under **Finance › Payouts** (`/admin/finance/payouts`, live from Stripe). Jump stores no bank numbers beyond a `last4` snapshot.
 
 Until an organization finishes onboarding (or while the flag is off) nothing changes: charges land on the platform account exactly as before and the platform settles outside Jump.
 
@@ -13,16 +13,19 @@ Until an organization finishes onboarding (or while the flag is off) nothing cha
 
 | File | Purpose |
 |------|---------|
-| `backend/src/services/ConnectService.js` | Account lifecycle: `startOnboarding` (create Express account + Account Link), `loginLink`, `syncAccount` / `applyAccount` (Stripe Account object → row), `updatePayoutSettings`, `markDisconnected`, `recordPayout`, and `destinationFor` (the routing rule) |
+| `backend/src/services/ConnectService.js` | Account lifecycle: `startOnboarding` (create Express account + Account Link), `loginLink`, `syncAccount` / `applyAccount` (Stripe Account object → row), `updatePayoutSettings`, `markDisconnected`, `recordPayout`, `destinationFor` (the routing rule), and `payoutActivity` (live `balance.retrieve` + `payouts.list` on the connected account for Finance › Payouts; `serializePayout` exported) |
 | `backend/src/services/PaymentSettingsService.js` | `checkoutOptionsFor(organization, { fees, lineItems })` adds `transfer_data` + `application_fee_amount`; `applicationFeeCents` (exported, pure) |
 | `backend/src/services/OrderService.js` | Builds `line_items` first, passes them to `checkoutOptionsFor`, records `stripeAccountId` / `applicationFee` on `PaymentTransaction`, logs `connect_charge_routed` |
 | `backend/src/services/RefundService.js` | `_createStripeRefund(…, { connected })` → `reverse_transfer: true, refund_application_fee: true` |
 | `backend/src/api/routes/webhooks.js` | `POST /webhooks/stripe/connect` (connected-account events, own secret) |
-| `backend/src/api/routes/admin.js` | `connect/onboard`, `connect/login-link`, `connect/sync`, `connect/payouts`; `GET /admin/settings/payments` carries `connect` |
+| `backend/src/api/routes/admin.js` | `connect/onboard`, `connect/login-link`, `connect/sync`, `connect/payouts`; `GET /admin/settings/payments` carries `connect`; `GET /admin/finance/payouts` |
 | `backend/src/api/validators/paymentValidators.js` | `validateUpdatePayoutSettings` (shape; values validated in the service) |
 | `packages/db/prisma/schema.prisma` | `OrganizationStripeAccount`; `PaymentTransaction.stripeAccountId`, `applicationFee` (migration `20260916120000_stripe_connect`) |
-| `frontend/src/app/admin/settings/payments/page.tsx` | Provider card payouts half (status pill, onboarding action, Express `Manage`), `Payouts` row |
-| `frontend/src/app/admin/settings/payments/payouts/page.tsx` | Payouts page: status, bank snapshot, schedule row, `?onboarding=complete|refresh` handling |
+| `frontend/src/app/admin/settings/payments/page.tsx` | Provider card payouts half (status pill, onboarding action, Express `Manage`), `Payout bank account` row under `Payment methods` (always shown; `Coming soon` while the flag is off) |
+| `frontend/src/app/admin/settings/payments/payout-bank-account/page.tsx` | Payout bank account page: empty state (`Connect account` → onboarding), bank on file (`•••• last4`, `Change bank` → Express dashboard, `Refresh`), payout schedule row, *About payouts* copy, `?onboarding=complete|refresh` handling. Old `/admin/settings/payments/payouts` 308s here (`next.config.mjs`) |
+| `frontend/src/app/admin/finance/page.tsx` | Finance landing: links to Payouts, Taxes (Settings › Tax) and Payment settings (Settings › Payments) |
+| `frontend/src/app/admin/finance/payouts/page.tsx` | Finance › Payouts: available / pending balance, schedule + bank card, recent payout history table; empty state links to the bank account page, never onboards itself |
+| `frontend/src/components/AdminSidebar.tsx` | `Finance` main entry with nested `Payouts` |
 | `frontend/src/app/admin/settings/payments/PayoutScheduleDialog.tsx` | Payout every business day / week / month + payout name |
 | `frontend/src/app/admin/settings/payments/useConnectActions.ts` | onboard (full-page redirect), openDashboard (new tab), sync |
 | `frontend/src/app/admin/dashboard/PayoutsBanner.tsx` | "Set up payouts" nudge while not active (session-dismissable) |
@@ -77,7 +80,7 @@ Row state is written only from Stripe Account objects — `syncAccount` (`accoun
 
 ### Onboarding
 
-`startOnboarding` creates the account once (`accounts.create` with the `controller` spelling of Express: `fees.payer` and `losses.payments` = `application`, `stripe_dashboard.type = 'express'`, `requirement_collection = 'stripe'`, `card_payments` + `transfers` requested, `metadata.organizationId`/`mode`), stores the row, then mints a single-use Account Link (`type: 'account_onboarding'`) every time it is called. Stripe returns to `/admin/settings/payments/payouts?onboarding=complete` (page syncs and reports *setup complete* or *Stripe still needs: …*) or `?onboarding=refresh` (link expired; page mints a new one and redirects). A `disconnected` row is deleted and replaced on the next onboard.
+`startOnboarding` creates the account once (`accounts.create` with the `controller` spelling of Express: `fees.payer` and `losses.payments` = `application`, `stripe_dashboard.type = 'express'`, `requirement_collection = 'stripe'`, `card_payments` + `transfers` requested, `metadata.organizationId`/`mode`), stores the row, then mints a single-use Account Link (`type: 'account_onboarding'`) every time it is called. Stripe returns to `/admin/settings/payments/payout-bank-account?onboarding=complete` (page syncs and reports *setup complete* or *Stripe still needs: …*) or `?onboarding=refresh` (link expired; page mints a new one and redirects). A `disconnected` row is deleted and replaced on the next onboard.
 
 ### Refunds
 
@@ -98,6 +101,29 @@ Same raw-body, skip-verification-when-unset, return-200-after-logging policy as 
 
 `PATCH …/connect/payouts { interval, anchor?, statementDescriptor? }` → `accounts.update(acct, { settings: { payouts: { schedule, statement_descriptor } } })`, then the response is re-applied to the row so the page shows what Stripe stored. Rules: `interval ∈ daily|weekly|monthly`; weekly needs a weekday `anchor`, monthly a day `1–31`, daily forbids one; payout name ≤ 22 chars, `[A-Z0-9 ]`, at least one letter (same normaliser as the card descriptor). Refused (409) before `detailsSubmitted`.
 
+### Finance › Payouts
+
+`GET /admin/finance/payouts` returns `{ connect, activity, canEdit }`. `activity` is read live from Stripe **on the connected account** (`stripe.balance.retrieve` + `stripe.payouts.list({ limit: 25, expand: ['data.destination'] })`, both with `{ stripeAccount }`) and mapped to dollars; it is `null` while the flag is off, without a row, before `detailsSubmitted` or after deauthorization, so the page renders its empty state instead of an error. A Stripe outage degrades to `{ balance: null, payouts: [], error }` — the page keeps the schedule/bank card from the row and shows the message. Nothing is cached or stored: payout history is Stripe's record, Jump's ledger stays `PaymentTransaction` (spec 024). This is a **payouts** list (money leaving Stripe to the organization), not an org-wide transactions list — see AGENTS.md gotcha 17.
+
+### Connecting the bank account — how and why
+
+The bank account is never typed into Jump. The organization's Express account is created by the platform, then Stripe collects identity, business and bank details on its own hosted onboarding page (Account Link) and, for changes, in the Express dashboard (login link, Stripe-authenticated). Jump only reads back `external_accounts[].bank_name` / `last4` / `currency` into `OrganizationStripeAccount`. Consequences:
+
+- **No PCI/NACHA scope for Jump** — routing/account numbers, SSNs and documents never touch Jump's servers, logs or database. The `last4` snapshot is the only bank data stored.
+- **Stripe owns KYC and bank verification** (`requirement_collection: 'stripe'`): US banks are verified instantly through Stripe Financial Connections (bank login) when the user chooses it, otherwise by micro-deposits; failed verifications and requirement changes come back through `account.updated` / `account.external_account.*` webhooks.
+- **Stripe owns account takeover risk** on bank changes: the Express dashboard requires the account holder's Stripe login (with Stripe's own 2FA), so a compromised Jump admin session cannot redirect payouts by itself. Stripe also pauses payouts after a bank change; the page copy says so.
+- **Liability stays with Stripe/Express** for negative balances of the connected account (`losses.payments = application` only makes the platform cover chargebacks — see Gotchas).
+
+Alternatives considered (2026-09-19, research note in the vault: `jump--research--payout-bank-connection.md`):
+
+| Option | Verdict |
+|---|---|
+| **Stripe Connect Express, hosted onboarding + Express dashboard** (current) | Ship. Zero bank data in Jump, Stripe authentication on changes, already built and tested |
+| **Stripe Connect embedded components** (`@stripe/connect-js` + `@stripe/react-connect-js`; `account_onboarding`, `account_management` with `external_account_collection`, `payouts`, `balances`, `payouts_list`) | Recommended follow-up. Same security model (Stripe iframe + Stripe login popup for Express accounts, `disable_stripe_user_authentication` is not allowed for `requirement_collection: stripe`), but the bank form and payout list render *inside* Jump's pages instead of a new tab. Needs `POST …/connect/account-session` (returns `client_secret` for the components the user's role may see), the **platform** publishable key on the frontend, CSP `frame-src`/`script-src` for `connect-js.stripe.com` + `js.stripe.com`, and `Cross-Origin-Opener-Policy` left at `unsafe-none` |
+| **Stripe Financial Connections directly** (`financial_connections.sessions` → bank account token → `external_account`) | Only worth it with Custom accounts; Express onboarding already offers the same bank-login flow |
+| **Plaid Auth → Stripe processor token** | Second vendor, second contract and privacy policy, only adds value for non-Stripe rails. No |
+| **Own bank form (`external_account` with raw routing/account numbers)** | Never: puts bank numbers through Jump, moves verification, fraud and liability onto Jump, and needs Custom accounts (Jump becomes responsible for all KYC updates) |
+
 ## API Endpoints
 
 | Method | Path | Auth | Description |
@@ -107,15 +133,16 @@ Same raw-body, skip-verification-when-unset, return-200-after-logging policy as 
 | POST | `/admin/settings/payments/connect/login-link` | admin | `{ url }` Express dashboard; 409 before onboarding completes |
 | POST | `/admin/settings/payments/connect/sync` | admin | `{ connect }` after `accounts.retrieve` |
 | PATCH | `/admin/settings/payments/connect/payouts` | admin | `{ connect }`; 400 on bad values, 409 before onboarding completes |
+| GET | `/admin/finance/payouts` | organizer+ | `{ connect, activity, canEdit }` — `activity` live from Stripe (`balance`, `payouts[]`, `error`) or `null` until onboarding completes |
 | POST | `/webhooks/stripe/connect` | Stripe signature (`STRIPE_CONNECT_WEBHOOK_SECRET`) | Connected-account events |
 
 ## Testing
 
-- `backend/tests/unit/connectService.test.js` — `accountToRow` mapping, status table, routing matrix (flag off, wrong mode, transfers inactive, disconnected, payouts paused), onboarding create/reuse/replace, live-mode https guard, login link, sync, payout-settings validation.
+- `backend/tests/unit/connectService.test.js` — `accountToRow` mapping, status table, routing matrix (flag off, wrong mode, transfers inactive, disconnected, payouts paused), onboarding create/reuse/replace, live-mode https guard, login link, sync, payout-settings validation, `payoutActivity` (null cases, cents → dollars, expanded destination, outage degrade).
 - `backend/tests/unit/paymentSettingsService.test.js` — `applicationFeeCents` identity (`total − fee === round(subtotal × 100)`) across tax-on-top, tax-inclusive, multi-tier drift, 1¢ and free tickets; routing added to checkout options; failures keep phase 1 options.
 - `backend/tests/unit/refundService.test.js` — Connect flags iff connected.
-- `backend/tests/contract/connect.test.js` — real Postgres: order on the platform account until `account.updated` activates transfers, then `sessions.create` receives `transfer_data` + the exact fee and the ledger records it; `capability.updated`, `payout.failed`, `deauthorized`; bad Connect signature → 400; admin routes (flag gate, ORGANIZER 403, onboard reuse, sync → login link → payouts, validation, tenant scoping).
-- `frontend/e2e/admin-payments-connect.spec.ts` — provider card states, onboard redirect, Express `Manage` in a new tab, ORGANIZER read-only, payouts page states, schedule dialog save/rejection, `?onboarding=complete|refresh`, dashboard banner; axe clean.
+- `backend/tests/contract/connect.test.js` — real Postgres: order on the platform account until `account.updated` activates transfers, then `sessions.create` receives `transfer_data` + the exact fee and the ledger records it; `capability.updated`, `payout.failed`, `deauthorized`; bad Connect signature → 400; admin routes (flag gate, ORGANIZER 403, onboard reuse, sync → login link → payouts, validation, tenant scoping, `GET /admin/finance/payouts` for ADMIN / ORGANIZER / no account / flag off).
+- `frontend/e2e/admin-payments-connect.spec.ts` — provider card states, onboard redirect, Express `Manage` in a new tab, ORGANIZER read-only, bank account page (empty state → onboarding, last four + `Change bank`, on-hold / failure), schedule dialog save/rejection, `?onboarding=complete|refresh`, Finance landing + sidebar, Finance › Payouts (empty, balance/history, outage), dashboard banner; axe clean.
 
 ## Gotchas
 
