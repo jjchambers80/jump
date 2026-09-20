@@ -60,7 +60,12 @@ export default function StorefrontPasswordGate({ organization, message, onUnlock
         className="w-full max-w-md rounded-lg bg-white p-8 text-center shadow-md dark:bg-slate-800"
       >
         {logoSrc && (
-          <LogoBox src={logoSrc} alt={`${organization.name} logo`} className="mx-auto mb-4 w-20 rounded-lg shadow-sm" />
+          <LogoBox
+            src={logoSrc}
+            alt={`${organization.name} logo`}
+            className="mx-auto mb-4 w-40 rounded-lg shadow-sm"
+            square={false}
+          />
         )}
         <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">{organization.name}</h1>
         <p className="mt-2 text-sm text-gray-600 dark:text-slate-400" data-testid="storefront-message">
