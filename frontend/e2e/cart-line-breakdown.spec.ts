@@ -67,6 +67,22 @@ test.describe('cart line-item price breakdown', () => {
   test.describe('desktop order summary', () => {
     test.use({ viewport: DESKTOP });
 
+    test('empty cart shows the placeholder and no totals', async ({ page }) => {
+      await mockEvent(page);
+      await page.goto(`/events/${EVENT_ID}`);
+
+      const summary = page.getByRole('heading', { name: 'Order Summary' }).locator('..').locator('..').locator('..');
+      await expect(summary).toContainText('Select tickets to begin your order.');
+      await expect(summary).not.toContainText('Subtotal');
+      await expect(summary).not.toContainText('$0.30');
+      await expect(summary.getByRole('button', { name: 'Proceed to Checkout' })).toHaveCount(0);
+      await expect(page.getByTestId('expand-collapse-all').first()).toBeDisabled();
+
+      await addTickets(page, TIER_A.name, 1);
+      await expect(summary).not.toContainText('Select tickets to begin your order.');
+      await expect(summary).toContainText('Subtotal');
+    });
+
     test('price has a dotted underline and toggles the breakdown accordion', async ({ page }) => {
       await mockEvent(page);
       await page.goto(`/events/${EVENT_ID}`);

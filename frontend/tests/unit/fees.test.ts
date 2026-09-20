@@ -74,13 +74,20 @@ describe('computeOrderFees', () => {
     );
   });
 
-  it('handles an empty cart without NaN', () => {
+  it('charges nothing for an empty cart (no fixed Stripe fee, no NaN)', () => {
     const fees = computeOrderFees([], 0.08);
     expect(fees.subtotal).toBe(0);
     expect(fees.platformFee).toBe(0);
-    expect(fees.processingFee).toBe(FEE_CONFIG.stripeFeeFixed);
+    expect(fees.processingFee).toBe(0);
     expect(fees.tax).toBe(0);
+    expect(fees.total).toBe(0);
     expect(fees.lines).toEqual([]);
+  });
+
+  it('still charges the fixed Stripe fee on a $0 (free) tier', () => {
+    const fees = computeOrderFees([{ price: 0, quantity: 2 }]);
+    expect(fees.processingFee).toBe(FEE_CONFIG.stripeFeeFixed);
+    expect(fees.total).toBe(FEE_CONFIG.stripeFeeFixed);
   });
 
   it('omits tax when the rate is zero', () => {
