@@ -10,6 +10,7 @@
 // `/account` is the buyer account page, so links differ by host.
 
 import domainService from '../services/DomainService.js';
+import { prisma } from '@jump/db';
 
 export function platformBaseUrl() {
   const raw = process.env.FRONTEND_URL || 'http://localhost:3001';
@@ -33,7 +34,12 @@ export async function storefrontFor(organizationId) {
 
 export async function orgPageUrl(organizationId) {
   const { base, custom } = await storefrontFor(organizationId);
-  return custom ? `${base}/` : `${base}/organizations/${organizationId}`;
+  if (custom) return `${base}/`;
+  const organization = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { slug: true },
+  });
+  return `${base}/organizations/${organization?.slug || organizationId}`;
 }
 
 export async function orderUrl(orderId, organizationId) {
@@ -43,7 +49,8 @@ export async function orderUrl(orderId, organizationId) {
 
 export async function eventUrl(eventId, organizationId, query = '') {
   const { base } = await storefrontFor(organizationId);
-  return `${base}/events/${eventId}${query}`;
+  const event = await prisma.event.findUnique({ where: { id: eventId }, select: { slug: true } });
+  return `${base}/events/${event?.slug || eventId}${query}`;
 }
 
 export async function confirmationUrl(orderId, organizationId) {
@@ -53,7 +60,12 @@ export async function confirmationUrl(orderId, organizationId) {
 
 export async function buyerAccountUrl(organizationId) {
   const { base, custom } = await storefrontFor(organizationId);
-  return custom ? `${base}/account` : `${base}/organizations/${organizationId}/account`;
+  if (custom) return `${base}/account`;
+  const organization = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { slug: true },
+  });
+  return `${base}/organizations/${organization?.slug || organizationId}/account`;
 }
 
 export async function buyerVerifyUrl(organizationId, rawToken) {

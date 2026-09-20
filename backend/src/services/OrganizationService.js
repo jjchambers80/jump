@@ -7,6 +7,7 @@ import storefrontPreferencesService from './StorefrontPreferencesService.js';
 import { ConflictError, NotFoundError } from '../middleware/errorHandler.js';
 import { formatEventSummary } from '../utils/eventSummary.js';
 import { uniqueSlug } from '../utils/slug.js';
+import { findByPublicIdentifier } from '../utils/publicIdentifier.js';
 
 export const serializeBusinessDetails = (organization) => {
   const { ein, ...businessDetails } = organization;
@@ -197,14 +198,15 @@ class OrganizationService {
   }
 
   /** Storefront homepage listing: falls back to the store name / no description. */
-  async getPublicMeta(id) {
-    const org = await prisma.organization.findFirst({
-      where: { id, status: 'ACTIVE' },
-      select: { id: true, name: true, seoTitle: true, seoDescription: true, coverUrl: true },
+  async getPublicMeta(identifier) {
+    const org = await findByPublicIdentifier(prisma.organization, identifier, {
+      where: { status: 'ACTIVE' },
+      select: { id: true, slug: true, name: true, seoTitle: true, seoDescription: true, coverUrl: true },
     });
     if (!org) throw new NotFoundError('Organization not found');
     return {
       id: org.id,
+      slug: org.slug,
       name: org.name,
       title: org.seoTitle || org.name,
       description: org.seoDescription,
@@ -219,11 +221,12 @@ class OrganizationService {
    * X-Storefront-Access token returns `locked: true`, the visitor message and
    * no events; branding stays so the password page can be styled.
    */
-  async getPublicOrganization(id, { accessToken = null } = {}) {
-    const org = await prisma.organization.findFirst({
-      where: { id, status: 'ACTIVE' },
+  async getPublicOrganization(identifier, { accessToken = null } = {}) {
+    const org = await findByPublicIdentifier(prisma.organization, identifier, {
+      where: { status: 'ACTIVE' },
       select: {
         id: true,
+        slug: true,
         name: true,
         logoUrl: true,
         coverUrl: true,
@@ -241,11 +244,12 @@ class OrganizationService {
               orderBy: { date: 'asc' },
               select: {
                 id: true,
+                slug: true,
                 name: true,
                 date: true,
                 category: true,
                 status: true,
-                venue: { select: { id: true, name: true, address: true } },
+                venue: { select: { id: true, slug: true, name: true, address: true } },
                 priceTiers: {
                   where: { isActive: true },
                   select: {
@@ -268,6 +272,7 @@ class OrganizationService {
 
     const organization = {
       id: org.id,
+      slug: org.slug,
       name: org.name,
       logoUrl: org.logoUrl,
       coverUrl: org.coverUrl,

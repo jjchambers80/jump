@@ -18,6 +18,14 @@ const verifyOrgOwnership = requireOrgMembership('orgId');
 const publicRouter = Router();
 const orgRouter = Router({ mergeParams: true });
 
+publicRouter.get('/:venueId/meta', async (req, res, next) => {
+  try {
+    res.json(await venueService.getPublicRoute(req.params.venueId));
+  } catch (error) {
+    next(error);
+  }
+});
+
 publicRouter.get('/:venueId', gateByVenueParam, async (req, res, next) => {
   try {
     const result = await venueService.getPublicVenueById(req.params.venueId);

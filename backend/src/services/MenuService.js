@@ -54,26 +54,26 @@ export function buildTree(rows) {
 }
 
 /** Path on the platform host; the frontend shortens it on tenant hosts. */
-export function hrefFor(organizationId, item, target) {
+export function hrefFor(organizationSlug, item, target) {
   switch (item.linkType) {
     case 'HOME':
-      return `/organizations/${organizationId}`;
+      return `/organizations/${organizationSlug}`;
     case 'EVENTS':
-      return `/organizations/${organizationId}#events`;
+      return `/organizations/${organizationSlug}#events`;
     case 'EVENT':
-      return `/events/${item.targetId}`;
+      return target ? `/events/${target.slug}` : null;
     case 'VENUE':
-      return `/venues/${item.targetId}`;
+      return target ? `/venues/${target.slug}` : null;
     case 'PAGE':
-      return target ? `/organizations/${organizationId}/pages/${target.slug}` : null;
+      return target ? `/organizations/${organizationSlug}/pages/${target.slug}` : null;
     case 'BLOG':
-      return target ? `/organizations/${organizationId}/blogs/${target.handle}` : null;
+      return target ? `/organizations/${organizationSlug}/blogs/${target.handle}` : null;
     case 'BLOG_POST':
       return target
-        ? `/organizations/${organizationId}/blogs/${target.blog.handle}/${target.handle}`
+        ? `/organizations/${organizationSlug}/blogs/${target.blog.handle}/${target.handle}`
         : null;
     case 'ACCOUNT':
-      return `/organizations/${organizationId}/account`;
+      return `/organizations/${organizationSlug}/account`;
     case 'EXTERNAL':
       return item.url;
     default:
@@ -131,7 +131,10 @@ class MenuService {
       include: { items: true },
     });
     if (!menu) throw new NotFoundError('Menu not found');
-    const targets = await this._resolveTargets(organizationId, menu.items);
+    const [targets, organizationSlug] = await Promise.all([
+      this._resolveTargets(organizationId, menu.items),
+      this._organizationSlug(organizationId),
+    ]);
     const decorate = (node) => ({
       id: node.id,
       label: node.label,
@@ -139,7 +142,7 @@ class MenuService {
       targetId: node.targetId,
       url: node.url,
       newTab: node.newTab,
-      target: this._describeTarget(organizationId, node, targets),
+      target: this._describeTarget(organizationSlug, node, targets),
       children: node.children.map(decorate),
     });
     return {
@@ -262,9 +265,12 @@ class MenuService {
       include: { items: true },
     });
     const allItems = menus.flatMap((menu) => menu.items);
-    const targets = await this._resolveTargets(organizationId, allItems);
+    const [targets, organizationSlug] = await Promise.all([
+      this._resolveTargets(organizationId, allItems),
+      this._organizationSlug(organizationId),
+    ]);
     const render = (node) => {
-      const described = this._describeTarget(organizationId, node, targets);
+      const described = this._describeTarget(organizationSlug, node, targets);
       if (described.status !== 'ok') return null;
       return {
         id: node.id,
@@ -437,13 +443,13 @@ class MenuService {
       ids('EVENT').length
         ? prisma.event.findMany({
             where: { id: { in: ids('EVENT') }, venue: { organizationId } },
-            select: { id: true, name: true, status: true },
+            select: { id: true, slug: true, name: true, status: true },
           })
         : [],
       ids('VENUE').length
         ? prisma.venue.findMany({
             where: { id: { in: ids('VENUE') }, organizationId },
-            select: { id: true, name: true },
+            select: { id: true, slug: true, name: true },
           })
         : [],
       ids('PAGE').length
@@ -482,9 +488,9 @@ class MenuService {
   }
 
   /** { title, status: ok | missing | hidden, href } for one item. */
-  _describeTarget(organizationId, item, targets) {
+  _describeTarget(organizationSlug, item, targets) {
     if (!TARGET_TYPES.has(item.linkType)) {
-      return { title: null, status: 'ok', href: hrefFor(organizationId, item, null) };
+      return { title: null, status: 'ok', href: hrefFor(organizationSlug, item, null) };
     }
     const target = targets.get(`${item.linkType}:${item.targetId}`);
     if (!target) return { title: null, status: 'missing', href: null };
@@ -495,8 +501,17 @@ class MenuService {
     return {
       title: target.title || target.name,
       status: hidden ? 'hidden' : 'ok',
-      href: hrefFor(organizationId, item, target),
+      href: hrefFor(organizationSlug, item, target),
     };
+  }
+
+  async _organizationSlug(organizationId) {
+    const organization = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { slug: true },
+    });
+    if (!organization) throw new NotFoundError('Organization not found');
+    return organization.slug;
   }
 }
 

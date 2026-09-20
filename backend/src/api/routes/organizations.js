@@ -24,6 +24,7 @@ import blogPostService from '../../services/BlogPostService.js';
 import pageService from '../../services/PageService.js';
 import menuService from '../../services/MenuService.js';
 import urlRedirectService from '../../services/UrlRedirectService.js';
+import { findByPublicIdentifier } from '../../utils/publicIdentifier.js';
 
 const router = Router();
 
@@ -159,19 +160,50 @@ router.get('/:id/public/meta', async (req, res, next) => {
  * page. Gated by private store mode; hidden / scheduled records are 404.
  * Each payload carries the organization identity for the storefront shell.
  */
-async function publicOrganizationIdentity(id) {
-  const org = await prisma.organization.findFirst({
-    where: { id, status: 'ACTIVE' },
-    select: { id: true, name: true, logoUrl: true, coverUrl: true, brandColor: true, themeMode: true, buyerSignInLinks: true },
+async function publicOrganizationIdentity(identifier) {
+  const org = await findByPublicIdentifier(prisma.organization, identifier, {
+    where: { status: 'ACTIVE' },
+    select: { id: true, slug: true, name: true, logoUrl: true, coverUrl: true, brandColor: true, themeMode: true, buyerSignInLinks: true },
   });
   if (!org) throw new NotFoundError('Organization not found');
   return org;
 }
 
+/** Canonical route lookups used by permanent redirects from legacy ids. */
+router.get('/:id/public/meta/pages/:identifier', async (req, res, next) => {
+  try {
+    const organization = await publicOrganizationIdentity(req.params.id);
+    const page = await pageService.getPublic(organization.id, req.params.identifier);
+    res.json({
+      organization: { id: organization.id, slug: organization.slug },
+      page: { id: page.id, slug: page.slug },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/:id/public/meta/blogs/:blogHandle/:identifier', async (req, res, next) => {
+  try {
+    const organization = await publicOrganizationIdentity(req.params.id);
+    const post = await blogPostService.publicGet(
+      organization.id,
+      req.params.blogHandle,
+      req.params.identifier
+    );
+    res.json({
+      organization: { id: organization.id, slug: organization.slug },
+      post: { id: post.id, handle: post.handle, blog: { handle: post.blog.handle } },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/:id/public/blogs/:blogHandle', gateByOrgParam, async (req, res, next) => {
   try {
     const organization = await publicOrganizationIdentity(req.params.id);
-    const result = await blogPostService.publicList(req.params.id, req.params.blogHandle, req.query.page);
+    const result = await blogPostService.publicList(organization.id, req.params.blogHandle, req.query.page);
     res.json({ organization, ...result });
   } catch (error) {
     next(error);
@@ -181,7 +213,7 @@ router.get('/:id/public/blogs/:blogHandle', gateByOrgParam, async (req, res, nex
 router.get('/:id/public/blogs/:blogHandle/:postHandle', gateByOrgParam, async (req, res, next) => {
   try {
     const organization = await publicOrganizationIdentity(req.params.id);
-    const post = await blogPostService.publicGet(req.params.id, req.params.blogHandle, req.params.postHandle);
+    const post = await blogPostService.publicGet(organization.id, req.params.blogHandle, req.params.postHandle);
     res.json({ organization, post });
   } catch (error) {
     next(error);
@@ -194,7 +226,8 @@ router.get('/:id/public/blogs/:blogHandle/:postHandle', gateByOrgParam, async (r
  */
 router.get('/:id/public/redirect', async (req, res, next) => {
   try {
-    const hit = await urlRedirectService.resolve(req.params.id, req.query.path);
+    const organization = await publicOrganizationIdentity(req.params.id);
+    const hit = await urlRedirectService.resolve(organization.id, req.query.path);
     if (!hit) throw new NotFoundError('No redirect');
     res.set('Cache-Control', 'public, max-age=60');
     res.json(hit);
@@ -206,9 +239,9 @@ router.get('/:id/public/redirect', async (req, res, next) => {
 /** GET /organizations/:id/public/menus — main + footer navigation (spec 027). */
 router.get('/:id/public/menus', gateByOrgParam, async (req, res, next) => {
   try {
-    await publicOrganizationIdentity(req.params.id);
+    const organization = await publicOrganizationIdentity(req.params.id);
     res.set('Cache-Control', 'public, max-age=60');
-    res.json(await menuService.publicMenus(req.params.id));
+    res.json(await menuService.publicMenus(organization.id));
   } catch (error) {
     next(error);
   }
@@ -217,7 +250,7 @@ router.get('/:id/public/menus', gateByOrgParam, async (req, res, next) => {
 router.get('/:id/public/pages/:slug', gateByOrgParam, async (req, res, next) => {
   try {
     const organization = await publicOrganizationIdentity(req.params.id);
-    const page = await pageService.getPublic(req.params.id, req.params.slug);
+    const page = await pageService.getPublic(organization.id, req.params.slug);
     res.json({ organization, page });
   } catch (error) {
     next(error);

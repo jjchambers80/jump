@@ -13,6 +13,7 @@ export interface PriceRange {
 
 export interface EventSummary {
   id: string;
+  slug?: string;
   name: string;
   date: string;
   venue: EventVenue;
@@ -28,6 +29,7 @@ export function formatPrice(dollars: number): string {
 
 export default function EventCard({ event }: { event: EventSummary }) {
   const eventDate = new Date(event.date);
+  const href = event.slug ? `/events/${encodeURIComponent(event.slug)}` : `/events/${event.id}`;
   const formattedDate = eventDate.toLocaleDateString('en-US', {
     weekday: 'long',
     year: 'numeric',
@@ -43,7 +45,7 @@ export default function EventCard({ event }: { event: EventSummary }) {
 
   return (
     <Link
-      href={`/events/${event.id}`}
+      href={href}
       data-testid={`event-card-${event.id}`}
       className="block bg-white dark:bg-slate-800 rounded-lg shadow-md dark:shadow-lg dark:shadow-black/20 hover:shadow-xl dark:hover:shadow-xl dark:hover:shadow-black/30 transition-shadow duration-300 overflow-hidden"
     >
