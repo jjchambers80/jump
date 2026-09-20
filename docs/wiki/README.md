@@ -40,6 +40,7 @@ Generated and maintained by running `/doc-feature` after completing feature work
 
 ### Admin & Organizer
 - [Admin Dashboard](features/admin-dashboard.md) — Stats, event management, analytics
+- [Administration Search](features/admin-search.md) — Authenticated, organization-scoped launcher across events, venues, customers, orders, tickets, applications and content (spec 029; backend implemented)
 - [Organization Settings](features/organization-settings.md) — Settings › General: read-only summary cards with edit dialogs (store contact, address, business details), people (OrganizationPerson)
 - [Tax Settings](features/tax-settings.md) — Settings › Tax: Stripe Tax status, per-state tax regions (collect / not, Stripe Tax or manual rate, Recalculate now), collected tax report, tax-inclusive pricing
 - [Payments Settings](features/payments-settings.md) — Settings › Payments: Stripe status + test-mode badge, statement descriptor suffix (`PREFIX* ORG`), optional payment methods allowlist, rates, Radar (spec 010 phase 1)
