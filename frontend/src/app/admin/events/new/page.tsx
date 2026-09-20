@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation';
 import api from '@/services/api';
 import { useOrg } from '@/components/OrgContext';
 import { TierCard, TierEditDialog, type TierFormData } from '@/components/TierEditDialog';
+import SlugField from '@/components/SlugField';
 
 interface Venue {
   id: string;
@@ -74,6 +75,8 @@ export default function CreateEventPage() {
   const [date, setDate] = useState('');
   const [capacity, setCapacity] = useState('');
   const [category, setCategory] = useState('');
+  const [slug, setSlug] = useState('');
+  const [slugError, setSlugError] = useState<string | null>(null);
   const [priceTiers, setPriceTiers] = useState<PriceTierInput[]>([newTier()]);
   const [editingTierKey, setEditingTierKey] = useState<string | null>(null);
 
@@ -180,6 +183,7 @@ export default function CreateEventPage() {
       const payload = {
         venueId,
         name,
+        slug: slug || undefined,
         description: description || undefined,
         date: new Date(date).toISOString(),
         capacity: parseInt(capacity),
@@ -202,7 +206,11 @@ export default function CreateEventPage() {
       await api.post(`/organizations/${selectedOrgId}/events`, payload);
       router.push('/admin/events');
     } catch (err: any) {
-      setError(err.message || 'Failed to create event');
+      if (err?.status === 409) {
+        setSlugError(err?.message || 'This slug is already taken. Please choose another.');
+      } else {
+        setError(err.message || 'Failed to create event');
+      }
     } finally {
       setSaving(false);
     }
@@ -250,6 +258,17 @@ export default function CreateEventPage() {
                 className={inputClass}
                 required
                 maxLength={255}
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <SlugField
+                value={slug}
+                onChange={setSlug}
+                source={name}
+                prefix="/events/"
+                baseUrl={typeof window !== 'undefined' ? window.location.origin : undefined}
+                error={slugError}
               />
             </div>
 

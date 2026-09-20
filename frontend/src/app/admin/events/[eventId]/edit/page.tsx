@@ -13,6 +13,7 @@ import { resolveAssetUrl } from '@/lib/assets';
 import ImageUploader from '@/components/ImageUploader';
 import { TierCard, TierEditDialog, type TierFormData } from '@/components/TierEditDialog';
 import AddOnsSection from './AddOnsSection';
+import SlugField from '@/components/SlugField';
 
 interface Venue {
   id: string;
@@ -113,6 +114,7 @@ function newTierForm(): TierFormInput {
 interface EventDetail {
   id: string;
   name: string;
+  slug: string;
   description: string | null;
   logoUrl: string | null;
   date: string;
@@ -183,6 +185,8 @@ function EditEventContent() {
   const [category, setCategory] = useState('');
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
+  const [slug, setSlug] = useState('');
+  const [slugError, setSlugError] = useState<string | null>(null);
 
   const [priceTiers, setPriceTiers] = useState<TierFormInput[]>([]);
   const [tiersInitialized, setTiersInitialized] = useState(false);
@@ -215,6 +219,7 @@ function EditEventContent() {
         setCapacity(String(event.capacity));
         setCategory(event.category || '');
         setLogoUrl(event.logoUrl || null);
+        setSlug(event.slug || '');
         // Initialize tier form state from loaded tiers
         const sorted = [...event.priceTiers].sort((a, b) => a.displayOrder - b.displayOrder);
         setPriceTiers(sorted.map(tierToForm));
@@ -366,6 +371,7 @@ function EditEventContent() {
       const payload: Record<string, unknown> = {};
 
       if (name !== eventData?.name) payload.name = name;
+      if (slug !== (eventData?.slug || '')) payload.slug = slug;
       if (description !== (eventData?.description || '')) payload.description = description || null;
       if (venueId !== eventData?.venue?.id) payload.venueId = venueId;
       if (date !== toDatetimeLocal(eventData?.date || ''))
@@ -441,7 +447,11 @@ function EditEventContent() {
       setSuccess(true);
       setTimeout(() => router.push('/admin/events'), 1000);
     } catch (err: any) {
-      setError(err.message || 'Failed to update event');
+      if (err?.status === 409) {
+        setSlugError(err?.message || 'This slug is already taken. Please choose another.');
+      } else {
+        setError(err.message || 'Failed to update event');
+      }
     } finally {
       setSaving(false);
     }
@@ -572,6 +582,17 @@ function EditEventContent() {
                 className={inputClass}
                 required
                 maxLength={255}
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <SlugField
+                value={slug}
+                onChange={setSlug}
+                source={name}
+                prefix="/events/"
+                baseUrl={typeof window !== 'undefined' ? window.location.origin : undefined}
+                error={slugError}
               />
             </div>
 

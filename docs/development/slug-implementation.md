@@ -58,5 +58,5 @@ All in `frontend/src/lib/publicPaths.ts`:
 
 ## Known gaps (not regressions)
 
-1. **Frontend SlugField component**: The t_a873fc3f task was expected to add a reusable SlugField component and wire it into all admin forms (events, venues, organizations, pages, blog posts). The backend handles slug auto-generation from title on all create paths, so forms without editable slug fields work correctly but users can't customize slugs from the admin UI yet.
-2. **Frontend slug controls**: `SeoListingCard.tsx` has a URL handle field usable by pages and blog posts, but event/venue/organization admin forms don't have equivalent controls. The API accepts `slug` in all create/update payloads (validated by `normalizeCustomSlug`), so adding form controls on the frontend is additive.
+1. **Pages admin editor**: There is no admin UI for creating/editing pages yet (spec 026 covers blog posts only at this point). When a page editor is built, it should use `SeoListingCard` (which already has a URL handle/slug field) like the blog post editor does.
+2. **Blog slug in admin list**: The admin blogs/events/venues list views still link with IDs rather than slugs. Public-facing links (`View event`, `View venue`, `View public page`) could use slugs for prettier URLs, but the current ID-based links work correctly because the backend resolves by both ID and slug.

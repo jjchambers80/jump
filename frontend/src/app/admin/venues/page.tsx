@@ -12,10 +12,12 @@ import { resolveAssetUrl } from '@/lib/assets';
 import { StateSelect } from '@/components/StateSelect';
 import { useOrg } from '@/components/OrgContext';
 import ImageUploader from '@/components/ImageUploader';
+import SlugField from '@/components/SlugField';
 
 interface Venue {
   id: string;
   name: string;
+  slug?: string;
   address: string;
   city: string | null;
   state: string | null;
@@ -33,6 +35,7 @@ interface Venue {
 
 interface VenueFormData {
   name: string;
+  slug: string;
   address: string;
   city: string;
   state: string;
@@ -43,6 +46,7 @@ interface VenueFormData {
 
 const EMPTY_FORM: VenueFormData = {
   name: '',
+  slug: '',
   address: '',
   city: '',
   state: '',
@@ -63,6 +67,7 @@ export default function VenuesPage() {
   const [logoUploading, setLogoUploading] = useState(false);
   const [selectedLogo, setSelectedLogo] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [slugError, setSlugError] = useState<string | null>(null);
 
   const fetchVenues = useCallback(async () => {
     if (!selectedOrgId) return;
@@ -99,6 +104,7 @@ export default function VenuesPage() {
   const handleEdit = (venue: Venue) => {
     setFormData({
       name: venue.name,
+      slug: venue.slug || '',
       address: venue.address,
       city: venue.city || '',
       state: venue.state || '',
@@ -192,7 +198,11 @@ export default function VenuesPage() {
       setLogoPreview(null);
       await fetchVenues();
     } catch (err: any) {
-      setError(err.message || 'Failed to save venue');
+      if (err?.status === 409) {
+        setSlugError(err?.message || 'This slug is already taken. Please choose another.');
+      } else {
+        setError(err.message || 'Failed to save venue');
+      }
     } finally {
       setSaving(false);
     }
@@ -266,6 +276,16 @@ export default function VenuesPage() {
                 placeholder="Venue name"
                 className="block w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 required
+              />
+            </div>
+            <div className="md:col-span-2">
+              <SlugField
+                value={formData.slug}
+                onChange={(value) => setFormData({ ...formData, slug: value })}
+                source={formData.name}
+                prefix="/venues/"
+                baseUrl={typeof window !== 'undefined' ? window.location.origin : undefined}
+                error={slugError}
               />
             </div>
             <div>
