@@ -3,6 +3,20 @@
 
 import { ValidationError } from '../../middleware/errorHandler.js';
 
+/** GET /admin/search?q= — trim and bound the launcher query before any DB work. */
+export const validateAdminSearchQuery = (req, res, next) => {
+  const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+  if (query.length < 2 || query.length > 200) {
+    return next(
+      new ValidationError('Validation failed', [
+        { field: 'q', message: 'q must be 2–200 characters' },
+      ])
+    );
+  }
+  req.adminSearchQuery = query;
+  next();
+};
+
 /**
  * Validate event creation request
  * name: required, max 255 chars

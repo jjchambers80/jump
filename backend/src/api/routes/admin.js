@@ -7,7 +7,10 @@ import { requireAuth } from '../../middleware/auth.js';
 import { requireOrganizer, requireAdmin } from '../../middleware/rbac.js';
 import { NotFoundError, ValidationError } from '../../middleware/errorHandler.js';
 import { resolveOrgScope, isUnscoped } from '../../middleware/orgScope.js';
-import { validateUpdateAttendee } from '../validators/adminValidators.js';
+import {
+  validateAdminSearchQuery,
+  validateUpdateAttendee,
+} from '../validators/adminValidators.js';
 import { validateUpdateBusinessDetails } from '../validators/organizationValidators.js';
 import { validateCreateOrganizationPerson } from '../validators/organizationPersonValidators.js';
 import { validateTaxRegionParams, validateUpsertTaxRegion, validateUpdateTaxSettings, validateTaxReportQuery } from '../validators/taxValidators.js';
@@ -38,6 +41,7 @@ import setupGuideService from '../../services/SetupGuideService.js';
 import billingService from '../../services/BillingService.js';
 import pageService from '../../services/PageService.js';
 import storefrontPreferencesService from '../../services/StorefrontPreferencesService.js';
+import adminSearchService from '../../services/AdminSearchService.js';
 import { PAID_ORDER_STATUSES } from '../../services/paidStatuses.js';
 import { activeOrgFor } from './adminScope.js';
 
@@ -48,6 +52,24 @@ router.use(requireAuth);
 router.use(requireOrganizer);
 
 // Organization the Settings pages act on — see routes/adminScope.js.
+
+/**
+ * GET /admin/search?q=<term> — bounded launcher results across admin resources.
+ * Members are restricted to their active organization; a SYSTEM_ADMIN without
+ * X-Jump-Org is intentionally unscoped, matching the other admin lists.
+ */
+router.get('/search', validateAdminSearchQuery, async (req, res, next) => {
+  try {
+    const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
+    if (!isUnscoped(scope) && !scope.organizationId) {
+      return res.json({ query: req.adminSearchQuery, total: 0, data: [] });
+    }
+    const data = await adminSearchService.search(scope, req.adminSearchQuery);
+    res.json({ query: req.adminSearchQuery, total: data.length, data });
+  } catch (error) {
+    next(error);
+  }
+});
 
 /** GET /admin/settings/business-details — current user's assigned organization. */
 router.get('/settings/business-details', async (req, res, next) => {
