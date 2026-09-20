@@ -9,7 +9,7 @@
 // slug is unique per event.
 
 import { prisma } from '@jump/db';
-import { slugify } from '../utils/slug.js';
+import { slugify, uniqueSlug } from '../utils/slug.js';
 import { ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import { CHOICE_TYPES, MAX_OPTIONS, MAX_PINNED_QUESTIONS, QUESTION_TYPES } from '../config/applications.js';
 import feeService from './FeeService.js';
@@ -543,15 +543,11 @@ class ApplicationFormService {
   }
 
   async _uniqueSlug(eventId, raw, exceptFormId = null) {
-    const base = slugify(raw);
-    if (!base) throw new ValidationError('slug must contain letters or numbers');
-    let slug = base;
-    for (let i = 2; i < 100; i += 1) {
-      const clash = await prisma.applicationForm.findFirst({ where: { eventId, slug, NOT: exceptFormId ? { id: exceptFormId } : undefined }, select: { id: true } });
-      if (!clash) return slug;
-      slug = `${base}-${i}`;
-    }
-    throw new ConflictError('Could not find a free slug');
+    return uniqueSlug(prisma.applicationForm, {
+      scope: { eventId },
+      raw,
+      exceptId: exceptFormId,
+    });
   }
 
   _validateFormFields(body, kind, existing) {
