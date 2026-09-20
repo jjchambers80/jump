@@ -7,6 +7,7 @@
 import React, { useEffect, useState, useCallback, Suspense } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { ExternalLink } from 'lucide-react';
 import api from '@/services/api';
 import { resolveAssetUrl } from '@/lib/assets';
 import ImageUploader from '@/components/ImageUploader';
@@ -507,12 +508,23 @@ function EditEventContent() {
             </p>
           )}
         </div>
-        <button
-          onClick={() => router.push('/admin/events')}
-          className="text-sm text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
-        >
-          ← Back to Events
-        </button>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => router.push('/admin/events')}
+            className="text-sm text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+          >
+            ← Back to Events
+          </button>
+          <a
+            href={`/events/${eventId}`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+          >
+            View event
+            <ExternalLink className="h-4 w-4" aria-hidden />
+          </a>
+        </div>
       </div>
 
       {error && (

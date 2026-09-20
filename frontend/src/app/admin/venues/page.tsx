@@ -6,6 +6,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { ExternalLink } from 'lucide-react';
 import api from '@/services/api';
 import { resolveAssetUrl } from '@/lib/assets';
 import { StateSelect } from '@/components/StateSelect';
@@ -236,9 +237,22 @@ export default function VenuesPage() {
           onSubmit={handleSubmit}
           className="mb-8 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 space-y-4"
         >
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-            {editingId ? 'Edit Venue' : 'New Venue'}
-          </h2>
+          <div className="flex items-center justify-between gap-4">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              {editingId ? 'Edit Venue' : 'New Venue'}
+            </h2>
+            {editingId && (
+              <a
+                href={`/venues/${editingId}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+              >
+                View venue
+                <ExternalLink className="h-4 w-4" aria-hidden />
+              </a>
+            )}
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
