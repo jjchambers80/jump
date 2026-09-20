@@ -4,16 +4,21 @@
 // storefront (name, handle, theme, branding); the org itself is picked in the
 // header switcher. Users (FR-006, ADMIN only) lives under
 // Settings › Users rather than in the main list.
+// Sections with sub-pages (Finance, Online store, Content) are collapsed by
+// default; a chevron toggle expands them, and the section holding the current
+// page opens automatically so the active link is never hidden.
 // Active state via usePathname(), mobile-responsive with toggle
 
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import {
   CalendarDays,
   ChartColumn,
+  ChevronRight,
   ClipboardList,
   FileText,
   Landmark,
@@ -33,8 +38,8 @@ interface NavItem {
   href: string;
   /** Parent-level items carry an icon; nested links are indented instead. */
   icon?: LucideIcon;
-  /** Visually nest this link beneath the preceding section link. */
-  nested?: boolean;
+  /** Sub-pages rendered beneath this link when the section is expanded. */
+  children?: NavItem[];
   /** Only show for these roles. If undefined, show for all allowed roles. */
   roles?: string[];
 }
@@ -49,16 +54,49 @@ const navItems: NavItem[] = [
   { label: 'Participants', href: '/admin/participants', icon: ClipboardList },
   { label: 'Check In', href: '/admin/orders/scan', icon: ScanLine },
   { label: 'Analytics', href: '/admin/analytics', icon: ChartColumn },
-  { label: 'Finance', href: '/admin/finance', icon: Landmark },
-  { label: 'Payouts', href: '/admin/finance/payouts', nested: true },
-  { label: 'Online store', href: '/admin/online-store', icon: Store },
-  { label: 'Pages', href: '/admin/online-store/pages', nested: true },
-  { label: 'Preferences', href: '/admin/online-store/preferences', nested: true },
-  { label: 'Content', href: '/admin/content', icon: FileText },
-  { label: 'Files', href: '/admin/content/files', nested: true },
-  { label: 'Menus', href: '/admin/content/menus', nested: true },
-  { label: 'Blog posts', href: '/admin/content/blog-posts', nested: true },
+  {
+    label: 'Finance',
+    href: '/admin/finance',
+    icon: Landmark,
+    children: [{ label: 'Payouts', href: '/admin/finance/payouts' }],
+  },
+  {
+    label: 'Online store',
+    href: '/admin/online-store',
+    icon: Store,
+    children: [
+      { label: 'Pages', href: '/admin/online-store/pages' },
+      { label: 'Preferences', href: '/admin/online-store/preferences' },
+    ],
+  },
+  {
+    label: 'Content',
+    href: '/admin/content',
+    icon: FileText,
+    children: [
+      { label: 'Files', href: '/admin/content/files' },
+      { label: 'Menus', href: '/admin/content/menus' },
+      { label: 'Blog posts', href: '/admin/content/blog-posts' },
+    ],
+  },
 ];
+
+/** Every link, parents and children alike, for the "more specific route" check. */
+const allItems: NavItem[] = navItems.flatMap((item) => [item, ...(item.children ?? [])]);
+
+/** The section whose href is a prefix of the current path, if any. */
+function sectionFor(pathname: string): string | undefined {
+  return navItems.find(
+    (item) => item.children && (pathname === item.href || pathname.startsWith(item.href + '/'))
+  )?.href;
+}
+
+const linkClass = (active: boolean) =>
+  `flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+    active
+      ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
+      : 'text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700'
+  }`;
 
 interface AdminSidebarProps {
   isOpen: boolean;
@@ -70,6 +108,19 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
   const { data: session } = useSession();
   const userRole = (session?.user as any)?.role;
 
+  // Sections are collapsed until toggled; the one holding the current page is
+  // opened whenever the route changes into it.
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
+    const current = sectionFor(pathname);
+    return current ? { [current]: true } : {};
+  });
+  useEffect(() => {
+    const current = sectionFor(pathname);
+    if (current) setExpanded((prev) => (prev[current] ? prev : { ...prev, [current]: true }));
+  }, [pathname]);
+
+  const toggle = (href: string) => setExpanded((prev) => ({ ...prev, [href]: !prev[href] }));
+
   const isActive = (href: string) => {
     if (href === '/admin/dashboard') {
       return pathname === '/admin' || pathname === '/admin/dashboard';
@@ -79,7 +130,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
     // Sub-route match, but skip if a more specific nav item owns this path
     // (e.g. /admin/orders/scan should match "Check In", not "Orders")
     if (pathname.startsWith(href + '/')) {
-      const moreSpecific = navItems.some(
+      const moreSpecific = allItems.some(
         (item) =>
           item.href !== href && item.href.startsWith(href + '/') && pathname.startsWith(item.href)
       );
@@ -144,25 +195,64 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
             {visibleItems.map((item) => {
               const active = isActive(item.href);
               const Icon = item.icon;
-              return (
+              const children = item.children?.filter(
+                (child) => !child.roles || child.roles.includes(userRole)
+              );
+              const link = (
                 <Link
-                  key={item.href}
                   href={item.href}
                   onClick={onClose}
                   aria-current={active ? 'page' : undefined}
-                  className={`
-                    flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors
-                    ${item.nested ? 'ml-4 pl-6' : ''}
-                    ${
-                      active
-                        ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
-                        : 'text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700'
-                    }
-                  `}
+                  className={`${linkClass(active)} flex-1 min-w-0`}
                 >
                   {Icon && <Icon className="w-4 h-4 mr-3 shrink-0" aria-hidden="true" />}
                   {item.label}
                 </Link>
+              );
+
+              if (!children?.length) {
+                return <div key={item.href}>{link}</div>;
+              }
+
+              const open = !!expanded[item.href];
+              const panelId = `sidebar-section-${item.href.replace(/\W+/g, '-')}`;
+              return (
+                <div key={item.href} data-testid={`sidebar-section-${item.label}`}>
+                  <div className="flex items-center gap-1">
+                    {link}
+                    <button
+                      type="button"
+                      onClick={() => toggle(item.href)}
+                      aria-expanded={open}
+                      aria-controls={panelId}
+                      aria-label={`${open ? 'Collapse' : 'Expand'} ${item.label}`}
+                      className="p-2 rounded-md text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-gray-700 dark:hover:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <ChevronRight
+                        className={`w-4 h-4 transition-transform motion-reduce:transition-none ${
+                          open ? 'rotate-90' : ''
+                        }`}
+                        aria-hidden="true"
+                      />
+                    </button>
+                  </div>
+                  <div id={panelId} hidden={!open} className="mt-1 space-y-1">
+                    {children.map((child) => {
+                      const childActive = isActive(child.href);
+                      return (
+                        <Link
+                          key={child.href}
+                          href={child.href}
+                          onClick={onClose}
+                          aria-current={childActive ? 'page' : undefined}
+                          className={`${linkClass(childActive)} ml-4 pl-6`}
+                        >
+                          {child.label}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
               );
             })}
           </nav>
