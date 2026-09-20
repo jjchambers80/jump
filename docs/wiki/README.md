@@ -61,6 +61,7 @@ Generated and maintained by running `/doc-feature` after completing feature work
 ### Frontend
 - [Theme System](features/theme-system.md) — Light/dark/auto modes, localStorage persistence
 - [Account Settings › General](features/account-settings.md) — `/admin/account` from the org menu: photo, name, verified email change, phone, language, time zone; `locale`/`timeZone`/`picture` JWT claims (spec 030 A)
+- [Devices & Sessions](features/devices-sessions.md) — Account › Security › Devices: `UserSession` rows + JWT `sid`, immediate API revocation, log out one / all others, `SecurityEvent` trail (spec 030 D)
 - [Org Switcher](features/org-switcher.md) — Global organization context in the admin header; `X-Jump-Org` header, backend `activeOrgFor(req)`, JWT claim refresh
 - [Organization Onboarding](features/organization-onboarding.md) — Shopify-style `/signup` flow from the org switcher (name → survey → done, new tab), `PlatformCustomer` per organization, pending orgs hidden until complete, `UNASSIGNED` promoted to ADMIN, dashboard setup guide cards; scopes check-in scan/redeem to the staff caller's organization (phase 1); Jump subscriptions on Jump's own Stripe account — subscribe step with embedded Checkout + trial, Settings › Plan, customer portal, `POST /webhooks/stripe/billing`, dark behind `BILLING_ENABLED` (phase 2); survey-tailored starter templates + check-in card, abandoned-signup sweep, SYSTEM_ADMIN funnel + survey summary (phase 3)
 
