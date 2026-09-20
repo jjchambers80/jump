@@ -21,6 +21,10 @@ async function signIn(page: Page, baseURL: string) {
   await page.route(`${API}/organizations`, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'org-1', name: 'Analytical Engines', status: 'ACTIVE', createdAt: iso(0), updatedAt: iso(0) }]) })
   );
+  // The Security page loads the sign-in-method overview (spec 030 B) before rendering its cards
+  await page.route(`${API}/account/security`, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ password: { set: false, updatedAt: null }, passkeys: [], providers: [], secondaryEmail: null, reauthMethods: ['email'] }) })
+  );
 }
 
 async function mockSessions(page: Page) {
@@ -75,7 +79,7 @@ test.describe('Account › Security › Devices', () => {
     await page.getByRole('button', { name: 'Log out iOS · Mobile Safari' }).click();
     await expect(page.getByTestId('device-row')).toHaveCount(2);
     expect(mock.calls).toEqual(['revoke:sess-phone']);
-    await expect(page.getByRole('status').last()).toHaveText('iOS · Mobile Safari logged out.');
+    await expect(page.getByTestId('devices-card').getByRole('status')).toHaveText('iOS · Mobile Safari logged out.');
   });
 
   test('dismissing the confirmation changes nothing', async ({ page, baseURL }) => {

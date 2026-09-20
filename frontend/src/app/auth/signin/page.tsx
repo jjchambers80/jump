@@ -7,6 +7,9 @@ import React, { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
+import { startAuthentication } from '@simplewebauthn/browser';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
 
 /** Only same-origin paths may be a post-sign-in destination. */
 function safeCallbackUrl(raw: string | null, fallback: string): string {
@@ -24,6 +27,50 @@ function SignInForm() {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  // Spec 030 B: optional password + passkey sign-in beside the magic link
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
+  async function handlePassword(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const result = await signIn('password', { email, password, redirect: false, callbackUrl });
+      if (result?.error) setError('Wrong email or password.');
+      else window.location.href = result?.url || callbackUrl;
+    } catch {
+      setError('An unexpected error occurred.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handlePasskey() {
+    setLoading(true);
+    setError('');
+    try {
+      const optionsRes = await fetch(`${API_URL}/auth/passkey/options`, { method: 'POST' });
+      if (!optionsRes.ok) throw new Error('options');
+      const { challengeId, options } = await optionsRes.json();
+      const assertion = await startAuthentication({ optionsJSON: options });
+      const verifyRes = await fetch(`${API_URL}/auth/passkey/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ challengeId, response: assertion }),
+      });
+      if (!verifyRes.ok) throw new Error('verify');
+      const { bridgeToken } = await verifyRes.json();
+      const result = await signIn('token-bridge', { token: bridgeToken, redirect: false, callbackUrl });
+      if (result?.error) throw new Error('bridge');
+      window.location.href = result?.url || callbackUrl;
+    } catch (err: any) {
+      if (err?.name === 'NotAllowedError') setError('');
+      else setError('Passkey sign-in failed. Try another method.');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function handleMagicLink(e: React.FormEvent) {
     e.preventDefault();
@@ -89,7 +136,7 @@ function SignInForm() {
           Sign in to Jump
         </h1>
         <p className="text-sm text-gray-500 dark:text-slate-400 text-center mb-8">
-          No password needed — use your email or Google account
+          Use a passkey, your Google account, an email link or a password
         </p>
 
         {params.get('reason') === 'revoked' && (
@@ -128,6 +175,23 @@ function SignInForm() {
             />
           </svg>
           Continue with Google
+        </button>
+
+        {/* Passkey sign-in (spec 030 B) */}
+        <button
+          type="button"
+          onClick={handlePasskey}
+          disabled={loading}
+          data-testid="signin-passkey"
+          className="w-full flex items-center justify-center gap-3 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg py-2.5 px-4 text-sm font-medium text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-600 transition mb-6 -mt-3 disabled:opacity-50"
+        >
+          <svg aria-hidden="true" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />
+            <path d="M5 21v-1a5 5 0 0 1 5-5h1" />
+            <circle cx="17" cy="16" r="2.5" />
+            <path d="M17 18.5V22l1.5-1.5" />
+          </svg>
+          Sign in with a passkey
         </button>
 
         <div className="relative mb-6">
@@ -197,6 +261,48 @@ function SignInForm() {
             {loading ? 'Sending...' : 'Send Magic Link'}
           </button>
         </form>
+
+        {/* Password sign-in (spec 030 B) — optional; most staff use a link, Google or a passkey */}
+        <div className="mt-4">
+          {!showPassword ? (
+            <button
+              type="button"
+              onClick={() => setShowPassword(true)}
+              className="w-full text-center text-sm text-indigo-600 dark:text-indigo-400 hover:underline"
+            >
+              Sign in with a password instead
+            </button>
+          ) : (
+            <form onSubmit={handlePassword} data-testid="signin-password-form">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                Password
+              </label>
+              <input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="w-full px-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 mb-3"
+              />
+              <button
+                type="submit"
+                disabled={loading || !email || !password}
+                className="w-full bg-gray-900 hover:bg-gray-800 disabled:bg-gray-300 dark:bg-slate-600 dark:hover:bg-slate-500 dark:disabled:bg-slate-700 text-white font-medium py-2.5 rounded-lg transition"
+              >
+                {loading ? 'Signing in...' : 'Sign in with password'}
+              </button>
+            </form>
+          )}
+        </div>
+
+        <p className="mt-4 text-center text-xs text-gray-500 dark:text-slate-400">
+          Can&apos;t sign in?{' '}
+          <Link href="/auth/recover" className="text-indigo-600 dark:text-indigo-400 hover:underline">
+            Restore access with your secondary email
+          </Link>
+        </p>
 
         <p className="mt-6 text-center text-xs text-gray-500 dark:text-slate-400">
           Want to sell tickets on Jump?{' '}

@@ -24,6 +24,10 @@ export default {
     Google({
       clientId: process.env.AUTH_GOOGLE_ID,
       clientSecret: process.env.AUTH_GOOGLE_SECRET,
+      // Spec 030 B: "Connect Google" from Account › Security links a Google
+      // account to the existing user with the same (Google-verified) email
+      // instead of failing with OAuthAccountNotLinked.
+      allowDangerousEmailAccountLinking: true,
     }),
   ],
   pages: {
