@@ -292,6 +292,9 @@ model BlogPost {
   blogId         String
   title          String
   handle         String
+  // `handle` is the persisted blog-post slug for backwards compatibility.
+  // This flag distinguishes title-derived handles from organizer custom values.
+  slugCustomized Boolean   @default(false)
   content        String
   excerpt        String?
   authorName     String
@@ -413,6 +416,7 @@ model Organization {
   // The cuid() default only covers direct prisma.organization.create calls
   // (tests, seed); OrganizationService always sets a name-derived slug.
   slug                       String                 @unique @default(cuid())
+  slugCustomized             Boolean                @default(false)
   status                     OrganizationStatus     @default(ACTIVE)
   companyName                String?
   email                      String?
@@ -513,6 +517,7 @@ model Page {
   // URL handle, unique per organization: /organizations/:orgId/pages/:slug.
   // Derived from the title unless the organizer sets one (search engine listing).
   slug           String
+  slugCustomized Boolean  @default(false)
   content        String
   isVisible      Boolean  @default(true)
   // Search engine listing overrides; null falls back to title / no description.
@@ -656,6 +661,9 @@ model Venue {
   id             String  @id @default(cuid())
   organizationId String
   name           String
+  // Public namespace is /venues/:slug, so venue slugs are globally unique.
+  slug           String  @unique @default(cuid())
+  slugCustomized Boolean @default(false)
   address        String
   city           String?
   state          String?
@@ -728,18 +736,21 @@ model BuyerLoginToken {
 }
 
 model Event {
-  id            String      @id @default(cuid())
-  venueId       String
-  name          String
-  description   String?
-  logoUrl       String?
-  imageId       String?
-  date          DateTime
-  capacity      Int
-  category      String?
-  status        EventStatus @default(DRAFT)
-  taxRate       Decimal?    @db.Decimal(6, 5)
-  taxRateSource TaxSource?
+  id             String      @id @default(cuid())
+  venueId        String
+  name           String
+  // Public namespace is /events/:slug, so event slugs are globally unique.
+  slug           String      @unique @default(cuid())
+  slugCustomized Boolean     @default(false)
+  description    String?
+  logoUrl        String?
+  imageId        String?
+  date           DateTime
+  capacity       Int
+  category       String?
+  status         EventStatus @default(DRAFT)
+  taxRate        Decimal?    @db.Decimal(6, 5)
+  taxRateSource  TaxSource?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
