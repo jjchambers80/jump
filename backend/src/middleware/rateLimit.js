@@ -109,6 +109,12 @@ export const LIMITS = Object.freeze({
     limit: 20,
     message: 'Too many sign-in requests from this address. Try again later.',
   },
+  // Spec 031 phase 3: six-digit code guesses per IP (each code also dies after 5 wrong guesses)
+  BUYER_AUTH_VERIFY: {
+    windowMs: 15 * 60 * 1000,
+    limit: 30,
+    message: 'Too many sign-in attempts from this address. Try again later.',
+  },
   APPLICATION_SUBMIT: {
     windowMs: 60 * 60 * 1000,
     limit: 30,

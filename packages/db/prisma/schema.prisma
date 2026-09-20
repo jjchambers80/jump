@@ -61,8 +61,8 @@ model User {
   // Spec 022: organizations this user signed up (owner of the Jump account)
   platformCustomers PlatformCustomer[]
   // Spec 030: revocable sessions (Devices) and the security audit trail
-  sessions       UserSession[]
-  securityEvents SecurityEvent[]
+  sessions          UserSession[]
+  securityEvents    SecurityEvent[]
 
   @@index([role])
   @@index([email])
@@ -438,6 +438,9 @@ model Organization {
   selfServeRefundCutoffHours Int?
   selfServeRefundFeeType     SelfServeRefundFeeType @default(NONE)
   selfServeRefundFeeValue    Decimal?               @db.Decimal(10, 2)
+  // Spec 031 phase 3: how buyers sign in — the email link alone, or a
+  // six-digit code typed on the account page (the email still carries the link).
+  buyerSignInMethod          BuyerSignInMethod      @default(LINK)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -678,6 +681,7 @@ model BuyerLoginToken {
   purpose        BuyerTokenPurpose
   expiresAt      DateTime
   usedAt         DateTime?
+  attempts       Int               @default(0) // failed guesses at a CODE token (spec 031); dead after 5
   createdAt      DateTime          @default(now())
 
   contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
@@ -986,6 +990,13 @@ enum PlatformPlan {
 enum BuyerTokenPurpose {
   WELCOME
   LOGIN
+  CODE
+}
+
+// Spec 031: buyer sign-in method per organization.
+enum BuyerSignInMethod {
+  LINK
+  CODE
 }
 
 enum DomainStatus {

@@ -3,13 +3,14 @@
 // whether the storefront shows sign-in links, how buyers sign in, and the
 // public account URL. Phase 1: sign-in links toggle + read-only cards.
 // Phase 2: the self-serve refund policy (cutoff before the event, fee).
+// Phase 3: the sign-in method (email link, or a six-digit code).
 'use client';
 
 import Link from 'next/link';
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useOrg } from '@/components/OrgContext';
-import api, { type CustomerAccountSettings, type CustomerAccountSettingsInput, type SelfServeRefundFeeType } from '@/services/api';
+import api, { type BuyerSignInMethod, type CustomerAccountSettings, type CustomerAccountSettingsInput, type SelfServeRefundFeeType } from '@/services/api';
 import SettingsNav from '../SettingsNav';
 import { UsersIcon } from '../icons';
 
@@ -116,6 +117,7 @@ export default function CustomerAccountsSettingsPage() {
     setSettings({
       ...settings,
       ...(body.buyerSignInLinks !== undefined ? { buyerSignInLinks: body.buyerSignInLinks } : {}),
+      ...(body.buyerSignInMethod !== undefined ? { signInMethod: body.buyerSignInMethod } : {}),
       ...(body.selfServeRefundsEnabled !== undefined
         ? { refundPolicy: { ...settings.refundPolicy, enabled: body.selfServeRefundsEnabled } }
         : {}),
@@ -258,12 +260,36 @@ export default function CustomerAccountsSettingsPage() {
                     </Link>
                   </div>
                   <div className={rowClass} data-testid="authentication-row">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">Authentication</p>
+                    <fieldset className="min-w-0 flex-1">
+                      <legend className="text-sm font-medium text-gray-900 dark:text-white">Authentication</legend>
                       <p className="text-sm text-gray-500 dark:text-slate-400">
-                        Email link · the link works for 15 minutes · buyers stay signed in for 30 days
+                        No passwords. Buyers stay signed in for 30 days.
                       </p>
-                    </div>
+                      <div className="mt-3 space-y-2">
+                        {(
+                          [
+                            ['LINK', 'Email link', 'The email has a sign-in button. Works for 15 minutes.'],
+                            ['CODE', 'Email code', 'The email shows a 6-digit code to type on the sign-in page (10 minutes), plus the link. Best when buyers read email on a different device.'],
+                          ] as [BuyerSignInMethod, string, string][]
+                        ).map(([value, title, help]) => (
+                          <label key={value} className="flex cursor-pointer items-start gap-3 text-sm">
+                            <input
+                              type="radio"
+                              name="sign-in-method"
+                              value={value}
+                              checked={settings.signInMethod === value}
+                              onChange={() => void patch({ buyerSignInMethod: value })}
+                              disabled={!canEdit || saving}
+                              className="mt-0.5 h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-600"
+                            />
+                            <span>
+                              <span className="font-medium text-gray-900 dark:text-white">{title}</span>
+                              <span className="block text-gray-500 dark:text-slate-400">{help}</span>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </fieldset>
                   </div>
                   <div className={rowClass} data-testid="self-serve-refunds-row">
                     <div className="min-w-0 flex-1">

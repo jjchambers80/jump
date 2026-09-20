@@ -1,6 +1,6 @@
 # Implementation Plan: Settings › Customer accounts (spec 031)
 
-**Status**: Phase 1 merged 2026-09-20 (PR #113). Phase 2 built 2026-09-20 (`feat/031-customer-accounts-phase-2`). Phase 3 not started.
+**Status**: Phase 1 merged 2026-09-20 (PR #113). Phase 2 merged 2026-09-20 (PR #114). Phase 3 built 2026-09-20 (`feat/031-customer-accounts-phase-3`).
 **Phase 2 deviation**: a self-refund that retains a fee leaves the order `PARTIALLY_REFUNDED` (the fee is money still on the order) so staff can return it with `refundOrder`; the plan's §7 risk note assumed `REFUNDED`.
 **Spec**: [spec.md](./spec.md)
 **Dependencies**: nothing new. Reuses the buyer session (spec 007), the `/admin/online-store/preferences` GET/PATCH pattern, `RefundService.refundTicket`, `activeOrgFor(req)`, `storefrontFor()` and the spec 020 limiter factory.

@@ -7,8 +7,12 @@
 // - A buyer session is its own HS256 JWT with typ 'buyer'. Staff middleware
 //   rejects it and this service rejects staff tokens, so the two principals
 //   never cross.
+// - Spec 031 phase 3: an organization may use a six-digit CODE instead of
+//   (well, alongside) the link. Codes live in the same table with purpose
+//   CODE, 10-minute TTL, hashed with the org + email so a code is only good
+//   for the address it was sent to, and die after 5 wrong guesses.
 
-import { createHash, randomBytes } from 'crypto';
+import { createHash, randomBytes, randomInt, timingSafeEqual } from 'crypto';
 import jwt from 'jsonwebtoken';
 import { prisma } from '@jump/db';
 import logger from '../utils/logger.js';
@@ -17,7 +21,11 @@ import { AuthenticationError } from '../middleware/errorHandler.js';
 const TOKEN_TTL_MS = {
   LOGIN: 15 * 60 * 1000,
   WELCOME: 7 * 24 * 60 * 60 * 1000,
+  CODE: 10 * 60 * 1000,
 };
+
+export const CODE_LENGTH = 6;
+export const CODE_MAX_ATTEMPTS = 5;
 
 export const BUYER_SESSION_TYP = 'buyer';
 const SESSION_TTL = '30d';
@@ -28,6 +36,15 @@ const LOGIN_REQUESTS_PER_WINDOW = 3;
 
 function hashToken(rawToken) {
   return createHash('sha256').update(rawToken).digest('hex');
+}
+
+/** A code is bound to the organization and address it was sent to. */
+function hashCode(organizationId, email, code) {
+  return hashToken(`code:${organizationId}:${email.toLowerCase()}:${code}`);
+}
+
+function isCodeShaped(value) {
+  return typeof value === 'string' && new RegExp(`^\\d{${CODE_LENGTH}}$`).test(value);
 }
 
 class BuyerAuthService {
@@ -58,6 +75,25 @@ class BuyerAuthService {
   }
 
   /**
+   * Issue a six-digit sign-in code for a contact (spec 031). Returns it once.
+   * @returns {Promise<{ rawCode: string, expiresAt: Date }>}
+   */
+  async issueCode(contact) {
+    const rawCode = String(randomInt(0, 10 ** CODE_LENGTH)).padStart(CODE_LENGTH, '0');
+    const expiresAt = new Date(Date.now() + TOKEN_TTL_MS.CODE);
+    await prisma.buyerLoginToken.create({
+      data: {
+        contactId: contact.id,
+        organizationId: contact.organizationId,
+        tokenHash: hashCode(contact.organizationId, contact.email, rawCode),
+        purpose: 'CODE',
+        expiresAt,
+      },
+    });
+    return { rawCode, expiresAt };
+  }
+
+  /**
    * Whether a contact has hit the LOGIN token issuance cap.
    * @param {string} contactId
    */
@@ -76,7 +112,10 @@ class BuyerAuthService {
    *
    * @param {string} organizationId
    * @param {string} email
-   * @returns {Promise<{ issued: boolean, contact?: object, rawToken?: string }>}
+   * When the organization signs buyers in by CODE, a six-digit code is issued
+   * alongside the link and returned as `rawCode`.
+   *
+   * @returns {Promise<{ issued: boolean, contact?: object, rawToken?: string, rawCode?: string|null }>}
    */
   async requestLogin(organizationId, email) {
     const contact = await prisma.contact.findUnique({
@@ -87,7 +126,7 @@ class BuyerAuthService {
         email: true,
         firstName: true,
         accountCreatedAt: true,
-        organization: { select: { name: true, logoUrl: true } },
+        organization: { select: { name: true, logoUrl: true, buyerSignInMethod: true } },
       },
     });
 
@@ -100,7 +139,58 @@ class BuyerAuthService {
     }
 
     const { rawToken } = await this.issueToken(contact, 'LOGIN');
-    return { issued: true, contact, rawToken };
+    const rawCode = contact.organization?.buyerSignInMethod === 'CODE' ? (await this.issueCode(contact)).rawCode : null;
+    return { issued: true, contact, rawToken, rawCode };
+  }
+
+  /**
+   * Consume a six-digit code typed on the account page (spec 031). The newest
+   * live code for the address is checked; a wrong guess counts against it and
+   * the fifth kills it. Every failure is the same 401 so nothing leaks.
+   *
+   * @returns {Promise<{ contactId: string, organizationId: string, email: string, purpose: 'CODE' }>}
+   */
+  async consumeCode(organizationId, email, code) {
+    const invalid = () => new AuthenticationError('This code is incorrect or has expired');
+    if (!organizationId || typeof email !== 'string' || !isCodeShaped(code)) throw invalid();
+
+    const now = new Date();
+    const normalizedEmail = email.toLowerCase();
+    const token = await prisma.buyerLoginToken.findFirst({
+      where: {
+        organizationId,
+        purpose: 'CODE',
+        usedAt: null,
+        expiresAt: { gt: now },
+        contact: { email: normalizedEmail },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, tokenHash: true, attempts: true, contact: { select: { id: true, organizationId: true, email: true } } },
+    });
+    if (!token) throw invalid();
+
+    const expected = Buffer.from(token.tokenHash, 'hex');
+    const actual = Buffer.from(hashCode(organizationId, normalizedEmail, code), 'hex');
+    if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
+      const attempts = token.attempts + 1;
+      await prisma.buyerLoginToken.update({
+        where: { id: token.id },
+        data: { attempts, ...(attempts >= CODE_MAX_ATTEMPTS ? { usedAt: now } : {}) },
+      });
+      if (attempts >= CODE_MAX_ATTEMPTS) {
+        logger.warn('Buyer sign-in code locked after repeated failures', { contactId: token.contact.id, organizationId });
+      }
+      throw invalid();
+    }
+
+    // Single use: the predicate loses to a concurrent claim or the attempt lockout above.
+    const claimed = await prisma.buyerLoginToken.updateMany({
+      where: { id: token.id, usedAt: null },
+      data: { usedAt: now },
+    });
+    if (claimed.count !== 1) throw invalid();
+
+    return { contactId: token.contact.id, organizationId: token.contact.organizationId, email: token.contact.email, purpose: 'CODE' };
   }
 
   /**

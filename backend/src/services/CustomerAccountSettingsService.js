@@ -2,8 +2,8 @@
 // buyer account features that already exist (spec 007): whether the storefront
 // header and checkout show a sign-in link, and where the account page lives.
 // Phase 1: the sign-in links toggle and the resolved account URL. Phase 2:
-// the self-serve refund policy (RefundPolicyService). Phase 3 adds the
-// sign-in method.
+// the self-serve refund policy (RefundPolicyService). Phase 3: the sign-in
+// method (email link, or a six-digit code alongside it).
 
 import { prisma } from '@jump/db';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
@@ -14,6 +14,7 @@ import logger from '../utils/logger.js';
 const SELECT = {
   id: true,
   buyerSignInLinks: true,
+  buyerSignInMethod: true,
   selfServeRefundsEnabled: true,
   selfServeRefundCutoffHours: true,
   selfServeRefundFeeType: true,
@@ -33,6 +34,7 @@ class CustomerAccountSettingsService {
   async update(organizationId, data) {
     const patch = {};
     if (data.buyerSignInLinks !== undefined) patch.buyerSignInLinks = data.buyerSignInLinks;
+    if (data.buyerSignInMethod !== undefined) patch.buyerSignInMethod = data.buyerSignInMethod;
     for (const key of POLICY_KEYS) if (data[key] !== undefined) patch[key] = data[key];
 
     // A fee type needs a value and NONE clears it; check against the merged
@@ -81,8 +83,7 @@ class CustomerAccountSettingsService {
         feeType: org.selfServeRefundFeeType,
         feeValue: org.selfServeRefundFeeValue == null ? null : Number(org.selfServeRefundFeeValue),
       },
-      // Phase 3 makes this configurable; until then every organization uses the email link.
-      signInMethod: 'LINK',
+      signInMethod: org.buyerSignInMethod,
       accountUrl,
       domain: hostname ? { hostname } : null,
     };

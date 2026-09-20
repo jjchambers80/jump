@@ -149,12 +149,20 @@ ${manageTicketsHtml}
    * @param {string} params.loginUrl - Single-use verify URL
    * @param {{ name?: string, logoUrl?: string }} [params.organization]
    */
-  async sendBuyerLoginEmail({ contact, loginUrl, organization = {} }) {
+  async sendBuyerLoginEmail({ contact, loginUrl, organization = {}, code = null }) {
     const orgName = organization.name || 'Jump';
+    // Spec 031 phase 3: CODE organizations get the six digits up top; the link stays as a fallback.
+    const codeHtml = code
+      ? `
+              <p>Enter this code on the sign-in page:</p>
+              <p style="text-align: center; margin: 24px 0; font-size: 32px; font-weight: bold; letter-spacing: 8px; font-family: 'SF Mono', Menlo, Consolas, monospace;">${escapeHtml(code.slice(0, 3))} ${escapeHtml(code.slice(3))}</p>
+              <p style="color: #666; font-size: 13px;">The code expires in 10 minutes. Or use the button below instead.</p>`
+      : `
+              <p>Use the button below to sign in and see your tickets and orders with ${escapeHtml(orgName)}.</p>`;
     const msg = {
       to: [contact.email],
       from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
-      subject: `Your sign-in link for ${orgName}`,
+      subject: code ? `${code} is your sign-in code for ${orgName}` : `Your sign-in link for ${orgName}`,
       html: `
         <html>
           <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
@@ -163,8 +171,7 @@ ${manageTicketsHtml}
               <h1 style="color: #333; font-size: 22px;">Sign in to ${escapeHtml(orgName)}</h1>
             </div>
             <div style="padding: 20px;">
-              <p>Hi ${escapeHtml(contact.firstName || 'there')},</p>
-              <p>Use the button below to sign in and see your tickets and orders with ${escapeHtml(orgName)}.</p>
+              <p>Hi ${escapeHtml(contact.firstName || 'there')},</p>${codeHtml}
               <div style="text-align: center; margin: 32px 0;">
                 <a href="${loginUrl}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 16px; font-weight: bold; padding: 14px 32px; border-radius: 8px; text-decoration: none;">Sign in</a>
               </div>

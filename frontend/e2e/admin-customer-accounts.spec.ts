@@ -10,7 +10,7 @@ const ORG_ID = 'org-cust';
 interface Settings {
   buyerSignInLinks: boolean;
   refundPolicy: { enabled: boolean; cutoffHours: number | null; feeType: 'NONE' | 'FIXED' | 'PERCENT'; feeValue: number | null };
-  signInMethod: 'LINK';
+  signInMethod: 'LINK' | 'CODE';
   accountUrl: string;
   domain: { hostname: string } | null;
 }
@@ -47,7 +47,12 @@ async function mockApi(page: Page, initial: Partial<Settings> = {}) {
       if ('selfServeRefundFeeType' in body) policy.feeType = body.selfServeRefundFeeType as Settings['refundPolicy']['feeType'];
       if ('selfServeRefundFeeValue' in body) policy.feeValue = body.selfServeRefundFeeValue as number | null;
       if (policy.feeType === 'NONE') policy.feeValue = null;
-      settings = { ...settings, ...(('buyerSignInLinks' in body) ? { buyerSignInLinks: body.buyerSignInLinks as boolean } : {}), refundPolicy: policy };
+      settings = {
+        ...settings,
+        ...('buyerSignInLinks' in body ? { buyerSignInLinks: body.buyerSignInLinks as boolean } : {}),
+        ...('buyerSignInMethod' in body ? { signInMethod: body.buyerSignInMethod as Settings['signInMethod'] } : {}),
+        refundPolicy: policy,
+      };
     }
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(settings) });
   });
@@ -78,7 +83,7 @@ test.describe('as ADMIN', () => {
 
     const accounts = page.getByTestId('customer-accounts-card');
     await expect(accounts.getByRole('link', { name: 'Customize' })).toHaveAttribute('href', '/admin/settings');
-    await expect(page.getByTestId('authentication-row')).toContainText('Email link');
+    await expect(page.getByTestId('authentication-row').getByRole('radio', { name: /Email link/ })).toBeChecked();
     await expect(page.getByLabel('Customer account URL')).toHaveValue(DEFAULTS.accountUrl);
     await expect(page.getByTestId('account-url-row').getByRole('link', { name: 'Manage' })).toHaveAttribute('href', '/admin/settings/domains');
   });
@@ -97,6 +102,16 @@ test.describe('as ADMIN', () => {
     await expect(toggle).toHaveAttribute('aria-checked', 'true');
     await expect.poll(() => patches.length).toBe(2);
     expect(patches).toEqual([{ buyerSignInLinks: false }, { buyerSignInLinks: true }]);
+  });
+
+  test('switching the sign-in method saves at once', async ({ page }) => {
+    const { patches } = await mockApi(page);
+    await page.goto('/admin/settings/customer-accounts');
+    const row = page.getByTestId('authentication-row');
+    await row.getByRole('radio', { name: /Email code/ }).check();
+    await expect(row.getByRole('radio', { name: /Email code/ })).toBeChecked();
+    await expect(page.getByRole('status')).toHaveText('Saved');
+    expect(patches).toEqual([{ buyerSignInMethod: 'CODE' }]);
   });
 
   test('the refund policy saves cutoff and fee, and the toggle hides the form', async ({ page }) => {
@@ -143,5 +158,6 @@ test('organizers see the toggle disabled', async ({ page, baseURL }) => {
   await mockApi(page);
   await page.goto('/admin/settings/customer-accounts');
   await expect(page.getByRole('switch', { name: 'Show sign-in links' })).toBeDisabled();
+  await expect(page.getByRole('radio', { name: /Email code/ })).toBeDisabled();
   await expect(page.getByText('Only admins can change this.')).toBeVisible();
 });

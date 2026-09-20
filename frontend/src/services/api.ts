@@ -327,6 +327,7 @@ export type StorefrontPreferencesInput = Partial<
 
 /** GET/PATCH /admin/settings/customer-accounts. */
 export type SelfServeRefundFeeType = 'NONE' | 'FIXED' | 'PERCENT';
+export type BuyerSignInMethod = 'LINK' | 'CODE';
 
 export interface CustomerAccountSettings {
   /** Show the buyer sign-in link in the storefront header and at checkout. */
@@ -339,8 +340,8 @@ export interface CustomerAccountSettings {
     feeType: SelfServeRefundFeeType;
     feeValue: number | null;
   };
-  /** How buyers sign in. Phase 1 is always the email link. */
-  signInMethod: 'LINK';
+  /** How buyers sign in: the email link alone, or a six-digit code typed on the account page (phase 3). */
+  signInMethod: BuyerSignInMethod;
   /** Public buyer account URL: /account on the active custom domain, else the platform path. */
   accountUrl: string;
   domain: { hostname: string } | null;
@@ -348,6 +349,7 @@ export interface CustomerAccountSettings {
 
 export type CustomerAccountSettingsInput = Partial<{
   buyerSignInLinks: boolean;
+  buyerSignInMethod: BuyerSignInMethod;
   selfServeRefundsEnabled: boolean;
   selfServeRefundCutoffHours: number | null;
   selfServeRefundFeeType: SelfServeRefundFeeType;
