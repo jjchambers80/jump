@@ -32,3 +32,15 @@ export const requireRecentAuth = (req, res, next) => {
   error.code = 'REAUTH_REQUIRED';
   next(error);
 };
+
+// ---- Two-step completion proof (spec 030 C) ----
+//
+// POST /account/two-step/verify returns a 2-minute HS256 proof with a single
+// use jti; the frontend passes it to useSession().update({ mfaProof }) and
+// the Auth.js jwt callback flips the session from `mfa: 'pending'` to 'ok'.
+
+export const MFA_PROOF_TTL_S = 2 * 60;
+
+export function issueMfaProof(userId, jti, { secret = process.env.AUTH_SECRET, ttlSeconds = MFA_PROOF_TTL_S } = {}) {
+  return jwt.sign({ typ: 'mfa', sub: userId, jti }, secret, { algorithm: 'HS256', expiresIn: ttlSeconds });
+}

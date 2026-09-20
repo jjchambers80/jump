@@ -142,6 +142,12 @@ export const LIMITS = Object.freeze({
     limit: 10,
     message: 'Too many sign-in attempts. Try again in a few minutes.',
   },
+  // Spec 030 C: second-step attempts (the service also locks after 5 failures per user)
+  TWO_STEP_VERIFY: {
+    windowMs: 15 * 60 * 1000,
+    limit: 15,
+    message: 'Too many verification attempts. Try again in a few minutes.',
+  },
   ACCOUNT_RECOVERY: {
     windowMs: 60 * 60 * 1000,
     limit: 3,

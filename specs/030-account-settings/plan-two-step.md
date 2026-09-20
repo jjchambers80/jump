@@ -1,6 +1,6 @@
 # Implementation Plan: Account settings › Security — Two-step authentication (spec 030, feature C)
 
-**Status**: Planned (2026-09-20). Not implemented.
+**Status**: Built 2026-09-20 on `feat/030-account-two-step` (see `docs/wiki/features/two-step-authentication.md`). Deviations: the trusted-device cookie is read by a Next route handler (`/api/account/two-step/trusted-check`) called from the client page rather than a server component; `otplib` v13 functional API (`epochTolerance: 30`); a user-verified passkey sign-in is marked in the bridge token subject (`:uv`).
 **Branch / worktree**: `feat/030-account-two-step` at `.claude/worktrees/030-account-two-step`, based on `feat/030-account-security` (rebase onto `main` once A + B merge).
 **Spec**: [`spec.md`](./spec.md) §6.5. **Depends on**: A (shell), B (step-up `requireRecentAuth`, `Passkey`, `SecurityEvent`, notices). Optional: D (`sid`) for "sign out other devices when 2FA is turned on".
 **Dependencies**: `otplib` (backend). QR via existing `qrcode` (`QRService`).

@@ -159,6 +159,8 @@ class SecurityService {
     });
     await securityEventService.record(userId, changing ? 'PASSWORD_CHANGED' : 'PASSWORD_SET', { req });
     const others = await sessionService.revokeOthers(userId, req?.user?.sid ?? null, 'password-change');
+    // Spec 030 C: a new password also forgets "remembered" two-step devices
+    await prisma.trustedDevice.deleteMany({ where: { userId } });
     await this._notify(
       user,
       changing ? 'Your password was changed' : 'A password was added to your account',
@@ -196,8 +198,11 @@ class SecurityService {
 
   async issueBridgeToken(userId, meta = {}) {
     // The frontend `token-bridge` Credentials provider consumes this row
-    // (same table, same sha256) and mints the Auth.js session.
-    const raw = await issueToken('bridge', userId, BRIDGE_TTL_MS);
+    // (same table, same sha256) and mints the Auth.js session. A passkey
+    // assertion with user verification is two factors already (spec 030 C):
+    // the subject carries ":uv" so that session skips the second step.
+    const subject = meta.userVerified ? `${userId}:uv` : userId;
+    const raw = await issueToken('bridge', subject, BRIDGE_TTL_MS);
     logger.info('Bridge token issued', { event: 'bridge_token_issued', userId, ...meta });
     return raw;
   }

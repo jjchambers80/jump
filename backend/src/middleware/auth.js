@@ -43,6 +43,14 @@ export const requireAuth = async (req, res, next) => {
       throw new AuthenticationError('Buyer sessions cannot access staff routes');
     }
 
+    // Two-step pending (spec 030 C): the first factor succeeded but the second
+    // step has not. Only the two-step router accepts such a token.
+    if (decoded.mfa === 'pending' && !req.allowPendingTwoStep) {
+      const error = new AuthenticationError('Finish two-step verification to continue');
+      error.code = 'TWO_STEP_REQUIRED';
+      throw error;
+    }
+
     // Revocable session (spec 030 D): a token carrying `sid` is refused as soon
     // as that device is logged out. Tokens minted before `sid` existed (or by
     // test helpers) have none and pass; they pick one up at their next
@@ -63,6 +71,7 @@ export const requireAuth = async (req, res, next) => {
       role: decoded.role,
       name: decoded.name,
       sid: decoded.sid ?? null,
+      twoStepPending: decoded.mfa === 'pending',
       // Preferred active org (spec 007): the admin org switcher sends X-Jump-Org;
       // otherwise the sign-in claim. resolveOrgScope only honors real memberships.
       organizationId: activeOrgFrom(req, decoded),
@@ -80,6 +89,12 @@ export const requireAuth = async (req, res, next) => {
   }
 };
 
+/** requireAuth that lets a two-step-pending token through (the two-step router only). */
+export const requireAuthAllowPending = (req, res, next) => {
+  req.allowPendingTwoStep = true;
+  return requireAuth(req, res, next);
+};
+
 /**
  * Optional auth middleware — attaches user if token is present, but doesn't fail if absent.
  * Useful for routes that behave differently for authenticated vs guest users.
@@ -95,6 +110,8 @@ export const optionalAuth = async (req, res, next) => {
           algorithms: ['HS256'],
         });
         if (decoded.typ === 'buyer') throw new Error('buyer session');
+        // Spec 030 C: a session mid two-step is anonymous to optional-auth routes
+        if (decoded.mfa === 'pending') throw new Error('two-step pending');
         req.user = {
           id: decoded.sub,
           email: decoded.email,

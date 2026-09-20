@@ -91,6 +91,13 @@ Code and tests shipped 2026-09-18 behind `BILLING_ENABLED` (default off). Until 
 - [ ] Backend: `BILLING_ENABLED=true`, `JUMP_STARTER_PRICE_ID`, `BILLING_TRIAL_DAYS` (default 30). Frontend: `NEXT_PUBLIC_BILLING_ENABLED=true`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (Jump account). Redeploy both; the backend startup log `Stripe webhook configuration` should show `billingSecret: true, billingEnabled: true`.
 - [ ] **Verify with one internal organization**: org switcher › Create organization → subscribe screen shows the trial ledger and the embedded card form → subscribe with a test card → returns to the survey → Settings › Plan shows *Free trial* with the trial end → *Manage billing* opens the portal → cancel there and confirm the plan flips to Free after the `customer.subscription.deleted` event.
 - [ ] Decide dunning copy beyond the dashboard banner (`past_due` / `unpaid`); nothing is gated on the plan today.
+## Account security (spec 030)
+
+- `AUTH_SECRET` now also derives the key that encrypts two-step TOTP seeds (`backend/src/utils/secretBox.js`) and signs step-up / two-step proofs. **Rotating it invalidates every stored authenticator seed** — users would have to set two-step up again — as well as all sessions. Plan a rotation as a maintenance window, never a hot swap.
+- Optional: `GEOIP_ENABLED=true` + `npm install -w backend geoip-lite` for city/country on Account › Security › Devices (MaxMind GeoLite2 attribution shown). Off → "Location unavailable".
+- Optional: `HIBP_CHECK=false` if outbound calls to `api.pwnedpasswords.com` are unwanted (default on, fail-open).
+- Passkeys need the RP id to match the sign-in host: the default is the host of the first `FRONTEND_URL`; set `WEBAUTHN_RP_ID` only if that differs.
+
 ## Related
 
 - [Tax Settings](../features/tax-settings.md), [Tax Calculation](../features/tax-calculation.md)

@@ -121,6 +121,13 @@ export default auth(async (req: NextRequest & { auth: unknown }) => {
       signInUrl.searchParams.set('callbackUrl', pathname + req.nextUrl.search);
       return NextResponse.redirect(signInUrl);
     }
+    // Spec 030 C: the first factor passed but the second step is due — the
+    // admin area waits at /auth/two-step (the page itself is public).
+    if (staffOnly && (req.auth as { mfaPending?: boolean } | null)?.mfaPending) {
+      const twoStepUrl = new URL('/auth/two-step', req.nextUrl);
+      twoStepUrl.searchParams.set('callbackUrl', pathname + req.nextUrl.search);
+      return NextResponse.redirect(twoStepUrl);
+    }
     return NextResponse.next();
   }
 

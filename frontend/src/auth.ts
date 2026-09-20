@@ -10,7 +10,7 @@ import Credentials from 'next-auth/providers/credentials';
 import authConfig from './auth.config';
 import { applyUserClaims, shouldRefreshClaims, type UserClaims } from '@/lib/sessionClaims';
 import { resolveSessionId, revokeSessionOnSignOut } from '@/lib/userSessions';
-import { consumeBridgeToken, recordSecurityEvent, verifyPasswordWithBackend } from '@/lib/staffAuth';
+import { consumeBridgeToken, recordSecurityEvent, resolveMfaState, verifyPasswordWithBackend } from '@/lib/staffAuth';
 
 const AUTH_SECRET = process.env.AUTH_SECRET!;
 
@@ -80,6 +80,7 @@ async function loadUserClaims(userId: string): Promise<UserClaims | null> {
       image: true,
       locale: true,
       timeZone: true,
+      twoStepEnabledAt: true,
       deletedAt: true,
       // Spec 030: uploaded photo wins over the provider picture
       avatarImage: { select: { id: true, file: { select: { hash: true } } } },
@@ -102,6 +103,7 @@ async function loadUserClaims(userId: string): Promise<UserClaims | null> {
     picture: dbUser.avatarImage
       ? `/images/${dbUser.avatarImage.id}/${dbUser.avatarImage.file.hash}/thumb`
       : dbUser.image ?? null,
+    twoStepEnabled: Boolean(dbUser.twoStepEnabledAt),
   };
 }
 
@@ -111,7 +113,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
   session: { strategy: 'jwt' },
   callbacks: {
-    async jwt({ token, user, account, trigger }) {
+    async jwt({ token, user, account, trigger, session: updateData }) {
       // Role and active org live in the JWT so the backend can trust them without a
       // DB hit per request. Re-read them on sign-in, when the client calls
       // useSession().update() (trigger === 'update' — the signup flow does this right
@@ -135,6 +137,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (!sid) return null;
       token.sid = sid;
 
+      token.mfa = await resolveMfaState(token.mfa, {
+        userId,
+        twoStepEnabled: Boolean(claims.twoStepEnabled),
+        signIn: Boolean(user?.id),
+        mfaSatisfied: Boolean((user as { mfaSatisfied?: boolean } | undefined)?.mfaSatisfied),
+        proof: trigger === 'update' ? (updateData as { mfaProof?: unknown } | undefined)?.mfaProof : undefined,
+      });
+
       return applyUserClaims(token, claims, now);
     },
     async session({ session, token }) {
@@ -149,6 +159,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.image = (token.picture as string | null | undefined) ?? null;
       }
       (session as any).sid = token.sid ?? null;
+      (session as any).mfaPending = token.mfa === 'pending';
       // Generate the raw JWT so the client can send it as a Bearer token to the backend
       (session as any).accessToken = jwt.sign(
         {
@@ -158,6 +169,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           name: token.name,
           organizationId: token.organizationId ?? null,
           sid: token.sid ?? undefined,
+          mfa: token.mfa ?? undefined,
           iat: Math.floor(Date.now() / 1000),
         },
         AUTH_SECRET,

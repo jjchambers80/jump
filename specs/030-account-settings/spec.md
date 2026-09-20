@@ -1,6 +1,6 @@
 # Spec 030: Account settings — General and Security
 
-**Status**: Specified 2026-09-20. **Not implemented** (audit below).
+**Status**: Specified 2026-09-20; all four features built the same day (A PR #109, D PR #112, B PR #115, C on `feat/030-account-two-step`). The audit below records the starting state.
 **Supersedes**: the five parallel drafts in `drafts/` (kept for reference; this file is the source of truth).
 **Plans**: one per feature, each built on its own worktree —
 [`plan-general.md`](./plan-general.md) · [`plan-security.md`](./plan-security.md) · [`plan-two-step.md`](./plan-two-step.md) · [`plan-devices.md`](./plan-devices.md).

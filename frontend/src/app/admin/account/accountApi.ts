@@ -127,3 +127,33 @@ export function initialsOf(name: string | null | undefined, email: string | null
     .slice(0, 2)
     .toUpperCase();
 }
+
+// ---- Two-step authentication (spec 030 C) ----
+
+export interface TwoStepStatus {
+  enabled: boolean;
+  enabledAt: string | null;
+  methods: { app: boolean; securityKey: boolean; passkeyCount: number };
+  recoveryCodes: { total: number; remaining: number } | null;
+  trustedDevices: { id: string; userAgent: string | null; createdAt: string; lastUsedAt: string; expiresAt: string }[];
+  setupPending: boolean;
+}
+
+export interface TwoStepVerifyResult {
+  proof: string;
+  method: 'app' | 'recovery' | 'passkey' | null;
+  trustToken?: string;
+}
+
+export const twoStepApi = {
+  status: () => api.get<TwoStepStatus>('/account/two-step'),
+  setup: () => api.post<{ otpauthUrl: string; qrDataUrl: string; secret: string }>('/account/two-step/setup', {}),
+  enable: (code: string) => api.post<{ recoveryCodes: string[]; proof: string; otherDevicesSignedOut: number }>('/account/two-step/enable', { code }),
+  disable: (factor: { code?: string; recoveryCode?: string }) => api.post<void>('/account/two-step/disable', factor),
+  regenerateCodes: () => api.post<{ recoveryCodes: string[] }>('/account/two-step/recovery-codes', {}),
+  revokeTrusted: (id: string) => api.delete<void>(`/account/two-step/trusted-devices/${encodeURIComponent(id)}`),
+  /** Pending-allowed */
+  verify: (body: { code?: string; recoveryCode?: string; passkey?: unknown; rememberDevice?: boolean }) =>
+    api.post<TwoStepVerifyResult>('/account/two-step/verify', body),
+  passkeyOptions: () => api.post<unknown>('/account/two-step/passkey-options', {}),
+};
