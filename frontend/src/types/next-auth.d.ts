@@ -8,6 +8,8 @@ declare module 'next-auth' {
     accessToken?: string;
     /** Revocable session id (spec 030 D). */
     sid?: string | null;
+    /** The second step of two-step authentication is still due (spec 030 C). */
+    mfaPending?: boolean;
     user: {
       id: string;
       email?: string | null;

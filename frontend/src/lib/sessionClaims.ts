@@ -16,6 +16,8 @@ export interface UserClaims {
   timeZone?: string | null;
   /** Avatar URL (uploaded photo thumb, else the provider picture). */
   picture?: string | null;
+  /** Whether the account has two-step authentication on (spec 030 C). */
+  twoStepEnabled?: boolean;
 }
 
 /** The subset of the Auth.js token this module reads and writes. */
@@ -30,6 +32,8 @@ export interface ClaimsToken {
   picture?: unknown;
   /** Revocable session row id (spec 030 D). */
   sid?: unknown;
+  /** Two-step state (spec 030 C). */
+  mfa?: unknown;
   /** Epoch ms of the last DB read backing role/organizationId. */
   claimsRefreshedAt?: unknown;
 }

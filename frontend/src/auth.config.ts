@@ -33,4 +33,13 @@ export default {
   pages: {
     signIn: '/auth/signin',
   },
+  callbacks: {
+    // Edge-safe: lets middleware.ts see a session whose second step is
+    // pending (spec 030 C). auth.ts replaces `callbacks` wholesale and
+    // exposes the same flag.
+    session({ session, token }) {
+      (session as any).mfaPending = token.mfa === 'pending';
+      return session;
+    },
+  },
 } satisfies NextAuthConfig;

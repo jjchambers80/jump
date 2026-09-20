@@ -1,6 +1,7 @@
 // Server-only helpers behind the spec 030 B Credentials providers.
 
 import { createHash, createHmac } from 'crypto';
+import jwt from 'jsonwebtoken';
 import { prisma } from '@jump/db';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
@@ -52,16 +53,42 @@ export async function verifyPasswordWithBackend(
  * "bridge:<userId>", token = sha256(raw)) — same table and hash the backend
  * writes. Single use; expired rows are deleted and refused.
  */
-export async function consumeBridgeToken(raw: string): Promise<{ id: string; email: string; name: string | null } | null> {
+export async function consumeBridgeToken(
+  raw: string
+): Promise<{ id: string; email: string; name: string | null; mfaSatisfied: boolean } | null> {
   const hash = createHash('sha256').update(raw).digest('hex');
   const row = await prisma.verificationToken.findFirst({ where: { token: hash, identifier: { startsWith: 'bridge:' } } });
   if (!row) return null;
   await prisma.verificationToken.deleteMany({ where: { identifier: row.identifier } });
   if (row.expires < new Date()) return null;
-  const userId = row.identifier.slice('bridge:'.length);
+  // "bridge:<userId>" or "bridge:<userId>:uv" (user-verified passkey = two factors, spec 030 C)
+  const subject = row.identifier.slice('bridge:'.length);
+  const mfaSatisfied = subject.endsWith(':uv');
+  const userId = mfaSatisfied ? subject.slice(0, -':uv'.length) : subject;
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, email: true, name: true, deletedAt: true, isActive: true } });
   if (!user || user.deletedAt || !user.isActive) return null;
-  return { id: user.id, email: user.email, name: user.name };
+  return { id: user.id, email: user.email, name: user.name, mfaSatisfied };
+}
+
+/**
+ * Redeem a two-step completion proof (spec 030 C): HS256 `typ: 'mfa'` for
+ * this user with a single-use jti the backend recorded as
+ * "mfa-proof:<jti>". Returns true once; the row is deleted either way.
+ */
+export async function consumeMfaProof(proof: unknown, userId: string): Promise<boolean> {
+  if (typeof proof !== 'string' || !proof || !process.env.AUTH_SECRET) return false;
+  let decoded: jwt.JwtPayload;
+  try {
+    decoded = jwt.verify(proof, process.env.AUTH_SECRET, { algorithms: ['HS256'] }) as jwt.JwtPayload;
+  } catch {
+    return false;
+  }
+  if (decoded.typ !== 'mfa' || decoded.sub !== userId || typeof decoded.jti !== 'string') return false;
+  const identifier = `mfa-proof:${decoded.jti}`;
+  const deleted = await prisma.verificationToken.deleteMany({
+    where: { identifier, token: createHash('sha256').update(decoded.jti).digest('hex') },
+  });
+  return deleted.count === 1;
 }
 
 export async function recordSecurityEvent(userId: string, type: string, meta?: Record<string, unknown>): Promise<void> {
@@ -70,4 +97,25 @@ export async function recordSecurityEvent(userId: string, type: string, meta?: R
   } catch {
     // The audit row must never break sign-in
   }
+}
+
+/**
+ * Two-step state for the token (spec 030 C).
+ *
+ * - Fresh sign-in on a 2FA account: 'pending' — unless the sign-in itself was
+ *   two factors (user-verified passkey via the token-bridge provider).
+ * - update({ mfaProof }): a valid single-use proof flips 'pending' → 'ok'.
+ * - Refresh: a token with no state on a 2FA account (signed in before 2FA
+ *   was turned on) becomes 'pending'; the enabling browser redeems the proof
+ *   the enable endpoint returned, other devices were signed out.
+ * - 2FA off: no state.
+ */
+export async function resolveMfaState(
+  current: unknown,
+  { userId, twoStepEnabled, signIn, mfaSatisfied, proof }: { userId: string; twoStepEnabled: boolean; signIn: boolean; mfaSatisfied: boolean; proof: unknown }
+): Promise<'pending' | 'ok' | undefined> {
+  if (!twoStepEnabled) return undefined;
+  if (proof !== undefined && (await consumeMfaProof(proof, userId))) return 'ok';
+  if (signIn) return mfaSatisfied ? 'ok' : 'pending';
+  return current === 'ok' ? 'ok' : 'pending';
 }

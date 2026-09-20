@@ -46,6 +46,16 @@ function handleRevokedSession(status: number, code: unknown) {
   void signOut({ callbackUrl: '/auth/signin?reason=revoked' });
 }
 
+/** A 401 TWO_STEP_REQUIRED means the second step is still due (spec 030 C): go finish it. */
+let twoStepRedirectStarted = false;
+function handleTwoStepRequired(status: number, code: unknown) {
+  if (status !== 401 || code !== 'TWO_STEP_REQUIRED' || typeof window === 'undefined' || twoStepRedirectStarted) return;
+  if (window.location.pathname.startsWith('/auth/two-step')) return;
+  twoStepRedirectStarted = true;
+  const callbackUrl = window.location.pathname + window.location.search;
+  window.location.assign(`/auth/two-step?callbackUrl=${encodeURIComponent(callbackUrl)}`);
+}
+
 class ApiClient {
   private baseURL: string;
 
@@ -101,6 +111,7 @@ class ApiClient {
 
       if (!response.ok) {
         handleRevokedSession(response.status, data?.code);
+        handleTwoStepRequired(response.status, data?.code);
         throw {
           status: response.status,
           message: data?.message || 'Request failed',
@@ -193,6 +204,7 @@ class ApiClient {
     const data = await response.json();
     if (!response.ok) {
       handleRevokedSession(response.status, data?.code);
+      handleTwoStepRequired(response.status, data?.code);
       throw {
         status: response.status,
         message: data.message || 'Upload failed',

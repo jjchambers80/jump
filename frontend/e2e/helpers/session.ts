@@ -15,6 +15,8 @@ export interface StaffUser {
   email: string;
   role: 'ADMIN' | 'ORGANIZER' | 'SYSTEM_ADMIN' | 'UNASSIGNED';
   name?: string;
+  /** Two-step state claim (spec 030 C); omit for accounts without two-step. */
+  mfa?: 'pending' | 'ok';
 }
 
 function authSecret(): string {
@@ -26,7 +28,7 @@ function authSecret(): string {
 }
 
 export async function mintSessionToken(user: StaffUser): Promise<string> {
-  return new SignJWT({ email: user.email, role: user.role, name: user.name ?? 'Test Staff', organizationId: null })
+  return new SignJWT({ email: user.email, role: user.role, name: user.name ?? 'Test Staff', organizationId: null, ...(user.mfa ? { mfa: user.mfa } : {}) })
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setSubject(user.id)
     .setIssuedAt()
@@ -43,7 +45,7 @@ export async function signInAsStaff(page: Page, user: StaffUser, baseURL: string
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ user: { id: user.id, email: user.email, role: user.role, name: user.name ?? 'Test Staff' }, accessToken: token, expires: '2099-01-01T00:00:00.000Z' }),
+      body: JSON.stringify({ user: { id: user.id, email: user.email, role: user.role, name: user.name ?? 'Test Staff' }, accessToken: token, mfaPending: user.mfa === 'pending', expires: '2099-01-01T00:00:00.000Z' }),
     })
   );
   return token;

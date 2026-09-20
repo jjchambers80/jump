@@ -1,17 +1,14 @@
 'use client';
 
 // Account › Security (spec 030): passkeys, password, connected accounts,
-// secondary email (B), devices (D). Two-step authentication (C) replaces
-// the placeholder when it lands.
+// secondary email (B), two-step authentication (C), devices (D).
 
 import { useCallback, useEffect, useState } from 'react';
 import { accountApi, type SecurityOverview } from '../accountApi';
 import { ReauthProvider } from '../useReauth';
 import DevicesCard from './DevicesCard';
+import TwoStepCard from './TwoStepCard';
 import { ConnectedAccountsCard, PasskeysCard, PasswordCard, SecondaryEmailCard, cardClass } from './SignInMethodsCards';
-
-const placeholderClass =
-  'rounded-xl border border-dashed border-gray-300 bg-white p-4 text-sm text-gray-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 sm:p-5';
 
 export default function AccountSecurityPage() {
   const [overview, setOverview] = useState<SecurityOverview | null>(null);
@@ -82,10 +79,7 @@ export default function AccountSecurityPage() {
             <PasswordCard overview={overview} onChanged={onChanged} onError={onError} />
             <ConnectedAccountsCard overview={overview} onChanged={onChanged} onError={onError} />
             <SecondaryEmailCard overview={overview} onChanged={onChanged} onError={onError} />
-            <div className={placeholderClass}>
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Two-step authentication</h3>
-              <p className="mt-1">Coming soon.</p>
-            </div>
+            <TwoStepCard onChanged={onChanged} onError={onError} />
             <DevicesCard />
           </div>
         )}
