@@ -5,6 +5,7 @@
 // organization currently picked in the header org switcher.
 
 import React, { useState } from 'react';
+import { ExternalLink } from 'lucide-react';
 import { useOrg } from '@/components/OrgContext';
 import OnlineStoreSettings from '@/components/OnlineStoreSettings';
 import { resolveAssetUrl } from '@/lib/assets';
@@ -36,7 +37,18 @@ export default function OnlineStorePage() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Online store</h1>
+      <div className="flex items-center justify-between gap-4 mb-6">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Online store</h1>
+        <a
+          href={`/organizations/${org.id}`}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+        >
+          View store
+          <ExternalLink className="h-4 w-4" aria-hidden />
+        </a>
+      </div>
 
       {/* Store header */}
       <div className="flex items-center gap-3 mb-6">
