@@ -9,6 +9,7 @@ import jwt from 'jsonwebtoken';
 import Credentials from 'next-auth/providers/credentials';
 import authConfig from './auth.config';
 import { applyUserClaims, shouldRefreshClaims, type UserClaims } from '@/lib/sessionClaims';
+import { resolveSessionId, revokeSessionOnSignOut } from '@/lib/userSessions';
 
 const AUTH_SECRET = process.env.AUTH_SECRET!;
 
@@ -76,7 +77,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
   session: { strategy: 'jwt' },
   callbacks: {
-    async jwt({ token, user, trigger }) {
+    async jwt({ token, user, account, trigger }) {
       // Role and active org live in the JWT so the backend can trust them without a
       // DB hit per request. Re-read them on sign-in, when the client calls
       // useSession().update() (trigger === 'update' — the signup flow does this right
@@ -90,6 +91,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       const claims = await loadUserClaims(userId);
       if (!claims) return null;
+
+      // Revocable session (spec 030 D): a new row per sign-in, adopted by
+      // legacy tokens on their first refresh; a revoked row ends the session.
+      const sid = await resolveSessionId(userId, typeof token.sid === 'string' ? token.sid : undefined, {
+        signIn: Boolean(user?.id),
+        provider: user?.id ? account?.provider ?? null : undefined,
+      });
+      if (!sid) return null;
+      token.sid = sid;
+
       return applyUserClaims(token, claims, now);
     },
     async session({ session, token }) {
@@ -103,6 +114,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         (session.user as any).timeZone = token.timeZone ?? null;
         session.user.image = (token.picture as string | null | undefined) ?? null;
       }
+      (session as any).sid = token.sid ?? null;
       // Generate the raw JWT so the client can send it as a Bearer token to the backend
       (session as any).accessToken = jwt.sign(
         {
@@ -111,12 +123,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           role: token.role,
           name: token.name,
           organizationId: token.organizationId ?? null,
+          sid: token.sid ?? undefined,
           iat: Math.floor(Date.now() / 1000),
         },
         AUTH_SECRET,
         { algorithm: 'HS256', expiresIn: '30d' }
       );
       return session;
+    },
+  },
+  events: {
+    // JWT strategy: `token` is the cookie being cleared. Revoke its row so the
+    // device disappears from Account › Security › Devices immediately.
+    async signOut(message) {
+      const token = 'token' in message ? message.token : null;
+      const sid = token && typeof token.sid === 'string' ? token.sid : undefined;
+      await revokeSessionOnSignOut(sid).catch(() => {});
     },
   },
 });

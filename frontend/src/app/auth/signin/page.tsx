@@ -92,6 +92,12 @@ function SignInForm() {
           No password needed — use your email or Google account
         </p>
 
+        {params.get('reason') === 'revoked' && (
+          <div role="status" className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-sm text-amber-800 dark:text-amber-300">
+            This device was logged out from your account&apos;s Devices settings. Sign in again to continue.
+          </div>
+        )}
+
         {error && (
           <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-400">
             {error}
