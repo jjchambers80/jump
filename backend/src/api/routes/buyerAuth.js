@@ -23,8 +23,10 @@ import emailService from '../../services/EmailService.js';
 import applicationService from '../../services/ApplicationService.js';
 import applicantProfileService from '../../services/ApplicantProfileService.js';
 import { requireBuyer } from '../../middleware/buyerAuth.js';
-import { ForbiddenError, ValidationError } from '../../middleware/errorHandler.js';
+import { ForbiddenError, NotFoundError, ValidationError } from '../../middleware/errorHandler.js';
 import { buyerVerifyUrl } from '../../utils/storefrontUrl.js';
+import { evaluateRefundPolicy, REFUND_POLICY_MESSAGES, REFUND_POLICY_SELECT } from '../../services/RefundPolicyService.js';
+import { prisma } from '@jump/db';
 import { MAX_PHOTO_MB, MAX_PROFILE_PHOTOS } from '../../config/applications.js';
 import logger from '../../utils/logger.js';
 
@@ -227,22 +229,37 @@ router.post('/me/applications/:id/withdraw', requireBuyer, async (req, res, next
   }
 });
 
-/** POST /buyer/me/tickets/:ticketId/refund — refund a refundable, VALID ticket this buyer owns. */
+/**
+ * POST /buyer/me/tickets/:ticketId/refund — self-serve refund of a ticket this
+ * buyer owns, under the organization's refund policy (spec 031 phase 2):
+ * tier must be refundable, ticket VALID, before the cutoff, and the policy fee
+ * is kept by the organization. Staff refunds do not apply the policy.
+ */
 router.post('/me/tickets/:ticketId/refund', requireBuyer, async (req, res, next) => {
   try {
-    const ticket = await ticketService.getTicketById(req.params.ticketId);
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: req.params.ticketId },
+      select: {
+        id: true,
+        contactId: true,
+        status: true,
+        pricePaid: true,
+        priceTier: { select: { isRefundable: true } },
+        event: { select: { date: true, venue: { select: { organization: { select: REFUND_POLICY_SELECT } } } } },
+      },
+    });
+    if (!ticket) throw new NotFoundError('Ticket not found');
     if (ticket.contactId !== req.buyer.contactId) {
       throw new ForbiddenError('You do not have access to this ticket');
     }
-    if (!ticket.isRefundable) {
-      throw new ValidationError('This ticket is not eligible for refund');
-    }
-    if (ticket.status !== 'VALID') {
-      throw new ValidationError(`Cannot refund a ticket with status: ${ticket.status}`);
+    const policy = evaluateRefundPolicy(ticket.event.venue.organization, ticket);
+    if (!policy.eligible) {
+      throw new ValidationError(REFUND_POLICY_MESSAGES[policy.reason] || 'This ticket cannot be refunded');
     }
     const result = await refundService.refundTicket(ticket.id, {
-      reason: 'Customer requested refund',
+      reason: policy.fee > 0 ? `Customer requested refund (${policy.fee.toFixed(2)} fee retained)` : 'Customer requested refund',
       initiatedBy: null,
+      feeAmount: policy.fee,
     });
     res.json(result);
   } catch (error) {

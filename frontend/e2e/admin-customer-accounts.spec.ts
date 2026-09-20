@@ -9,6 +9,7 @@ const ORG_ID = 'org-cust';
 
 interface Settings {
   buyerSignInLinks: boolean;
+  refundPolicy: { enabled: boolean; cutoffHours: number | null; feeType: 'NONE' | 'FIXED' | 'PERCENT'; feeValue: number | null };
   signInMethod: 'LINK';
   accountUrl: string;
   domain: { hostname: string } | null;
@@ -16,6 +17,7 @@ interface Settings {
 
 const DEFAULTS: Settings = {
   buyerSignInLinks: true,
+  refundPolicy: { enabled: true, cutoffHours: null, feeType: 'NONE', feeValue: null },
   signInMethod: 'LINK',
   accountUrl: `http://localhost:3001/organizations/${ORG_ID}/account`,
   domain: null,
@@ -37,9 +39,15 @@ async function mockApi(page: Page, initial: Partial<Settings> = {}) {
   await page.route(`${API}/admin/settings/customer-accounts`, async (route) => {
     const request = route.request();
     if (request.method() === 'PATCH') {
-      const body = request.postDataJSON() as Partial<Settings>;
+      const body = request.postDataJSON() as Record<string, unknown>;
       patches.push(body);
-      settings = { ...settings, ...body };
+      const policy = { ...settings.refundPolicy };
+      if ('selfServeRefundsEnabled' in body) policy.enabled = body.selfServeRefundsEnabled as boolean;
+      if ('selfServeRefundCutoffHours' in body) policy.cutoffHours = body.selfServeRefundCutoffHours as number | null;
+      if ('selfServeRefundFeeType' in body) policy.feeType = body.selfServeRefundFeeType as Settings['refundPolicy']['feeType'];
+      if ('selfServeRefundFeeValue' in body) policy.feeValue = body.selfServeRefundFeeValue as number | null;
+      if (policy.feeType === 'NONE') policy.feeValue = null;
+      settings = { ...settings, ...(('buyerSignInLinks' in body) ? { buyerSignInLinks: body.buyerSignInLinks as boolean } : {}), refundPolicy: policy };
     }
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(settings) });
   });
@@ -87,7 +95,39 @@ test.describe('as ADMIN', () => {
 
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-checked', 'true');
+    await expect.poll(() => patches.length).toBe(2);
     expect(patches).toEqual([{ buyerSignInLinks: false }, { buyerSignInLinks: true }]);
+  });
+
+  test('the refund policy saves cutoff and fee, and the toggle hides the form', async ({ page }) => {
+    const { patches } = await mockApi(page);
+    await page.goto('/admin/settings/customer-accounts');
+
+    const row = page.getByTestId('self-serve-refunds-row');
+    await expect(row.getByRole('switch', { name: 'Self-serve refunds' })).toHaveAttribute('aria-checked', 'true');
+    const save = page.getByTestId('refund-policy-save');
+    await expect(save).toBeDisabled();
+
+    await page.getByLabel('Cutoff (hours before the event)').fill('48');
+    await page.getByLabel('Fee', { exact: true }).selectOption('FIXED');
+    await expect(save).toBeDisabled(); // a fee type needs a value
+    await expect(row).toContainText('Enter a fee amount above 0.');
+    await page.getByLabel('Fee amount ($)').fill('2.50');
+    await expect(save).toBeEnabled();
+    await save.click();
+    await expect(page.getByRole('status')).toHaveText('Saved');
+    expect(patches).toEqual([{ selfServeRefundCutoffHours: 48, selfServeRefundFeeType: 'FIXED', selfServeRefundFeeValue: 2.5 }]);
+    await expect(save).toBeDisabled(); // clean again
+
+    await page.getByLabel('Fee', { exact: true }).selectOption('PERCENT');
+    await page.getByLabel('Fee (%)').fill('150');
+    await expect(row).toContainText('Enter a percentage above 0 and up to 100.');
+    await expect(save).toBeDisabled();
+
+    await row.getByRole('switch', { name: 'Self-serve refunds' }).click();
+    await expect(page.getByTestId('refund-policy-form')).toHaveCount(0);
+    await expect.poll(() => patches.length).toBe(2);
+    expect(patches.at(-1)).toEqual({ selfServeRefundsEnabled: false });
   });
 
   test('the URL card shows the custom domain when one is active', async ({ page }) => {

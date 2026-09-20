@@ -34,11 +34,11 @@ model User {
   // organization. `image` stays the Auth.js/Google picture fallback; an
   // uploaded photo lives in `avatarImage`. `timeZone` null = browser default.
   phone         String?
-  locale        String    @default("en-US")
+  locale        String  @default("en-US")
   timeZone      String?
-  avatarImageId String?   @unique
+  avatarImageId String? @unique
   pendingEmail  String?
-  avatarImage   Image?    @relation("UserAvatar", fields: [avatarImageId], references: [id])
+  avatarImage   Image?  @relation("UserAvatar", fields: [avatarImageId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -296,68 +296,75 @@ model StoreFileReference {
 // ──────────────────────────────────────────────
 
 model Organization {
-  id                        String             @id @default(cuid())
-  name                      String
+  id                         String                 @id @default(cuid())
+  name                       String
   // URL handle for the admin org page (/admin/organization/[slug]). Generated
   // from the name at creation, stable across renames; editable via PATCH.
   // The cuid() default only covers direct prisma.organization.create calls
   // (tests, seed); OrganizationService always sets a name-derived slug.
-  slug                      String             @unique @default(cuid())
-  status                    OrganizationStatus @default(ACTIVE)
-  companyName               String?
-  email                     String?
-  businessType              String?
-  nickname                  String?
-  countryCode               String?            @default("US")
-  addressLine1              String?
-  addressLine2              String?
-  city                      String?
-  state                     String?
-  postalCode                String?
-  phoneCountryCode          String?            @default("+1")
-  phoneNumber               String?
-  ein                       String?
-  logoUrl                   String?
-  logoImageId               String?
-  coverUrl                  String?
-  coverImageId              String?
-  brandColor                String?
-  themeMode                 ThemeMode          @default(SYSTEM)
+  slug                       String                 @unique @default(cuid())
+  status                     OrganizationStatus     @default(ACTIVE)
+  companyName                String?
+  email                      String?
+  businessType               String?
+  nickname                   String?
+  countryCode                String?                @default("US")
+  addressLine1               String?
+  addressLine2               String?
+  city                       String?
+  state                      String?
+  postalCode                 String?
+  phoneCountryCode           String?                @default("+1")
+  phoneNumber                String?
+  ein                        String?
+  logoUrl                    String?
+  logoImageId                String?
+  coverUrl                   String?
+  coverImageId               String?
+  brandColor                 String?
+  themeMode                  ThemeMode              @default(SYSTEM)
   // Spec 009 phase 3: listed tier prices already include sales tax; tax is
   // backed out at the event's rate instead of added on top.
-  taxInclusivePricing       Boolean            @default(false)
+  taxInclusivePricing        Boolean                @default(false)
   // Spec 010 phase 1: what buyers see on their card statement (suffix after the
   // platform prefix; null = derived from name) and which optional Stripe payment
   // methods this organization offers at checkout (subset of the allowlist).
-  statementDescriptorSuffix String?
-  enabledPaymentMethods     String[]           @default([])
-  paymentSettingsUpdatedAt  DateTime?
+  statementDescriptorSuffix  String?
+  enabledPaymentMethods      String[]               @default([])
+  paymentSettingsUpdatedAt   DateTime?
   // Spec 011 phase 3: daily email to members summarising new application
   // submissions. `applicationDigestAt` is the end of the last window sent.
-  applicationDigestEnabled  Boolean            @default(true)
-  applicationDigestAt       DateTime?
+  applicationDigestEnabled   Boolean                @default(true)
+  applicationDigestAt        DateTime?
   // Spec 022: null while the /signup flow is in progress (OnboardingService
   // sets it explicitly); direct creates (tests, seed, POST /organizations)
   // are onboarded at once. Pending organizations are hidden from the org
   // switcher and swept when abandoned.
-  onboardingCompletedAt     DateTime?          @default(now())
+  onboardingCompletedAt      DateTime?              @default(now())
   // Spec 022: the organizer dismissed the dashboard setup guide.
-  setupGuideDismissedAt     DateTime?
+  setupGuideDismissedAt      DateTime?
   // Online Store › Preferences. Private mode hides the storefront behind a
   // password (scrypt hash; never returned by the API) with an optional message
   // for visitors. seoTitle/seoDescription are the storefront homepage's
   // <title> and meta description. autoRedirectLanguage (Automatic redirection
   // › Language) is stored for the day the storefront is localized; nothing
   // reads it yet.
-  storefrontPrivate         Boolean            @default(false)
-  storefrontPasswordHash    String?
-  storefrontMessage         String?
-  seoTitle                  String?
-  seoDescription            String?
-  autoRedirectLanguage      Boolean            @default(false)
+  storefrontPrivate          Boolean                @default(false)
+  storefrontPasswordHash     String?
+  storefrontMessage          String?
+  seoTitle                   String?
+  seoDescription             String?
+  autoRedirectLanguage       Boolean                @default(false)
   // Spec 031 phase 1: Settings › Customer accounts. Show the buyer sign-in
   // link in the storefront header and at checkout.
-  buyerSignInLinks          Boolean            @default(true)
+  buyerSignInLinks           Boolean                @default(true)
+  // Spec 031 phase 2: self-serve refund policy applied on top of the tier's
+  // isRefundable flag. Cutoff null = until the event starts; the fee is kept
+  // by the organization and recorded on Refund.feeAmount.
+  selfServeRefundsEnabled    Boolean                @default(true)
+  selfServeRefundCutoffHours Int?
+  selfServeRefundFeeType     SelfServeRefundFeeType @default(NONE)
+  selfServeRefundFeeValue    Decimal?               @db.Decimal(10, 2)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -863,6 +870,7 @@ model Refund {
   status         RefundStatus @default(PENDING)
   initiatedBy    String? // userId of admin who initiated, null for customer self-service
   manual         Boolean      @default(false) // recorded refund on an offline-paid order, no Stripe call (spec 024)
+  feeAmount      Decimal      @default(0) @db.Decimal(10, 2) // kept by the organization on a self-serve refund (spec 031)
 
   createdAt DateTime @default(now())
   // NO updatedAt — append-only ledger
@@ -929,6 +937,13 @@ enum ThemeMode {
   LIGHT
   DARK
   SYSTEM
+}
+
+// Spec 031: how the self-serve refund fee is computed.
+enum SelfServeRefundFeeType {
+  NONE
+  FIXED
+  PERCENT
 }
 
 enum EventStatus {

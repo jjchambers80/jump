@@ -7,6 +7,7 @@ import { generateBarcodes } from '../utils/barcode.js';
 import qrService from './QRService.js';
 import logger from '../utils/logger.js';
 import { NotFoundError, ConflictError, ValidationError } from '../middleware/errorHandler.js';
+import { evaluateRefundPolicy, REFUND_POLICY_SELECT } from './RefundPolicyService.js';
 
 class TicketService {
   /**
@@ -158,20 +159,27 @@ class TicketService {
    * @param {string} contactId
    */
   async getTicketsForContact(contactId) {
-    return this.listTickets({ contactId });
+    return this.listTickets({ contactId }, { refundPolicy: true });
   }
 
   /**
    * Shared ticket listing + formatting for the two owner lookups above.
    * @param {Object} where - Prisma Ticket where clause
    */
-  async listTickets(where) {
+  async listTickets(where, { refundPolicy = false } = {}) {
     const tickets = await prisma.ticket.findMany({
       where,
       include: {
         event: {
           include: {
-            venue: { select: { name: true, address: true } },
+            venue: {
+              select: {
+                name: true,
+                address: true,
+                // Spec 031: the buyer's account page shows the self-serve refund policy per ticket.
+                ...(refundPolicy ? { organization: { select: REFUND_POLICY_SELECT } } : {}),
+              },
+            },
           },
         },
         priceTier: { select: { name: true, price: true, description: true, saleStartDate: true, saleEndDate: true, isRefundable: true } },
@@ -218,6 +226,9 @@ class TicketService {
         saleStatus,
         saleEndDate: ticket.priceTier?.saleEndDate || null,
         isRefundable: ticket.priceTier?.isRefundable ?? false,
+        ...(refundPolicy && ticket.event.venue?.organization
+          ? { refundPolicy: evaluateRefundPolicy(ticket.event.venue.organization, ticket, now) }
+          : {}),
         status: ticket.status,
         redeemedAt: ticket.redeemedAt,
         purchaseDate: ticket.order?.createdAt || ticket.createdAt,

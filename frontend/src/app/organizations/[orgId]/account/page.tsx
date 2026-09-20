@@ -56,7 +56,34 @@ interface BuyerTicket {
   venue: string;
   priceTierName?: string;
   status: string;
+  pricePaid?: number;
   isRefundable?: boolean;
+  /** Self-serve refund policy (spec 031): what the buyer may do right now and on what terms. */
+  refundPolicy?: {
+    eligible: boolean;
+    reason: 'DISABLED' | 'TIER' | 'STATUS' | 'WINDOW_CLOSED' | 'ZERO' | null;
+    deadline: string | null;
+    fee: number;
+    refundAmount: number;
+  };
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return '';
+  return new Date(value).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+/** One line under a ticket explaining the refund terms; null when there is nothing to say. */
+function refundTerms(t: BuyerTicket): string | null {
+  const p = t.refundPolicy;
+  if (!p || t.status !== 'VALID') return null;
+  if (p.eligible) {
+    const fee = p.fee > 0 ? ` · $${p.fee.toFixed(2)} fee` : '';
+    return `Refundable until ${formatDateTime(p.deadline)}${fee}`;
+  }
+  if (p.reason === 'WINDOW_CLOSED') return 'Refund window closed';
+  if (p.reason === 'TIER' || p.reason === 'DISABLED' || p.reason === 'ZERO') return 'Not refundable';
+  return null;
 }
 
 function formatDate(value?: string) {
@@ -169,14 +196,22 @@ export default function BuyerAccountPage({ params }: { params: { orgId: string }
   const [refundMessage, setRefundMessage] = useState<string | null>(null);
 
   const requestRefund = async (t: BuyerTicket) => {
-    if (!window.confirm(`Refund ticket #${t.ticketNumber} for ${t.eventName}? This cannot be undone.`)) return;
+    const p = t.refundPolicy;
+    const terms =
+      p && p.fee > 0
+        ? ` You'll receive $${p.refundAmount.toFixed(2)} (a $${p.fee.toFixed(2)} fee is kept).`
+        : p
+          ? ` You'll receive $${p.refundAmount.toFixed(2)}.`
+          : '';
+    if (!window.confirm(`Refund ticket #${t.ticketNumber} for ${t.eventName}?${terms} This cannot be undone.`)) return;
     setRefundingId(t.id);
     setRefundMessage(null);
     try {
       const res = await fetch(`/api/buyer/me/tickets/${t.id}/refund`, { method: 'POST' });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.message || body.error || 'Refund failed');
-      setRefundMessage(`Ticket #${t.ticketNumber} refunded. The amount returns to your original payment method.`);
+      const amount = typeof body.amount === 'number' ? `$${body.amount.toFixed(2)} returns` : 'The amount returns';
+      setRefundMessage(`Ticket #${t.ticketNumber} refunded. ${amount} to your original payment method.`);
       await loadSession();
     } catch (err: any) {
       setRefundMessage(err.message);
@@ -347,9 +382,14 @@ export default function BuyerAccountPage({ params }: { params: { orgId: string }
                           {formatDate(t.eventDate)} · {t.venue}
                           {t.priceTierName ? ` · ${t.priceTierName}` : ''}
                         </p>
+                        {refundTerms(t) && (
+                          <p className="text-xs text-gray-500 dark:text-slate-500" data-testid="refund-terms">
+                            {refundTerms(t)}
+                          </p>
+                        )}
                       </div>
                       <div className="flex items-center gap-3">
-                        {t.isRefundable && t.status === 'VALID' && (
+                        {(t.refundPolicy ? t.refundPolicy.eligible : t.isRefundable && t.status === 'VALID') && (
                           <button
                             type="button"
                             onClick={() => requestRefund(t)}

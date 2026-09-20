@@ -48,6 +48,7 @@ describe('Customer account settings contract', () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
       buyerSignInLinks: true,
+      refundPolicy: { enabled: true, cutoffHours: null, feeType: 'NONE', feeValue: null },
       signInMethod: 'LINK',
       accountUrl: `${platformBaseUrl()}/organizations/${organization.id}/account`,
       domain: null,
@@ -89,6 +90,31 @@ describe('Customer account settings contract', () => {
 
     const on = await request(app).patch(PATH).set(...auth(adminToken)).send({ buyerSignInLinks: true });
     expect(on.body.buyerSignInLinks).toBe(true);
+  });
+
+  it('saves the refund policy and enforces fee-type / value pairing', async () => {
+    const saved = await request(app)
+      .patch(PATH)
+      .set(...auth(adminToken))
+      .send({ selfServeRefundCutoffHours: 48, selfServeRefundFeeType: 'FIXED', selfServeRefundFeeValue: 2.5 });
+    expect(saved.status).toBe(200);
+    expect(saved.body.refundPolicy).toEqual({ enabled: true, cutoffHours: 48, feeType: 'FIXED', feeValue: 2.5 });
+
+    // A fee type without a value (existing null) is refused; NONE clears the value.
+    await request(app).patch(PATH).set(...auth(adminToken)).send({ selfServeRefundFeeType: 'NONE' });
+    const missing = await request(app).patch(PATH).set(...auth(adminToken)).send({ selfServeRefundFeeType: 'PERCENT' });
+    expect(missing.status).toBe(400);
+    expect(missing.body.details[0].field).toBe('selfServeRefundFeeValue');
+    const over = await request(app).patch(PATH).set(...auth(adminToken)).send({ selfServeRefundFeeType: 'PERCENT', selfServeRefundFeeValue: 150 });
+    expect(over.status).toBe(400);
+    const badCutoff = await request(app).patch(PATH).set(...auth(adminToken)).send({ selfServeRefundCutoffHours: 1.5 });
+    expect(badCutoff.status).toBe(400);
+    const badType = await request(app).patch(PATH).set(...auth(adminToken)).send({ selfServeRefundFeeType: 'FLAT' });
+    expect(badType.status).toBe(400);
+
+    const cleared = await request(app).patch(PATH).set(...auth(adminToken)).send({ selfServeRefundsEnabled: false, selfServeRefundCutoffHours: null });
+    expect(cleared.body.refundPolicy).toEqual({ enabled: false, cutoffHours: null, feeType: 'NONE', feeValue: null });
+    await request(app).patch(PATH).set(...auth(adminToken)).send({ selfServeRefundsEnabled: true });
   });
 
   it('resolves the account URL on the active custom domain', async () => {

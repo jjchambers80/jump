@@ -295,7 +295,15 @@ class RefundService {
    * @param {{ reason?: string, initiatedBy?: string }} options
    * @returns {Promise<Object>} Refund record
    */
-  async refundTicket(ticketId, { reason = null, initiatedBy = null } = {}) {
+  /**
+   * Refund one ticket. Staff callers pass nothing and the full `pricePaid`
+   * goes back. A self-serve refund (spec 031) passes the policy's `feeAmount`:
+   * the buyer gets `pricePaid − feeAmount`, the organization keeps the fee,
+   * and the ticket is voided either way.
+   */
+  async refundTicket(ticketId, { reason = null, initiatedBy = null, feeAmount = 0 } = {}) {
+    const fee = round(Number(feeAmount) || 0);
+    if (fee < 0) throw new ValidationError('feeAmount cannot be negative');
     const result = await prisma.$transaction(async (tx) => {
       // Lock the ticket's order to prevent concurrent refunds
       const ticket = await tx.ticket.findUnique({
@@ -332,7 +340,9 @@ class RefundService {
         throw new ValidationError('No successful payment found');
       }
 
-      const refundAmount = Number(ticket.pricePaid);
+      const pricePaid = Number(ticket.pricePaid);
+      if (fee > pricePaid) throw new ValidationError('feeAmount cannot exceed the ticket price');
+      const refundAmount = round(pricePaid - fee);
       if (refundAmount <= 0) {
         throw new ValidationError('Ticket has no refundable amount');
       }
@@ -355,6 +365,7 @@ class RefundService {
           orderId: order.id,
           ticketId: ticket.id,
           amount: refundAmount,
+          feeAmount: fee,
           reason,
           status: 'PENDING',
           initiatedBy,
@@ -401,7 +412,15 @@ class RefundService {
         },
       });
       const openAddOnLines = await tx.orderAddOn.count({ where: { orderId: order.id, refundedAt: null } });
-      const newOrderStatus = activeTicketsAfter === 0 && openAddOnLines === 0 ? 'REFUNDED' : 'PARTIALLY_REFUNDED';
+      // Spec 031: a retained fee is money still on the order, so the order stays
+      // PARTIALLY_REFUNDED and staff can return the remainder with refundOrder.
+      const [{ total: feesRetainedRaw }] = await tx.$queryRaw`
+        SELECT COALESCE(SUM("feeAmount"), 0) AS total
+        FROM "Refund"
+        WHERE "orderId" = ${order.id} AND "status" = 'SUCCEEDED'::"RefundStatus"
+      `;
+      const allLinesClosed = activeTicketsAfter === 0 && openAddOnLines === 0;
+      const newOrderStatus = allLinesClosed && Number(feesRetainedRaw) <= 0 ? 'REFUNDED' : 'PARTIALLY_REFUNDED';
 
       await tx.order.update({
         where: { id: order.id },
@@ -658,6 +677,7 @@ class RefundService {
     return refunds.map((r) => ({
       id: r.id,
       amount: Number(r.amount),
+      feeAmount: Number(r.feeAmount ?? 0),
       reason: r.reason,
       status: r.status,
       stripeRefundId: r.stripeRefundId,
@@ -695,6 +715,7 @@ class RefundService {
       ticketId: refund.ticketId,
       orderAddOnId: refund.orderAddOnId ?? null,
       amount: Number(refund.amount),
+      feeAmount: Number(refund.feeAmount ?? 0),
       reason: refund.reason,
       status: refund.status,
       stripeRefundId: refund.stripeRefundId,
