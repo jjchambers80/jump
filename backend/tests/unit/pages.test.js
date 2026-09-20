@@ -54,6 +54,7 @@ describe('Online Store pages', () => {
         organizationId: 'org-1',
         title: 'About Us!',
         slug: 'about-us',
+        slugCustomized: false,
         content: '<p>Story</p>',
         isVisible: true,
         seoTitle: null,
@@ -62,20 +63,16 @@ describe('Online Store pages', () => {
     });
   });
 
-  it('suffixes the slug when it clashes within the organization', async () => {
+  it('rejects a custom slug that clashes within the organization', async () => {
     page.findFirst.mockResolvedValueOnce({ id: 'other' }).mockResolvedValueOnce(null);
-    page.create.mockResolvedValue({ id: 'page-2' });
+    page.create.mockImplementation(() => { throw new Error('should not be called'); });
 
-    await pageService.create('org-1', { title: 'About', content: 'x', slug: 'About' });
+    await expect(
+      pageService.create('org-1', { title: 'About', content: 'x', slug: 'About' })
+    ).rejects.toMatchObject({ statusCode: 409 });
 
-    expect(page.findFirst).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({
-        where: expect.objectContaining({ organizationId: 'org-1', slug: 'about' }),
-      })
-    );
-    expect(page.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ slug: 'about-2' }) })
+    expect(page.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ slug: 'about', NOT: undefined }) })
     );
   });
 
@@ -109,13 +106,13 @@ describe('Online Store pages', () => {
     });
   });
 
-  it('re-derives the slug from the title when the handle is cleared', async () => {
+  it('re-derives a generated slug when the title changes', async () => {
     page.findFirst
-      .mockResolvedValueOnce({ id: 'page-1', title: 'About', slug: 'about' })
+      .mockResolvedValueOnce({ id: 'page-1', title: 'About', slug: 'about', slugCustomized: false })
       .mockResolvedValueOnce(null);
     page.update.mockResolvedValue({ id: 'page-1' });
 
-    await pageService.update('org-1', 'page-1', { title: 'Our Story', slug: '' });
+    await pageService.update('org-1', 'page-1', { title: 'Our Story' });
 
     expect(page.findFirst).toHaveBeenNthCalledWith(
       2,
@@ -125,7 +122,24 @@ describe('Online Store pages', () => {
     );
     expect(page.update).toHaveBeenCalledWith({
       where: { id: 'page-1' },
-      data: { title: 'Our Story', slug: 'our-story' },
+      data: { title: 'Our Story', slug: 'our-story', slugCustomized: false },
+    });
+  });
+
+  it('preserves a customized slug when the title changes', async () => {
+    page.findFirst.mockResolvedValueOnce({
+      id: 'page-1',
+      title: 'About',
+      slug: 'company',
+      slugCustomized: true,
+    });
+    page.update.mockResolvedValue({ id: 'page-1' });
+
+    await pageService.update('org-1', 'page-1', { title: 'Our Story' });
+
+    expect(page.update).toHaveBeenCalledWith({
+      where: { id: 'page-1' },
+      data: { title: 'Our Story', slug: 'company', slugCustomized: true },
     });
   });
 

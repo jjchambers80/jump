@@ -5,7 +5,7 @@
 import { prisma } from '@jump/db';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import { excerptFromHtml, htmlToText, sanitizeContentHtml } from '../utils/sanitizeHtml.js';
-import { uniqueHandle } from '../utils/uniqueHandle.js';
+import { rethrowSlugConflict, resolveUniqueSlug } from '../utils/slug.js';
 import blogService from './BlogService.js';
 import storeFileService from './StoreFileService.js';
 
@@ -127,24 +127,36 @@ class BlogPostService {
     const featuredFileId = await this._featured(organizationId, data.featuredFileId);
     const isVisible = data.isVisible ?? false;
     const publishedAt = this._publishedAt(data.publishedAt, isVisible, null);
-    const row = await prisma.blogPost.create({
-      data: {
-        organizationId,
-        blogId,
-        title,
-        handle: await uniqueHandle(prisma.blogPost, { blogId }, data.handle || title),
-        content,
-        excerpt: data.excerpt === undefined ? null : this._excerpt(data.excerpt),
-        authorName,
-        tags: normalizeTags(data.tags),
-        featuredFileId,
-        isVisible,
-        publishedAt,
-        seoTitle: optionalText(data.seoTitle) ?? null,
-        seoDescription: optionalText(data.seoDescription) ?? null,
-      },
-      include: this.include,
+    const slugState = await resolveUniqueSlug(prisma.blogPost, {
+      scope: { blogId },
+      title,
+      customSlug: data.slug !== undefined ? data.slug : data.handle,
+      field: 'handle',
     });
+    let row;
+    try {
+      row = await prisma.blogPost.create({
+        data: {
+          organizationId,
+          blogId,
+          title,
+          handle: slugState.slug,
+          slugCustomized: slugState.slugCustomized,
+          content,
+          excerpt: data.excerpt === undefined ? null : this._excerpt(data.excerpt),
+          authorName,
+          tags: normalizeTags(data.tags),
+          featuredFileId,
+          isVisible,
+          publishedAt,
+          seoTitle: optionalText(data.seoTitle) ?? null,
+          seoDescription: optionalText(data.seoDescription) ?? null,
+        },
+        include: this.include,
+      });
+    } catch (error) {
+      rethrowSlugConflict(error, 'handle');
+    }
     await this._syncReferences(organizationId, row);
     return { ...this.serialize(row), neighbors: await this._neighbors(organizationId, row) };
   }
@@ -176,16 +188,30 @@ class BlogPostService {
       );
     }
     const blogId = patch.blogId || existing.blogId;
-    if (data.handle !== undefined || patch.blogId) {
-      // "" means "derive from the (new) title again"; a blog move re-checks uniqueness.
-      const raw = data.handle
-        ? data.handle
-        : data.handle === ''
-          ? patch.title || existing.title
-          : existing.handle;
-      patch.handle = await uniqueHandle(prisma.blogPost, { blogId }, raw, id);
+    if (
+      data.title !== undefined ||
+      data.slug !== undefined ||
+      data.handle !== undefined ||
+      patch.blogId
+    ) {
+      const slugState = await resolveUniqueSlug(prisma.blogPost, {
+        scope: { blogId },
+        title: patch.title ?? existing.title,
+        customSlug: data.slug !== undefined ? data.slug : data.handle,
+        currentSlug: existing.handle,
+        slugCustomized: existing.slugCustomized,
+        exceptId: id,
+        field: 'handle',
+      });
+      patch.handle = slugState.slug;
+      patch.slugCustomized = slugState.slugCustomized;
     }
-    const row = await prisma.blogPost.update({ where: { id }, data: patch, include: this.include });
+    let row;
+    try {
+      row = await prisma.blogPost.update({ where: { id }, data: patch, include: this.include });
+    } catch (error) {
+      rethrowSlugConflict(error, 'handle');
+    }
     if (
       patch.content !== undefined ||
       patch.excerpt !== undefined ||
@@ -302,6 +328,8 @@ class BlogPostService {
       blog: row.blog,
       title: row.title,
       handle: row.handle,
+      slug: row.handle,
+      slugCustomized: row.slugCustomized,
       content: row.content,
       excerpt: row.excerpt,
       authorName: row.authorName,
@@ -325,6 +353,7 @@ class BlogPostService {
       id: row.id,
       title: row.title,
       handle: row.handle,
+      slug: row.handle,
       blog: row.blog,
       authorName: row.authorName,
       tags: row.tags,

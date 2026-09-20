@@ -6,22 +6,33 @@ import logger from '../utils/logger.js';
 import { ConflictError, NotFoundError } from '../middleware/errorHandler.js';
 import { formatEventSummary } from '../utils/eventSummary.js';
 import taxService from './TaxService.js';
+import { rethrowSlugConflict, resolveUniqueSlug } from '../utils/slug.js';
 
 class VenueService {
   /** Create a new venue within an organization. */
   async createVenue(orgId, data) {
-    const venue = await prisma.venue.create({
-      data: {
-        organizationId: orgId,
-        name: data.name,
-        address: data.address,
-        city: data.city || null,
-        state: data.state || null,
-        postalCode: data.postalCode || null,
-        timezone: data.timezone || 'America/New_York',
-        isPublic: data.isPublic !== undefined ? data.isPublic : true,
-      },
+    const slugState = await resolveUniqueSlug(prisma.venue, {
+      title: data.name,
+      customSlug: data.slug,
     });
+    let venue;
+    try {
+      venue = await prisma.venue.create({
+        data: {
+          organizationId: orgId,
+          name: data.name,
+          ...slugState,
+          address: data.address,
+          city: data.city || null,
+          state: data.state || null,
+          postalCode: data.postalCode || null,
+          timezone: data.timezone || 'America/New_York',
+          isPublic: data.isPublic !== undefined ? data.isPublic : true,
+        },
+      });
+    } catch (error) {
+      rethrowSlugConflict(error);
+    }
 
     logger.info('Venue created', {
       event: 'venue_created',
@@ -56,6 +67,7 @@ class VenueService {
       select: {
         id: true,
         name: true,
+        slug: true,
         address: true,
         timezone: true,
         logoUrl: true,
@@ -66,6 +78,7 @@ class VenueService {
           select: {
             id: true,
             name: true,
+            slug: true,
             date: true,
             category: true,
             status: true,
@@ -90,6 +103,7 @@ class VenueService {
     const publicVenue = {
       id: venue.id,
       name: venue.name,
+      slug: venue.slug,
       address: venue.address,
       timezone: venue.timezone,
       logoUrl: venue.logoUrl,
@@ -99,6 +113,7 @@ class VenueService {
     const eventVenue = {
       id: venue.id,
       name: venue.name,
+      slug: venue.slug,
       address: venue.address,
     };
 
@@ -127,7 +142,7 @@ class VenueService {
   async updateVenue(orgId, id, data) {
     const existing = await prisma.venue.findFirst({
       where: { id, organizationId: orgId },
-      select: { id: true },
+      select: { id: true, name: true, slug: true, slugCustomized: true },
     });
     if (!existing) {
       throw new NotFoundError('Venue not found');
@@ -135,6 +150,18 @@ class VenueService {
 
     const updateData = {};
     if (data.name !== undefined) updateData.name = data.name;
+    if (data.name !== undefined || data.slug !== undefined) {
+      Object.assign(
+        updateData,
+        await resolveUniqueSlug(prisma.venue, {
+          title: data.name ?? existing.name,
+          customSlug: data.slug,
+          currentSlug: existing.slug,
+          slugCustomized: existing.slugCustomized,
+          exceptId: id,
+        })
+      );
+    }
     if (data.address !== undefined) updateData.address = data.address;
     if (data.city !== undefined) updateData.city = data.city;
     if (data.state !== undefined) updateData.state = data.state;
@@ -142,7 +169,12 @@ class VenueService {
     if (data.timezone !== undefined) updateData.timezone = data.timezone;
     if (data.isPublic !== undefined) updateData.isPublic = data.isPublic;
 
-    const venue = await prisma.venue.update({ where: { id }, data: updateData });
+    let venue;
+    try {
+      venue = await prisma.venue.update({ where: { id }, data: updateData });
+    } catch (error) {
+      rethrowSlugConflict(error);
+    }
 
     logger.info('Venue updated', {
       event: 'venue_updated',

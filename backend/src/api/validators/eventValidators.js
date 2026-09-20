@@ -3,6 +3,17 @@
 // Per FR-012, contracts/api.yaml
 
 import { ValidationError } from '../../middleware/errorHandler.js';
+import { normalizeCustomSlug } from '../../utils/slug.js';
+
+function normalizeSlug(req, next) {
+  try {
+    if (req.body.slug !== undefined) req.body.slug = normalizeCustomSlug(req.body.slug);
+    return true;
+  } catch (error) {
+    next(error);
+    return false;
+  }
+}
 
 /**
  * Validate POST /organizations/:orgId/events body
@@ -46,6 +57,7 @@ export const validateCreateEvent = (req, res, next) => {
   if (errors.length > 0) {
     return next(new ValidationError('Validation failed', errors));
   }
+  if (!normalizeSlug(req, next)) return;
 
   next();
 };
@@ -78,6 +90,7 @@ export const validateUpdateEvent = (req, res, next) => {
   if (errors.length > 0) {
     return next(new ValidationError('Validation failed', errors));
   }
+  if (!normalizeSlug(req, next)) return;
 
   next();
 };

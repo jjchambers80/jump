@@ -4,6 +4,19 @@
 import logger from '../utils/logger.js';
 
 export const errorHandler = (err, req, res, next) => {
+  const uniqueTarget = Array.isArray(err?.meta?.target)
+    ? err.meta.target
+    : [String(err?.meta?.target || '')];
+  if (
+    err?.code === 'P2002' &&
+    uniqueTarget.some((field) => field.includes('slug') || field.includes('handle'))
+  ) {
+    err.name = 'ConflictError';
+    err.statusCode = 409;
+    err.message = 'That URL slug is already in use';
+    err.details = { field: 'slug' };
+  }
+
   // Log error with correlation ID
   const correlationId = req.headers['x-correlation-id'] || req.id;
   const logMethod = err.statusCode && err.statusCode < 500 ? 'warn' : 'error';
