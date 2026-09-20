@@ -11,10 +11,28 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import {
+  CalendarDays,
+  ChartColumn,
+  ClipboardList,
+  FileText,
+  Landmark,
+  LayoutDashboard,
+  MapPin,
+  ScanLine,
+  Settings,
+  ShoppingCart,
+  Store,
+  Ticket,
+  Users,
+  type LucideIcon,
+} from 'lucide-react';
 
 interface NavItem {
   label: string;
   href: string;
+  /** Parent-level items carry an icon; nested links are indented instead. */
+  icon?: LucideIcon;
   /** Visually nest this link beneath the preceding section link. */
   nested?: boolean;
   /** Only show for these roles. If undefined, show for all allowed roles. */
@@ -22,21 +40,21 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { label: 'Dashboard', href: '/admin/dashboard' },
-  { label: 'Venues', href: '/admin/venues' },
-  { label: 'Events', href: '/admin/events' },
-  { label: 'Tickets', href: '/admin/tickets' },
-  { label: 'Orders', href: '/admin/orders' },
-  { label: 'Customers', href: '/admin/customers' },
-  { label: 'Participants', href: '/admin/participants' },
-  { label: 'Check In', href: '/admin/orders/scan' },
-  { label: 'Analytics', href: '/admin/analytics' },
-  { label: 'Finance', href: '/admin/finance' },
+  { label: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
+  { label: 'Venues', href: '/admin/venues', icon: MapPin },
+  { label: 'Events', href: '/admin/events', icon: CalendarDays },
+  { label: 'Tickets', href: '/admin/tickets', icon: Ticket },
+  { label: 'Orders', href: '/admin/orders', icon: ShoppingCart },
+  { label: 'Customers', href: '/admin/customers', icon: Users },
+  { label: 'Participants', href: '/admin/participants', icon: ClipboardList },
+  { label: 'Check In', href: '/admin/orders/scan', icon: ScanLine },
+  { label: 'Analytics', href: '/admin/analytics', icon: ChartColumn },
+  { label: 'Finance', href: '/admin/finance', icon: Landmark },
   { label: 'Payouts', href: '/admin/finance/payouts', nested: true },
-  { label: 'Online store', href: '/admin/online-store' },
+  { label: 'Online store', href: '/admin/online-store', icon: Store },
   { label: 'Pages', href: '/admin/online-store/pages', nested: true },
   { label: 'Preferences', href: '/admin/online-store/preferences', nested: true },
-  { label: 'Content', href: '/admin/content' },
+  { label: 'Content', href: '/admin/content', icon: FileText },
   { label: 'Files', href: '/admin/content/files', nested: true },
   { label: 'Menus', href: '/admin/content/menus', nested: true },
   { label: 'Blog posts', href: '/admin/content/blog-posts', nested: true },
@@ -125,6 +143,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
           <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
             {visibleItems.map((item) => {
               const active = isActive(item.href);
+              const Icon = item.icon;
               return (
                 <Link
                   key={item.href}
@@ -133,7 +152,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                   aria-current={active ? 'page' : undefined}
                   className={`
                     flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors
-                    ${item.nested ? 'ml-4 pl-5' : ''}
+                    ${item.nested ? 'ml-4 pl-6' : ''}
                     ${
                       active
                         ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
@@ -141,6 +160,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                     }
                   `}
                 >
+                  {Icon && <Icon className="w-4 h-4 mr-3 shrink-0" aria-hidden="true" />}
                   {item.label}
                 </Link>
               );
@@ -158,6 +178,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                   : 'text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700'
               }`}
             >
+              <Settings className="w-4 h-4 mr-3 shrink-0" aria-hidden="true" />
               Settings
             </Link>
           </div>
