@@ -296,9 +296,19 @@ export type StorefrontPreferencesInput = Partial<
 // ===== Settings › Customer accounts (spec 031) =====
 
 /** GET/PATCH /admin/settings/customer-accounts. */
+export type SelfServeRefundFeeType = 'NONE' | 'FIXED' | 'PERCENT';
+
 export interface CustomerAccountSettings {
   /** Show the buyer sign-in link in the storefront header and at checkout. */
   buyerSignInLinks: boolean;
+  /** Self-serve refund policy (phase 2), applied on top of each tier's isRefundable flag. */
+  refundPolicy: {
+    enabled: boolean;
+    /** Hours before the event start after which buyers can no longer refund; null = until the event starts. */
+    cutoffHours: number | null;
+    feeType: SelfServeRefundFeeType;
+    feeValue: number | null;
+  };
   /** How buyers sign in. Phase 1 is always the email link. */
   signInMethod: 'LINK';
   /** Public buyer account URL: /account on the active custom domain, else the platform path. */
@@ -306,7 +316,13 @@ export interface CustomerAccountSettings {
   domain: { hostname: string } | null;
 }
 
-export type CustomerAccountSettingsInput = Partial<Pick<CustomerAccountSettings, 'buyerSignInLinks'>>;
+export type CustomerAccountSettingsInput = Partial<{
+  buyerSignInLinks: boolean;
+  selfServeRefundsEnabled: boolean;
+  selfServeRefundCutoffHours: number | null;
+  selfServeRefundFeeType: SelfServeRefundFeeType;
+  selfServeRefundFeeValue: number | null;
+}>;
 
 // ===== Ticket Scanning & Redemption =====
 

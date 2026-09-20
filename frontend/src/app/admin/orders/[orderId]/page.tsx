@@ -96,6 +96,8 @@ interface OrderDetail {
 interface RefundRecord {
   id: string;
   amount: number;
+  /** Kept by the organization on a self-serve refund (spec 031). */
+  feeAmount?: number;
   reason: string | null;
   status: string;
   ticket: { id: string; barcode: string; ticketNumber: number } | null;
@@ -555,6 +557,9 @@ export default function AdminOrderDetailPage() {
                       </span>
                     )}
                     {refund.manual && <span className="text-gray-500 dark:text-slate-400 ml-2">recorded outside Stripe</span>}
+                    {(refund.feeAmount ?? 0) > 0 && (
+                      <span className="text-gray-500 dark:text-slate-400 ml-2">· {formatCurrency(refund.feeAmount!)} fee retained</span>
+                    )}
                   </p>
                   {refund.reason && (
                     <p className="text-xs text-gray-500 dark:text-slate-400">{refund.reason}</p>
