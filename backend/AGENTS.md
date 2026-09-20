@@ -100,6 +100,12 @@ SELECT * FROM "PriceTier" WHERE id = ? FOR UPDATE  -- row-level lock
 -- Reserve first, move reserved → sold after payment confirmation
 ```
 
+## Account settings (spec 030)
+
+- `/account/*` (`routes/account.js`) is the signed-in user's own data: every handler uses `req.user.id`, never a user id from params or body. Administrators edit other people only through `/users` (roles/status). No `X-Jump-Org` scoping.
+- Email changes are verified-pending (`User.pendingEmail` + `VerificationToken` identifier `email-change:<userId>`); `POST /account/email/confirm` is public and mounted before `requireAuth`. Phone is E.164 (`libphonenumber-js`), stored unverified. `utils/locales.js` must stay identical to `frontend/src/lib/locales.ts`.
+- `AccountService.toJson` is the only serializer for a `User` with `accounts` included — it strips provider tokens. Do not `res.json` a raw user.
+
 ## Abuse protection (spec 020 phase 1)
 
 - Every per-IP limiter comes from `middleware/rateLimit.js` `makeLimiter(name, opts)` — never call `express-rate-limit` directly. It keys on the signed `X-Jump-Client-Ip` (`utils/clientIp.js`), honours `RATE_LIMIT_<NAME>_LIMIT` / `_WINDOW_MS`, records `rate_limited_total{route}` and is a pass-through under `NODE_ENV=test` unless `RATE_LIMIT_ENFORCE_IN_TESTS=1` (set it before importing the app; `tests/contract/abuseProtection.test.js` shows the pattern). Defaults live in `LIMITS`; the `BASELINE` limiter on `server.js` skips `/health`, `/metrics`, `/webhooks/*`. Count only what matters: `skipFailedRequests` when validation errors must be free (`ORDER_CREATE`), `countStatuses: [401, 403]` for auth failures (`SCANNER_AUTH`).

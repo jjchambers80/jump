@@ -1,6 +1,6 @@
 # Implementation Plan: Account settings › General (spec 030, feature A)
 
-**Status**: Planned (2026-09-20). Not implemented.
+**Status**: Built 2026-09-20 on `feat/030-account-general` (see `docs/wiki/features/account-settings.md`). Deviations: confirmation page is `/auth/confirm-email` (not `/account/…`, which is the buyer account on custom domains); `AdminRoute` fixed to survive `useSession().update()`.
 **Branch / worktree**: `feat/030-account-general` at `.claude/worktrees/030-account-general`, based on `main`.
 **Spec**: [`spec.md`](./spec.md) §4–§5. **Blocks**: B, C, D (they mount on the shell and router built here).
 **Dependencies**: `libphonenumber-js` (frontend + backend). Nothing else new.
