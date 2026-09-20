@@ -8,6 +8,7 @@ export function formatEventSummary(event) {
 
   return {
     id: event.id,
+    slug: event.slug,
     name: event.name,
     slug: event.slug,
     date: event.date,

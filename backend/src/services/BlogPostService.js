@@ -6,6 +6,8 @@ import { prisma } from '@jump/db';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import { excerptFromHtml, htmlToText, sanitizeContentHtml } from '../utils/sanitizeHtml.js';
 import { rethrowSlugConflict, resolveUniqueSlug } from '../utils/slug.js';
+import { uniqueHandle } from '../utils/uniqueHandle.js';
+import { findByPublicIdentifier } from '../utils/publicIdentifier.js';
 import blogService from './BlogService.js';
 import storeFileService from './StoreFileService.js';
 
@@ -307,11 +309,12 @@ class BlogPostService {
     };
   }
 
-  async publicGet(organizationId, blogHandle, postHandle) {
+  async publicGet(organizationId, blogHandle, postIdentifier) {
     const blog = await blogService.getByHandle(organizationId, blogHandle);
     if (!blog) throw new NotFoundError('Blog post not found');
-    const row = await prisma.blogPost.findFirst({
-      where: { blogId: blog.id, handle: postHandle, ...this._statusWhere('visible', new Date()) },
+    const row = await findByPublicIdentifier(prisma.blogPost, postIdentifier, {
+      slugField: 'handle',
+      where: { blogId: blog.id, ...this._statusWhere('visible', new Date()) },
       include: this.include,
     });
     if (!row) throw new NotFoundError('Blog post not found');

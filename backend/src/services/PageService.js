@@ -3,6 +3,7 @@ import { rethrowSlugConflict, resolveUniqueSlug, uniqueSlug } from '../utils/slu
 import { NotFoundError } from '../middleware/errorHandler.js';
 import storeFileService from './StoreFileService.js';
 import { sanitizeContentHtml } from '../utils/sanitizeHtml.js';
+import { findByPublicIdentifier } from '../utils/publicIdentifier.js';
 
 /** Optional text field: trims, and stores an empty string as null. */
 function optionalText(value) {
@@ -28,9 +29,9 @@ class PageService {
   }
 
   /** Storefront: a visible page by handle; hidden pages are 404. */
-  async getPublic(organizationId, slug) {
-    const page = await prisma.page.findFirst({
-      where: { organizationId, slug, isVisible: true },
+  async getPublic(organizationId, identifier) {
+    const page = await findByPublicIdentifier(prisma.page, identifier, {
+      where: { organizationId, isVisible: true },
       select: {
         id: true,
         title: true,

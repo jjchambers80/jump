@@ -80,6 +80,7 @@ export async function uniqueSlug(
 
   throw new ConflictError('Could not find a free URL slug');
 }
+
 /** Resolve provenance and allocate a slug, rejecting collisions for typed values. */
 export async function resolveUniqueSlug(
   model,

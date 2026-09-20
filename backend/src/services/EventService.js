@@ -11,6 +11,7 @@ import applicationFormService from './ApplicationFormService.js';
 import addOnService from './AddOnService.js';
 import { PAID_ORDER_STATUSES } from './paidStatuses.js';
 import { rethrowSlugConflict, resolveUniqueSlug } from '../utils/slug.js';
+import { findByPublicIdentifier } from '../utils/publicIdentifier.js';
 
 class EventService {
   /**
@@ -466,11 +467,10 @@ class EventService {
    * @param {string} eventId - Event ID
    * @returns {Promise<Object>} Event detail with venue and price tiers
    */
-  async getEventById(eventId) {
-    const event = await prisma.event.findUnique({
-      where: { id: eventId },
+  async getEventById(identifier) {
+    const event = await findByPublicIdentifier(prisma.event, identifier, {
       include: {
-        venue: { include: { organization: { select: { id: true, name: true, logoUrl: true, brandColor: true, themeMode: true, taxInclusivePricing: true, buyerSignInLinks: true } } } },
+        venue: { include: { organization: { select: { id: true, slug: true, name: true, logoUrl: true, brandColor: true, themeMode: true, taxInclusivePricing: true, buyerSignInLinks: true } } } },
         priceTiers: { orderBy: { displayOrder: 'asc' } },
         // Add-ons a ticket checkout may offer (spec 012); the storefront picks
         // per cart tier via `allTiers` / `priceTierIds`.
@@ -487,6 +487,16 @@ class EventService {
     }
 
     return this._formatEventDetail(event);
+  }
+
+  /** Canonical public route data; intentionally bypasses the private-store gate. */
+  async getPublicRoute(identifier) {
+    const event = await findByPublicIdentifier(prisma.event, identifier, {
+      where: { status: 'PUBLISHED', venue: { organization: { status: 'ACTIVE' } } },
+      select: { id: true, slug: true },
+    });
+    if (!event) throw new NotFoundError('Event not found');
+    return event;
   }
 
   /**
@@ -683,6 +693,7 @@ class EventService {
   _formatEventDetail(event) {
     return {
       id: event.id,
+      slug: event.slug,
       name: event.name,
       slug: event.slug,
       slugCustomized: event.slugCustomized,
@@ -700,6 +711,7 @@ class EventService {
         region: taxService.resolveRegionForVenue(event.venue)?.region || null,
       },
       organizationId: event.venue?.organization?.id || null,
+      organizationSlug: event.venue?.organization?.slug || null,
       organizationName: event.venue?.organization?.name || null,
       // Storefront header (logo + name) on event, checkout and apply pages.
       organizationLogoUrl: event.venue?.organization?.logoUrl || null,
@@ -712,6 +724,7 @@ class EventService {
       venue: event.venue
         ? {
             id: event.venue.id,
+            slug: event.venue.slug,
             name: event.venue.name,
             slug: event.venue.slug,
             address: event.venue.address,

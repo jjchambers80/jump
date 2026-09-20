@@ -40,13 +40,19 @@ router.get('/owner', resolveLimiter, async (req, res, next) => {
     let organizationId = null;
 
     if (typeof eventId === 'string' && ID_RE.test(eventId)) {
-      const e = await prisma.event.findUnique({ where: { id: eventId }, select: { venue: { select: { organizationId: true } } } });
+      const e = await prisma.event.findFirst({
+        where: { OR: [{ id: eventId }, { slug: eventId }] },
+        select: { venue: { select: { organizationId: true } } },
+      });
       organizationId = e?.venue?.organizationId ?? null;
     } else if (typeof orderId === 'string' && ID_RE.test(orderId)) {
       const o = await prisma.order.findUnique({ where: { id: orderId }, select: { contact: { select: { organizationId: true } } } });
       organizationId = o?.contact?.organizationId ?? null;
     } else if (typeof venueId === 'string' && ID_RE.test(venueId)) {
-      const v = await prisma.venue.findUnique({ where: { id: venueId }, select: { organizationId: true } });
+      const v = await prisma.venue.findFirst({
+        where: { OR: [{ id: venueId }, { slug: venueId }] },
+        select: { organizationId: true },
+      });
       organizationId = v?.organizationId ?? null;
     } else {
       throw new ValidationError('eventId, orderId or venueId is required');

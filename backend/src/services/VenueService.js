@@ -7,6 +7,7 @@ import { ConflictError, NotFoundError } from '../middleware/errorHandler.js';
 import { formatEventSummary } from '../utils/eventSummary.js';
 import taxService from './TaxService.js';
 import { rethrowSlugConflict, resolveUniqueSlug } from '../utils/slug.js';
+import { findByPublicIdentifier } from '../utils/publicIdentifier.js';
 
 class VenueService {
   /** Create a new venue within an organization. */
@@ -57,26 +58,27 @@ class VenueService {
   }
 
   /** Get public venue fields and published event summaries. */
-  async getPublicVenueById(id) {
-    const venue = await prisma.venue.findFirst({
+  async getPublicVenueById(identifier) {
+    const venue = await findByPublicIdentifier(prisma.venue, identifier, {
       where: {
-        id,
         isPublic: true,
         organization: { status: 'ACTIVE' },
       },
       select: {
         id: true,
+        slug: true,
         name: true,
         slug: true,
         address: true,
         timezone: true,
         logoUrl: true,
-        organization: { select: { brandColor: true, themeMode: true } },
+        organization: { select: { id: true, slug: true, brandColor: true, themeMode: true } },
         events: {
           where: { status: 'PUBLISHED' },
           orderBy: { date: 'asc' },
           select: {
             id: true,
+            slug: true,
             name: true,
             slug: true,
             date: true,
@@ -102,6 +104,7 @@ class VenueService {
 
     const publicVenue = {
       id: venue.id,
+      slug: venue.slug,
       name: venue.name,
       slug: venue.slug,
       address: venue.address,
@@ -109,9 +112,12 @@ class VenueService {
       logoUrl: venue.logoUrl,
       brandColor: venue.organization?.brandColor || null,
       themeMode: venue.organization?.themeMode || 'SYSTEM',
+      organizationId: venue.organization?.id || null,
+      organizationSlug: venue.organization?.slug || null,
     };
     const eventVenue = {
       id: venue.id,
+      slug: venue.slug,
       name: venue.name,
       slug: venue.slug,
       address: venue.address,
@@ -123,6 +129,16 @@ class VenueService {
         formatEventSummary({ ...event, venue: eventVenue })
       ),
     };
+  }
+
+  /** Canonical public route data; intentionally bypasses the private-store gate. */
+  async getPublicRoute(identifier) {
+    const venue = await findByPublicIdentifier(prisma.venue, identifier, {
+      where: { isPublic: true, organization: { status: 'ACTIVE' } },
+      select: { id: true, slug: true },
+    });
+    if (!venue) throw new NotFoundError('Venue not found');
+    return venue;
   }
 
   /** List venues for an organization. */
