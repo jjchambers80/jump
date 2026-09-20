@@ -2,12 +2,14 @@ import { ValidationError } from '../../middleware/errorHandler.js';
 
 const FIELDS = new Set([
   'buyerSignInLinks',
+  'buyerSignInMethod',
   'selfServeRefundsEnabled',
   'selfServeRefundCutoffHours',
   'selfServeRefundFeeType',
   'selfServeRefundFeeValue',
 ]);
 const FEE_TYPES = new Set(['NONE', 'FIXED', 'PERCENT']);
+const SIGN_IN_METHODS = new Set(['LINK', 'CODE']);
 // One year: a cutoff further out than that means "never", which is what the toggle is for.
 const CUTOFF_MAX_HOURS = 8760;
 
@@ -27,6 +29,10 @@ export function validateUpdateCustomerAccountSettings(req, res, next) {
     if (body[field] !== undefined && typeof body[field] !== 'boolean') {
       errors.push({ field, message: `${field} must be a boolean` });
     }
+  }
+
+  if (body.buyerSignInMethod !== undefined && !SIGN_IN_METHODS.has(body.buyerSignInMethod)) {
+    errors.push({ field: 'buyerSignInMethod', message: 'buyerSignInMethod must be LINK or CODE' });
   }
 
   const cutoff = body.selfServeRefundCutoffHours;

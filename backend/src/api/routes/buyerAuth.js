@@ -3,6 +3,7 @@
 //
 //   POST /buyer/auth/request   { organizationId, email }  -> 202 always
 //   POST /buyer/auth/verify    { token }                  -> { sessionToken, organizationId }
+//   POST /buyer/auth/verify-code { organizationId, email, code } -> same (spec 031, CODE organizations)
 //   GET  /buyer/me                                        -> profile + org branding
 //   GET  /buyer/me/orders                                 -> this org's orders only
 //   GET  /buyer/me/tickets                                -> this org's tickets only
@@ -39,6 +40,7 @@ export { clientIpForRateLimit };
 
 // Per-IP cap on sign-in requests (spec 020 factory); the per-email cap lives in BuyerAuthService.
 const requestLimiter = makeLimiter('BUYER_AUTH_REQUEST', LIMITS.BUYER_AUTH_REQUEST);
+const verifyLimiter = makeLimiter('BUYER_AUTH_VERIFY', LIMITS.BUYER_AUTH_VERIFY);
 
 /** POST /buyer/auth/request — email a sign-in link. Never reveals account existence. */
 router.post('/auth/request', requestLimiter, async (req, res, next) => {
@@ -59,6 +61,7 @@ router.post('/auth/request', requestLimiter, async (req, res, next) => {
           contact: result.contact,
           organization: result.contact.organization,
           loginUrl: await buyerVerifyUrl(organizationId, result.rawToken),
+          code: result.rawCode || null,
         })
         .catch((error) => {
           logger.error('Buyer login email failed', { contactId: result.contact.id, error: error.message });
@@ -85,6 +88,24 @@ router.post('/auth/verify', async (req, res, next) => {
       purpose: buyer.purpose,
     });
 
+    res.json({ sessionToken, organizationId: buyer.organizationId });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** POST /buyer/auth/verify-code — exchange a six-digit code for a session (spec 031). */
+router.post('/auth/verify-code', verifyLimiter, async (req, res, next) => {
+  try {
+    const { organizationId, email, code } = req.body || {};
+    const buyer = await buyerAuthService.consumeCode(organizationId, email, code);
+    const sessionToken = buyerAuthService.signSession(buyer);
+    logger.info('Buyer signed in', {
+      event: 'buyer_signed_in',
+      contactId: buyer.contactId,
+      organizationId: buyer.organizationId,
+      purpose: buyer.purpose,
+    });
     res.json({ sessionToken, organizationId: buyer.organizationId });
   } catch (error) {
     next(error);

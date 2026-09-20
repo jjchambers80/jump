@@ -7,7 +7,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { rememberNext, safeNextPath } from '@/lib/buyerNext';
+import { rememberNext, safeNextPath, takeNext } from '@/lib/buyerNext';
 import { api } from '../../../../services/api';
 import { resolveAssetUrl } from '../../../../lib/assets';
 import BrandScope from '../../../../components/BrandScope';
@@ -21,6 +21,8 @@ interface OrganizationPublic {
   logoUrl: string | null;
   brandColor?: string | null;
   themeMode?: ThemeMode | null;
+  /** Spec 031 phase 3: CODE organizations show a six-digit code field after the email step. */
+  buyerSignInMethod?: 'LINK' | 'CODE';
 }
 
 interface BuyerProfile {
@@ -116,6 +118,10 @@ export default function BuyerAccountPage({ params }: { params: { orgId: string }
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  // One-time code entry (CODE organizations)
+  const [code, setCode] = useState('');
+  const [verifying, setVerifying] = useState(false);
+  const [codeError, setCodeError] = useState<string | null>(null);
 
   const loadSession = useCallback(async () => {
     const me = await fetch('/api/buyer/me', { cache: 'no-store' });
@@ -189,6 +195,43 @@ export default function BuyerAccountPage({ params }: { params: { orgId: string }
       setFormError(err.message);
     } finally {
       setSending(false);
+    }
+  };
+
+  const submitCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const digits = code.replace(/\D/g, '');
+    if (digits.length !== 6) {
+      setCodeError('Enter the 6-digit code from the email');
+      return;
+    }
+    setCodeError(null);
+    setVerifying(true);
+    try {
+      const res = await fetch('/api/buyer/verify-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId: params.orgId, email: email.trim().toLowerCase(), code: digits }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || body.message || 'This code is incorrect or has expired');
+      }
+      // Signed in: the stored return path (if any) wins, else reload this page's data.
+      const next = takeNext();
+      if (next) {
+        router.replace(next);
+        return;
+      }
+      setSent(false);
+      setCode('');
+      setLoading(true);
+      await loadSession();
+      setLoading(false);
+    } catch (err: any) {
+      setCodeError(err.message);
+    } finally {
+      setVerifying(false);
     }
   };
 
@@ -280,10 +323,51 @@ export default function BuyerAccountPage({ params }: { params: { orgId: string }
             {sent ? (
               <div>
                 <h2 className="text-xl font-semibold text-gray-900 dark:text-slate-100 mb-2">Check your email</h2>
-                <p className="text-gray-600 dark:text-slate-400">
-                  If <strong>{email}</strong> has an account with {org.name}, a sign-in link is on its way. It works once
-                  and expires in 15 minutes.
-                </p>
+                {org.buyerSignInMethod === 'CODE' ? (
+                  <>
+                    <p className="text-gray-600 dark:text-slate-400">
+                      If <strong>{email}</strong> has an account with {org.name}, a 6-digit code is on its way. Enter it
+                      below — it expires in 10 minutes. The email also has a sign-in link if you prefer.
+                    </p>
+                    <form onSubmit={submitCode} noValidate className="mt-6" data-testid="sign-in-code-form">
+                      <label htmlFor="sign-in-code" className="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-2">
+                        Sign-in code
+                      </label>
+                      <div className="flex flex-wrap gap-3">
+                        <input
+                          id="sign-in-code"
+                          type="text"
+                          inputMode="numeric"
+                          autoComplete="one-time-code"
+                          pattern="[0-9]*"
+                          maxLength={7}
+                          value={code}
+                          onChange={(e) => setCode(e.target.value)}
+                          placeholder="123456"
+                          autoFocus
+                          className="w-40 rounded-lg border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 px-4 py-3 font-mono text-lg tracking-[0.3em] focus:outline-none focus:ring-2 focus:ring-brand"
+                        />
+                        <button
+                          type="submit"
+                          disabled={verifying}
+                          className="rounded-lg bg-brand px-5 py-3 font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-60 transition-colors"
+                        >
+                          {verifying ? 'Checking…' : 'Continue'}
+                        </button>
+                      </div>
+                      {codeError && (
+                        <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">
+                          {codeError}
+                        </p>
+                      )}
+                    </form>
+                  </>
+                ) : (
+                  <p className="text-gray-600 dark:text-slate-400">
+                    If <strong>{email}</strong> has an account with {org.name}, a sign-in link is on its way. It works
+                    once and expires in 15 minutes.
+                  </p>
+                )}
                 <button
                   type="button"
                   onClick={() => setSent(false)}

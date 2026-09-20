@@ -238,6 +238,7 @@ class OrganizationService {
         storefrontPasswordHash: true,
         storefrontMessage: true,
         buyerSignInLinks: true,
+        buyerSignInMethod: true,
         venues: {
           select: {
             events: {
@@ -279,6 +280,7 @@ class OrganizationService {
       themeMode: org.themeMode,
       // Spec 031: storefront header / checkout show the buyer sign-in link
       buyerSignInLinks: org.buyerSignInLinks,
+      buyerSignInMethod: org.buyerSignInMethod,
     };
 
     if (!storefrontPreferencesService.hasAccess(org, accessToken)) {
