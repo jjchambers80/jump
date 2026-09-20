@@ -26,6 +26,10 @@ export interface SessionClaims extends JWTPayload {
   role?: string;
   name?: string | null;
   organizationId?: string | null;
+  /** Spec 030 account preferences + avatar, so the admin UI reads them from the session. */
+  locale?: string;
+  timeZone?: string | null;
+  picture?: string | null;
 }
 
 export async function encodeSessionToken(token: SessionClaims): Promise<string> {
@@ -34,6 +38,9 @@ export async function encodeSessionToken(token: SessionClaims): Promise<string> 
     role: token.role,
     name: token.name ?? undefined,
     organizationId: token.organizationId ?? null,
+    locale: token.locale ?? undefined,
+    timeZone: token.timeZone ?? undefined,
+    picture: token.picture ?? undefined,
   })
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setSubject(token.sub ?? '')

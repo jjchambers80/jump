@@ -11,6 +11,11 @@ export interface UserClaims {
   name: string | null;
   email: string;
   organizationId: string | null;
+  /** Spec 030 account preferences; undefined when the caller has no profile data. */
+  locale?: string;
+  timeZone?: string | null;
+  /** Avatar URL (uploaded photo thumb, else the provider picture). */
+  picture?: string | null;
 }
 
 /** The subset of the Auth.js token this module reads and writes. */
@@ -20,6 +25,9 @@ export interface ClaimsToken {
   name?: unknown;
   email?: unknown;
   organizationId?: unknown;
+  locale?: unknown;
+  timeZone?: unknown;
+  picture?: unknown;
   /** Epoch ms of the last DB read backing role/organizationId. */
   claimsRefreshedAt?: unknown;
 }
@@ -40,6 +48,9 @@ export function applyUserClaims<T extends ClaimsToken>(token: T, claims: UserCla
   token.name = claims.name;
   token.email = claims.email;
   token.organizationId = claims.organizationId;
+  if (claims.locale !== undefined) token.locale = claims.locale;
+  if (claims.timeZone !== undefined) token.timeZone = claims.timeZone;
+  if (claims.picture !== undefined) token.picture = claims.picture;
   token.claimsRefreshedAt = now;
   return token;
 }

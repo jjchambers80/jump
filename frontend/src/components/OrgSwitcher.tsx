@@ -6,10 +6,12 @@
 // (spec 022); OrgContext picks the new organization up when that tab finishes.
 
 import React, { useState, useRef, useEffect } from 'react';
+import Link from 'next/link';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { useOrg } from './OrgContext';
+import { resolveAssetUrl } from '@/lib/assets';
 
 export const SIGNUP_FROM_ADMIN_PATH = '/signup?from_admin=1';
 
@@ -54,6 +56,8 @@ export default function OrgSwitcher() {
 
   const userName = session?.user?.name || 'User';
   const userEmail = session?.user?.email || '';
+  // Spec 030: uploaded photo (relative /images URL) or the provider picture
+  const userImage = resolveAssetUrl(session?.user?.image);
 
   // Generate initials for avatar
   const initials = (selectedOrg?.name || 'O')
@@ -133,17 +137,27 @@ export default function OrgSwitcher() {
             </button>
           </div>
 
-          {/* User info & logout */}
+          {/* User info (links to the personal account settings, spec 030) & logout */}
           <div className="border-t border-gray-100 dark:border-slate-700 py-1">
-            <div className="px-4 py-2.5 flex items-center gap-3">
-              <span className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-200 dark:bg-slate-600 text-gray-600 dark:text-slate-300 text-xs font-bold">
-                {userName.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()}
-              </span>
+            <Link
+              href="/admin/account"
+              onClick={() => setOpen(false)}
+              data-testid="org-switcher-account"
+              className="px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500"
+            >
+              {userImage ? (
+                <img src={userImage} alt="" className="w-8 h-8 rounded-full object-cover bg-gray-200 dark:bg-slate-600" />
+              ) : (
+                <span className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-200 dark:bg-slate-600 text-gray-600 dark:text-slate-300 text-xs font-bold">
+                  {userName.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()}
+                </span>
+              )}
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 dark:text-slate-100 truncate">{userName}</p>
                 <p className="text-xs text-gray-500 dark:text-slate-400 truncate">{userEmail}</p>
+                <p className="text-xs text-indigo-600 dark:text-indigo-400">Manage account</p>
               </div>
-            </div>
+            </Link>
             <button
               onClick={() => {
                 if (theme === 'light') setTheme('dark');

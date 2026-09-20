@@ -109,7 +109,7 @@ class AccountService {
     await emailService.sendEmailChangeConfirmation({
       to: email,
       currentEmail: user.email,
-      confirmUrl: `${platformBaseUrl()}/account/confirm-email?token=${encodeURIComponent(rawToken)}`,
+      confirmUrl: `${platformBaseUrl()}/auth/confirm-email?token=${encodeURIComponent(rawToken)}`,
     });
     logger.info('Email change requested', { event: 'account_email_change_requested', userId });
     return this.get(userId);
