@@ -38,6 +38,16 @@ export interface AccountPatch {
   timeZone?: string | null;
 }
 
+export interface AccountSession {
+  id: string;
+  current: boolean;
+  device: { type: string | null; os: string | null; browser: string | null; label: string };
+  provider: string | null;
+  createdAt: string;
+  lastSeenAt: string;
+  location: { city: string | null; region: string | null; country: string | null } | null;
+}
+
 export const accountApi = {
   get: () => api.get<Account>('/account'),
   update: (patch: AccountPatch) => api.patch<Account>('/account', patch),
@@ -52,6 +62,11 @@ export const accountApi = {
     return api.upload<Account>('/account/avatar', formData);
   },
   removeAvatar: () => api.delete<Account>('/account/avatar'),
+  sessions: {
+    list: () => api.get<{ sessions: AccountSession[] }>('/account/sessions'),
+    revoke: (id: string) => api.delete<{ revoked: number; current: boolean }>(`/account/sessions/${encodeURIComponent(id)}`),
+    revokeOthers: () => api.post<{ revoked: number }>('/account/sessions/revoke-others', {}),
+  },
 };
 
 /** Initials from the display name, for the avatar fallback. */

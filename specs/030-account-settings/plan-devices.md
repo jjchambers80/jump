@@ -1,6 +1,6 @@
 # Implementation Plan: Account settings › Security — Devices (spec 030, feature D)
 
-**Status**: Planned (2026-09-20). Not implemented.
+**Status**: Built 2026-09-20 on `feat/030-account-devices` (see `docs/wiki/features/devices-sessions.md`). Deviations: device/location columns are filled by the **backend** `SessionService.touch` on API calls (no Next-layout touch — the browser talks to the backend directly, so the real IP and UA are there); `geoip-lite` lives in the backend workspace; Redis made lazy + fail-fast because the cache joined the auth path.
 **Branch / worktree**: `feat/030-account-devices` at `.claude/worktrees/030-account-devices`, based on `feat/030-account-general` (rebase onto `main` once A merges). Independent of B and C; B / C call `SessionService.revokeOthers` once this lands.
 **Spec**: [`spec.md`](./spec.md) §6.6.
 **Dependencies**: `ua-parser-js` (backend). Optional `geoip-lite` (backend; bundled MaxMind GeoLite2, CC BY-SA 4.0 — attribution line on the Devices card).

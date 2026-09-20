@@ -6,6 +6,8 @@ import 'next-auth';
 declare module 'next-auth' {
   interface Session {
     accessToken?: string;
+    /** Revocable session id (spec 030 D). */
+    sid?: string | null;
     user: {
       id: string;
       email?: string | null;

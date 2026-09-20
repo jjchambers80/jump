@@ -105,6 +105,7 @@ SELECT * FROM "PriceTier" WHERE id = ? FOR UPDATE  -- row-level lock
 - `/account/*` (`routes/account.js`) is the signed-in user's own data: every handler uses `req.user.id`, never a user id from params or body. Administrators edit other people only through `/users` (roles/status). No `X-Jump-Org` scoping.
 - Email changes are verified-pending (`User.pendingEmail` + `VerificationToken` identifier `email-change:<userId>`); `POST /account/email/confirm` is public and mounted before `requireAuth`. Phone is E.164 (`libphonenumber-js`), stored unverified. `utils/locales.js` must stay identical to `frontend/src/lib/locales.ts`.
 - `AccountService.toJson` is the only serializer for a `User` with `accounts` included — it strips provider tokens. Do not `res.json` a raw user.
+- Devices (feature D): staff JWTs carry `sid` (a `UserSession` row). `requireAuth` refuses a revoked `sid` with 401 `SESSION_REVOKED` and calls `SessionService.touch` (throttled device/location write). `req.user.sid` may be `null` (legacy tokens, test helpers) — never require it. Password / 2FA changes must call `SessionService.revokeOthers(userId, req.user.sid, by)`. Redis is lazy: go through `utils/cache.js`, which fails open fast when the client is not `ready`.
 
 ## Abuse protection (spec 020 phase 1)
 

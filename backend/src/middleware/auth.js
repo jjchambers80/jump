@@ -4,6 +4,7 @@
 
 import jwt from 'jsonwebtoken';
 import { AuthenticationError } from './errorHandler.js';
+import sessionService from '../services/SessionService.js';
 
 const AUTH_SECRET = process.env.AUTH_SECRET;
 
@@ -42,12 +43,26 @@ export const requireAuth = async (req, res, next) => {
       throw new AuthenticationError('Buyer sessions cannot access staff routes');
     }
 
+    // Revocable session (spec 030 D): a token carrying `sid` is refused as soon
+    // as that device is logged out. Tokens minted before `sid` existed (or by
+    // test helpers) have none and pass; they pick one up at their next
+    // claims refresh.
+    if (typeof decoded.sid === 'string' && decoded.sid) {
+      if (await sessionService.isRevoked(decoded.sid)) {
+        const error = new AuthenticationError('This session has been signed out');
+        error.code = 'SESSION_REVOKED';
+        throw error;
+      }
+      sessionService.touch(decoded.sid, req);
+    }
+
     // Attach user info to request
     req.user = {
       id: decoded.sub,
       email: decoded.email,
       role: decoded.role,
       name: decoded.name,
+      sid: decoded.sid ?? null,
       // Preferred active org (spec 007): the admin org switcher sends X-Jump-Org;
       // otherwise the sign-in claim. resolveOrgScope only honors real memberships.
       organizationId: activeOrgFrom(req, decoded),

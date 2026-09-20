@@ -1,7 +1,7 @@
 // Base HTTP client for API calls
 // Error handling and Authorization header injection
 
-import { getSession } from 'next-auth/react';
+import { getSession, signOut } from 'next-auth/react';
 import type { OrderAddOnLine } from '@/lib/addOns';
 import { allStorefrontAccessTokens } from '@/lib/storefrontAccess';
 
@@ -19,6 +19,18 @@ export function getActiveOrganizationId(): string | null {
 
 interface RequestOptions extends RequestInit {
   headers?: Record<string, string>;
+}
+
+/**
+ * A 401 SESSION_REVOKED means this device was logged out from Account ›
+ * Security › Devices (spec 030 D). Drop the cookie and land on sign-in;
+ * the Auth.js claims refresh would do it within a minute anyway.
+ */
+let revokedSignOutStarted = false;
+function handleRevokedSession(status: number, code: unknown) {
+  if (status !== 401 || code !== 'SESSION_REVOKED' || typeof window === 'undefined' || revokedSignOutStarted) return;
+  revokedSignOutStarted = true;
+  void signOut({ callbackUrl: '/auth/signin?reason=revoked' });
 }
 
 class ApiClient {
@@ -72,6 +84,7 @@ class ApiClient {
       const data = text ? JSON.parse(text) : undefined;
 
       if (!response.ok) {
+        handleRevokedSession(response.status, data?.code);
         throw {
           status: response.status,
           message: data?.message || 'Request failed',
@@ -163,6 +176,7 @@ class ApiClient {
 
     const data = await response.json();
     if (!response.ok) {
+      handleRevokedSession(response.status, data?.code);
       throw {
         status: response.status,
         message: data.message || 'Upload failed',

@@ -28,6 +28,8 @@ export interface ClaimsToken {
   locale?: unknown;
   timeZone?: unknown;
   picture?: unknown;
+  /** Revocable session row id (spec 030 D). */
+  sid?: unknown;
   /** Epoch ms of the last DB read backing role/organizationId. */
   claimsRefreshedAt?: unknown;
 }

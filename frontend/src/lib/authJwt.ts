@@ -30,6 +30,8 @@ export interface SessionClaims extends JWTPayload {
   locale?: string;
   timeZone?: string | null;
   picture?: string | null;
+  /** Revocable session row id (spec 030 D); absent on tokens minted before it existed. */
+  sid?: string;
 }
 
 export async function encodeSessionToken(token: SessionClaims): Promise<string> {
@@ -41,6 +43,7 @@ export async function encodeSessionToken(token: SessionClaims): Promise<string> 
     locale: token.locale ?? undefined,
     timeZone: token.timeZone ?? undefined,
     picture: token.picture ?? undefined,
+    sid: token.sid ?? undefined,
   })
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setSubject(token.sub ?? '')
