@@ -16,6 +16,9 @@ import { parseAddOnLines, type AddOn } from '../../../lib/addOns';
 import BrandScope from '../../../components/BrandScope';
 import OrganizationHeader from '../../../components/OrganizationHeader';
 import type { ThemeMode } from '../../../lib/theme';
+import Link from 'next/link';
+import { storefrontHref } from '../../../lib/storefrontPath';
+import { useBuyer } from '../../../lib/useBuyer';
 import { acceptancesFor, fetchLegalVersions, LEGAL_PAGES_ENABLED, LEGAL_PATHS, type LegalVersions } from '../../../lib/legal';
 
 interface EventVenue {
@@ -48,6 +51,8 @@ interface Event {
   organizationLogoUrl?: string | null;
   organizationBrandColor?: string | null;
   organizationThemeMode?: ThemeMode | null;
+  /** Settings › Customer accounts › Show sign-in links (spec 031). */
+  organizationSignInLinks?: boolean;
 }
 
 interface CreateOrderResponse {
@@ -106,6 +111,22 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
   // ticket); marketing consent is never pre-checked (GDPR / ePrivacy / CASL).
   const [createAccount, setCreateAccount] = useState(true);
   const [emailSubscribed, setEmailSubscribed] = useState(false);
+  // Spec 031: a buyer signed in at this organization gets their details
+  // prefilled (still editable) and no "create an account" box — they have one.
+  const { buyer } = useBuyer(event?.organizationId ?? null);
+  useEffect(() => {
+    if (!buyer) return;
+    setFirstName((current) => current || buyer.firstName || '');
+    setLastName((current) => current || buyer.lastName || '');
+    setEmail((current) => current || buyer.email || '');
+  }, [buyer]);
+  const showSignInLink = event?.organizationSignInLinks !== false && !buyer;
+  const signInHref =
+    event?.organizationId && typeof window !== 'undefined'
+      ? `${storefrontHref(`/organizations/${event.organizationId}/account`, event.organizationId)}?next=${encodeURIComponent(
+          `${window.location.pathname}${window.location.search}`
+        )}`
+      : null;
   // Spec 024 phase 3: the versions of the terms and privacy policy this page
   // shows, echoed on the order so the consent trail names them.
   const [legalVersions, setLegalVersions] = useState<LegalVersions | null>(null);
@@ -199,7 +220,8 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
           lastName: lastName.trim(),
           email: email.trim().toLowerCase(),
         },
-        createAccount,
+        // An existing account is never "created" again; the backend only turns the flag on anyway.
+        createAccount: buyer ? false : createAccount,
         emailSubscribed,
         ...(versions && { acceptances: acceptancesFor(versions) }),
       });
@@ -453,7 +475,24 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
               Your Details
             </h2>
             <p className="text-gray-600 dark:text-slate-400 mb-6 text-sm">
-              No account required — just enter your details to purchase tickets.
+              {buyer ? (
+                <>
+                  Signed in as <span className="font-semibold">{buyer.email}</span>. Check your details below.
+                </>
+              ) : (
+                <>
+                  No account required — just enter your details to purchase tickets.
+                  {showSignInLink && signInHref && (
+                    <>
+                      {' '}
+                      Already have an account?{' '}
+                      <Link href={signInHref} data-testid="checkout-sign-in-link" className="font-semibold text-brand-link hover:opacity-80">
+                        Sign in
+                      </Link>
+                    </>
+                  )}
+                </>
+              )}
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
@@ -550,6 +589,7 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
 
             {/* Account + marketing opt-ins — independent; neither implies the other */}
             <div className="mb-6 space-y-3">
+              {!buyer && (
               <label htmlFor="createAccount" className="flex items-start gap-3 cursor-pointer">
                 <input
                   type="checkbox"
@@ -568,6 +608,7 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
                   </span>
                 </span>
               </label>
+              )}
               <label htmlFor="emailSubscribed" className="flex items-start gap-3 cursor-pointer">
                 <input
                   type="checkbox"

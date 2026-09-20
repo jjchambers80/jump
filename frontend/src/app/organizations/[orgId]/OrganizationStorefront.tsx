@@ -17,6 +17,8 @@ interface OrganizationPublic {
   coverUrl: string | null;
   brandColor?: string | null;
   themeMode?: ThemeMode | null;
+  /** Settings › Customer accounts › Show sign-in links (spec 031). */
+  buyerSignInLinks?: boolean;
 }
 
 interface OrgPageData {
@@ -176,6 +178,7 @@ export default function OrganizationStorefront({ orgId }: { orgId: string }) {
         as="h1"
         layout={hasCover ? 'two-column' : 'centered'}
         nav
+        signIn={organization.buyerSignInLinks !== false}
       />
 
       {/* Mobile cover image */}

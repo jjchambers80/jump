@@ -4,8 +4,10 @@
 // httpOnly and handled by /api/buyer/* route handlers.
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { rememberNext, safeNextPath } from '@/lib/buyerNext';
 import { api } from '../../../../services/api';
 import { resolveAssetUrl } from '../../../../lib/assets';
 import BrandScope from '../../../../components/BrandScope';
@@ -68,6 +70,14 @@ function formatDate(value?: string) {
 }
 
 export default function BuyerAccountPage({ params }: { params: { orgId: string } }) {
+  const router = useRouter();
+  // Spec 031: ?next=<same-origin path> — where to go once signed in (checkout
+  // sends buyers here). Read once from the URL so a later re-render cannot
+  // resurrect it; kept in sessionStorage across the magic-link round trip.
+  const nextPath = useRef<string | null>(null);
+  if (nextPath.current === null && typeof window !== 'undefined') {
+    nextPath.current = safeNextPath(new URLSearchParams(window.location.search).get('next')) ?? '';
+  }
   const [org, setOrg] = useState<OrganizationPublic | null>(null);
   const [orgError, setOrgError] = useState<string | null>(null);
   const [profile, setProfile] = useState<BuyerProfile | null>(null);
@@ -92,6 +102,13 @@ export default function BuyerAccountPage({ params }: { params: { orgId: string }
       setProfile(null);
       return;
     }
+    if (nextPath.current) {
+      // Already signed in here: continue where the buyer was going.
+      const target = nextPath.current;
+      nextPath.current = '';
+      router.replace(target);
+      return;
+    }
     setProfile(data);
     const [o, t] = await Promise.all([
       fetch('/api/buyer/me/orders', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : { data: [] })),
@@ -99,7 +116,7 @@ export default function BuyerAccountPage({ params }: { params: { orgId: string }
     ]);
     setOrders(o.data || []);
     setTickets(t.data || []);
-  }, [params.orgId]);
+  }, [params.orgId, router]);
 
   useEffect(() => {
     let cancelled = false;
@@ -129,6 +146,7 @@ export default function BuyerAccountPage({ params }: { params: { orgId: string }
     }
     setFormError(null);
     setSending(true);
+    rememberNext(nextPath.current || null);
     try {
       const res = await fetch('/api/buyer/request', {
         method: 'POST',

@@ -344,6 +344,9 @@ model Organization {
   seoTitle                  String?
   seoDescription            String?
   autoRedirectLanguage      Boolean            @default(false)
+  // Spec 031 phase 1: Settings › Customer accounts. Show the buyer sign-in
+  // link in the storefront header and at checkout.
+  buyerSignInLinks          Boolean            @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
