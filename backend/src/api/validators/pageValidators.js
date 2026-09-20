@@ -1,6 +1,6 @@
 import { ValidationError } from '../../middleware/errorHandler.js';
 import { SEO_TITLE_MAX, SEO_DESCRIPTION_MAX } from '../../utils/pageLimits.js';
-import { SLUG_MAX_LENGTH } from '../../utils/slug.js';
+import { normalizeCustomSlug } from '../../utils/slug.js';
 
 /**
  * Shared field checks. `partial` (PUT) lets required fields be absent but
@@ -29,10 +29,10 @@ function collectErrors(body, { partial }) {
   }
 
   if (slug !== undefined && slug !== null) {
-    if (typeof slug !== 'string') {
-      errors.push({ field: 'slug', message: 'slug must be a string' });
-    } else if (slug.trim().length > SLUG_MAX_LENGTH) {
-      errors.push({ field: 'slug', message: `slug must be ${SLUG_MAX_LENGTH} characters or less` });
+    try {
+      body.slug = normalizeCustomSlug(slug);
+    } catch (error) {
+      errors.push({ field: 'slug', message: error.message });
     }
   }
 

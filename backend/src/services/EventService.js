@@ -10,6 +10,7 @@ import taxService from './TaxService.js';
 import applicationFormService from './ApplicationFormService.js';
 import addOnService from './AddOnService.js';
 import { PAID_ORDER_STATUSES } from './paidStatuses.js';
+import { rethrowSlugConflict, resolveUniqueSlug } from '../utils/slug.js';
 
 class EventService {
   /**
@@ -57,11 +58,19 @@ class EventService {
       }
     }
 
+    const slugState = await resolveUniqueSlug(prisma.event, {
+      title: name,
+      customSlug: data.slug,
+    });
+
     // Create event with price tiers in a transaction
-    const event = await prisma.event.create({
+    let event;
+    try {
+      event = await prisma.event.create({
       data: {
         venueId,
         name,
+        ...slugState,
         description: description || null,
         date: eventDate,
         capacity: capacityNum,
@@ -88,7 +97,10 @@ class EventService {
         venue: true,
         priceTiers: { orderBy: { displayOrder: 'asc' } },
       },
-    });
+      });
+    } catch (error) {
+      rethrowSlugConflict(error);
+    }
 
     logger.info('Event created', {
       event: 'event_created',
@@ -126,10 +138,12 @@ class EventService {
     if (newName.length > 255) throw new ValidationError('Event name must be between 1 and 255 characters');
 
     const { event, forms } = await prisma.$transaction(async (tx) => {
+      const slugState = await resolveUniqueSlug(tx.event, { title: newName });
       const created = await tx.event.create({
         data: {
           venueId: source.venueId,
           name: newName,
+          ...slugState,
           description: source.description,
           logoUrl: source.logoUrl,
           imageId: source.imageId,
@@ -208,6 +222,19 @@ class EventService {
       updateData.name = updates.name;
     }
 
+    if (updates.name !== undefined || updates.slug !== undefined) {
+      Object.assign(
+        updateData,
+        await resolveUniqueSlug(prisma.event, {
+          title: updates.name ?? existing.name,
+          customSlug: updates.slug,
+          currentSlug: existing.slug,
+          slugCustomized: existing.slugCustomized,
+          exceptId: eventId,
+        })
+      );
+    }
+
     if (updates.description !== undefined) {
       updateData.description = updates.description;
     }
@@ -258,14 +285,19 @@ class EventService {
       updateData.imageId = updates.imageId;
     }
 
-    const event = await prisma.event.update({
-      where: { id: eventId },
-      data: updateData,
-      include: {
-        venue: true,
-        priceTiers: { orderBy: { displayOrder: 'asc' } },
-      },
-    });
+    let event;
+    try {
+      event = await prisma.event.update({
+        where: { id: eventId },
+        data: updateData,
+        include: {
+          venue: true,
+          priceTiers: { orderBy: { displayOrder: 'asc' } },
+        },
+      });
+    } catch (error) {
+      rethrowSlugConflict(error);
+    }
 
     logger.info('Event updated', {
       event: 'event_updated',
@@ -397,7 +429,7 @@ class EventService {
         where,
         include: {
           venue: {
-            select: { id: true, name: true, address: true },
+            select: { id: true, name: true, slug: true, address: true },
           },
           priceTiers: {
             where: { isActive: true },
@@ -652,6 +684,8 @@ class EventService {
     return {
       id: event.id,
       name: event.name,
+      slug: event.slug,
+      slugCustomized: event.slugCustomized,
       description: event.description,
       logoUrl: event.logoUrl || null,
       date: event.date,
@@ -679,6 +713,7 @@ class EventService {
         ? {
             id: event.venue.id,
             name: event.venue.name,
+            slug: event.venue.slug,
             address: event.venue.address,
             timezone: event.venue.timezone,
           }

@@ -80,6 +80,8 @@ describe('Content › Blog posts contract', () => {
       blogId: newsBlog.id,
       blog: { handle: 'news' },
       handle: 'vendor-applications-open',
+      slug: 'vendor-applications-open',
+      slugCustomized: false,
       authorName: 'Betty Roman',
       tags: ['vendors', 'news'],
       isVisible: false,
@@ -159,7 +161,7 @@ describe('Content › Blog posts contract', () => {
     expect(back.body.status).toBe('visible');
   });
 
-  it('re-derives the handle from the title on an empty handle and keeps uniqueness per blog', async () => {
+  it('supports the slug alias and preserves customized slugs across title changes', async () => {
     const second = await request(app)
       .post('/admin/blog-posts')
       .set(...auth(organizerToken))
@@ -170,15 +172,28 @@ describe('Content › Blog posts contract', () => {
     const renamed = await request(app)
       .patch(`/admin/blog-posts/${second.body.id}`)
       .set(...auth(organizerToken))
-      .send({ title: 'Recap 2026', handle: '' });
+      .send({ title: 'Recap 2026' });
     expect(renamed.body.handle).toBe('recap-2026');
 
     const typed = await request(app)
       .patch(`/admin/blog-posts/${second.body.id}`)
       .set(...auth(organizerToken))
-      .send({ handle: 'Our Recap!' });
+      .send({ slug: 'our-recap' });
     expect(typed.body.handle).toBe('our-recap');
+    expect(typed.body).toMatchObject({ slug: 'our-recap', slugCustomized: true });
     expect(typed.body.neighbors.next).toEqual({ id: post.id, title: 'Vendor applications open' });
+
+    const retitled = await request(app)
+      .patch(`/admin/blog-posts/${second.body.id}`)
+      .set(...auth(organizerToken))
+      .send({ title: 'A different recap title' });
+    expect(retitled.body).toMatchObject({ handle: 'our-recap', slug: 'our-recap', slugCustomized: true });
+
+    const duplicate = await request(app)
+      .post('/admin/blog-posts')
+      .set(...auth(organizerToken))
+      .send({ title: 'Duplicate URL', slug: 'our-recap' });
+    expect(duplicate.status).toBe(409);
   });
 
   it('lists with search, sort, tags endpoint and bulk actions', async () => {

@@ -1,5 +1,5 @@
 import { prisma } from '@jump/db';
-import { uniqueSlug } from '../utils/slug.js';
+import { rethrowSlugConflict, resolveUniqueSlug, uniqueSlug } from '../utils/slug.js';
 import { NotFoundError } from '../middleware/errorHandler.js';
 import storeFileService from './StoreFileService.js';
 import { sanitizeContentHtml } from '../utils/sanitizeHtml.js';
@@ -47,17 +47,27 @@ class PageService {
 
   async create(organizationId, data) {
     const title = data.title.trim();
-    const page = await prisma.page.create({
-      data: {
-        organizationId,
-        title,
-        slug: await this._uniqueSlug(organizationId, data.slug || title),
-        content: sanitizeContentHtml(data.content),
-        isVisible: data.isVisible ?? true,
-        seoTitle: optionalText(data.seoTitle) ?? null,
-        seoDescription: optionalText(data.seoDescription) ?? null,
-      },
+    const slugState = await resolveUniqueSlug(prisma.page, {
+      scope: { organizationId },
+      title,
+      customSlug: data.slug,
     });
+    let page;
+    try {
+      page = await prisma.page.create({
+        data: {
+          organizationId,
+          title,
+          ...slugState,
+          content: sanitizeContentHtml(data.content),
+          isVisible: data.isVisible ?? true,
+          seoTitle: optionalText(data.seoTitle) ?? null,
+          seoDescription: optionalText(data.seoDescription) ?? null,
+        },
+      });
+    } catch (error) {
+      rethrowSlugConflict(error);
+    }
     // Content › Files "Used in" (spec 025).
     await storeFileService.syncReferences(
       'PAGE',
@@ -77,15 +87,25 @@ class PageService {
     if (data.isVisible !== undefined) patch.isVisible = data.isVisible;
     if (data.seoTitle !== undefined) patch.seoTitle = optionalText(data.seoTitle);
     if (data.seoDescription !== undefined) patch.seoDescription = optionalText(data.seoDescription);
-    if (data.slug !== undefined) {
-      // Empty handle means "derive it from the title again".
-      patch.slug = await this._uniqueSlug(
-        organizationId,
-        data.slug || patch.title || existing.title,
-        pageId
+    if (data.title !== undefined || data.slug !== undefined) {
+      Object.assign(
+        patch,
+        await resolveUniqueSlug(prisma.page, {
+          scope: { organizationId },
+          title: patch.title ?? existing.title,
+          customSlug: data.slug,
+          currentSlug: existing.slug,
+          slugCustomized: existing.slugCustomized,
+          exceptId: pageId,
+        })
       );
     }
-    const page = await prisma.page.update({ where: { id: existing.id }, data: patch });
+    let page;
+    try {
+      page = await prisma.page.update({ where: { id: existing.id }, data: patch });
+    } catch (error) {
+      rethrowSlugConflict(error);
+    }
     if (patch.content !== undefined) {
       await storeFileService.syncReferences(
         'PAGE',

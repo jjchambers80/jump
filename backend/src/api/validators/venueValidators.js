@@ -3,10 +3,11 @@
 
 import { ValidationError } from '../../middleware/errorHandler.js';
 import { normalizeStateCode } from '../../utils/usStates.js';
+import { normalizeCustomSlug } from '../../utils/slug.js';
 
 // Common IANA timezone patterns (basic validation)
 const IANA_TZ_REGEX = /^[A-Za-z]+\/[A-Za-z_]+$/;
-const VENUE_FIELDS = new Set(['name', 'address', 'city', 'state', 'postalCode', 'timezone', 'isPublic']);
+const VENUE_FIELDS = new Set(['name', 'slug', 'address', 'city', 'state', 'postalCode', 'timezone', 'isPublic']);
 
 /**
  * Venue.state keys the organization's tax regions (spec 009), so it must be a
@@ -75,6 +76,11 @@ export const validateCreateVenue = (req, res, next) => {
   // Normalize
   req.body.name = name.trim();
   req.body.address = address.trim();
+  try {
+    if (req.body.slug !== undefined) req.body.slug = normalizeCustomSlug(req.body.slug);
+  } catch (error) {
+    return next(error);
+  }
 
   next();
 };
@@ -118,6 +124,12 @@ export const validateUpdateVenue = (req, res, next) => {
 
   const stateError = normalizeState(req.body);
   if (stateError) return next(new ValidationError(stateError));
+
+  try {
+    if (req.body.slug !== undefined) req.body.slug = normalizeCustomSlug(req.body.slug);
+  } catch (error) {
+    return next(error);
+  }
 
   next();
 };

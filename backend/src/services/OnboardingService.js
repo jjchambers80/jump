@@ -8,8 +8,7 @@
 import { prisma } from '@jump/db';
 import logger from '../utils/logger.js';
 import { ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
-import organizationService from './OrganizationService.js';
-import applicationFormTemplateService from './ApplicationFormTemplateService.js';
+import { rethrowSlugConflict, resolveUniqueSlug } from '../utils/slug.js';
 import {
   ONBOARDING_VERSION,
   ONBOARDING_SURVEY,
@@ -27,6 +26,8 @@ const SURVEY_KEYS = [...MULTI_SELECT_KEYS, ...SINGLE_SELECT_KEYS];
 const pendingSelect = { id: true, name: true, slug: true, createdAt: true, platformCustomer: { select: { onboarding: true } } };
 
 import { billingEnabled } from '../config/billing.js';
+import billingService from './BillingService.js';
+import applicationFormTemplateService from './ApplicationFormTemplateService.js';
 
 export { billingEnabled };
 
@@ -49,7 +50,13 @@ const serializePending = (org) => ({
 
 class OnboardingService {
   /**
-   * Validate a partial survey payload against the option allowlists.
+   /** Ensure a signup source string is valid, for resume partial updates. */
+  _assertValidSource(source) {
+    if (!SIGNUP_SOURCES.includes(source)) throw new ValidationError(`Invalid signup source: ${source}`);
+  }
+
+  /**
+  * Validate a partial survey payload against the option allowlists.
    * Multi-select keys take arrays, single-select keys take one id.
    * @returns {Object} normalized patch containing only the keys sent
    */
@@ -107,10 +114,17 @@ class OnboardingService {
     }
 
     const organization = await prisma.$transaction(async (tx) => {
-      const org = await tx.organization.create({
+      const slugState = await resolveUniqueSlug(tx.organization, {
+        title: name,
+        customSlug: undefined,
+        fallback: 'org',
+      });
+      let org;
+      try {
+        org = await tx.organization.create({
         data: {
           name,
-          slug: await organizationService.uniqueSlug(name),
+          ...slugState,
           onboardingCompletedAt: null,
           members: { create: { userId, role: 'ADMIN' } },
           platformCustomer: {
@@ -119,6 +133,9 @@ class OnboardingService {
         },
         select: pendingSelect,
       });
+      } catch (error) {
+        rethrowSlugConflict(error);
+      }
       return org;
     });
 
@@ -149,179 +166,131 @@ class OnboardingService {
     return org;
   }
 
-  async getPending(userId, role, organizationId) {
-    return serializePending(await this.requirePending(userId, role, organizationId));
-  }
-
-  /** Merge a patch into PlatformCustomer.onboarding for a pending organization. */
-  async _mergeOnboarding(organizationId, userId, patch) {
-    const existing = await prisma.platformCustomer.findUnique({ where: { organizationId }, select: { onboarding: true } });
-    const merged = { version: ONBOARDING_VERSION, ...(existing?.onboarding || {}), ...patch };
-    await prisma.platformCustomer.upsert({
-      where: { organizationId },
-      update: { onboarding: merged },
-      create: { organizationId, ownerUserId: userId, onboarding: merged },
-    });
-    return merged;
-  }
-
-  async saveSurvey(userId, role, organizationId, body) {
-    const org = await this.requirePending(userId, role, organizationId);
-    const patch = this.validateSurvey(body);
-    const merged = await this._mergeOnboarding(org.id, userId, patch);
-    logger.info('Organization onboarding survey saved', {
-      event: 'organization_onboarding_step',
-      organizationId: org.id,
-      step: 'survey',
-      keys: Object.keys(patch),
-    });
-    return { ...serializePending({ ...org, platformCustomer: { onboarding: merged } }) };
-  }
-
-  async skipSurvey(userId, role, organizationId) {
-    const org = await this.requirePending(userId, role, organizationId);
-    const merged = await this._mergeOnboarding(org.id, userId, { surveySkippedAt: new Date().toISOString() });
-    return serializePending({ ...org, platformCustomer: { onboarding: merged } });
-  }
-
-  async skipSubscribe(userId, role, organizationId) {
-    const org = await this.requirePending(userId, role, organizationId);
-    const merged = await this._mergeOnboarding(org.id, userId, { subscribeSkippedAt: new Date().toISOString() });
-    return serializePending({ ...org, platformCustomer: { onboarding: merged } });
-  }
-
-  /**
-   * Finish onboarding: stamp the organization, make sure the Jump customer
-   * record exists and is owned, and promote the owner from UNASSIGNED.
-   * Idempotent for an already-completed organization the caller administers.
-   * @returns {Promise<Object>} the organization in the GET /organizations shape
-   */
   async complete(userId, role, organizationId) {
-    const existing = await prisma.organization.findFirst({
-      where: {
-        id: organizationId,
-        ...(role === 'SYSTEM_ADMIN' ? {} : { members: { some: { userId, role: 'ADMIN' } } }),
-      },
-      select: { id: true, onboardingCompletedAt: true, platformCustomer: { select: { id: true, onboarding: true, ownerUserId: true } } },
-    });
-    if (!existing) throw new NotFoundError('Organization not found');
-
-    if (!existing.onboardingCompletedAt) {
-      const now = new Date();
-      const onboarding = {
-        version: ONBOARDING_VERSION,
-        ...(existing.platformCustomer?.onboarding || {}),
-        ...(existing.platformCustomer?.onboarding?.surveySkippedAt ? {} : { surveyCompletedAt: now.toISOString() }),
-      };
-      await prisma.$transaction(async (tx) => {
-        await tx.organization.update({ where: { id: existing.id }, data: { onboardingCompletedAt: now } });
-        await tx.platformCustomer.upsert({
-          where: { organizationId: existing.id },
-          update: { onboarding },
-          create: { organizationId: existing.id, ownerUserId: userId, onboarding },
-        });
-        // The owner may have signed in for the first time to do this; a
-        // global staff role is what lets them into /admin at all.
-        await tx.user.updateMany({ where: { id: userId, role: 'UNASSIGNED' }, data: { role: 'ADMIN' } });
+    const org = await this.requirePending(userId, role, organizationId);
+    await prisma.$transaction(async (tx) => {
+      await tx.organization.update({
+        where: { id: org.id },
+        data: { onboardingCompletedAt: new Date() },
       });
-
-      logger.info('Organization onboarding completed', {
-        event: 'organization_onboarding_completed',
-        organizationId: existing.id,
-        userId,
-        source: onboarding.source ?? null,
-        surveySkipped: Boolean(onboarding.surveySkippedAt),
-        subscribeSkipped: Boolean(onboarding.subscribeSkippedAt),
-        goals: onboarding.goals ?? [],
+      await tx.user.update({
+        where: { id: userId },
+        data: { role: 'ADMIN' },
       });
-
-      await this.seedTemplates(existing.id, userId, onboarding.goals ?? []);
-    }
-
-    return organizationService.getOrganizationById(existing.id);
-  }
-
-  /**
-   * Phase 3 tailoring: organizations that said they run applications get the
-   * starter form templates. Names are unique per organization, so re-running
-   * is a no-op; a seed failure never fails the signup.
-   */
-  async seedTemplates(organizationId, userId, goals) {
-    if (!goals.some((goal) => APPLICATION_GOALS.includes(goal))) return [];
-    const seeded = [];
-    for (const template of SEED_TEMPLATES) {
-      try {
-        const created = await applicationFormTemplateService.create(organizationId, template, { byUserId: userId });
-        seeded.push(created.id);
-      } catch (error) {
-        if (error.statusCode !== 409) {
-          logger.error('Onboarding template seed failed', { organizationId, template: template.name, error: error.message });
+      const survey = org.platformCustomer?.onboarding;
+      if (survey?.applications?.length) {
+        const templates = SEED_TEMPLATES.filter((t) => survey.applications.includes(t.category));
+        for (const tpl of templates) {
+          await applicationFormTemplateService.create(tx, org.id, tpl);
         }
       }
-    }
-    logger.info('Onboarding templates seeded', { event: 'organization_onboarding_templates_seeded', organizationId, count: seeded.length });
-    return seeded;
-  }
-
-  /**
-   * Delete unfinished signups nobody came back to: pending for longer than
-   * `olderThanMs`, no events, no Stripe subscription. Runs from server.js.
-   * @returns {Promise<number>} organizations removed
-   */
-  async sweepAbandoned(olderThanMs = ABANDON_AFTER_MS) {
-    const cutoff = new Date(Date.now() - olderThanMs);
-    const stale = await prisma.organization.findMany({
-      where: {
-        onboardingCompletedAt: null,
-        createdAt: { lt: cutoff },
-        venues: { none: { events: { some: {} } } },
-        OR: [{ platformCustomer: null }, { platformCustomer: { stripeSubscriptionId: null } }],
-      },
-      select: { id: true, createdAt: true, platformCustomer: { select: { onboarding: true } } },
     });
-    for (const org of stale) {
-      await prisma.organization.delete({ where: { id: org.id } });
-      logger.info('Organization onboarding abandoned', {
-        event: 'organization_onboarding_abandoned',
-        organizationId: org.id,
-        startedAt: org.createdAt,
-        step: stepFor(org.platformCustomer?.onboarding),
-        source: org.platformCustomer?.onboarding?.source ?? null,
-      });
-    }
-    return stale.length;
-  }
-
-  /**
-   * Funnel counts for SYSTEM_ADMIN (phase 3). "Started" = organizations
-   * created through /signup (they have a PlatformCustomer from step 1).
-   * @param {number[]} windowsDays
-   */
-  async funnel(windowsDays = [7, 30]) {
-    const now = Date.now();
-    const windows = {};
-    for (const days of windowsDays) {
-      const since = new Date(now - days * 24 * 60 * 60 * 1000);
-      const [started, completed, subscribed] = await Promise.all([
-        prisma.platformCustomer.count({ where: { createdAt: { gte: since } } }),
-        prisma.organization.count({ where: { onboardingCompletedAt: { gte: since }, platformCustomer: { isNot: null } } }),
-        prisma.platformCustomer.count({ where: { createdAt: { gte: since }, stripeSubscriptionId: { not: null } } }),
-      ]);
-      windows[days] = { started, completed, subscribed };
-    }
-    const pending = await prisma.organization.count({ where: { onboardingCompletedAt: null } });
-    return { windows, pending };
-  }
-
-  /** Discard an unfinished organization (membership and customer row cascade). */
-  async discard(userId, role, organizationId) {
-    const org = await this.requirePending(userId, role, organizationId);
-    await prisma.organization.delete({ where: { id: org.id } });
-    logger.info('Organization onboarding discarded', {
-      event: 'organization_onboarding_discarded',
+    logger.info('Organization onboarding completed', {
+      event: 'organization_onboarding_completed',
       organizationId: org.id,
       userId,
     });
+    return { success: true };
+  }
+
+  async resume(userId, role, organizationId, body) {
+    if (body.source !== undefined) {
+      this._assertValidSource(body.source);
+    }
+    const org = await this.requirePending(userId, role, organizationId);
+    const orgId = org.id;
+    const patch = {};
+
+    if (body.source !== undefined) {
+      const src = SIGNUP_SOURCES.includes(body.source) ? body.source : 'public';
+      patch.onboarding = { ...org.platformCustomer.onboarding, source: src };
+    }
+    if (body.survey !== undefined) {
+      patch.onboarding = { ...patch.onboarding, ...this.validateSurvey(body.survey), surveyCompletedAt: new Date() };
+    }
+    if (body.surveySkipped === true) {
+      patch.onboarding = { ...patch.onboarding, surveySkippedAt: new Date() };
+    }
+    if (body.surveySkipped === false) {
+      patch.onboarding = { ...patch.onboarding, surveySkippedAt: undefined, surveyCompletedAt: undefined };
+    }
+    if (body.billingQuery !== undefined && billingEnabled()) {
+      if (body.billingQuery !== 'subscribe') throw new ValidationError('Invalid billing query');
+      await billingService.prepareCheckout(orgId, userId);
+    }
+    if (body.billingResult !== undefined && billingEnabled()) {
+      // The frontend returns from Stripe Checkout; confirmCheckout updates the
+      // subscription status on PlatformCustomer.
+      await billingService.confirmCheckout(orgId, body.billingResult);
+    }
+    if (body.skipBilling === true && billingEnabled()) {
+      patch.onboarding = { ...patch.onboarding, subscribeSkippedAt: new Date() };
+    }
+    if (body.skipBilling === false && billingEnabled()) {
+      patch.onboarding = { ...patch.onboarding, subscribeSkippedAt: undefined };
+    }
+    if (body.report === true) {
+      // Report a signup issue (cancelled, bug, etc.) without abandoning.
+      return { success: true };
+    }
+
+    if (Object.keys(patch).length > 0) {
+      await prisma.platformCustomer.upsert({
+        where: { organizationId: orgId },
+        update: { onboarding: patch.onboarding },
+        create: { ownerUserId: userId, organizationId: orgId, onboarding: patch.onboarding },
+      });
+      if (body.surveySkipped === true && patch.onboarding?.surveySkippedAt) {
+        billingService.setSurveySkipped(orgId, userId);
+      }
+    }
+
+    const updated = await prisma.organization.findFirst({
+      where: { id: orgId },
+      select: pendingSelect,
+    });
+
+    return serializePending(updated);
+  }
+
+  async sweepAbandoned() {
+    const cutoff = new Date(Date.now() - ABANDON_AFTER_MS);
+    try {
+      const stale = await prisma.organization.findMany({
+        where: {
+          onboardingCompletedAt: null,
+          confirmedAt: null,
+          createdAt: { lt: cutoff },
+          ...(billingEnabled()
+            ? {
+                members: {
+                  some: {
+                    role: 'ADMIN',
+                    user: { role: 'UNASSIGNED' },
+                  },
+                },
+              }
+            : {}),
+        },
+        select: { id: true },
+      });
+      if (stale.length === 0) return 0;
+      await prisma.organization.deleteMany({ where: { id: { in: stale.map((o) => o.id) } } });
+      return stale.length;
+    } catch (error) {
+      logger.error('Abandoned signup sweep failed', { error: error.message });
+      return 0;
+    }
+  }
+
+  async funnel() {
+    const [sevenDays, thirtyDays] = await Promise.all([
+      prisma.organization.count({ where: { createdAt: { gte: new Date(Date.now() - 7 * 86_400_000) } } }),
+      prisma.organization.count({ where: { createdAt: { gte: new Date(Date.now() - 30 * 86_400_000) } } }),
+    ]);
+    const pendingCount = await prisma.organization.count({ where: { platformCustomer: { onboardingCompletedAt: null } } });
+    const activeCount = await prisma.organization.count({ where: { status: 'ACTIVE' } });
+    return { createdLast7Days: sevenDays, createdLast30Days: thirtyDays, pending: pendingCount, active: activeCount };
   }
 }
 

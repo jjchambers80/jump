@@ -113,24 +113,19 @@ describe('Online Store pages contract', () => {
     );
   });
 
-  it('stores the search engine listing and keeps handles unique per organization', async () => {
+  it('returns a conflict for a duplicate custom slug in the same organization', async () => {
     const created = await request(app)
       .post('/admin/pages')
       .set(...auth(organizerToken))
       .send({
         title: 'FAQ',
         content: '<p>Answers</p>',
-        slug: 'About Us',
+        slug: 'about-us',
         seoTitle: 'Frequently asked questions',
         seoDescription: 'Everything you need to know.',
       });
 
-    expect(created.status).toBe(201);
-    expect(created.body).toMatchObject({
-      slug: 'about-us-2',
-      seoTitle: 'Frequently asked questions',
-      seoDescription: 'Everything you need to know.',
-    });
+    expect(created.status).toBe(409);
 
     // The same handle is free in another organization.
     const theirs = await request(app)
@@ -170,6 +165,7 @@ describe('Online Store pages contract', () => {
       content: '<p>Rules</p>',
       isVisible: false,
       seoTitle: 'Refunds',
+      slugCustomized: false,
     });
 
     const custom = await request(app)
@@ -177,7 +173,13 @@ describe('Online Store pages contract', () => {
       .set(...auth(organizerToken))
       .send({ slug: 'refunds', seoTitle: null });
     expect(custom.status).toBe(200);
-    expect(custom.body).toMatchObject({ slug: 'refunds', seoTitle: null, title: 'Refund policy' });
+    expect(custom.body).toMatchObject({ slug: 'refunds', slugCustomized: true, seoTitle: null, title: 'Refund policy' });
+
+    const renamed = await request(app)
+      .put(`/admin/pages/${created.body.id}`)
+      .set(...auth(organizerToken))
+      .send({ title: 'Returns policy' });
+    expect(renamed.body).toMatchObject({ slug: 'refunds', slugCustomized: true });
 
     const invalid = await request(app)
       .put(`/admin/pages/${created.body.id}`)

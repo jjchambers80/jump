@@ -4,9 +4,9 @@
 import { prisma } from '@jump/db';
 import logger from '../utils/logger.js';
 import storefrontPreferencesService from './StorefrontPreferencesService.js';
-import { ConflictError, NotFoundError } from '../middleware/errorHandler.js';
+import { NotFoundError } from '../middleware/errorHandler.js';
 import { formatEventSummary } from '../utils/eventSummary.js';
-import { uniqueSlug } from '../utils/slug.js';
+import { rethrowSlugConflict, resolveUniqueSlug, uniqueSlug } from '../utils/slug.js';
 
 export const serializeBusinessDetails = (organization) => {
   const { ein, ...businessDetails } = organization;
@@ -51,13 +51,23 @@ class OrganizationService {
    * @returns {Promise<Object>} Created organization
    */
   async createOrganization(data, creatorUserId = null) {
-    const organization = await prisma.organization.create({
-      data: {
-        name: data.name,
-        slug: await this.uniqueSlug(data.name),
-        ...(creatorUserId ? { members: { create: { userId: creatorUserId, role: 'ADMIN' } } } : {}),
-      },
+    const slugState = await resolveUniqueSlug(prisma.organization, {
+      title: data.name,
+      customSlug: data.slug,
+      fallback: 'org',
     });
+    let organization;
+    try {
+      organization = await prisma.organization.create({
+        data: {
+          name: data.name,
+          ...slugState,
+          ...(creatorUserId ? { members: { create: { userId: creatorUserId, role: 'ADMIN' } } } : {}),
+        },
+      });
+    } catch (error) {
+      rethrowSlugConflict(error);
+    }
 
     logger.info('Organization created', {
       event: 'organization_created',
@@ -141,26 +151,36 @@ class OrganizationService {
    * @returns {Promise<Object>} Updated organization
    */
   async updateOrganization(id, data) {
+    const existing = await prisma.organization.findUnique({
+      where: { id },
+      select: { name: true, slug: true, slugCustomized: true },
+    });
+    if (!existing) throw new NotFoundError('Organization not found');
     const updateData = {};
     if (data.name !== undefined) updateData.name = data.name;
-    // The slug does not follow renames (URLs stay stable); it only changes
-    // when set explicitly, and must be free.
-    if (data.slug !== undefined) {
-      const clash = await prisma.organization.findFirst({
-        where: { slug: data.slug, NOT: { id } },
-        select: { id: true },
-      });
-      if (clash) throw new ConflictError('That slug is already in use');
-      updateData.slug = data.slug;
+    if (data.name !== undefined || data.slug !== undefined) {
+      Object.assign(
+        updateData,
+        await resolveUniqueSlug(prisma.organization, {
+          title: data.name ?? existing.name,
+          customSlug: data.slug,
+          currentSlug: existing.slug,
+          slugCustomized: existing.slugCustomized,
+          exceptId: id,
+          fallback: 'org',
+        })
+      );
     }
     if (data.status !== undefined) updateData.status = data.status;
     if (data.brandColor !== undefined) updateData.brandColor = data.brandColor;
     if (data.themeMode !== undefined) updateData.themeMode = data.themeMode;
 
-    const organization = await prisma.organization.update({
-      where: { id },
-      data: updateData,
-    });
+    let organization;
+    try {
+      organization = await prisma.organization.update({ where: { id }, data: updateData });
+    } catch (error) {
+      rethrowSlugConflict(error);
+    }
 
     logger.info('Organization updated', {
       event: 'organization_updated',
@@ -200,12 +220,13 @@ class OrganizationService {
   async getPublicMeta(id) {
     const org = await prisma.organization.findFirst({
       where: { id, status: 'ACTIVE' },
-      select: { id: true, name: true, seoTitle: true, seoDescription: true, coverUrl: true },
+      select: { id: true, name: true, slug: true, seoTitle: true, seoDescription: true, coverUrl: true },
     });
     if (!org) throw new NotFoundError('Organization not found');
     return {
       id: org.id,
       name: org.name,
+      slug: org.slug,
       title: org.seoTitle || org.name,
       description: org.seoDescription,
       // Social sharing image: the cover from Online store › Branding.
@@ -225,6 +246,7 @@ class OrganizationService {
       select: {
         id: true,
         name: true,
+        slug: true,
         logoUrl: true,
         coverUrl: true,
         brandColor: true,
@@ -242,10 +264,11 @@ class OrganizationService {
               select: {
                 id: true,
                 name: true,
+                slug: true,
                 date: true,
                 category: true,
                 status: true,
-                venue: { select: { id: true, name: true, address: true } },
+                venue: { select: { id: true, name: true, slug: true, address: true } },
                 priceTiers: {
                   where: { isActive: true },
                   select: {
@@ -269,6 +292,7 @@ class OrganizationService {
     const organization = {
       id: org.id,
       name: org.name,
+      slug: org.slug,
       logoUrl: org.logoUrl,
       coverUrl: org.coverUrl,
       brandColor: org.brandColor,
