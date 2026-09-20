@@ -76,6 +76,8 @@ See [Database Architecture](database-architecture.md).
 
 ## Gotchas
 
+- **Sign-in links (spec 031).** The storefront header and checkout show a sign-in link when `Organization.buyerSignInLinks` is on (Settings › Customer accounts); a signed-in buyer at checkout is prefilled and sends `createAccount: false`. See [Customer Accounts Settings](customer-accounts-settings.md).
+
 - **Never set `accountCreatedAt` or `emailSubscribed` from an unpaid checkout.** Anyone can start and abandon a checkout with someone else's email; the opt-ins are honored only when the Stripe webhook completes the order.
 - **Opt-ins only turn on.** A later guest checkout never revokes an account and never flips marketing consent off; unsubscribe is a separate flow (admin customers PATCH today).
 - **Confirmation email is fire-and-forget and retried 3×; the sign-in email is single-attempt.** A lost sign-in email is solved by requesting another, subject to the 3-per-15-min cap.

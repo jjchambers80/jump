@@ -293,6 +293,21 @@ export type StorefrontPreferencesInput = Partial<
   Omit<StorefrontPreferences, 'hasPassword'> & { password: string | null }
 >;
 
+// ===== Settings › Customer accounts (spec 031) =====
+
+/** GET/PATCH /admin/settings/customer-accounts. */
+export interface CustomerAccountSettings {
+  /** Show the buyer sign-in link in the storefront header and at checkout. */
+  buyerSignInLinks: boolean;
+  /** How buyers sign in. Phase 1 is always the email link. */
+  signInMethod: 'LINK';
+  /** Public buyer account URL: /account on the active custom domain, else the platform path. */
+  accountUrl: string;
+  domain: { hostname: string } | null;
+}
+
+export type CustomerAccountSettingsInput = Partial<Pick<CustomerAccountSettings, 'buyerSignInLinks'>>;
+
 // ===== Ticket Scanning & Redemption =====
 
 export interface TicketPreview {

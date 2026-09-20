@@ -6,6 +6,7 @@
 import React, { Suspense, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { takeNext } from '@/lib/buyerNext';
 
 function VerifyInner({ orgId }: { orgId: string }) {
   const router = useRouter();
@@ -35,7 +36,9 @@ function VerifyInner({ orgId }: { orgId: string }) {
         return;
       }
       const { organizationId } = await res.json();
-      router.replace(`/organizations/${organizationId || orgId}/account`);
+      // Spec 031: return to where the buyer was going (checkout) when the
+      // account page stored a same-origin path before sending the link.
+      router.replace(takeNext() ?? `/organizations/${organizationId || orgId}/account`);
     })();
   }, [token, orgId, router]);
 

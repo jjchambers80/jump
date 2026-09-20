@@ -20,6 +20,8 @@ export interface StorefrontOrganization {
   coverUrl?: string | null;
   brandColor?: string | null;
   themeMode?: ThemeMode | null;
+  /** Settings › Customer accounts › Show sign-in links (spec 031). */
+  buyerSignInLinks?: boolean;
 }
 
 interface StorefrontShellProps<T extends { organization: StorefrontOrganization }> {
@@ -91,7 +93,7 @@ export default function StorefrontShell<T extends { organization: StorefrontOrga
       themeMode={organization.themeMode}
       className="min-h-screen bg-gray-50 dark:bg-slate-900"
     >
-      <OrganizationHeader organization={organization} as="link" nav />
+      <OrganizationHeader organization={organization} as="link" nav signIn={organization.buyerSignInLinks !== false} />
       {children(data)}
       <StorefrontFooter organization={organization} />
     </BrandScope>

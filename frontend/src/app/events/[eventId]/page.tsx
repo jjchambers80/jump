@@ -64,6 +64,8 @@ interface Event {
   organizationLogoUrl?: string | null;
   organizationBrandColor?: string | null;
   organizationThemeMode?: ThemeMode | null;
+  /** Settings › Customer accounts › Show sign-in links (spec 031). */
+  organizationSignInLinks?: boolean;
   venue: EventVenue | null;
   priceTiers: PriceTier[];
   /** Ticket-scope add-ons (spec 012); offered per cart tier. */
@@ -268,6 +270,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
         <OrganizationHeader
           organization={{ id: event.organizationId, name: event.organizationName, logoUrl: event.organizationLogoUrl }}
           nav
+          signIn={event.organizationSignInLinks !== false}
         />
       )}
       <div className="max-w-6xl mx-auto px-0 sm:px-6 lg:px-8 py-0 sm:py-12 lg:flex lg:gap-6 lg:items-start">

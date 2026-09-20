@@ -19,6 +19,7 @@ const SECTIONS: Section[] = [
   ...(process.env.NEXT_PUBLIC_BILLING_ENABLED === 'true' ? [{ href: '/admin/settings/plan', label: 'Plan' }] : []),
   { href: '/admin/settings/tax', label: 'Tax' },
   { href: '/admin/settings/applications', label: 'Applications' },
+  { href: '/admin/settings/customer-accounts', label: 'Customer accounts' },
   { href: '/admin/settings/users', label: 'Users', roles: ['ADMIN', 'SYSTEM_ADMIN'] },
 ];
 
