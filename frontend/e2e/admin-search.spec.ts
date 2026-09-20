@@ -37,7 +37,7 @@ const response = {
       id: 'ticket-1',
       title: 'TKT-SUMMER',
       subtitle: 'Summer Festival · VALID',
-      href: '/admin/orders',
+      href: '/admin/orders?view=tickets&search=summer',
       meta: { eventId: 'event-1', status: 'VALID' },
     },
   ],
@@ -259,4 +259,53 @@ test('uses a collapsed search control on mobile without hiding header navigation
   await page.getByLabel('Open administration search').click();
   await page.getByLabel('Close administration search').click();
   await expect(mobileSearch).toBeHidden();
+});
+
+test('navigates from a TICKET search result to Orders with tickets view and search pre-filled', async ({ page }) => {
+  // Mock the tickets API endpoint that TicketRowsView calls
+  await page.route(`${API}/admin/tickets*`, async (route) => {
+    const url = new URL(route.request().url());
+    const search = url.searchParams.get('search') || '';
+    await fulfillJson(route, {
+      data: [],
+      pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
+    });
+  });
+  await mockOrganizations(page);
+  await page.route(`${API}/admin/dashboard*`, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' })
+  );
+  await page.route(`${API}/admin/search*`, (route) => fulfillJson(route, response));
+  await page.goto('/admin/dashboard');
+
+  // Submit a query
+  const search = page.getByRole('combobox', { name: 'Search administration' });
+  await search.fill('summer');
+  await search.press('Enter');
+
+  // Click the TICKET result
+  await page.getByRole('option', { name: /^TKT-SUMMER/ }).click();
+
+  // Should land on /admin/orders with the ticket view and search params
+  await expect(page).toHaveURL(/\/admin\/orders\?view=tickets&search=summer/);
+
+  // The Tickets tab should be selected
+  await expect(page.getByRole('tab', { name: 'Tickets' })).toHaveAttribute('aria-selected', 'true');
+
+  // The search input should be pre-filled
+  await expect(page.getByPlaceholder(/name, email/)).toHaveValue('summer');
+
+  // The Orders page layout should still be visible
+  await expect(page.getByRole('heading', { name: 'Orders' })).toBeVisible();
+  await expect(page.getByRole('tablist', { name: 'View' })).toBeVisible();
+});
+
+test('navigates to Orders with view=orders from URL param and shows order list', async ({ page }) => {
+  await mockOrganizations(page);
+  await page.route(`${API}/admin/dashboard*`, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' })
+  );
+  await page.goto('/admin/orders?view=orders');
+  await expect(page.getByRole('heading', { name: 'Orders' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Orders' })).toHaveAttribute('aria-selected', 'true');
 });

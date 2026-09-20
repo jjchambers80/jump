@@ -1,6 +1,6 @@
 # Administration search
 
-**Status:** In progress (spec 029; backend implemented)
+**Status:** Complete (spec 029; backend + frontend integrated, E2E verified)
 **Last Updated:** 2026-09-20
 
 ## Overview
@@ -18,6 +18,11 @@ Every query follows the caller's existing administration scope. ORGANIZER and AD
 | `backend/src/api/validators/adminValidators.js` | Trims `q` and enforces the 2–200 character bound before database work |
 | `backend/tests/contract/adminSearch.test.js` | Authentication, validation, all resource groups, empty results, Stripe-id matching and tenant isolation |
 | `backend/tests/unit/adminSearch{,Validator}.test.js` | Query caps/scopes/order, error propagation and validator behavior |
+| `frontend/src/components/AdminSearch.tsx` | Combobox search control with 250ms debounce, AbortController cancellation, keyboard navigation, 5 visual states |
+| `frontend/src/lib/adminSearch.ts` | Shared types, group order/labels, view-all href builder |
+| `frontend/src/app/admin/orders/page.tsx` | Orders shell that reads `?view=tickets&search=` URL params (spec 029 integration) |
+| `frontend/src/app/admin/orders/TicketRowsView.tsx` | Ticket-row view that accepts `initialSearch` prop from URL params |
+| `frontend/e2e/admin-search.spec.ts` | 16 Playwright E2E tests (Chromium + Firefox) covering search UI, keyboard nav, stale requests, org-scope timing, validation, error+retry, mobile, and TICKET→Orders hydration |
 
 ## API
 
@@ -60,6 +65,13 @@ A successful response is:
 `type` is one of `EVENT`, `VENUE`, `CUSTOMER`, `ORDER`, `TICKET`, `APPLICATION`, `PAGE`, `BLOG_POST`, or `FILE`. Results are grouped in that order. The resource caps are 5 events, 3 venues, 5 customers, 5 orders, 5 tickets, 5 applications, 3 pages, 3 blog posts, and 3 files, for a maximum response size of 37. No match returns `200` with `{ "query": "…", "total": 0, "data": [] }`; the launcher is intentionally not paginated.
 
 Text matching is case-insensitive and contains-based. Order terms beginning with `pi_`, `re_`, `pyr_`, or `cs_` use exact equality against the corresponding Stripe/payment identifiers. Draft applications are excluded. Customer rows follow the Customers definition and therefore require at least one paid order.
+
+## Integration notes
+
+- **TICKET rows** href to `/admin/orders?view=tickets&search=<q>`. The Orders page reads these URL params on mount and switches to the Tickets tab with the search term pre-filled.
+- **PAGE rows** href to the page editor at `/admin/online-store/pages/<id>`.
+- **View all tickets** goes to `/admin/orders` without a pre-filled search (the user can search from there).
+- **View all applications** goes to `/admin/participants?q=<term>` on the applications list.
 
 ## Performance and security
 

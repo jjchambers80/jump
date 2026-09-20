@@ -508,15 +508,15 @@ function TicketDetailModal({
   );
 }
 
-export default function TicketRowsView() {
+export default function TicketRowsView({ initialSearch = '' }: { initialSearch?: string }) {
   const { selectedOrgId } = useOrg();
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('');
   const [eventFilter, setEventFilter] = useState('');
-  const [search, setSearch] = useState('');
-  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState(initialSearch);
+  const [searchInput, setSearchInput] = useState(initialSearch);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);

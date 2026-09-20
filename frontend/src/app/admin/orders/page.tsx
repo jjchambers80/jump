@@ -3,27 +3,42 @@
 // Orders (spec 024 phase 2): the one money surface. "Orders" lists one row
 // per order — ticket purchases and paid applications alike; "Tickets" is the
 // ticket-level view (purchaser / attendee / barcode / check-in) the page had
-// before. The choice is remembered per browser.
+// before. The choice is remembered per browser, but URL query params
+// ?view=tickets&search=<q> override it (spec 029: admin search TICKET rows).
 
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import OrdersListView from './OrdersListView';
 import TicketRowsView from './TicketRowsView';
 
 type View = 'orders' | 'tickets';
 const STORAGE_KEY = 'jump.admin.orders.view';
 
-export default function AdminOrdersPage() {
+function AdminOrdersPage() {
+  const searchParams = useSearchParams();
   const [view, setView] = useState<View>('orders');
+  const [urlSearch, setUrlSearch] = useState('');
 
+  // On first render, prefer URL params over localStorage so that
+  // admin search TICKET rows (spec 029) land in the right view.
   useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (saved === 'tickets' || saved === 'orders') setView(saved);
-    } catch {
-      // storage unavailable: default view
+    const viewParam = searchParams.get('view');
+    const searchParam = searchParams.get('search');
+    if (viewParam === 'tickets') {
+      setView('tickets');
+    } else if (viewParam === 'orders') {
+      setView('orders');
+    } else {
+      try {
+        const saved = window.localStorage.getItem(STORAGE_KEY);
+        if (saved === 'tickets' || saved === 'orders') setView(saved);
+      } catch {
+        // storage unavailable: default view
+      }
     }
-  }, []);
+    if (searchParam) setUrlSearch(searchParam);
+  }, [searchParams]);
 
   const choose = (next: View) => {
     setView(next);
@@ -79,7 +94,20 @@ export default function AdminOrdersPage() {
         </Link>
       </div>
 
-      {view === 'orders' ? <OrdersListView /> : <TicketRowsView />}
+      {view === 'orders' ? (
+        <OrdersListView />
+      ) : (
+        <TicketRowsView initialSearch={urlSearch} />
+      )}
     </div>
+  );
+}
+
+// Suspense wrapper: useSearchParams() requires a Suspense boundary.
+export default function OrdersPage() {
+  return (
+    <Suspense fallback={<div className="max-w-[1400px] mx-auto px-4 py-8" />}>
+      <AdminOrdersPage />
+    </Suspense>
   );
 }
