@@ -1,6 +1,6 @@
 import { prisma } from '@jump/db';
-import { slugify } from '../utils/slug.js';
-import { ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
+import { uniqueSlug } from '../utils/slug.js';
+import { NotFoundError } from '../middleware/errorHandler.js';
 import storeFileService from './StoreFileService.js';
 import { sanitizeContentHtml } from '../utils/sanitizeHtml.js';
 
@@ -98,18 +98,11 @@ class PageService {
   }
 
   async _uniqueSlug(organizationId, raw, exceptPageId = null) {
-    const base = slugify(raw);
-    if (!base) throw new ValidationError('URL handle must contain letters or numbers');
-    let slug = base;
-    for (let i = 2; i < 100; i += 1) {
-      const clash = await prisma.page.findFirst({
-        where: { organizationId, slug, NOT: exceptPageId ? { id: exceptPageId } : undefined },
-        select: { id: true },
-      });
-      if (!clash) return slug;
-      slug = `${base}-${i}`;
-    }
-    throw new ConflictError('Could not find a free URL handle');
+    return uniqueSlug(prisma.page, {
+      scope: { organizationId },
+      raw,
+      exceptId: exceptPageId,
+    });
   }
 }
 

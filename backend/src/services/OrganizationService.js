@@ -6,7 +6,7 @@ import logger from '../utils/logger.js';
 import storefrontPreferencesService from './StorefrontPreferencesService.js';
 import { ConflictError, NotFoundError } from '../middleware/errorHandler.js';
 import { formatEventSummary } from '../utils/eventSummary.js';
-import { slugify } from '../utils/slug.js';
+import { uniqueSlug } from '../utils/slug.js';
 
 export const serializeBusinessDetails = (organization) => {
   const { ein, ...businessDetails } = organization;
@@ -33,17 +33,12 @@ class OrganizationService {
    * @param {string|null} exceptOrganizationId - Ignore this org's own slug (updates)
    */
   async uniqueSlug(raw, exceptOrganizationId = null) {
-    const base = slugify(raw) || 'org';
-    let slug = base;
-    for (let i = 2; i < 1000; i += 1) {
-      const clash = await prisma.organization.findFirst({
-        where: { slug, NOT: exceptOrganizationId ? { id: exceptOrganizationId } : undefined },
-        select: { id: true },
-      });
-      if (!clash) return slug;
-      slug = `${base}-${i}`;
-    }
-    throw new ConflictError('Could not find a free organization slug');
+    return uniqueSlug(prisma.organization, {
+      raw,
+      exceptId: exceptOrganizationId,
+      fallback: 'org',
+      maxAttempts: 999,
+    });
   }
 
   /**
