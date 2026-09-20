@@ -1,7 +1,7 @@
 # Payments Settings
 
 **Status**: Implemented (spec 010 phase 1, 2026-09-14; phase 2 Stripe Connect payouts 2026-09-16, dark behind `STRIPE_CONNECT_ENABLED` — see [Connect Payouts](connect-payouts.md)).
-**Last Updated**: 2026-09-16
+**Last Updated**: 2026-09-19
 
 ## Overview
 
@@ -14,7 +14,7 @@
 | `frontend/src/app/admin/settings/payments/page.tsx` | Page: Stripe provider card (charges pill, test-mode badge, Payment methods row), Customer billing statement card, Rates, Fraud prevention |
 | `frontend/src/app/admin/settings/payments/StatementDescriptorDialog.tsx` | Prefix + suffix input with live preview and counter; trade name / support phone read-only (link to General) |
 | `frontend/src/app/admin/settings/payments/methods/page.tsx` | Payment methods: Cards and Wallets (always on), optional rows with per-row switch or `Unavailable` pill |
-| `frontend/src/app/admin/settings/payments/payouts/page.tsx`, `PayoutScheduleDialog.tsx`, `useConnectActions.ts` | Phase 2 payouts page, schedule dialog and Connect actions — [Connect Payouts](connect-payouts.md) |
+| `frontend/src/app/admin/settings/payments/payout-bank-account/page.tsx`, `PayoutScheduleDialog.tsx`, `useConnectActions.ts` | Phase 2 payout bank account page, schedule dialog and Connect actions — [Connect Payouts](connect-payouts.md) |
 | `frontend/src/app/admin/settings/payments/BrandBadge.tsx` | Text-only brand badges |
 | `frontend/src/app/admin/settings/payments/usePaymentsApi.ts`, `types.ts` | API hook (org-scoped like Tax), shapes, client-side `descriptorError` mirror |
 | `frontend/src/app/admin/settings/SettingsNav.tsx` | `Payments` between `Domains` and `Tax` |
@@ -37,7 +37,7 @@ No new environment variables. Platform account state is read live (`stripe.accou
 
 ### Page
 
-1. **Stripe card** — `Accepting payments` (platform `charges_enabled`) or `Unavailable`; amber `Test mode` badge on a test key. SYSTEM_ADMIN gets **Manage** (Stripe dashboard); `manageUrl`/`radarUrl` are stripped for other roles. `Payment methods` row shows brand badges for everything enabled (`+n` overflow) and links to the methods page. When `connect.enabled` the right half shows the payouts status pill (`Set up payouts` … `Receiving payouts`) with the onboarding action, **Manage** opens the organization's Express dashboard, and a `Payouts` row links to the payouts page.
+1. **Stripe card** — `Accepting payments` (platform `charges_enabled`) or `Unavailable`; amber `Test mode` badge on a test key. SYSTEM_ADMIN gets **Manage** (Stripe dashboard); `manageUrl`/`radarUrl` are stripped for other roles. `Payment methods` row shows brand badges for everything enabled (`+n` overflow) and links to the methods page. When `connect.enabled` the right half shows the payouts status pill (`Set up payouts` … `Receiving payouts`) with the onboarding action and **Manage** opens the organization's Express dashboard. The `Payout bank account` row under `Payment methods` is always present (`Coming soon` while the flag is off, `Not connected`, `No bank account yet`, or `Bank •••• last4`) and links to the bank account page.
 2. **Customer billing statement** — the effective descriptor (`PREFIX* SUFFIX`), whether it is derived from the trade name, and the support phone (edited on General). **Edit** opens the dialog; ORGANIZER sees **View** (read-only).
 3. **Rates** — from `FEE_CONFIG` via the API so the page never drifts from `FeeService`: service fee 5%, processing 2.9% + $0.30, sales tax → Settings › Tax.
 4. **Fraud prevention** — static `Stripe Radar screens every card payment · Active` row; SYSTEM_ADMIN link to Radar rules. Radar has no status API, so the copy says "screens", not "blocks".

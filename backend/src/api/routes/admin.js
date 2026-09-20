@@ -728,6 +728,25 @@ router.patch('/settings/payments/connect/payouts', requireAdmin, validateUpdateP
 });
 
 /**
+ * GET /admin/finance/payouts → { connect, activity, canEdit }
+ * Finance › Payouts: connected-account state plus live balance and recent
+ * payouts. `activity` is null until onboarding is complete (or while the
+ * flag is off) so the page renders its empty state. Every staff role can read.
+ */
+router.get('/finance/payouts', async (req, res, next) => {
+  try {
+    const organizationId = await activeOrgFor(req);
+    const [connect, activity] = await Promise.all([
+      connectService.statusFor(organizationId),
+      connectService.payoutActivity(organizationId),
+    ]);
+    res.json({ connect, activity, canEdit: ['ADMIN', 'SYSTEM_ADMIN'].includes(req.user.role) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * GET /admin/dashboard/stats
  * Aggregate statistics across all accessible events
  */

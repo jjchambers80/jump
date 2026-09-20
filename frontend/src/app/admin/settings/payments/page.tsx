@@ -3,7 +3,8 @@
 // Stripe account: whether payments are live, which methods checkout offers,
 // what buyers see on their card statement, the rates buyers pay, and fraud
 // screening. With Stripe Connect enabled (phase 2) the provider card also
-// shows whether the organization is receiving payouts and links to Payouts.
+// shows whether the organization is receiving payouts; the Payout bank account
+// row (always present) is where the deposit account is connected.
 'use client';
 
 import Link from 'next/link';
@@ -223,20 +224,21 @@ export default function PaymentsSettingsPage() {
                 </span>
                 <ChevronRightIcon className="h-4 w-4 shrink-0 text-gray-400 dark:text-slate-500" />
               </Link>
-              {connect.enabled && (
-                <Link href="/admin/settings/payments/payouts" className={rowClass} data-testid="payments-payouts-row">
-                  <BankIcon className="h-5 w-5 shrink-0 text-gray-500 dark:text-slate-400" />
-                  <span className="min-w-0 flex-1 font-medium text-gray-900 dark:text-white">Payouts</span>
-                  <span className="truncate text-gray-600 dark:text-slate-400">
-                    {connect.account?.bank
+              {/* Where revenue is deposited: connect once, then last four + Change bank */}
+              <Link href="/admin/settings/payments/payout-bank-account" className={rowClass} data-testid="payments-payouts-row">
+                <BankIcon className="h-5 w-5 shrink-0 text-gray-500 dark:text-slate-400" />
+                <span className="min-w-0 flex-1 font-medium text-gray-900 dark:text-white">Payout bank account</span>
+                <span className="truncate text-gray-600 dark:text-slate-400">
+                  {!connect.enabled
+                    ? 'Coming soon'
+                    : connect.account?.bank
                       ? `${connect.account.bank.name ?? 'Bank account'} •••• ${connect.account.bank.last4}`
                       : connect.status === 'active'
                         ? 'No bank account yet'
-                        : 'Not set up'}
-                  </span>
-                  <ChevronRightIcon className="h-4 w-4 shrink-0 text-gray-400 dark:text-slate-500" />
-                </Link>
-              )}
+                        : 'Not connected'}
+                </span>
+                <ChevronRightIcon className="h-4 w-4 shrink-0 text-gray-400 dark:text-slate-500" />
+              </Link>
             </div>
             {settings && optionalEnabledCount === 0 && (
               <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">Cards, Apple Pay and Google Pay are always on. Add more ways to pay on the Payment methods page.</p>

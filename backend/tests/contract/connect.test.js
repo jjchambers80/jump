@@ -17,6 +17,8 @@ const mockAccountsUpdate = jest.fn();
 const mockCreateLoginLink = jest.fn();
 const mockAccountLinksCreate = jest.fn();
 const mockConstructEvent = jest.fn();
+const mockBalanceRetrieve = jest.fn();
+const mockPayoutsList = jest.fn();
 
 jest.unstable_mockModule('../../src/config/stripe.js', () => {
   let n = 0;
@@ -30,6 +32,8 @@ jest.unstable_mockModule('../../src/config/stripe.js', () => {
       accounts: { retrieve: mockAccountsRetrieve, create: mockAccountsCreate, update: mockAccountsUpdate, createLoginLink: mockCreateLoginLink },
       accountLinks: { create: mockAccountLinksCreate },
       webhooks: { constructEvent: mockConstructEvent },
+      balance: { retrieve: mockBalanceRetrieve },
+      payouts: { list: mockPayoutsList },
     },
   };
 });
@@ -256,6 +260,40 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
         expect(res.body.message).toMatch(message);
       }
       expect(mockAccountsUpdate).toHaveBeenCalledTimes(1); // only the earlier valid call
+    });
+
+    it('GET /admin/finance/payouts: live balance and recent payouts once active; ORGANIZER reads without canEdit', async () => {
+      mockBalanceRetrieve.mockResolvedValue({ available: [{ amount: 42000, currency: 'usd' }], pending: [{ amount: 1500, currency: 'usd' }] });
+      mockPayoutsList.mockResolvedValue({
+        data: [{ id: 'po_ct_1', amount: 30000, currency: 'usd', status: 'paid', arrival_date: 1789516800, created: 1789344000, automatic: true, destination: { bank_name: 'Wells Fargo', last4: '3544' } }],
+      });
+
+      const res = await request(app).get('/admin/finance/payouts').set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body.canEdit).toBe(true);
+      expect(res.body.connect.status).toBe('active');
+      expect(res.body.activity.balance).toEqual({ available: 420, pending: 15, currency: 'usd' });
+      expect(res.body.activity.payouts[0]).toMatchObject({ id: 'po_ct_1', amount: 300, status: 'paid', arrivalDate: '2026-09-16T00:00:00.000Z', bank: { name: 'Wells Fargo', last4: '3544' } });
+      expect(mockBalanceRetrieve).toHaveBeenCalledWith({ stripeAccount: 'acct_onboard_ct' });
+
+      const organizer = await request(app).get('/admin/finance/payouts').set('Authorization', `Bearer ${organizerToken}`);
+      expect(organizer.status).toBe(200);
+      expect(organizer.body.canEdit).toBe(false);
+      expect(organizer.body.activity.payouts).toHaveLength(1);
+
+      // Org B has no account: state only, no Stripe call
+      mockBalanceRetrieve.mockClear();
+      const none = await request(app).get('/admin/finance/payouts').set('Authorization', `Bearer ${adminBToken}`);
+      expect(none.status).toBe(200);
+      expect(none.body).toMatchObject({ connect: { enabled: true, status: 'not_started', account: null }, activity: null });
+      expect(mockBalanceRetrieve).not.toHaveBeenCalled();
+
+      // Flag off: the page still loads, with nothing to show
+      process.env.STRIPE_CONNECT_ENABLED = 'false';
+      const off = await request(app).get('/admin/finance/payouts').set('Authorization', `Bearer ${adminToken}`);
+      expect(off.status).toBe(200);
+      expect(off.body).toMatchObject({ connect: { enabled: false }, activity: null });
+      process.env.STRIPE_CONNECT_ENABLED = 'true';
     });
 
     it('members are scoped to their own organization even with a foreign X-Jump-Org', async () => {

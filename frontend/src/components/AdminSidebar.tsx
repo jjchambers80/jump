@@ -31,6 +31,8 @@ const navItems: NavItem[] = [
   { label: 'Participants', href: '/admin/participants' },
   { label: 'Check In', href: '/admin/orders/scan' },
   { label: 'Analytics', href: '/admin/analytics' },
+  { label: 'Finance', href: '/admin/finance' },
+  { label: 'Payouts', href: '/admin/finance/payouts', nested: true },
   { label: 'Online store', href: '/admin/online-store' },
   { label: 'Pages', href: '/admin/online-store/pages', nested: true },
   { label: 'Preferences', href: '/admin/online-store/preferences', nested: true },

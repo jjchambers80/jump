@@ -15,6 +15,8 @@ const mockAccountsRetrieve = jest.fn();
 const mockAccountsUpdate = jest.fn();
 const mockCreateLoginLink = jest.fn();
 const mockAccountLinksCreate = jest.fn();
+const mockBalanceRetrieve = jest.fn();
+const mockPayoutsList = jest.fn();
 
 jest.unstable_mockModule('@jump/db', () => ({
   prisma: {
@@ -31,6 +33,8 @@ jest.unstable_mockModule('../../src/config/stripe.js', () => ({
       createLoginLink: mockCreateLoginLink,
     },
     accountLinks: { create: mockAccountLinksCreate },
+    balance: { retrieve: mockBalanceRetrieve },
+    payouts: { list: mockPayoutsList },
   },
 }));
 jest.unstable_mockModule('../../src/utils/logger.js', () => ({
@@ -43,7 +47,7 @@ jest.unstable_mockModule('../../src/utils/storefrontUrl.js', () => ({
 
 process.env.STRIPE_SECRET_KEY = 'sk_test_unit';
 
-const { default: service, accountToRow, connectStatus, connectEnabled } = await import('../../src/services/ConnectService.js');
+const { default: service, accountToRow, connectStatus, connectEnabled, serializePayout } = await import('../../src/services/ConnectService.js');
 
 const stripeAccount = (over = {}) => ({
   id: 'acct_1',
@@ -238,8 +242,8 @@ describe('startOnboarding', () => {
     expect(mockAccountLinksCreate).toHaveBeenCalledWith({
       account: 'acct_new',
       type: 'account_onboarding',
-      return_url: 'http://localhost:3001/admin/settings/payments/payouts?onboarding=complete',
-      refresh_url: 'http://localhost:3001/admin/settings/payments/payouts?onboarding=refresh',
+      return_url: 'http://localhost:3001/admin/settings/payments/payout-bank-account?onboarding=complete',
+      refresh_url: 'http://localhost:3001/admin/settings/payments/payout-bank-account?onboarding=refresh',
     });
   });
 
@@ -369,5 +373,78 @@ describe('updatePayoutSettings', () => {
 
     mockFindUnique.mockResolvedValueOnce(row({ detailsSubmitted: false }));
     await expect(service.updatePayoutSettings('org_1', { interval: 'daily' })).rejects.toMatchObject({ statusCode: 409 });
+  });
+});
+
+describe('payoutActivity (Finance › Payouts)', () => {
+  const stripePayout = (over = {}) => ({
+    id: 'po_1',
+    amount: 12345,
+    currency: 'usd',
+    status: 'paid',
+    arrival_date: 1789516800, // 2026-09-16T00:00:00Z
+    created: 1789344000,
+    automatic: true,
+    statement_descriptor: 'ROMAN SKIN',
+    failure_message: null,
+    destination: { object: 'bank_account', bank_name: 'Wells Fargo', last4: '3544' },
+    ...over,
+  });
+
+  test('null while the flag is off, without an account, or before onboarding completes', async () => {
+    process.env.STRIPE_CONNECT_ENABLED = 'false';
+    expect(await service.payoutActivity('org_1')).toBeNull();
+    process.env.STRIPE_CONNECT_ENABLED = 'true';
+    mockFindUnique.mockResolvedValueOnce(null);
+    expect(await service.payoutActivity('org_1')).toBeNull();
+    mockFindUnique.mockResolvedValueOnce(row({ detailsSubmitted: false }));
+    expect(await service.payoutActivity('org_1')).toBeNull();
+    mockFindUnique.mockResolvedValueOnce(row({ disconnectedAt: new Date() }));
+    expect(await service.payoutActivity('org_1')).toBeNull();
+    expect(mockBalanceRetrieve).not.toHaveBeenCalled();
+  });
+
+  test('reads balance and payouts on the connected account and maps cents to dollars', async () => {
+    mockFindUnique.mockResolvedValueOnce(row());
+    mockBalanceRetrieve.mockResolvedValueOnce({
+      available: [{ amount: 50000, currency: 'usd' }],
+      pending: [{ amount: 1250, currency: 'usd' }, { amount: 250, currency: 'usd' }],
+    });
+    mockPayoutsList.mockResolvedValueOnce({ data: [stripePayout(), stripePayout({ id: 'po_2', status: 'failed', failure_message: 'Account closed', destination: 'ba_1' })] });
+
+    const activity = await service.payoutActivity('org_1');
+    expect(mockBalanceRetrieve).toHaveBeenCalledWith({ stripeAccount: 'acct_1' });
+    expect(mockPayoutsList).toHaveBeenCalledWith({ limit: 25, expand: ['data.destination'] }, { stripeAccount: 'acct_1' });
+    expect(activity.error).toBeNull();
+    expect(activity.balance).toEqual({ available: 500, pending: 15, currency: 'usd' });
+    expect(activity.payouts).toHaveLength(2);
+    expect(activity.payouts[0]).toEqual({
+      id: 'po_1',
+      amount: 123.45,
+      currency: 'usd',
+      status: 'paid',
+      arrivalDate: '2026-09-16T00:00:00.000Z',
+      createdAt: '2026-09-14T00:00:00.000Z',
+      automatic: true,
+      statementDescriptor: 'ROMAN SKIN',
+      failureMessage: null,
+      bank: { name: 'Wells Fargo', last4: '3544' },
+    });
+    // An unexpanded destination id is not a bank snapshot
+    expect(activity.payouts[1]).toMatchObject({ status: 'failed', failureMessage: 'Account closed', bank: null });
+  });
+
+  test('a Stripe outage degrades to an error string instead of throwing', async () => {
+    mockFindUnique.mockResolvedValueOnce(row());
+    mockBalanceRetrieve.mockRejectedValueOnce(new Error('connection reset'));
+    mockPayoutsList.mockResolvedValueOnce({ data: [] });
+    const activity = await service.payoutActivity('org_1');
+    expect(activity.balance).toBeNull();
+    expect(activity.payouts).toEqual([]);
+    expect(activity.error).toMatch(/could not be reached/);
+  });
+
+  test('serializePayout tolerates a bare object', () => {
+    expect(serializePayout({ id: 'po_x' })).toMatchObject({ id: 'po_x', amount: 0, currency: 'usd', status: 'pending', arrivalDate: null, bank: null });
   });
 });

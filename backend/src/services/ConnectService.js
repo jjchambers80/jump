@@ -28,6 +28,32 @@ export const PAYOUT_INTERVALS = new Set(['daily', 'weekly', 'monthly']);
 export const WEEKLY_ANCHORS = new Set(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']);
 // Stripe caps the payout statement descriptor at 22 characters like card descriptors.
 const PAYOUT_DESCRIPTOR_MAX = 22;
+// Finance › Payouts shows the most recent payouts only; the full history stays in Stripe.
+const PAYOUT_HISTORY_LIMIT = 25;
+
+/** Sum a Stripe balance bucket (`available` / `pending`) into dollars for the account's currency. */
+function balanceSummary(balance) {
+  const sum = (bucket) => (bucket || []).reduce((total, entry) => total + (entry.amount || 0), 0) / 100;
+  const currency = balance.available?.[0]?.currency || balance.pending?.[0]?.currency || 'usd';
+  return { available: sum(balance.available), pending: sum(balance.pending), currency };
+}
+
+/** Pure mapping from a Stripe Payout object to what the page renders (amounts in dollars). */
+export function serializePayout(payout) {
+  const bank = payout.destination && typeof payout.destination === 'object' ? payout.destination : null;
+  return {
+    id: payout.id,
+    amount: (payout.amount || 0) / 100,
+    currency: payout.currency || 'usd',
+    status: payout.status || 'pending',
+    arrivalDate: payout.arrival_date ? new Date(payout.arrival_date * 1000).toISOString() : null,
+    createdAt: payout.created ? new Date(payout.created * 1000).toISOString() : null,
+    automatic: payout.automatic !== false,
+    statementDescriptor: payout.statement_descriptor || null,
+    failureMessage: payout.failure_message || null,
+    bank: bank ? { name: bank.bank_name || null, last4: bank.last4 || null } : null,
+  };
+}
 
 const ORG_SELECT = { id: true, name: true, email: true, phoneCountryCode: true, phoneNumber: true };
 
@@ -161,8 +187,8 @@ class ConnectService {
     const link = await stripe.accountLinks.create({
       account: row.stripeAccountId,
       type: 'account_onboarding',
-      return_url: `${base}/admin/settings/payments/payouts?onboarding=complete`,
-      refresh_url: `${base}/admin/settings/payments/payouts?onboarding=refresh`,
+      return_url: `${base}/admin/settings/payments/payout-bank-account?onboarding=complete`,
+      refresh_url: `${base}/admin/settings/payments/payout-bank-account?onboarding=refresh`,
     });
     return { url: link.url };
   }
@@ -285,6 +311,39 @@ class ConnectService {
       changes: Object.keys(payouts),
     });
     return this.applyAccount(row.stripeAccountId, account);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Finance › Payouts
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Balance and recent payouts of the connected account, read live from
+   * Stripe for the Finance › Payouts page. Null when there is nothing to show
+   * yet (flag off, no account, onboarding unfinished) so the page can render
+   * its empty state instead of an error. Never throws on a Stripe outage:
+   * the page shows what the row already knows and an `error` string.
+   * @returns {Promise<{ balance: object, payouts: object[], error: string|null } | null>}
+   */
+  async payoutActivity(organizationId, { limit = PAYOUT_HISTORY_LIMIT } = {}) {
+    if (!this.enabled()) return null;
+    const row = await this.accountFor(organizationId);
+    if (!row || row.disconnectedAt || !row.detailsSubmitted) return null;
+    const opts = { stripeAccount: row.stripeAccountId };
+    try {
+      const [balance, payouts] = await Promise.all([
+        stripe.balance.retrieve(opts),
+        stripe.payouts.list({ limit, expand: ['data.destination'] }, opts),
+      ]);
+      return {
+        balance: balanceSummary(balance),
+        payouts: (payouts.data || []).map(serializePayout),
+        error: null,
+      };
+    } catch (error) {
+      logger.warn('Connect payout activity unavailable', { event: 'connect_payout_activity_failed', organizationId, error: error.message });
+      return { balance: null, payouts: [], error: 'Stripe could not be reached. Balance and payout history are temporarily unavailable.' };
+    }
   }
 
   // ---------------------------------------------------------------------------
