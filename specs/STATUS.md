@@ -1,7 +1,7 @@
 # Spec Lifecycle Status
 
 This index records the verified lifecycle state of every spec document in this directory.
-Last updated: 2026-09-19.
+Last updated: 2026-09-20.
 
 | # | Title | Lifecycle | Notes |
 |---|-------|-----------|-------|
@@ -27,6 +27,7 @@ Last updated: 2026-09-19.
 | 026 | Content › Blog posts | **Implemented** | Plan + build 2026-09-19 (`specs/026-blog-posts/plan.md`, branch `feat/026-blog-posts`). `Blog` (Shopify container, default "News") + `BlogPost` (Tiptap editor, excerpt, SEO listing, Visible/Hidden/Scheduled, featured image from Files, author, tags, ‹ › navigation, save bar). Public `/blogs/:blog[/:post]` and `/pages/:slug` routes, server-side `sanitize-html`; Pages adopt the editor. |
 | 027 | Content › Menus | **Implemented** | Plan + build 2026-09-19 (`specs/027-menus/plan.md`, branch `feat/027-menus`). `Menu` / `MenuItem` (3 levels, whole-tree PUT), defaults `main-menu` + `footer-menu`, dnd-kit tree editor with grouped link picker (Home, All events, Event, Venue, Page, Blog, Blog post, Buyer account, External). Storefront: nav row in `OrganizationHeader` + new footer via `StorefrontChrome`; not on checkout / apply / account. |
 | 028 | Content › URL redirects | **Implemented** | Plan + build 2026-09-19 (`specs/028-url-redirects/plan.md`, branch `feat/028-url-redirects`). `UrlRedirect` per org, 301 on the storefront 404 path (tenant middleware + platform catch-all), admin list under Menus. |
+| 030 | Account settings — General and Security (profile, photo, email change, phone, language, time zone; passkeys, password, connected accounts, secondary email, two-step authentication, devices) | **Proposed** | Spec consolidated 2026-09-20 from five drafts (`030-account-settings/spec.md`). Audit: nothing built — sessions are stateless JWTs, no password / passkey / 2FA / session models. Four plans, one worktree each: `plan-general.md` (`feat/030-account-general`), `plan-security.md` (`feat/030-account-security`), `plan-two-step.md` (`feat/030-account-two-step`), `plan-devices.md` (`feat/030-account-devices`). Merge order A → D → B → C. |
 | 029 | Administration header search | **Implemented** | All three cards complete 2026-09-20: backend scoped search endpoint (PR #104), frontend search control (16 E2E tests), and integration verification (Orders page reads `?view=tickets&search=` URL params, TICKET→Orders E2E hydration test). |
 
 ## Documents archived as historical
