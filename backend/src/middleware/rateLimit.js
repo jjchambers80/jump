@@ -120,6 +120,27 @@ export const LIMITS = Object.freeze({
     limit: 5,
     message: 'Too many email change requests. Try again later.',
   },
+  // Spec 030 B: step-up attempts, WebAuthn ceremonies, password sign-ins, recovery links
+  ACCOUNT_REAUTH: {
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    message: 'Too many verification attempts. Try again in a few minutes.',
+  },
+  PASSKEY_CEREMONY: {
+    windowMs: 15 * 60 * 1000,
+    limit: 20,
+    message: 'Too many passkey attempts. Try again in a few minutes.',
+  },
+  PASSWORD_SIGNIN: {
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    message: 'Too many sign-in attempts. Try again in a few minutes.',
+  },
+  ACCOUNT_RECOVERY: {
+    windowMs: 60 * 60 * 1000,
+    limit: 3,
+    message: 'Too many recovery requests. Try again later.',
+  },
 });
 
 /** Paths the baseline limiter never counts: health, metrics scrape, Stripe webhooks. */

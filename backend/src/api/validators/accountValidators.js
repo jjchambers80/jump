@@ -98,3 +98,42 @@ export const validateEmailConfirm = (req, res, next) => {
   }
   next();
 };
+
+// ---- Security (spec 030 B) ----
+
+export const validateSetPassword = (req, res, next) => {
+  const password = req.body?.password;
+  if (typeof password !== 'string' || !password) return next(new ValidationError('Password is required'));
+  next();
+};
+
+export const validateSecondaryEmail = (req, res, next) => {
+  try {
+    req.body = req.body || {};
+    req.body.email = normalizeEmail(req.body.email, 'Secondary email');
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const validateTokenBody = (req, res, next) => {
+  const token = req.body?.token;
+  if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{20,128}$/.test(token)) {
+    return next(new ValidationError('Token is invalid'));
+  }
+  next();
+};
+
+export const validatePasskeyResponse = (req, res, next) => {
+  const response = req.body?.response;
+  if (!response || typeof response !== 'object' || typeof response.id !== 'string') {
+    return next(new ValidationError('Passkey response is missing'));
+  }
+  next();
+};
+
+export const validateProviderParam = (req, res, next) => {
+  if (!/^[a-z0-9-]{1,40}$/.test(req.params.provider || '')) return next(new ValidationError('Unknown provider'));
+  next();
+};

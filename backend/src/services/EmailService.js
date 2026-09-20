@@ -273,6 +273,85 @@ ${manageTicketsHtml}
     logger.info('Security notice sent', { event: 'security_notice_sent', title });
   }
 
+  /** Six-digit step-up code (spec 030 B). */
+  async sendReauthCode({ to, code }) {
+    const msg = {
+      to: [to],
+      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      subject: `${code} is your Jump verification code`,
+      html: `
+        <html>
+          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+            <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
+              <h1 style="color: #333; font-size: 22px;">Confirm it's you</h1>
+            </div>
+            <div style="padding: 20px; text-align: center;">
+              <p>Enter this code in Jump to confirm a security change:</p>
+              <p style="font-size: 32px; letter-spacing: 8px; font-weight: bold; margin: 24px 0;">${escapeHtml(code)}</p>
+              <p style="color: #666; font-size: 13px;">It expires in 10 minutes. If you didn't request it, ignore this email — nothing changes without the code.</p>
+            </div>
+          </body>
+        </html>
+      `,
+    };
+    await resend.emails.send(msg);
+    logger.info('Reauth code sent', { event: 'reauth_code_sent' });
+  }
+
+  /** Verification link for a secondary (recovery) email (spec 030 B). */
+  async sendSecondaryEmailVerification({ to, confirmUrl }) {
+    const msg = {
+      to: [to],
+      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      subject: 'Verify your secondary email for Jump',
+      html: `
+        <html>
+          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+            <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
+              <h1 style="color: #333; font-size: 22px;">Verify this email</h1>
+            </div>
+            <div style="padding: 20px;">
+              <p>This address was added as the secondary email on a Jump account. Once verified it can be used to restore access to that account, and security notifications are sent here too.</p>
+              <div style="text-align: center; margin: 32px 0;">
+                <a href="${confirmUrl}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 16px; font-weight: bold; padding: 14px 32px; border-radius: 8px; text-decoration: none;">Verify email address</a>
+              </div>
+              <p style="color: #666; font-size: 13px;">This link works once and expires in 1 hour. If you didn't add this address, ignore this email.</p>
+            </div>
+          </body>
+        </html>
+      `,
+    };
+    await resend.emails.send(msg);
+    logger.info('Secondary email verification sent', { event: 'secondary_email_verification_sent' });
+  }
+
+  /** One-time recovery sign-in link, sent to the verified secondary address (spec 030 B). */
+  async sendRecoveryLink({ to, primaryEmail, recoverUrl }) {
+    const msg = {
+      to: [to],
+      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      subject: 'Restore access to your Jump account',
+      html: `
+        <html>
+          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+            <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
+              <h1 style="color: #333; font-size: 22px;">Restore access</h1>
+            </div>
+            <div style="padding: 20px;">
+              <p>Use the button below to sign in to the Jump account <strong>${escapeHtml(primaryEmail)}</strong>. This address is its secondary email.</p>
+              <div style="text-align: center; margin: 32px 0;">
+                <a href="${recoverUrl}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 16px; font-weight: bold; padding: 14px 32px; border-radius: 8px; text-decoration: none;">Sign in</a>
+              </div>
+              <p style="color: #666; font-size: 13px;">This link works once and expires in 15 minutes. If you didn't request it, ignore this email and consider reviewing Account › Security.</p>
+            </div>
+          </body>
+        </html>
+      `,
+    };
+    await resend.emails.send(msg);
+    logger.info('Recovery link sent', { event: 'recovery_link_sent' });
+  }
+
   /**
    * Send an application decision / status email (spec 011). `body` is plain
    * text already rendered from the organization's template; paragraphs are
