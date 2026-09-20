@@ -13,5 +13,9 @@
     "db:studio": "npx --workspace=packages/db prisma studio",
     "dev:backend": "npm run dev --workspace=backend",
     "dev:frontend": "npm run dev --workspace=frontend"
+  },
+  "overrides": {
+    "@auth/core": "0.41.1",
+    "next": "14.2.21"
   }
 }

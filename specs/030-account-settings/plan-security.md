@@ -1,6 +1,6 @@
 # Implementation Plan: Account settings › Security — sign-in methods (spec 030, feature B)
 
-**Status**: Planned (2026-09-20). Not implemented.
+**Status**: Built 2026-09-20 on `feat/030-account-security` (see `docs/wiki/features/account-security.md`). Deviations: WebAuthn ceremonies run in **Express** (`PasskeyService`, `/auth/passkey/*`), not Next route handlers — the backend already holds the RP config and limiters; password sign-in verifies via `POST /auth/password` (frontend-only) so hashing, limits and audit stay in one place; root `overrides` pin `next`/`@auth/core` after npm's re-resolution.
 **Branch / worktree**: `feat/030-account-security` at `.claude/worktrees/030-account-security`, based on `feat/030-account-general` (rebase onto `main` once A merges).
 **Spec**: [`spec.md`](./spec.md) §6.1–§6.4, §7. **Blocks**: C (needs step-up + passkeys).
 **Dependencies**: `@simplewebauthn/server` + `@simplewebauthn/browser` (pin the same major). Password hashing uses Node `crypto.scrypt` — no native module.

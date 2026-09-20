@@ -59,6 +59,16 @@ describe('Account contract', () => {
     sentEmails.length = 0;
   });
 
+  // Spec 030 B: the email change is a security mutation and needs a proof
+  const reauth = async () => {
+    sentEmails.length = 0;
+    await request(app).post('/account/reauth/start').set(...auth(token)).send({ method: 'email' }).expect(200);
+    const code = String(sentEmails[0].subject).match(/^(\d{6}) is your/)[1];
+    const res = await request(app).post('/account/reauth').set(...auth(token)).send({ code }).expect(200);
+    sentEmails.length = 0;
+    return ['X-Jump-Reauth', res.body.reauthToken];
+  };
+
   it('requires authentication', async () => {
     await request(app).get('/account').expect(401);
   });
@@ -110,15 +120,15 @@ describe('Account contract', () => {
 
   describe('email change', () => {
     it('refuses the current address and one another user holds', async () => {
-      await request(app).post('/account/email').set(...auth(token)).send({ email: emails[0] }).expect(400);
-      const res = await request(app).post('/account/email').set(...auth(token)).send({ email: emails[1] }).expect(409);
+      await request(app).post('/account/email').set(...auth(token)).set(...(await reauth())).send({ email: emails[0] }).expect(400);
+      const res = await request(app).post('/account/email').set(...auth(token)).set(...(await reauth())).send({ email: emails[1] }).expect(409);
       expect(res.body.code).toBe('EMAIL_TAKEN');
       expect(sentEmails).toHaveLength(0);
     });
 
     it('goes pending, confirms from the emailed token, and notifies the old address', async () => {
       const newEmail = `renamed@${TAG}.test`;
-      const pending = await request(app).post('/account/email').set(...auth(token)).send({ email: newEmail }).expect(200);
+      const pending = await request(app).post('/account/email').set(...auth(token)).set(...(await reauth())).send({ email: newEmail }).expect(200);
       expect(pending.body.pendingEmail).toBe(newEmail);
       expect(pending.body.email).toBe(emails[0]);
       expect(sentEmails).toHaveLength(1);
@@ -147,7 +157,7 @@ describe('Account contract', () => {
 
     it('resend re-issues the token, cancel clears the pending state', async () => {
       const newEmail = `again@${TAG}.test`;
-      await request(app).post('/account/email').set(...auth(token)).send({ email: newEmail }).expect(200);
+      await request(app).post('/account/email').set(...auth(token)).set(...(await reauth())).send({ email: newEmail }).expect(200);
       const first = tokenFromEmail(sentEmails[0]);
       await request(app).post('/account/email/resend').set(...auth(token)).expect(200);
       const second = tokenFromEmail(sentEmails[1]);
@@ -162,7 +172,7 @@ describe('Account contract', () => {
 
     it('rejects an expired token', async () => {
       const newEmail = `late@${TAG}.test`;
-      await request(app).post('/account/email').set(...auth(token)).send({ email: newEmail }).expect(200);
+      await request(app).post('/account/email').set(...auth(token)).set(...(await reauth())).send({ email: newEmail }).expect(200);
       const raw = tokenFromEmail(sentEmails[0]);
       await prisma.verificationToken.updateMany({
         where: { identifier: `email-change:${userId}` },
@@ -175,7 +185,7 @@ describe('Account contract', () => {
 
     it('re-checks uniqueness at confirmation time', async () => {
       const contested = `taken@${TAG}.test`;
-      await request(app).post('/account/email').set(...auth(token)).send({ email: contested }).expect(200);
+      await request(app).post('/account/email').set(...auth(token)).set(...(await reauth())).send({ email: contested }).expect(200);
       const raw = tokenFromEmail(sentEmails[0]);
       const squatter = await prisma.user.create({ data: { email: contested, role: 'UNASSIGNED' } });
       const res = await request(app).post('/account/email/confirm').send({ token: raw }).expect(409);

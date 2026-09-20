@@ -4,6 +4,7 @@ import { FormEvent, RefObject, useRef, useState } from 'react';
 import SettingsDialog from '@/app/admin/settings/SettingsDialog';
 import { emailError, errorClass, fieldClass, formAlertClass, hintClass, labelClass } from '@/app/admin/settings/formShared';
 import { Account, accountApi } from './accountApi';
+import { isReauthCancelled, useReauth } from './useReauth';
 
 interface Props {
   account: Account;
@@ -18,6 +19,7 @@ interface Props {
  * pending state (resend / cancel) is shown on the summary row.
  */
 export default function EmailDialog({ account, onClose, onSaved, returnFocusRef }: Props) {
+  const { withReauth } = useReauth();
   const [email, setEmail] = useState('');
   const [errors, setErrors] = useState<{ email?: string; form?: string }>({});
   const [saving, setSaving] = useState(false);
@@ -39,8 +41,9 @@ export default function EmailDialog({ account, onClose, onSaved, returnFocusRef 
     }
     try {
       setSaving(true);
-      onSaved(await accountApi.requestEmailChange(trimmed));
+      onSaved(await withReauth(() => accountApi.requestEmailChange(trimmed)));
     } catch (error: any) {
+      if (isReauthCancelled(error)) return;
       if (error.code === 'EMAIL_TAKEN') setErrors({ email: 'That email address is already in use.' });
       else setErrors({ form: error.message || 'Unable to start the email change.' });
     } finally {

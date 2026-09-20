@@ -17,6 +17,8 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@jump/db": "*",
+    "@simplewebauthn/browser": "^13.3.0",
+    "@simplewebauthn/server": "^13.3.3",
     "@stripe/stripe-js": "^2.4.0",
     "@tiptap/extension-image": "^3.31.3",
     "@tiptap/pm": "^3.31.3",

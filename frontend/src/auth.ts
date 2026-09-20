@@ -10,11 +10,45 @@ import Credentials from 'next-auth/providers/credentials';
 import authConfig from './auth.config';
 import { applyUserClaims, shouldRefreshClaims, type UserClaims } from '@/lib/sessionClaims';
 import { resolveSessionId, revokeSessionOnSignOut } from '@/lib/userSessions';
+import { consumeBridgeToken, recordSecurityEvent, verifyPasswordWithBackend } from '@/lib/staffAuth';
 
 const AUTH_SECRET = process.env.AUTH_SECRET!;
 
-// Build providers: start with auth.config providers, add dev-only credentials
-const providers: NextAuthConfig['providers'] = [...authConfig.providers];
+// Build providers: start with auth.config providers, add the spec 030 B
+// Credentials providers and, in development, the instant dev sign-in.
+const providers: NextAuthConfig['providers'] = [
+  ...authConfig.providers,
+  // Email + password. Verification, rate limiting and audit happen in the
+  // backend (POST /auth/password); a user without a password fails like a
+  // wrong password.
+  Credentials({
+    id: 'password',
+    name: 'Password',
+    credentials: {
+      email: { label: 'Email', type: 'email' },
+      password: { label: 'Password', type: 'password' },
+    },
+    async authorize(credentials, request) {
+      const email = credentials?.email;
+      const password = credentials?.password;
+      if (typeof email !== 'string' || typeof password !== 'string' || !email || !password) return null;
+      return verifyPasswordWithBackend(email, password, request);
+    },
+  }),
+  // One-time bridge token minted by the backend after a passkey assertion
+  // or a secondary-email recovery link. This is the only way a ceremony
+  // that ends outside Auth.js becomes a session.
+  Credentials({
+    id: 'token-bridge',
+    name: 'Token bridge',
+    credentials: { token: { label: 'Token', type: 'text' } },
+    async authorize(credentials) {
+      const token = credentials?.token;
+      if (typeof token !== 'string' || !token) return null;
+      return consumeBridgeToken(token);
+    },
+  }),
+];
 
 if (process.env.NODE_ENV === 'development') {
   providers.push(
@@ -133,6 +167,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
   events: {
+    // "Connect Google" from Account › Security (spec 030 B)
+    async linkAccount({ user, account }) {
+      if (user.id) await recordSecurityEvent(user.id, 'PROVIDER_CONNECTED', { provider: account.provider });
+    },
     // JWT strategy: `token` is the cookie being cleared. Revoke its row so the
     // device disappears from Account › Security › Devices immediately.
     async signOut(message) {

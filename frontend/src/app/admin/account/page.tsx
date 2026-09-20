@@ -16,6 +16,7 @@ import NameDialog from './NameDialog';
 import PhoneDialog, { formatAccountPhone } from './PhoneDialog';
 import PhotoCard from './PhotoCard';
 import TimeZoneDialog from './TimeZoneDialog';
+import { ReauthProvider } from './useReauth';
 
 type Editor = 'name' | 'email' | 'phone' | 'language' | 'timeZone' | null;
 
@@ -109,6 +110,7 @@ export default function AccountGeneralPage() {
   const browser = browserTimeZone();
 
   return (
+    <ReauthProvider>
     <section aria-labelledby="account-general-heading">
       <h2 id="account-general-heading" className="flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white">
         <UsersIcon className="h-5 w-5 text-gray-700 dark:text-slate-300" />
@@ -233,5 +235,6 @@ export default function AccountGeneralPage() {
         <TimeZoneDialog account={account} returnFocusRef={timeZoneRowRef} onClose={closeEditor} onSaved={(saved) => finishSave(saved, 'Time zone saved.')} />
       )}
     </section>
+    </ReauthProvider>
   );
 }

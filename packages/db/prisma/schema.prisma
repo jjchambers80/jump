@@ -40,6 +40,15 @@ model User {
   pendingEmail  String?
   avatarImage   Image?  @relation("UserAvatar", fields: [avatarImageId], references: [id])
 
+  // Spec 030 › Security (feature B). Password is optional — magic link and
+  // Google remain; the hash is "scrypt$N$r$p$salt$hash" (Node crypto, no
+  // native dependency). Secondary email = recovery + security notices.
+  passwordHash             String?
+  passwordUpdatedAt        DateTime?
+  secondaryEmail           String?
+  secondaryEmailVerifiedAt DateTime?
+  passkeys                 Passkey[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -106,6 +115,26 @@ model UserSession {
 
   @@index([userId, revokedAt])
   @@index([lastSeenAt])
+}
+
+// Spec 030 B: WebAuthn credentials (discoverable). Private keys never reach Jump.
+model Passkey {
+  id           String    @id @default(cuid())
+  userId       String
+  credentialId String    @unique // base64url
+  publicKey    Bytes
+  counter      Int       @default(0)
+  transports   String[]
+  deviceType   String // singleDevice | multiDevice
+  backedUp     Boolean   @default(false)
+  aaguid       String?
+  label        String
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 // Spec 030: append-only audit trail of account security mutations (no updatedAt).

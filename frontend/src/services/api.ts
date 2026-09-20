@@ -8,6 +8,19 @@ import { allStorefrontAccessTokens } from '@/lib/storefrontAccess';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
 
 let activeOrganizationId: string | null = null;
+
+/**
+ * Step-up proof for security mutations (spec 030 B). Set by useReauth after
+ * the user re-proves who they are; sent as X-Jump-Reauth on every request
+ * while it lasts (10 min server-side).
+ */
+let reauthToken: string | null = null;
+export function setReauthToken(token: string | null) {
+  reauthToken = token;
+}
+export function getReauthToken(): string | null {
+  return reauthToken;
+}
 /** Set by OrgContext whenever the admin org switcher changes. */
 export function setActiveOrganizationId(id: string | null) {
   activeOrganizationId = id;
@@ -53,6 +66,9 @@ class ApiClient {
     // The backend honors it only when the user is a member of that organization.
     if (activeOrganizationId && !headers['X-Jump-Org']) {
       headers['X-Jump-Org'] = activeOrganizationId;
+    }
+    if (reauthToken && !headers['X-Jump-Reauth']) {
+      headers['X-Jump-Reauth'] = reauthToken;
     }
 
     // Private storefront tokens (Online store › Preferences › Store access):
