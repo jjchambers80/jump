@@ -44,10 +44,13 @@ class FeeService {
     // Platform fee on the ex-tax base price
     const platformFee = this._round(subtotal * FEE_CONFIG.platformFeePercent);
 
-    // Processing fee on (subtotal + platformFee) — Stripe charges on the full amount
-    const processingFee = this._round(
-      (subtotal + platformFee) * FEE_CONFIG.stripeFeePercent + FEE_CONFIG.stripeFeeFixed
-    );
+    // Processing fee on (subtotal + platformFee) — Stripe charges on the full amount.
+    // No lines means no charge: an empty cart must not carry the fixed fee
+    // (a $0 tier still does — free tickets go through Checkout like any other).
+    const processingFee =
+      items.length === 0
+        ? 0
+        : this._round((subtotal + platformFee) * FEE_CONFIG.stripeFeePercent + FEE_CONFIG.stripeFeeFixed);
 
     const total = this._round(subtotal + platformFee + processingFee + tax);
 

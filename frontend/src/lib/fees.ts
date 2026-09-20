@@ -89,9 +89,12 @@ export function computeOrderFees(items: FeeItem[], taxRate: number = 0, taxInclu
   const tax = taxInclusive ? roundCurrency(taxableListed - taxableNet) : roundCurrency(taxableNet * taxRate);
   const subtotal = roundCurrency(listed - (taxInclusive ? tax : 0));
   const platformFee = roundCurrency(subtotal * FEE_CONFIG.platformFeePercent);
-  const processingFee = roundCurrency(
-    (subtotal + platformFee) * FEE_CONFIG.stripeFeePercent + FEE_CONFIG.stripeFeeFixed
-  );
+  // No lines means no charge: an empty cart must not carry Stripe's fixed fee.
+  // (A $0 tier still does — free tickets go through Checkout like any other.)
+  const processingFee =
+    items.length === 0
+      ? 0
+      : roundCurrency((subtotal + platformFee) * FEE_CONFIG.stripeFeePercent + FEE_CONFIG.stripeFeeFixed);
   const total = roundCurrency(subtotal + platformFee + processingFee + tax);
 
   const lines: LineBreakdown[] = items.map((item) => {

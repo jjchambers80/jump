@@ -53,6 +53,17 @@ describe('FeeService.computeOrderFees', () => {
     expect(Math.abs(totalItemProcessing - result.processingFee)).toBeLessThanOrEqual(0.01);
   });
 
+  it('charges nothing for an empty item list', () => {
+    const result = feeService.computeOrderFees([]);
+
+    expect(result.subtotal).toBe(0);
+    expect(result.platformFee).toBe(0);
+    expect(result.processingFee).toBe(0);
+    expect(result.tax).toBe(0);
+    expect(result.total).toBe(0);
+    expect(result.itemBreakdowns).toEqual([]);
+  });
+
   it('handles free tickets ($0 price)', () => {
     const result = feeService.computeOrderFees([{ unitPrice: 0, quantity: 5 }]);
 
