@@ -244,6 +244,36 @@ ${manageTicketsHtml}
   }
 
   /**
+   * Plain security notice for account changes (spec 030): sessions signed
+   * out, password / passkey / provider changes. `body` is plain text.
+   * @param {{ to: string|string[], title: string, body: string }} params
+   */
+  async sendSecurityNotice({ to, title, body }) {
+    const recipients = (Array.isArray(to) ? to : [to]).filter(Boolean);
+    if (recipients.length === 0) return;
+    const msg = {
+      to: recipients,
+      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      subject: `Jump security: ${title}`,
+      html: `
+        <html>
+          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+            <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
+              <h1 style="color: #333; font-size: 22px;">${escapeHtml(title)}</h1>
+            </div>
+            <div style="padding: 20px;">
+              <p>${escapeHtml(body)}</p>
+              <p style="color: #666; font-size: 13px;">This message was sent because a security setting on your Jump account changed.</p>
+            </div>
+          </body>
+        </html>
+      `,
+    };
+    await resend.emails.send(msg);
+    logger.info('Security notice sent', { event: 'security_notice_sent', title });
+  }
+
+  /**
    * Send an application decision / status email (spec 011). `body` is plain
    * text already rendered from the organization's template; paragraphs are
    * split on blank lines and every line is escaped, so organizer text can

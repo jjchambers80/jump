@@ -1,10 +1,20 @@
 // Cache utility using Redis
 // Provides a simple get/set/invalidate caching layer
 
-import redis from './redis.js';
+import redis, { ensureRedisConnecting } from './redis.js';
 import logger from './logger.js';
 
 const DEFAULT_TTL = 300; // 5 minutes in seconds
+
+/**
+ * Whether a command can run right now. The client connects lazily on first
+ * use; until it is ready (or while it is down) every call falls open fast
+ * instead of queueing behind ioredis retries.
+ */
+function available() {
+  ensureRedisConnecting();
+  return redis.status === 'ready';
+}
 
 /**
  * Get a cached value by key
@@ -12,6 +22,7 @@ const DEFAULT_TTL = 300; // 5 minutes in seconds
  * @returns {Promise<Object|null>} Parsed cached value or null
  */
 export async function cacheGet(key) {
+  if (!available()) return null;
   try {
     const cached = await redis.get(key);
     if (cached) {
@@ -33,6 +44,7 @@ export async function cacheGet(key) {
  * @param {number} ttl - Time-to-live in seconds (default: 300)
  */
 export async function cacheSet(key, value, ttl = DEFAULT_TTL) {
+  if (!available()) return;
   try {
     await redis.set(key, JSON.stringify(value), 'EX', ttl);
     logger.debug('Cache set', { key, ttl });
@@ -47,6 +59,7 @@ export async function cacheSet(key, value, ttl = DEFAULT_TTL) {
  * @param {string} pattern - Glob pattern for keys to invalidate (e.g., 'events:*')
  */
 export async function cacheInvalidate(pattern) {
+  if (!available()) return;
   try {
     const keys = await redis.keys(pattern);
     if (keys.length > 0) {

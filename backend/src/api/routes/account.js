@@ -18,6 +18,9 @@ import {
 } from '../validators/accountValidators.js';
 import accountService from '../../services/AccountService.js';
 import imageService from '../../services/ImageService.js';
+import sessionService from '../../services/SessionService.js';
+import securityEventService from '../../services/SecurityEventService.js';
+import emailService from '../../services/EmailService.js';
 
 const router = Router();
 const emailChangeLimiter = makeLimiter('ACCOUNT_EMAIL_CHANGE', LIMITS.ACCOUNT_EMAIL_CHANGE);
@@ -79,6 +82,36 @@ router.delete('/avatar', wrap(async (req, res) => {
     await imageService.deleteImage(previousAvatarImageId).catch(() => {});
   }
   res.json(account);
+}));
+
+// ---- Devices (spec 030 D) ----
+
+router.get('/sessions', wrap(async (req, res) => {
+  res.json({ sessions: await sessionService.list(req.user.id, req.user.sid) });
+}));
+
+router.delete('/sessions/:id', wrap(async (req, res) => {
+  const result = await sessionService.revoke(req.user.id, req.params.id, 'user');
+  await securityEventService.record(req.user.id, 'SESSION_REVOKED', {
+    req,
+    meta: { sid: req.params.id, current: req.params.id === req.user.sid },
+  });
+  res.json({ ...result, current: req.params.id === req.user.sid });
+}));
+
+router.post('/sessions/revoke-others', wrap(async (req, res) => {
+  const result = await sessionService.revokeOthers(req.user.id, req.user.sid, 'logout-all');
+  await securityEventService.record(req.user.id, 'SESSIONS_REVOKED_ALL', { req, meta: result });
+  if (result.revoked > 0) {
+    emailService
+      .sendSecurityNotice({
+        to: req.user.email,
+        title: 'You logged out of your other devices',
+        body: `${result.revoked} other ${result.revoked === 1 ? 'session was' : 'sessions were'} signed out of your Jump account. If this wasn't you, sign in and check Account › Security › Devices.`,
+      })
+      .catch(() => {});
+  }
+  res.json(result);
 }));
 
 export default router;

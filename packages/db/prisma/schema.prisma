@@ -51,6 +51,9 @@ model User {
   memberships       OrganizationMember[]
   // Spec 022: organizations this user signed up (owner of the Jump account)
   platformCustomers PlatformCustomer[]
+  // Spec 030: revocable sessions (Devices) and the security audit trail
+  sessions       UserSession[]
+  securityEvents SecurityEvent[]
 
   @@index([role])
   @@index([email])
@@ -77,6 +80,47 @@ model Account {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
+}
+
+// Spec 030 feature D: one row per signed-in browser. The JWT carries the row
+// id as `sid`; the backend rejects a revoked one immediately and the Auth.js
+// claims refresh (≤ 60 s) drops the cookie. Raw IPs are never stored.
+model UserSession {
+  id         String    @id @default(cuid())
+  userId     String
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  revokedAt  DateTime?
+  revokedBy  String? // user | logout-all | sign-out | password-change | two-step | sweep
+  userAgent  String?
+  deviceType String? // desktop | mobile | tablet | unknown
+  os         String?
+  browser    String?
+  ipHash     String?
+  city       String?
+  region     String?
+  country    String? // ISO 3166-1 alpha-2
+  provider   String? // resend | google | password | passkey | dev-email
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([lastSeenAt])
+}
+
+// Spec 030: append-only audit trail of account security mutations (no updatedAt).
+model SecurityEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  ipHash    String?
+  userAgent String?
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 model VerificationToken {
