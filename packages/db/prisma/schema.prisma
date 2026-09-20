@@ -49,6 +49,14 @@ model User {
   secondaryEmailVerifiedAt DateTime?
   passkeys                 Passkey[]
 
+  // Spec 030 › Security (feature C): two-step authentication. The TOTP
+  // secret is AES-256-GCM encrypted with a key derived from AUTH_SECRET;
+  // a second step is required after every first factor once enabled.
+  twoStepEnabledAt DateTime?
+  totpSecretEnc    String?
+  recoveryCodes    RecoveryCode[]
+  trustedDevices   TrustedDevice[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -131,6 +139,35 @@ model Passkey {
   label        String
   createdAt    DateTime  @default(now())
   lastUsedAt   DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Spec 030 C: backup codes for two-step (10 per set, single use, sha256 stored).
+model RecoveryCode {
+  id        String    @id @default(cuid())
+  userId    String
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Spec 030 C: "Remember this device for 30 days" — the cookie holds a random
+// token, only its hash is stored.
+model TrustedDevice {
+  id         String   @id @default(cuid())
+  userId     String
+  tokenHash  String   @unique
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime @default(now())
+  expiresAt  DateTime
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

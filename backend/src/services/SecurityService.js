@@ -159,6 +159,8 @@ class SecurityService {
     });
     await securityEventService.record(userId, changing ? 'PASSWORD_CHANGED' : 'PASSWORD_SET', { req });
     const others = await sessionService.revokeOthers(userId, req?.user?.sid ?? null, 'password-change');
+    // Spec 030 C: a new password also forgets "remembered" two-step devices
+    await prisma.trustedDevice.deleteMany({ where: { userId } });
     await this._notify(
       user,
       changing ? 'Your password was changed' : 'A password was added to your account',
