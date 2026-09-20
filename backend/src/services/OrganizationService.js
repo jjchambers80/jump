@@ -237,6 +237,7 @@ class OrganizationService {
         storefrontPrivate: true,
         storefrontPasswordHash: true,
         storefrontMessage: true,
+        buyerSignInLinks: true,
         venues: {
           select: {
             events: {
@@ -276,6 +277,8 @@ class OrganizationService {
       coverUrl: org.coverUrl,
       brandColor: org.brandColor,
       themeMode: org.themeMode,
+      // Spec 031: storefront header / checkout show the buyer sign-in link
+      buyerSignInLinks: org.buyerSignInLinks,
     };
 
     if (!storefrontPreferencesService.hasAccess(org, accessToken)) {

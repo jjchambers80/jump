@@ -18,6 +18,7 @@ import { validateFormBody, validateTierBody, validateQuestionBody, validateDecis
 import { validateUpdatePaymentSettings, validateUpdatePayoutSettings } from '../validators/paymentValidators.js';
 import { validateCreatePage, validateUpdatePage } from '../validators/pageValidators.js';
 import { validateUpdateStorefrontPreferences } from '../validators/storefrontPreferencesValidators.js';
+import { validateUpdateCustomerAccountSettings } from '../validators/customerAccountSettingsValidators.js';
 import { validateOrderListQuery } from '../validators/orderValidators.js';
 import organizationService from '../../services/OrganizationService.js';
 import organizationPersonService from '../../services/OrganizationPersonService.js';
@@ -38,6 +39,7 @@ import applicationTemplateService from '../../services/ApplicationTemplateServic
 import applicationFormTemplateService from '../../services/ApplicationFormTemplateService.js';
 import applicationDigestService from '../../services/ApplicationDigestService.js';
 import setupGuideService from '../../services/SetupGuideService.js';
+import customerAccountSettingsService from '../../services/CustomerAccountSettingsService.js';
 import billingService from '../../services/BillingService.js';
 import pageService from '../../services/PageService.js';
 import storefrontPreferencesService from '../../services/StorefrontPreferencesService.js';
@@ -152,6 +154,29 @@ router.patch(
   async (req, res, next) => {
     try {
       res.json(await storefrontPreferencesService.update(await activeOrgFor(req), req.body));
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/** GET /admin/settings/customer-accounts — sign-in links, sign-in method, account URL (spec 031). */
+router.get('/settings/customer-accounts', async (req, res, next) => {
+  try {
+    res.json(await customerAccountSettingsService.get(await activeOrgFor(req)));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** PATCH /admin/settings/customer-accounts — partial update (ADMIN). */
+router.patch(
+  '/settings/customer-accounts',
+  requireAdmin,
+  validateUpdateCustomerAccountSettings,
+  async (req, res, next) => {
+    try {
+      res.json(await customerAccountSettingsService.update(await activeOrgFor(req), req.body));
     } catch (error) {
       next(error);
     }

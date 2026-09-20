@@ -5,6 +5,8 @@ import LogoBox from './LogoBox';
 import { resolveAssetUrl } from '../lib/assets';
 import StorefrontNav from './storefront/StorefrontNav';
 import { useStorefrontMenus } from './storefront/useStorefrontMenus';
+import { storefrontHref } from '../lib/storefrontPath';
+import { useBuyer } from '../lib/useBuyer';
 
 export interface OrganizationHeaderProps {
   organization: { id?: string | null; name: string; logoUrl?: string | null };
@@ -26,6 +28,13 @@ export interface OrganizationHeaderProps {
    * (checkout, confirmation, apply, account).
    */
   nav?: boolean;
+  /**
+   * Show the buyer sign-in link (spec 031, Settings › Customer accounts):
+   * "Sign in" when there is no buyer session for this organization,
+   * "Account" when there is. Off on the account page itself and on focused
+   * flows. Pages pass the organization's `buyerSignInLinks` flag.
+   */
+  signIn?: boolean;
 }
 
 /**
@@ -37,9 +46,12 @@ export default function OrganizationHeader({
   as = 'link',
   layout = 'centered',
   nav = false,
+  signIn = false,
 }: OrganizationHeaderProps) {
   const menus = useStorefrontMenus(nav ? organization.id : null);
   const navItems = nav && organization.id ? (menus?.main ?? []) : [];
+  const { buyer, loading: buyerLoading } = useBuyer(signIn ? organization.id : null);
+  const accountHref = organization.id ? storefrontHref(`/organizations/${organization.id}/account`, organization.id) : null;
   const logoSrc = organization.logoUrl ? resolveAssetUrl(organization.logoUrl) : null;
   const href = organization.id ? `/organizations/${organization.id}` : null;
   const nameClass =
@@ -85,14 +97,29 @@ export default function OrganizationHeader({
               </div>
             )}
           </div>
-          {navItems.length > 0 && organization.id && (
-            <StorefrontNav
-              orgId={organization.id}
-              items={navItems}
-              variant="mobile"
-              className="md:hidden"
-            />
-          )}
+          <div className="flex shrink-0 items-center gap-3">
+            {signIn && accountHref && !buyerLoading && (
+              <Link
+                href={accountHref}
+                data-testid="buyer-sign-in-link"
+                className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-semibold text-brand-link hover:opacity-80 transition-opacity"
+              >
+                <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                  <circle cx="10" cy="6.5" r="3" />
+                  <path d="M4 17v-1a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v1" />
+                </svg>
+                {buyer ? 'Account' : 'Sign in'}
+              </Link>
+            )}
+            {navItems.length > 0 && organization.id && (
+              <StorefrontNav
+                orgId={organization.id}
+                items={navItems}
+                variant="mobile"
+                className="md:hidden"
+              />
+            )}
+          </div>
         </div>
         {navItems.length > 0 && organization.id && (
           <div className="mt-3 hidden md:block">

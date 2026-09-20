@@ -162,7 +162,7 @@ router.get('/:id/public/meta', async (req, res, next) => {
 async function publicOrganizationIdentity(id) {
   const org = await prisma.organization.findFirst({
     where: { id, status: 'ACTIVE' },
-    select: { id: true, name: true, logoUrl: true, coverUrl: true, brandColor: true, themeMode: true },
+    select: { id: true, name: true, logoUrl: true, coverUrl: true, brandColor: true, themeMode: true, buyerSignInLinks: true },
   });
   if (!org) throw new NotFoundError('Organization not found');
   return org;

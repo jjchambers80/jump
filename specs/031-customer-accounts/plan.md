@@ -1,6 +1,6 @@
 # Implementation Plan: Settings › Customer accounts (spec 031)
 
-**Status**: Planned (2026-09-20). Not implemented.
+**Status**: Phase 1 built 2026-09-20 (`feat/031-customer-accounts-phase-1`). Phases 2–3 not started.
 **Spec**: [spec.md](./spec.md)
 **Dependencies**: nothing new. Reuses the buyer session (spec 007), the `/admin/online-store/preferences` GET/PATCH pattern, `RefundService.refundTicket`, `activeOrgFor(req)`, `storefrontFor()` and the spec 020 limiter factory.
 **Phases**: three independently mergeable PRs, in order. Phase 1 is the one that puts the nav item in place; phases 2 and 3 add cards to the same page.
