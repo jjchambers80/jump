@@ -52,3 +52,25 @@ describe('applyUserClaims', () => {
     expect(token.organizationId).toBeNull();
   });
 });
+
+describe('applyUserClaims account preferences (spec 030)', () => {
+  it('copies locale, timeZone and picture when present', () => {
+    const token: ClaimsToken = { sub: 'u1' };
+    applyUserClaims(
+      token,
+      { role: 'ADMIN', name: 'JJ', email: 'jj@example.com', organizationId: null, locale: 'en-US', timeZone: 'America/New_York', picture: '/images/i/h/thumb' },
+      NOW
+    );
+    expect(token.locale).toBe('en-US');
+    expect(token.timeZone).toBe('America/New_York');
+    expect(token.picture).toBe('/images/i/h/thumb');
+  });
+
+  it('leaves the preference claims alone when the snapshot has none', () => {
+    const token: ClaimsToken = { sub: 'u1', locale: 'en-US', timeZone: 'UTC', picture: null };
+    applyUserClaims(token, { role: 'ADMIN', name: 'JJ', email: 'jj@example.com', organizationId: null }, NOW);
+    expect(token.locale).toBe('en-US');
+    expect(token.timeZone).toBe('UTC');
+    expect(token.picture).toBeNull();
+  });
+});

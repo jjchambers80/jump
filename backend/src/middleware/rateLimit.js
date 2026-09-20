@@ -114,6 +114,12 @@ export const LIMITS = Object.freeze({
     limit: 30,
     message: 'Too many applications from this address. Try again later.',
   },
+  // Spec 030: email-change confirmations (request + resend) per IP
+  ACCOUNT_EMAIL_CHANGE: {
+    windowMs: 60 * 60 * 1000,
+    limit: 5,
+    message: 'Too many email change requests. Try again later.',
+  },
 });
 
 /** Paths the baseline limiter never counts: health, metrics scrape, Stripe webhooks. */

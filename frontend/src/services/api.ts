@@ -76,6 +76,8 @@ class ApiClient {
           status: response.status,
           message: data?.message || 'Request failed',
           error: data?.error,
+          // Machine-readable code from the backend error handler (e.g. EMAIL_TAKEN)
+          code: data?.code,
           details: data?.details,
         };
       }
@@ -165,6 +167,7 @@ class ApiClient {
         status: response.status,
         message: data.message || 'Upload failed',
         error: data.error,
+        code: data.code,
       };
     }
     return data;

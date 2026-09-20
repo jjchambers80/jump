@@ -42,7 +42,12 @@ async function loadUserClaims(userId: string): Promise<UserClaims | null> {
       role: true,
       name: true,
       email: true,
+      image: true,
+      locale: true,
+      timeZone: true,
       deletedAt: true,
+      // Spec 030: uploaded photo wins over the provider picture
+      avatarImage: { select: { id: true, file: { select: { hash: true } } } },
       // Active org = oldest membership; the admin org switcher overrides via X-Jump-Org (spec 007)
       memberships: {
         orderBy: { createdAt: 'asc' },
@@ -57,6 +62,11 @@ async function loadUserClaims(userId: string): Promise<UserClaims | null> {
     name: dbUser.name,
     email: dbUser.email,
     organizationId: dbUser.memberships[0]?.organizationId ?? null,
+    locale: dbUser.locale,
+    timeZone: dbUser.timeZone,
+    picture: dbUser.avatarImage
+      ? `/images/${dbUser.avatarImage.id}/${dbUser.avatarImage.file.hash}/thumb`
+      : dbUser.image ?? null,
   };
 }
 
@@ -88,6 +98,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.id = token.sub as string;
         (session.user as any).role = token.role;
         (session.user as any).organizationId = token.organizationId ?? null;
+        // Spec 030 account preferences + avatar (relative /images URL or provider URL)
+        (session.user as any).locale = token.locale ?? 'en-US';
+        (session.user as any).timeZone = token.timeZone ?? null;
+        session.user.image = (token.picture as string | null | undefined) ?? null;
       }
       // Generate the raw JWT so the client can send it as a Bearer token to the backend
       (session as any).accessToken = jwt.sign(

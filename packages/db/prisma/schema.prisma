@@ -30,6 +30,16 @@ model User {
   isActive  Boolean   @default(true)
   deletedAt DateTime?
 
+  // Spec 030: account settings › General. Personal to the User, never to an
+  // organization. `image` stays the Auth.js/Google picture fallback; an
+  // uploaded photo lives in `avatarImage`. `timeZone` null = browser default.
+  phone         String?
+  locale        String    @default("en-US")
+  timeZone      String?
+  avatarImageId String?   @unique
+  pendingEmail  String?
+  avatarImage   Image?    @relation("UserAvatar", fields: [avatarImageId], references: [id])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -110,6 +120,7 @@ model Image {
   applicantProfileImages ApplicantProfileImage[]
   applicationAnswers     ApplicationAnswer[]
   storeFile              StoreFile?
+  userAvatars            User[]                  @relation("UserAvatar")
 
   @@index([fileId])
   @@index([usageType])

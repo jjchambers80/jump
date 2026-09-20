@@ -5,7 +5,7 @@ const allowedMimeTypes = new Set(['image/jpeg', 'image/png', 'image/gif', 'image
 
 const storage = multer.memoryStorage();
 
-function createImageUpload(maxSizeMb = 5) {
+function createImageUpload(maxSizeMb = 5, fieldName = 'logo') {
   const upload = multer({
     storage,
     limits: { fileSize: maxSizeMb * 1024 * 1024 },
@@ -19,7 +19,7 @@ function createImageUpload(maxSizeMb = 5) {
   });
 
   return (req, res, next) => {
-    upload.single('logo')(req, res, (error) => {
+    upload.single(fieldName)(req, res, (error) => {
       if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') {
         next(new ValidationError(`Image must be ${maxSizeMb} MB or smaller`));
         return;
@@ -30,3 +30,5 @@ function createImageUpload(maxSizeMb = 5) {
 }
 
 export const uploadImage = createImageUpload(5);
+// Spec 030: account photo, multipart field `avatar`
+export const uploadAvatar = createImageUpload(5, 'avatar');

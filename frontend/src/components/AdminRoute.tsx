@@ -16,7 +16,12 @@ const ALLOWED_ROLES = ['ADMIN', 'ORGANIZER', 'SYSTEM_ADMIN'];
 export default function AdminRoute({ children }: AdminRouteProps) {
   const { data: session, status } = useSession();
   const loading = status === 'loading';
-  const isAuthenticated = status === 'authenticated';
+  // useSession().update() flips status to 'loading' while it re-fetches but
+  // keeps the previous session data; treating that as signed-out would
+  // unmount the page (losing dialog focus and refetching everything), so
+  // authentication follows the data, and 'loading' only matters before the
+  // first session arrives.
+  const isAuthenticated = Boolean(session);
   const userRole = (session?.user as any)?.role;
   const isAllowed = ALLOWED_ROLES.includes(userRole);
   const router = useRouter();
@@ -34,7 +39,7 @@ export default function AdminRoute({ children }: AdminRouteProps) {
     if (needsSignup) router.replace('/signup');
   }, [needsSignup, router]);
 
-  if (loading) {
+  if (loading && !isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
