@@ -88,12 +88,37 @@ describe('Events API Contract Tests', () => {
       expect(res.body).toHaveProperty('id');
       expect(res.body.name).toBe('Summer Concert');
       expect(res.body.status).toBe('DRAFT');
+      expect(res.body).toMatchObject({ slug: 'summer-concert', slugCustomized: false });
       expect(res.body).toHaveProperty('venue');
       expect(res.body.venue.id).toBe(testVenueId);
       expect(res.body).toHaveProperty('priceTiers');
       expect(res.body.priceTiers).toHaveLength(2);
 
       draftEventId = res.body.id;
+    });
+
+    it('accepts a custom slug and rejects a duplicate custom slug', async () => {
+      const slug = `custom-event-${Date.now()}`;
+      const body = {
+        venueId: testVenueId,
+        name: 'Custom URL Event',
+        slug,
+        date: '2027-07-16T19:00:00.000Z',
+        capacity: 10,
+        priceTiers: [{ name: 'GA', price: 10, quantityTotal: 10 }],
+      };
+      const first = await request(app)
+        .post(`/organizations/${testOrgId}/events`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send(body);
+      expect(first.status).toBe(201);
+      expect(first.body).toMatchObject({ slug, slugCustomized: true });
+
+      const duplicate = await request(app)
+        .post(`/organizations/${testOrgId}/events`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({ ...body, name: 'Duplicate URL Event', date: '2027-07-17T19:00:00.000Z' });
+      expect(duplicate.status).toBe(409);
     });
 
     it('should return 201 when admin creates an event', async () => {

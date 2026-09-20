@@ -10,6 +10,7 @@ import { useBuyer } from '../lib/useBuyer';
 
 export interface OrganizationHeaderProps {
   organization: { id?: string | null; name: string; logoUrl?: string | null };
+  organizationSlug?: string | null;
   /**
    * Render the name as the page's h1 (organization page) or as plain text
    * linking back to the organization page (event, checkout, apply pages).
@@ -43,6 +44,7 @@ export interface OrganizationHeaderProps {
  */
 export default function OrganizationHeader({
   organization,
+  organizationSlug,
   as = 'link',
   layout = 'centered',
   nav = false,
@@ -51,9 +53,12 @@ export default function OrganizationHeader({
   const menus = useStorefrontMenus(nav ? organization.id : null);
   const navItems = nav && organization.id ? (menus?.main ?? []) : [];
   const { buyer, loading: buyerLoading } = useBuyer(signIn ? organization.id : null);
-  const accountHref = organization.id ? storefrontHref(`/organizations/${organization.id}/account`, organization.id) : null;
+  const orgSlug = organizationSlug ?? organization.id ?? '';
+  const accountHref = organization.id
+    ? storefrontHref(`/organizations/${encodeURIComponent(orgSlug)}/account`, organization.id)
+    : null;
   const logoSrc = organization.logoUrl ? resolveAssetUrl(organization.logoUrl) : null;
-  const href = organization.id ? `/organizations/${organization.id}` : null;
+  const href = organization.id ? `/organizations/${encodeURIComponent(orgSlug)}` : null;
   const nameClass =
     'min-w-0 break-words text-2xl font-bold text-gray-900 dark:text-slate-100 sm:text-3xl';
   const containerClass =

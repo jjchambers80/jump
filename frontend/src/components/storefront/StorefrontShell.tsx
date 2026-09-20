@@ -26,6 +26,7 @@ export interface StorefrontOrganization {
 
 interface StorefrontShellProps<T extends { organization: StorefrontOrganization }> {
   orgId: string;
+  organizationSlug?: string;
   state: StorefrontContentState<T>;
   notFoundTitle: string;
   children: (data: T) => ReactNode;
@@ -33,6 +34,7 @@ interface StorefrontShellProps<T extends { organization: StorefrontOrganization 
 
 export default function StorefrontShell<T extends { organization: StorefrontOrganization }>({
   orgId,
+  organizationSlug,
   state,
   notFoundTitle,
   children,
@@ -93,7 +95,7 @@ export default function StorefrontShell<T extends { organization: StorefrontOrga
       themeMode={organization.themeMode}
       className="min-h-screen bg-gray-50 dark:bg-slate-900"
     >
-      <OrganizationHeader organization={organization} as="link" nav signIn={organization.buyerSignInLinks !== false} />
+      <OrganizationHeader organization={organization} organizationSlug={organizationSlug} as="link" nav signIn={organization.buyerSignInLinks !== false} />
       {children(data)}
       <StorefrontFooter organization={organization} />
     </BrandScope>

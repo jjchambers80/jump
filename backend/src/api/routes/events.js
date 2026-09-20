@@ -41,6 +41,15 @@ publicRouter.get('/', async (req, res, next) => {
   }
 });
 
+/** Canonical route lookup used by the frontend's permanent legacy redirect. */
+publicRouter.get('/:eventId/meta', async (req, res, next) => {
+  try {
+    res.json(await eventService.getPublicRoute(req.params.eventId));
+  } catch (error) {
+    next(error);
+  }
+});
+
 /**
  * GET /events/:eventId
  * Get single published event details (public, no auth required)

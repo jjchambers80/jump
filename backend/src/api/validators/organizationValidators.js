@@ -2,7 +2,7 @@
 // Input validation for organization endpoints per FR-048
 
 import { ValidationError } from '../../middleware/errorHandler.js';
-import { SLUG_MAX_LENGTH, SLUG_PATTERN } from '../../utils/slug.js';
+import { normalizeCustomSlug } from '../../utils/slug.js';
 
 export const BUSINESS_TYPES = [
   'SOLE_PROPRIETORSHIP',
@@ -85,7 +85,7 @@ const normalizeOptionalString = (body, field, label, maxLength = 255) => {
  * Validate organization creation payload
  */
 export const validateCreateOrganization = (req, res, next) => {
-  const { name } = req.body;
+  const { name, slug } = req.body;
 
   if (!name || typeof name !== 'string' || name.trim().length === 0) {
     return next(new ValidationError('Organization name is required'));
@@ -97,6 +97,11 @@ export const validateCreateOrganization = (req, res, next) => {
 
   // Normalize
   req.body.name = name.trim();
+  try {
+    if (slug !== undefined) req.body.slug = normalizeCustomSlug(slug);
+  } catch (error) {
+    return next(error);
+  }
 
   next();
 };
@@ -117,17 +122,13 @@ export const validateUpdateOrganization = (req, res, next) => {
     req.body.name = name.trim();
   }
 
-  // slug: lowercase letters, digits, single hyphens between words
+  // null/blank explicitly resets a customized slug to title-derived behavior.
   if (slug !== undefined) {
-    const normalized = typeof slug === 'string' ? slug.trim().toLowerCase() : '';
-    if (!SLUG_PATTERN.test(normalized) || normalized.length > SLUG_MAX_LENGTH) {
-      return next(
-        new ValidationError(
-          `Slug must be 1-${SLUG_MAX_LENGTH} lowercase letters, digits, and hyphens (e.g. raleigh-retro-gamers)`
-        )
-      );
+    try {
+      req.body.slug = normalizeCustomSlug(slug);
+    } catch (error) {
+      return next(error);
     }
-    req.body.slug = normalized;
   }
 
   if (status !== undefined) {

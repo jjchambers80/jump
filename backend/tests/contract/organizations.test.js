@@ -228,26 +228,32 @@ describe('Organization Contract Tests', () => {
       expect(res.status).toBe(403);
     });
 
-    it('keeps the slug when the name changes', async () => {
-      const before = await prisma.organization.findUnique({ where: { id: orgId }, select: { slug: true } });
+    it('updates a generated slug when the name changes', async () => {
       const res = await request(app)
         .patch(`/organizations/${orgId}`)
         .set('Authorization', `Bearer ${orgAdminToken}`)
         .send({ name: 'Renamed Patch Org' });
 
       expect(res.status).toBe(200);
-      expect(res.body.slug).toBe(before.slug);
+      expect(res.body).toMatchObject({ slug: 'renamed-patch-org', slugCustomized: false });
     });
 
-    it('sets a normalized slug explicitly', async () => {
+    it('sets a custom slug explicitly and preserves it across later renames', async () => {
       const slug = `patched-slug-${Date.now()}`;
-      const res = await request(app)
+      const customized = await request(app)
         .patch(`/organizations/${orgId}`)
         .set('Authorization', `Bearer ${orgAdminToken}`)
-        .send({ slug: ` ${slug.toUpperCase()} ` });
+        .send({ slug });
 
-      expect(res.status).toBe(200);
-      expect(res.body.slug).toBe(slug);
+      expect(customized.status).toBe(200);
+      expect(customized.body).toMatchObject({ slug, slugCustomized: true });
+
+      const renamed = await request(app)
+        .patch(`/organizations/${orgId}`)
+        .set('Authorization', `Bearer ${orgAdminToken}`)
+        .send({ name: 'Another Organization Name' });
+      expect(renamed.status).toBe(200);
+      expect(renamed.body).toMatchObject({ slug, slugCustomized: true });
     });
 
     it('returns 400 for an invalid slug', async () => {

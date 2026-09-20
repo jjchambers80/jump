@@ -193,16 +193,26 @@ class StorefrontPreferencesService {
   }
 
   /** Organization behind a public event / venue id (null when unknown). */
-  async organizationIdFor({ eventId, venueId }) {
+  async organizationIdFor({ eventId, venueId, organizationIdentifier }) {
+    if (organizationIdentifier) {
+      const organization = await prisma.organization.findFirst({
+        where: { OR: [{ id: organizationIdentifier }, { slug: organizationIdentifier }] },
+        select: { id: true },
+      });
+      return organization?.id ?? null;
+    }
     if (eventId) {
-      const event = await prisma.event.findUnique({
-        where: { id: eventId },
+      const event = await prisma.event.findFirst({
+        where: { OR: [{ id: eventId }, { slug: eventId }] },
         select: { venue: { select: { organizationId: true } } },
       });
       return event?.venue?.organizationId ?? null;
     }
     if (venueId) {
-      const venue = await prisma.venue.findUnique({ where: { id: venueId }, select: { organizationId: true } });
+      const venue = await prisma.venue.findFirst({
+        where: { OR: [{ id: venueId }, { slug: venueId }] },
+        select: { organizationId: true },
+      });
       return venue?.organizationId ?? null;
     }
     return null;

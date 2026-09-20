@@ -6,22 +6,34 @@ import logger from '../utils/logger.js';
 import { ConflictError, NotFoundError } from '../middleware/errorHandler.js';
 import { formatEventSummary } from '../utils/eventSummary.js';
 import taxService from './TaxService.js';
+import { rethrowSlugConflict, resolveUniqueSlug } from '../utils/slug.js';
+import { findByPublicIdentifier } from '../utils/publicIdentifier.js';
 
 class VenueService {
   /** Create a new venue within an organization. */
   async createVenue(orgId, data) {
-    const venue = await prisma.venue.create({
-      data: {
-        organizationId: orgId,
-        name: data.name,
-        address: data.address,
-        city: data.city || null,
-        state: data.state || null,
-        postalCode: data.postalCode || null,
-        timezone: data.timezone || 'America/New_York',
-        isPublic: data.isPublic !== undefined ? data.isPublic : true,
-      },
+    const slugState = await resolveUniqueSlug(prisma.venue, {
+      title: data.name,
+      customSlug: data.slug,
     });
+    let venue;
+    try {
+      venue = await prisma.venue.create({
+        data: {
+          organizationId: orgId,
+          name: data.name,
+          ...slugState,
+          address: data.address,
+          city: data.city || null,
+          state: data.state || null,
+          postalCode: data.postalCode || null,
+          timezone: data.timezone || 'America/New_York',
+          isPublic: data.isPublic !== undefined ? data.isPublic : true,
+        },
+      });
+    } catch (error) {
+      rethrowSlugConflict(error);
+    }
 
     logger.info('Venue created', {
       event: 'venue_created',
@@ -46,25 +58,26 @@ class VenueService {
   }
 
   /** Get public venue fields and published event summaries. */
-  async getPublicVenueById(id) {
-    const venue = await prisma.venue.findFirst({
+  async getPublicVenueById(identifier) {
+    const venue = await findByPublicIdentifier(prisma.venue, identifier, {
       where: {
-        id,
         isPublic: true,
         organization: { status: 'ACTIVE' },
       },
       select: {
         id: true,
+        slug: true,
         name: true,
         address: true,
         timezone: true,
         logoUrl: true,
-        organization: { select: { brandColor: true, themeMode: true } },
+        organization: { select: { id: true, slug: true, brandColor: true, themeMode: true } },
         events: {
           where: { status: 'PUBLISHED' },
           orderBy: { date: 'asc' },
           select: {
             id: true,
+            slug: true,
             name: true,
             date: true,
             category: true,
@@ -89,16 +102,22 @@ class VenueService {
 
     const publicVenue = {
       id: venue.id,
+      slug: venue.slug,
       name: venue.name,
+      slug: venue.slug,
       address: venue.address,
       timezone: venue.timezone,
       logoUrl: venue.logoUrl,
       brandColor: venue.organization?.brandColor || null,
       themeMode: venue.organization?.themeMode || 'SYSTEM',
+      organizationId: venue.organization?.id || null,
+      organizationSlug: venue.organization?.slug || null,
     };
     const eventVenue = {
       id: venue.id,
+      slug: venue.slug,
       name: venue.name,
+      slug: venue.slug,
       address: venue.address,
     };
 
@@ -108,6 +127,16 @@ class VenueService {
         formatEventSummary({ ...event, venue: eventVenue })
       ),
     };
+  }
+
+  /** Canonical public route data; intentionally bypasses the private-store gate. */
+  async getPublicRoute(identifier) {
+    const venue = await findByPublicIdentifier(prisma.venue, identifier, {
+      where: { isPublic: true, organization: { status: 'ACTIVE' } },
+      select: { id: true, slug: true },
+    });
+    if (!venue) throw new NotFoundError('Venue not found');
+    return venue;
   }
 
   /** List venues for an organization. */
@@ -127,7 +156,7 @@ class VenueService {
   async updateVenue(orgId, id, data) {
     const existing = await prisma.venue.findFirst({
       where: { id, organizationId: orgId },
-      select: { id: true },
+      select: { id: true, name: true, slug: true, slugCustomized: true },
     });
     if (!existing) {
       throw new NotFoundError('Venue not found');
@@ -135,6 +164,18 @@ class VenueService {
 
     const updateData = {};
     if (data.name !== undefined) updateData.name = data.name;
+    if (data.name !== undefined || data.slug !== undefined) {
+      Object.assign(
+        updateData,
+        await resolveUniqueSlug(prisma.venue, {
+          title: data.name ?? existing.name,
+          customSlug: data.slug,
+          currentSlug: existing.slug,
+          slugCustomized: existing.slugCustomized,
+          exceptId: id,
+        })
+      );
+    }
     if (data.address !== undefined) updateData.address = data.address;
     if (data.city !== undefined) updateData.city = data.city;
     if (data.state !== undefined) updateData.state = data.state;
@@ -142,7 +183,12 @@ class VenueService {
     if (data.timezone !== undefined) updateData.timezone = data.timezone;
     if (data.isPublic !== undefined) updateData.isPublic = data.isPublic;
 
-    const venue = await prisma.venue.update({ where: { id }, data: updateData });
+    let venue;
+    try {
+      venue = await prisma.venue.update({ where: { id }, data: updateData });
+    } catch (error) {
+      rethrowSlugConflict(error);
+    }
 
     logger.info('Venue updated', {
       event: 'venue_updated',

@@ -7,6 +7,19 @@ import { ConflictError, ValidationError } from '../middleware/errorHandler.js';
 export const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 export const SLUG_MAX_LENGTH = 60;
 
+export function normalizeCustomSlug(value, field = 'slug') {
+  if (value === undefined || value === null) return value;
+  if (typeof value !== 'string') throw new ValidationError(`${field} must be a string or null`);
+  const normalized = value.trim().toLowerCase();
+  if (normalized === '') return '';
+  if (normalized.length > SLUG_MAX_LENGTH || !SLUG_PATTERN.test(normalized)) {
+    throw new ValidationError(
+      `${field} must be 1-${SLUG_MAX_LENGTH} lowercase letters, digits, and hyphens`
+    );
+  }
+  return normalized;
+}
+
 export function slugify(name) {
   return String(name || '')
     .normalize('NFKD')
@@ -66,4 +79,50 @@ export async function uniqueSlug(
   }
 
   throw new ConflictError('Could not find a free URL slug');
+}
+
+/** Resolve provenance and allocate a slug, rejecting collisions for typed values. */
+export async function resolveUniqueSlug(
+  model,
+  {
+    scope = {},
+    title,
+    customSlug,
+    currentSlug = null,
+    slugCustomized = false,
+    exceptId = null,
+    field = 'slug',
+    fallback = null,
+  }
+) {
+  const resolved = resolveSlug({ title, customSlug, currentSlug, slugCustomized });
+
+  if (resolved.slugCustomized) {
+    const where = { ...scope, [field]: resolved.slug };
+    if (exceptId) where.NOT = { id: exceptId };
+    const clash = await model.findFirst({ where, select: { id: true } });
+    if (clash) throw new ConflictError('That URL slug is already in use', { field: 'slug' });
+    return resolved;
+  }
+
+  return {
+    slug: await uniqueSlug(model, {
+      scope,
+      raw: resolved.slug,
+      exceptId,
+      field,
+      fallback,
+    }),
+    slugCustomized: false,
+  };
+}
+
+/** Turn a database uniqueness race on a slug write into the public 409 contract. */
+export function rethrowSlugConflict(error, targetField = 'slug') {
+  const target = error?.meta?.target;
+  const fields = Array.isArray(target) ? target : [String(target || '')];
+  if (error?.code === 'P2002' && fields.some((field) => field.includes(targetField))) {
+    throw new ConflictError('That URL slug is already in use', { field: 'slug' });
+  }
+  throw error;
 }

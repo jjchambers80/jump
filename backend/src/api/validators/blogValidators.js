@@ -1,6 +1,6 @@
 import { ValidationError } from '../../middleware/errorHandler.js';
 import { SEO_TITLE_MAX, SEO_DESCRIPTION_MAX } from '../../utils/pageLimits.js';
-import { SLUG_MAX_LENGTH } from '../../utils/slug.js';
+import { SLUG_MAX_LENGTH, normalizeCustomSlug } from '../../utils/slug.js';
 import {
   BLOG_POST_CONTENT_MAX,
   BLOG_POST_TAGS_MAX,
@@ -18,6 +18,7 @@ const POST_KEYS = new Set([
   'isVisible',
   'publishedAt',
   'handle',
+  'slug',
   'seoTitle',
   'seoDescription',
 ]);
@@ -45,6 +46,7 @@ function collectPostErrors(body, { partial }) {
     isVisible,
     publishedAt,
     handle,
+    slug,
   } = body;
 
   if (title !== undefined || !partial) {
@@ -90,13 +92,21 @@ function collectPostErrors(body, { partial }) {
     }
   }
   if (handle !== undefined && handle !== null) {
-    if (typeof handle !== 'string')
-      errors.push({ field: 'handle', message: 'handle must be a string' });
-    else if (handle.trim().length > SLUG_MAX_LENGTH)
-      errors.push({
-        field: 'handle',
-        message: `handle must be ${SLUG_MAX_LENGTH} characters or less`,
-      });
+    try {
+      body.handle = normalizeCustomSlug(handle, 'handle');
+    } catch (error) {
+      errors.push({ field: 'handle', message: error.message });
+    }
+  }
+  if (slug !== undefined && slug !== null) {
+    try {
+      body.slug = normalizeCustomSlug(slug);
+    } catch (error) {
+      errors.push({ field: 'slug', message: error.message });
+    }
+  }
+  if (handle !== undefined && slug !== undefined && body.handle !== body.slug) {
+    errors.push({ field: 'slug', message: 'slug and handle must match when both are provided' });
   }
   optionalString(errors, body, 'seoTitle', SEO_TITLE_MAX);
   optionalString(errors, body, 'seoDescription', SEO_DESCRIPTION_MAX);

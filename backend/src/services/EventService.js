@@ -10,6 +10,8 @@ import taxService from './TaxService.js';
 import applicationFormService from './ApplicationFormService.js';
 import addOnService from './AddOnService.js';
 import { PAID_ORDER_STATUSES } from './paidStatuses.js';
+import { rethrowSlugConflict, resolveUniqueSlug } from '../utils/slug.js';
+import { findByPublicIdentifier } from '../utils/publicIdentifier.js';
 
 class EventService {
   /**
@@ -57,11 +59,19 @@ class EventService {
       }
     }
 
+    const slugState = await resolveUniqueSlug(prisma.event, {
+      title: name,
+      customSlug: data.slug,
+    });
+
     // Create event with price tiers in a transaction
-    const event = await prisma.event.create({
+    let event;
+    try {
+      event = await prisma.event.create({
       data: {
         venueId,
         name,
+        ...slugState,
         description: description || null,
         date: eventDate,
         capacity: capacityNum,
@@ -88,7 +98,10 @@ class EventService {
         venue: true,
         priceTiers: { orderBy: { displayOrder: 'asc' } },
       },
-    });
+      });
+    } catch (error) {
+      rethrowSlugConflict(error);
+    }
 
     logger.info('Event created', {
       event: 'event_created',
@@ -126,10 +139,12 @@ class EventService {
     if (newName.length > 255) throw new ValidationError('Event name must be between 1 and 255 characters');
 
     const { event, forms } = await prisma.$transaction(async (tx) => {
+      const slugState = await resolveUniqueSlug(tx.event, { title: newName });
       const created = await tx.event.create({
         data: {
           venueId: source.venueId,
           name: newName,
+          ...slugState,
           description: source.description,
           logoUrl: source.logoUrl,
           imageId: source.imageId,
@@ -208,6 +223,19 @@ class EventService {
       updateData.name = updates.name;
     }
 
+    if (updates.name !== undefined || updates.slug !== undefined) {
+      Object.assign(
+        updateData,
+        await resolveUniqueSlug(prisma.event, {
+          title: updates.name ?? existing.name,
+          customSlug: updates.slug,
+          currentSlug: existing.slug,
+          slugCustomized: existing.slugCustomized,
+          exceptId: eventId,
+        })
+      );
+    }
+
     if (updates.description !== undefined) {
       updateData.description = updates.description;
     }
@@ -258,14 +286,19 @@ class EventService {
       updateData.imageId = updates.imageId;
     }
 
-    const event = await prisma.event.update({
-      where: { id: eventId },
-      data: updateData,
-      include: {
-        venue: true,
-        priceTiers: { orderBy: { displayOrder: 'asc' } },
-      },
-    });
+    let event;
+    try {
+      event = await prisma.event.update({
+        where: { id: eventId },
+        data: updateData,
+        include: {
+          venue: true,
+          priceTiers: { orderBy: { displayOrder: 'asc' } },
+        },
+      });
+    } catch (error) {
+      rethrowSlugConflict(error);
+    }
 
     logger.info('Event updated', {
       event: 'event_updated',
@@ -397,7 +430,7 @@ class EventService {
         where,
         include: {
           venue: {
-            select: { id: true, name: true, address: true },
+            select: { id: true, name: true, slug: true, address: true },
           },
           priceTiers: {
             where: { isActive: true },
@@ -434,11 +467,10 @@ class EventService {
    * @param {string} eventId - Event ID
    * @returns {Promise<Object>} Event detail with venue and price tiers
    */
-  async getEventById(eventId) {
-    const event = await prisma.event.findUnique({
-      where: { id: eventId },
+  async getEventById(identifier) {
+    const event = await findByPublicIdentifier(prisma.event, identifier, {
       include: {
-        venue: { include: { organization: { select: { id: true, name: true, logoUrl: true, brandColor: true, themeMode: true, taxInclusivePricing: true, buyerSignInLinks: true } } } },
+        venue: { include: { organization: { select: { id: true, slug: true, name: true, logoUrl: true, brandColor: true, themeMode: true, taxInclusivePricing: true, buyerSignInLinks: true } } } },
         priceTiers: { orderBy: { displayOrder: 'asc' } },
         // Add-ons a ticket checkout may offer (spec 012); the storefront picks
         // per cart tier via `allTiers` / `priceTierIds`.
@@ -455,6 +487,16 @@ class EventService {
     }
 
     return this._formatEventDetail(event);
+  }
+
+  /** Canonical public route data; intentionally bypasses the private-store gate. */
+  async getPublicRoute(identifier) {
+    const event = await findByPublicIdentifier(prisma.event, identifier, {
+      where: { status: 'PUBLISHED', venue: { organization: { status: 'ACTIVE' } } },
+      select: { id: true, slug: true },
+    });
+    if (!event) throw new NotFoundError('Event not found');
+    return event;
   }
 
   /**
@@ -651,7 +693,10 @@ class EventService {
   _formatEventDetail(event) {
     return {
       id: event.id,
+      slug: event.slug,
       name: event.name,
+      slug: event.slug,
+      slugCustomized: event.slugCustomized,
       description: event.description,
       logoUrl: event.logoUrl || null,
       date: event.date,
@@ -666,6 +711,7 @@ class EventService {
         region: taxService.resolveRegionForVenue(event.venue)?.region || null,
       },
       organizationId: event.venue?.organization?.id || null,
+      organizationSlug: event.venue?.organization?.slug || null,
       organizationName: event.venue?.organization?.name || null,
       // Storefront header (logo + name) on event, checkout and apply pages.
       organizationLogoUrl: event.venue?.organization?.logoUrl || null,
@@ -678,7 +724,9 @@ class EventService {
       venue: event.venue
         ? {
             id: event.venue.id,
+            slug: event.venue.slug,
             name: event.venue.name,
+            slug: event.venue.slug,
             address: event.venue.address,
             timezone: event.venue.timezone,
           }

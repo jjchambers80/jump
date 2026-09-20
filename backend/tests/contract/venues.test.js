@@ -269,6 +269,23 @@ describe('Venue Contract Tests', () => {
       expect(res.body).toHaveProperty('id');
       expect(res.body.name).toBe('Test Venue');
       expect(res.body.organizationId).toBe(testOrgId);
+      expect(res.body).toMatchObject({ slug: 'test-venue', slugCustomized: false });
+    });
+
+    it('accepts a custom slug and rejects a duplicate custom slug', async () => {
+      const slug = `venue-custom-${Date.now()}`;
+      const first = await request(app)
+        .post(`/organizations/${testOrgId}/venues`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({ name: 'Custom Venue', address: '1 Slug Way', slug });
+      expect(first.status).toBe(201);
+      expect(first.body).toMatchObject({ slug, slugCustomized: true });
+
+      const duplicate = await request(app)
+        .post(`/organizations/${testOrgId}/venues`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({ name: 'Other Venue', address: '2 Slug Way', slug });
+      expect(duplicate.status).toBe(409);
     });
 
     it('should return 201 when admin creates a venue', async () => {
@@ -371,6 +388,19 @@ describe('Venue Contract Tests', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.name).toBe('New Venue Name');
+      expect(res.body).toMatchObject({ slug: 'new-venue-name', slugCustomized: false });
+
+      const custom = await request(app)
+        .patch(`/organizations/${testOrgId}/venues/${venueId}`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({ slug: 'stable-venue-url' });
+      expect(custom.body).toMatchObject({ slug: 'stable-venue-url', slugCustomized: true });
+
+      const renamed = await request(app)
+        .patch(`/organizations/${testOrgId}/venues/${venueId}`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({ name: 'Newest Venue Name' });
+      expect(renamed.body).toMatchObject({ slug: 'stable-venue-url', slugCustomized: true });
     });
 
     it('rejects oversized fields and arbitrary logo URLs', async () => {
