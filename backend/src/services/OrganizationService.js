@@ -226,7 +226,6 @@ class OrganizationService {
     if (!org) throw new NotFoundError('Organization not found');
     return {
       id: org.id,
-      slug: org.slug,
       name: org.name,
       slug: org.slug,
       title: org.seoTitle || org.name,
@@ -295,7 +294,6 @@ venue: { select: { id: true, slug: true, name: true, address: true } },
 
     const organization = {
       id: org.id,
-      slug: org.slug,
       name: org.name,
       slug: org.slug,
       logoUrl: org.logoUrl,

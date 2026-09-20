@@ -7,16 +7,11 @@
 export const SEO_TITLE_MAX = 70;
 export const SEO_DESCRIPTION_MAX = 160;
 
+import { slugify } from '@/lib/slug';
+
 /** Client-side preview of the handle the backend derives from a title. */
 export function previewHandle(value: string) {
-  return value
-    .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60)
-    .replace(/-+$/g, '');
+  return slugify(value);
 }
 
 const field =
