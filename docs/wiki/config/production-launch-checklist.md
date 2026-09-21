@@ -98,6 +98,19 @@ Code and tests shipped 2026-09-18 behind `BILLING_ENABLED` (default off). Until 
 - Optional: `HIBP_CHECK=false` if outbound calls to `api.pwnedpasswords.com` are unwanted (default on, fail-open).
 - Passkeys need the RP id to match the sign-in host: the default is the host of the first `FRONTEND_URL`; set `WEBAUTHN_RP_ID` only if that differs.
 
+## Legal (spec 023)
+
+Spec written 2026-09-18 (`specs/023-legal-compliance/spec.md`). Phase 0 shipped dark 2026-09-19 (PR #99: `/legal/<slug>` route, legacy redirects, dead customers route removed; PR #95: `LegalAcceptance` capture on apply and checkout); `security.txt` and DMCA agent wait on the legal entity name. Phase 1 needs the attorney-reviewed documents and blocks launch. Open questions are spec §12 — the entity details (Q1), dispute resolution (Q2), merchant of record (Q3, same decision as Connect above), refund allocation (Q4) and the controller / processor framing (Q7) gate drafting.
+
+- [ ] Answer spec 023 §12 Q1–Q4, Q7 with counsel; hand the spec's §4 content requirements to the attorney.
+- [ ] Register the DMCA designated agent (copyright.gov) and publish the contact on `/legal/copyright`.
+- [ ] Create and monitor `legal@`, `privacy@`, `security@` and the DMCA mailbox; publish `security.txt`.
+- [ ] Record vendor DPA / terms acceptance (Stripe, Resend, Railway, Google OAuth) in `docs/wiki/config/privacy-register.md`.
+- [ ] Drop counsel's Markdown into `frontend/content/legal/`, set versions, flip `NEXT_PUBLIC_LEGAL_PAGES_ENABLED=true`, verify the footer and `/legal/*` on the platform host and on one custom domain.
+- [ ] Verify one PAID application form shows the card-authorization checkbox and the acceptance row is written; verify one checkout writes `LegalAcceptance` rows.
+- [ ] Before `BILLING_ENABLED`: subscribe-step renewal / cancellation disclosure text approved (spec 023 Q8).
+- [ ] Before `STRIPE_CONNECT_ENABLED`: Organizer Terms Connect annex approved; payouts interstitial live.
+
 ## Related
 
 - [Tax Settings](../features/tax-settings.md), [Tax Calculation](../features/tax-calculation.md)
