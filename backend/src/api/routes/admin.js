@@ -586,7 +586,7 @@ router.delete('/application-templates/:templateId', requireAdmin, wrap(async (re
 router.get('/events/:eventId/map', wrap(async (req, res) => {
   const orgId = await activeOrgFor(req);
   const map = await mapService.findByEvent(orgId, req.params.eventId);
-  if (!map) return res.json(null);
+  if (!map) return res.status(404).json({ error: 'NotFoundError', message: 'No map for this event' });
   res.json({ mapId: map.id });
 }));
 

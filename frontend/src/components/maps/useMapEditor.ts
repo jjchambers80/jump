@@ -31,6 +31,7 @@ export interface EditorState {
   underlayFileId: string | null;
   underlayOpacity: number;
   status: 'DRAFT' | 'PUBLISHED';
+  eventId: string;
 }
 
 interface Snapshot {
@@ -85,6 +86,7 @@ export function useMapEditor(mapId: string) {
           underlayFileId: data.underlayFileId,
           underlayOpacity: data.underlayOpacity,
           status: data.status,
+          eventId: data.eventId,
         });
         setTiers(data.tiers || []);
         setLoading(false);

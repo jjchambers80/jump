@@ -2,12 +2,14 @@
 
 import React, { useState, useCallback, Suspense, useRef, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { useOrg } from '@/components/OrgContext';
 import MapCanvas from '@/components/maps/MapCanvas';
 import MapLegend from '@/components/maps/MapLegend';
 import EditorToolbar from '@/components/maps/EditorToolbar';
 import EditorSidebar from '@/components/maps/EditorSidebar';
 import { useMapEditor, type EditorTool } from '@/components/maps/useMapEditor';
+import { mapsApi } from '@/services/api';
 import { ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
 import type { MapBooth, MapElement } from '@/services/api';
 import { snapToGrid, findAlignmentGuides } from '@/components/maps/layoutOps';
@@ -24,6 +26,8 @@ function BuilderContent() {
   const router = useRouter();
   const mapId = params.mapId as string;
   const { selectedOrgId } = useOrg();
+  const { data: session } = useSession();
+  const role = (session?.user as { role?: string } | undefined)?.role;
 
   const {
     state,
@@ -59,6 +63,8 @@ function BuilderContent() {
   const transformRef = useRef<ReactZoomPanPinchRef>(null);
   const [guides, setGuides] = useState<{ axis: 'x' | 'y'; pos: number }[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  // Booth move mode
+  const [moveMode, setMoveMode] = useState<string | null>(null);
 
   // Reset selected booth when selectedIds changes
   useEffect(() => {
@@ -101,14 +107,72 @@ function BuilderContent() {
 
   const handleCanvasClick = useCallback(
     (id: string, e?: React.MouseEvent | React.KeyboardEvent) => {
+      // If in move mode, attempt the move
+      if (moveMode && id !== moveMode) {
+        doMove(moveMode, id);
+        return;
+      }
       if (selectedIds.has(id)) {
         setSelectedIds(new Set());
       } else {
         setSelectedIds(new Set([id]));
       }
     },
-    [selectedIds, setSelectedIds]
+    [selectedIds, setSelectedIds, moveMode]
   );
+
+  // ─── Booth assignment API calls ──────────────────────────────────
+
+  const doAssign = useCallback(async (boothId: string, applicationId: string, force: boolean) => {
+    if (!state) return;
+    try {
+      const result = await mapsApi.assignBooth(mapId, boothId, applicationId, force);
+      // Reload the full map to get fresh state
+      const fresh = await mapsApi.get(mapId);
+      updateBooths(fresh.booths);
+      const update: any = {};
+      update.status = fresh.status;
+      update.booths = fresh.booths;
+      updateState(update);
+    } catch (err: any) {
+      throw err;
+    }
+  }, [state, mapId, updateBooths, updateState]);
+
+  const doUnassign = useCallback(async (boothId: string) => {
+    try {
+      const result = await mapsApi.unassignBooth(mapId, boothId);
+      const fresh = await mapsApi.get(mapId);
+      updateBooths(fresh.booths);
+    } catch (err: any) {
+      // Show error
+      console.error('Unassign failed', err);
+    }
+  }, [mapId, updateBooths]);
+
+  const doStatusChange = useCallback(async (boothId: string, status: 'AVAILABLE' | 'RESERVED' | 'BLOCKED') => {
+    try {
+      const result = await mapsApi.setBoothStatus(mapId, boothId, status);
+      const fresh = await mapsApi.get(mapId);
+      updateBooths(fresh.booths);
+    } catch (err: any) {
+      console.error('Status change failed', err);
+    }
+  }, [mapId, updateBooths]);
+
+  const doMove = useCallback(async (fromBoothId: string, toBoothId: string) => {
+    try {
+      const result = await mapsApi.moveBooth(mapId, fromBoothId, toBoothId);
+      const fresh = await mapsApi.get(mapId);
+      updateBooths(fresh.booths);
+      setMoveMode(null);
+    } catch (err: any) {
+      console.error('Move failed', err);
+      setMoveMode(null);
+    }
+  }, [mapId, updateBooths]);
+
+  // ─── End booth assignment API ────────────────────────────────────
 
   const handleCanvasPointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -213,6 +277,9 @@ function BuilderContent() {
 
   // Filter booths by selected tier in legend
   const filteredBooths = state?.booths || [];
+
+  // Session-based eventId from the first tier's form, or fallback URL param
+  const eventId = state?.booths?.[0]?.mapId ? (mapId) : '';
 
   if (loading) {
     return (
@@ -353,6 +420,16 @@ function BuilderContent() {
           legendTiers={legendTiers}
           selectedTierId={null}
           onTierSelect={() => {}}
+          // Booth panel props
+          eventId={state.eventId}
+          mapStatus={state.status}
+          role={role}
+          onBoothAssign={doAssign}
+          onBoothUnassign={doUnassign}
+          onBoothStatusChange={doStatusChange}
+          onBoothMoveStart={(boothId) => setMoveMode(boothId)}
+          onBoothMoveCancel={() => setMoveMode(null)}
+          moveMode={moveMode}
         />
       </div>
 

@@ -4,6 +4,7 @@ import React from 'react';
 import type { MapBooth, MapTier, MapElement } from '@/services/api';
 import { STATUS_BADGE_COLORS, STATUS_LABELS } from './mapTheme';
 import MapLegend from './MapLegend';
+import BoothPanel from './BoothPanel';
 
 interface EditorSidebarProps {
   tabs: 'settings' | 'properties' | 'legend';
@@ -32,6 +33,16 @@ interface EditorSidebarProps {
   legendTiers: { id: string; name: string; price: number; swatch: number }[];
   selectedTierId: string | null;
   onTierSelect: (tierId: string | null) => void;
+  // Booth panel (spec 014 phase 1 assignment)
+  eventId: string;
+  mapStatus: 'DRAFT' | 'PUBLISHED';
+  role: string | undefined;
+  onBoothAssign: (boothId: string, applicationId: string, force: boolean) => Promise<void>;
+  onBoothUnassign: (boothId: string) => void;
+  onBoothStatusChange: (boothId: string, status: 'AVAILABLE' | 'RESERVED' | 'BLOCKED') => void;
+  onBoothMoveStart: (boothId: string) => void;
+  onBoothMoveCancel: () => void;
+  moveMode: string | null;
 }
 
 export default function EditorSidebar({
@@ -58,6 +69,15 @@ export default function EditorSidebar({
   legendTiers,
   selectedTierId,
   onTierSelect,
+  eventId,
+  mapStatus,
+  role,
+  onBoothAssign,
+  onBoothUnassign,
+  onBoothStatusChange,
+  onBoothMoveStart,
+  onBoothMoveCancel,
+  moveMode,
 }: EditorSidebarProps) {
   const tabClass = (tab: string) =>
     `flex-1 px-3 py-2 text-xs font-medium rounded-t transition-colors ${
@@ -181,19 +201,6 @@ export default function EditorSidebar({
           <>
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">
-                Status
-              </label>
-              <span
-                className={`inline-block px-2 py-0.5 text-xs rounded-full ${
-                  STATUS_BADGE_COLORS[selectedBooth.status] || 'bg-gray-100 text-gray-700'
-                }`}
-              >
-                {STATUS_LABELS[selectedBooth.status] || selectedBooth.status}
-              </span>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">
                 Label
               </label>
               <input
@@ -288,16 +295,20 @@ export default function EditorSidebar({
               </select>
             </div>
 
-            {/* Booth panel extension point — Assign/Unassign/Move buttons go here (phase 2) */}
-
-            {selectedBooth.holder && (
-              <div className="pt-2 border-t border-gray-200 dark:border-slate-700">
-                <p className="text-xs text-gray-500 dark:text-slate-400 mb-1">Assigned to</p>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">
-                  {selectedBooth.holder.businessName || 'Unknown vendor'}
-                </p>
-              </div>
-            )}
+            {/* Booth panel — assignment operations */}
+            <BoothPanel
+              booth={selectedBooth}
+              mapId={selectedBooth.mapId || ''}
+              eventId={eventId}
+              mapStatus={mapStatus}
+              role={role}
+              onStatusChange={onBoothStatusChange}
+              onAssign={onBoothAssign}
+              onUnassign={onBoothUnassign}
+              onMoveStart={onBoothMoveStart}
+              onMoveCancel={onBoothMoveCancel}
+              moveMode={moveMode}
+            />
           </>
         )}
 

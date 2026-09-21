@@ -79,6 +79,7 @@ export default function Booth({
     <g
       role="button"
       tabIndex={0}
+      data-testid={`booth-${booth.label}`}
       aria-label={`Booth ${booth.label}, ${booth.w} by ${booth.h}, ${
         booth.tierId ? 'tier assigned' : 'no tier'
       }, ${statusText}`}

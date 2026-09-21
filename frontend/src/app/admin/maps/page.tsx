@@ -202,6 +202,7 @@ function MapsListContent() {
               {maps.map((m) => (
                 <tr
                   key={m.id}
+                  data-testid="map-row"
                   className="border-b border-gray-100 dark:border-slate-700/50 hover:bg-gray-50 dark:hover:bg-slate-700/50"
                 >
                   <td className="px-4 py-3">

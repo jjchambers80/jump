@@ -66,6 +66,40 @@ describe('BoothService', () => {
       expect(result.status).toBe('SOLD');
       expect(result.label).toBe('A1');
     });
+
+    test('two concurrent assigns on one booth — exactly one succeeds', async () => {
+      // Simulate FOR UPDATE row lock: first caller sees AVAILABLE, second sees SOLD
+      let callCount = 0;
+      mockPrisma.floorMap = { findFirst: jest.fn().mockResolvedValue({ id: mapId, eventId: 'evt_1' }) };
+      mockPrisma.$transaction = jest.fn(async (fn) => {
+        callCount++;
+        const isFirst = callCount === 1;
+        const mockTx = {
+          $queryRawUnsafe: jest.fn().mockResolvedValue([{
+            id: 'b_1', mapId, label: 'A1', status: isFirst ? 'AVAILABLE' : 'SOLD', tierId: null, applicationId: isFirst ? null : 'app_2',
+          }]),
+          application: {
+            findFirst: isFirst
+              ? jest.fn().mockResolvedValue({ id: 'app_1', tierId: null, eventId: 'evt_1' })
+              : jest.fn().mockResolvedValue({ id: 'app_2', tierId: null, eventId: 'evt_1' }),
+            findUnique: jest.fn().mockResolvedValue(null),
+            update: jest.fn(),
+          },
+          booth: {
+            findUnique: jest.fn().mockResolvedValue(null),
+            update: jest.fn(),
+          },
+        };
+        return fn(mockTx);
+      });
+
+      // First should succeed
+      const result = await service.assign(orgId, mapId, 'b_1', 'app_1', 'u_1');
+      expect(result.status).toBe('SOLD');
+
+      // Second should fail because booth is now SOLD
+      await expect(service.assign(orgId, mapId, 'b_1', 'app_2', 'u_2')).rejects.toThrow(ConflictError);
+    });
   });
 
   describe('unassign', () => {

@@ -109,6 +109,7 @@ class BoothService {
 
   /**
    * Move a holder from one booth to another (both on the same map).
+   * If the target is occupied, swaps the holders (exchange).
    * Locks both rows ordered by id to avoid deadlock.
    */
   async move(orgId, mapId, fromBoothId, toBoothId) {
@@ -132,31 +133,57 @@ class BoothService {
 
       if (!fromBooth || !toBooth) throw new NotFoundError('One or both booths not found');
       if (fromBooth.status !== 'SOLD') throw new ValidationError('Source booth is not sold');
-      if (!['AVAILABLE', 'RESERVED'].includes(toBooth.status)) {
+      if (!['AVAILABLE', 'RESERVED', 'SOLD'].includes(toBooth.status)) {
         throw new ConflictError('Target booth is not available');
       }
 
-      const applicationId = fromBooth.applicationId;
-      if (!applicationId) throw new ValidationError('Source booth has no assigned application');
+      const fromAppId = fromBooth.applicationId;
+      if (!fromAppId) throw new ValidationError('Source booth has no assigned application');
 
-      // Clear source
+      if (toBooth.status === 'SOLD' && toBooth.applicationId) {
+        // Swap: exchange holders between the two booths
+        const toAppId = toBooth.applicationId;
+
+        await tx.booth.update({
+          where: { id: fromBooth.id },
+          data: { status: 'SOLD', applicationId: toAppId, assignedById: toBooth.assignedById },
+        });
+
+        await tx.booth.update({
+          where: { id: toBooth.id },
+          data: { status: 'SOLD', applicationId: fromAppId, assignedById: fromBooth.assignedById },
+        });
+
+        await tx.application.update({
+          where: { id: fromAppId },
+          data: { boothLabel: toBooth.label },
+        });
+
+        await tx.application.update({
+          where: { id: toAppId },
+          data: { boothLabel: fromBooth.label },
+        });
+
+        return { fromBooth: fromBooth.id, toBooth: toBooth.id, label: toBooth.label, swapped: true };
+      }
+
+      // Normal move: clear source, set target
       await tx.booth.update({
         where: { id: fromBooth.id },
         data: { status: 'AVAILABLE', applicationId: null, holdApplicationId: null, holdExpiresAt: null, assignedById: null },
       });
 
-      // Set target
       await tx.booth.update({
         where: { id: toBooth.id },
-        data: { status: 'SOLD', applicationId, assignedById: fromBooth.assignedById },
+        data: { status: 'SOLD', applicationId: fromAppId, assignedById: fromBooth.assignedById },
       });
 
       await tx.application.update({
-        where: { id: applicationId },
+        where: { id: fromAppId },
         data: { boothLabel: toBooth.label },
       });
 
-      return { fromBooth: fromBooth.id, toBooth: toBooth.id, label: toBooth.label };
+      return { fromBooth: fromBooth.id, toBooth: toBooth.id, label: toBooth.label, swapped: false };
     });
   }
 

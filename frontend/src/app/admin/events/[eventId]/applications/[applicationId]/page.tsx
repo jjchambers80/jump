@@ -598,10 +598,35 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
             {/* Notes */}
             <div className={card} data-testid="application-notes">
               <h3 className="text-base font-semibold text-gray-900 dark:text-white">Notes</h3>
+
+              {/* Booth assignment (spec 014) */}
+              {app.booth && (
+                <div className="mt-3" data-testid="application-booth">
+                  <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Booth</p>
+                  <Link
+                    href={`/admin/maps/${app.booth.mapId}?booth=${app.booth.id}`}
+                    className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+                  >
+                    {app.booth.label} — view on map
+                  </Link>
+                </div>
+              )}
+
               <label htmlFor="booth-label" className="mt-3 block text-sm font-medium text-gray-700 dark:text-slate-300">
                 Booth / placement
               </label>
-              <input id="booth-label" value={booth} maxLength={60} onChange={(e) => setBooth(e.target.value)} className={field} placeholder="e.g. 104" />
+              <input
+                id="booth-label"
+                value={booth}
+                maxLength={60}
+                onChange={(e) => setBooth(e.target.value)}
+                disabled={Boolean(app.booth)}
+                className={`${field} ${app.booth ? 'opacity-60 cursor-not-allowed' : ''}`}
+                placeholder="e.g. 104"
+              />
+              {app.booth && (
+                <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Managed by the map — edit on the map builder.</p>
+              )}
               <label htmlFor="internal-note" className="mt-3 block text-sm font-medium text-gray-700 dark:text-slate-300">
                 Internal note
               </label>

@@ -349,7 +349,7 @@ class MapService {
     const boothCount = await prisma.booth.count({ where: { mapId, status: { not: 'BLOCKED' } } });
     if (boothCount < 1) throw new ValidationError('Map must have at least one booth to publish');
 
-    return prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx) => {
       await tx.floorMap.update({
         where: { id: mapId },
         data: { status: 'PUBLISHED', publishedAt: new Date() },
@@ -387,8 +387,10 @@ class MapService {
       }
 
       logger.info('Floor map published', { event: 'floor_map_published', mapId, organizationId: orgId });
-      return this.get(orgId, mapId);
     });
+    const result = await this.get(orgId, mapId);
+    logger.info('Publish get result', { status: result.status });
+    return result;
   }
 
   /** Unpublish: back to DRAFT. Leaves mapBound and quantities alone. */
