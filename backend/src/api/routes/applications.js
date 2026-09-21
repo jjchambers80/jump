@@ -27,7 +27,7 @@ const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/we
 
 // Per-IP cap on submissions (spec 020 factory; RATE_LIMIT_APPLICATION_SUBMIT_* overrides).
 const submitLimiter = makeLimiter('APPLICATION_SUBMIT', LIMITS.APPLICATION_SUBMIT);
-const boothLimiter = makeLimiter('BOOTH_CHOOSE', { ...LIMITS.BOOTH_CHOOSE, skipFailedRequests: true });
+const boothLimiter = makeLimiter('BOOTH_CHOOSE', LIMITS.BOOTH_CHOOSE);
 
 const upload = multer({
   storage: multer.memoryStorage(),

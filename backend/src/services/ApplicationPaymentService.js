@@ -319,16 +319,14 @@ class ApplicationPaymentService {
         error: error.message,
       });
       if (!isCardFailure(error) && !intentId) {
-        // No intent exists to reconcile. A released booth returns the
-        // application to PAYMENT_DUE so the vendor can select another one.
+        // No intent exists to reconcile. PAYMENT_DUE is the one state every
+        // retry path (pay-now, retry charge, offline settlement) accepts; a
+        // released booth lets the vendor select another one.
         await prisma.$transaction(async (tx) => {
-          const releasedBooth = await boothService.releaseHoldOnFailure(application.id, { tx });
+          await boothService.releaseHoldOnFailure(application.id, { tx });
           await tx.application.update({
             where: { id: application.id },
-            data: {
-              paymentStatus: releasedBooth ? 'PAYMENT_DUE' : 'CARD_ON_FILE',
-              capacitySlot: 'RESERVED',
-            },
+            data: { paymentStatus: 'PAYMENT_DUE', capacitySlot: 'RESERVED' },
           });
         });
         throw new ValidationError(`Could not charge the card on file: ${error.message}`);
@@ -395,11 +393,20 @@ class ApplicationPaymentService {
       const tier = application.tierId && tx.applicationTier?.findUnique
         ? await tx.applicationTier.findUnique({ where: { id: application.tierId }, select: { mapBound: true } })
         : null;
-      if (tier?.mapBound && application.status === 'APPROVED') {
-        await boothService.claimBooth(applicationId, null, { tx });
-      } else {
-        const booth = await boothService.boothForApplication(applicationId, { tx });
-        if (booth?.status === 'HELD') await boothService.claimBooth(applicationId, booth.id, { tx });
+      // Stripe has the money: the PAID transition never fails on booth state.
+      // A hold that vanished meanwhile is logged for the organizer to assign by hand.
+      try {
+        if (tier?.mapBound && application.status === 'APPROVED') {
+          await boothService.claimBooth(applicationId, null, { tx });
+        } else {
+          const booth = await boothService.boothForApplication(applicationId, { tx });
+          if (booth?.status === 'HELD') await boothService.claimBooth(applicationId, booth.id, { tx });
+        }
+      } catch (error) {
+        if (error?.code !== 'BOOTH_HOLD_MISSING') throw error;
+        logger.warn('Application paid without a booth hold', {
+          event: 'application_paid_without_booth', applicationId, error: error.message,
+        });
       }
       const row = await tx.application.update({
         where: { id: applicationId },
@@ -509,14 +516,14 @@ class ApplicationPaymentService {
         return this._onCheckoutCompleted(applicationId, { ...object, payment_status: 'paid' });
       case 'checkout.session.expired':
         if (object.metadata?.purpose === 'pay_now') {
-          {
-            const application = await prisma.application.findUnique({
-              where: { id: applicationId },
-              include: PAYMENT_INCLUDE,
-            });
-            if (application?.paymentStatus === 'PROCESSING') {
-              await this._markPaymentDue(application, 'Checkout session expired');
-            }
+          const application = await prisma.application.findUnique({
+            where: { id: applicationId },
+            include: PAYMENT_INCLUDE,
+          });
+          // Only the session the application is waiting on may reset it; a
+          // stale session expiring after a re-choose must not touch the new hold.
+          if (application?.paymentStatus === 'PROCESSING' && application.stripeCheckoutSessionId === object.id) {
+            await this._markPaymentDue(application, 'Checkout session expired');
           }
         }
         logger.info('Application checkout session expired', { applicationId, sessionId: object.id, mode: object.mode });
@@ -594,6 +601,10 @@ class ApplicationPaymentService {
   async _onIntentFailed(applicationId, intent) {
     const application = await prisma.application.findUnique({ where: { id: applicationId }, include: { form: true } });
     if (!application || application.paymentStatus !== 'PROCESSING') return;
+    // A decline inside hosted Checkout is retried by the vendor on Stripe's
+    // page within the same session; the session's expiry or completion
+    // settles it. Only off-session charges fail here.
+    if (intent.metadata?.purpose === 'pay_now' || intent.metadata?.purpose === 'submit') return;
     await this._markPaymentDue(application, intent.last_payment_error?.message || intent.status, intent.id);
     await this._send(applicationId, 'PAYMENT_DUE');
   }

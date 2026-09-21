@@ -57,6 +57,7 @@ describe('BoothService', () => {
           },
           booth: {
             findUnique: jest.fn().mockResolvedValue(null),
+            findFirst: jest.fn().mockResolvedValue(null),
             update: jest.fn(),
           },
         };
@@ -87,6 +88,7 @@ describe('BoothService', () => {
           },
           booth: {
             findUnique: jest.fn().mockResolvedValue(null),
+            findFirst: jest.fn().mockResolvedValue(null),
             update: jest.fn(),
           },
         };

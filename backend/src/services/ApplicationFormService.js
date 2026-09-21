@@ -358,6 +358,11 @@ class ApplicationFormService {
     const data = this._validateFormFields(body, existing.kind, existing);
     if (body.slug !== undefined) data.slug = await this._uniqueSlug(eventId, body.slug, formId);
     if (data.status === 'OPEN') this._assertCanOpen({ ...existing, ...data });
+    // A map-bound tier sells its booth after approval (spec 014 §4.2): the
+    // vendor picks a spot, then pays. Charging at submission has no spot yet.
+    if (data.chargeTiming === 'SUBMIT' && existing.tiers.some((t) => t.mapBound)) {
+      throw new ValidationError('Forms with tiers bound to a floor map must charge on approval');
+    }
     const form = await prisma.applicationForm.update({ where: { id: formId }, data, include: FORM_INCLUDE });
     return this._serializeForm(form, event, await this._addOnsForEvent(eventId));
   }

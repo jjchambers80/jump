@@ -479,11 +479,17 @@ class ApplicationService {
   }
 
   async _payNow(application) {
+    // Guard before anything moves: a replayed Pay on a settled application
+    // must be a plain 409, never a state change (it used to rewrite PAID rows).
+    if (application.status !== 'APPROVED' || application.paymentStatus !== 'PAYMENT_DUE') {
+      throw new ConflictError('There is no outstanding balance on this application');
+    }
     if (application.tier?.mapBound) await boothService.beginPayment(application.id);
     try {
       return { url: await applicationPaymentService.payNowUrl(application, await statusUrlFor(application)) };
     } catch (error) {
-      if (application.tier?.mapBound) {
+      // Only a failure to mint the Checkout session undoes the PROCESSING hold.
+      if (application.tier?.mapBound && !(error instanceof ConflictError)) {
         await applicationPaymentService._markPaymentDue(application, error.message).catch(() => {});
       }
       throw error;

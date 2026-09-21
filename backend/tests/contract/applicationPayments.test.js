@@ -424,7 +424,10 @@ describe('Application payments contract (spec 011 phase 2)', () => {
     expect(outage.status).toBe(400);
     expect(outage.body.message).toMatch(/Could not charge the card on file/);
     const row = await appRow(id2);
-    expect(row).toMatchObject({ status: 'APPROVED', paymentStatus: 'CARD_ON_FILE', capacitySlot: 'RESERVED' });
+    // PAYMENT_DUE is the one state retry charge, pay-now and offline settlement
+    // all accept; the saved card stays on the row for the retry.
+    expect(row).toMatchObject({ status: 'APPROVED', paymentStatus: 'PAYMENT_DUE', capacitySlot: 'RESERVED' });
+    expect(row.stripePaymentMethodId).toBeTruthy();
     // Clean up the reserved slot for later tests
     await prisma.$transaction([
       prisma.application.update({ where: { id: id2 }, data: { status: 'WITHDRAWN', capacitySlot: 'NONE' } }),

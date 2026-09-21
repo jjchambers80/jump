@@ -41,7 +41,7 @@ export { clientIpForRateLimit };
 // Per-IP cap on sign-in requests (spec 020 factory); the per-email cap lives in BuyerAuthService.
 const requestLimiter = makeLimiter('BUYER_AUTH_REQUEST', LIMITS.BUYER_AUTH_REQUEST);
 const verifyLimiter = makeLimiter('BUYER_AUTH_VERIFY', LIMITS.BUYER_AUTH_VERIFY);
-const boothLimiter = makeLimiter('BOOTH_CHOOSE', { ...LIMITS.BOOTH_CHOOSE, skipFailedRequests: true });
+const boothLimiter = makeLimiter('BOOTH_CHOOSE', LIMITS.BOOTH_CHOOSE);
 
 /** POST /buyer/auth/request — email a sign-in link. Never reveals account existence. */
 router.post('/auth/request', requestLimiter, async (req, res, next) => {

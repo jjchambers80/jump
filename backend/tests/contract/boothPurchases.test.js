@@ -300,4 +300,106 @@ describe('Approved vendor booth purchase API', () => {
     expect(body).toContain(`/map?booth=A5`);
     expect(body).not.toContain('Choose your booth');
   });
+
+  // ─── Review findings on 32b3b1e: money paths must be idempotent ────────
+
+  /** Put an application back to "approved, awaiting a booth" with every hold released. */
+  async function resetToPaymentDue(application, booth) {
+    await prisma.booth.updateMany({
+      where: { OR: [{ holdApplicationId: application.id }, { applicationId: application.id }, { id: booth.id }] },
+      data: { status: 'AVAILABLE', holdApplicationId: null, holdExpiresAt: null, applicationId: null, assignedById: null },
+    });
+    await prisma.application.update({
+      where: { id: application.id },
+      data: { status: 'APPROVED', paymentStatus: 'PAYMENT_DUE', boothLabel: null, stripeCheckoutSessionId: null },
+    });
+  }
+
+  it('a replayed Pay on a settled application is a plain 409 and changes nothing', async () => {
+    const application = applications[4]; // PAID with booth A5 from the previous test
+    const before = await prisma.application.findUnique({ where: { id: application.id } });
+    const res = await request(app)
+      .post(`/applications/${application.id}/pay`)
+      .query({ token: statusToken(application.id) });
+    expect(res.status).toBe(409);
+    const after = await prisma.application.findUnique({ where: { id: application.id } });
+    expect(after).toMatchObject({ status: 'APPROVED', paymentStatus: 'PAID', boothLabel: before.boothLabel });
+    const booth = await prisma.booth.findUnique({ where: { id: booths[4].id } });
+    expect(booth).toMatchObject({ status: 'SOLD', applicationId: application.id });
+  });
+
+  it('the PAID transition never fails on booth state: money in, no hold → paid without a booth', async () => {
+    const application = applications[3];
+    // Approved + PAYMENT_DUE, never chose a booth (or the hold expired).
+    await applicationPaymentService._markPaidTx(application.id, `pi_${TAG}_nohold`, { source: 'test' });
+    const row = await prisma.application.findUnique({ where: { id: application.id } });
+    expect(row.paymentStatus).toBe('PAID');
+    expect(await prisma.booth.findUnique({ where: { applicationId: application.id } })).toBeNull();
+  });
+
+  it('a stale Checkout session expiring does not reset a newer in-flight payment', async () => {
+    const application = applications[2];
+    await resetToPaymentDue(application, booths[2]);
+    const held = await request(app)
+      .post(`/applications/${application.id}/booth`)
+      .query({ token: statusToken(application.id) })
+      .send({ boothId: booths[2].id });
+    expect(held.status).toBe(200);
+    await prisma.application.update({
+      where: { id: application.id },
+      data: { paymentStatus: 'PROCESSING', stripeCheckoutSessionId: `cs_${TAG}_live` },
+    });
+    await applicationPaymentService.handleEvent({
+      type: 'checkout.session.expired',
+      data: { object: { id: `cs_${TAG}_stale`, mode: 'payment', metadata: { applicationId: application.id, purpose: 'pay_now' } } },
+    });
+    const row = await prisma.application.findUnique({ where: { id: application.id } });
+    expect(row.paymentStatus).toBe('PROCESSING');
+    expect(await prisma.booth.findUnique({ where: { id: booths[2].id } })).toMatchObject({ status: 'HELD', holdApplicationId: application.id });
+
+    // A card decline inside that hosted session is retried on Stripe's page: no release here either.
+    await applicationPaymentService.handleEvent({
+      type: 'payment_intent.payment_failed',
+      data: { object: { id: `pi_${TAG}_declined`, status: 'requires_payment_method', metadata: { applicationId: application.id, purpose: 'pay_now' } } },
+    });
+    expect((await prisma.application.findUnique({ where: { id: application.id } })).paymentStatus).toBe('PROCESSING');
+
+    // The live session expiring is what releases the hold.
+    await applicationPaymentService.handleEvent({
+      type: 'checkout.session.expired',
+      data: { object: { id: `cs_${TAG}_live`, mode: 'payment', metadata: { applicationId: application.id, purpose: 'pay_now' } } },
+    });
+    expect((await prisma.application.findUnique({ where: { id: application.id } })).paymentStatus).toBe('PAYMENT_DUE');
+    expect((await prisma.booth.findUnique({ where: { id: booths[2].id } })).status).toBe('AVAILABLE');
+  });
+
+  it('staff cannot assign a second booth to an application whose hold is settling', async () => {
+    const application = applications[1];
+    await resetToPaymentDue(application, booths[1]);
+    await prisma.booth.update({ where: { id: booths[0].id }, data: { status: 'AVAILABLE', holdApplicationId: null, holdExpiresAt: null, applicationId: null } });
+    const held = await request(app)
+      .post(`/applications/${application.id}/booth`)
+      .query({ token: statusToken(application.id) })
+      .send({ boothId: booths[1].id });
+    expect(held.status).toBe(200);
+    const res = await request(app)
+      .post(`/admin/maps/${map.id}/booths/${booths[0].id}/assign`)
+      .set('Authorization', `Bearer ${organizerToken}`)
+      .set('X-Jump-Org', organization.id)
+      .send({ applicationId: application.id });
+    expect(res.status).toBe(409);
+    expect(res.body.message).toMatch(/APPLICATION_HAS_BOOTH/);
+  });
+
+  it('a form with a map-bound tier cannot switch to charging at submission', async () => {
+    const adminToken = await staffToken({ email: `admin-${TAG}@test.com`, role: 'ADMIN' });
+    await joinOrgByToken(adminToken, organization.id, 'ADMIN');
+    const res = await request(app)
+      .patch(`/admin/events/${event.id}/application-forms/${form.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .set('X-Jump-Org', organization.id)
+      .send({ chargeTiming: 'SUBMIT' });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/charge on approval/);
+  });
 });

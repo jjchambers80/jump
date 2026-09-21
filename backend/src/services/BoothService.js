@@ -272,8 +272,11 @@ class BoothService {
         throw new ValidationError('Application belongs to a different event');
       }
 
-      // Check application doesn't already hold a booth
-      const existingBooth = await tx.booth.findUnique({ where: { applicationId } });
+      // Check application doesn't already hold a booth — sold, or held while a
+      // payment is in flight (settling that hold would collide on applicationId).
+      const existingBooth = await tx.booth.findFirst({
+        where: { OR: [{ applicationId }, { holdApplicationId: applicationId, status: 'HELD' }] },
+      });
       if (existingBooth && existingBooth.id !== boothId) {
         throw new ConflictError('APPLICATION_HAS_BOOTH — this application already holds another booth');
       }
