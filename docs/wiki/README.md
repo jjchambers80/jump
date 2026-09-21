@@ -58,6 +58,9 @@ Generated and maintained by running `/doc-feature` after completing feature work
 - [Online Store Preferences](features/online-store-preferences.md) — Online store › Preferences: store access (private mode + password gate on every public storefront page), homepage SEO title/description + Open Graph
 - [Storefront Language Redirection](features/storefront-language-redirection.md) — Online store › Preferences › Automatic redirection: Language toggle ("redirect visitors to the language that matches their browser when available"); stored on `Organization.autoRedirectLanguage`, no runtime effect until the storefront is localized
 - [Venue Management](features/venue-management.md) — CRUD, logo uploads, timezone config
+- [Floor Maps](features/maps.md) — Builder, booth geometry, tier binding, public read (spec 014)
+- [Map Templates](features/map-templates.md) — Reusable vector geometry snapshots (spec 014 phase 3)
+- [Vendor Directory](features/vendor-directory.md) — Public vendor profiles with map booth links (spec 014 phase 3)
 - [User Management](features/user-management.md) — Role assignment, account listing
 
 ### Frontend
