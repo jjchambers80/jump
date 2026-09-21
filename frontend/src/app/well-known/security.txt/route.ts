@@ -16,7 +16,7 @@ export const GET = () => {
     '# Security Contact Information',
     '# Report security vulnerabilities to the Jump team.',
     `Contact: mailto:${email}`,
-    `Expires: ${expires.toISOString().slice(0, 10)}`,
+    `Expires: ${expires.toISOString()}`,
     'Preferred-Languages: en',
   ].join('\n') + '\n';
 
