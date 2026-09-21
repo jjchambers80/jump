@@ -92,7 +92,9 @@ router.post('/:mapId/booths/:boothId/assign', async (req, res, next) => {
     const orgId = await activeOrgFor(req);
     const { applicationId, force } = req.body;
     if (!applicationId) return res.status(400).json({ error: 'ValidationError', message: 'applicationId is required' });
-    res.json(await boothService.assign(orgId, req.params.mapId, req.params.boothId, applicationId, req.user.id, { force: !!force }));
+    // Only ADMIN may put an application on a booth of another tier (comps).
+    const canForce = ['ADMIN', 'SYSTEM_ADMIN'].includes(req.user.role);
+    res.json(await boothService.assign(orgId, req.params.mapId, req.params.boothId, applicationId, req.user.id, { force: !!force && canForce }));
   } catch (error) { next(error); }
 });
 

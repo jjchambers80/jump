@@ -113,14 +113,26 @@ describe('MapService', () => {
             findMany: jest.fn().mockResolvedValue([
               { id: 'tier_1', quantityApproved: 1, quantityReserved: 0 },
             ]),
+            update: jest.fn(),
             updateMany: jest.fn(),
           },
         };
+        txRef = mockTx;
         return fn(mockTx);
       });
 
+      let txRef;
       const result = await service.publish(orgId, mapId);
       expect(result.status).toBe('PUBLISHED');
+      // Publishing binds the tier and derives its capacity from the booth count.
+      expect(txRef.applicationTier.update).toHaveBeenCalledWith({
+        where: { id: 'tier_1' },
+        data: { mapBound: true, quantityTotal: 2 },
+      });
+      // Tiers of this event that lost their booths are released.
+      expect(txRef.applicationTier.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ mapBound: true, id: { notIn: ['tier_1'] } }), data: { mapBound: false } })
+      );
     });
   });
 

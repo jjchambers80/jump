@@ -16,6 +16,7 @@ import {
 import logger from '../utils/logger.js';
 import feeService from './FeeService.js';
 import storeFileService from './StoreFileService.js';
+import { findByPublicIdentifier } from '../utils/publicIdentifier.js';
 import applicationFormService, { tierAmounts } from './ApplicationFormService.js';
 
 class MapService {
@@ -100,7 +101,7 @@ class MapService {
         height: this._validateDimension('height', data.height, 40),
         unit: data.unit && UNITS.has(data.unit) ? data.unit : 'ft',
         gridSize: Number.isInteger(data.gridSize) ? Math.max(1, Math.min(100, data.gridSize)) : 10,
-        underlayFileId: data.underlayFileId || null,
+        underlayFileId: await this._requireOrgImage(orgId, data.underlayFileId),
         underlayOpacity: Number.isInteger(data.underlayOpacity) ? data.underlayOpacity : 40,
         layout: data.layout || EMPTY_LAYOUT,
       },
@@ -189,7 +190,7 @@ class MapService {
       }
       updateData.gridSize = data.gridSize;
     }
-    if (data.underlayFileId !== undefined) updateData.underlayFileId = data.underlayFileId || null;
+    if (data.underlayFileId !== undefined) updateData.underlayFileId = await this._requireOrgImage(orgId, data.underlayFileId);
     if (data.underlayOpacity !== undefined) {
       if (!Number.isInteger(data.underlayOpacity) || data.underlayOpacity < 0 || data.underlayOpacity > 100) {
         throw new ValidationError('underlayOpacity must be 0–100');
@@ -279,6 +280,20 @@ class MapService {
       validatedBooths.push({ label: b.label, kind, x, y, w, h, rotation, tierId });
     }
 
+    // Every tier a booth names must sell on one of this event's PAID forms —
+    // an unknown id would 500 on the foreign key, another org's id would leak
+    // its tier into this map's legend.
+    const wantedTierIds = [...new Set(validatedBooths.map((b) => b.tierId).filter(Boolean))];
+    if (wantedTierIds.length > 0) {
+      const known = await prisma.applicationTier.findMany({
+        where: { id: { in: wantedTierIds }, form: { eventId: map.eventId, kind: 'PAID' } },
+        select: { id: true },
+      });
+      const knownIds = new Set(known.map((t) => t.id));
+      const missing = wantedTierIds.find((id) => !knownIds.has(id));
+      if (missing) throw new ValidationError(`Unknown tier "${missing}" for this event`);
+    }
+
     // Run the upsert transaction
     return prisma.$transaction(async (tx) => {
       const existing = await tx.booth.findMany({ where: { mapId } });
@@ -346,8 +361,9 @@ class MapService {
 
   /** Publish: set PUBLISHED, sync mapBound tier quantities, check oversold. */
   async publish(orgId, mapId) {
+    // Re-publishing an already published map is how the organizer re-syncs
+    // tier capacity after editing booths, so there is no early return here.
     const map = await this._requireInOrg(orgId, mapId);
-    if (map.status === 'PUBLISHED') return this.get(orgId, mapId);
 
     const boothCount = await prisma.booth.count({ where: { mapId, status: { not: 'BLOCKED' } } });
     if (boothCount < 1) throw new ValidationError('Map must have at least one booth to publish');
@@ -382,18 +398,23 @@ class MapService {
         }
       }
 
+      // Publishing binds every tier that has booths: its capacity is the
+      // booth count from now on. Tiers that were bound but lost their booths
+      // are released (their quantity is left as is).
       for (const tierId of tierIds) {
-        await tx.applicationTier.updateMany({
-          where: { id: tierId, mapBound: true },
-          data: { quantityTotal: tierCounts[tierId] },
+        await tx.applicationTier.update({
+          where: { id: tierId },
+          data: { mapBound: true, quantityTotal: tierCounts[tierId] },
         });
       }
+      await tx.applicationTier.updateMany({
+        where: { mapBound: true, form: { eventId: map.eventId }, id: { notIn: tierIds } },
+        data: { mapBound: false },
+      });
 
       logger.info('Floor map published', { event: 'floor_map_published', mapId, organizationId: orgId });
     });
-    const result = await this.get(orgId, mapId);
-    logger.info('Publish get result', { status: result.status });
-    return result;
+    return this.get(orgId, mapId);
   }
 
   /** Unpublish: back to DRAFT. Leaves mapBound and quantities alone. */
@@ -409,15 +430,18 @@ class MapService {
   // ─── Public read ─────────────────────────────────────────────────────
 
   /** GET /events/:eventId/map — published map only, no-cache. */
-  async publicMap(eventId) {
+  async publicMap(eventIdentifier) {
+    // Public URLs carry the event slug (spec: resource slugs); ids still work.
+    const event = await findByPublicIdentifier(prisma.event, eventIdentifier, { select: { id: true } });
+    if (!event) throw new NotFoundError('Map not published for this event');
     const map = await prisma.floorMap.findUnique({
-      where: { eventId },
+      where: { eventId: event.id },
       include: {
         booths: {
           orderBy: [{ y: 'asc' }, { x: 'asc' }],
           select: { id: true, label: true, kind: true, x: true, y: true, w: true, h: true, rotation: true, status: true, tierId: true, applicationId: true, updatedAt: true },
         },
-        underlay: { include: { file: true } },
+        underlay: { include: { file: true, image: { select: { id: true } } } },
         event: {
           select: {
             id: true,
@@ -510,8 +534,8 @@ class MapService {
           : null,
         vendorName: ['SOLD', 'RESERVED'].includes(b.status) ? (vendorMap[b.applicationId] || null) : null,
       })),
-      brandColor: map.event?.organization?.brandColor || null,
-      themeMode: map.event?.organization?.themeMode || 'SYSTEM',
+      brandColor: map.event?.venue?.organization?.brandColor || null,
+      themeMode: map.event?.venue?.organization?.themeMode || 'SYSTEM',
       updatedAt: map.updatedAt,
       etag,
     };
@@ -570,6 +594,17 @@ class MapService {
     }
 
     return newMap.id;
+  }
+
+  /** Underlay must be one of the org's own image files; null clears it. */
+  async _requireOrgImage(orgId, fileId) {
+    if (!fileId) return null;
+    const row = await prisma.storeFile.findFirst({
+      where: { id: fileId, organizationId: orgId, image: { isNot: null } },
+      select: { id: true },
+    });
+    if (!row) throw new ValidationError('underlayFileId must be an image in this organization\'s Files');
+    return row.id;
   }
 
   // ─── Validation helpers ────────────────────────────────────────────

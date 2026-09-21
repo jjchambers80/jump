@@ -50,6 +50,7 @@ describe('Maps contract', () => {
       data: {
         venueId: venue.id,
         name: `${TAG} Expo`,
+        slug: `${TAG.toLowerCase()}-expo-${Date.now().toString(36)}`,
         date: new Date(Date.now() + 86_400_000),
         status: 'PUBLISHED',
         capacity: 100,
@@ -323,6 +324,58 @@ describe('Maps contract', () => {
     expect(res.body.status).toBe('PUBLISHED');
   });
 
+  it('publishing binds tiers with booths and derives their quantity from the booth count', async () => {
+    const list = await request(app).get('/admin/maps').set(...auth(organizerToken));
+    const mapId = list.body[0].id;
+    await prisma.booth.updateMany({ where: { mapId, label: { in: ['A2', 'A3'] } }, data: { tierId: tier.id } });
+    // The fixture tier holds 10 approved + 10 reserved slots; two booths can only bind an empty tier.
+    await prisma.applicationTier.update({ where: { id: tier.id }, data: { quantityApproved: 0, quantityReserved: 0 } });
+    const res = await request(app).post(`/admin/maps/${mapId}/publish`).set(...auth(organizerToken));
+    expect(res.status).toBe(200);
+    const bound = await prisma.applicationTier.findUnique({ where: { id: tier.id } });
+    expect(bound).toMatchObject({ mapBound: true, quantityTotal: 2 });
+    // Fewer booths than approved + reserved slots is refused, never silently shrunk.
+    await prisma.booth.updateMany({ where: { mapId, label: 'A3' }, data: { tierId: null } });
+    await prisma.applicationTier.update({ where: { id: tier.id }, data: { quantityApproved: 2 } });
+    const oversold = await request(app).post(`/admin/maps/${mapId}/publish`).set(...auth(organizerToken));
+    expect(oversold.status).toBe(409);
+    expect(oversold.body.message).toMatch(/TIER_OVERSOLD/);
+    await prisma.applicationTier.update({ where: { id: tier.id }, data: { quantityApproved: 0 } });
+    // A tier that lost every booth is released on the next publish.
+    await prisma.booth.updateMany({ where: { mapId }, data: { tierId: null } });
+    await request(app).post(`/admin/maps/${mapId}/publish`).set(...auth(organizerToken)).expect(200);
+    const released = await prisma.applicationTier.findUnique({ where: { id: tier.id } });
+    expect(released.mapBound).toBe(false);
+    await prisma.applicationTier.update({ where: { id: tier.id }, data: { quantityTotal: 20, quantityApproved: 10, quantityReserved: 10 } });
+  });
+
+  it('refuses booths on tiers that do not sell on this event, and underlays from other organizations', async () => {
+    const list = await request(app).get('/admin/maps').set(...auth(organizerToken));
+    const mapId = list.body[0].id;
+    const map = await request(app).get(`/admin/maps/${mapId}`).set(...auth(organizerToken));
+    const booths = map.body.booths.map((b) => ({ id: b.id, label: b.label, kind: b.kind, x: b.x, y: b.y, w: b.w, h: b.h, rotation: b.rotation, tierId: b.tierId }));
+    booths[0].tierId = 'tier_that_does_not_exist';
+    const bad = await request(app).put(`/admin/maps/${mapId}/layout`).set(...auth(organizerToken)).send({ elements: [], booths });
+    expect(bad.status).toBe(400);
+    expect(bad.body.message).toMatch(/Unknown tier/);
+
+    const otherFile = await prisma.file.create({ data: { hash: `${TAG}-hash-${Date.now().toString(36)}`, mimeType: 'image/png', sizeBytes: 10 } });
+    const otherImage = await prisma.image.create({ data: { fileId: otherFile.id, usageType: 'store' } });
+    const foreign = await prisma.storeFile.create({
+      data: { organizationId: otherOrganization.id, fileId: otherFile.id, imageId: otherImage.id, name: 'plan', extension: 'png' },
+    });
+    const res = await request(app).patch(`/admin/maps/${mapId}`).set(...auth(organizerToken)).send({ underlayFileId: foreign.id });
+    expect(res.status).toBe(400);
+    // The org's own image is accepted and served through the public payload.
+    const myImage = await prisma.image.create({ data: { fileId: otherFile.id, usageType: 'store' } });
+    const mine = await prisma.storeFile.create({
+      data: { organizationId: organization.id, fileId: otherFile.id, imageId: myImage.id, name: 'hall', extension: 'png' },
+    });
+    const ok = await request(app).patch(`/admin/maps/${mapId}`).set(...auth(organizerToken)).send({ underlayFileId: mine.id });
+    expect(ok.status).toBe(200);
+    expect(ok.body.underlayFileId).toBe(mine.id);
+  });
+
   // ─── Public map (spec 014 §4.3) ─────────────────────────────────
 
   it('serves the published map publicly with no-store, an ETag and 304', async () => {
@@ -353,6 +406,13 @@ describe('Maps contract', () => {
 
     const again = await request(app).get(`/events/${event.id}/map`).set('If-None-Match', res.headers.etag);
     expect(again.status).toBe(304);
+
+    // The storefront fetches by slug (public URLs are slugged); same payload, same ETag.
+    const bySlug = await request(app).get(`/events/${event.slug}/map`);
+    expect(bySlug.status).toBe(200);
+    expect(bySlug.headers.etag).toBe(res.headers.etag);
+    expect(bySlug.body.id).toBe(res.body.id);
+    expect(bySlug.body.themeMode).toBe('SYSTEM');
 
     // Any booth write changes the ETag (no stale map, ever).
     await request(app)
