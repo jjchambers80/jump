@@ -2,6 +2,7 @@
 DROP INDEX IF EXISTS "Refund_stripeRefundId_key";
 
 -- CreateTable
+-- THROWAWAY VERIFY: injected by JUMP-008 verification PR to confirm CI catches edited applied migrations
 CREATE TABLE "TierPreset" (
     "id" TEXT NOT NULL,
     "organizationId" TEXT NOT NULL,
