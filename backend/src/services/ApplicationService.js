@@ -1970,7 +1970,7 @@ class ApplicationService {
       capacitySlot: a.capacitySlot,
       contact: this._contact(a.contact),
       profile: applicantProfileService.serialize(a.profile),
-      tier: a.tier ? { id: a.tier.id, name: a.tier.name, price: Number(a.tier.price) } : null,
+      tier: a.tier ? { id: a.tier.id, name: a.tier.name, price: Number(a.tier.price), mapBound: a.tier.mapBound === true } : null,
       amounts: this._amounts(a),
       pricing: this._pricing(a),
       addOns: m.addOns.map(({ addOn: _addOn, ...l }) => l),

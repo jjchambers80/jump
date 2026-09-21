@@ -105,6 +105,8 @@ describe('BoothService', () => {
   describe('unassign', () => {
     test('requires SOLD status', async () => {
       mockPrisma.floorMap = { findFirst: jest.fn().mockResolvedValue({ id: mapId }) };
+      // Phase 2 reads the holder before locking, so the Application row can be locked first.
+      mockPrisma.booth = { findFirst: jest.fn().mockResolvedValue({ applicationId: null }) };
       mockPrisma.$transaction = jest.fn(async (fn) => {
         const mockTx = {
           $queryRawUnsafe: jest.fn().mockResolvedValue([{ id: 'b_1', mapId, status: 'AVAILABLE' }]),
@@ -135,11 +137,12 @@ describe('BoothService', () => {
   describe('move', () => {
     test('requires source booth to be SOLD', async () => {
       mockPrisma.floorMap = { findFirst: jest.fn().mockResolvedValue({ id: mapId }) };
+      mockPrisma.booth = { findMany: jest.fn().mockResolvedValue([{ id: 'b_1', applicationId: null }, { id: 'b_2', applicationId: null }]) };
       mockPrisma.$transaction = jest.fn(async (fn) => {
         const mockTx = {
           $queryRawUnsafe: jest.fn().mockResolvedValue([
-            { id: 'b_1', mapId, status: 'AVAILABLE' },
-            { id: 'b_2', mapId, status: 'AVAILABLE' },
+            { id: 'b_1', mapId, status: 'AVAILABLE', applicationId: null },
+            { id: 'b_2', mapId, status: 'AVAILABLE', applicationId: null },
           ]),
         };
         return fn(mockTx);

@@ -191,7 +191,9 @@ test('sidebar entry and the org-wide list: events, short ids, tags, status sort,
   await expect(table).toContainText('Pia Talks');
   await expect(page.getByTestId('application-event-app-piatalks01')).toContainText('Winter Con');
   await expect(page.getByTestId('application-row-app-retroweekly')).toContainText('ID: ROWEEKLY');
-  await expect(page.getByTestId('application-tags-app-retroweekly')).toContainText('Media row 3');
+  // Spec 014 phase 2: the placement moved from the Tags cell to its own Booth column.
+  await expect(page.getByTestId('application-booth-app-retroweekly')).toContainText('Media row 3');
+  await expect(page.getByTestId('application-tags-app-retroweekly')).not.toContainText('Media row 3');
   await expect(page.getByTestId('application-tags-app-retroweekly')).toContainText('Sponsor');
   await expect(page.getByRole('link', { name: 'Retro Weekly' })).toHaveAttribute('href', `/admin/events/${EXPO.id}/applications/app-retroweekly`);
 
