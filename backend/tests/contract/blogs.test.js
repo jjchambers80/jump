@@ -209,7 +209,7 @@ describe('Content › Blog posts contract', () => {
       .get('/admin/blog-posts?sort=title')
       .set(...auth(organizerToken));
     expect(byTitle.body.posts.map((p) => p.title)).toEqual([
-      'Recap 2026',
+      'A different recap title',
       'Vendor applications open',
     ]);
 

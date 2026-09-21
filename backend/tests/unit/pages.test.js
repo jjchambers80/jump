@@ -72,7 +72,10 @@ describe('Online Store pages', () => {
     ).rejects.toMatchObject({ statusCode: 409 });
 
     expect(page.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ slug: 'about', NOT: undefined }) })
+      expect.objectContaining({ where: expect.not.objectContaining({ NOT: expect.anything() }) })
+    );
+    expect(page.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ slug: 'about' }) })
     );
   });
 

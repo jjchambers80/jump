@@ -23,8 +23,9 @@ describe('hrefFor', () => {
     const org = 'org_1';
     expect(hrefFor(org, { linkType: 'HOME' })).toBe('/organizations/org_1');
     expect(hrefFor(org, { linkType: 'EVENTS' })).toBe('/organizations/org_1#events');
-    expect(hrefFor(org, { linkType: 'EVENT', targetId: 'e1' })).toBe('/events/e1');
-    expect(hrefFor(org, { linkType: 'VENUE', targetId: 'v1' })).toBe('/venues/v1');
+    expect(hrefFor(org, { linkType: 'EVENT', targetId: 'e1' }, { slug: 'expo' })).toBe('/events/expo');
+    expect(hrefFor(org, { linkType: 'VENUE', targetId: 'v1' }, { slug: 'hall' })).toBe('/venues/hall');
+    expect(hrefFor(org, { linkType: 'EVENT', targetId: 'e1' }, null)).toBeNull();
     expect(hrefFor(org, { linkType: 'PAGE' }, { slug: 'faq' })).toBe(
       '/organizations/org_1/pages/faq'
     );

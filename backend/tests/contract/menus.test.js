@@ -143,19 +143,19 @@ describe('Content › Menus contract', () => {
     const [home, vendors, draft, account] = response.body.items;
     expect(home).toMatchObject({
       label: 'Home',
-      target: { status: 'ok', href: `/organizations/${organization.id}` },
+      target: { status: 'ok', href: `/organizations/${organization.slug}` },
       children: [],
     });
     expect(vendors.target).toEqual({
       title: 'FAQ',
       status: 'ok',
-      href: `/organizations/${organization.id}/pages/faq`,
+      href: `/organizations/${organization.slug}/pages/faq`,
     });
     expect(vendors.children.map((c) => c.label)).toEqual(['Expo', 'Hall']);
     expect(vendors.children[0].target).toEqual({
       title: 'Expo',
       status: 'ok',
-      href: `/events/${event.id}`,
+      href: `/events/${event.slug}`,
     });
     expect(vendors.children[1].children[0]).toMatchObject({
       label: 'Packet',
@@ -166,9 +166,9 @@ describe('Content › Menus contract', () => {
     expect(draft.target).toEqual({
       title: 'Draft',
       status: 'hidden',
-      href: `/organizations/${organization.id}/pages/draft`,
+      href: `/organizations/${organization.slug}/pages/draft`,
     });
-    expect(account.target.href).toBe(`/organizations/${organization.id}/account`);
+    expect(account.target.href).toBe(`/organizations/${organization.slug}/account`);
 
     await prisma.page.delete({ where: { id: hiddenPage.id } });
     const after = await request(app)
@@ -230,12 +230,12 @@ describe('Content › Menus contract', () => {
     expect(response.headers['cache-control']).toBe('public, max-age=60');
     expect(response.body.main.map((i) => i.label)).toEqual(['Home', 'Vendors', 'Account']);
     expect(response.body.main[1]).toMatchObject({
-      href: `/organizations/${organization.id}/pages/faq`,
+      href: `/organizations/${organization.slug}/pages/faq`,
       children: [
-        { label: 'Expo', href: `/events/${event.id}` },
+        { label: 'Expo', href: `/events/${event.slug}` },
         {
           label: 'Hall',
-          href: `/venues/${venue.id}`,
+          href: `/venues/${venue.slug}`,
           children: [{ label: 'Packet', href: 'https://x.test/p.pdf', newTab: true }],
         },
       ],
@@ -244,7 +244,7 @@ describe('Content › Menus contract', () => {
       {
         id: expect.any(String),
         label: 'Home',
-        href: `/organizations/${organization.id}`,
+        href: `/organizations/${organization.slug}`,
         newTab: false,
         children: [],
       },

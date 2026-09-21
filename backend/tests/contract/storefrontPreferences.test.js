@@ -92,6 +92,7 @@ describe('Online Store preferences contract', () => {
     expect(meta.status).toBe(200);
     expect(meta.body).toEqual({
       id: organization.id,
+      slug: organization.slug,
       name: `${TAG} Store`,
       title: 'Retro Nights',
       description: 'Tickets for retro gaming nights',

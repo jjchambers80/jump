@@ -7,6 +7,7 @@ import { jest } from '@jest/globals';
 const mockFindMany = jest.fn();
 const mockCount = jest.fn();
 const mockFindUnique = jest.fn();
+const mockFindFirst = jest.fn();
 
 jest.unstable_mockModule('@jump/db', () => ({
   prisma: {
@@ -14,6 +15,7 @@ jest.unstable_mockModule('@jump/db', () => ({
       findMany: mockFindMany,
       count: mockCount,
       findUnique: mockFindUnique,
+      findFirst: mockFindFirst,
     },
   },
 }));
@@ -142,7 +144,7 @@ describe('EventService', () => {
 
   describe('getEventById', () => {
     it('should return event detail with organization and per-tier availability', async () => {
-      mockFindUnique.mockResolvedValue(publishedEvent('evt-1', [tier(50, 100, 40)]));
+      mockFindFirst.mockResolvedValue(publishedEvent('evt-1', [tier(50, 100, 40)]));
 
       const result = await EventService.getEventById('evt-1');
 
@@ -155,13 +157,13 @@ describe('EventService', () => {
     });
 
     it('should throw NotFoundError for non-existent event', async () => {
-      mockFindUnique.mockResolvedValue(null);
+      mockFindFirst.mockResolvedValue(null);
 
       await expect(EventService.getEventById('non-existent')).rejects.toThrow('Event not found');
     });
 
     it('should throw NotFoundError for draft events', async () => {
-      mockFindUnique.mockResolvedValue({
+      mockFindFirst.mockResolvedValue({
         id: 'evt-1',
         status: 'DRAFT',
         _count: { tickets: 0 },
@@ -171,7 +173,7 @@ describe('EventService', () => {
     });
 
     it('should report zero availability when every tier is sold out', async () => {
-      mockFindUnique.mockResolvedValue(publishedEvent('evt-1', [tier(50, 100, 100), tier(80, 10, 8, 2)]));
+      mockFindFirst.mockResolvedValue(publishedEvent('evt-1', [tier(50, 100, 100), tier(80, 10, 8, 2)]));
 
       const result = await EventService.getEventById('evt-1');
       expect(result.priceTiers.every((t) => t.quantityAvailable === 0)).toBe(true);

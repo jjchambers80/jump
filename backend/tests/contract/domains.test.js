@@ -160,7 +160,7 @@ describe('Storefront domains contract (spec 007 phase 3)', () => {
     expect(await storefront.orgPageUrl(orgA.id)).toBe(`https://${host}/`);
     expect(await storefront.orderUrl('o1', orgA.id)).toBe(`https://${host}/orders/o1`);
     // org B has no domain: platform URLs
-    expect(await storefront.buyerAccountUrl(orgB.id)).toMatch(new RegExp(`/organizations/${orgB.id}/account$`));
+    expect(await storefront.buyerAccountUrl(orgB.id)).toMatch(new RegExp(`/organizations/${orgB.slug}/account$`));
   });
 
   it('a second domain is not primary; primary can be switched; deleting primary promotes the other', async () => {

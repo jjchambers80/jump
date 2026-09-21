@@ -177,14 +177,17 @@ describe('Venue Contract Tests', () => {
 
       expect(res.body.venue).toEqual({
         id: publicVenueId,
+        slug: expect.any(String),
         name: 'Public Contract Venue',
         address: '10 Public Plaza',
         timezone: 'America/New_York',
         logoUrl: '/uploads/logos/public-venue.webp',
         brandColor: null,
         themeMode: 'SYSTEM',
+        organizationId: testOrgId,
+        organizationSlug: expect.any(String),
       });
-      expect(res.body.venue).not.toHaveProperty('organizationId');
+      expect(res.body.venue).not.toHaveProperty('isPublic');
     });
 
     it('exposes the owning organization brand color', async () => {
@@ -222,6 +225,7 @@ describe('Venue Contract Tests', () => {
             date: expect.any(String),
             venue: {
               id: publicVenueId,
+              slug: expect.any(String),
               name: 'Public Contract Venue',
               address: '10 Public Plaza',
             },

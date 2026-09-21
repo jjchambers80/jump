@@ -50,7 +50,7 @@ describe('Customer account settings contract', () => {
       buyerSignInLinks: true,
       refundPolicy: { enabled: true, cutoffHours: null, feeType: 'NONE', feeValue: null },
       signInMethod: 'LINK',
-      accountUrl: `${platformBaseUrl()}/organizations/${organization.id}/account`,
+      accountUrl: `${platformBaseUrl()}/organizations/${organization.slug}/account`,
       domain: null,
     });
   });
