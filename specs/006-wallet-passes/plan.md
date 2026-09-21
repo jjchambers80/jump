@@ -32,7 +32,9 @@ Every VALID ticket gets two wallet actions — **Add to Apple Wallet** (signed `
 
 ## Phases
 
-### Phase 0 — Accounts, certificates, entitlements (no code; start immediately, longest lead time)
+**Current status (2026-09-21)**: Phase 1 code is complete and open in PR #15 (branch `worktree-plan-wallet-passes`), pending review/merge — not yet shipped to `main`. Phase 0 account/cert setup (JJ) is a prerequisite for phase 3 NFC and is tracked separately, not blocking phase 1. Phases 2–4 have no code and are not started; **no NFC code exists anywhere in the phase 1 diff** (verified: zero references to `setNFC`, `smartTap`, `enableSmartTap`, or `NFC_APPLE_*` in `backend/src/`). See `docs/wiki/features/wallet-passes.md#phase-boundaries-confirmed-no-nfc-code-in-phase-1` for the file-level verification.
+
+### Phase 0 — Accounts, certificates, entitlements (no code; start immediately, longest lead time) — **status: not started / external, tracked with JJ**
 
 | # | Task | Owner | Notes |
 |---|------|-------|-------|
@@ -45,7 +47,7 @@ Every VALID ticket gets two wallet actions — **Add to Apple Wallet** (signed `
 | 0.7 | Order pilot reader hardware: 1× VTAP100 (USB keyboard-wedge) + 1× Socket Mobile S550 (BLE) | JJ | Unblocks phase 4 |
 | 0.8 | Add Railway secrets: `APPLE_*`, `GOOGLE_WALLET_*`, `NFC_*` (see quickstart) | JJ | |
 
-### Phase 1 — QR wallet passes (ship first)
+### Phase 1 — QR wallet passes (ship first) — **status: code complete, in PR #15, not yet merged**
 
 **Data model** (`packages/db/prisma/schema.prisma`, migration `20260912_wallet_passes`):
 
@@ -100,7 +102,7 @@ model Event {
 
 **Acceptance**: from checkout → confirmation, a buyer can add each ticket to Apple or Google Wallet in ≤ 2 taps; the same buttons appear in the confirmation email; the wallet pass QR redeems with the existing scanner exactly once.
 
-### Phase 2 — Pass lifecycle (refund / void / reschedule reach installed passes)
+### Phase 2 — Pass lifecycle (refund / void / reschedule reach installed passes) — **status: not started (future work)**
 
 | File | Change |
 |------|--------|
@@ -112,7 +114,7 @@ model Event {
 
 **Tests**: contract tests for the 5 endpoints (register → list → get → unregister), unit test for push fan-out + 410 pruning, Google PATCH mocked via `nock`.
 
-### Phase 3 — NFC payload in passes (gated on Phase 0.2 / 0.5)
+### Phase 3 — NFC payload in passes (gated on Phase 0.2 / 0.5) — **status: not started (future work, NOT in scope for phase 1/PR #15); no NFC code exists in the repo today**
 
 | File | Change |
 |------|--------|
@@ -125,7 +127,7 @@ model Event {
 
 **Tests**: pass.json snapshot contains `nfc` only when flag + key present; Google class snapshot; `/redeem` with `nfc:<token>` redeems once and returns `ALREADY_REDEEMED` on repeat; rotated token rejected.
 
-### Phase 4 — Door reader integration (gated on Phase 0.7)
+### Phase 4 — Door reader integration (gated on Phase 0.7) — **status: not started (future work, requires phase 3 + reader hardware)**
 
 | Item | Change |
 |------|--------|

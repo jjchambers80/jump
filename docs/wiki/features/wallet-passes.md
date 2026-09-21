@@ -1,8 +1,21 @@
 # Wallet Passes (Apple Wallet / Google Wallet)
 
 **Status:** Implemented (phase 1 — QR passes). NFC tap-to-redeem is planned (phases 3–4).
-**Last Updated:** 2026-09-12
+**Last Updated:** 2026-09-21
 **Spec:** `specs/006-wallet-passes/` (research, plan, quickstart)
+
+## Phase Boundaries (Confirmed: No NFC Code in Phase 1)
+
+| Phase | Scope | Status | Key Files | NFC Involvement |
+|-------|-------|--------|-----------|-----------------|
+| **Phase 1** | QR wallet passes (ship first) | **Code complete — PR #15 open, not yet merged** | `AppleWalletService.js`, `GoogleWalletService.js`, `wallet.js` routes, `WalletButtons.tsx` | `nfcToken` generated & stored on Ticket (line 136 `TicketService.js`), **NOT embedded in passes**. Apple `pass.setNFC()` never called. Google `enableSmartTap` / `smartTapRedemptionValue` never set. |
+| **Phase 2** | Pass lifecycle (refund/void/reschedule push updates to installed passes) | Planned | New `WalletRegistration` model, Apple web-service endpoints (`/wallet/apple/v1`), `ApplePushService`, Google object PATCH | None |
+| **Phase 3** | NFC payload in passes (gated on Apple NFC cert + Google Smart Tap keys) | Planned | `AppleWalletService.buildPass` + `NFC_APPLE_PUBLIC_KEY`, `GoogleWalletService` + `enableSmartTap`, `QRService`/`PayloadService` NFC resolver | **Enabled here**: `pass.setNFC({ message: ticket.nfcToken, ... })`, `smartTapRedemptionValue: ticket.nfcToken`, `nfc:` prefix resolver for `/scan` & `/redeem` |
+| **Phase 4** | Door reader integration (VTAP100, Socket Mobile S550) | Planned | Admin scan page Reader mode, `socketMobile.ts`, provisioning docs | NFC reader hardware required |
+
+**Verification**: Grep of `backend/src/services/wallet/` shows zero references to `setNFC`, `smartTap`, `NFC_APPLE`, or `enableSmartTap`. The `nfcToken` column exists only as a reserved field for future phases.
+
+**Next steps**: (1) review and merge PR #15; (2) no phase 2–4 work is scheduled until phase 0 account/cert setup (owner: JJ, see `specs/006-wallet-passes/plan.md` Phase 0) is underway — phase 2 (pass lifecycle) can start independently of the NFC-gated phases 3–4.
 
 ## Overview
 
