@@ -53,7 +53,7 @@ jobs:
         run: npm run test:unit
       - name: Contract + integration tests
         working-directory: backend
-        run: npm test -- tests/contract tests/integration
+        run: npm test -- --runInBand tests/contract tests/integration
 
   frontend:
     name: frontend typecheck + unit
