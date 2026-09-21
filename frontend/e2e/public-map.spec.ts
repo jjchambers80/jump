@@ -20,6 +20,17 @@ const EVENT = {
   taxRate: 0,
   taxInclusivePricing: false,
 };
+type MockVendor = {
+  id: string;
+  name: string;
+  description: string | null;
+  website: string | null;
+  socials: Record<string, string>;
+  imageUrl: string | null;
+  category: string;
+  tier: { id: string; name: string } | null;
+  booth: { id: string; label: string } | null;
+};
 const MAP = {
   id: 'map-1',
   eventId: 'ev-map',
@@ -45,7 +56,7 @@ const MAP = {
       tier: { id: 't-1', name: '10×10 booth' },
       booth: { id: 'b-1', label: 'A1' },
     },
-  ],
+  ] as MockVendor[],
   booths: [
     { id: 'b-1', label: 'A1', kind: 'BOOTH', x: 0, y: 0, w: 10, h: 10, rotation: 0, status: 'SOLD', tier: { id: 't-1', name: '10×10 booth', price: 275 }, vendorName: 'Acme Crafts' },
     { id: 'b-2', label: 'A2', kind: 'BOOTH', x: 12, y: 0, w: 10, h: 10, rotation: 0, status: 'AVAILABLE', tier: { id: 't-1', name: '10×10 booth', price: 275 }, vendorName: null },
@@ -102,12 +113,14 @@ test.describe('public floor map', () => {
     await expect(page.getByText('Sold to Acme Crafts').locator('visible=true')).toHaveCount(1);
   });
 
-  test('?booth= opens on that booth', async ({ page }) => {
+  test('?booth= accepts stable booth ids and legacy labels', async ({ page }) => {
     await mockEvent(page);
-    await page.goto('/events/ev-map/map?booth=A2');
+    await page.goto('/events/ev-map/map?booth=b-2');
     await expect(page.getByTestId('booth-A2')).toBeVisible();
-    // The highlighted booth is the one the deep link named.
-    await expect(page.getByTestId('booth-A2')).toHaveAttribute('aria-label', /Booth A2/);
+    await expect(page.getByRole('dialog').getByRole('heading', { name: 'Booth A2' })).toBeVisible();
+
+    await page.goto('/events/ev-map/map?booth=A1');
+    await expect(page.getByRole('dialog').getByRole('heading', { name: 'Booth A1' })).toBeVisible();
   });
 
   test('renders, searches and locates vendors from the directory', async ({ page }) => {
@@ -120,9 +133,34 @@ test.describe('public floor map', () => {
     await directory.getByPlaceholder('Search vendors, categories or booths').fill('missing');
     await expect(directory.getByText('No vendors match your search.')).toBeVisible();
     await directory.getByPlaceholder('Search vendors, categories or booths').fill('A1');
-    await directory.getByRole('button', { name: 'View booth A1' }).click();
+    const boothLink = directory.getByRole('link', { name: 'View booth A1' });
+    await expect(boothLink).toHaveAttribute('href', '/events/ev-map/map?booth=b-1');
+    await boothLink.press('Enter');
+    await expect(page).toHaveURL(/\/events\/ev-map\/map\?booth=b-1$/);
     await expect(page.getByRole('dialog')).toBeVisible();
     await expect(page.getByText('Sold to Acme Crafts').locator('visible=true')).toHaveCount(1);
+    await expect(page.getByRole('dialog').getByRole('link', { name: 'Permanent link to Acme Crafts at booth A1' })).toHaveAttribute('href', '/events/ev-map/map?booth=b-1');
+
+    await page.reload();
+    await expect(page.getByRole('dialog').getByRole('heading', { name: 'Booth A1' })).toBeVisible();
+  });
+
+  test('shows a clear fallback for an unassigned vendor', async ({ page }) => {
+    await mockEvent(page, {
+      vendors: [{ ...MAP.vendors[0], id: 'application-unassigned', name: 'No Booth Books', booth: null }],
+    });
+    await page.goto('/events/ev-map/map');
+    const directory = page.getByTestId('vendor-directory');
+    await expect(directory.getByRole('heading', { name: 'No Booth Books' })).toBeVisible();
+    await expect(directory.getByText('Booth to be announced')).toBeVisible();
+    await expect(directory.getByRole('link', { name: /View booth/ })).toHaveCount(0);
+  });
+
+  test('reports a booth id that does not belong to this event map', async ({ page }) => {
+    await mockEvent(page);
+    await page.goto('/events/ev-map/map?booth=booth-from-another-event');
+    await expect(page.getByText('Booth “booth-from-another-event” was not found on this event map.')).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 
   test('shows the directory empty state', async ({ page }) => {

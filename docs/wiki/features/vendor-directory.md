@@ -29,7 +29,9 @@ The directory provides:
 - text search across name, description, category, tier, and booth;
 - a category filter;
 - website and social-profile display;
-- a booth button that centers the map, highlights the booth, and opens its detail dialog;
+- a keyboard-accessible booth link using the stable `?booth=<booth-id>` URL; it centers the map, highlights the booth, opens its detail dialog, and survives refreshes and directory sorting;
+- legacy `?booth=<label>` links remain supported, while unknown or cross-event booth ids show an inline not-found message;
+- booth detail dialogs expose the same permanent vendor/booth link, and unassigned vendors show “Booth to be announced” without a dead link;
 - explicit empty and no-results states.
 
 The map page retains its existing loading, private-store/error, and unpublished/not-found states.

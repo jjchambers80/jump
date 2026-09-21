@@ -402,6 +402,7 @@ describe('Maps contract', () => {
     expect(after.status).toBe(200);
     expect(after.headers.etag).not.toBe(res.headers.etag);
     expect(after.body.booths.find((b) => b.label === 'A1').vendorName).toBeNull();
+    expect(after.body.vendors.find((vendor) => vendor.id === application.id).booth).toBeNull();
   });
 
   it('gates the public map behind a private storefront', async () => {
