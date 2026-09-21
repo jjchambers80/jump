@@ -763,6 +763,7 @@ model Event {
   applicationForms ApplicationForm[]
   applications     Application[]
   addOns           AddOn[]
+  floorMap         FloorMap?               // spec 014: one optional map per event
 
   @@index([venueId])
   @@index([status])
@@ -1130,6 +1131,81 @@ enum RefundStatus {
   FAILED
 }
 
+// ─── Maps (spec 014) ──────────────────────────────────────────────────────
+
+enum FloorMapStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum BoothKind {
+  BOOTH
+  TABLE
+}
+
+enum BoothStatus {
+  AVAILABLE
+  HELD
+  SOLD
+  RESERVED
+  BLOCKED
+}
+
+model FloorMap {
+  id              String        @id @default(cuid())
+  organizationId  String
+  eventId         String        @unique                // one map per event in v1
+  name            String
+  status          FloorMapStatus @default(DRAFT)
+  unit            String        @default("ft")         // display only
+  gridSize        Int           @default(10)            // px per grid unit in the editor
+  width           Int                                   // grid units
+  height          Int
+  underlayFileId  String?                               // StoreFile
+  underlayOpacity Int           @default(40)
+  layout          Json                                  // { version: 1, elements: [...] }
+  publishedAt     DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  event        Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  underlay     StoreFile?    @relation(fields: [underlayFileId], references: [id], onDelete: SetNull)
+  booths       Booth[]
+
+  @@index([organizationId])
+}
+
+model Booth {
+  id                String      @id @default(cuid())
+  mapId             String
+  label             String
+  kind              BoothKind   @default(BOOTH)
+  x                 Int                                   // grid units
+  y                 Int
+  w                 Int
+  h                 Int
+  rotation          Int         @default(0)               // 0 | 90
+  tierId            String?                               // ApplicationTier that sells this booth
+  status            BoothStatus @default(AVAILABLE)
+  applicationId     String?     @unique                    // SOLD / RESERVED holder
+  holdApplicationId String?                               // HELD by (checkout in flight)
+  holdExpiresAt     DateTime?
+  assignedById      String?                               // staff who assigned manually
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  map             FloorMap        @relation(fields: [mapId], references: [id], onDelete: Cascade)
+  tier            ApplicationTier? @relation(fields: [tierId], references: [id], onDelete: SetNull)
+  application     Application?     @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  // holdApplication has no explicit FK — it references the same Application table for HELD state
+
+  @@unique([mapId, label])
+  @@index([mapId, status])
+  @@index([tierId])
+}
+
 // ─── Applications (spec 011) ───────────────────────────────────────────────
 // Per-event application forms for vendors, sponsors (PAID, tiered, capacity
 // on approval) and press / panels / creators (FREE). Review status and payment
@@ -1335,12 +1411,14 @@ model ApplicationTier {
   quantityReserved Int     @default(0) // slots held while a charge is in flight or payment is due
   displayOrder     Int     @default(0)
   isActive         Boolean @default(true)
+  mapBound         Boolean @default(false)    // spec 014: derived quantityTotal from booths on publish
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   form         ApplicationForm        @relation(fields: [formId], references: [id], onDelete: Cascade)
   applications Application[]
+  booths       Booth[]
   addOns       ApplicationTierAddOn[]
   orderItems   OrderItem[]
 

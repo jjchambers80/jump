@@ -43,6 +43,8 @@ import { adminFilesRouter, publicFilesRouter } from './routes/storeFiles.js';
 import blogsRouter from './routes/blogs.js';
 import menusRouter from './routes/menus.js';
 import redirectsRouter from './routes/redirects.js';
+import mapsRouter from './routes/maps.js';
+import publicMapRouter from './routes/publicMap.js';
 import domainService from '../services/DomainService.js';
 import applicationPaymentService from '../services/ApplicationPaymentService.js';
 import applicationDigestService from '../services/ApplicationDigestService.js';
@@ -148,6 +150,7 @@ app.get('/metrics', metricsHandler);
 app.use('/admin/files', adminFilesRouter);
 app.use('/admin/menus', menusRouter);
 app.use('/admin/redirects', redirectsRouter);
+app.use('/admin/maps', mapsRouter);
 app.use('/admin', blogsRouter);
 app.use('/admin', adminRouter);
 app.use('/events/:eventId/applications', eventApplicationsRouter);
@@ -173,6 +176,7 @@ app.use('/auth', staffAuthRouter);
 app.use('/users', usersRouter);
 app.use('/images', imagesRouter);
 app.use('/files', publicFilesRouter);
+app.use('/public', publicMapRouter);
 app.use('/webhooks', webhooksRouter);
 
 // Error handling (must be last)
