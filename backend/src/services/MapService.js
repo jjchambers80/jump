@@ -14,6 +14,9 @@ import {
   ELEMENT_KINDS, EMPTY_LAYOUT, MIN_MAP_NAME_LENGTH, MAX_MAP_NAME_LENGTH,
 } from '../config/maps.js';
 import logger from '../utils/logger.js';
+import feeService from './FeeService.js';
+import storeFileService from './StoreFileService.js';
+import applicationFormService, { tierAmounts } from './ApplicationFormService.js';
 
 class MapService {
   // ─── Admin CRUD ─────────────────────────────────────────────────────
@@ -412,9 +415,17 @@ class MapService {
       include: {
         booths: {
           orderBy: [{ y: 'asc' }, { x: 'asc' }],
-          select: { id: true, label: true, kind: true, x: true, y: true, w: true, h: true, rotation: true, status: true, tierId: true, applicationId: true },
+          select: { id: true, label: true, kind: true, x: true, y: true, w: true, h: true, rotation: true, status: true, tierId: true, applicationId: true, updatedAt: true },
         },
-        event: { select: { organization: { select: { brandColor: true, themeMode: true } } } },
+        underlay: { include: { file: true } },
+        event: {
+          select: {
+            id: true,
+            taxRate: true,
+            // Events belong to organizations through the venue (Event → Venue → Organization).
+            venue: { select: { organization: { select: { id: true, brandColor: true, themeMode: true, taxInclusivePricing: true } } } },
+          },
+        },
       },
     });
 
@@ -425,38 +436,84 @@ class MapService {
     // Resolve tier names/price for booth legend
     const tierIds = [...new Set(map.booths.filter((b) => b.tierId).map((b) => b.tierId))];
     const tiers = tierIds.length > 0
-      ? await prisma.applicationTier.findMany({ where: { id: { in: tierIds } }, select: { id: true, name: true, price: true } })
+      ? await prisma.applicationTier.findMany({
+          where: { id: { in: tierIds } },
+          select: { id: true, name: true, price: true, form: { select: { id: true, name: true, slug: true, feeMode: true, taxable: true } } },
+        })
       : [];
     const tierMap = {};
     for (const t of tiers) tierMap[t.id] = t;
 
-    // Resolve sold booth vendor names
-    const soldAppIds = map.booths.filter((b) => b.status === 'SOLD' && b.applicationId).map((b) => b.applicationId);
-    const vendors = soldAppIds.length > 0
+    // Resolve sold/reserved booth vendor names
+    const holderAppIds = map.booths
+      .filter((b) => ['SOLD', 'RESERVED'].includes(b.status) && b.applicationId)
+      .map((b) => b.applicationId);
+    const vendors = holderAppIds.length > 0
       ? await prisma.application.findMany({
-          where: { id: { in: soldAppIds } },
+          where: { id: { in: holderAppIds } },
           select: { id: true, profile: { select: { businessName: true } } },
         })
       : [];
     const vendorMap = {};
     for (const v of vendors) vendorMap[v.id] = v.profile?.businessName || null;
 
+    // Compute legend with all-in prices using the form's fee mode
+    const legend = [];
+    const seenTierIds = new Set();
+    for (const b of map.booths) {
+      if (b.tierId && tierMap[b.tierId] && !seenTierIds.has(b.tierId)) {
+        const tier = tierMap[b.tierId];
+        // Get all-in price for this tier using the form's fee mode
+        const amounts = tierAmounts(Number(tier.price), tier.form, map.event, map.event.venue.organization);
+        legend.push({
+          tierId: tier.id,
+          name: tier.name,
+          price: amounts.applicantPays, // all-in price
+          swatch: seenTierIds.size % 6,
+        });
+        seenTierIds.add(b.tierId);
+      }
+    }
+
+    // ETag derived from map.updatedAt + max booth.updatedAt
+    const boothUpdated = map.booths.length > 0
+      ? Math.max(...map.booths.map((b) => new Date(b.updatedAt).getTime()))
+      : map.updatedAt.getTime();
+    const etagSource = Math.max(map.updatedAt.getTime(), boothUpdated);
+    const etag = `"${etagSource}"`;
+
     return {
-      id: map.id, eventId: map.eventId, name: map.name,
-      width: map.width, height: map.height, unit: map.unit, gridSize: map.gridSize,
+      id: map.id,
+      eventId: map.eventId,
+      name: map.name,
+      width: map.width,
+      height: map.height,
+      unit: map.unit,
+      gridSize: map.gridSize,
       layout: map.layout,
-      underlayFileId: map.underlayFileId, underlayOpacity: map.underlayOpacity,
+      underlayFileId: map.underlayFileId,
+      underlayUrl: map.underlay ? storeFileService.url(map.underlay) : null,
+      underlayOpacity: map.underlayOpacity,
+      legend,
       booths: map.booths.map((b) => ({
-        id: b.id, label: b.label, kind: b.kind, x: b.x, y: b.y, w: b.w, h: b.h,
-        rotation: b.rotation, status: b.status,
+        id: b.id,
+        label: b.label,
+        kind: b.kind,
+        x: b.x,
+        y: b.y,
+        w: b.w,
+        h: b.h,
+        rotation: b.rotation,
+        status: b.status,
         tier: b.tierId && tierMap[b.tierId]
           ? { id: b.tierId, name: tierMap[b.tierId].name, price: Number(tierMap[b.tierId].price) }
           : null,
-        vendorName: b.status === 'SOLD' ? (vendorMap[b.applicationId] || null) : null,
+        vendorName: ['SOLD', 'RESERVED'].includes(b.status) ? (vendorMap[b.applicationId] || null) : null,
       })),
       brandColor: map.event?.organization?.brandColor || null,
       themeMode: map.event?.organization?.themeMode || 'SYSTEM',
       updatedAt: map.updatedAt,
+      etag,
     };
   }
 

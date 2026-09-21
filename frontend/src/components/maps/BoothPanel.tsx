@@ -1,8 +1,9 @@
 'use client';
 
+import { formatPrice } from '../../lib/fees';
 import { useState, useCallback } from 'react';
 import Link from 'next/link';
-import { mapsApi, assignableApplications } from '@/services/api';
+import { mapsApi } from '@/services/api';
 import type { MapBooth, AssignableApplication } from '@/services/api';
 import { STATUS_BADGE_COLORS, STATUS_LABELS } from './mapTheme';
 
@@ -42,7 +43,8 @@ export default function BoothPanel({
   const [assignError, setAssignError] = useState<string | null>(null);
 
   const isAdmin = role === 'ADMIN' || role === 'SYSTEM_ADMIN';
-  const hasHolder = booth.status === 'SOLD' && booth.holder;
+  const holder = booth.status === 'SOLD' ? booth.holder ?? null : null;
+  const hasHolder = holder !== null;
 
   const doSearch = useCallback(async (q: string) => {
     setSearch(q);
@@ -92,14 +94,14 @@ export default function BoothPanel({
       </div>
 
       {/* Holder info */}
-      {hasHolder && (
+      {holder && (
         <div>
           <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Assigned to</p>
           <Link
-            href={`/admin/events/${eventId}/applications/${booth.holder.id}`}
+            href={`/admin/events/${eventId}/applications/${holder.id}`}
             className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300"
           >
-            {booth.holder.businessName || 'Unknown vendor'}
+            {holder.businessName || 'Unknown vendor'}
           </Link>
         </div>
       )}
@@ -242,7 +244,7 @@ export default function BoothPanel({
                         </p>
                         <p className="truncate text-xs text-gray-500 dark:text-slate-400">
                           {c.contactName} · {c.email}
-                          {c.tier && <span> · {c.tier.name} (${(c.tier.price / 100).toFixed(2)})</span>}
+                          {c.tier && <span> · {c.tier.name} ({formatPrice(c.tier.price)})</span>}
                           {!c.tierMatch && (
                             <span className="ml-1 text-amber-600 dark:text-amber-400">(tier mismatch)</span>
                           )}

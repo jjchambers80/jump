@@ -113,7 +113,8 @@ export function tenantResourceFor(
   pathname: string,
   searchParams: URLSearchParams
 ): TenantResource | null {
-  const m = pathname.match(/^\/(events|checkout|orders|venues)\/([^/]+)\/?$/);
+  // `/events/:id/map` (spec 014) is the only sub-path that names a resource.
+  const m = pathname.match(/^\/(events|checkout|orders|venues)\/([^/]+)(?:\/map)?\/?$/);
   if (m) {
     const id = decodeURIComponent(m[2]);
     if (!ID_RE.test(id)) return null;

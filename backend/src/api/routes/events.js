@@ -17,6 +17,7 @@ import { uploadImage } from '../../middleware/imageUpload.js';
 import imageService from '../../services/ImageService.js';
 import { validateCreateEvent, validateUpdateEvent } from '../validators/eventValidators.js';
 import { gateByEventParam } from '../../middleware/storefrontGate.js';
+import mapService from '../../services/MapService.js';
 
 // ── Public routes (mounted at /events) ──
 const publicRouter = express.Router();
@@ -58,6 +59,25 @@ publicRouter.get('/:eventId', gateByEventParam, async (req, res, next) => {
   try {
     const result = await eventService.getEventById(req.params.eventId);
     res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /events/:eventId/map
+ * Get published floor map (public, no auth required)
+ * 404 if map is not PUBLISHED; no-store + ETag + 304
+ */
+publicRouter.get('/:eventId/map', gateByEventParam, async (req, res, next) => {
+  try {
+    const data = await mapService.publicMap(req.params.eventId);
+    res.set('Cache-Control', 'no-store');
+    res.set('ETag', data.etag);
+    if (req.headers['if-none-match'] === data.etag) {
+      return res.status(304).end();
+    }
+    res.json(data);
   } catch (error) {
     next(error);
   }

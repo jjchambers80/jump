@@ -1,5 +1,6 @@
 'use client';
 
+import { formatPrice } from '../../lib/fees';
 import React from 'react';
 import type { MapBooth, MapTier, MapElement } from '@/services/api';
 import { STATUS_BADGE_COLORS, STATUS_LABELS } from './mapTheme';
@@ -289,7 +290,7 @@ export default function EditorSidebar({
                 <option value="">— No tier —</option>
                 {tiers.map((tier) => (
                   <option key={tier.id} value={tier.id}>
-                    {tier.name} (${(tier.price / 100).toFixed(2)})
+                    {tier.name} ({formatPrice(tier.price)})
                   </option>
                 ))}
               </select>

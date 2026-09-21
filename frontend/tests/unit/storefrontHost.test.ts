@@ -123,6 +123,12 @@ describe('tenantResourceFor', () => {
     expect(tenantResourceFor('/orders/or_1/', sp())).toEqual({ kind: 'order', id: 'or_1' });
     expect(tenantResourceFor('/venues/ve_1', sp())).toEqual({ kind: 'venue', id: 've_1' });
   });
+  it('treats the public floor map as the event resource (spec 014)', () => {
+    expect(tenantResourceFor('/events/ev_1/map', sp())).toEqual({ kind: 'event', id: 'ev_1' });
+    expect(tenantResourceFor('/events/ev_1/map/', sp())).toEqual({ kind: 'event', id: 'ev_1' });
+    expect(tenantResourceFor('/events/ev_1/apply', sp())).toBeNull();
+    expect(tenantResourceFor('/venues/ve_1/map', sp())).toEqual({ kind: 'venue', id: 've_1' });
+  });
   it('extracts the confirmation order from the query string', () => {
     expect(tenantResourceFor('/confirmation', sp('orderId=or_9&status=success'))).toEqual({
       kind: 'order',

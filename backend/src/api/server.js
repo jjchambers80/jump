@@ -44,7 +44,6 @@ import blogsRouter from './routes/blogs.js';
 import menusRouter from './routes/menus.js';
 import redirectsRouter from './routes/redirects.js';
 import mapsRouter from './routes/maps.js';
-import publicMapRouter from './routes/publicMap.js';
 import domainService from '../services/DomainService.js';
 import applicationPaymentService from '../services/ApplicationPaymentService.js';
 import applicationDigestService from '../services/ApplicationDigestService.js';
@@ -176,7 +175,6 @@ app.use('/auth', staffAuthRouter);
 app.use('/users', usersRouter);
 app.use('/images', imagesRouter);
 app.use('/files', publicFilesRouter);
-app.use('/public', publicMapRouter);
 app.use('/webhooks', webhooksRouter);
 
 // Error handling (must be last)

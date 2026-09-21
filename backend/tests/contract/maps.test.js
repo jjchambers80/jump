@@ -323,6 +323,63 @@ describe('Maps contract', () => {
     expect(res.body.status).toBe('PUBLISHED');
   });
 
+  // ─── Public map (spec 014 §4.3) ─────────────────────────────────
+
+  it('serves the published map publicly with no-store, an ETag and 304', async () => {
+    const list = await request(app).get('/admin/maps').set(...auth(organizerToken));
+    const mapId = list.body[0].id;
+    const map = await request(app).get(`/admin/maps/${mapId}`).set(...auth(organizerToken));
+    const booth = map.body.booths.find((b) => b.label === 'A1');
+    await prisma.booth.update({ where: { id: booth.id }, data: { tierId: tier.id } });
+    await request(app)
+      .post(`/admin/maps/${mapId}/booths/${booth.id}/assign`)
+      .set(...auth(organizerToken))
+      .send({ applicationId: application.id })
+      .expect(200);
+
+    const res = await request(app).get(`/events/${event.id}/map`);
+    expect(res.status).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.headers.etag).toBeTruthy();
+    expect(res.body.legend.length).toBeGreaterThan(0);
+    expect(res.body.legend[0]).toMatchObject({ tierId: tier.id, swatch: 0 });
+    expect(res.body.legend[0].price).toBeGreaterThan(0);
+    const sold = res.body.booths.find((b) => b.label === 'A1');
+    expect(sold).toMatchObject({ status: 'SOLD', vendorName: `${TAG} Vendor Co` });
+    const available = res.body.booths.find((b) => b.label !== 'A1');
+    expect(available.vendorName).toBeNull();
+    // Only the SOLD booth exposes its holder; nothing internal leaks.
+    expect(sold.applicationId).toBeUndefined();
+
+    const again = await request(app).get(`/events/${event.id}/map`).set('If-None-Match', res.headers.etag);
+    expect(again.status).toBe(304);
+
+    // Any booth write changes the ETag (no stale map, ever).
+    await request(app)
+      .post(`/admin/maps/${mapId}/booths/${booth.id}/unassign`)
+      .set(...auth(organizerToken))
+      .expect(200);
+    const after = await request(app).get(`/events/${event.id}/map`).set('If-None-Match', res.headers.etag);
+    expect(after.status).toBe(200);
+    expect(after.headers.etag).not.toBe(res.headers.etag);
+    expect(after.body.booths.find((b) => b.label === 'A1').vendorName).toBeNull();
+  });
+
+  it('gates the public map behind a private storefront', async () => {
+    await prisma.organization.update({ where: { id: organization.id }, data: { storefrontPrivate: true } });
+    try {
+      const res = await request(app).get(`/events/${event.id}/map`);
+      expect(res.status).toBe(403); // same answer as every other storefront read behind the gate
+    } finally {
+      await prisma.organization.update({ where: { id: organization.id }, data: { storefrontPrivate: false } });
+    }
+  });
+
+  it('does not expose an ungated copy of the public map', async () => {
+    const res = await request(app).get(`/public/events/${event.id}/map`);
+    expect(res.status).toBe(404);
+  });
+
   it('unpublishes the map', async () => {
     const list = await request(app)
       .get('/admin/maps')
@@ -333,6 +390,8 @@ describe('Maps contract', () => {
       .set(...auth(organizerToken));
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('DRAFT');
+    const pub = await request(app).get(`/events/${event.id}/map`);
+    expect(pub.status).toBe(404);
   });
 
   // ─── Application detail includes booth ──────────────────────────

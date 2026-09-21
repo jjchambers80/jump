@@ -1,5 +1,6 @@
 'use client';
 
+import { formatPrice } from '../../lib/fees';
 import React from 'react';
 import { useTheme } from 'next-themes';
 import {
@@ -34,8 +35,6 @@ export default function MapLegend({
   const { resolvedTheme } = useTheme();
   const dark = resolvedTheme === 'dark';
 
-  const formatPrice = (cents: number) =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
 
   return (
     <div className="space-y-4">

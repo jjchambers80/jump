@@ -453,6 +453,48 @@ export interface AssignableApplication {
   status: string;
 }
 
+// Public map types
+export interface PublicMapLegendTier {
+  tierId: string;
+  name: string;
+  price: number; // all-in price in dollars (FeeService units)
+  swatch: number; // 0-5
+}
+
+export interface PublicMapBooth {
+  id: string;
+  label: string;
+  kind: BoothKind;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  rotation: number;
+  status: BoothStatus;
+  tier: { id: string; name: string; price: number } | null;
+  vendorName: string | null;
+}
+
+export interface PublicMap {
+  id: string;
+  eventId: string;
+  name: string;
+  width: number;
+  height: number;
+  unit: string;
+  gridSize: number;
+  layout: { version: number; elements: MapElement[] };
+  underlayFileId: string | null;
+  underlayUrl: string | null;
+  underlayOpacity: number;
+  legend: PublicMapLegendTier[];
+  booths: PublicMapBooth[];
+  brandColor: string | null;
+  themeMode: string;
+  updatedAt: string;
+  etag: string;
+}
+
 export const mapsApi = {
   list: () => api.get<AdminMap[]>('/admin/maps'),
   create: (data: { eventId: string; name?: string; width?: number; height?: number; unit?: string }) =>
@@ -477,6 +519,9 @@ export const mapsApi = {
     api.post<{ boothId: string; label: string; status: string }>(`/admin/maps/${mapId}/booths/${boothId}/status`, { status }),
   getEventMapId: (eventId: string) =>
     api.get<{ mapId: string } | null>(`/admin/events/${eventId}/map`),
+  // Public map
+  getPublicEventMap: (eventId: string, etag?: string) =>
+    api.get<PublicMap>(`/events/${encodeURIComponent(eventId)}/map`, etag ? { headers: { 'If-None-Match': etag } } : {}),
 };
 
 // ===== Settings › Customer accounts (spec 031) =====

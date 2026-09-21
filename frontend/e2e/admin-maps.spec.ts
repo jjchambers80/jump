@@ -141,6 +141,24 @@ const assignableApps = [
 ];
 
 async function mockMapsApi(page: Page) {
+  // The admin shell resolves the active org from this list; without it every
+  // org-scoped page stays on its loading state.
+  await page.route(`${API}/organizations`, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([
+        {
+          id: ORG_ID,
+          name: 'Maps Org',
+          slug: 'maps-org',
+          status: 'ACTIVE',
+          createdAt: '2026-09-01T00:00:00.000Z',
+          updatedAt: '2026-09-01T00:00:00.000Z',
+        },
+      ]),
+    })
+  );
   await page.route(`${API}/admin/maps`, (route) =>
     route.fulfill({
       status: 200,
@@ -228,7 +246,8 @@ async function mockMapsApi(page: Page) {
     const fromBoothId = new URL(request.url()).pathname.split('/booths/')[1].split('/move')[0];
     const fromBooth = booths.find((b) => b.id === fromBoothId);
     const toBooth = booths.find((b) => b.id === body.targetBoothId);
-    if (!fromBooth || !toBooth || fromBooth.status !== 'SOLD' || (toBooth.status !== 'AVAILABLE' && toBooth.status !== 'RESERVED')) {
+    const canReceive = (status: string) => status === 'AVAILABLE' || status === 'RESERVED' || status === 'SOLD';
+    if (!fromBooth || !toBooth || fromBooth.status !== 'SOLD' || !canReceive(toBooth.status)) {
       return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ message: 'Invalid move' }) });
     }
     // Swap if target is sold, otherwise move
@@ -239,8 +258,8 @@ async function mockMapsApi(page: Page) {
       toBooth.applicationId = tempAppId;
       toBooth.assignedById = fromBooth.assignedById;
       // Update holders
-      fromBooth.holder = { ...fromBooth.holder!, id: fromBooth.applicationId };
-      toBooth.holder = { ...toBooth.holder!, id: toBooth.applicationId };
+      fromBooth.holder = { ...fromBooth.holder!, id: fromBooth.applicationId ?? '' };
+      toBooth.holder = { ...toBooth.holder!, id: toBooth.applicationId ?? '' };
       route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -304,70 +323,62 @@ test('lists maps with event and booth counts', async ({ page }) => {
   await expect(rows.nth(0)).toContainText('1 / 3');
 });
 
+// Selecting a booth on the SVG canvas opens its panel under the Properties tab.
+async function selectBooth(page: Page, label: string) {
+  await page.getByTestId(`booth-${label}`).click();
+  const properties = page.getByRole('button', { name: 'Properties' });
+  await expect(properties).toBeEnabled();
+  await properties.click();
+}
+
 test('opens builder and selects a booth', async ({ page }) => {
   await gotoBuilder(page);
-  // Click booth A1 on the canvas (simulated by clicking its label in the sidebar list)
-  await page.getByTestId('booth-row-a1').click();
-  await expect(page.getByRole('tab', { name: 'Properties' })).toBeEnabled();
-  await page.getByRole('tab', { name: 'Properties' }).click();
-  await expect(page.getByText('A1')).toBeVisible();
+  await selectBooth(page, 'A1');
+  await expect(page.getByText('Assign', { exact: true })).toBeVisible();
+  await expect(page.getByText('Available', { exact: true }).first()).toBeVisible();
 });
 
 test('assigns an application from the booth panel', async ({ page }) => {
   await gotoBuilder(page);
-  // Select booth A1 (available)
-  await page.getByTestId('booth-row-a1').click();
-  await page.getByRole('tab', { name: 'Properties' }).click();
-  // Click Assign button
-  await page.getByRole('button', { name: 'Assign' }).click();
-  // Search for vendor
-  await page.getByPlaceholder('Search by business name or contact…').fill('Vendor');
-  await expect(page.getByText('Vendor Two')).toBeVisible();
-  // Click Assign on the vendor
-  await page.getByRole('button', { name: 'Assign' }).click();
-  // Booth should now show as SOLD
-  await expect(page.getByText('Sold')).toBeVisible();
-  await expect(page.getByText('Vendor Two')).toBeVisible();
+  await selectBooth(page, 'A1');
+  await page.getByRole('button', { name: 'Assign', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('heading', { name: 'Assign to A1' })).toBeVisible();
+  await dialog.getByPlaceholder('Search by business name or contact…').fill('Vendor');
+  await expect(dialog.getByText('Vendor Two')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Assign', exact: true }).first().click();
+  await expect(dialog).toHaveCount(0);
+  // The panel now shows the holder and the Sold pill.
+  await expect(page.getByRole('link', { name: 'Vendor Two' })).toBeVisible();
+  await expect(page.getByText('Sold', { exact: true }).first()).toBeVisible();
+  await expect(page.getByTestId('booth-A1')).toHaveAttribute('aria-label', /Sold/);
 });
 
 test('unassigns a booth from the booth panel', async ({ page }) => {
   await gotoBuilder(page);
-  // Select booth A3 (already sold)
-  await page.getByTestId('booth-row-a3').click();
-  await page.getByRole('tab', { name: 'Properties' }).click();
-  await expect(page.getByText('Vendor One')).toBeVisible();
-  // Click Unassign
+  await selectBooth(page, 'A3');
+  await expect(page.getByRole('link', { name: 'Vendor One' })).toBeVisible();
   await page.getByRole('button', { name: 'Unassign' }).click();
-  // Booth should now show as Available
-  await expect(page.getByText('Available')).toBeVisible();
-  await expect(page.getByText('Vendor One')).not.toBeVisible();
+  await expect(page.getByRole('link', { name: 'Vendor One' })).toHaveCount(0);
+  await expect(page.getByTestId('booth-A3')).toHaveAttribute('aria-label', /Available/);
 });
 
 test('moves a holder to another booth via Move to…', async ({ page }) => {
   await gotoBuilder(page);
-  // Select booth A3 (sold)
-  await page.getByTestId('booth-row-a3').click();
-  await page.getByRole('tab', { name: 'Properties' }).click();
-  // Click Move to…
+  await selectBooth(page, 'A3');
   await page.getByRole('button', { name: 'Move to…' }).click();
-  // Click target booth A1 on canvas (simulated by clicking booth row)
-  await page.getByTestId('booth-row-a1').click();
-  // Booth A3 should now be available, A1 should show the holder
-  await expect(page.getByTestId('booth-row-a1')).toContainText('Vendor One');
-  await expect(page.getByTestId('booth-row-a3')).toContainText('Available');
+  await page.getByTestId('booth-A1').click();
+  await expect(page.getByTestId('booth-A1')).toHaveAttribute('aria-label', /Sold/);
+  await expect(page.getByTestId('booth-A3')).toHaveAttribute('aria-label', /Available/);
 });
 
 test('blocks a booth and makes it available again', async ({ page }) => {
   await gotoBuilder(page);
-  // Select booth A1 (available)
-  await page.getByTestId('booth-row-a1').click();
-  await page.getByRole('tab', { name: 'Properties' }).click();
-  // Click Block
-  await page.getByRole('button', { name: 'Block' }).click();
-  await expect(page.getByText('Blocked')).toBeVisible();
-  // Click Make available
+  await selectBooth(page, 'A1');
+  await page.getByRole('button', { name: 'Block', exact: true }).click();
+  await expect(page.getByTestId('booth-A1')).toHaveAttribute('aria-label', /Blocked/);
   await page.getByRole('button', { name: 'Make available' }).click();
-  await expect(page.getByText('Available')).toBeVisible();
+  await expect(page.getByTestId('booth-A1')).toHaveAttribute('aria-label', /Available/);
 });
 
 test('sidebar Maps entry navigates to maps list', async ({ page }) => {

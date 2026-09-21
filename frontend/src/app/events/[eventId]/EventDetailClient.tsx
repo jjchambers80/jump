@@ -14,6 +14,7 @@ import BrandScope from '../../../components/BrandScope';
 import OrganizationHeader from '../../../components/OrganizationHeader';
 import StorefrontFooter from '../../../components/storefront/StorefrontFooter';
 import GetInvolved from './GetInvolved';
+import FloorMapPreview from './FloorMapPreview';
 import CartLineItem from '../../../components/CartLineItem';
 import OrderTotals from '../../../components/OrderTotals';
 import ExpandCollapseAll from '../../../components/ExpandCollapseAll';
@@ -590,6 +591,9 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
 
           {/* Applications (spec 011): vendors, sponsors, press, panels */}
           <GetInvolved eventId={event.id} />
+
+          {/* Floor map preview (spec 014 phase 1) */}
+          <FloorMapPreview eventId={event.id} />
         </div>
         {/* End content card */}
 
