@@ -319,16 +319,11 @@ class ApplicationPaymentService {
         error: error.message,
       });
       if (!isCardFailure(error) && !intentId) {
-        // No intent exists to reconcile. PAYMENT_DUE is the one state every
-        // retry path (pay-now, retry charge, offline settlement) accepts; a
+        // No intent exists to reconcile. PAYMENT_DUE (with its due date and a
+        // FAILED payment row) is the one state every retry path accepts; the
         // released booth lets the vendor select another one.
-        await prisma.$transaction(async (tx) => {
-          await boothService.releaseHoldOnFailure(application.id, { tx });
-          await tx.application.update({
-            where: { id: application.id },
-            data: { paymentStatus: 'PAYMENT_DUE', capacitySlot: 'RESERVED' },
-          });
-        });
+        await prisma.application.update({ where: { id: application.id }, data: { capacitySlot: 'RESERVED' } });
+        await this._markPaymentDue(application, error.message);
         throw new ValidationError(`Could not charge the card on file: ${error.message}`);
       }
       return this._markPaymentDue(application, error.message, intentId);
@@ -440,6 +435,15 @@ class ApplicationPaymentService {
       });
       return true;
     });
+  }
+
+  /** Expire a hosted Checkout session the vendor walked away from; already-expired sessions are fine. */
+  async expireCheckoutSession(sessionId) {
+    try {
+      await stripe.checkout.sessions.expire(sessionId);
+    } catch (error) {
+      if (error?.code !== 'resource_missing' && !/already|expired|complete/i.test(String(error?.message))) throw error;
+    }
   }
 
   /** Charge failed: keep the reserved slot, start the pay-now clock. */

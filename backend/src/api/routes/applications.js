@@ -118,6 +118,15 @@ applicationStatusRouter.post('/:id/pay', submitLimiter, async (req, res, next) =
 });
 
 /** Hold and purchase a published booth through an emailed guest status link. */
+/** Back from a cancelled pay-now Checkout: release the hold, back to PAYMENT_DUE. */
+applicationStatusRouter.post('/:id/cancel-checkout', boothLimiter, async (req, res, next) => {
+  try {
+    res.json(await applicationService.cancelCheckout(req.params.id, req.query.token));
+  } catch (error) {
+    next(error);
+  }
+});
+
 applicationStatusRouter.post('/:id/booth', boothLimiter, async (req, res, next) => {
   try {
     res.json(await applicationService.chooseBooth(req.params.id, req.query.token, req.body?.boothId));

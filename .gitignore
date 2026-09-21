@@ -68,3 +68,7 @@ graphify-out/
 # Locally installed agent skills (ui-ux-pro-max etc.)
 .claude/skills/
 skills-lock.json
+
+# npm rename staging dirs left by interrupted installs
+.node_modules-*
+**/.node_modules-*

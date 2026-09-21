@@ -4,7 +4,13 @@ import { eventPath } from '@/lib/publicPaths';
 import { fetchPublicJson } from '@/lib/storefrontMeta';
 import PublicMapClient from './PublicMapClient';
 
-export default async function PublicMapPage({ params }: { params: { eventId: string } }) {
+export default async function PublicMapPage({
+  params,
+  searchParams,
+}: {
+  params: { eventId: string };
+  searchParams?: Record<string, string | string[] | undefined>;
+}) {
   const route = await fetchPublicJson<{ slug: string }>(
     `/events/${encodeURIComponent(params.eventId)}/meta`
   );
@@ -13,7 +19,13 @@ export default async function PublicMapPage({ params }: { params: { eventId: str
     route.slug !== params.eventId &&
     !headers().get('x-jump-tenant-host')
   ) {
-    permanentRedirect(`${eventPath(route.slug)}/map`);
+    // Keep ?booth= (and anything else) across the slug redirect.
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(searchParams ?? {})) {
+      if (typeof value === 'string') query.set(key, value);
+    }
+    const suffix = query.toString();
+    permanentRedirect(`${eventPath(route.slug)}/map${suffix ? `?${suffix}` : ''}`);
   }
   return <PublicMapClient params={params} />;
 }

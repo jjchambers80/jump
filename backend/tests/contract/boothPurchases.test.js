@@ -1,8 +1,22 @@
 // Contract tests for approved-vendor self-serve booth selection (spec 014 phase 2).
 // Postgres is real; these tests stop at HELD so no Stripe call is needed.
 
+import { jest } from '@jest/globals';
 import request from 'supertest';
 import { staffToken, joinOrgByToken, cleanupStaff } from '../helpers/staff.js';
+
+// Only the cancel-checkout path reaches Stripe: it expires the hosted session.
+const mockSessionsExpire = jest.fn().mockResolvedValue({});
+jest.unstable_mockModule('../../src/config/stripe.js', () => ({
+  default: {
+    checkout: { sessions: { create: jest.fn(), retrieve: jest.fn(), expire: mockSessionsExpire } },
+    customers: { create: jest.fn() },
+    paymentIntents: { create: jest.fn(), retrieve: jest.fn() },
+    setupIntents: { retrieve: jest.fn() },
+    refunds: { create: jest.fn() },
+    webhooks: { constructEvent: jest.fn() },
+  },
+}));
 
 const { default: app } = await import('../../src/api/server.js');
 const { prisma } = await import('@jump/db');
@@ -371,6 +385,32 @@ describe('Approved vendor booth purchase API', () => {
     });
     expect((await prisma.application.findUnique({ where: { id: application.id } })).paymentStatus).toBe('PAYMENT_DUE');
     expect((await prisma.booth.findUnique({ where: { id: booths[2].id } })).status).toBe('AVAILABLE');
+  });
+
+  it('backing out of hosted Checkout expires the session, releases the hold and reopens the picker', async () => {
+    const application = applications[2];
+    await resetToPaymentDue(application, booths[2]);
+    await request(app)
+      .post(`/applications/${application.id}/booth`)
+      .query({ token: statusToken(application.id) })
+      .send({ boothId: booths[2].id })
+      .expect(200);
+    await prisma.application.update({
+      where: { id: application.id },
+      data: { paymentStatus: 'PROCESSING', stripeCheckoutSessionId: `cs_${TAG}_walkaway` },
+    });
+    const res = await request(app)
+      .post(`/applications/${application.id}/cancel-checkout`)
+      .query({ token: statusToken(application.id) });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ cancelled: true, paymentStatus: 'PAYMENT_DUE' });
+    expect(mockSessionsExpire).toHaveBeenCalledWith(`cs_${TAG}_walkaway`);
+    expect((await prisma.booth.findUnique({ where: { id: booths[2].id } })).status).toBe('AVAILABLE');
+    // Idempotent: a second cancel is a no-op.
+    const again = await request(app)
+      .post(`/applications/${application.id}/cancel-checkout`)
+      .query({ token: statusToken(application.id) });
+    expect(again.body).toEqual({ cancelled: false, paymentStatus: 'PAYMENT_DUE' });
   });
 
   it('staff cannot assign a second booth to an application whose hold is settling', async () => {

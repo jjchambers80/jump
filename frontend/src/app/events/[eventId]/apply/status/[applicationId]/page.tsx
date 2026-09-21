@@ -8,7 +8,7 @@
 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Suspense, useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import api, { mapsApi } from '@/services/api';
 import { formatDate, money, PAYMENT_LABEL, STATUS_LABEL, STATUS_STYLE, needsBoothPicker, type ApplicantApplication } from '@/lib/applications';
 import BoothPicker from '@/components/maps/BoothPicker';
@@ -69,6 +69,19 @@ function StatusContent({ params }: { params: { eventId: string; applicationId: s
 
   // Back from Stripe: the webhook may land a beat after the redirect. Poll briefly
   // until the row reflects the payment / card, then stop.
+  // Back from a cancelled pay-now Checkout: the row is still PROCESSING with the
+  // booth held. Tell the backend so the hold is released and the picker reopens.
+  const cancelHandled = useRef(false);
+  useEffect(() => {
+    if (checkout !== 'cancelled' || !app || !token || cancelHandled.current) return;
+    if (app.paymentStatus !== 'PROCESSING') return;
+    cancelHandled.current = true;
+    api
+      .post(`/applications/${params.applicationId}/cancel-checkout?token=${encodeURIComponent(token)}`, {})
+      .catch(() => undefined)
+      .then(() => load());
+  }, [checkout, app, token, params.applicationId, load]);
+
   useEffect(() => {
     if (!checkout || !app || checkout === 'cancelled') return;
     const settled = checkout === 'submitted' ? app.status !== 'DRAFT' : checkout === 'paid' ? app.paymentStatus === 'PAID' : true;

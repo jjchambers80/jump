@@ -233,6 +233,15 @@ router.post('/me/applications/:id/pay', requireBuyer, async (req, res, next) => 
   }
 });
 
+/** Back from a cancelled pay-now Checkout: release the hold, back to PAYMENT_DUE. */
+router.post('/me/applications/:id/cancel-checkout', requireBuyer, boothLimiter, async (req, res, next) => {
+  try {
+    res.json(await applicationService.cancelCheckoutForContact(req.buyer.organizationId, req.buyer.contactId, req.params.id));
+  } catch (error) {
+    next(error);
+  }
+});
+
 /** Hold and purchase a booth owned by this buyer's approved application. */
 router.post('/me/applications/:id/booth', requireBuyer, boothLimiter, async (req, res, next) => {
   try {

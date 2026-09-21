@@ -496,6 +496,35 @@ class ApplicationService {
     }
   }
 
+  /**
+   * The vendor backed out of hosted Checkout: expire the Stripe session so a
+   * late completion cannot land, release the booth hold and return to
+   * PAYMENT_DUE so the picker is usable again. A no-op unless a pay-now
+   * session is in flight.
+   */
+  async cancelCheckout(applicationId, rawToken) {
+    const application = await this._requireByToken(applicationId, rawToken);
+    return this._cancelCheckout(application);
+  }
+
+  async cancelCheckoutForContact(organizationId, contactId, applicationId) {
+    const application = await prisma.application.findFirst({
+      where: { id: applicationId, organizationId, contactId, status: { not: 'DRAFT' } },
+      include: DETAIL_INCLUDE,
+    });
+    if (!application) throw new NotFoundError('Application not found');
+    return this._cancelCheckout(application);
+  }
+
+  async _cancelCheckout(application) {
+    if (application.status !== 'APPROVED' || application.paymentStatus !== 'PROCESSING' || !application.stripeCheckoutSessionId) {
+      return { cancelled: false, paymentStatus: application.paymentStatus };
+    }
+    await applicationPaymentService.expireCheckoutSession(application.stripeCheckoutSessionId);
+    await applicationPaymentService._markPaymentDue(application, 'Checkout cancelled by the vendor');
+    return { cancelled: true, paymentStatus: 'PAYMENT_DUE' };
+  }
+
   /** Buyer-session path: ownership is scoped by organization + contact. */
   async chooseBoothForContact(organizationId, contactId, applicationId, boothId) {
     const application = await prisma.application.findFirst({
@@ -1797,7 +1826,9 @@ class ApplicationService {
     // Spec 014 phase 2: "Booth not chosen" = approved on a map-bound tier with
     // no booth owned yet (a HELD booth is still unpaid, so it counts as not chosen).
     if (query.booth === 'none') {
-      where.status = 'APPROVED';
+      // ANDed with any status filter the user picked: a status the filter
+      // excludes just yields no rows instead of silently overriding it.
+      where.AND = [...(where.AND || []), { status: 'APPROVED' }];
       where.tier = { mapBound: true };
       where.booth = null;
     } else if (query.booth === 'chosen') {
