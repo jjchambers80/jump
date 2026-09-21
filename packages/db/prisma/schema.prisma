@@ -1548,6 +1548,7 @@ model Application {
   withdrawnBy     WithdrawnBy?
   withdrawReason  String?
   boothLabel      String?
+  publicProfile   Boolean      @default(true) // spec 014: organizer-controlled public vendor directory opt-in
   tags            String[]     @default([]) // spec 019 phase 3: free-form organizer tags
   checkedInAt     DateTime? // spec 019 phase 3: on-site check-in (APPROVED only)
   checkedOutAt    DateTime?

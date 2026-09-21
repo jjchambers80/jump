@@ -691,7 +691,7 @@ class ApplicationService {
    * `checkedIn` / `checkedOut` booleans that stamp or clear the timestamps.
    * Check-in is refused (409) unless the application is APPROVED.
    */
-  async updateMeta(eventId, applicationId, organizationId, { boothLabel, internalNote, tags, checkedIn, checkedOut }) {
+  async updateMeta(eventId, applicationId, organizationId, { boothLabel, internalNote, tags, checkedIn, checkedOut, publicProfile }) {
     await applicationFormService.requireEvent(eventId, organizationId);
     const data = {};
     if (boothLabel !== undefined) {
@@ -703,6 +703,10 @@ class ApplicationService {
       data.internalNote = internalNote ? internalNote.trim() : null;
     }
     if (tags !== undefined) data.tags = this._normaliseTags(tags);
+    if (publicProfile !== undefined) {
+      if (typeof publicProfile !== 'boolean') throw new ValidationError('publicProfile must be a boolean');
+      data.publicProfile = publicProfile;
+    }
     for (const [key, column] of [['checkedIn', 'checkedInAt'], ['checkedOut', 'checkedOutAt']]) {
       const value = key === 'checkedIn' ? checkedIn : checkedOut;
       if (value === undefined) continue;
@@ -2067,6 +2071,7 @@ class ApplicationService {
       boothLabel: a.boothLabel,
       // Spec 014: owned (SOLD / RESERVED) or, phase 2, HELD while the vendor pays.
       booth: a.mapBooth ? boothView(a) : a.booth ? { id: a.booth.id, label: a.booth.label, mapId: a.booth.mapId, status: 'SOLD', w: null, h: null, holdExpiresAt: null } : null,
+      publicProfile: a.publicProfile,
       internalNote: a.internalNote,
       tags: a.tags ?? [],
       checkedInAt: a.checkedInAt ?? null,

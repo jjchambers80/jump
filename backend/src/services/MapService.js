@@ -16,6 +16,7 @@ import {
 import logger from '../utils/logger.js';
 import feeService from './FeeService.js';
 import storeFileService from './StoreFileService.js';
+import imageService from './ImageService.js';
 import applicationFormService, { tierAmounts } from './ApplicationFormService.js';
 
 class MapService {
@@ -451,18 +452,57 @@ class MapService {
     const tierMap = {};
     for (const t of tiers) tierMap[t.id] = t;
 
-    // Resolve sold/reserved booth vendor names
-    const holderAppIds = map.booths
-      .filter((b) => ['SOLD', 'RESERVED'].includes(b.status) && b.applicationId)
-      .map((b) => b.applicationId);
-    const vendors = holderAppIds.length > 0
-      ? await prisma.application.findMany({
-          where: { id: { in: holderAppIds } },
-          select: { id: true, profile: { select: { businessName: true } } },
-        })
-      : [];
+    // Public directory: approved PAID-form vendors only, scoped to this event
+    // and explicitly visible. Never select Contact or organizer-only metadata.
+    const vendors = await prisma.application.findMany({
+      where: {
+        eventId,
+        status: 'APPROVED',
+        publicProfile: true,
+        form: { kind: 'PAID' },
+      },
+      select: {
+        id: true,
+        updatedAt: true,
+        booth: { select: { id: true, label: true, status: true } },
+        tier: { select: { id: true, name: true } },
+        form: { select: { id: true, name: true } },
+        profile: {
+          select: {
+            businessName: true,
+            description: true,
+            website: true,
+            socials: true,
+            updatedAt: true,
+            images: {
+              take: 1,
+              orderBy: { displayOrder: 'asc' },
+              select: { image: { include: { file: true } } },
+            },
+          },
+        },
+      },
+      orderBy: [{ profile: { businessName: 'asc' } }, { id: 'asc' }],
+    });
     const vendorMap = {};
     for (const v of vendors) vendorMap[v.id] = v.profile?.businessName || null;
+
+    const directory = vendors.map((vendor) => {
+      const firstImage = vendor.profile?.images?.[0]?.image;
+      return {
+        id: vendor.id,
+        name: vendor.profile.businessName,
+        description: vendor.profile.description,
+        website: vendor.profile.website,
+        socials: vendor.profile.socials || {},
+        imageUrl: firstImage ? imageService.formatImageResponse(firstImage).urls.card : null,
+        category: vendor.form.name,
+        tier: vendor.tier ? { id: vendor.tier.id, name: vendor.tier.name } : null,
+        booth: vendor.booth && ['SOLD', 'RESERVED'].includes(vendor.booth.status)
+          ? { id: vendor.booth.id, label: vendor.booth.label }
+          : null,
+      };
+    });
 
     // Compute legend with all-in prices using the form's fee mode
     const legend = [];
@@ -486,7 +526,14 @@ class MapService {
     const boothUpdated = map.booths.length > 0
       ? Math.max(...map.booths.map((b) => new Date(b.updatedAt).getTime()))
       : map.updatedAt.getTime();
-    const etagSource = Math.max(map.updatedAt.getTime(), boothUpdated);
+    const vendorUpdated = vendors.length > 0
+      ? Math.max(...vendors.flatMap((v) => [
+          new Date(v.updatedAt).getTime(),
+          new Date(v.profile.updatedAt).getTime(),
+          ...(v.profile.images || []).map((row) => new Date(row.image.updatedAt).getTime()),
+        ]))
+      : map.updatedAt.getTime();
+    const etagSource = Math.max(map.updatedAt.getTime(), boothUpdated, vendorUpdated);
     const etag = `"${etagSource}"`;
 
     return {
@@ -502,6 +549,7 @@ class MapService {
       underlayUrl: map.underlay ? storeFileService.url(map.underlay) : null,
       underlayOpacity: map.underlayOpacity,
       legend,
+      vendors: directory,
       booths: map.booths.map((b) => ({
         id: b.id,
         label: b.label,
@@ -517,8 +565,8 @@ class MapService {
           : null,
         vendorName: ['SOLD', 'RESERVED'].includes(b.status) ? (vendorMap[b.applicationId] || null) : null,
       })),
-      brandColor: map.event?.organization?.brandColor || null,
-      themeMode: map.event?.organization?.themeMode || 'SYSTEM',
+      brandColor: map.event?.venue?.organization?.brandColor || null,
+      themeMode: map.event?.venue?.organization?.themeMode || 'SYSTEM',
       updatedAt: map.updatedAt,
       etag,
     };

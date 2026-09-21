@@ -33,6 +33,19 @@ const MAP = {
   underlayUrl: null,
   underlayOpacity: 40,
   legend: [{ tierId: 't-1', name: '10×10 booth', price: 275, swatch: 0 }],
+  vendors: [
+    {
+      id: 'application-acme',
+      name: 'Acme Crafts',
+      description: 'Handmade goods for curious people.',
+      website: 'https://acme.example',
+      socials: { instagram: 'acmecrafts' },
+      imageUrl: null,
+      category: 'Artisan vendors',
+      tier: { id: 't-1', name: '10×10 booth' },
+      booth: { id: 'b-1', label: 'A1' },
+    },
+  ],
   booths: [
     { id: 'b-1', label: 'A1', kind: 'BOOTH', x: 0, y: 0, w: 10, h: 10, rotation: 0, status: 'SOLD', tier: { id: 't-1', name: '10×10 booth', price: 275 }, vendorName: 'Acme Crafts' },
     { id: 'b-2', label: 'A2', kind: 'BOOTH', x: 12, y: 0, w: 10, h: 10, rotation: 0, status: 'AVAILABLE', tier: { id: 't-1', name: '10×10 booth', price: 275 }, vendorName: null },
@@ -44,7 +57,7 @@ const MAP = {
   etag: '"1"',
 };
 
-async function mockEvent(page: Page, { published = true } = {}) {
+async function mockEvent(page: Page, { published = true, vendors = MAP.vendors } = {}) {
   await page.route(`${API}/events/ev-map/meta`, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ slug: 'ev-map' }) })
   );
@@ -57,7 +70,7 @@ async function mockEvent(page: Page, { published = true } = {}) {
           status: 200,
           contentType: 'application/json',
           headers: { 'Cache-Control': 'no-store', ETag: MAP.etag },
-          body: JSON.stringify(MAP),
+          body: JSON.stringify({ ...MAP, vendors }),
         })
       : route.fulfill({
           status: 404,
@@ -95,6 +108,27 @@ test.describe('public floor map', () => {
     await expect(page.getByTestId('booth-A2')).toBeVisible();
     // The highlighted booth is the one the deep link named.
     await expect(page.getByTestId('booth-A2')).toHaveAttribute('aria-label', /Booth A2/);
+  });
+
+  test('renders, searches and locates vendors from the directory', async ({ page }) => {
+    await mockEvent(page);
+    await page.goto('/events/ev-map/map');
+    const directory = page.getByTestId('vendor-directory');
+    await expect(directory.getByRole('heading', { name: 'Vendor directory' })).toBeVisible({ timeout: 15_000 });
+    await expect(directory.getByRole('heading', { name: 'Acme Crafts' })).toBeVisible();
+    await expect(directory.getByRole('listitem').getByText('Artisan vendors')).toBeVisible();
+    await directory.getByPlaceholder('Search vendors, categories or booths').fill('missing');
+    await expect(directory.getByText('No vendors match your search.')).toBeVisible();
+    await directory.getByPlaceholder('Search vendors, categories or booths').fill('A1');
+    await directory.getByRole('button', { name: 'View booth A1' }).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await expect(page.getByText('Sold to Acme Crafts').locator('visible=true')).toHaveCount(1);
+  });
+
+  test('shows the directory empty state', async ({ page }) => {
+    await mockEvent(page, { vendors: [] });
+    await page.goto('/events/ev-map/map');
+    await expect(page.getByText('Vendor directory coming soon')).toBeVisible();
   });
 
   test('an unpublished map is not available', async ({ page }) => {
