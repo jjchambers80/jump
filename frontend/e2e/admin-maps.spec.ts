@@ -140,7 +140,10 @@ const assignableApps = [
   },
 ];
 
+const layoutPuts: any[] = [];
+
 async function mockMapsApi(page: Page) {
+  layoutPuts.length = 0;
   // The admin shell resolves the active org from this list; without it every
   // org-scoped page stays on its loading state.
   await page.route(`${API}/organizations`, (route) =>
@@ -159,6 +162,32 @@ async function mockMapsApi(page: Page) {
       ]),
     })
   );
+  // Events the Create dialog offers (the one with a map is filtered out client-side).
+  await page.route(`${API}/organizations/${ORG_ID}/events?*`, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        events: [
+          { id: EVENT_ID, name: 'Expo 2026', date: '2026-10-04T00:00:00.000Z' },
+          { id: 'ev-2', name: 'Winter Market', date: '2026-12-01T00:00:00.000Z' },
+        ],
+        pagination: { page: 1, limit: 100, total: 2, totalPages: 1 },
+      }),
+    })
+  );
+  // Builder saves: settings PATCH and the whole-layout PUT echo the payload back.
+  await page.route(`${API}/admin/maps/${MAP_ID}/layout`, async (route) => {
+    const body = route.request().postDataJSON();
+    layoutPuts.push(body);
+    const booths = (body.booths as any[]).map((b, i) => ({
+      ...mapDetail.booths.find((mb) => mb.label === b.label),
+      id: mapDetail.booths.find((mb) => mb.label === b.label)?.id ?? `saved-${i}`,
+      ...b,
+      status: mapDetail.booths.find((mb) => mb.label === b.label)?.status ?? 'AVAILABLE',
+    }));
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...mapDetail, booths, layout: { version: 1, elements: body.elements } }) });
+  });
   await page.route(`${API}/admin/maps`, (route) =>
     route.fulfill({
       status: 200,
@@ -188,7 +217,7 @@ async function mockMapsApi(page: Page) {
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(mapDetail),
+      body: JSON.stringify(route.request().method() === 'PATCH' ? { ...mapDetail, ...route.request().postDataJSON() } : mapDetail),
     })
   );
 
@@ -379,6 +408,49 @@ test('blocks a booth and makes it available again', async ({ page }) => {
   await expect(page.getByTestId('booth-A1')).toHaveAttribute('aria-label', /Blocked/);
   await page.getByRole('button', { name: 'Make available' }).click();
   await expect(page.getByTestId('booth-A1')).toHaveAttribute('aria-label', /Available/);
+});
+
+test('the Create map dialog lists the org events that have no map yet', async ({ page }) => {
+  await mockMapsApi(page);
+  await page.goto('/admin/maps');
+  await page.getByRole('button', { name: 'Create map' }).first().click();
+  const dialog = page.getByRole('dialog').or(page.locator('text=Create floor map').locator('..'));
+  const select = page.getByRole('combobox').last();
+  await expect(select).toBeVisible();
+  await expect(select.locator('option')).toHaveCount(2); // placeholder + Winter Market
+  await expect(select.locator('option', { hasText: 'Winter Market' })).toHaveCount(1);
+  await expect(select.locator('option', { hasText: 'Expo 2026' })).toHaveCount(0);
+  void dialog;
+});
+
+test('the Booth tool places a new booth on the canvas and autosaves it', async ({ page }) => {
+  await gotoBuilder(page);
+  await page.getByRole('button', { name: 'Booth', exact: true }).click();
+  const canvas = page.getByTestId('map-canvas');
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error('canvas not laid out');
+  // Bottom-right of the 50×40 map is empty in the fixture.
+  await page.mouse.click(box.x + box.width * 0.75, box.y + box.height * 0.75);
+  await expect(page.getByTestId('booth-B4')).toBeVisible();
+  await expect(page.getByText('4 booths')).toBeVisible();
+  // Autosave sends the whole layout, new booth included, within a few seconds.
+  await expect.poll(() => layoutPuts.length, { timeout: 8_000 }).toBeGreaterThan(0);
+  expect(layoutPuts.at(-1).booths.map((b: any) => b.label)).toContain('B4');
+});
+
+test('the Row tool drags out several booths at once', async ({ page }) => {
+  await gotoBuilder(page);
+  await page.getByRole('button', { name: 'Row', exact: true }).click();
+  const canvas = page.getByTestId('map-canvas');
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error('canvas not laid out');
+  const y = box.y + box.height * 0.8;
+  await page.mouse.move(box.x + box.width * 0.05, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.6, y, { steps: 8 });
+  await page.mouse.up();
+  await expect(page.getByTestId('booth-B4')).toBeVisible();
+  await expect(page.getByTestId('booth-B5')).toBeVisible();
 });
 
 test('sidebar Maps entry navigates to maps list', async ({ page }) => {

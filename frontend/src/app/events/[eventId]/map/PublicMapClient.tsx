@@ -453,6 +453,7 @@ export default function PublicMapClient({ params }: PublicMapClientProps) {
                 underlayOpacity={mapData.underlayOpacity}
                 elements={elements}
                 booths={boothsForCanvas}
+                tierSwatches={Object.fromEntries(legendTiers.map((t) => [t.id, t.swatch]))}
                 interactive={true}
                 onBoothClick={handleBoothClick}
                 highlightBooth={highlightBooth ?? undefined}

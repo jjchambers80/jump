@@ -39,6 +39,12 @@ interface MapCanvasProps {
   highlightBooth?: string;
   transformRef?: React.RefObject<ReactZoomPanPinchRef | null>;
   guides?: { axis: 'x' | 'y'; pos: number }[];
+  /** tierId → legend swatch index (0–5). */
+  tierSwatches?: Record<string, number>;
+  /** Disable pan/drag while a placement tool is active. */
+  panningDisabled?: boolean;
+  /** Row-tool drag preview, in grid units. */
+  preview?: { x: number; y: number; w: number; h: number } | null;
 }
 
 export default function MapCanvas({
@@ -63,7 +69,14 @@ export default function MapCanvas({
   highlightBooth,
   transformRef: externalTransformRef,
   guides,
+  tierSwatches,
+  panningDisabled = false,
+  preview,
 }: MapCanvasProps) {
+  const fallbackSwatches: Record<string, number> = {};
+  for (const b of booths) {
+    if (b.tierId && fallbackSwatches[b.tierId] === undefined) fallbackSwatches[b.tierId] = Object.keys(fallbackSwatches).length % 6;
+  }
   const { resolvedTheme } = useTheme();
   const dark = resolvedTheme === 'dark';
   const internalRef = useRef<ReactZoomPanPinchRef>(null);
@@ -97,6 +110,7 @@ export default function MapCanvas({
       style={{ minWidth: svgWidth, minHeight: svgHeight }}
       role={interactive ? 'application' : 'img'}
       aria-label={interactive ? 'Floor map editor' : 'Floor map'}
+      data-testid="map-canvas"
     >
       {underlayUrl && (
         <image
@@ -133,9 +147,9 @@ export default function MapCanvas({
       ))}
 
       {sortedBooths.map((booth) => {
-        const tierIdx = booth.tierId
-          ? booths.findIndex((b) => b.tierId === booth.tierId) % 6
-          : -1;
+        // Swatch by tier ordinal, the same index the legend shows. Callers pass
+        // the legend order; without it, tiers are numbered by first appearance.
+        const tierIdx = booth.tierId ? (tierSwatches?.[booth.tierId] ?? fallbackSwatches[booth.tierId]) : -1;
         return (
           <Booth
             key={booth.id}
@@ -150,6 +164,20 @@ export default function MapCanvas({
           />
         );
       })}
+
+      {preview && (
+        <rect
+          x={preview.x * gridSize}
+          y={preview.y * gridSize}
+          width={preview.w * gridSize}
+          height={preview.h * gridSize}
+          fill="none"
+          stroke={GUIDE_COLOR}
+          strokeWidth={1.5}
+          strokeDasharray="6 3"
+          pointerEvents="none"
+        />
+      )}
 
       {guides?.map((g, i) => (
         <line
@@ -184,7 +212,7 @@ export default function MapCanvas({
       limitToBounds={false}
       centerOnInit={false}
       fitOnInit
-      panning={{ disabled: false }}
+      panning={{ disabled: panningDisabled }}
       pinch={{ disabled: false }}
       wheel={{ disabled: false, step: 0.1 }}
       doubleClick={{ disabled: true }}

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useCallback, Suspense, useRef, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useOrg } from '@/components/OrgContext';
 import MapCanvas from '@/components/maps/MapCanvas';
@@ -12,14 +12,31 @@ import { useMapEditor, type EditorTool } from '@/components/maps/useMapEditor';
 import { mapsApi } from '@/services/api';
 import { ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
 import type { MapBooth, MapElement } from '@/services/api';
-import { snapToGrid, findAlignmentGuides } from '@/components/maps/layoutOps';
-import { generateAutoNumberLabels, defaultBoothLabel } from '@/components/maps/boothLabels';
+import { snapToGrid, findAlignmentGuides, hasOverlap } from '@/components/maps/layoutOps';
+import { generateAutoNumberLabels, defaultBoothLabel, computeRowLayout } from '@/components/maps/boothLabels';
 import {
   ArrowLeft,
   AlertTriangle,
   Loader2,
   ExternalLink,
 } from 'lucide-react';
+
+type MapElementType = MapElement;
+// Default footprint for a new booth and the aisle the Row tool leaves between booths (grid units).
+const DEFAULT_BOOTH = 10;
+const ROW_GAP = 2;
+const ELEMENT_SIZES: Partial<Record<MapElement['kind'], { w: number; h: number }>> = {
+  stage: { w: 20, h: 8 },
+  entrance: { w: 6, h: 3 },
+  restroom: { w: 4, h: 4 },
+  food: { w: 8, h: 6 },
+  info: { w: 4, h: 4 },
+  firstAid: { w: 4, h: 4 },
+  programming: { w: 16, h: 10 },
+  label: { w: 10, h: 2 },
+  wall: { w: 20, h: 1 },
+  aisle: { w: 20, h: 2 },
+};
 
 function BuilderContent() {
   const params = useParams();
@@ -76,6 +93,18 @@ function BuilderContent() {
       setSelectedBooth(null);
     }
   }, [selectedIds, state?.booths]);
+
+  // ?booth=<id> deep link from the application detail page selects that booth once loaded.
+  const searchParams = useSearchParams();
+  const deepLinkedBooth = searchParams.get('booth');
+  const deepLinkApplied = useRef(false);
+  useEffect(() => {
+    if (deepLinkApplied.current || !deepLinkedBooth || !state) return;
+    if (!state.booths.some((b) => b.id === deepLinkedBooth)) return;
+    deepLinkApplied.current = true;
+    setSelectedIds(new Set([deepLinkedBooth]));
+    setSidebarTab('properties');
+  }, [deepLinkedBooth, state, setSelectedIds]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -174,11 +203,165 @@ function BuilderContent() {
 
   // ─── End booth assignment API ────────────────────────────────────
 
+  // ─── Placement tools ────────────────────────────────────────────
+  // Pointer events arrive on the zoom wrapper; the SVG's screen matrix maps
+  // them back to map units, then everything snaps to whole grid cells.
+  const rowDrag = useRef<{ x: number; y: number } | null>(null);
+  const [rowPreview, setRowPreview] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+
+  const toGrid = useCallback(
+    (e: React.PointerEvent): { x: number; y: number } | null => {
+      if (!state) return null;
+      const svg = (e.currentTarget as HTMLElement).querySelector('svg');
+      const ctm = svg?.getScreenCTM();
+      if (!svg || !ctm) return null;
+      const pt = svg.createSVGPoint();
+      pt.x = e.clientX;
+      pt.y = e.clientY;
+      const p = pt.matrixTransform(ctm.inverse());
+      return {
+        x: Math.max(0, Math.min(state.width, Math.floor(p.x / state.gridSize))),
+        y: Math.max(0, Math.min(state.height, Math.floor(p.y / state.gridSize))),
+      };
+    },
+    [state]
+  );
+
+  const nextLabel = useCallback(
+    (taken: Set<string>) => {
+      let n = state ? state.booths.length + 1 : 1;
+      while (taken.has(`B${n}`)) n += 1;
+      return `B${n}`;
+    },
+    [state]
+  );
+
+  const newBooth = useCallback(
+    (kind: 'BOOTH' | 'TABLE', x: number, y: number, label: string): MapBooth => ({
+      id: `new-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+      mapId,
+      label,
+      kind,
+      x,
+      y,
+      w: DEFAULT_BOOTH,
+      h: DEFAULT_BOOTH,
+      rotation: 0,
+      tierId: null,
+      status: 'AVAILABLE',
+      applicationId: null,
+      assignedById: null,
+      createdAt: '',
+      updatedAt: '',
+    }),
+    [mapId]
+  );
+
+  const placeElement = useCallback(
+    (kind: MapElementType['kind'], x: number, y: number) => {
+      if (!state) return;
+      const size = ELEMENT_SIZES[kind] ?? { w: 10, h: 10 };
+      const w = Math.min(size.w, Math.max(1, state.width - x));
+      const h = Math.min(size.h, Math.max(1, state.height - y));
+      updateElements([
+        ...state.elements,
+        {
+          id: `el-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+          kind,
+          x,
+          y,
+          w,
+          h,
+          ...(kind === 'label' ? { text: 'Label', size: 'M' as const } : {}),
+          ...(kind === 'wall' ? { orientation: 'h' as const } : {}),
+        },
+      ]);
+    },
+    [state, updateElements]
+  );
+
   const handleCanvasPointerDown = useCallback(
     (e: React.PointerEvent) => {
-      // Place new booths/table/markers on double-click or click on empty space with tool active
+      if (!state || activeTool === 'select' || e.button !== 0) return;
+      const at = toGrid(e);
+      if (!at) return;
+      if (activeTool === 'row') {
+        const start = {
+          x: Math.min(at.x, Math.max(0, state.width - DEFAULT_BOOTH)),
+          y: Math.min(at.y, Math.max(0, state.height - DEFAULT_BOOTH)),
+        };
+        rowDrag.current = start;
+        setRowPreview({ ...start, w: DEFAULT_BOOTH, h: DEFAULT_BOOTH });
+        return;
+      }
+      if (activeTool === 'booth' || activeTool === 'table') {
+        const x = Math.min(at.x, Math.max(0, state.width - DEFAULT_BOOTH));
+        const y = Math.min(at.y, Math.max(0, state.height - DEFAULT_BOOTH));
+        const candidate = { label: '', x, y, w: DEFAULT_BOOTH, h: DEFAULT_BOOTH, rotation: 0 };
+        if (hasOverlap(candidate, state.booths)) return; // never stack booths
+        const booth = newBooth(activeTool === 'booth' ? 'BOOTH' : 'TABLE', x, y, nextLabel(new Set(state.booths.map((b) => b.label))));
+        addBooth(booth);
+        setSelectedIds(new Set([booth.id]));
+        setSidebarTab('properties');
+        return;
+      }
+      if (activeTool === 'marker') return; // the marker menu sets a concrete kind
+      placeElement(activeTool as MapElementType['kind'], at.x, at.y);
+      setActiveTool('select');
     },
-    []
+    [state, activeTool, toGrid, newBooth, nextLabel, addBooth, placeElement, setSelectedIds, setActiveTool]
+  );
+
+  const handleCanvasPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!rowDrag.current || !state) return;
+      const at = toGrid(e);
+      if (!at) return;
+      const start = rowDrag.current;
+      const horizontal = Math.abs(at.x - start.x) >= Math.abs(at.y - start.y);
+      const span = horizontal ? Math.abs(at.x - start.x) : Math.abs(at.y - start.y);
+      const count = Math.max(1, Math.floor(span / (DEFAULT_BOOTH + ROW_GAP)) + 1);
+      setRowPreview({
+        x: horizontal ? Math.min(start.x, at.x) : start.x,
+        y: horizontal ? start.y : Math.min(start.y, at.y),
+        w: horizontal ? count * DEFAULT_BOOTH + (count - 1) * ROW_GAP : DEFAULT_BOOTH,
+        h: horizontal ? DEFAULT_BOOTH : count * DEFAULT_BOOTH + (count - 1) * ROW_GAP,
+      });
+    },
+    [state, toGrid]
+  );
+
+  const handleCanvasPointerUp = useCallback(
+    (e: React.PointerEvent) => {
+      const start = rowDrag.current;
+      rowDrag.current = null;
+      const preview = rowPreview;
+      setRowPreview(null);
+      if (!start || !preview || !state) return;
+      const horizontal = preview.w >= preview.h;
+      const count = horizontal
+        ? Math.round((preview.w + ROW_GAP) / (DEFAULT_BOOTH + ROW_GAP))
+        : Math.round((preview.h + ROW_GAP) / (DEFAULT_BOOTH + ROW_GAP));
+      const taken = new Set(state.booths.map((b) => b.label));
+      const startNum = state.booths.length + 1;
+      const layout = computeRowLayout(preview.x, preview.y, count, DEFAULT_BOOTH, DEFAULT_BOOTH, ROW_GAP, horizontal ? 'row' : 'column', 'B', startNum);
+      const placed: MapBooth[] = [];
+      for (const cell of layout.booths) {
+        if (cell.x + DEFAULT_BOOTH > state.width || cell.y + DEFAULT_BOOTH > state.height) break;
+        const candidate = { label: '', x: cell.x, y: cell.y, w: DEFAULT_BOOTH, h: DEFAULT_BOOTH, rotation: 0 };
+        if (hasOverlap(candidate, [...state.booths, ...placed])) continue;
+        let label = cell.label;
+        while (taken.has(label)) label = `${label}'`;
+        taken.add(label);
+        placed.push(newBooth('BOOTH', cell.x, cell.y, label));
+      }
+      if (placed.length > 0) {
+        updateBooths([...state.booths, ...placed]);
+        setSelectedIds(new Set(placed.map((b) => b.id)));
+      }
+      void e;
+    },
+    [rowPreview, state, newBooth, updateBooths, setSelectedIds]
   );
 
   // Zoom controls
@@ -251,8 +434,7 @@ function BuilderContent() {
   const handlePublish = useCallback(async () => {
     setPublishError(null);
     try {
-      await doSave();
-      await publish();
+      await publish(); // saves first; refuses to publish a stale layout
       setShowPublishDialog(false);
     } catch (err: any) {
       setPublishError(err?.message || 'Publish failed');
@@ -388,6 +570,11 @@ function BuilderContent() {
             selectedIds={selectedIds}
             onSelect={handleCanvasClick}
             onPointerDown={handleCanvasPointerDown}
+            onPointerMove={handleCanvasPointerMove}
+            onPointerUp={handleCanvasPointerUp}
+            panningDisabled={activeTool !== 'select'}
+            tierSwatches={Object.fromEntries(legendTiers.map((t) => [t.id, t.swatch]))}
+            preview={rowPreview}
             onZoomChange={handleZoomChange}
             transformRef={transformRef}
             guides={guides}

@@ -76,6 +76,7 @@ export default function FloorMapPreview({ eventId }: { eventId: string }) {
           underlayOpacity={mapData.underlayOpacity}
           elements={elements}
           booths={booths}
+          tierSwatches={Object.fromEntries(mapData.legend.map((l) => [l.tierId, l.swatch]))}
           interactive={false}
         />
       </div>

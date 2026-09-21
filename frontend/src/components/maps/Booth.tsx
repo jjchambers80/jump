@@ -42,11 +42,14 @@ export default function Booth({
   onClick,
   highlight,
 }: BoothProps) {
+  // Rotation 90° swaps the footprint in place at (x, y) — the same rule the
+  // server bounds check and layoutOps.aabbOverlap use, so what is drawn is
+  // exactly what is validated.
+  const isRotated = booth.rotation === 90;
   const x = booth.x * gridSize;
   const y = booth.y * gridSize;
-  const w = booth.w * gridSize;
-  const h = booth.h * gridSize;
-  const isRotated = booth.rotation === 90;
+  const w = (isRotated ? booth.h : booth.w) * gridSize;
+  const h = (isRotated ? booth.w : booth.h) * gridSize;
 
   const fill = tierSwatchIndex !== undefined
     ? tierSwatch(tierSwatchIndex, dark)
@@ -108,31 +111,16 @@ export default function Booth({
         </rect>
       )}
 
-      {isRotated ? (
-        <g transform={`translate(${x + w / 2}, ${y + h / 2}) rotate(90) translate(${-w / 2}, ${-h / 2})`}>
-          <rect
-            x={0}
-            y={0}
-            width={w}
-            height={h}
-            rx={2}
-            fill={fill}
-            stroke={stroke}
-            strokeWidth={strokeWidth}
-          />
-        </g>
-      ) : (
-        <rect
-          x={x}
-          y={y}
-          width={w}
-          height={h}
-          rx={2}
-          fill={fill}
-          stroke={stroke}
-          strokeWidth={strokeWidth}
-        />
-      )}
+      <rect
+        x={x}
+        y={y}
+        width={w}
+        height={h}
+        rx={2}
+        fill={fill}
+        stroke={stroke}
+        strokeWidth={strokeWidth}
+      />
 
       <text
         x={x + w / 2}

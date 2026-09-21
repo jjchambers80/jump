@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useOrg } from '@/components/OrgContext';
-import { mapsApi } from '@/services/api';
+import { api, mapsApi } from '@/services/api';
 import { useAccountFormat } from '@/lib/accountFormat';
 import type { AdminMap } from '@/services/api';
 import {
@@ -58,16 +58,15 @@ function MapsListContent() {
     setCreateError(null);
     setEventsLoading(true);
     try {
-      // Fetch events without maps
-      const res = await fetch('/admin/events', {
-        headers: { 'X-Jump-Org': selectedOrgId || '', 'Content-Type': 'application/json' },
-      });
-      const allEvents = await res.json();
-      const data = Array.isArray(allEvents) ? allEvents : allEvents.data || [];
+      // Same org-scoped list the Events page uses; a map exists per event at most once.
+      const data = await api.get<{ events: { id: string; name: string; date: string }[] }>(
+        `/organizations/${selectedOrgId}/events?page=1&limit=100`
+      );
       const mapEventIds = new Set(maps.map((m) => m.eventId));
-      setEvents(data.filter((e: any) => !mapEventIds.has(e.id)));
-    } catch {
+      setEvents((data.events || []).filter((e) => !mapEventIds.has(e.id)));
+    } catch (err: any) {
       setEvents([]);
+      setCreateError(err.message || 'Failed to load events');
     } finally {
       setEventsLoading(false);
     }
