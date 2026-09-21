@@ -204,7 +204,11 @@ async function mockCustomerDetail(page: Page, initial: CustomerDetail) {
   const patches: Record<string, unknown>[] = [];
   const signInLinkResults: { ok: boolean; message: string }[] = [];
 
-  await page.route(`${API}/admin/customers/${initial.id}`, async (route) => {
+  await page.route(`${API}/admin/customers/${initial.id}/timeline*`, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [], nextCursor: null }) })
+  );
+
+  await page.route((u) => u.origin === API && u.pathname === `/admin/customers/${initial.id}`, async (route) => {
     const request = route.request();
     const url = new URL(request.url());
 
@@ -236,7 +240,7 @@ async function mockCustomerDetail(page: Page, initial: CustomerDetail) {
 /** Mock the customer list API. */
 async function mockCustomerList(page: Page, data?: { data: Customer[]; pagination: { page: number; limit: number; total: number; totalPages: number } }) {
   const listData = data || buildCustomerList();
-  await page.route(`${API}/admin/customers`, async (route) => {
+  await page.route((u) => u.origin === API && u.pathname === '/admin/customers', async (route) => {
     const request = route.request();
     if (request.method() !== 'GET') return route.fulfill({ status: 405, body: 'Method Not Allowed' });
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(listData) });
@@ -277,13 +281,13 @@ test.describe('Customer detail Phase 1', () => {
     // Header with editable name and segment badge
     const nameButton = page.getByTestId('customer-name-edit');
     await expect(nameButton).toContainText('Jane Doe');
-    await expect(page.getByText('New')).toBeVisible();
+    await expect(page.getByTestId('customer-segment')).toContainText('New');
 
     // Stats bar
     await expect(page.getByText('Amount spent')).toBeVisible();
     await expect(page.getByText('$450.00')).toBeVisible();
     await expect(page.getByText('Transactions')).toBeVisible();
-    await expect(page.getByText('5')).toBeVisible();
+    await expect(page.getByText('5', { exact: true })).toBeVisible();
     await expect(page.getByText('Customer since')).toBeVisible();
     await expect(page.getByText('Last activity')).toBeVisible();
 
@@ -326,7 +330,7 @@ test.describe('Customer detail Phase 1', () => {
   test('shows name save error in the dialog', async ({ page }) => {
     const fixture = buildCustomerAccount();
     // Let the PATCH fail with a 409
-    await page.route(`${API}/admin/customers/${fixture.id}`, async (route) => {
+    await page.route((u) => u.origin === API && u.pathname === `/admin/customers/${fixture.id}`, async (route) => {
       const request = route.request();
       if (request.method() === 'GET') {
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fixture) });
@@ -345,7 +349,7 @@ test.describe('Customer detail Phase 1', () => {
     await page.getByRole('button', { name: 'Save' }).click();
 
     // Error should appear in the dialog
-    await expect(page.getByRole('alert')).toContainText('Another admin updated this customer.');
+    await expect(page.getByRole('dialog').getByRole('alert')).toContainText('Another admin updated this customer.');
     // Dialog stays open
     await expect(page.getByRole('dialog', { name: 'Edit name' })).toBeVisible();
   });
@@ -442,7 +446,7 @@ test.describe('Customer detail Phase 1', () => {
     await expect(page.getByRole('button', { name: 'Remove tag local' })).toBeVisible();
 
     // Add a new tag via the input (type and press Enter)
-    const tagInput = page.getByLabel('Tags');
+    const tagInput = page.getByRole('textbox', { name: 'Tags' });
     await tagInput.fill('returning');
     await tagInput.press('Enter');
     await expect(page.getByRole('button', { name: 'Remove tag returning' })).toBeVisible();
@@ -474,10 +478,10 @@ test.describe('Customer detail Phase 1', () => {
     await expect(page.getByRole('dialog', { name: 'Edit tags' })).toBeVisible();
 
     // Try adding one more tag
-    const tagInput = page.getByLabel('Tags');
+    const tagInput = page.getByRole('textbox', { name: 'Tags' });
     await tagInput.fill('overflow');
     await tagInput.press('Enter');
-    await expect(page.getByRole('alert')).toContainText('At most 20 tags');
+    await expect(page.getByRole('dialog').getByRole('alert')).toContainText('At most 20 tags');
   });
 
   test('shows marketing provenance line and toggles subscription', async ({ page }) => {
@@ -499,9 +503,8 @@ test.describe('Customer detail Phase 1', () => {
     // Toggle subscription off
     await page.getByTitle('Subscribed').click();
 
-    // Wait for the toggle to reflect new state (the detail re-fetches after toggle)
-    // After toggle the API PATCH then GET; we can check patch was sent
-    expect(patches.some((p) => p.emailSubscribed === false)).toBe(true);
+    // The PATCH is sent asynchronously; poll until it lands
+    await expect.poll(() => patches.some((p) => p.emailSubscribed === false)).toBe(true);
   });
 
   test.describe('Account card', () => {
@@ -511,9 +514,9 @@ test.describe('Customer detail Phase 1', () => {
 
       await page.goto(`/admin/customers/${fixture.id}`);
 
-      await expect(page.getByText('Account')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Account' })).toBeVisible();
       await expect(page.getByText('Account since')).toBeVisible();
-      await expect(page.getByText(/Jun 1,/)).toBeVisible();
+      await expect(page.getByText(/Jun 0?1, 2026/)).toBeVisible();
       await expect(page.getByText('Last sign-in')).toBeVisible();
       await expect(page.getByText('day ago')).toBeVisible();
 
@@ -528,7 +531,7 @@ test.describe('Customer detail Phase 1', () => {
 
       await page.goto(`/admin/customers/${fixture.id}`);
 
-      await expect(page.getByText('Account')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Account' })).toBeVisible();
       await expect(page.getByText('Guest checkout')).toBeVisible();
       await expect(page.getByText(/completed their purchase as a guest/i)).toBeVisible();
       // No account buttons for guests
@@ -542,7 +545,7 @@ test.describe('Customer detail Phase 1', () => {
 
       await page.goto(`/admin/customers/${fixture.id}`);
 
-      await page.getByRole('button', { name: /Send sign-in link/i }).click();
+      await page.getByRole('button', { name: /Send sign-in link/i }).first().click();
       await expect(page.getByText('Sign-in link sent.')).toBeVisible();
     });
 
@@ -554,7 +557,7 @@ test.describe('Customer detail Phase 1', () => {
       // Guest has no accountUrl so the Account card shows guest checkout;
       // the send-sign-in-link is available from the More actions dropdown.
       // Mock GET for the page load
-      await page.route(`${API}/admin/customers/${fixture.id}`, (route) => {
+      await page.route((u) => u.origin === API && u.pathname === `/admin/customers/${fixture.id}`, (route) => {
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fixture) });
       });
 
@@ -572,14 +575,15 @@ test.describe('Customer detail Phase 1', () => {
 
     test('send sign-in link shows 429 ratelimit error', async ({ page }) => {
       const fixture = buildCustomerAccount();
+      await mockCustomerDetail(page, fixture);
+      // Registered after the default mock so it takes precedence (last route wins)
       await page.route(`${API}/admin/customers/${fixture.id}/send-sign-in-link`, async (route) => {
         return route.fulfill({ status: 429, contentType: 'application/json', body: JSON.stringify({ message: 'Too many sign-in links sent recently. Try again later.' }) });
       });
-      await mockCustomerDetail(page, fixture);
 
       await page.goto(`/admin/customers/${fixture.id}`);
 
-      await page.getByRole('button', { name: /Send sign-in link/i }).click();
+      await page.getByRole('button', { name: /Send sign-in link/i }).first().click();
       await expect(page.getByText(/Too many sign-in links/i)).toBeVisible();
     });
 
@@ -607,8 +611,8 @@ test.describe('Customer detail Phase 1', () => {
     await page.getByRole('button', { name: 'More actions' }).click();
 
     // Send sign-in link and Copy account URL should be present
-    await expect(page.getByRole('button', { name: 'Send sign-in link' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Copy account URL' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Send sign-in link' }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Copy account URL' }).first()).toBeVisible();
 
     // Erase should be disabled
     const eraseButton = page.getByRole('button', { name: /Erase customer data/i });
@@ -627,10 +631,10 @@ test.describe('Customer detail Phase 1', () => {
 
     // Navigate from the customer list into the detail page
     await page.goto('/admin/customers');
-    await expect(page.getByText('Jane Doe')).toBeVisible();
+    await expect(page.getByText('Jane Doe').first()).toBeVisible();
 
     // Click on Jane Doe's row to navigate to detail
-    await page.getByText('Jane Doe').click();
+    await page.getByText('Jane Doe').first().click();
     await expect(page).toHaveURL(/\/admin\/customers\/cust-001/);
 
     // Detail page should render correctly
@@ -658,9 +662,9 @@ test.describe('Customer detail Phase 1', () => {
       await expect(page.getByRole('heading', { name: 'Customers' })).toBeVisible();
 
       // Verify customer rows render
-      await expect(page.getByText('Jane Doe')).toBeVisible();
-      await expect(page.getByText('Bob Smith')).toBeVisible();
-      await expect(page.getByText('Alice Johnson')).toBeVisible();
+      await expect(page.getByText('Jane Doe').first()).toBeVisible();
+      await expect(page.getByText('Bob Smith').first()).toBeVisible();
+      await expect(page.getByText('Alice Johnson').first()).toBeVisible();
     });
 
     test('search filters customer list', async ({ page }) => {
@@ -684,7 +688,7 @@ test.describe('Customer detail Phase 1', () => {
       await searchInput.press('Enter');
 
       // Should only show Jane
-      await expect(page.getByText('Jane Doe')).toBeVisible();
+      await expect(page.getByText('Jane Doe').first()).toBeVisible();
       await expect(page.getByText('Bob Smith')).toHaveCount(0);
     });
   });

@@ -10,6 +10,7 @@ import {
   segmentBadgeClass,
   type CustomerSegment,
 } from '@/lib/customers';
+import { customerScopeFrom, type CustomerScope } from '@/lib/customerNavigation';
 
 interface Customer {
   id: string;
@@ -55,6 +56,9 @@ function CustomersPageContent() {
   const searchParams = useSearchParams();
   const initialSearch = searchParams.get('search') || '';
   const initialSegment = (searchParams.get('segment') || '') as CustomerSegment | '';
+  // Spec 032 phase 3: `all` also lists prospects (contacts with no paid order)
+  const [scope, setScope] = useState<CustomerScope>(() => customerScopeFrom(searchParams));
+  const noun = scope === 'all' ? 'contact' : 'customer';
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,7 +85,7 @@ function CustomersPageContent() {
     try {
       setLoading(true);
       setError(null);
-      const params = new URLSearchParams({ page: String(page), limit: '20' });
+      const params = new URLSearchParams({ page: String(page), limit: '20', scope });
       if (search) params.set('search', search);
       if (segment) params.set('segment', segment);
       params.set('sort', sort);
@@ -95,7 +99,7 @@ function CustomersPageContent() {
     } finally {
       setLoading(false);
     }
-  }, [selectedOrgId, page, search, segment, sort, direction]);
+  }, [selectedOrgId, page, search, segment, sort, direction, scope]);
 
   useEffect(() => {
     fetchCustomers();
@@ -104,9 +108,10 @@ function CustomersPageContent() {
   // Reset page when search changes
   useEffect(() => {
     setPage(1);
-  }, [search, segment, sort, direction]);
+  }, [search, segment, sort, direction, scope]);
 
   const listQuery = customerListQuery({ page, search, segment, sort, direction });
+  if (scope === 'all') listQuery.set('scope', 'all');
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -165,9 +170,32 @@ function CustomersPageContent() {
           </div>
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">Customers</h1>
         </div>
-        <span className="text-sm text-gray-500 dark:text-slate-400">
-          {!loading && `${total} customer${total !== 1 ? 's' : ''}`}
-        </span>
+        <div className="flex items-center gap-3">
+          <div role="group" aria-label="Contact scope" className="inline-flex rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-0.5">
+            {([
+              ['customers', 'Customers'],
+              ['all', 'All contacts'],
+            ] as [CustomerScope, string][]).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={scope === value}
+                data-testid={`customer-scope-${value}`}
+                onClick={() => setScope(value)}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  scope === value
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <span className="text-sm text-gray-500 dark:text-slate-400" aria-live="polite">
+            {!loading && `${total} ${noun}${total !== 1 ? 's' : ''}`}
+          </span>
+        </div>
       </div>
 
       {/* Search bar */}
@@ -260,7 +288,7 @@ function CustomersPageContent() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
           <p className="text-gray-500 dark:text-slate-400">
-            {search || segment ? 'No customers match these filters.' : 'No customers yet.'}
+            {search || segment ? `No ${noun}s match these filters.` : `No ${noun}s yet.`}
           </p>
         </div>
       )}
@@ -454,7 +482,7 @@ function CustomersPageContent() {
           {/* Footer with pagination */}
           <div className="flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-slate-800/80 border-t border-gray-200 dark:border-slate-700">
             <span className="text-xs text-gray-500 dark:text-slate-400">
-              {total} customer{total !== 1 ? 's' : ''}
+              {total} {noun}{total !== 1 ? 's' : ''}
             </span>
             {totalPages > 1 && (
               <div className="flex items-center gap-3">

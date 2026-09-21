@@ -190,6 +190,31 @@ describe('Application orders reporting contract (spec 024)', () => {
     expect(byBusiness.body.data.map((c) => c.email)).toEqual([`vendor@${TAG}.test`]);
   });
 
+  it('scope=all includes prospects while rejecting unsupported scopes', async () => {
+    const all = await request(app)
+      .get(`/admin/customers?scope=all&search=${encodeURIComponent(`@${TAG}.test`)}`)
+      .set(...auth(adminToken));
+    expect(all.status).toBe(200);
+    expect(all.body.data.map((c) => c.email).sort()).toEqual([
+      `both@${TAG}.test`,
+      `buyer@${TAG}.test`,
+      `pending@${TAG}.test`,
+      `vendor@${TAG}.test`,
+    ]);
+    expect(all.body.data.find((c) => c.id === contacts.pending.id)).toMatchObject({
+      segment: 'Prospect',
+      transactionCount: 0,
+      orderCount: 0,
+      ticketOrderCount: 0,
+      applicationCount: 0,
+      totalSpent: 0,
+      totalRefunded: 0,
+    });
+
+    const invalid = await request(app).get('/admin/customers?scope=prospects').set(...auth(adminToken));
+    expect(invalid.status).toBe(400);
+  });
+
   it('customer detail lists applications beside orders; an application-only contact resolves', async () => {
     const both = await request(app).get(`/admin/customers/${contacts.both.id}`).set(...auth(adminToken));
     expect(both.status).toBe(200);
@@ -219,7 +244,19 @@ describe('Application orders reporting contract (spec 024)', () => {
     expect(vendor.body.totalRefunded).toBe(100);
 
     const pending = await request(app).get(`/admin/customers/${contacts.pending.id}`).set(...auth(adminToken));
-    expect(pending.status).toBe(404);
+    expect(pending.status).toBe(200);
+    expect(pending.body).toMatchObject({
+      id: contacts.pending.id,
+      segment: 'Prospect',
+      transactionCount: 0,
+      orderCount: 0,
+      ticketOrderCount: 0,
+      applicationCount: 0,
+      totalSpent: 0,
+      totalRefunded: 0,
+      orders: [],
+      applications: [],
+    });
   });
 
   // ─── Analytics + dashboard ───────────────────────────────────────────────

@@ -93,8 +93,8 @@ test.describe('Customer prospect filter and detail rendering', () => {
 
     // Verify zero-value indicators are present. The stat tiles for a prospect
     // show $0.00 for amount and 0 for transactions — any of these patterns.
-    const hasZeroAmount = pageText.includes('$0') || pageText.includes('$0.00');
-    const hasZeroTransactions = pageText.includes(' 0 ') || pageText.includes('0\n');
+    const hasZeroAmount = (pageText ?? '').includes('$0') || (pageText ?? '').includes('$0.00');
+    const hasZeroTransactions = (pageText ?? '').includes(' 0 ') || (pageText ?? '').includes('0\n');
 
     expect(hasZeroAmount || hasZeroTransactions).toBe(true);
 
@@ -128,8 +128,8 @@ test.describe('Customer prospect filter and detail rendering', () => {
     await customerLinks.first().click();
     await expect(page).toHaveURL(/\/admin\/customers\//);
 
-    // A customer should NOT have the Prospect segment badge
-    await expect(page.getByTestId('customer-segment')).toHaveCount(0);
+    // A customer with money collected is never a Prospect
+    await expect(page.getByTestId('customer-segment')).not.toContainText('Prospect');
 
     // Should show positive or zero amount tiles (not asserting strictly positive,
     // but the page rendered without error)

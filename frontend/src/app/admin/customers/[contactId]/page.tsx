@@ -84,9 +84,6 @@ interface CustomerDetail {
   lastActivityAt: string | null;
   orders: CustomerOrder[];
   applications: CustomerApplication[];
-  segment: CustomerSegment;
-  prevId: string | null;
-  nextId: string | null;
 }
 
 // ── Tag helpers ───────────────────────────────────────────────────────────
@@ -931,7 +928,7 @@ function CustomerDetailPageContent() {
               </button>
             </div>
             <div className="px-4 py-3">
-              {customer.tags.length === 0 ? (
+              {(customer.tags || []).length === 0 ? (
                 <button
                   onClick={openTagsDialog}
                   className="text-sm text-gray-400 dark:text-slate-500 italic hover:text-indigo-600 dark:hover:text-indigo-400"
@@ -940,7 +937,7 @@ function CustomerDetailPageContent() {
                 </button>
               ) : (
                 <div className="flex flex-wrap gap-1">
-                  {customer.tags.map((tag) => (
+                  {(customer.tags || []).map((tag) => (
                     <span key={tag} className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">
                       {tag}
                     </span>
