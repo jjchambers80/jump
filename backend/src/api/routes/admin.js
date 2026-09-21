@@ -44,6 +44,7 @@ import billingService from '../../services/BillingService.js';
 import pageService from '../../services/PageService.js';
 import storefrontPreferencesService from '../../services/StorefrontPreferencesService.js';
 import adminSearchService from '../../services/AdminSearchService.js';
+import mapService from '../../services/MapService.js';
 import { PAID_ORDER_STATUSES } from '../../services/paidStatuses.js';
 import { activeOrgFor } from './adminScope.js';
 
@@ -579,6 +580,14 @@ router.delete('/application-templates/:templateId', requireAdmin, wrap(async (re
   if (scope.empty) throw new NotFoundError('Application form template not found');
   await applicationFormTemplateService.remove(req.params.templateId, scope.organizationId);
   res.status(204).end();
+}));
+
+// Map deep-link for event Map button (spec 014)
+router.get('/events/:eventId/map', wrap(async (req, res) => {
+  const orgId = await activeOrgFor(req);
+  const map = await mapService.findByEvent(orgId, req.params.eventId);
+  if (!map) return res.json(null);
+  res.json({ mapId: map.id });
 }));
 
 // Forms

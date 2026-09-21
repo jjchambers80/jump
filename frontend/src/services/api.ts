@@ -335,6 +335,150 @@ export type StorefrontPreferencesInput = Partial<
   Omit<StorefrontPreferences, 'hasPassword'> & { password: string | null }
 >;
 
+// ===== Maps (spec 014 phase 1) =====
+
+export type FloorMapStatus = 'DRAFT' | 'PUBLISHED';
+export type BoothKind = 'BOOTH' | 'TABLE';
+export type BoothStatus = 'AVAILABLE' | 'HELD' | 'SOLD' | 'RESERVED' | 'BLOCKED';
+
+export interface AdminMap {
+  id: string;
+  eventId: string;
+  name: string;
+  status: FloorMapStatus;
+  width: number;
+  height: number;
+  unit: string;
+  boothCount: number;
+  soldCount: number;
+  reservedCount: number;
+  blockedCount: number;
+  event: { id: string; name: string; slug: string; date: string };
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MapElement {
+  id: string;
+  kind: 'wall' | 'aisle' | 'stage' | 'entrance' | 'restroom' | 'food' | 'info' | 'firstAid' | 'programming' | 'label';
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  caption?: string;
+  text?: string;
+  size?: 'S' | 'M' | 'L';
+  orientation?: 'h' | 'v';
+}
+
+export interface MapBooth {
+  id: string;
+  mapId: string;
+  label: string;
+  kind: BoothKind;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  rotation: number;
+  tierId: string | null;
+  status: BoothStatus;
+  applicationId: string | null;
+  assignedById: string | null;
+  createdAt: string;
+  updatedAt: string;
+  holder?: {
+    id: string;
+    status: string;
+    paymentStatus: string;
+    businessName: string | null;
+  } | null;
+}
+
+export interface MapTier {
+  id: string;
+  name: string;
+  price: number;
+  mapBound: boolean;
+  quantityTotal: number | null;
+  form: { id: string; name: string; slug: string } | null;
+  displayOrder: number;
+}
+
+export interface AdminMapDetail {
+  id: string;
+  organizationId: string;
+  eventId: string;
+  name: string;
+  status: FloorMapStatus;
+  unit: string;
+  gridSize: number;
+  width: number;
+  height: number;
+  underlayFileId: string | null;
+  underlayOpacity: number;
+  layout: { version: number; elements: MapElement[] };
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  booths: MapBooth[];
+  tiers: MapTier[];
+}
+
+export interface LayoutBoothInput {
+  id?: string;
+  label: string;
+  kind: BoothKind;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  rotation: number;
+  tierId: string | null;
+}
+
+export interface LayoutInput {
+  elements: Omit<MapElement, 'id'>[];
+  booths: LayoutBoothInput[];
+}
+
+export interface AssignableApplication {
+  id: string;
+  businessName: string | null;
+  contactName: string;
+  email: string;
+  tier: { id: string; name: string; price: number; mapBound: boolean } | null;
+  tierMatch: boolean;
+  status: string;
+}
+
+export const mapsApi = {
+  list: () => api.get<AdminMap[]>('/admin/maps'),
+  create: (data: { eventId: string; name?: string; width?: number; height?: number; unit?: string }) =>
+    api.post<AdminMapDetail>('/admin/maps', data),
+  get: (mapId: string) => api.get<AdminMapDetail>(`/admin/maps/${mapId}`),
+  update: (mapId: string, data: Partial<Pick<AdminMapDetail, 'name' | 'width' | 'height' | 'unit' | 'gridSize' | 'underlayFileId' | 'underlayOpacity'>>) =>
+    api.patch<AdminMapDetail>(`/admin/maps/${mapId}`, data),
+  replaceLayout: (mapId: string, data: LayoutInput) =>
+    api.put<AdminMapDetail>(`/admin/maps/${mapId}/layout`, data),
+  publish: (mapId: string) => api.post<AdminMapDetail>(`/admin/maps/${mapId}/publish`, {}),
+  unpublish: (mapId: string) => api.post<AdminMapDetail>(`/admin/maps/${mapId}/unpublish`, {}),
+  remove: (mapId: string) => api.delete<void>(`/admin/maps/${mapId}`),
+  assignableApplications: (mapId: string, boothId: string, q?: string) =>
+    api.get<AssignableApplication[]>(`/admin/maps/${mapId}/booths/${boothId}/assignable${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+  assignBooth: (mapId: string, boothId: string, applicationId: string, force?: boolean) =>
+    api.post<{ boothId: string; label: string; status: string }>(`/admin/maps/${mapId}/booths/${boothId}/assign`, { applicationId, force }),
+  unassignBooth: (mapId: string, boothId: string) =>
+    api.post<{ boothId: string; label: string; status: string }>(`/admin/maps/${mapId}/booths/${boothId}/unassign`, {}),
+  moveBooth: (mapId: string, boothId: string, targetBoothId: string) =>
+    api.post<{ fromBooth: string; toBooth: string; label: string }>(`/admin/maps/${mapId}/booths/${boothId}/move`, { targetBoothId }),
+  setBoothStatus: (mapId: string, boothId: string, status: 'AVAILABLE' | 'RESERVED' | 'BLOCKED') =>
+    api.post<{ boothId: string; label: string; status: string }>(`/admin/maps/${mapId}/booths/${boothId}/status`, { status }),
+  getEventMapId: (eventId: string) =>
+    api.get<{ mapId: string } | null>(`/admin/events/${eventId}/map`),
+};
+
 // ===== Settings › Customer accounts (spec 031) =====
 
 /** GET/PATCH /admin/settings/customer-accounts. */

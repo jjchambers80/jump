@@ -23,6 +23,7 @@ import {
   FileText,
   Landmark,
   LayoutDashboard,
+  Map,
   MapPin,
   ScanLine,
   Settings,
@@ -52,6 +53,7 @@ const navItems: NavItem[] = [
   { label: 'Orders', href: '/admin/orders', icon: ShoppingCart },
   { label: 'Customers', href: '/admin/customers', icon: Users },
   { label: 'Participants', href: '/admin/participants', icon: ClipboardList },
+  { label: 'Maps', href: '/admin/maps', icon: Map },
   { label: 'Check In', href: '/admin/orders/scan', icon: ScanLine },
   { label: 'Analytics', href: '/admin/analytics', icon: ChartColumn },
   {

@@ -18,6 +18,14 @@ import logger from '../utils/logger.js';
 class MapService {
   // ─── Admin CRUD ─────────────────────────────────────────────────────
 
+  /** Find a map by event within an org (deep-link helper). */
+  async findByEvent(orgId, eventId) {
+    return prisma.floorMap.findFirst({
+      where: { eventId, organizationId: orgId },
+      select: { id: true },
+    });
+  }
+
   /** List maps for an org with event summary, booth counts. */
   async list(orgId) {
     const maps = await prisma.floorMap.findMany({
