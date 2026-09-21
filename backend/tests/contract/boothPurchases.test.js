@@ -1,17 +1,19 @@
 // Contract tests for approved-vendor self-serve booth selection (spec 014 phase 2).
-// Postgres is real; these tests stop at HELD so no Stripe call is needed.
+// Postgres is real; most tests stop at HELD so no Stripe call is needed — the
+// card-on-file decline test below is the one path that reaches paymentIntents.create.
 
 import { jest } from '@jest/globals';
 import request from 'supertest';
 import { staffToken, joinOrgByToken, cleanupStaff } from '../helpers/staff.js';
 
-// Only the cancel-checkout path reaches Stripe: it expires the hosted session.
+// Only the cancel-checkout path and the card-on-file decline test reach Stripe.
 const mockSessionsExpire = jest.fn().mockResolvedValue({});
+const mockPaymentIntentsCreate = jest.fn();
 jest.unstable_mockModule('../../src/config/stripe.js', () => ({
   default: {
     checkout: { sessions: { create: jest.fn(), retrieve: jest.fn(), expire: mockSessionsExpire } },
     customers: { create: jest.fn() },
-    paymentIntents: { create: jest.fn(), retrieve: jest.fn() },
+    paymentIntents: { create: mockPaymentIntentsCreate, retrieve: jest.fn() },
     setupIntents: { retrieve: jest.fn() },
     refunds: { create: jest.fn() },
     webhooks: { constructEvent: jest.fn() },
@@ -429,6 +431,41 @@ describe('Approved vendor booth purchase API', () => {
       .send({ applicationId: application.id });
     expect(res.status).toBe(409);
     expect(res.body.message).toMatch(/APPLICATION_HAS_BOOTH/);
+  });
+
+  it('a declined card on the hold request releases the booth and leaves the application payable again', async () => {
+    const application = applications[1]; // APPROVED + PAYMENT_DUE, no hold from earlier tests
+    await resetToPaymentDue(application, booths[1]);
+    await prisma.contact.update({ where: { id: contacts[1].id }, data: { stripeCustomerId: `cus_${TAG}_1` } });
+    await prisma.application.update({ where: { id: application.id }, data: { stripePaymentMethodId: `pm_${TAG}_1` } });
+    const declineError = new Error('Your card was declined.');
+    declineError.type = 'StripeCardError';
+    declineError.code = 'card_declined';
+    declineError.raw = { payment_intent: { id: `pi_${TAG}_declined_1` } };
+    mockPaymentIntentsCreate.mockRejectedValueOnce(declineError);
+
+    const res = await request(app)
+      .post(`/applications/${application.id}/booth`)
+      .query({ token: statusToken(application.id) })
+      .send({ boothId: booths[1].id });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ boothId: booths[1].id, status: 'AVAILABLE', paymentStatus: 'PAYMENT_DUE' });
+
+    const row = await prisma.application.findUnique({ where: { id: application.id } });
+    expect(row).toMatchObject({ status: 'APPROVED', paymentStatus: 'PAYMENT_DUE' });
+    const booth = await prisma.booth.findUnique({ where: { id: booths[1].id } });
+    expect(booth).toMatchObject({ status: 'AVAILABLE', holdApplicationId: null, holdExpiresAt: null, applicationId: null });
+
+    // The vendor can immediately pick the same (now-available) booth again;
+    // a successful charge this time sells it.
+    mockPaymentIntentsCreate.mockResolvedValueOnce({ id: `pi_${TAG}_retry_1`, status: 'succeeded' });
+    const retry = await request(app)
+      .post(`/applications/${application.id}/booth`)
+      .query({ token: statusToken(application.id) })
+      .send({ boothId: booths[1].id });
+    expect(retry.status).toBe(200);
+    expect(retry.body).toMatchObject({ status: 'SOLD', paymentStatus: 'PAID' });
   });
 
   it('a form with a map-bound tier cannot switch to charging at submission', async () => {

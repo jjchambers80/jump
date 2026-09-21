@@ -116,8 +116,8 @@ interface Scenario {
   app: ReturnType<typeof applicantApp>;
   states: Record<string, BoothState>;
   version: number;
-  /** What POST …/booth answers; `taken` = 409 BOOTH_TAKEN once. */
-  choose: 'card' | 'no-card' | 'taken';
+  /** What POST …/booth answers; `taken` = 409 BOOTH_TAKEN once, `declined` = a card-on-file decline (200, booth released). */
+  choose: 'card' | 'no-card' | 'taken' | 'declined';
 }
 
 async function mockVendor(page: Page, scenario: Scenario) {
@@ -146,6 +146,12 @@ async function mockVendor(page: Page, scenario: Scenario) {
         base.choose = 'card';
         return route.fulfill(json({ error: 'ConflictError', message: 'This booth is no longer available', code: 'BOOTH_TAKEN' }, 409));
       }
+      if (base.choose === 'declined') {
+        // Card on file, but the off-session charge is declined: the server
+        // releases the hold in the same request and reports it as available.
+        base.version += 1;
+        return route.fulfill(json({ boothId, holdExpiresAt: new Date(Date.now() + 15 * 60_000).toISOString(), status: 'AVAILABLE', paymentStatus: 'PAYMENT_DUE' }));
+      }
       base.states[boothId] = 'HELD';
       base.version += 1;
       const holdExpiresAt = new Date(Date.now() + 15 * 60_000).toISOString();
@@ -171,6 +177,8 @@ async function mockVendor(page: Page, scenario: Scenario) {
 const statusUrl = `/events/${EVENT_ID}/apply/status/${APP_ID}?token=${TOKEN}`;
 
 test.describe('vendor booth purchase', () => {
+  test.describe.configure({ mode: 'serial' });
+
   test('an approved vendor with a card on file picks an available booth and reaches the paid state', async ({ page }) => {
     const calls = await mockVendor(page, { app: applicantApp(), states: {}, version: 1, choose: 'card' });
     await page.goto(statusUrl);
@@ -237,6 +245,19 @@ test.describe('vendor booth purchase', () => {
     await expect(page.getByTestId('booth-A2')).toHaveAttribute('aria-disabled', 'true');
     expect(mapFetches()).toBeGreaterThan(before);
     await expect(page.getByTestId('booth-picker-hint')).toContainText('No booths are left');
+  });
+
+  test('a declined card on file releases the booth and lets the vendor pick again', async ({ page }) => {
+    await mockVendor(page, { app: applicantApp(), states: {}, version: 1, choose: 'declined' });
+    await page.goto(statusUrl);
+    await page.getByTestId('booth-A2').click();
+    await page.getByTestId('booth-buy').click();
+    const notice = page.getByTestId('booth-picker-notice');
+    await expect(notice).toContainText('We could not charge your card');
+    // The buy sheet closes and the booth is selectable again — nothing was sold.
+    await expect(page.getByTestId('booth-buy-sheet')).toHaveCount(0);
+    await expect(page.getByTestId('apply-payment')).not.toContainText('Paid');
+    await expect(page.getByTestId('booth-A2')).not.toHaveAttribute('aria-disabled', 'true');
   });
 
   test('a booth already placed by staff keeps the plain pay button', async ({ page }) => {
