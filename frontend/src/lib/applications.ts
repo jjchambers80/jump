@@ -420,6 +420,7 @@ export interface AdminApplication {
   withdrawnBy: 'ORGANIZER' | 'APPLICANT' | 'SYSTEM' | null;
   withdrawReason: string | null;
   boothLabel: string | null;
+  booth: { id: string; label: string; mapId: string } | null;
   internalNote: string | null;
   tags: string[];
   checkedInAt: string | null;

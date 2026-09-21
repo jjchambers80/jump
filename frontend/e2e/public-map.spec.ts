@@ -1,0 +1,118 @@
+// Public floor map (spec 014 phase 1): /events/:id/map — backend mocked.
+
+import { expect, test, type Page } from '@playwright/test';
+
+const API = 'http://localhost:3002';
+const EVENT = {
+  id: 'ev-map',
+  slug: 'ev-map',
+  name: 'Map Expo',
+  date: '2027-06-01T15:00:00.000Z',
+  status: 'PUBLISHED',
+  capacity: 100,
+  venue: { id: 've-1', name: 'Hall', address: '1 St', city: 'Raleigh', state: 'NC' },
+  priceTiers: [],
+  organizationId: 'org-map',
+  organizationName: 'Map Org',
+  organizationLogoUrl: null,
+  organizationBrandColor: '#b91c1c',
+  organizationThemeMode: 'SYSTEM',
+  taxRate: 0,
+  taxInclusivePricing: false,
+};
+const MAP = {
+  id: 'map-1',
+  eventId: 'ev-map',
+  name: 'Main hall',
+  width: 40,
+  height: 20,
+  unit: 'ft',
+  gridSize: 10,
+  layout: { version: 1, elements: [{ id: 'e1', kind: 'stage', x: 0, y: 14, w: 10, h: 4, caption: 'Stage' }] },
+  underlayFileId: null,
+  underlayUrl: null,
+  underlayOpacity: 40,
+  legend: [{ tierId: 't-1', name: '10×10 booth', price: 275, swatch: 0 }],
+  booths: [
+    { id: 'b-1', label: 'A1', kind: 'BOOTH', x: 0, y: 0, w: 10, h: 10, rotation: 0, status: 'SOLD', tier: { id: 't-1', name: '10×10 booth', price: 275 }, vendorName: 'Acme Crafts' },
+    { id: 'b-2', label: 'A2', kind: 'BOOTH', x: 12, y: 0, w: 10, h: 10, rotation: 0, status: 'AVAILABLE', tier: { id: 't-1', name: '10×10 booth', price: 275 }, vendorName: null },
+    { id: 'b-3', label: 'A3', kind: 'BOOTH', x: 24, y: 0, w: 10, h: 10, rotation: 0, status: 'BLOCKED', tier: null, vendorName: null },
+  ],
+  brandColor: '#b91c1c',
+  themeMode: 'SYSTEM',
+  updatedAt: '2026-09-21T00:00:00.000Z',
+  etag: '"1"',
+};
+
+async function mockEvent(page: Page, { published = true } = {}) {
+  await page.route(`${API}/events/ev-map/meta`, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ slug: 'ev-map' }) })
+  );
+  await page.route(`${API}/events/ev-map`, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(EVENT) })
+  );
+  await page.route(`${API}/events/ev-map/map`, (route) =>
+    published
+      ? route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          headers: { 'Cache-Control': 'no-store', ETag: MAP.etag },
+          body: JSON.stringify(MAP),
+        })
+      : route.fulfill({
+          status: 404,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'Map not published for this event' }),
+        })
+  );
+  await page.route(`${API}/organizations/org-map/public/menus`, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ main: [], footer: [] }) })
+  );
+}
+
+test.describe('public floor map', () => {
+  test('renders the legend, booth states and the sold vendor', async ({ page }) => {
+    await mockEvent(page);
+    await page.goto('/events/ev-map/map');
+    await expect(page.getByText('10×10 booth').first()).toBeVisible();
+    await expect(page.getByText('$275.00').first()).toBeVisible();
+    const sold = page.getByTestId('booth-A1');
+    await expect(sold).toBeVisible();
+    await expect(sold).toHaveAttribute('aria-label', /Booth A1, 10 by 10/);
+    await expect(page.getByTestId('booth-A2')).toBeVisible();
+    await expect(page.getByTestId('booth-A3')).toBeVisible();
+
+    await sold.click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    // Sheet (mobile) and popover (desktop) both mount; only the viewport's copy is visible.
+    await expect(page.getByText('Sold to Acme Crafts').locator('visible=true')).toHaveCount(1);
+  });
+
+  test('?booth= opens on that booth', async ({ page }) => {
+    await mockEvent(page);
+    await page.goto('/events/ev-map/map?booth=A2');
+    await expect(page.getByTestId('booth-A2')).toBeVisible();
+    // The highlighted booth is the one the deep link named.
+    await expect(page.getByTestId('booth-A2')).toHaveAttribute('aria-label', /Booth A2/);
+  });
+
+  test('an unpublished map is not available', async ({ page }) => {
+    await mockEvent(page, { published: false });
+    await page.goto('/events/ev-map/map');
+    await expect(page.getByText('Floor Map Not Available')).toBeVisible();
+    await expect(page.getByTestId('booth-A1')).toHaveCount(0);
+  });
+
+  test('the event page shows a floor map preview only when published', async ({ page }) => {
+    await mockEvent(page);
+    await page.goto('/events/ev-map');
+    await expect(page.getByRole('heading', { name: 'Floor map' })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('link', { name: /Open map/ })).toHaveAttribute('href', '/events/ev-map/map');
+
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    await mockEvent(page, { published: false });
+    await page.goto('/events/ev-map');
+    await expect(page.getByRole('heading', { name: 'Floor map' })).toHaveCount(0);
+  });
+});

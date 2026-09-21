@@ -141,6 +141,8 @@ const DETAIL_INCLUDE = {
   decisions: { orderBy: { createdAt: 'asc' } },
   // Spec 024: lines, payment and refunds live on the order.
   order: { include: ORDER_INCLUDE },
+  // Spec 014: booth assignment for map-bound applications.
+  booth: { select: { id: true, label: true, mapId: true } },
 };
 
 const OFFLINE_METHODS = new Set(['CHEQUE', 'CASH', 'BANK_TRANSFER', 'COMPED', 'OTHER']);
@@ -1887,6 +1889,7 @@ class ApplicationService {
       withdrawnBy: a.withdrawnBy,
       withdrawReason: a.withdrawReason,
       boothLabel: a.boothLabel,
+      booth: a.booth ? { id: a.booth.id, label: a.booth.label, mapId: a.booth.mapId } : null,
       internalNote: a.internalNote,
       tags: a.tags ?? [],
       checkedInAt: a.checkedInAt ?? null,

@@ -9,6 +9,7 @@ import { formatEventSummary } from '../utils/eventSummary.js';
 import taxService from './TaxService.js';
 import applicationFormService from './ApplicationFormService.js';
 import addOnService from './AddOnService.js';
+import mapService from './MapService.js';
 import { PAID_ORDER_STATUSES } from './paidStatuses.js';
 import { rethrowSlugConflict, resolveUniqueSlug } from '../utils/slug.js';
 import { findByPublicIdentifier } from '../utils/publicIdentifier.js';
@@ -138,7 +139,7 @@ class EventService {
     const newName = name === undefined || name === null || String(name).trim() === '' ? `Copy of ${source.name}` : String(name).trim();
     if (newName.length > 255) throw new ValidationError('Event name must be between 1 and 255 characters');
 
-    const { event, forms } = await prisma.$transaction(async (tx) => {
+    const { event, forms, copiedMap } = await prisma.$transaction(async (tx) => {
       const slugState = await resolveUniqueSlug(tx.event, { title: newName });
       const created = await tx.event.create({
         data: {
@@ -177,7 +178,8 @@ class EventService {
       // Tiers were created in source order, so index i of each list is the same tier.
       const tierIdMap = new Map(source.priceTiers.map((tier, i) => [tier.id, created.priceTiers[i]?.id]));
       await addOnService.copyForEvent(tx, source.id, created.id, { priceTierIdMap: tierIdMap, applicationTierIdMap });
-      return { event: created, forms: copied };
+      const copiedMap = await mapService.copyForEvent(tx, source.id, created.id, { applicationTierIdMap });
+      return { event: created, forms: copied, copiedMap: !!copiedMap };
     });
 
     logger.info('Event duplicated', {
@@ -188,7 +190,7 @@ class EventService {
       forms,
     });
 
-    return { ...this._formatEventDetail(event), copiedForms: forms };
+    return { ...this._formatEventDetail(event), copiedForms: forms, copiedMap };
   }
 
   /**
