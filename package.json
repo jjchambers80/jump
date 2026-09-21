@@ -1,4 +1,5 @@
 {
+  "name": "jump",
   "private": true,
   "workspaces": [
     "packages/*",

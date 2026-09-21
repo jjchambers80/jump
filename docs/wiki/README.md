@@ -61,6 +61,7 @@ Generated and maintained by running `/doc-feature` after completing feature work
 - [Venue Management](features/venue-management.md) — CRUD, logo uploads, timezone config
 - [Floor Maps](features/maps.md) — Builder, booth geometry, tier binding, public read (spec 014)
 - [Map Templates](features/map-templates.md) — Reusable vector geometry snapshots (spec 014 phase 3)
+- [Map Export](features/map-export.md) — Print-ready vector PDF export with vendor directory (spec 014 phase 3)
 - [Vendor Directory](features/vendor-directory.md) — Public vendor profiles with map booth links (spec 014 phase 3)
 - [User Management](features/user-management.md) — Role assignment, account listing
 
