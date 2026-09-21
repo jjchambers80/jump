@@ -120,6 +120,11 @@ export const LIMITS = Object.freeze({
     limit: 30,
     message: 'Too many applications from this address. Try again later.',
   },
+  BOOTH_CHOOSE: {
+    windowMs: 60 * 1000,
+    limit: 10,
+    message: 'Too many booth selection attempts. Wait a minute and try again.',
+  },
   // Spec 030: email-change confirmations (request + resend) per IP
   ACCOUNT_EMAIL_CHANGE: {
     windowMs: 60 * 60 * 1000,

@@ -318,6 +318,27 @@ describe('Application payments contract (spec 011 phase 2)', () => {
     expect((await appRow(cardApp)).paymentStatus).toBe('PAID');
   });
 
+  it('approving a map-bound tier reserves capacity but waits for booth selection before charging', async () => {
+    const tier = await prisma.applicationTier.create({
+      data: { formId: approvalForm.id, name: 'Map booth', price: 325, quantityTotal: 2, mapBound: true, displayOrder: 99 },
+    });
+    const created = await submit('vendor-space', tier.id, `map-vendor@${TAG}.test`, 'Map Vendor');
+    const applicationId = created.body.applicationId;
+    await cardOnFile(applicationId);
+    const chargesBefore = mockIntentsCreate.mock.calls.length;
+
+    const response = await request(app)
+      .post(`${adminBase()}/applications/${applicationId}/decision`)
+      .set(...auth(organizerToken))
+      .send({ decision: 'APPROVE' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ status: 'APPROVED', paymentStatus: 'PAYMENT_DUE', capacitySlot: 'RESERVED' });
+    expect(response.body.payment.paymentDueAt).toBeTruthy();
+    expect(mockIntentsCreate).toHaveBeenCalledTimes(chargesBefore);
+    expect(await prisma.applicationTier.findUnique({ where: { id: tier.id } })).toMatchObject({ quantityApproved: 0, quantityReserved: 1 });
+  });
+
   let dueApp; // APPROVAL timing, declined card → PAYMENT_DUE → pay-now
 
   it('a declined card leaves the application APPROVED + PAYMENT_DUE with the slot reserved and a PAYMENT_DUE email', async () => {
