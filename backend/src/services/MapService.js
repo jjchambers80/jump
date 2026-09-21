@@ -457,12 +457,16 @@ class MapService {
    * tier bindings remapped through applicationTierIdMap.
    * Called from EventService.duplicateEvent.
    */
-  async copyForEvent(tx, fromMapId, toEventId, { applicationTierIdMap = {} }) {
+  async copyForEvent(tx, fromEventId, toEventId, { applicationTierIdMap = new Map() } = {}) {
+    // Called from EventService.duplicateEvent with the source EVENT id and the
+    // Map<sourceTierId, newTierId> that ApplicationFormService.copyForms returns.
     const map = await tx.floorMap.findUnique({
-      where: { id: fromMapId },
-      select: { name: true, unit: true, gridSize: true, width: true, height: true, underlayOpacity: true, layout: true },
+      where: { eventId: fromEventId },
+      select: { id: true, name: true, unit: true, gridSize: true, width: true, height: true, underlayOpacity: true, layout: true },
     });
     if (!map) return null; // no source map to copy
+    const fromMapId = map.id;
+    const remapTier = (id) => (id ? (applicationTierIdMap instanceof Map ? applicationTierIdMap.get(id) : applicationTierIdMap[id]) || null : null);
 
     const newMap = await tx.floorMap.create({
       data: {
@@ -492,7 +496,7 @@ class MapService {
           w: b.w,
           h: b.h,
           rotation: b.rotation,
-          tierId: applicationTierIdMap[b.tierId] || null,
+          tierId: remapTier(b.tierId),
           status: 'AVAILABLE',
         })),
       });

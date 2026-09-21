@@ -139,7 +139,7 @@ class EventService {
     const newName = name === undefined || name === null || String(name).trim() === '' ? `Copy of ${source.name}` : String(name).trim();
     if (newName.length > 255) throw new ValidationError('Event name must be between 1 and 255 characters');
 
-    const { event, forms } = await prisma.$transaction(async (tx) => {
+    const { event, forms, copiedMap } = await prisma.$transaction(async (tx) => {
       const slugState = await resolveUniqueSlug(tx.event, { title: newName });
       const created = await tx.event.create({
         data: {
