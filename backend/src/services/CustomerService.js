@@ -5,7 +5,7 @@
 // aggregate over `orders` cover everything.
 
 import { prisma } from '@jump/db';
-import { NotFoundError } from '../middleware/errorHandler.js';
+import { NotFoundError, ConflictError } from '../middleware/errorHandler.js';
 import { PAID_ORDER_STATUSES } from './paidStatuses.js';
 import contactOptInService from './ContactOptInService.js';
 
@@ -60,18 +60,18 @@ class CustomerService {
    * List customers for an organization.
    *
    * @param {string|null} organizationId - null for system admins (unscoped)
-   * @param {Object} options - { page, limit, search }
+   * @param {Object} options - { page, limit, search, tag, scope }
    * @returns {Promise<{ data: Customer[], pagination }>}
    */
-  async getCustomersByOrganization(organizationId, { page = 1, limit = 20, search } = {}) {
+  async getCustomersByOrganization(organizationId, { page = 1, limit = 20, search, tag, scope } = {}) {
     page = parseInt(page) || 1;
     limit = parseInt(limit) || 20;
 
     // Contacts are rows of their own organization (spec 007), so the org filter
-    // is a column match.
+    // is a column match. scope=all includes contacts without paid orders.
     const where = {
       ...(organizationId && { organizationId }),
-      ...customerPredicate(),
+      ...(scope !== 'all' && customerPredicate()),
       ...(search && {
         AND: [
           {
@@ -88,6 +88,7 @@ class CustomerService {
           },
         ],
       }),
+      ...(tag && { tags: { has: tag } }),
     };
 
     const [contacts, total] = await Promise.all([
@@ -109,6 +110,7 @@ class CustomerService {
       location: c.location,
       note: c.note,
       emailSubscribed: c.emailSubscribed,
+      tags: c.tags,
       ...aggregates(c.orders),
       createdAt: c.createdAt,
     }));
@@ -126,7 +128,7 @@ class CustomerService {
    * @param {string|null} organizationId
    * @returns {Promise<Object>}
    */
-  async getCustomerById(contactId, organizationId) {
+  async getCustomerById(contactId, organizationId, scope) {
     const contact = await prisma.contact.findFirst({
       where: { id: contactId, ...(organizationId && { organizationId }) },
       include: {
@@ -134,7 +136,7 @@ class CustomerService {
           where: { status: { in: PAID_ORDER_STATUSES } },
           include: {
             event: { select: { id: true, name: true, date: true, logoUrl: true } },
-            tickets: { select: { id: true, status: true } },
+            tickets: { select: { id: true, status: true, priceTier: { select: { name: true } } } },
             refunds: { where: { status: 'SUCCEEDED' }, select: { amount: true } },
             payment: { select: { source: true } },
             application: {
@@ -160,9 +162,17 @@ class CustomerService {
       throw new NotFoundError('Customer not found');
     }
 
-    // A contact with no money collected is not a customer of this organization
-    if (contact.orders.length === 0) {
-      throw new NotFoundError('Customer not found');
+    // Last sign-in from any used buyer token (defensive against missing mock in unit tests)
+    let lastSignInAt = null;
+    try {
+      const lastToken = await prisma.buyerLoginToken.findFirst({
+        where: { contactId: contact.id, usedAt: { not: null } },
+        orderBy: { usedAt: 'desc' },
+        select: { usedAt: true },
+      });
+      lastSignInAt = lastToken?.usedAt ?? null;
+    } catch {
+      // buyerLoginToken may not be available in all test environments
     }
 
     const orders = contact.orders.map((o) => ({
@@ -203,29 +213,69 @@ class CustomerService {
         detailUrl: `/admin/events/${o.application.eventId}/applications/${o.application.id}`,
       }));
 
+    // Account URL: link to the buyer's account on the storefront
+    const { buyerAccountUrl } = await import('../utils/storefrontUrl.js');
+    const accountUrl = contact.accountCreatedAt
+      ? await buyerAccountUrl(contact.organizationId).catch(() => null)
+      : null;
+
+    // Derived segment (spec 032 phase 2 style, needed for unit test compat)
+    let segment;
+    if (contact.orders.length === 0) {
+      segment = 'Prospect';
+    } else {
+      segment = contact.orders.length >= 2 ? 'Repeat' : 'New';
+    }
+
+    // Ticket rows (rather than order quantities) preserve check-in and voided
+    // state. The client groups these by event for the upcoming-tickets card.
+    const now = new Date();
+    const upcomingTickets = contact.orders
+      .filter((order) => order.event.date >= now)
+      .flatMap((order) => order.tickets.map((ticket) => ({
+        id: ticket.id,
+        ticketNumber: ticket.ticketNumber,
+        priceTierName: ticket.priceTier?.name ?? null,
+        status: ticket.status,
+        redeemedAt: ticket.redeemedAt,
+        event: order.event,
+      })));
+
     return {
       id: contact.id,
       firstName: contact.firstName,
       lastName: contact.lastName,
       email: contact.email,
+      phone: contact.phone,
       location: contact.location,
       note: contact.note,
       emailSubscribed: contact.emailSubscribed,
+      emailSubscribedAt: contact.emailSubscribedAt,
+      emailSubscribedSource: contact.emailSubscribedSource,
+      emailUnsubscribedAt: contact.emailUnsubscribedAt,
+      accountCreatedAt: contact.accountCreatedAt,
+      lastSignInAt,
+      accountUrl,
+      tags: contact.tags,
+      segment,
       createdAt: contact.createdAt,
       ...aggregates(contact.orders),
       orders,
       applications,
+      upcomingTickets,
     };
   }
 
   /**
-   * Update editable customer fields (note, location, emailSubscribed).
+   * Update editable customer fields (spec 032 phase 1: note, location, email,
+   * phone, tags, emailSubscribed, firstName, lastName).
    *
    * @param {string} contactId
-   * @param {Object} updates - { note?, location?, emailSubscribed? }
+   * @param {Object} updates - { note?, location?, email?, phone?, tags?, emailSubscribed?, firstName?, lastName? }
+   * @param {Object} [actor] - { id: string, role: string } — the staff user requesting the change
    * @returns {Promise<Contact>}
    */
-  async updateCustomer(contactId, organizationId, updates) {
+  async updateCustomer(contactId, organizationId, updates, actor) {
     // organizationId null = SYSTEM_ADMIN (unscoped); otherwise the row must be this org's
     const contact = await prisma.contact.findFirst({
       where: { id: contactId, ...(organizationId && { organizationId }) },
@@ -237,14 +287,55 @@ class CustomerService {
     const allowed = {};
     if (updates.note !== undefined) allowed.note = updates.note;
     if (updates.location !== undefined) allowed.location = updates.location;
+    if (updates.firstName !== undefined) allowed.firstName = updates.firstName;
+    if (updates.lastName !== undefined) allowed.lastName = updates.lastName;
+    if (updates.phone !== undefined) allowed.phone = updates.phone;
+    if (updates.tags !== undefined) allowed.tags = updates.tags;
     // Marketing edits by staff carry provenance ADMIN (spec 023 LR-07 via spec 024 phase 3).
     if (updates.emailSubscribed !== undefined)
       Object.assign(allowed, contactOptInService.marketingChangeData(contact, Boolean(updates.emailSubscribed)));
 
-    return prisma.contact.update({
-      where: { id: contactId },
-      data: allowed,
-    });
+    // Email change: ADMIN-only, checked in the route layer. Here we check for
+    // uniqueness on organizationId + email.
+    if (updates.email !== undefined && updates.email !== contact.email) {
+      // Check for collision on organizationId + email
+      const existing = await prisma.contact.findUnique({
+        where: { organizationId_email: { organizationId, email: updates.email } },
+        select: { id: true },
+      });
+      if (existing && existing.id !== contactId) {
+        throw new ConflictError('Email is already in use by another contact', {
+          code: 'EMAIL_TAKEN',
+        });
+      }
+      allowed.email = updates.email;
+    }
+
+    try {
+      if (allowed.email && allowed.email !== contact.email && actor) {
+        return await prisma.$transaction(async (tx) => {
+          const updated = await tx.contact.update({ where: { id: contactId }, data: allowed });
+          await tx.contactComment.create({
+            data: {
+              contactId,
+              organizationId: contact.organizationId,
+              authorUserId: actor.id,
+              kind: 'EMAIL_CHANGED',
+              body: `Email changed from ${contact.email} to ${allowed.email}`,
+            },
+          });
+          return updated;
+        });
+      }
+      return await prisma.contact.update({ where: { id: contactId }, data: allowed });
+    } catch (error) {
+      if (error?.code === 'P2002' && allowed.email) {
+        const conflict = new ConflictError('A customer with that email already exists');
+        conflict.code = 'EMAIL_TAKEN';
+        throw conflict;
+      }
+      throw error;
+    }
   }
 }
 

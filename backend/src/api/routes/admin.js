@@ -5,7 +5,7 @@ import express from 'express';
 import { prisma } from '@jump/db';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireOrganizer, requireAdmin } from '../../middleware/rbac.js';
-import { NotFoundError, ValidationError } from '../../middleware/errorHandler.js';
+import { NotFoundError, ValidationError, ForbiddenError } from '../../middleware/errorHandler.js';
 import { resolveOrgScope, isUnscoped } from '../../middleware/orgScope.js';
 import {
   validateAdminSearchQuery,
@@ -19,6 +19,11 @@ import { validateUpdatePaymentSettings, validateUpdatePayoutSettings } from '../
 import { validateCreatePage, validateUpdatePage } from '../validators/pageValidators.js';
 import { validateUpdateStorefrontPreferences } from '../validators/storefrontPreferencesValidators.js';
 import { validateUpdateCustomerAccountSettings } from '../validators/customerAccountSettingsValidators.js';
+import { validateUpdateCustomer } from '../validators/customerValidators.js';
+import {
+  timelineQuery,
+  validateCreateCustomerComment,
+} from '../validators/customerTimelineValidators.js';
 import { validateOrderListQuery } from '../validators/orderValidators.js';
 import organizationService from '../../services/OrganizationService.js';
 import organizationPersonService from '../../services/OrganizationPersonService.js';
@@ -44,6 +49,10 @@ import billingService from '../../services/BillingService.js';
 import pageService from '../../services/PageService.js';
 import storefrontPreferencesService from '../../services/StorefrontPreferencesService.js';
 import adminSearchService from '../../services/AdminSearchService.js';
+import customerTimelineService from '../../services/CustomerTimelineService.js';
+import buyerAuthService from '../../services/BuyerAuthService.js';
+import { LIMITS, makeLimiter } from '../../middleware/rateLimit.js';
+import { buyerVerifyUrl } from '../../utils/storefrontUrl.js';
 import { PAID_ORDER_STATUSES } from '../../services/paidStatuses.js';
 import { activeOrgFor } from './adminScope.js';
 
@@ -1434,7 +1443,7 @@ router.post('/tickets/scan-order', async (req, res, next) => {
   }
 });
 
-/** GET /admin/customers — list customers with search + pagination */
+/** GET /admin/customers — list customers with search + pagination + tag filter */
 router.get('/customers', async (req, res, next) => {
   try {
     const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
@@ -1442,11 +1451,12 @@ router.get('/customers', async (req, res, next) => {
       // Staff with no membership see no customers rather than every org's
       return res.json({ data: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } });
     }
-    const { page, limit, search } = req.query;
+    const { page, limit, search, tag } = req.query;
     const result = await customerService.getCustomersByOrganization(scope.organizationId, {
       page,
       limit,
       search,
+      tag,
     });
     res.json(result);
   } catch (error) {
@@ -1468,23 +1478,147 @@ router.get('/customers/:contactId', async (req, res, next) => {
   }
 });
 
-/** PATCH /admin/customers/:contactId — update note, location, emailSubscribed */
-router.patch('/customers/:contactId', async (req, res, next) => {
+/** GET /admin/customers/:contactId/timeline — comments and derived customer events. */
+router.get('/customers/:contactId/timeline', async (req, res, next) => {
   try {
     const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
-    if (!isUnscoped(scope) && !scope.organizationId) {
-      throw new NotFoundError('Customer not found');
-    }
-    const { note, location, emailSubscribed } = req.body;
-    const updated = await customerService.updateCustomer(req.params.contactId, scope.organizationId, {
-      note,
-      location,
-      emailSubscribed,
-    });
-    res.json(updated);
+    if (!isUnscoped(scope) && !scope.organizationId) throw new NotFoundError('Customer not found');
+    const result = await customerTimelineService.getTimeline(
+      req.params.contactId,
+      scope.organizationId,
+      timelineQuery(req)
+    );
+    res.json(result);
   } catch (error) {
     next(error);
   }
 });
+
+/** POST /admin/customers/:contactId/comments — add an attributed plain-text note. */
+router.post(
+  '/customers/:contactId/comments',
+  validateCreateCustomerComment,
+  async (req, res, next) => {
+    try {
+      const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
+      if (!isUnscoped(scope) && !scope.organizationId)
+        throw new NotFoundError('Customer not found');
+      const comment = await customerTimelineService.createComment(
+        req.params.contactId,
+        scope.organizationId,
+        req.user.id,
+        req.body.body
+      );
+      res.status(201).json(comment);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/** DELETE /admin/customers/:contactId/comments/:commentId — author or ADMIN only. */
+router.delete('/customers/:contactId/comments/:commentId', async (req, res, next) => {
+  try {
+    const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
+    if (!isUnscoped(scope) && !scope.organizationId) throw new NotFoundError('Customer not found');
+    await customerTimelineService.deleteComment(
+      req.params.contactId,
+      req.params.commentId,
+      scope.organizationId,
+      req.user
+    );
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** PATCH /admin/customers/:contactId — update customer fields (spec 032 phase 1) */
+router.patch(
+  '/customers/:contactId',
+  validateUpdateCustomer,
+  async (req, res, next) => {
+    try {
+      const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
+      if (!isUnscoped(scope) && !scope.organizationId) {
+        throw new NotFoundError('Customer not found');
+      }
+
+      // Email change is ADMIN-only
+      if (req.body.email !== undefined && req.user.role !== 'ADMIN' && req.user.role !== 'SYSTEM_ADMIN') {
+        throw new ForbiddenError('Only administrators can change a customer email address');
+      }
+
+      const updated = await customerService.updateCustomer(
+        req.params.contactId,
+        scope.organizationId,
+        req.body,
+        { id: req.user.id, role: req.user.role },
+      );
+      res.json(updated);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/** POST /admin/customers/:contactId/send-sign-in-link — issue and email a passwordless sign-in link (spec 032 phase 1). */
+const sendSignInLinkLimiter = makeLimiter('BUYER_AUTH_REQUEST', LIMITS.BUYER_AUTH_REQUEST);
+router.post(
+  '/customers/:contactId/send-sign-in-link',
+  sendSignInLinkLimiter,
+  async (req, res, next) => {
+    try {
+      const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
+      if (!isUnscoped(scope) && !scope.organizationId) {
+        throw new NotFoundError('Customer not found');
+      }
+
+      const contact = await prisma.contact.findFirst({
+        where: { id: req.params.contactId, ...(scope.organizationId && { organizationId: scope.organizationId }) },
+        select: {
+          id: true,
+          organizationId: true,
+          email: true,
+          firstName: true,
+          accountCreatedAt: true,
+        },
+      });
+      if (!contact) {
+        throw new NotFoundError('Customer not found');
+      }
+      if (!contact.accountCreatedAt) {
+        return res.status(422).json({
+          error: 'UnprocessableContent',
+          message: 'This customer does not have an account. They checked out as a guest.',
+          code: 'NO_ACCOUNT',
+        });
+      }
+
+      const result = await buyerAuthService.requestLogin(contact.organizationId, contact.email);
+      if (!result.issued) {
+        // Rate limited or account not reachable — return 429
+        return res.status(429).json({
+          error: 'TooManyRequests',
+          message: 'This customer has received too many sign-in links recently. Try again later.',
+          code: 'SIGN_IN_LINK_RATE_LIMITED',
+        });
+      }
+
+      // Send the email
+      const loginUrl = await buyerVerifyUrl(contact.organizationId, result.rawToken);
+      await emailService.sendBuyerLoginEmail({
+        contact: { email: contact.email, firstName: contact.firstName, organizationId: contact.organizationId },
+        loginUrl,
+        organization: result.contact?.organization || {},
+        code: result.rawCode || null,
+      });
+
+      res.json({ sent: true });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 export default router;

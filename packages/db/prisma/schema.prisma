@@ -71,6 +71,7 @@ model User {
   // Spec 030: revocable sessions (Devices) and the security audit trail
   sessions          UserSession[]
   securityEvents    SecurityEvent[]
+  contactComments   ContactComment[]
 
   @@index([role])
   @@index([email])
@@ -492,6 +493,7 @@ model Organization {
   venues                   Venue[]
   members                  OrganizationMember[]
   contacts                 Contact[]
+  contactComments          ContactComment[]
   domains                  OrganizationDomain[]
   people                   OrganizationPerson[]
   tierPresets              TierPreset[]
@@ -699,6 +701,8 @@ model Contact {
   emailSubscribedSource EmailSubscribedSource?
   emailUnsubscribedAt   DateTime?
   accountCreatedAt      DateTime? // null = guest checkout; set = login-enabled buyer account
+  phone                 String?
+  tags                  String[]              @default([])
   stripeCustomerId      String?                @unique // spec 011: platform-account Customer holding the applicant's saved card
 
   createdAt DateTime @default(now())
@@ -710,9 +714,36 @@ model Contact {
   loginTokens       BuyerLoginToken[]
   applicantProfiles ApplicantProfile[]
   applications      Application[]
+  contactComments   ContactComment[]
 
   @@unique([organizationId, email])
   @@index([email])
+  @@index([tags], type: Gin)
+}
+
+// Staff-authored notes and audit entries shown in the customer timeline.
+// User-authored comment bodies are plain text and capped in both the API and DB.
+model ContactComment {
+  id             String             @id @default(cuid())
+  contactId      String
+  organizationId String
+  authorUserId   String
+  kind           ContactCommentKind @default(COMMENT)
+  body           String
+  createdAt      DateTime           @default(now())
+
+  contact      Contact      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  author       User         @relation(fields: [authorUserId], references: [id])
+
+  @@index([contactId, createdAt])
+  @@index([organizationId, createdAt])
+  @@index([authorUserId])
+}
+
+enum ContactCommentKind {
+  COMMENT
+  EMAIL_CHANGED
 }
 
 // Single-use, hashed magic-link token for passwordless buyer sign-in.
