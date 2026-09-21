@@ -26,9 +26,11 @@ const ORDER_SELECT = {
   },
 };
 
-/** A customer is a contact with money collected: a paid order of either kind. */
-function customerPredicate() {
-  return { orders: { some: { status: { in: PAID_ORDER_STATUSES } } } };
+/** By default a customer is a contact with money collected; `all` also returns prospects. */
+function customerPredicate(scope = 'customers') {
+  return scope === 'all'
+    ? {}
+    : { orders: { some: { status: { in: PAID_ORDER_STATUSES } } } };
 }
 
 /**
@@ -44,6 +46,7 @@ function aggregates(orders) {
   const lastActivityAt = latest(orders.map((o) => o.paidAt || o.createdAt));
   const transactionCount = orders.length;
   return {
+    ...(orders.length === 0 && { segment: 'Prospect' }),
     orderCount: transactionCount, // alias kept for existing consumers
     transactionCount,
     ticketOrderCount: tickets.length,
@@ -60,10 +63,13 @@ class CustomerService {
    * List customers for an organization.
    *
    * @param {string|null} organizationId - null for system admins (unscoped)
-   * @param {Object} options - { page, limit, search }
+   * @param {Object} options - { page, limit, search, scope }
    * @returns {Promise<{ data: Customer[], pagination }>}
    */
-  async getCustomersByOrganization(organizationId, { page = 1, limit = 20, search } = {}) {
+  async getCustomersByOrganization(
+    organizationId,
+    { page = 1, limit = 20, search, scope = 'customers' } = {}
+  ) {
     page = parseInt(page) || 1;
     limit = parseInt(limit) || 20;
 
@@ -71,7 +77,7 @@ class CustomerService {
     // is a column match.
     const where = {
       ...(organizationId && { organizationId }),
-      ...customerPredicate(),
+      ...customerPredicate(scope),
       ...(search && {
         AND: [
           {
@@ -157,11 +163,6 @@ class CustomerService {
     });
 
     if (!contact) {
-      throw new NotFoundError('Customer not found');
-    }
-
-    // A contact with no money collected is not a customer of this organization
-    if (contact.orders.length === 0) {
       throw new NotFoundError('Customer not found');
     }
 

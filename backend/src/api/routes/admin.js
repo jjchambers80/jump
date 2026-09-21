@@ -1442,11 +1442,15 @@ router.get('/customers', async (req, res, next) => {
       // Staff with no membership see no customers rather than every org's
       return res.json({ data: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } });
     }
-    const { page, limit, search } = req.query;
+    const { page, limit, search, scope: customerScope = 'customers' } = req.query;
+    if (!['customers', 'all'].includes(customerScope)) {
+      throw new ValidationError('scope must be customers or all');
+    }
     const result = await customerService.getCustomersByOrganization(scope.organizationId, {
       page,
       limit,
       search,
+      scope: customerScope,
     });
     res.json(result);
   } catch (error) {

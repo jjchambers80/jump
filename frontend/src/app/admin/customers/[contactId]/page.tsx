@@ -1,11 +1,16 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { Suspense, useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import api from '@/services/api';
 import { useOrg } from '@/components/OrgContext';
 import { resolveAssetUrl } from '@/lib/assets';
+import {
+  customerListHref,
+  customerScopeFrom,
+  withCustomerScope,
+} from '@/lib/customerNavigation';
 
 interface OrderEvent {
   id: string;
@@ -106,8 +111,11 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-export default function CustomerDetailPage() {
+function CustomerDetailPageContent() {
   const { contactId } = useParams<{ contactId: string }>();
+  const searchParams = useSearchParams();
+  const scope = customerScopeFrom(searchParams);
+  const customersHref = customerListHref(withCustomerScope(searchParams, scope));
   const { selectedOrgId } = useOrg();
 
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
@@ -202,7 +210,7 @@ export default function CustomerDetailPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-6 text-center">
           <p className="text-red-800 dark:text-red-300">{error || 'Customer not found'}</p>
-          <Link href="/admin/customers" className="mt-3 inline-block text-sm text-indigo-600 dark:text-indigo-400 hover:underline">
+          <Link href={customersHref} className="mt-3 inline-block text-sm text-indigo-600 dark:text-indigo-400 hover:underline">
             Back to customers
           </Link>
         </div>
@@ -214,7 +222,7 @@ export default function CustomerDetailPage() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
       {/* Breadcrumb + Header */}
       <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-slate-400 mb-4">
-        <Link href="/admin/customers" className="hover:text-indigo-600 dark:hover:text-indigo-400">
+        <Link href={customersHref} className="hover:text-indigo-600 dark:hover:text-indigo-400">
           Customers
         </Link>
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -223,6 +231,14 @@ export default function CustomerDetailPage() {
         <span className="text-gray-900 dark:text-white font-medium">
           {customer.firstName} {customer.lastName}
         </span>
+        {customer.transactionCount === 0 && (
+          <span
+            data-testid="customer-segment"
+            className="inline-flex items-center rounded-full bg-violet-100 dark:bg-violet-900/30 px-2 py-0.5 text-xs font-medium text-violet-800 dark:text-violet-300"
+          >
+            Prospect
+          </span>
+        )}
       </div>
 
       {/* Stats bar */}
@@ -494,5 +510,13 @@ export default function CustomerDetailPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function CustomerDetailPage() {
+  return (
+    <Suspense fallback={<div className="max-w-7xl mx-auto px-4 sm:px-6 py-6" />}>
+      <CustomerDetailPageContent />
+    </Suspense>
   );
 }

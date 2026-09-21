@@ -1,9 +1,16 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { Suspense, useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import api from '@/services/api';
 import { useOrg } from '@/components/OrgContext';
+import type { CustomerScope } from '@/lib/customerNavigation';
+import {
+  customerDetailHref,
+  customerScopeFrom,
+  withCustomerScope,
+} from '@/lib/customerNavigation';
 
 interface Customer {
   id: string;
@@ -42,9 +49,11 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
 }
 
-export default function CustomersPage() {
+function CustomersPageContent() {
   const { selectedOrgId } = useOrg();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const scope = customerScopeFrom(searchParams);
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,7 +75,7 @@ export default function CustomersPage() {
     try {
       setLoading(true);
       setError(null);
-      const params = new URLSearchParams({ page: String(page), limit: '20' });
+      const params = new URLSearchParams({ page: String(page), limit: '20', scope });
       if (search) params.set('search', search);
       const result = await api.get<CustomerListResponse>(`/admin/customers?${params}`);
       setCustomers(result.data);
@@ -77,7 +86,7 @@ export default function CustomersPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedOrgId, page, search]);
+  }, [selectedOrgId, page, search, scope]);
 
   useEffect(() => {
     fetchCustomers();
@@ -92,6 +101,17 @@ export default function CustomersPage() {
     e.preventDefault();
     setSearch(searchInput.trim());
   };
+
+  const chooseScope = (nextScope: CustomerScope) => {
+    if (nextScope === scope) return;
+    setPage(1);
+    router.replace(`/admin/customers?${withCustomerScope(searchParams, nextScope)}`);
+  };
+
+  const hrefForCustomer = (customerId: string) =>
+    customerDetailHref(customerId, withCustomerScope(searchParams, scope));
+
+  const openCustomer = (customerId: string) => router.push(hrefForCustomer(customerId));
 
   const startEdit = (customer: Customer, field: 'note' | 'location') => {
     setEditingId(customer.id);
@@ -136,18 +156,41 @@ export default function CustomersPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
             <svg className="w-5 h-5 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656-.126-1.283-.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
             </svg>
           </div>
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">Customers</h1>
         </div>
-        <span className="text-sm text-gray-500 dark:text-slate-400">
-          {!loading && `${total} customer${total !== 1 ? 's' : ''}`}
-        </span>
+        <div className="flex items-center gap-3">
+          <div role="group" aria-label="Contact scope" className="inline-flex rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-0.5">
+            {([
+              ['customers', 'Customers'],
+              ['all', 'All contacts'],
+            ] as [CustomerScope, string][]).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={scope === value}
+                data-testid={`customer-scope-${value}`}
+                onClick={() => chooseScope(value)}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  scope === value
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <span className="text-sm text-gray-500 dark:text-slate-400" aria-live="polite">
+            {!loading && `${total} ${scope === 'all' ? 'contact' : 'customer'}${total !== 1 ? 's' : ''}`}
+          </span>
+        </div>
       </div>
 
       {/* Search bar */}
@@ -201,7 +244,9 @@ export default function CustomersPage() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
           <p className="text-gray-500 dark:text-slate-400">
-            {search ? 'No customers match your search.' : 'No customers yet.'}
+            {search
+              ? `No ${scope === 'all' ? 'contacts' : 'customers'} match your search.`
+              : `No ${scope === 'all' ? 'contacts' : 'customers'} yet.`}
           </p>
         </div>
       )}
@@ -226,13 +271,17 @@ export default function CustomersPage() {
               <div key={customer.id}>
                 {/* Desktop row */}
                 <div
-                  onClick={() => router.push(`/admin/customers/${customer.id}`)}
+                  onClick={() => openCustomer(customer.id)}
                   className="hidden lg:grid grid-cols-[minmax(150px,1.5fr)_minmax(180px,2fr)_70px_minmax(100px,1fr)_70px_90px_minmax(120px,1.5fr)] gap-x-4 px-4 py-3 items-center hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors cursor-pointer">
                   {/* Name */}
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                    <Link
+                      href={hrefForCustomer(customer.id)}
+                      onClick={(event) => event.stopPropagation()}
+                      className="block text-sm font-medium text-gray-900 dark:text-white truncate hover:text-indigo-600 dark:hover:text-indigo-400"
+                    >
                       {customer.firstName} {customer.lastName}
-                    </p>
+                    </Link>
                     {customer.lastActivityAt && (
                       <p className="text-xs text-gray-400 dark:text-slate-500 truncate">
                         Last activity {formatDate(customer.lastActivityAt)}
@@ -341,12 +390,19 @@ export default function CustomersPage() {
                 </div>
 
                 {/* Mobile card */}
-                <div onClick={() => router.push(`/admin/customers/${customer.id}`)} className="lg:hidden p-4 space-y-2 cursor-pointer">
+                <div
+                  onClick={() => openCustomer(customer.id)}
+                  className="lg:hidden p-4 space-y-2 cursor-pointer"
+                >
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">
+                      <Link
+                        href={hrefForCustomer(customer.id)}
+                        onClick={(event) => event.stopPropagation()}
+                        className="block text-sm font-medium text-gray-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400"
+                      >
                         {customer.firstName} {customer.lastName}
-                      </p>
+                      </Link>
                       <p className="text-xs text-gray-500 dark:text-slate-400">{customer.email}</p>
                     </div>
                     <button
@@ -383,7 +439,7 @@ export default function CustomersPage() {
           {/* Footer with pagination */}
           <div className="flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-slate-800/80 border-t border-gray-200 dark:border-slate-700">
             <span className="text-xs text-gray-500 dark:text-slate-400">
-              {total} customer{total !== 1 ? 's' : ''}
+              {total} {scope === 'all' ? 'contact' : 'customer'}{total !== 1 ? 's' : ''}
             </span>
             {totalPages > 1 && (
               <div className="flex items-center gap-3">
@@ -410,5 +466,13 @@ export default function CustomersPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function CustomersPage() {
+  return (
+    <Suspense fallback={<div className="max-w-7xl mx-auto px-4 sm:px-6 py-6" />}>
+      <CustomersPageContent />
+    </Suspense>
   );
 }
