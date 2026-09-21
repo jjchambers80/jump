@@ -44,7 +44,13 @@ hermes kanban --board jump assign <task-id> coding
 hermes kanban --board jump dispatch
 ```
 
-The worker must report changed files, tests and results, migrations, risks, commit SHA, branch, and PR URL/number. It must not call a card `done` merely because local edits exist.
+In the worktree the worker first runs `./scripts/bootstrap-worktree.sh` (copies `backend/.env`, `frontend/.env.local`, `packages/db/.env` from the primary checkout, installs, generates the Prisma client); the backend suite then runs against the dev Postgres with the database name swapped to `jump_test`.
+
+The worker must report changed files, tests and results, migrations, risks, commit SHA, branch, and PR URL/number. It must not call a card `done` merely because local edits exist — on 2026-09-21 a card was closed with its work only staged in the worktree and no PR, and the operator had to commit and publish it (PR #126).
+
+### Completion contracts
+
+Cards created with a PR contract (`--completion-contract <pr-url>` or the repo `jjchambers80/jump`) only close when the PR's **required** GitHub checks are green. `.github/workflows/ci.yml` (`backend tests`, `frontend typecheck + unit`) is required on `main` for exactly this reason — before 2026-09-21 the repository had no required checks, so every PR contract failed with `PR acceptance missing` and the cards cycled through Blocked (t_dfd5e571, t_c2dc0a85). Review cards for already-merged PRs, decisions and docs-only work take `--completion-contract local-only`.
 
 ### Review
 
