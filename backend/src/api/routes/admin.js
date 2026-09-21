@@ -1451,12 +1451,19 @@ router.get('/customers', async (req, res, next) => {
       // Staff with no membership see no customers rather than every org's
       return res.json({ data: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } });
     }
-    const { page, limit, search, tag } = req.query;
+    const { page, limit, search, tag, segment, sort, direction, scope: customerScope = 'customers' } = req.query;
+    if (!['customers', 'all'].includes(customerScope)) {
+      throw new ValidationError('scope must be customers or all');
+    }
     const result = await customerService.getCustomersByOrganization(scope.organizationId, {
       page,
       limit,
       search,
       tag,
+      scope: customerScope,
+      segment,
+      sort,
+      direction,
     });
     res.json(result);
   } catch (error) {
@@ -1471,7 +1478,18 @@ router.get('/customers/:contactId', async (req, res, next) => {
     if (!isUnscoped(scope) && !scope.organizationId) {
       throw new NotFoundError('Customer not found');
     }
-    const result = await customerService.getCustomerById(req.params.contactId, scope.organizationId);
+    const { search, tag, segment, sort, direction, scope: customerScope = 'customers' } = req.query;
+    if (!['customers', 'all'].includes(customerScope)) {
+      throw new ValidationError('scope must be customers or all');
+    }
+    const result = await customerService.getCustomerById(req.params.contactId, scope.organizationId, {
+      search,
+      tag,
+      scope: customerScope,
+      segment,
+      sort,
+      direction,
+    });
     res.json(result);
   } catch (error) {
     next(error);

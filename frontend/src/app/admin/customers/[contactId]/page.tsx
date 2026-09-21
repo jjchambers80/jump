@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useCallback, useRef, FormEvent } from 'react';
+import React, { Suspense, useEffect, useState, useCallback, useRef, FormEvent } from 'react';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import api from '@/services/api';
@@ -11,6 +11,7 @@ import { ChevronRightIcon, EllipsisIcon } from '@/app/admin/settings/icons';
 import SettingsDialog from '@/app/admin/settings/SettingsDialog';
 import CustomerTimeline from './CustomerTimeline';
 import UpcomingTickets, { type UpcomingTicket } from './UpcomingTickets';
+import { segmentBadgeClass, type CustomerSegment } from '@/lib/customers';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -70,7 +71,7 @@ interface CustomerDetail {
   lastSignInAt: string | null;
   accountUrl: string | null;
   tags: string[];
-  segment: string | null;
+  segment: CustomerSegment | null;
   prevId?: string | null;
   nextId?: string | null;
   upcomingTickets?: UpcomingTicket[];
@@ -83,6 +84,9 @@ interface CustomerDetail {
   lastActivityAt: string | null;
   orders: CustomerOrder[];
   applications: CustomerApplication[];
+  segment: CustomerSegment;
+  prevId: string | null;
+  nextId: string | null;
 }
 
 // ── Tag helpers ───────────────────────────────────────────────────────────
@@ -149,7 +153,7 @@ function StatusBadge({ status }: { status: string }) {
 
 // ── Main Page ──────────────────────────────────────────────────────────────
 
-export default function CustomerDetailPage() {
+function CustomerDetailPageContent() {
   const { contactId } = useParams<{ contactId: string }>();
   const searchParams = useSearchParams();
   const { selectedOrgId } = useOrg();
@@ -558,7 +562,7 @@ export default function CustomerDetailPage() {
               </svg>
             </button>
             {customer.segment && (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300">
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${segmentBadgeClass(customer.segment)}`}>
                 {customer.segment}
               </span>
             )}
@@ -654,7 +658,7 @@ export default function CustomerDetailPage() {
         ))}
         <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg px-4 py-3">
           <p className="text-xs text-gray-500 dark:text-slate-400 mb-1">Segment</p>
-          <span data-testid="customer-segment" className="inline-flex rounded-full bg-indigo-100 px-2.5 py-1 text-sm font-semibold text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300">
+          <span data-testid="customer-segment" className={`inline-flex rounded-full px-2.5 py-1 text-sm font-semibold ${customer.segment ? segmentBadgeClass(customer.segment) : 'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-300'}`}>
             {customer.segment || '—'}
           </span>
         </div>
@@ -1059,5 +1063,13 @@ export default function CustomerDetailPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function CustomerDetailPage() {
+  return (
+    <Suspense fallback={<div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">Loading customer…</div>}>
+      <CustomerDetailPageContent />
+    </Suspense>
   );
 }
