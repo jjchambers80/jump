@@ -53,6 +53,8 @@ export function useMapEditor(mapId: string) {
   const [activeTool, setActiveTool] = useState<EditorTool>('select');
   const [dirty, setDirty] = useState(false);
   const [zoom, setZoom] = useState(1);
+  // Mirrors versionRef so the autosave effect re-runs on every edit.
+  const [editVersion, setEditVersion] = useState(0);
 
   // Undo stack
   const undoStack = useRef<Snapshot[]>([]);
@@ -119,7 +121,7 @@ export function useMapEditor(mapId: string) {
     return () => {
       if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
     };
-  }, [dirty, saving]);
+  }, [dirty, saving, editVersion]);
 
   // beforeunload guard
   useEffect(() => {
@@ -164,9 +166,25 @@ export function useMapEditor(mapId: string) {
           tierId: b.tierId,
         })) as LayoutBoothInput[],
       };
-      await mapsApi.replaceLayout(mapId, layoutData);
+      const saved = await mapsApi.replaceLayout(mapId, layoutData);
       savedVersionRef.current = version;
-      if (versionRef.current === version) setDirty(false);
+      if (versionRef.current !== version) return false; // edited meanwhile: keep dirty, save again
+      // Adopt the server rows: newly placed booths get their real ids (labels are unique per map).
+      const byLabel = new Map(saved.booths.map((b) => [b.label, b]));
+      const idMap = new Map<string, string>();
+      setState((s) => {
+        if (!s) return s;
+        const booths = s.booths.map((b) => {
+          const row = byLabel.get(b.label);
+          if (row && row.id !== b.id) idMap.set(b.id, row.id);
+          return row ? { ...b, ...row } : b;
+        });
+        return { ...s, booths };
+      });
+      if (idMap.size > 0) {
+        setSelectedIds((ids) => new Set([...ids].map((id) => idMap.get(id) ?? id)));
+      }
+      setDirty(false);
       return true;
     } catch (err: any) {
       failedVersionRef.current = versionRef.current;
@@ -203,6 +221,7 @@ export function useMapEditor(mapId: string) {
       if (recordUndo) pushUndo(state.elements, state.booths);
       setState((s) => (s ? { ...s, booths } : null));
       versionRef.current += 1;
+      setEditVersion(versionRef.current);
       setDirty(true);
     },
     [state, pushUndo]
@@ -214,6 +233,7 @@ export function useMapEditor(mapId: string) {
       if (recordUndo) pushUndo(state.elements, state.booths);
       setState((s) => (s ? { ...s, elements } : null));
       versionRef.current += 1;
+      setEditVersion(versionRef.current);
       setDirty(true);
     },
     [state, pushUndo]
@@ -224,6 +244,7 @@ export function useMapEditor(mapId: string) {
       if (!state) return;
       setState((s) => (s ? { ...s, ...patch } : null));
       versionRef.current += 1;
+      setEditVersion(versionRef.current);
       setDirty(true);
     },
     [state]
@@ -236,6 +257,7 @@ export function useMapEditor(mapId: string) {
     const prev = undoStack.current.pop()!;
     setState((s) => (s ? { ...s, elements: prev.elements, booths: prev.booths } : null));
     versionRef.current += 1;
+    setEditVersion(versionRef.current);
     setDirty(true);
   }, [state]);
 
@@ -246,13 +268,17 @@ export function useMapEditor(mapId: string) {
     const next = redoStack.current.pop()!;
     setState((s) => (s ? { ...s, elements: next.elements, booths: next.booths } : null));
     versionRef.current += 1;
+    setEditVersion(versionRef.current);
     setDirty(true);
   }, [state]);
 
   const publish = useCallback(async () => {
     if (!stateRef.current) return false;
     // Publish what the server has: a failed save must not publish stale booths.
-    const saved = await doSave();
+    // An edit that lands during the save makes doSave report false; one more
+    // pass catches it, anything beyond that is the organizer still editing.
+    let saved = await doSave();
+    if (!saved && failedVersionRef.current !== versionRef.current) saved = await doSave();
     if (!saved) throw new Error('Save the map before publishing');
     const result = await mapsApi.publish(mapId);
     setState((s) =>
@@ -274,6 +300,7 @@ export function useMapEditor(mapId: string) {
       pushUndo(state.elements, state.booths);
       setState((s) => (s ? { ...s, booths: [...s.booths, booth] } : null));
       versionRef.current += 1;
+      setEditVersion(versionRef.current);
       setDirty(true);
     },
     [state, pushUndo]
@@ -287,6 +314,7 @@ export function useMapEditor(mapId: string) {
     setState({ ...state, booths: newBooths, elements: newElements });
     setSelectedIds(new Set());
     versionRef.current += 1;
+    setEditVersion(versionRef.current);
     setDirty(true);
   }, [state, selectedIds, pushUndo]);
 
@@ -310,6 +338,7 @@ export function useMapEditor(mapId: string) {
     }));
     setState({ ...state, booths: [...state.booths, ...newBooths] });
     versionRef.current += 1;
+    setEditVersion(versionRef.current);
     setDirty(true);
   }, [state, selectedIds, pushUndo]);
 

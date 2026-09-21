@@ -33,6 +33,7 @@ interface MapCanvasProps {
   onPointerDown?: (e: React.PointerEvent) => void;
   onPointerMove?: (e: React.PointerEvent) => void;
   onPointerUp?: (e: React.PointerEvent) => void;
+  onPointerLeave?: () => void;
   onZoomChange?: (scale: number) => void;
   reducedMotion?: boolean;
   showGrid?: boolean;
@@ -63,6 +64,7 @@ export default function MapCanvas({
   onPointerDown,
   onPointerMove,
   onPointerUp,
+  onPointerLeave,
   onZoomChange,
   reducedMotion = false,
   showGrid = false,
@@ -223,6 +225,8 @@ export default function MapCanvas({
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
+        onPointerLeave={onPointerLeave}
+        onPointerCancel={onPointerLeave}
       >
         <TransformComponent wrapperStyle={{ width: '100%', height: '100%' }}>
           {svgContent}

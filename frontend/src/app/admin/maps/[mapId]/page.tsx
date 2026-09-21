@@ -331,6 +331,11 @@ function BuilderContent() {
     [state, toGrid]
   );
 
+  const cancelRowDrag = useCallback(() => {
+    rowDrag.current = null;
+    setRowPreview(null);
+  }, []);
+
   const handleCanvasPointerUp = useCallback(
     (e: React.PointerEvent) => {
       const start = rowDrag.current;
@@ -572,6 +577,7 @@ function BuilderContent() {
             onPointerDown={handleCanvasPointerDown}
             onPointerMove={handleCanvasPointerMove}
             onPointerUp={handleCanvasPointerUp}
+            onPointerLeave={cancelRowDrag}
             panningDisabled={activeTool !== 'select'}
             tierSwatches={Object.fromEntries(legendTiers.map((t) => [t.id, t.swatch]))}
             preview={rowPreview}

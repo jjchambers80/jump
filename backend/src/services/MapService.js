@@ -274,8 +274,11 @@ class MapService {
       if (w === null) throw new ValidationError(`booth ${i + 1}: w must be ${MIN_BOOTH_SIZE}–${MAX_BOOTH_SIZE}`);
       if (h === null) throw new ValidationError(`booth ${i + 1}: h must be ${MIN_BOOTH_SIZE}–${MAX_BOOTH_SIZE}`);
 
-      if (x + w > map.width) throw new ValidationError(`booth ${i + 1} (${b.label}) extends beyond right edge`);
-      if (y + h > map.height) throw new ValidationError(`booth ${i + 1} (${b.label}) extends beyond bottom edge`);
+      // Rotation 90° swaps the footprint in place — the same rule the client draws with.
+      const spanW = rotation === 90 ? h : w;
+      const spanH = rotation === 90 ? w : h;
+      if (x + spanW > map.width) throw new ValidationError(`booth ${i + 1} (${b.label}) extends beyond right edge`);
+      if (y + spanH > map.height) throw new ValidationError(`booth ${i + 1} (${b.label}) extends beyond bottom edge`);
 
       validatedBooths.push({ label: b.label, kind, x, y, w, h, rotation, tierId });
     }
