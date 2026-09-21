@@ -9,6 +9,6 @@
     }
   },
   "deploy": {
-    "startCommand": "cd packages/db && (npx prisma migrate status 2>&1 || { echo '=== Failed migration detected ==='; echo 'Recovery (run via railway ssh --service backend):'; echo '  1. npx prisma migrate resolve --rolled-back \"<failed-migration-name>\"'; echo '  2. npx prisma db execute --file /tmp/fix.sql'; echo '  3. npx prisma migrate resolve --applied \"<failed-migration-name>\"'; echo 'See docs/wiki/config/database-setup.md for the full procedure'; exit 1; }) && npx prisma migrate deploy && cd ../../backend && node src/api/server.js"
+    "startCommand": "cd packages/db && npx prisma migrate deploy || { echo '=== prisma migrate deploy failed (P3009 class) ==='; echo 'Do not restart until the failed migration is resolved. From a running container that ships packages/db (railway ssh --service frontend):'; echo '  1. npx prisma migrate resolve --rolled-back \"<failed-migration-name>\"'; echo '  2. npx prisma db execute --stdin   # the migration SQL minus the statement that failed'; echo '  3. npx prisma migrate resolve --applied \"<failed-migration-name>\"'; echo '  4. railway redeploy --service backend'; echo 'Full procedure: docs/wiki/config/database-setup.md#failed-migration-recovery'; exit 1; }; cd ../../backend && node src/api/server.js"
   }
 }

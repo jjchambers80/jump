@@ -76,8 +76,10 @@ jobs:
           npx prisma migrate deploy
           echo ""
           echo "=== Comparing database schema to schema.prisma ==="
-          diff_output=$(npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel ./prisma/schema.prisma 2>&1)
+          set +e
+          diff_output=$(npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel ./prisma/schema.prisma --exit-code 2>&1)
           diff_exit=$?
+          set -e
           echo "$diff_output"
           if [ $diff_exit -ne 0 ]; then
             echo "::error::Migration history does not produce schema.prisma."

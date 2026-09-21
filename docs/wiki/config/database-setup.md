@@ -72,7 +72,7 @@ All commands run from the repository root.
 - PostgreSQL provisioned as Railway service
 - Connection string set via `DATABASE_URL` env var on all services
 - Migrations applied automatically on container start (see `railpack.backend.json`):
-  `npx prisma migrate status && npx prisma migrate deploy`
+  `npx prisma migrate deploy` — when it fails the container logs the recovery steps below and exits instead of crash-looping silently
 - Or via SSH tunnel:
   ```bash
   railway run npx prisma migrate deploy
@@ -84,9 +84,9 @@ If the backend enters a crash-loop with a P3009 error ("migration failed to appl
 
 **Recovery procedure** (run each command from `packages/db`):
 
-1. **Connect to the Railway environment**:
+1. **Connect to a running container that ships `packages/db`** — the backend is crash-looping, so use the frontend (this is what fixed the 2026-09-12 incident):
    ```bash
-   railway ssh --service backend
+   railway ssh --service frontend
    ```
 
 2. **Identify the failed migration** from the error log — it appears as `20260910025837_add_tier_presets` or similar.
@@ -97,14 +97,10 @@ If the backend enters a crash-loop with a P3009 error ("migration failed to appl
    ```
    This marks the migration as rolled back in the migration history, clearing the P3009 lock.
 
-4. **Apply a corrective SQL fix** (create a fix script locally and upload it):
-   ```bash
-   npx prisma db execute --file /tmp/fix.sql
-   ```
-   Or pipe the SQL directly:
+4. **Apply the rest of the migration by hand** — the migration SQL minus the statement that failed (in the 2026-09-12 incident, minus a `DROP INDEX` for an index production never had):
    ```bash
    npx prisma db execute --stdin <<SQL
-   ALTER TABLE "PriceTier" ADD COLUMN "presetId" TEXT;
+   -- paste the surviving statements of prisma/migrations/<migration-name>/migration.sql
    SQL
    ```
 
@@ -113,13 +109,13 @@ If the backend enters a crash-loop with a P3009 error ("migration failed to appl
    npx prisma migrate resolve --applied "<migration-name>"
    ```
 
-6. **Verify** — restart the backend service:
+6. **Verify and redeploy**:
    ```bash
-   npx prisma migrate status
+   npx prisma migrate status   # "Database schema is up to date"
+   railway redeploy --service backend
    ```
-   This should show "Database schema is up to date." If so, the backend starts normally on next deploy.
 
-After recovery, create a **new clean migration** locally (`npm run db:migrate`) that drops the broken one and applies the intended schema in one atomic step, so the same failure cannot recur on a fresh deploy.
+Never edit an applied migration afterwards — the `migration safety` CI job fails any PR that modifies or deletes an existing file under `packages/db/prisma/migrations/`, and the replay check fails when the migration history no longer produces `schema.prisma`. Fix forward with a new migration.
 
 ## Key Files
 
