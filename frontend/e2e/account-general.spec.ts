@@ -50,7 +50,7 @@ async function mockAccountApi(page: Page, initial: Partial<typeof baseAccount> =
       patches.push(patch);
       current = { ...current, ...patch };
       if ('firstName' in patch || 'lastName' in patch) {
-        current.name = [current.firstName, current.lastName].filter(Boolean).join(' ') || null;
+        current.name = [current.firstName, current.lastName].filter(Boolean).join(' ') || '';
       }
       return route.fulfill(json(current));
     }
