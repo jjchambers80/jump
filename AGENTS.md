@@ -22,6 +22,7 @@ npm run db:studio           # Prisma Studio GUI
 ## Testing
 
 ```bash
+./scripts/bootstrap-worktree.sh     # In a fresh worktree (.worktrees/<id>): copies the gitignored env files from the primary checkout, installs, generates Prisma
 cd backend && npm test              # All backend tests (creates + migrates jump_test on your Postgres automatically)
 cd backend && npm run test:unit     # Unit tests only
 cd backend && npm run test:contract # Contract tests
@@ -30,6 +31,9 @@ cd frontend && npm run test:unit    # Vitest unit tests (lib/color.ts)
 ```
 
 ## Core Constraints
+
+- **Worktrees**: run `./scripts/bootstrap-worktree.sh` before anything else in a fresh worktree — without `backend/.env` the test suite falls back to `postgres:postgres@localhost:5432` and every contract test fails with `P1000`
+- **CI is the completion gate**: `.github/workflows/ci.yml` (backend unit + contract + integration on a Postgres service, frontend typecheck + vitest) is a required check on `main`; a Kanban card with a PR completion contract only closes once it is green. Keep the suite deterministic — no network, no Stripe
 
 - **DB import**: Always `import { prisma } from "@jump/db"` — never instantiate PrismaClient directly
 - **AUTH_SECRET**: Must be identical in `backend/.env` and `frontend/.env.local` — JWT verification fails silently on mismatch

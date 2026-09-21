@@ -1,0 +1,75 @@
+# Required checks for main. Kept deliberately small and deterministic so the
+# Kanban PR completion contract (hermes kanban, docs/development/kanban-workflow.md)
+# has a green signal to accept: a PR is done when these pass, not when a worker
+# says so. Playwright and the Claude review stay separate (cost, flakiness).
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: 22
+
+jobs:
+  backend:
+    name: backend tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: jump_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # tests/testDatabase.js: explicit URL wins, so no backend/.env is needed.
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/jump_test?schema=public
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/jump_test?schema=public
+      HIBP_CHECK: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run db:generate
+      - name: Unit tests
+        working-directory: backend
+        run: npm run test:unit
+      - name: Contract + integration tests
+        working-directory: backend
+        run: npm test -- tests/contract tests/integration
+
+  frontend:
+    name: frontend typecheck + unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run db:generate
+      - name: Typecheck
+        working-directory: frontend
+        run: npx tsc --noEmit -p .
+      - name: Unit tests
+        working-directory: frontend
+        run: npm run test:unit
