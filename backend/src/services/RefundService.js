@@ -12,6 +12,7 @@ import addOnService from './AddOnService.js';
 import logger from '../utils/logger.js';
 import { NotFoundError, ConflictError, ValidationError } from '../middleware/errorHandler.js';
 import { orderStatusFor } from './applicationOrderStatus.js';
+import boothService from './BoothService.js';
 
 const round = (v) => Math.round((v + Number.EPSILON) * 100) / 100;
 
@@ -283,6 +284,9 @@ class RefundService {
         where: { id: orderId },
         data: { status: orderStatusFor(application) },
       });
+      if (paymentStatus === 'REFUNDED') {
+        await boothService.releaseForApplication(order.applicationId, { tx });
+      }
     } else {
       await tx.order.update({ where: { id: orderId }, data: { status: paymentStatus } });
     }

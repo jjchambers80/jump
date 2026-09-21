@@ -24,6 +24,7 @@ import { statusUrlFor } from './applicationLinks.js';
 import { buyerAccountUrl } from '../utils/storefrontUrl.js';
 import emailService from './EmailService.js';
 import contactOptInService from './ContactOptInService.js';
+import boothService from './BoothService.js';
 import { ORDER_INCLUDE, adjustmentItems, buyerLineTotal, tierItem } from './OrderLineService.js';
 import { orderStatusFor } from './applicationOrderStatus.js';
 import logger from '../utils/logger.js';
@@ -318,9 +319,18 @@ class ApplicationPaymentService {
         error: error.message,
       });
       if (!isCardFailure(error) && !intentId) {
-        // Stripe / network problem, not the card: leave PROCESSING so the
-        // organizer retries; the webhook will reconcile if the intent exists.
-        await prisma.application.update({ where: { id: application.id }, data: { paymentStatus: 'CARD_ON_FILE', capacitySlot: 'RESERVED' } });
+        // No intent exists to reconcile. A released booth returns the
+        // application to PAYMENT_DUE so the vendor can select another one.
+        await prisma.$transaction(async (tx) => {
+          const releasedBooth = await boothService.releaseHoldOnFailure(application.id, { tx });
+          await tx.application.update({
+            where: { id: application.id },
+            data: {
+              paymentStatus: releasedBooth ? 'PAYMENT_DUE' : 'CARD_ON_FILE',
+              capacitySlot: 'RESERVED',
+            },
+          });
+        });
         throw new ValidationError(`Could not charge the card on file: ${error.message}`);
       }
       return this._markPaymentDue(application, error.message, intentId);
@@ -382,6 +392,15 @@ class ApplicationPaymentService {
         data.status = 'SUBMITTED';
         data.submittedAt = new Date();
       }
+      const tier = application.tierId && tx.applicationTier?.findUnique
+        ? await tx.applicationTier.findUnique({ where: { id: application.tierId }, select: { mapBound: true } })
+        : null;
+      if (tier?.mapBound && application.status === 'APPROVED') {
+        await boothService.claimBooth(applicationId, null, { tx });
+      } else {
+        const booth = await boothService.boothForApplication(applicationId, { tx });
+        if (booth?.status === 'HELD') await boothService.claimBooth(applicationId, booth.id, { tx });
+      }
       const row = await tx.application.update({
         where: { id: applicationId },
         data,
@@ -441,6 +460,7 @@ class ApplicationPaymentService {
         status: 'FAILED',
         failureReason: String(reason || '').slice(0, 500) || null,
       });
+      await boothService.releaseHoldOnFailure(application.id, { tx });
     });
     logger.warn('Application payment due', { event: 'application_payment_due', applicationId: application.id, reason, paymentDueAt });
     return 'PAYMENT_DUE';
@@ -488,6 +508,17 @@ class ApplicationPaymentService {
       case 'checkout.session.async_payment_succeeded':
         return this._onCheckoutCompleted(applicationId, { ...object, payment_status: 'paid' });
       case 'checkout.session.expired':
+        if (object.metadata?.purpose === 'pay_now') {
+          {
+            const application = await prisma.application.findUnique({
+              where: { id: applicationId },
+              include: PAYMENT_INCLUDE,
+            });
+            if (application?.paymentStatus === 'PROCESSING') {
+              await this._markPaymentDue(application, 'Checkout session expired');
+            }
+          }
+        }
         logger.info('Application checkout session expired', { applicationId, sessionId: object.id, mode: object.mode });
         return;
       case 'payment_intent.succeeded':
@@ -609,6 +640,7 @@ class ApplicationPaymentService {
                   ? addOnService.unsell(tx, lines)
                   : addOnService.release(tx, lines));
             }
+            await boothService.releaseForApplication(row.id, { tx });
             const updated = await tx.application.update({
               where: { id: row.id },
               data: {

@@ -35,6 +35,7 @@ import addOnService from './AddOnService.js';
 import applicantProfileService from './ApplicantProfileService.js';
 import applicationTemplateService from './ApplicationTemplateService.js';
 import applicationPaymentService from './ApplicationPaymentService.js';
+import boothService from './BoothService.js';
 import orderService from './OrderService.js';
 import orderLineService, { ORDER_INCLUDE, adjustmentItems } from './OrderLineService.js';
 import refundService from './RefundService.js';
@@ -68,7 +69,7 @@ const EXPORT_MAX_ROWS = 10_000;
 const LIST_INCLUDE = {
   contact: { select: { email: true, firstName: true, lastName: true } },
   profile: { select: { businessName: true, images: { take: 1, orderBy: { displayOrder: 'asc' }, include: { image: { include: { file: true } } } } } },
-  tier: { select: { id: true, name: true } },
+  tier: { select: { id: true, name: true, mapBound: true } },
   form: { select: { id: true, name: true, kind: true } },
   event: {
     select: {
@@ -400,7 +401,13 @@ class ApplicationService {
   /** Guest: pay an outstanding balance (APPROVED + PAYMENT_DUE). */
   async payNow(applicationId, rawToken) {
     const application = await this._requireByToken(applicationId, rawToken);
-    return { url: await applicationPaymentService.payNowUrl(application, await statusUrlFor(application)) };
+    return this._payNow(application);
+  }
+
+  /** Guest status-link path: authenticate first, then atomically hold and pay. */
+  async chooseBooth(applicationId, rawToken, boothId) {
+    await this._requireByToken(applicationId, rawToken);
+    return this._chooseBooth(applicationId, boothId);
   }
 
   async statusUrl(application) {
@@ -439,7 +446,63 @@ class ApplicationService {
   async payNowForContact(organizationId, contactId, applicationId) {
     const application = await prisma.application.findFirst({ where: { id: applicationId, organizationId, contactId }, include: DETAIL_INCLUDE });
     if (!application || application.status === 'DRAFT') throw new NotFoundError('Application not found');
-    return { url: await applicationPaymentService.payNowUrl(application, await statusUrlFor(application)) };
+    return this._payNow(application);
+  }
+
+  async _payNow(application) {
+    if (application.tier?.mapBound) await boothService.beginPayment(application.id);
+    try {
+      return { url: await applicationPaymentService.payNowUrl(application, await statusUrlFor(application)) };
+    } catch (error) {
+      if (application.tier?.mapBound) {
+        await applicationPaymentService._markPaymentDue(application, error.message).catch(() => {});
+      }
+      throw error;
+    }
+  }
+
+  /** Buyer-session path: ownership is scoped by organization + contact. */
+  async chooseBoothForContact(organizationId, contactId, applicationId, boothId) {
+    const application = await prisma.application.findFirst({
+      where: { id: applicationId, organizationId, contactId, status: { not: 'DRAFT' } },
+      select: { id: true },
+    });
+    if (!application) throw new NotFoundError('Application not found');
+    return this._chooseBooth(applicationId, boothId);
+  }
+
+  /**
+   * Hold the booth before money moves. A saved card is charged immediately;
+   * without one, the existing pay-now route creates the hosted Checkout.
+   */
+  async _chooseBooth(applicationId, boothId) {
+    const hold = await boothService.chooseBooth(applicationId, boothId);
+    const application = await prisma.application.findUnique({ where: { id: applicationId }, include: DETAIL_INCLUDE });
+    if (!application?.stripePaymentMethodId) {
+      return { ...hold, paymentStatus: application?.paymentStatus || 'PAYMENT_DUE' };
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw`SELECT * FROM "Application" WHERE "id" = ${applicationId} FOR UPDATE`;
+      const locked = rows[0];
+      if (!locked || locked.status !== 'APPROVED' || locked.paymentStatus !== 'PAYMENT_DUE') {
+        throw new ConflictError('The application payment state changed; refresh and try again');
+      }
+      await this._transition(
+        tx,
+        applicationId,
+        { paymentStatus: 'PROCESSING', chargeAttempts: locked.chargeAttempts + 1 },
+        { include: null }
+      );
+    });
+    const paymentStatus = await applicationPaymentService.chargeOnApproval(applicationId);
+    const booth = await boothService.boothForApplication(applicationId);
+    return {
+      boothId: booth?.id || boothId,
+      holdExpiresAt: booth?.holdExpiresAt || hold.holdExpiresAt,
+      status: booth?.status || (paymentStatus === 'PAID' ? 'SOLD' : 'AVAILABLE'),
+      paymentStatus,
+    };
   }
 
   /** Buyer: replace the card on file (setup-mode Checkout). */
@@ -665,19 +728,33 @@ class ApplicationService {
       if (application.paymentStatus === 'PROCESSING') throw new ConflictError('A payment is in progress for this application; try again in a moment');
 
       const data = { status: spec.to, decidedAt: new Date(), decidedById: input.byUserId };
+      const orderData = {};
       let chargeNow = false;
       if (spec.to === 'APPROVED') {
         if (application.paymentStatus === 'AWAITING_CARD') throw new ConflictError('The applicant has not saved a card yet');
         if (application.paymentStatus === 'CARD_ON_FILE') {
           if (!paymentsEnabled()) throw new ConflictError('Application payments are not enabled');
+          const tier = application.tierId
+            ? await tx.applicationTier.findUnique({
+                where: { id: application.tierId },
+                select: { mapBound: true, form: { select: { paymentDueDays: true } } },
+              })
+            : null;
           // Hold the slot while the charge is in flight; PAID moves it to approved.
           if (application.tierId) {
             await this._takeCapacity(tx, application, 'RESERVED');
             data.capacitySlot = 'RESERVED';
           }
-          data.paymentStatus = 'PROCESSING';
-          data.chargeAttempts = application.chargeAttempts + 1;
-          chargeNow = true;
+          if (tier?.mapBound) {
+            // A map-bound approval is an invitation to select inventory. Money
+            // moves only after the applicant holds a specific booth.
+            data.paymentStatus = 'PAYMENT_DUE';
+            orderData.dueAt = new Date(Date.now() + (tier.form.paymentDueDays ?? 7) * 86_400_000);
+          } else {
+            data.paymentStatus = 'PROCESSING';
+            data.chargeAttempts = application.chargeAttempts + 1;
+            chargeNow = true;
+          }
         } else if (application.tierId) {
           await this._takeCapacity(tx, application, 'APPROVED');
           data.capacitySlot = 'APPROVED';
@@ -687,6 +764,7 @@ class ApplicationService {
         data.capacitySlot = 'NONE';
       }
       if (spec.to === 'WITHDRAWN') {
+        await boothService.releaseForApplication(applicationId, { tx });
         data.withdrawnBy = 'ORGANIZER';
         data.withdrawReason = note;
       }
@@ -694,7 +772,7 @@ class ApplicationService {
       const row = await this._transition(tx, applicationId, {
         ...data,
         decisions: { create: { action: spec.action, byUserId: input.byUserId, note } },
-      });
+      }, { orderData });
       return { updated: row, charge: chargeNow };
     });
 
@@ -747,6 +825,15 @@ class ApplicationService {
         throw new ConflictError('Only approved applications with a payment due can be charged');
       if (!application.stripePaymentMethodId)
         throw new ConflictError('No card on file; ask the applicant to pay from their status page');
+      if (application.tierId) {
+        const tier = await tx.applicationTier.findUnique({
+          where: { id: application.tierId },
+          select: { mapBound: true },
+        });
+        if (tier?.mapBound) {
+          await boothService.beginPayment(applicationId, { tx, markProcessing: false });
+        }
+      }
       await this._transition(
         tx,
         applicationId,
@@ -923,6 +1010,7 @@ class ApplicationService {
       // A PAYMENT_DUE application holds its slot and lines: release them, rewrite, then hold again on the new tier.
       const held = application.capacitySlot === 'RESERVED';
       if (held) await this._releaseCapacity(tx, application);
+      await boothService.releaseForApplication(applicationId, { tx });
 
       const data = this._orderData(application, { tier: newTier, addOnLines: kept });
       const droppedText = dropped.length
@@ -1220,10 +1308,15 @@ class ApplicationService {
 
   /** RESERVED → APPROVED for the tier and add-on holds, as `_markPaid` does after a Stripe payment. */
   async _confirmHeldSlot(tx, application) {
-    if (!application.tierId || application.capacitySlot !== 'RESERVED') return;
-    await tx.$executeRaw`UPDATE "ApplicationTier" SET "quantityReserved" = GREATEST("quantityReserved" - 1, 0), "quantityApproved" = "quantityApproved" + 1 WHERE "id" = ${application.tierId}`;
-    const lines = await this._addOnLines(tx, application.id);
-    if (lines.length) await addOnService.commit(tx, lines);
+    if (application.tier?.mapBound) {
+      await boothService.beginPayment(application.id, { tx, markProcessing: false });
+    }
+    if (application.tierId && application.capacitySlot === 'RESERVED') {
+      await tx.$executeRaw`UPDATE "ApplicationTier" SET "quantityReserved" = GREATEST("quantityReserved" - 1, 0), "quantityApproved" = "quantityApproved" + 1 WHERE "id" = ${application.tierId}`;
+      const lines = await this._addOnLines(tx, application.id);
+      if (lines.length) await addOnService.commit(tx, lines);
+    }
+    if (application.tier?.mapBound) await boothService.claimBooth(application.id, null, { tx });
   }
 
   /**

@@ -18,6 +18,9 @@ export const MAX_TAGS = 20;
 export const MAX_TAG_LENGTH = 40;
 /** Spec 019 follow-up: questions a form may pin as list columns. */
 export const MAX_PINNED_QUESTIONS = 2;
+/** Spec 014 phase 2: self-serve booth holds and their expiry sweep. */
+export const BOOTH_HOLD_MS = Number.parseInt(process.env.BOOTH_HOLD_MS || '900000', 10);
+export const BOOTH_SWEEP_INTERVAL_MS = Number.parseInt(process.env.BOOTH_SWEEP_INTERVAL_MS || '60000', 10);
 
 export const QUESTION_TYPES = new Set([
   'SHORT_TEXT',

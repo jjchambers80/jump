@@ -48,6 +48,8 @@ import domainService from '../services/DomainService.js';
 import applicationPaymentService from '../services/ApplicationPaymentService.js';
 import applicationDigestService from '../services/ApplicationDigestService.js';
 import orderService from '../services/OrderService.js';
+import boothService from '../services/BoothService.js';
+import { BOOTH_SWEEP_INTERVAL_MS } from '../config/applications.js';
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -218,6 +220,11 @@ if (process.env.NODE_ENV !== 'test') {
   };
   setTimeout(applicationSweep, 30 * 1000).unref();
   setInterval(applicationSweep, APPLICATION_SWEEP_MS).unref();
+
+  // Self-serve booth holds (spec 014 phase 2): release expired inventory, but
+  // BoothService preserves holds whose payment is still PROCESSING.
+  setTimeout(() => boothService.sweepExpiredHolds().catch(() => {}), BOOTH_SWEEP_INTERVAL_MS).unref();
+  setInterval(() => boothService.sweepExpiredHolds().catch(() => {}), BOOTH_SWEEP_INTERVAL_MS).unref();
 
   // Abandoned-checkout sweep (spec 020): PENDING ticket orders past the
   // Checkout session lifetime + grace are settled against Stripe (hold
