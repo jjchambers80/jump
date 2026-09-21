@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { api, mapsApi, type PublicMap, type PublicMapBooth, type PublicMapVendor, type MapBooth, type MapElement } from '@/services/api';
 import BrandScope from '@/components/BrandScope';
@@ -30,10 +30,11 @@ interface BoothDetailProps {
     taxInclusivePricing?: boolean;
   };
   vendor?: PublicMapVendor;
+  boothHref: string;
   onClose: () => void;
 }
 
-function BoothDetail({ booth, legend, event, vendor, onClose }: BoothDetailProps) {
+function BoothDetail({ booth, legend, event, vendor, boothHref, onClose }: BoothDetailProps) {
   const { resolvedTheme } = useTheme();
   const dark = resolvedTheme === 'dark';
   const tier = legend.find((t) => t.id === booth.tier?.id);
@@ -118,6 +119,11 @@ function BoothDetail({ booth, legend, event, vendor, onClose }: BoothDetailProps
               {statusLabel}
             </span>
           </div>
+          {vendorLabel && (
+            <a href={boothHref} className="inline-flex items-center text-sm font-medium text-brand-link hover:underline focus:outline-none focus:ring-2 focus:ring-brand/40">
+              Permanent link to {vendorLabel} at booth {booth.label}
+            </a>
+          )}
         </div>
       </div>
 
@@ -171,6 +177,11 @@ function BoothDetail({ booth, legend, event, vendor, onClose }: BoothDetailProps
               {statusLabel}
             </span>
           </div>
+          {vendorLabel && (
+            <a href={boothHref} className="inline-flex items-center text-sm font-medium text-brand-link hover:underline focus:outline-none focus:ring-2 focus:ring-brand/40">
+              Permanent link to {vendorLabel} at booth {booth.label}
+            </a>
+          )}
         </div>
       </div>
     </div>
@@ -208,6 +219,8 @@ function toMapBooth(pb: PublicMapBooth): MapBooth {
 
 export default function PublicMapClient({ params }: PublicMapClientProps) {
   const { resolvedTheme } = useTheme();
+  const pathname = usePathname();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [mapData, setMapData] = useState<PublicMap | null>(null);
   const [eventData, setEventData] = useState<{
@@ -224,6 +237,7 @@ export default function PublicMapClient({ params }: PublicMapClientProps) {
   const [etag, setEtag] = useState<string | null>(null);
   const [selectedBooth, setSelectedBooth] = useState<PublicMapBooth | null>(null);
   const [highlightBooth, setHighlightBooth] = useState<string | null>(null);
+  const [deepLinkError, setDeepLinkError] = useState<string | null>(null);
   const transformRef = useRef<any>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const pulseCountRef = useRef(0);
@@ -289,32 +303,45 @@ export default function PublicMapClient({ params }: PublicMapClientProps) {
     fetchEvent();
   }, [fetchMap, fetchEvent]);
 
-  // Handle ?booth= param for focus
+  const boothHref = useCallback((boothId: string) => {
+    const query = new URLSearchParams({ booth: boothId });
+    return `${pathname}?${query.toString()}`;
+  }, [pathname]);
+
+  // Canonical links use immutable booth ids. Keep accepting labels so links
+  // sent before phase 3 continue to work.
   useEffect(() => {
     const boothParam = searchParams.get('booth');
-    if (boothParam && mapData) {
-      const booth = mapData.booths.find((b) => b.label === boothParam);
-      if (booth) {
-        setHighlightBooth(booth.id);
-        // Fit to the booth: react-zoom-pan-pinch centres on a DOM node, and the
-        // booth <g> carries data-testid="booth-<label>".
-        const node = document.querySelector<HTMLElement>(`[data-testid="booth-${CSS.escape(booth.label)}"]`);
-        if (transformRef.current && node) {
-          transformRef.current.zoomToElement(node, 2, reducedMotionRef.current ? 0 : 300);
+    if (!boothParam || !mapData) {
+      setDeepLinkError(null);
+      return;
+    }
+
+    const booth = mapData.booths.find((candidate) => candidate.id === boothParam || candidate.label === boothParam);
+    if (!booth) {
+      setSelectedBooth(null);
+      setHighlightBooth(null);
+      setDeepLinkError(`Booth “${boothParam}” was not found on this event map.`);
+      return;
+    }
+
+    setDeepLinkError(null);
+    setHighlightBooth(booth.id);
+    setSelectedBooth(booth);
+    const node = document.querySelector<HTMLElement>(`[data-testid="booth-${CSS.escape(booth.label)}"]`);
+    if (transformRef.current && node) {
+      transformRef.current.zoomToElement(node, 2, reducedMotionRef.current ? 0 : 300);
+    }
+    if (!reducedMotionRef.current) {
+      pulseCountRef.current = 0;
+      const pulseInterval = setInterval(() => {
+        pulseCountRef.current++;
+        if (pulseCountRef.current >= 3) {
+          clearInterval(pulseInterval);
+          setHighlightBooth(null);
         }
-        // Pulse 3x
-        if (!reducedMotionRef.current) {
-          pulseCountRef.current = 0;
-          const pulseInterval = setInterval(() => {
-            pulseCountRef.current++;
-            if (pulseCountRef.current >= 3) {
-              clearInterval(pulseInterval);
-              setHighlightBooth(null);
-            }
-          }, 1500);
-          return () => clearInterval(pulseInterval);
-        }
-      }
+      }, 1500);
+      return () => clearInterval(pulseInterval);
     }
   }, [searchParams, mapData]);
 
@@ -347,20 +374,16 @@ export default function PublicMapClient({ params }: PublicMapClientProps) {
   }, [fetchMap, etag]);
 
   const handleBoothClick = (booth: MapBooth) => {
-    // Find the corresponding PublicMapBooth
-    if (mapData) {
-      const publicBooth = mapData.booths.find((b) => b.id === booth.id);
-      if (publicBooth) {
-        setSelectedBooth(publicBooth);
-      }
-    }
+    focusBooth(booth.id);
   };
 
   const focusBooth = (boothId: string) => {
     const booth = mapData?.booths.find((candidate) => candidate.id === boothId);
     if (!booth) return;
+    setDeepLinkError(null);
     setHighlightBooth(booth.id);
     setSelectedBooth(booth);
+    router.push(boothHref(booth.id), { scroll: false });
     const node = document.querySelector<HTMLElement>(`[data-testid="booth-${CSS.escape(booth.label)}"]`);
     if (transformRef.current && node) {
       transformRef.current.zoomToElement(node, 2, reducedMotionRef.current ? 0 : 300);
@@ -368,9 +391,15 @@ export default function PublicMapClient({ params }: PublicMapClientProps) {
     node?.scrollIntoView({ block: 'center', behavior: reducedMotionRef.current ? 'auto' : 'smooth' });
   };
 
+  const closeBooth = () => {
+    setSelectedBooth(null);
+    setHighlightBooth(null);
+    router.replace(pathname, { scroll: false });
+  };
+
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Escape' && selectedBooth) {
-      setSelectedBooth(null);
+      closeBooth();
     }
   };
 
@@ -454,6 +483,12 @@ export default function PublicMapClient({ params }: PublicMapClientProps) {
           <p className="text-gray-600 dark:text-slate-400 mt-1">Floor Map</p>
         </div>
 
+        {deepLinkError && (
+          <div role="alert" className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+            {deepLinkError}
+          </div>
+        )}
+
         <div className="grid lg:grid-cols-4 gap-6">
           {/* Map canvas */}
           <div className="lg:col-span-3">
@@ -484,7 +519,7 @@ export default function PublicMapClient({ params }: PublicMapClientProps) {
             </div>
           </div>
         </div>
-        <VendorDirectory vendors={mapData.vendors ?? []} onSelectBooth={focusBooth} />
+        <VendorDirectory vendors={mapData.vendors ?? []} onSelectBooth={focusBooth} boothHref={boothHref} />
       </div>
 
       {selectedBooth && (
@@ -493,7 +528,8 @@ export default function PublicMapClient({ params }: PublicMapClientProps) {
           legend={legendTiers}
           event={eventData || {}}
           vendor={mapData.vendors?.find((candidate) => candidate.booth?.id === selectedBooth.id)}
-          onClose={() => setSelectedBooth(null)}
+          boothHref={boothHref(selectedBooth.id)}
+          onClose={closeBooth}
         />
       )}
 

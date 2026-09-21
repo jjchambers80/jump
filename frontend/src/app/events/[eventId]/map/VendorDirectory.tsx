@@ -8,6 +8,7 @@ import type { PublicMapVendor } from '@/services/api';
 interface VendorDirectoryProps {
   vendors: PublicMapVendor[];
   onSelectBooth: (boothId: string) => void;
+  boothHref: (boothId: string) => string;
 }
 
 function websiteLabel(value: string) {
@@ -18,7 +19,7 @@ function websiteLabel(value: string) {
   }
 }
 
-export default function VendorDirectory({ vendors, onSelectBooth }: VendorDirectoryProps) {
+export default function VendorDirectory({ vendors, onSelectBooth, boothHref }: VendorDirectoryProps) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('');
 
@@ -110,9 +111,16 @@ export default function VendorDirectory({ vendors, onSelectBooth }: VendorDirect
                     )}
                     <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
                       {vendor.booth ? (
-                        <button type="button" onClick={() => onSelectBooth(vendor.booth!.id)} className="inline-flex items-center gap-1 font-medium text-brand-link hover:underline">
+                        <a
+                          href={boothHref(vendor.booth.id)}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            onSelectBooth(vendor.booth!.id);
+                          }}
+                          className="inline-flex items-center gap-1 font-medium text-brand-link hover:underline focus:outline-none focus:ring-2 focus:ring-brand/40"
+                        >
                           <MapPin className="h-4 w-4" aria-hidden /> View booth {vendor.booth.label}
-                        </button>
+                        </a>
                       ) : (
                         <span className="text-gray-500 dark:text-slate-400">Booth to be announced</span>
                       )}
