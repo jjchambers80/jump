@@ -37,6 +37,8 @@ A ready implementation card must include the outcome, scope, acceptance criteria
 
 Hermes assigns implementation cards to the Jump Claude Code worker (`coding`) and dispatches them. The worker must use an isolated worktree when code changes are required.
 
+The board is bound to the `jump` Hermes project (`board.json` `project_id`, set 2026-09-20), so every card created without an explicit `--workspace` — including children produced by `decompose` — is materialised as its own worktree at `<repo>/.worktrees/<task-id>` on branch `jump/<task-id>-<slug>`. Pass `--workspace scratch` only for cards that must not touch the repo. A card that has to continue an existing branch takes `--workspace dir:<path of that worktree>`. Never create implementation cards with the default scratch workspace: before the binding, scratch cards ran in the main checkout (`default_workdir`) and several workers wrote into it at once. Cards that must run in sequence are chained with `--parent <prerequisite>` (a parent is a prerequisite, not a container) — sibling children of one decomposition dispatch concurrently.
+
 ```bash
 hermes kanban --board jump assign <task-id> coding
 hermes kanban --board jump dispatch
