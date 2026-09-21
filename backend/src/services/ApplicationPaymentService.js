@@ -21,9 +21,10 @@ import addOnService from './AddOnService.js';
 import applicationTemplateService from './ApplicationTemplateService.js';
 import paymentSettingsService, { stripeMode } from './PaymentSettingsService.js';
 import { statusUrlFor } from './applicationLinks.js';
-import { buyerAccountUrl } from '../utils/storefrontUrl.js';
+import { buyerAccountUrl, eventUrl } from '../utils/storefrontUrl.js';
 import emailService from './EmailService.js';
 import contactOptInService from './ContactOptInService.js';
+import boothService from './BoothService.js';
 import { ORDER_INCLUDE, adjustmentItems, buyerLineTotal, tierItem } from './OrderLineService.js';
 import { orderStatusFor } from './applicationOrderStatus.js';
 import logger from '../utils/logger.js';
@@ -318,9 +319,11 @@ class ApplicationPaymentService {
         error: error.message,
       });
       if (!isCardFailure(error) && !intentId) {
-        // Stripe / network problem, not the card: leave PROCESSING so the
-        // organizer retries; the webhook will reconcile if the intent exists.
-        await prisma.application.update({ where: { id: application.id }, data: { paymentStatus: 'CARD_ON_FILE', capacitySlot: 'RESERVED' } });
+        // No intent exists to reconcile. PAYMENT_DUE (with its due date and a
+        // FAILED payment row) is the one state every retry path accepts; the
+        // released booth lets the vendor select another one.
+        await prisma.application.update({ where: { id: application.id }, data: { capacitySlot: 'RESERVED' } });
+        await this._markPaymentDue(application, error.message);
         throw new ValidationError(`Could not charge the card on file: ${error.message}`);
       }
       return this._markPaymentDue(application, error.message, intentId);
@@ -382,6 +385,24 @@ class ApplicationPaymentService {
         data.status = 'SUBMITTED';
         data.submittedAt = new Date();
       }
+      const tier = application.tierId && tx.applicationTier?.findUnique
+        ? await tx.applicationTier.findUnique({ where: { id: application.tierId }, select: { mapBound: true } })
+        : null;
+      // Stripe has the money: the PAID transition never fails on booth state.
+      // A hold that vanished meanwhile is logged for the organizer to assign by hand.
+      try {
+        if (tier?.mapBound && application.status === 'APPROVED') {
+          await boothService.claimBooth(applicationId, null, { tx });
+        } else {
+          const booth = await boothService.boothForApplication(applicationId, { tx });
+          if (booth?.status === 'HELD') await boothService.claimBooth(applicationId, booth.id, { tx });
+        }
+      } catch (error) {
+        if (error?.code !== 'BOOTH_HOLD_MISSING') throw error;
+        logger.warn('Application paid without a booth hold', {
+          event: 'application_paid_without_booth', applicationId, error: error.message,
+        });
+      }
       const row = await tx.application.update({
         where: { id: applicationId },
         data,
@@ -416,6 +437,15 @@ class ApplicationPaymentService {
     });
   }
 
+  /** Expire a hosted Checkout session the vendor walked away from; already-expired sessions are fine. */
+  async expireCheckoutSession(sessionId) {
+    try {
+      await stripe.checkout.sessions.expire(sessionId);
+    } catch (error) {
+      if (error?.code !== 'resource_missing' && !/already|expired|complete/i.test(String(error?.message))) throw error;
+    }
+  }
+
   /** Charge failed: keep the reserved slot, start the pay-now clock. */
   async _markPaymentDue(application, reason, paymentIntentId = null) {
     const dueDays = application.form?.paymentDueDays ?? 7;
@@ -441,6 +471,7 @@ class ApplicationPaymentService {
         status: 'FAILED',
         failureReason: String(reason || '').slice(0, 500) || null,
       });
+      await boothService.releaseHoldOnFailure(application.id, { tx });
     });
     logger.warn('Application payment due', { event: 'application_payment_due', applicationId: application.id, reason, paymentDueAt });
     return 'PAYMENT_DUE';
@@ -488,6 +519,17 @@ class ApplicationPaymentService {
       case 'checkout.session.async_payment_succeeded':
         return this._onCheckoutCompleted(applicationId, { ...object, payment_status: 'paid' });
       case 'checkout.session.expired':
+        if (object.metadata?.purpose === 'pay_now') {
+          const application = await prisma.application.findUnique({
+            where: { id: applicationId },
+            include: PAYMENT_INCLUDE,
+          });
+          // Only the session the application is waiting on may reset it; a
+          // stale session expiring after a re-choose must not touch the new hold.
+          if (application?.paymentStatus === 'PROCESSING' && application.stripeCheckoutSessionId === object.id) {
+            await this._markPaymentDue(application, 'Checkout session expired');
+          }
+        }
         logger.info('Application checkout session expired', { applicationId, sessionId: object.id, mode: object.mode });
         return;
       case 'payment_intent.succeeded':
@@ -563,6 +605,10 @@ class ApplicationPaymentService {
   async _onIntentFailed(applicationId, intent) {
     const application = await prisma.application.findUnique({ where: { id: applicationId }, include: { form: true } });
     if (!application || application.paymentStatus !== 'PROCESSING') return;
+    // A decline inside hosted Checkout is retried by the vendor on Stripe's
+    // page within the same session; the session's expiry or completion
+    // settles it. Only off-session charges fail here.
+    if (intent.metadata?.purpose === 'pay_now' || intent.metadata?.purpose === 'submit') return;
     await this._markPaymentDue(application, intent.last_payment_error?.message || intent.status, intent.id);
     await this._send(applicationId, 'PAYMENT_DUE');
   }
@@ -609,6 +655,7 @@ class ApplicationPaymentService {
                   ? addOnService.unsell(tx, lines)
                   : addOnService.release(tx, lines));
             }
+            await boothService.releaseForApplication(row.id, { tx });
             const updated = await tx.application.update({
               where: { id: row.id },
               data: {
@@ -699,7 +746,17 @@ class ApplicationPaymentService {
       }
       const statusUrl = await statusUrlFor(application);
       const accountUrl = application.contact?.accountCreatedAt ? await buyerAccountUrl(application.organizationId) : null;
-      return await emailService.sendApplicationReceipt(application, { statusUrl, accountUrl, paymentMethod, lines });
+      // Spec 014 phase 2: name the booth this payment bought and deep-link the public map.
+      let booth = null;
+      const owned = application.tier?.mapBound ? await boothService.boothForApplication(applicationId).catch(() => null) : null;
+      if (owned && owned.status === 'SOLD') {
+        booth = {
+          label: owned.label,
+          size: `${owned.w}\u00d7${owned.h}`,
+          mapUrl: await eventUrl(application.eventId, application.organizationId, `/map?booth=${encodeURIComponent(owned.label)}`).catch(() => null),
+        };
+      }
+      return await emailService.sendApplicationReceipt(application, { statusUrl, accountUrl, paymentMethod, lines, booth });
     } catch (error) {
       logger.error('Application receipt failed', { applicationId, error: error.message });
       return false;

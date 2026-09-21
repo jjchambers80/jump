@@ -139,6 +139,10 @@ export const SELECTION_FILL_LIGHT = '#c7d2fe';
 /** Selection fill (for elements) (dark). */
 export const SELECTION_FILL_DARK = '#312e81';
 
+/** Checkmark glyph on the viewer's selected booth (spec 014 phase 2 picker). */
+export const CHECKMARK_LIGHT = '#ffffff';
+export const CHECKMARK_DARK = '#1e1b4b';
+
 /** Alignment guide colour. */
 export const GUIDE_COLOR = '#6366f1';
 /** Highlight ring colour when a booth is focused by ?booth= param. */

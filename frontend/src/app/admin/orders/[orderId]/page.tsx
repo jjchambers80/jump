@@ -89,6 +89,8 @@ interface OrderDetail {
     formKind: string | null;
     tierName: string | null;
     businessName: string | null;
+    /** Spec 014 phase 2: the booth this order bought, for the line description. */
+    booth?: { id: string; label: string; w: number; h: number; status: string } | null;
   } | null;
   createdAt: string;
 }
@@ -359,6 +361,7 @@ export default function AdminOrderDetailPage() {
           <div data-testid="order-application-panel">
             <InfoRow label="Business" value={order.application.businessName ?? '—'} />
             <InfoRow label="Form" value={`${order.application.formName ?? 'Application'}${order.application.tierName ? ` · ${order.application.tierName}` : ''}`} />
+            {order.application.booth && <InfoRow label="Booth" value={`${order.application.booth.label} · ${order.application.booth.w}×${order.application.booth.h}`} />}
             <InfoRow label="Review status" value={APPLICATION_STATUS_LABEL[order.application.status] ?? order.application.status} />
             <InfoRow label="Payment" value={APPLICATION_PAYMENT_LABEL[order.application.paymentStatus] ?? order.application.paymentStatus} />
             <div className="pt-2">
@@ -405,6 +408,11 @@ export default function AdminOrderDetailPage() {
                     <span className="text-xs uppercase tracking-wider text-gray-400 dark:text-slate-500 mr-2">{item.kind === 'WAIVER' ? 'Waived' : 'Adjustment'}</span>
                   )}
                   {item.kind === 'ADJUSTMENT' || item.kind === 'WAIVER' ? item.description : item.priceTierName ?? item.description}
+                  {item.kind === 'APPLICATION_TIER' && order.application?.booth && (
+                    <span className="ml-2 text-xs text-gray-500 dark:text-slate-400" data-testid="order-item-booth">
+                      Booth {order.application.booth.label} · {order.application.booth.w}×{order.application.booth.h}
+                    </span>
+                  )}
                 </td>
                 <td className="py-2 text-right">{item.quantity}</td>
                 <td className="py-2 text-right">{formatCurrency(item.unitPrice)}</td>

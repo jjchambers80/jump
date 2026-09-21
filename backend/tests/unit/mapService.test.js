@@ -67,7 +67,7 @@ describe('MapService', () => {
           booth: { findMany: jest.fn().mockResolvedValue([{ tierId: 'tier_1' }, { tierId: 'tier_1' }, { tierId: 'tier_2' }]) },
           applicationTier: {
             findMany: jest.fn().mockResolvedValue([
-              { id: 'tier_1', quantityApproved: 3, quantityReserved: 0 },
+              { id: 'tier_1', name: 'Standard', quantityApproved: 3, quantityReserved: 0, form: { chargeTiming: 'APPROVAL', name: 'Vendor' } },
             ]),
             updateMany: jest.fn(),
           },
@@ -111,7 +111,7 @@ describe('MapService', () => {
           booth: { findMany: jest.fn().mockResolvedValue([{ tierId: 'tier_1' }, { tierId: 'tier_1' }]) },
           applicationTier: {
             findMany: jest.fn().mockResolvedValue([
-              { id: 'tier_1', quantityApproved: 1, quantityReserved: 0 },
+              { id: 'tier_1', name: 'Standard', quantityApproved: 1, quantityReserved: 0, form: { chargeTiming: 'APPROVAL', name: 'Vendor' } },
             ]),
             updateMany: jest.fn(),
           },

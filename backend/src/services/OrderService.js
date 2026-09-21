@@ -562,6 +562,8 @@ class OrderService {
             form: { select: { id: true, name: true, kind: true } },
             tier: { select: { id: true, name: true } },
             profile: { select: { businessName: true } },
+            // Spec 014 phase 2: the booth this order bought (SOLD / RESERVED holder)
+            booth: { select: { id: true, label: true, w: true, h: true, status: true } },
           },
         },
       },
@@ -1186,6 +1188,9 @@ class OrderService {
             formKind: order.application.form?.kind ?? null,
             tierName: order.application.tier?.name ?? null,
             businessName: order.application.profile?.businessName ?? null,
+            booth: order.application.booth
+              ? { id: order.application.booth.id, label: order.application.booth.label, w: order.application.booth.w, h: order.application.booth.h, status: order.application.booth.status }
+              : null,
           }
         : null,
       createdAt: order.createdAt,

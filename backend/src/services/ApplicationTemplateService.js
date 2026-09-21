@@ -12,7 +12,8 @@ import { moneyOf } from './applicationMoney.js';
 import { DEFAULT_TEMPLATES, MERGE_FIELDS, TEMPLATE_ACTIONS } from '../config/applications.js';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import emailService from './EmailService.js';
-import { buyerAccountUrl, storefrontFor } from '../utils/storefrontUrl.js';
+import boothService from './BoothService.js';
+import { buyerAccountUrl, eventUrl, storefrontFor } from '../utils/storefrontUrl.js';
 import logger from '../utils/logger.js';
 
 const ACTIONS = new Set(TEMPLATE_ACTIONS);
@@ -95,6 +96,7 @@ class ApplicationTemplateService {
       application.statusUrl ||
       `${base}/events/${application.eventId}/apply/status/${application.id}`;
     const money = moneyOf(application, { taxInclusive: organization.taxInclusivePricing === true });
+    const booth = await this._boothContext(application);
     return {
       applicant: {
         firstName: application.contact?.firstName || '',
@@ -124,11 +126,40 @@ class ApplicationTemplateService {
       // Spec 024 phase 3: `account.created` is true on the RECEIVED email that
       // carries the applicant's first sign-in link (`links.account` is then that link).
       account: { created: accountCreated === true },
+      // Spec 014 phase 2: the vendor's booth, or the "choose your booth" step
+      // an approved map-bound application still has ahead of it.
+      booth: booth.booth,
       links: {
         status: statusUrl,
         payNow: payNowUrl || '',
         account: accountUrl || (await buyerAccountUrl(organization.id || application.organizationId)),
+        map: booth.mapUrl,
       },
+    };
+  }
+
+  /**
+   * `{ booth: { label, size, chooseRequired } | null, mapUrl }` for the merge
+   * context. `chooseRequired` is true while an approved application on a
+   * map-bound tier owes payment and owns no booth yet; a HELD booth is not
+   * shown (the hold may lapse before the email is read).
+   */
+  async _boothContext(application) {
+    const mapBound = application.tier?.mapBound === true;
+    const owned = mapBound || application.boothLabel ? await boothService.boothForApplication(application.id).catch(() => null) : null;
+    const sold = owned && owned.status !== 'HELD' ? owned : null;
+    const chooseRequired = mapBound && !sold && application.status === 'APPROVED' && application.paymentStatus === 'PAYMENT_DUE';
+    const organizationId = application.organizationId || application.event?.venue?.organizationId || application.event?.venue?.organization?.id;
+    const mapUrl = sold && organizationId ? await eventUrl(application.eventId, organizationId, `/map?booth=${encodeURIComponent(sold.label)}`) : '';
+    const label = sold?.label || (!mapBound ? application.boothLabel : null) || '';
+    if (!label && !chooseRequired) return { booth: null, mapUrl };
+    return {
+      booth: {
+        label,
+        size: sold ? `${sold.w}\u00d7${sold.h}` : '',
+        chooseRequired,
+      },
+      mapUrl,
     };
   }
 

@@ -41,6 +41,7 @@ export { clientIpForRateLimit };
 // Per-IP cap on sign-in requests (spec 020 factory); the per-email cap lives in BuyerAuthService.
 const requestLimiter = makeLimiter('BUYER_AUTH_REQUEST', LIMITS.BUYER_AUTH_REQUEST);
 const verifyLimiter = makeLimiter('BUYER_AUTH_VERIFY', LIMITS.BUYER_AUTH_VERIFY);
+const boothLimiter = makeLimiter('BOOTH_CHOOSE', LIMITS.BOOTH_CHOOSE);
 
 /** POST /buyer/auth/request — email a sign-in link. Never reveals account existence. */
 router.post('/auth/request', requestLimiter, async (req, res, next) => {
@@ -227,6 +228,29 @@ router.get('/me/applications/:id', requireBuyer, async (req, res, next) => {
 router.post('/me/applications/:id/pay', requireBuyer, async (req, res, next) => {
   try {
     res.json(await applicationService.payNowForContact(req.buyer.organizationId, req.buyer.contactId, req.params.id));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** Back from a cancelled pay-now Checkout: release the hold, back to PAYMENT_DUE. */
+router.post('/me/applications/:id/cancel-checkout', requireBuyer, boothLimiter, async (req, res, next) => {
+  try {
+    res.json(await applicationService.cancelCheckoutForContact(req.buyer.organizationId, req.buyer.contactId, req.params.id));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** Hold and purchase a booth owned by this buyer's approved application. */
+router.post('/me/applications/:id/booth', requireBuyer, boothLimiter, async (req, res, next) => {
+  try {
+    res.json(await applicationService.chooseBoothForContact(
+      req.buyer.organizationId,
+      req.buyer.contactId,
+      req.params.id,
+      req.body?.boothId
+    ));
   } catch (error) {
     next(error);
   }

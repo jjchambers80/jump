@@ -27,6 +27,7 @@ const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/we
 
 // Per-IP cap on submissions (spec 020 factory; RATE_LIMIT_APPLICATION_SUBMIT_* overrides).
 const submitLimiter = makeLimiter('APPLICATION_SUBMIT', LIMITS.APPLICATION_SUBMIT);
+const boothLimiter = makeLimiter('BOOTH_CHOOSE', LIMITS.BOOTH_CHOOSE);
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -111,6 +112,24 @@ applicationStatusRouter.post('/:id/resume', submitLimiter, async (req, res, next
 applicationStatusRouter.post('/:id/pay', submitLimiter, async (req, res, next) => {
   try {
     res.json(await applicationService.payNow(req.params.id, req.query.token));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** Hold and purchase a published booth through an emailed guest status link. */
+/** Back from a cancelled pay-now Checkout: release the hold, back to PAYMENT_DUE. */
+applicationStatusRouter.post('/:id/cancel-checkout', boothLimiter, async (req, res, next) => {
+  try {
+    res.json(await applicationService.cancelCheckout(req.params.id, req.query.token));
+  } catch (error) {
+    next(error);
+  }
+});
+
+applicationStatusRouter.post('/:id/booth', boothLimiter, async (req, res, next) => {
+  try {
+    res.json(await applicationService.chooseBooth(req.params.id, req.query.token, req.body?.boothId));
   } catch (error) {
     next(error);
   }

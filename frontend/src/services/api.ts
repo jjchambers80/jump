@@ -522,7 +522,39 @@ export const mapsApi = {
   // Public map
   getPublicEventMap: (eventId: string, etag?: string) =>
     api.get<PublicMap>(`/events/${encodeURIComponent(eventId)}/map`, etag ? { headers: { 'If-None-Match': etag } } : {}),
+  // Vendor booth purchase (spec 014 phase 2). Guest status links authenticate
+  // with `?token=` like the other /applications/:id/* routes; the buyer-session
+  // variant goes through the Next proxy so the httpOnly `jump_buyer` cookie is sent.
+  chooseBooth: (applicationId: string, boothId: string, token: string) =>
+    api.post<ChooseBoothResult>(
+      `/applications/${encodeURIComponent(applicationId)}/booth?token=${encodeURIComponent(token)}`,
+      { boothId }
+    ),
+  chooseBoothForContact: async (applicationId: string, boothId: string): Promise<ChooseBoothResult> => {
+    const res = await fetch(`/api/buyer/me/applications/${encodeURIComponent(applicationId)}/booth`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ boothId }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw { status: res.status, message: body.message || 'Could not choose that booth', error: body.error, code: body.code };
+    return body as ChooseBoothResult;
+  },
 };
+
+/**
+ * What `POST …/booth` returns once the hold is taken: `status` is the booth's
+ * state after any immediate off-session charge (HELD while Checkout or a
+ * webhook settles it, SOLD when the card already went through, AVAILABLE when
+ * the card was declined and the hold was released) and `paymentStatus` the
+ * application's. Success is only ever `paymentStatus === 'PAID'`.
+ */
+export interface ChooseBoothResult {
+  boothId: string;
+  holdExpiresAt: string | null;
+  status: BoothStatus;
+  paymentStatus?: string;
+}
 
 // ===== Settings › Customer accounts (spec 031) =====
 

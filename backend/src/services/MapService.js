@@ -371,10 +371,17 @@ class MapService {
 
       const tierIds = Object.keys(tierCounts);
       const tiers = tierIds.length > 0
-        ? await tx.applicationTier.findMany({ where: { id: { in: tierIds } }, select: { id: true, quantityApproved: true, quantityReserved: true } })
+        ? await tx.applicationTier.findMany({
+            where: { id: { in: tierIds } },
+            select: { id: true, name: true, quantityApproved: true, quantityReserved: true, form: { select: { chargeTiming: true, name: true } } },
+          })
         : [];
 
       for (const tier of tiers) {
+        // Booths are bought after approval; a charge-at-submission form has no spot to sell.
+        if (tier.form.chargeTiming !== 'APPROVAL') {
+          throw new ConflictError(`TIER_CHARGE_TIMING — form "${tier.form.name}" charges at submission; set it to charge on approval before binding "${tier.name}" to the map`);
+        }
         const count = tierCounts[tier.id];
         const used = tier.quantityApproved + tier.quantityReserved;
         if (count < used) {

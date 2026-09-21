@@ -86,7 +86,13 @@ class ApplicationDigestService {
     const recipients = await this.recipients(org.id);
     if (recipients.length === 0) return false;
 
-    const { subject, body } = this.compose(org, rows, since, now);
+    // Spec 014 phase 2: approved vendors on a map-bound tier who have not
+    // bought a booth yet (a HELD booth is still unpaid, so it counts).
+    const boothNotChosen = await prisma.application.count({
+      where: { organizationId: org.id, status: 'APPROVED', paymentStatus: 'PAYMENT_DUE', tier: { mapBound: true }, booth: null },
+    });
+
+    const { subject, body } = this.compose(org, rows, since, now, { boothNotChosen });
     for (const to of recipients) {
       try {
         await emailService.sendApplicationMessage({ to, subject, body, organization: { name: org.name, logoUrl: org.logoUrl } });
@@ -112,7 +118,7 @@ class ApplicationDigestService {
    * branded shell by EmailService.sendApplicationMessage, which escapes
    * every line and turns the review URL into a button.
    */
-  compose(org, rows, since, now) {
+  compose(org, rows, since, now, { boothNotChosen = 0 } = {}) {
     const base = platformBaseUrl();
     const byEvent = new Map();
     for (const a of rows) {
@@ -163,6 +169,9 @@ class ApplicationDigestService {
         if (list.length > MAX_ROWS_PER_FORM) lines.push(`…and ${list.length - MAX_ROWS_PER_FORM} more`);
         parts.push(lines.join('\n'));
       }
+    }
+    if (boothNotChosen > 0) {
+      parts.push(`Approved, booth not chosen: ${boothNotChosen} vendor${boothNotChosen === 1 ? '' : 's'} still need${boothNotChosen === 1 ? 's' : ''} to pick and pay for a booth.\n${base}/admin/participants?booth=none`);
     }
     parts.push(`${base}/admin/participants?status=SUBMITTED`);
     parts.push(`You get this daily summary because you are a member of ${org.name}. Turn it off under Settings › Applications.`);

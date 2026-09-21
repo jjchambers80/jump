@@ -22,6 +22,8 @@ export interface ListQuery {
   addOn?: string;
   /** Spec 019 phase 3: exact tag. */
   tag?: string;
+  /** Spec 014 phase 2: `none` = approved on a map-bound tier with no booth yet; `chosen` = owns one. */
+  booth?: 'none' | 'chosen';
   q?: string;
   sort?: string;
   page?: number;

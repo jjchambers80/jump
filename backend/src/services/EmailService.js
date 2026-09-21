@@ -473,9 +473,10 @@ ${manageTicketsHtml}
    * templated emails (APPROVED, OFFLINE_PAID) are separate. Never throws.
    *
    * @param {{ order, contact, event: { name, date, venue: { organization } }, profile, tier, form }} application with its order (lines, add-ons, payment)
-   * @param {{ statusUrl: string, accountUrl?: string|null, paymentMethod?: string|null, lines: Array<{ label: string, amount: number }> }} options
+   * @param {{ statusUrl: string, accountUrl?: string|null, paymentMethod?: string|null, lines: Array<{ label: string, amount: number }>, booth?: { label: string, size: string, mapUrl: string|null }|null }} options
+   *   `booth` (spec 014 phase 2): the booth this payment bought, named on the receipt with a `?booth=` map link
    */
-  async sendApplicationReceipt(application, { statusUrl, accountUrl = null, paymentMethod = null, lines = [] }) {
+  async sendApplicationReceipt(application, { statusUrl, accountUrl = null, paymentMethod = null, lines = [], booth = null }) {
     const order = application.order;
     const organization = application.event?.venue?.organization || {};
     const orgName = organization.name || 'the organizer';
@@ -504,6 +505,7 @@ ${manageTicketsHtml}
       ...lines.map((l) => `${l.label}: ${money(l.amount)}`),
       `Total paid: ${money(order.totalAmount)}`,
       `Payment method: ${method}`,
+      ...(booth ? ['', `Your booth: ${booth.label}${booth.size ? ` (${booth.size})` : ''}`, ...(booth.mapUrl ? [`See it on the map: ${booth.mapUrl}`] : [])] : []),
       '',
       `Your application: ${statusUrl}`,
       ...(accountUrl ? [`Your account: ${accountUrl}`] : []),
@@ -530,6 +532,7 @@ ${manageTicketsHtml}
                 <table style="width: 100%; border-collapse: collapse;">${rowsHtml}<tr><td colspan="2" style="border-top: 1px solid #e5e7eb; padding: 0;"></td></tr>${summaryRows}</table>
                 <p style="margin: 12px 0 0; color: #666; font-size: 13px;">Paid by ${escapeHtml(method)}${order.paidAt ? ` on ${new Date(order.paidAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}` : ''}.</p>
               </div>
+              ${booth ? `<p style="margin: 0 0 16px;">Your booth: <strong>${escapeHtml(booth.label)}</strong>${booth.size ? ` (${escapeHtml(booth.size)})` : ''}${booth.mapUrl ? ` · <a href="${escapeHtml(booth.mapUrl)}" style="color: #2563eb;">See it on the map</a>` : ''}</p>` : ''}
               <div style="text-align: center; margin: 24px 0;"><a href="${escapeHtml(statusUrl)}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 15px; font-weight: bold; padding: 12px 28px; border-radius: 8px; text-decoration: none;">View your application</a></div>
               ${accountUrl ? `<p style="color: #666; font-size: 13px; text-align: center;">Manage your applications any time: <a href="${escapeHtml(accountUrl)}" style="color: #2563eb;">your account</a></p>` : ''}
               <p style="color: #666; font-size: 12px; margin-top: 16px;">Questions about this payment? Reply to this email to reach ${escapeHtml(orgName)}.</p>

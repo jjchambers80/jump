@@ -607,9 +607,24 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
                     href={`/admin/maps/${app.booth.mapId}?booth=${app.booth.id}`}
                     className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300"
                   >
-                    {app.booth.label} — view on map
+                    {app.booth.label}
+                    {app.booth.w && app.booth.h ? ` · ${app.booth.w}×${app.booth.h}` : ''} — view on map
                   </Link>
+                  {/* Spec 014 phase 2: a self-serve purchase in flight holds the booth until Stripe confirms. */}
+                  {app.booth.status === 'HELD' && (
+                    <p className="mt-1 text-xs text-orange-800 dark:text-orange-300" data-testid="application-booth-held">
+                      Held by the vendor while they pay{app.booth.holdExpiresAt ? ` · hold ends ${formatDate(app.booth.holdExpiresAt, true)}` : ''}. It becomes sold when the payment goes through.
+                    </p>
+                  )}
+                  {app.booth.status === 'RESERVED' && (
+                    <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Reserved on the map, not sold.</p>
+                  )}
                 </div>
+              )}
+              {!app.booth && app.tier?.mapBound && app.status === 'APPROVED' && app.paymentStatus === 'PAYMENT_DUE' && (
+                <p className="mt-3 text-xs text-gray-500 dark:text-slate-400" data-testid="application-booth-not-chosen">
+                  Booth not chosen yet — the vendor picks one on the floor map when they pay.
+                </p>
               )}
 
               <label htmlFor="booth-label" className="mt-3 block text-sm font-medium text-gray-700 dark:text-slate-300">

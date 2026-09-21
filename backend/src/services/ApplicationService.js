@@ -35,6 +35,7 @@ import addOnService from './AddOnService.js';
 import applicantProfileService from './ApplicantProfileService.js';
 import applicationTemplateService from './ApplicationTemplateService.js';
 import applicationPaymentService from './ApplicationPaymentService.js';
+import boothService from './BoothService.js';
 import orderService from './OrderService.js';
 import orderLineService, { ORDER_INCLUDE, adjustmentItems } from './OrderLineService.js';
 import refundService from './RefundService.js';
@@ -68,7 +69,7 @@ const EXPORT_MAX_ROWS = 10_000;
 const LIST_INCLUDE = {
   contact: { select: { email: true, firstName: true, lastName: true } },
   profile: { select: { businessName: true, images: { take: 1, orderBy: { displayOrder: 'asc' }, include: { image: { include: { file: true } } } } } },
-  tier: { select: { id: true, name: true } },
+  tier: { select: { id: true, name: true, mapBound: true } },
   form: { select: { id: true, name: true, kind: true } },
   event: {
     select: {
@@ -148,6 +149,32 @@ const DETAIL_INCLUDE = {
 const OFFLINE_METHODS = new Set(['CHEQUE', 'CASH', 'BANK_TRANSFER', 'COMPED', 'OTHER']);
 const OFFLINE_METHOD_LABEL = { CHEQUE: 'Cheque', CASH: 'Cash', BANK_TRANSFER: 'Bank transfer', COMPED: 'Comped', OTHER: 'Other' };
 const money = (n) => `$${Number(n).toFixed(2)}`;
+
+/**
+ * Spec 014 phase 2: the booth each application owns (SOLD / RESERVED via
+ * `Booth.applicationId`) or is holding while paying (HELD via
+ * `holdApplicationId`, which has no Prisma relation), in one query. Attached
+ * as `row.mapBooth` so the sync serializers can read it.
+ */
+async function attachBooths(rows) {
+  const ids = rows.map((a) => a.id);
+  if (ids.length === 0) return rows;
+  const booths = await prisma.booth.findMany({
+    where: { OR: [{ applicationId: { in: ids } }, { holdApplicationId: { in: ids } }] },
+    select: { id: true, mapId: true, label: true, status: true, w: true, h: true, holdExpiresAt: true, applicationId: true, holdApplicationId: true },
+  });
+  const owned = new Map(booths.filter((b) => b.applicationId).map((b) => [b.applicationId, b]));
+  const held = new Map(booths.filter((b) => b.status === 'HELD' && b.holdApplicationId).map((b) => [b.holdApplicationId, b]));
+  for (const a of rows) a.mapBooth = owned.get(a.id) ?? held.get(a.id) ?? null;
+  return rows;
+}
+
+/** Booth as the applicant and organizer see it; null when none is owned or held. */
+function boothView(a) {
+  const b = a.mapBooth;
+  if (!b) return null;
+  return { id: b.id, mapId: b.mapId, label: b.label, status: b.status, w: b.w, h: b.h, holdExpiresAt: b.status === 'HELD' ? b.holdExpiresAt : null };
+}
 
 /**
  * Statuses in which the organizer may still change what the applicant owes
@@ -385,6 +412,7 @@ class ApplicationService {
   /** Guest status page: token must match; returns the applicant-facing view. */
   async statusView(applicationId, rawToken) {
     const application = await this._requireByToken(applicationId, rawToken);
+    await attachBooths([application]);
     return this._serializeApplicant(application);
   }
 
@@ -400,7 +428,13 @@ class ApplicationService {
   /** Guest: pay an outstanding balance (APPROVED + PAYMENT_DUE). */
   async payNow(applicationId, rawToken) {
     const application = await this._requireByToken(applicationId, rawToken);
-    return { url: await applicationPaymentService.payNowUrl(application, await statusUrlFor(application)) };
+    return this._payNow(application);
+  }
+
+  /** Guest status-link path: authenticate first, then atomically hold and pay. */
+  async chooseBooth(applicationId, rawToken, boothId) {
+    await this._requireByToken(applicationId, rawToken);
+    return this._chooseBooth(applicationId, boothId);
   }
 
   async statusUrl(application) {
@@ -426,12 +460,14 @@ class ApplicationService {
       include: DETAIL_INCLUDE,
       orderBy: { createdAt: 'desc' },
     });
+    await attachBooths(rows);
     return rows.map((a) => this._serializeApplicant(a));
   }
 
   async getForContact(organizationId, contactId, applicationId) {
     const application = await prisma.application.findFirst({ where: { id: applicationId, organizationId, contactId }, include: DETAIL_INCLUDE });
     if (!application || application.status === 'DRAFT') throw new NotFoundError('Application not found');
+    await attachBooths([application]);
     return this._serializeApplicant(application);
   }
 
@@ -439,7 +475,98 @@ class ApplicationService {
   async payNowForContact(organizationId, contactId, applicationId) {
     const application = await prisma.application.findFirst({ where: { id: applicationId, organizationId, contactId }, include: DETAIL_INCLUDE });
     if (!application || application.status === 'DRAFT') throw new NotFoundError('Application not found');
-    return { url: await applicationPaymentService.payNowUrl(application, await statusUrlFor(application)) };
+    return this._payNow(application);
+  }
+
+  async _payNow(application) {
+    // Guard before anything moves: a replayed Pay on a settled application
+    // must be a plain 409, never a state change (it used to rewrite PAID rows).
+    if (application.status !== 'APPROVED' || application.paymentStatus !== 'PAYMENT_DUE') {
+      throw new ConflictError('There is no outstanding balance on this application');
+    }
+    if (application.tier?.mapBound) await boothService.beginPayment(application.id);
+    try {
+      return { url: await applicationPaymentService.payNowUrl(application, await statusUrlFor(application)) };
+    } catch (error) {
+      // Only a failure to mint the Checkout session undoes the PROCESSING hold.
+      if (application.tier?.mapBound && !(error instanceof ConflictError)) {
+        await applicationPaymentService._markPaymentDue(application, error.message).catch(() => {});
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * The vendor backed out of hosted Checkout: expire the Stripe session so a
+   * late completion cannot land, release the booth hold and return to
+   * PAYMENT_DUE so the picker is usable again. A no-op unless a pay-now
+   * session is in flight.
+   */
+  async cancelCheckout(applicationId, rawToken) {
+    const application = await this._requireByToken(applicationId, rawToken);
+    return this._cancelCheckout(application);
+  }
+
+  async cancelCheckoutForContact(organizationId, contactId, applicationId) {
+    const application = await prisma.application.findFirst({
+      where: { id: applicationId, organizationId, contactId, status: { not: 'DRAFT' } },
+      include: DETAIL_INCLUDE,
+    });
+    if (!application) throw new NotFoundError('Application not found');
+    return this._cancelCheckout(application);
+  }
+
+  async _cancelCheckout(application) {
+    if (application.status !== 'APPROVED' || application.paymentStatus !== 'PROCESSING' || !application.stripeCheckoutSessionId) {
+      return { cancelled: false, paymentStatus: application.paymentStatus };
+    }
+    await applicationPaymentService.expireCheckoutSession(application.stripeCheckoutSessionId);
+    await applicationPaymentService._markPaymentDue(application, 'Checkout cancelled by the vendor');
+    return { cancelled: true, paymentStatus: 'PAYMENT_DUE' };
+  }
+
+  /** Buyer-session path: ownership is scoped by organization + contact. */
+  async chooseBoothForContact(organizationId, contactId, applicationId, boothId) {
+    const application = await prisma.application.findFirst({
+      where: { id: applicationId, organizationId, contactId, status: { not: 'DRAFT' } },
+      select: { id: true },
+    });
+    if (!application) throw new NotFoundError('Application not found');
+    return this._chooseBooth(applicationId, boothId);
+  }
+
+  /**
+   * Hold the booth before money moves. A saved card is charged immediately;
+   * without one, the existing pay-now route creates the hosted Checkout.
+   */
+  async _chooseBooth(applicationId, boothId) {
+    const hold = await boothService.chooseBooth(applicationId, boothId);
+    const application = await prisma.application.findUnique({ where: { id: applicationId }, include: DETAIL_INCLUDE });
+    if (!application?.stripePaymentMethodId) {
+      return { ...hold, paymentStatus: application?.paymentStatus || 'PAYMENT_DUE' };
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw`SELECT * FROM "Application" WHERE "id" = ${applicationId} FOR UPDATE`;
+      const locked = rows[0];
+      if (!locked || locked.status !== 'APPROVED' || locked.paymentStatus !== 'PAYMENT_DUE') {
+        throw new ConflictError('The application payment state changed; refresh and try again');
+      }
+      await this._transition(
+        tx,
+        applicationId,
+        { paymentStatus: 'PROCESSING', chargeAttempts: locked.chargeAttempts + 1 },
+        { include: null }
+      );
+    });
+    const paymentStatus = await applicationPaymentService.chargeOnApproval(applicationId);
+    const booth = await boothService.boothForApplication(applicationId);
+    return {
+      boothId: booth?.id || boothId,
+      holdExpiresAt: booth?.holdExpiresAt || hold.holdExpiresAt,
+      status: booth?.status || (paymentStatus === 'PAID' ? 'SOLD' : 'AVAILABLE'),
+      paymentStatus,
+    };
   }
 
   /** Buyer: replace the card on file (setup-mode Checkout). */
@@ -470,6 +597,7 @@ class ApplicationService {
       });
     });
     logger.info('Application withdrawn by applicant', { event: 'application_decided', applicationId: application.id, action: 'WITHDRAWN', by: 'applicant' });
+    await attachBooths([updated]);
     return this._serializeApplicant(updated);
   }
 
@@ -503,6 +631,7 @@ class ApplicationService {
       this.summaryInScope(scope),
     ]);
     const bases = await this._storefrontBases(rows);
+    await attachBooths(rows);
     return {
       data: rows.map((a) => this._serializeRow(a, { unscoped: !scope.organizationId && !scope.eventId, statusBase: bases.get(a.organizationId) })),
       total,
@@ -546,6 +675,7 @@ class ApplicationService {
     await applicationFormService.requireEvent(eventId, organizationId);
     const application = await prisma.application.findFirst({ where: { id: applicationId, eventId }, include: DETAIL_INCLUDE });
     if (!application || application.status === 'DRAFT') throw new NotFoundError('Application not found');
+    await attachBooths([application]);
     return this._serializeAdmin(application);
   }
 
@@ -590,6 +720,7 @@ class ApplicationService {
       data[column] = data[column] ? existing[column] ?? now : null;
     }
     const application = await prisma.application.update({ where: { id: applicationId }, data, include: DETAIL_INCLUDE });
+    await attachBooths([application]);
     return this._serializeAdmin(application);
   }
 
@@ -665,19 +796,33 @@ class ApplicationService {
       if (application.paymentStatus === 'PROCESSING') throw new ConflictError('A payment is in progress for this application; try again in a moment');
 
       const data = { status: spec.to, decidedAt: new Date(), decidedById: input.byUserId };
+      const orderData = {};
       let chargeNow = false;
       if (spec.to === 'APPROVED') {
         if (application.paymentStatus === 'AWAITING_CARD') throw new ConflictError('The applicant has not saved a card yet');
         if (application.paymentStatus === 'CARD_ON_FILE') {
           if (!paymentsEnabled()) throw new ConflictError('Application payments are not enabled');
+          const tier = application.tierId
+            ? await tx.applicationTier.findUnique({
+                where: { id: application.tierId },
+                select: { mapBound: true, form: { select: { paymentDueDays: true } } },
+              })
+            : null;
           // Hold the slot while the charge is in flight; PAID moves it to approved.
           if (application.tierId) {
             await this._takeCapacity(tx, application, 'RESERVED');
             data.capacitySlot = 'RESERVED';
           }
-          data.paymentStatus = 'PROCESSING';
-          data.chargeAttempts = application.chargeAttempts + 1;
-          chargeNow = true;
+          if (tier?.mapBound) {
+            // A map-bound approval is an invitation to select inventory. Money
+            // moves only after the applicant holds a specific booth.
+            data.paymentStatus = 'PAYMENT_DUE';
+            orderData.dueAt = new Date(Date.now() + (tier.form.paymentDueDays ?? 7) * 86_400_000);
+          } else {
+            data.paymentStatus = 'PROCESSING';
+            data.chargeAttempts = application.chargeAttempts + 1;
+            chargeNow = true;
+          }
         } else if (application.tierId) {
           await this._takeCapacity(tx, application, 'APPROVED');
           data.capacitySlot = 'APPROVED';
@@ -687,6 +832,7 @@ class ApplicationService {
         data.capacitySlot = 'NONE';
       }
       if (spec.to === 'WITHDRAWN') {
+        await boothService.releaseForApplication(applicationId, { tx });
         data.withdrawnBy = 'ORGANIZER';
         data.withdrawReason = note;
       }
@@ -694,7 +840,7 @@ class ApplicationService {
       const row = await this._transition(tx, applicationId, {
         ...data,
         decisions: { create: { action: spec.action, byUserId: input.byUserId, note } },
-      });
+      }, { orderData });
       return { updated: row, charge: chargeNow };
     });
 
@@ -747,6 +893,15 @@ class ApplicationService {
         throw new ConflictError('Only approved applications with a payment due can be charged');
       if (!application.stripePaymentMethodId)
         throw new ConflictError('No card on file; ask the applicant to pay from their status page');
+      if (application.tierId) {
+        const tier = await tx.applicationTier.findUnique({
+          where: { id: application.tierId },
+          select: { mapBound: true },
+        });
+        if (tier?.mapBound) {
+          await boothService.beginPayment(applicationId, { tx, markProcessing: false });
+        }
+      }
       await this._transition(
         tx,
         applicationId,
@@ -923,6 +1078,7 @@ class ApplicationService {
       // A PAYMENT_DUE application holds its slot and lines: release them, rewrite, then hold again on the new tier.
       const held = application.capacitySlot === 'RESERVED';
       if (held) await this._releaseCapacity(tx, application);
+      await boothService.releaseForApplication(applicationId, { tx });
 
       const data = this._orderData(application, { tier: newTier, addOnLines: kept });
       const droppedText = dropped.length
@@ -1220,10 +1376,15 @@ class ApplicationService {
 
   /** RESERVED → APPROVED for the tier and add-on holds, as `_markPaid` does after a Stripe payment. */
   async _confirmHeldSlot(tx, application) {
-    if (!application.tierId || application.capacitySlot !== 'RESERVED') return;
-    await tx.$executeRaw`UPDATE "ApplicationTier" SET "quantityReserved" = GREATEST("quantityReserved" - 1, 0), "quantityApproved" = "quantityApproved" + 1 WHERE "id" = ${application.tierId}`;
-    const lines = await this._addOnLines(tx, application.id);
-    if (lines.length) await addOnService.commit(tx, lines);
+    if (application.tier?.mapBound) {
+      await boothService.beginPayment(application.id, { tx, markProcessing: false });
+    }
+    if (application.tierId && application.capacitySlot === 'RESERVED') {
+      await tx.$executeRaw`UPDATE "ApplicationTier" SET "quantityReserved" = GREATEST("quantityReserved" - 1, 0), "quantityApproved" = "quantityApproved" + 1 WHERE "id" = ${application.tierId}`;
+      const lines = await this._addOnLines(tx, application.id);
+      if (lines.length) await addOnService.commit(tx, lines);
+    }
+    if (application.tier?.mapBound) await boothService.claimBooth(application.id, null, { tx });
   }
 
   /**
@@ -1662,6 +1823,17 @@ class ApplicationService {
       const list = String(query.payment).split(',').filter((s) => PAYMENT_STATUSES.has(s));
       if (list.length) where.paymentStatus = { in: list };
     }
+    // Spec 014 phase 2: "Booth not chosen" = approved on a map-bound tier with
+    // no booth owned yet (a HELD booth is still unpaid, so it counts as not chosen).
+    if (query.booth === 'none') {
+      // ANDed with any status filter the user picked: a status the filter
+      // excludes just yields no rows instead of silently overriding it.
+      where.AND = [...(where.AND || []), { status: 'APPROVED' }];
+      where.tier = { mapBound: true };
+      where.booth = null;
+    } else if (query.booth === 'chosen') {
+      where.booth = { isNot: null };
+    }
     if (query.q) {
       const q = String(query.q).trim();
       if (q) {
@@ -1801,6 +1973,10 @@ class ApplicationService {
       paymentDueAt: a.order?.dueAt ?? null,
       overdue: a.overdue,
       boothLabel: a.boothLabel,
+      // Spec 014 phase 2: the Booth column — owned or held; `mapBound` tells
+      // "not chosen" apart from "this tier is not sold from a map".
+      booth: a.mapBooth ? { id: a.mapBooth.id, label: a.mapBooth.label, status: a.mapBooth.status } : null,
+      mapBound: a.tier?.mapBound === true,
       tags: a.tags ?? [],
       checkedInAt: a.checkedInAt ?? null,
       checkedOutAt: a.checkedOutAt ?? null,
@@ -1831,7 +2007,7 @@ class ApplicationService {
       capacitySlot: a.capacitySlot,
       contact: this._contact(a.contact),
       profile: applicantProfileService.serialize(a.profile),
-      tier: a.tier ? { id: a.tier.id, name: a.tier.name, price: Number(a.tier.price) } : null,
+      tier: a.tier ? { id: a.tier.id, name: a.tier.name, price: Number(a.tier.price), mapBound: a.tier.mapBound === true } : null,
       amounts: this._amounts(a),
       pricing: this._pricing(a),
       addOns: m.addOns.map(({ addOn: _addOn, ...l }) => l),
@@ -1889,7 +2065,8 @@ class ApplicationService {
       withdrawnBy: a.withdrawnBy,
       withdrawReason: a.withdrawReason,
       boothLabel: a.boothLabel,
-      booth: a.booth ? { id: a.booth.id, label: a.booth.label, mapId: a.booth.mapId } : null,
+      // Spec 014: owned (SOLD / RESERVED) or, phase 2, HELD while the vendor pays.
+      booth: a.mapBooth ? boothView(a) : a.booth ? { id: a.booth.id, label: a.booth.label, mapId: a.booth.mapId, status: 'SOLD', w: null, h: null, holdExpiresAt: null } : null,
       internalNote: a.internalNote,
       tags: a.tags ?? [],
       checkedInAt: a.checkedInAt ?? null,
@@ -1909,7 +2086,7 @@ class ApplicationService {
       organization: a.event.venue?.organization ? { id: a.event.venue.organization.id, name: a.event.venue.organization.name } : null,
       status: a.status,
       paymentStatus: a.paymentStatus,
-      tier: a.tier ? { id: a.tier.id, name: a.tier.name } : null,
+      tier: a.tier ? { id: a.tier.id, name: a.tier.name, mapBound: a.tier.mapBound } : null,
       amounts: this._amounts(a),
       addOns: m.addOns.map(({ addOn: _addOn, ...l }) => l),
       adjustments: m.adjustments
@@ -1920,6 +2097,10 @@ class ApplicationService {
       profile: applicantProfileService.serialize(a.profile),
       answers: this._serializeAnswers(a).filter((ans) => !ans.archived),
       boothLabel: a.boothLabel,
+      // Spec 014 phase 2: the booth picker needs the current booth (owned or
+      // held, with the hold deadline) and whether a saved card will be charged.
+      booth: boothView(a),
+      hasCardOnFile: Boolean(a.stripePaymentMethodId),
       submittedAt: a.submittedAt,
       decidedAt: a.decidedAt,
       paidAt: m.paidAt,

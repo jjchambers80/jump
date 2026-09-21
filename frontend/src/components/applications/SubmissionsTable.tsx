@@ -38,7 +38,7 @@ const STATUS_ORDER: ApplicationStatus[] = ['SUBMITTED', 'WAITLISTED', 'APPROVED'
 /** Organization mount page size (plan §7.4); the per-event mount keeps the API default. */
 const ORG_PAGE_SIZE = 25;
 type Filters = Omit<ParticipantsQuery, 'page' | 'pageSize'>;
-const FILTER_KEYS: (keyof Filters)[] = ['event', 'form', 'status', 'payment', 'addOn', 'tag', 'q', 'sort'];
+const FILTER_KEYS: (keyof Filters)[] = ['event', 'form', 'status', 'payment', 'addOn', 'tag', 'booth', 'q', 'sort'];
 const DECIDED: Record<Decision, string> = { APPROVE: 'approved', REJECT: 'rejected', WAITLIST: 'waitlisted', WITHDRAW: 'withdrawn' };
 
 /** The subset of a form the filters need, common to the per-event and org-wide form lists. */
@@ -57,6 +57,20 @@ const select = 'rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm
 const btn = 'rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
 const chip = 'inline-block rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 dark:bg-slate-700 dark:text-slate-200';
 const tagChip = 'inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-200';
+const heldChip = 'inline-block rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-800 dark:bg-orange-900/30 dark:text-orange-300';
+
+/**
+ * Booth column (spec 014 phase 2): the owned booth, a HELD one mid-purchase,
+ * "Not chosen" for an approved vendor on a map-bound tier, the typed
+ * placement for everyone else.
+ */
+function BoothCell({ row }: { row: ApplicationRow }) {
+  if (row.booth?.status === 'HELD') return <span className={heldChip}>Held · {row.booth.label}</span>;
+  if (row.booth) return <span className={chip}>{row.booth.label}</span>;
+  if (row.boothLabel) return <span className={chip}>{row.boothLabel}</span>;
+  if (row.mapBound && row.status === 'APPROVED') return <span className="text-xs text-gray-500 dark:text-slate-400">Not chosen</span>;
+  return <span className="text-gray-400 dark:text-slate-500">—</span>;
+}
 
 function submittedLines(value: string | null) {
   if (!value) return ['', ''];
@@ -82,6 +96,7 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
       payment: searchParams.get('payment') || undefined,
       addOn: searchParams.get('addOn') || undefined,
       tag: searchParams.get('tag') || undefined,
+      booth: (['none', 'chosen'].includes(searchParams.get('booth') ?? '') ? searchParams.get('booth') : undefined) as 'none' | 'chosen' | undefined,
       q: searchParams.get('q') || undefined,
       sort: searchParams.get('sort') || undefined,
       page: Number(searchParams.get('page') || 1),
@@ -183,7 +198,7 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
   const patchRow = (next: AdminApplication) =>
     setList((prev) =>
       prev
-        ? { ...prev, data: prev.data.map((r) => (r.id === next.id ? { ...r, status: next.status, paymentStatus: next.paymentStatus, decidedAt: next.decidedAt, boothLabel: next.boothLabel, tags: next.tags ?? [], checkedInAt: next.checkedInAt ?? null, checkedOutAt: next.checkedOutAt ?? null } : r)) }
+        ? { ...prev, data: prev.data.map((r) => (r.id === next.id ? { ...r, status: next.status, paymentStatus: next.paymentStatus, decidedAt: next.decidedAt, boothLabel: next.boothLabel, booth: next.booth ? { id: next.booth.id, label: next.booth.label, status: next.booth.status } : null, tags: next.tags ?? [], checkedInAt: next.checkedInAt ?? null, checkedOutAt: next.checkedOutAt ?? null } : r)) }
         : prev
     );
 
@@ -306,7 +321,9 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
   const summary = list?.summary ?? {};
   const totalPages = list ? Math.max(1, Math.ceil(list.total / list.pageSize)) : 1;
   const statusSort = query.sort === 'status' ? 'ascending' : query.sort === 'status_desc' ? 'descending' : 'none';
-  const columns = 10 + (showOrganization ? 1 : 0) + pinnedColumns.length + (showAnswers ? 1 : 0);
+  // Spec 014 phase 2: a Booth column once any row in view sells from a map or carries a placement.
+  const showBooth = (list?.data ?? []).some((r) => r.mapBound || r.booth || r.boothLabel);
+  const columns = 10 + (showOrganization ? 1 : 0) + pinnedColumns.length + (showAnswers ? 1 : 0) + (showBooth ? 1 : 0);
   const detailHref = (row: ApplicationRow) => `/admin/events/${row.eventId ?? eventId}/applications/${row.id}`;
 
   return (
@@ -367,6 +384,11 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
             ))}
           </select>
         )}
+        <select aria-label="Booth" value={query.booth || ''} onChange={(e) => setQuery({ booth: (e.target.value || undefined) as 'none' | 'chosen' | undefined })} className={select} data-testid="applications-booth-filter">
+          <option value="">Any booth</option>
+          <option value="none">Booth not chosen</option>
+          <option value="chosen">Booth chosen</option>
+        </select>
         {tagOptions.length > 0 && (
           <select aria-label="Tag" value={query.tag || ''} onChange={(e) => setQuery({ tag: e.target.value || undefined })} className={select} data-testid="applications-tag-filter">
             <option value="">Any tag</option>
@@ -461,6 +483,7 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
                 </th>
               ))}
               {showAnswers && <th className="px-3 py-2">Answers</th>}
+              {showBooth && <th className="px-3 py-2">Booth</th>}
               <th className="px-3 py-2" aria-sort={statusSort}>
                 <button
                   type="button"
@@ -509,11 +532,11 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
                     <BusinessCell row={row} eventId={row.eventId ?? eventId ?? ''} onCheck={(field, value) => toggleCheck(row, field, value)} checkBusy={checkBusy.has(row.id)} />
                   </td>
                   <td className="px-3 py-2 align-top" data-testid={`application-tags-${row.id}`}>
-                    {!row.boothLabel && !(row.tags ?? []).length ? (
+                    {!(showBooth ? false : row.boothLabel) && !(row.tags ?? []).length ? (
                       <span className="text-gray-400 dark:text-slate-500">—</span>
                     ) : (
                       <div className="flex max-w-[14rem] flex-wrap gap-1">
-                        {row.boothLabel && <span className={chip}>{row.boothLabel}</span>}
+                        {!showBooth && row.boothLabel && <span className={chip}>{row.boothLabel}</span>}
                         {(row.tags ?? []).map((t) => (
                           <span key={t} className={tagChip}>
                             {t}
@@ -551,6 +574,11 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
                           </div>
                         ))
                       )}
+                    </td>
+                  )}
+                  {showBooth && (
+                    <td className="px-3 py-2 align-top" data-testid={`application-booth-${row.id}`}>
+                      <BoothCell row={row} />
                     </td>
                   )}
                   <td className="px-3 py-2 align-top">
