@@ -9,6 +9,6 @@
     }
   },
   "deploy": {
-    "startCommand": "cd packages/db && npx prisma migrate deploy && cd ../../backend && node src/api/server.js"
+    "startCommand": "cd packages/db && (npx prisma migrate status 2>&1 || { echo '=== Failed migration detected ==='; echo 'Recovery (run via railway ssh --service backend):'; echo '  1. npx prisma migrate resolve --rolled-back \"<failed-migration-name>\"'; echo '  2. npx prisma db execute --file /tmp/fix.sql'; echo '  3. npx prisma migrate resolve --applied \"<failed-migration-name>\"'; echo 'See docs/wiki/config/database-setup.md for the full procedure'; exit 1; }) && npx prisma migrate deploy && cd ../../backend && node src/api/server.js"
   }
 }
