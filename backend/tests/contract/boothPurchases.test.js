@@ -2,14 +2,17 @@
 // Postgres is real; these tests stop at HELD so no Stripe call is needed.
 
 import request from 'supertest';
+import { staffToken, joinOrgByToken, cleanupStaff } from '../helpers/staff.js';
 
 const { default: app } = await import('../../src/api/server.js');
 const { prisma } = await import('@jump/db');
 const { statusToken } = await import('../../src/services/applicationLinks.js');
 const { default: buyerAuthService } = await import('../../src/services/BuyerAuthService.js');
 const { default: applicationPaymentService } = await import('../../src/services/ApplicationPaymentService.js');
+const { default: applicationTemplateService } = await import('../../src/services/ApplicationTemplateService.js');
 
 const TAG = `booth-buy-${Date.now()}`;
+const STAFF_EMAIL = `${TAG}-organizer@test.local`;
 
 describe('Approved vendor booth purchase API', () => {
   let organization;
@@ -20,9 +23,12 @@ describe('Approved vendor booth purchase API', () => {
   let booths;
   let applications;
   let contacts;
+  let organizerToken;
 
   beforeAll(async () => {
     organization = await prisma.organization.create({ data: { name: `${TAG} Org` } });
+    organizerToken = await staffToken({ email: STAFF_EMAIL, role: 'ORGANIZER' });
+    await joinOrgByToken(organizerToken, organization.id, 'ORGANIZER');
     const venue = await prisma.venue.create({
       data: { organizationId: organization.id, name: `${TAG} Hall`, address: '1 Main St', city: 'Raleigh', state: 'NC' },
     });
@@ -98,6 +104,7 @@ describe('Approved vendor booth purchase API', () => {
     await prisma.event.deleteMany({ where: { id: event.id } });
     await prisma.venue.deleteMany({ where: { organizationId: organization.id } });
     await prisma.organization.deleteMany({ where: { id: organization.id } });
+    await cleanupStaff([STAFF_EMAIL]);
   });
 
   it('requires a valid guest status token', async () => {
@@ -125,6 +132,58 @@ describe('Approved vendor booth purchase API', () => {
 
     expect(second.status).toBe(409);
     expect(second.body.code).toBe('BOOTH_TAKEN');
+  });
+
+  it('exposes the held booth, the hold deadline and the card state on the status view (phase 2 UI)', async () => {
+    const response = await request(app)
+      .get(`/applications/${applications[0].id}/status`)
+      .query({ token: statusToken(applications[0].id) });
+
+    expect(response.status).toBe(200);
+    expect(response.body.tier).toMatchObject({ id: tier.id, mapBound: true });
+    expect(response.body.hasCardOnFile).toBe(false);
+    expect(response.body.canPay).toBe(true);
+    expect(response.body.booth).toMatchObject({ id: booths[0].id, label: 'A1', status: 'HELD', w: 8, h: 8 });
+    expect(new Date(response.body.booth.holdExpiresAt).getTime()).toBeGreaterThan(Date.now());
+
+    // A vendor with no hold has no booth at all.
+    const bare = await request(app)
+      .get(`/applications/${applications[2].id}/status`)
+      .query({ token: statusToken(applications[2].id) });
+    expect(bare.body.booth).toBeNull();
+  });
+
+  it('lists the Booth column and the "Booth not chosen" filter for organizers', async () => {
+    const all = await request(app)
+      .get(`/admin/events/${event.id}/applications`)
+      .set('Authorization', `Bearer ${organizerToken}`)
+      .set('X-Jump-Org', organization.id);
+    expect(all.status).toBe(200);
+    const held = all.body.data.find((row) => row.id === applications[0].id);
+    expect(held).toMatchObject({ mapBound: true, booth: { label: 'A1', status: 'HELD' } });
+
+    const notChosen = await request(app)
+      .get(`/admin/events/${event.id}/applications`)
+      .query({ booth: 'none' })
+      .set('Authorization', `Bearer ${organizerToken}`)
+      .set('X-Jump-Org', organization.id);
+    expect(notChosen.status).toBe(200);
+    const ids = notChosen.body.data.map((row) => row.id);
+    // Approved + payment due on the map-bound tier, nothing owned yet: the
+    // vendor still holding A1 counts, the SUBMITTED one does not.
+    expect(ids).toEqual(expect.arrayContaining([applications[0].id, applications[1].id, applications[2].id]));
+    expect(ids).not.toContain(applications[3].id);
+  });
+
+  it('renders the "Choose your booth" step in the APPROVED email until a booth is owned', async () => {
+    const application = await prisma.application.findUnique({
+      where: { id: applications[2].id },
+      include: { contact: true, profile: true, tier: true, form: true, event: { select: { id: true, name: true, date: true, venue: { select: { organizationId: true, organization: true } } } }, order: true },
+    });
+    const { body } = await applicationTemplateService.render(organization.id, 'APPROVED', application);
+    expect(body).toContain('Choose your booth');
+    expect(body).toContain(`/events/${event.id}/apply/status/${application.id}`);
+    expect(body).not.toContain('Your booth:');
   });
 
   it('authorizes the buyer-session endpoint by contact ownership', async () => {
@@ -206,5 +265,39 @@ describe('Approved vendor booth purchase API', () => {
     ]);
     expect(updatedApplication).toMatchObject({ paymentStatus: 'PAID', boothLabel: 'A5' });
     expect(soldBooth).toMatchObject({ status: 'SOLD', applicationId: application.id, holdApplicationId: null, holdExpiresAt: null });
+
+    // The status view now names the sold booth without a hold deadline …
+    const status = await request(app)
+      .get(`/applications/${application.id}/status`)
+      .query({ token: statusToken(application.id) });
+    expect(status.body.booth).toMatchObject({ label: 'A5', status: 'SOLD', holdExpiresAt: null });
+    expect(status.body.canPay).toBe(false);
+
+    // … the organizer's list drops it from "Booth not chosen" …
+    const notChosen = await request(app)
+      .get(`/admin/events/${event.id}/applications`)
+      .query({ booth: 'none' })
+      .set('Authorization', `Bearer ${organizerToken}`)
+      .set('X-Jump-Org', organization.id);
+    expect(notChosen.body.data.map((row) => row.id)).not.toContain(application.id);
+
+    // … the order detail carries the booth for its line description …
+    const orderRow = await prisma.order.findFirst({ where: { applicationId: application.id }, select: { id: true } });
+    const order = await request(app)
+      .get(`/admin/orders/${orderRow.id}`)
+      .set('Authorization', `Bearer ${organizerToken}`)
+      .set('X-Jump-Org', organization.id);
+    expect(order.status).toBe(200);
+    expect(order.body.application.booth).toMatchObject({ label: 'A5', w: 8, h: 8, status: 'SOLD' });
+
+    // … and the APPROVED email names the booth with a map deep link.
+    const full = await prisma.application.findUnique({
+      where: { id: application.id },
+      include: { contact: true, profile: true, tier: true, form: true, event: { select: { id: true, name: true, date: true, venue: { select: { organizationId: true, organization: true } } } }, order: true },
+    });
+    const { body } = await applicationTemplateService.render(organization.id, 'APPROVED', full);
+    expect(body).toContain('Your booth: A5 8\u00d78');
+    expect(body).toContain(`/map?booth=A5`);
+    expect(body).not.toContain('Choose your booth');
   });
 });

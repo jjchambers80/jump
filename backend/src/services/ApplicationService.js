@@ -151,6 +151,32 @@ const OFFLINE_METHOD_LABEL = { CHEQUE: 'Cheque', CASH: 'Cash', BANK_TRANSFER: 'B
 const money = (n) => `$${Number(n).toFixed(2)}`;
 
 /**
+ * Spec 014 phase 2: the booth each application owns (SOLD / RESERVED via
+ * `Booth.applicationId`) or is holding while paying (HELD via
+ * `holdApplicationId`, which has no Prisma relation), in one query. Attached
+ * as `row.mapBooth` so the sync serializers can read it.
+ */
+async function attachBooths(rows) {
+  const ids = rows.map((a) => a.id);
+  if (ids.length === 0) return rows;
+  const booths = await prisma.booth.findMany({
+    where: { OR: [{ applicationId: { in: ids } }, { holdApplicationId: { in: ids } }] },
+    select: { id: true, mapId: true, label: true, status: true, w: true, h: true, holdExpiresAt: true, applicationId: true, holdApplicationId: true },
+  });
+  const owned = new Map(booths.filter((b) => b.applicationId).map((b) => [b.applicationId, b]));
+  const held = new Map(booths.filter((b) => b.status === 'HELD' && b.holdApplicationId).map((b) => [b.holdApplicationId, b]));
+  for (const a of rows) a.mapBooth = owned.get(a.id) ?? held.get(a.id) ?? null;
+  return rows;
+}
+
+/** Booth as the applicant and organizer see it; null when none is owned or held. */
+function boothView(a) {
+  const b = a.mapBooth;
+  if (!b) return null;
+  return { id: b.id, mapId: b.mapId, label: b.label, status: b.status, w: b.w, h: b.h, holdExpiresAt: b.status === 'HELD' ? b.holdExpiresAt : null };
+}
+
+/**
  * Statuses in which the organizer may still change what the applicant owes
  * — add-on lines (spec 012), tier and adjustments (spec 018): no money has
  * moved. One rule: money that has moved is only ever refunded, never
@@ -386,6 +412,7 @@ class ApplicationService {
   /** Guest status page: token must match; returns the applicant-facing view. */
   async statusView(applicationId, rawToken) {
     const application = await this._requireByToken(applicationId, rawToken);
+    await attachBooths([application]);
     return this._serializeApplicant(application);
   }
 
@@ -433,12 +460,14 @@ class ApplicationService {
       include: DETAIL_INCLUDE,
       orderBy: { createdAt: 'desc' },
     });
+    await attachBooths(rows);
     return rows.map((a) => this._serializeApplicant(a));
   }
 
   async getForContact(organizationId, contactId, applicationId) {
     const application = await prisma.application.findFirst({ where: { id: applicationId, organizationId, contactId }, include: DETAIL_INCLUDE });
     if (!application || application.status === 'DRAFT') throw new NotFoundError('Application not found');
+    await attachBooths([application]);
     return this._serializeApplicant(application);
   }
 
@@ -533,6 +562,7 @@ class ApplicationService {
       });
     });
     logger.info('Application withdrawn by applicant', { event: 'application_decided', applicationId: application.id, action: 'WITHDRAWN', by: 'applicant' });
+    await attachBooths([updated]);
     return this._serializeApplicant(updated);
   }
 
@@ -566,6 +596,7 @@ class ApplicationService {
       this.summaryInScope(scope),
     ]);
     const bases = await this._storefrontBases(rows);
+    await attachBooths(rows);
     return {
       data: rows.map((a) => this._serializeRow(a, { unscoped: !scope.organizationId && !scope.eventId, statusBase: bases.get(a.organizationId) })),
       total,
@@ -609,6 +640,7 @@ class ApplicationService {
     await applicationFormService.requireEvent(eventId, organizationId);
     const application = await prisma.application.findFirst({ where: { id: applicationId, eventId }, include: DETAIL_INCLUDE });
     if (!application || application.status === 'DRAFT') throw new NotFoundError('Application not found');
+    await attachBooths([application]);
     return this._serializeAdmin(application);
   }
 
@@ -653,6 +685,7 @@ class ApplicationService {
       data[column] = data[column] ? existing[column] ?? now : null;
     }
     const application = await prisma.application.update({ where: { id: applicationId }, data, include: DETAIL_INCLUDE });
+    await attachBooths([application]);
     return this._serializeAdmin(application);
   }
 
@@ -1755,6 +1788,15 @@ class ApplicationService {
       const list = String(query.payment).split(',').filter((s) => PAYMENT_STATUSES.has(s));
       if (list.length) where.paymentStatus = { in: list };
     }
+    // Spec 014 phase 2: "Booth not chosen" = approved on a map-bound tier with
+    // no booth owned yet (a HELD booth is still unpaid, so it counts as not chosen).
+    if (query.booth === 'none') {
+      where.status = 'APPROVED';
+      where.tier = { mapBound: true };
+      where.booth = null;
+    } else if (query.booth === 'chosen') {
+      where.booth = { isNot: null };
+    }
     if (query.q) {
       const q = String(query.q).trim();
       if (q) {
@@ -1894,6 +1936,10 @@ class ApplicationService {
       paymentDueAt: a.order?.dueAt ?? null,
       overdue: a.overdue,
       boothLabel: a.boothLabel,
+      // Spec 014 phase 2: the Booth column — owned or held; `mapBound` tells
+      // "not chosen" apart from "this tier is not sold from a map".
+      booth: a.mapBooth ? { id: a.mapBooth.id, label: a.mapBooth.label, status: a.mapBooth.status } : null,
+      mapBound: a.tier?.mapBound === true,
       tags: a.tags ?? [],
       checkedInAt: a.checkedInAt ?? null,
       checkedOutAt: a.checkedOutAt ?? null,
@@ -1982,7 +2028,8 @@ class ApplicationService {
       withdrawnBy: a.withdrawnBy,
       withdrawReason: a.withdrawReason,
       boothLabel: a.boothLabel,
-      booth: a.booth ? { id: a.booth.id, label: a.booth.label, mapId: a.booth.mapId } : null,
+      // Spec 014: owned (SOLD / RESERVED) or, phase 2, HELD while the vendor pays.
+      booth: a.mapBooth ? boothView(a) : a.booth ? { id: a.booth.id, label: a.booth.label, mapId: a.booth.mapId, status: 'SOLD', w: null, h: null, holdExpiresAt: null } : null,
       internalNote: a.internalNote,
       tags: a.tags ?? [],
       checkedInAt: a.checkedInAt ?? null,
@@ -2002,7 +2049,7 @@ class ApplicationService {
       organization: a.event.venue?.organization ? { id: a.event.venue.organization.id, name: a.event.venue.organization.name } : null,
       status: a.status,
       paymentStatus: a.paymentStatus,
-      tier: a.tier ? { id: a.tier.id, name: a.tier.name } : null,
+      tier: a.tier ? { id: a.tier.id, name: a.tier.name, mapBound: a.tier.mapBound } : null,
       amounts: this._amounts(a),
       addOns: m.addOns.map(({ addOn: _addOn, ...l }) => l),
       adjustments: m.adjustments
@@ -2013,6 +2060,10 @@ class ApplicationService {
       profile: applicantProfileService.serialize(a.profile),
       answers: this._serializeAnswers(a).filter((ans) => !ans.archived),
       boothLabel: a.boothLabel,
+      // Spec 014 phase 2: the booth picker needs the current booth (owned or
+      // held, with the hold deadline) and whether a saved card will be charged.
+      booth: boothView(a),
+      hasCardOnFile: Boolean(a.stripePaymentMethodId),
       submittedAt: a.submittedAt,
       decidedAt: a.decidedAt,
       paidAt: m.paidAt,

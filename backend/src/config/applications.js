@@ -57,6 +57,10 @@ export const MERGE_FIELDS = [
   ['links.payNow', 'Link to pay an outstanding balance'],
   ['links.account', 'Link to the applicant account page (on the RECEIVED email, a one-time sign-in link when the applicant just created an account)'],
   ['account.created', 'Section flag: true on the RECEIVED email when the applicant chose to create an account'],
+  ['booth.label', 'Booth the applicant owns on the floor map (or the placement typed on the application); empty until chosen'],
+  ['booth.size', 'Booth size in grid units, e.g. "10×10" (empty without a map booth)'],
+  ['booth.chooseRequired', 'Section flag: true on an approved map-bound application until the applicant chooses and pays for a booth'],
+  ['links.map', 'Link to the public floor map centred on the applicant\'s booth (empty until one is owned)'],
 ];
 
 /** Actions that have a template. PAYMENT_DUE is used from phase 2; ADD_ONS_CHANGED from spec 012; TIER_CHANGED / WAIVED / OFFLINE_PAID from spec 018. */
@@ -90,6 +94,15 @@ Good news — {{profile.businessName}} is approved for {{event.name}}{{#tier}} (
 {{#order.ref}}
 Order number: {{order.ref}}
 {{/order.ref}}
+{{#booth.chooseRequired}}
+Choose your booth: pick your spot on the floor map and pay {{amount.applicantPays}} by {{payment.dueDate}} to confirm it. Booths go to whoever buys first, so choose soon: {{links.status}}
+{{/booth.chooseRequired}}
+{{#booth.label}}
+Your booth: {{booth.label}} {{booth.size}}
+{{/booth.label}}
+{{#links.map}}
+See your booth on the map: {{links.map}}
+{{/links.map}}
 We will follow up with logistics closer to the event. Your application: {{links.status}}
 
 See you there,

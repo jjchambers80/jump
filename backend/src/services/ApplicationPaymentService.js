@@ -21,7 +21,7 @@ import addOnService from './AddOnService.js';
 import applicationTemplateService from './ApplicationTemplateService.js';
 import paymentSettingsService, { stripeMode } from './PaymentSettingsService.js';
 import { statusUrlFor } from './applicationLinks.js';
-import { buyerAccountUrl } from '../utils/storefrontUrl.js';
+import { buyerAccountUrl, eventUrl } from '../utils/storefrontUrl.js';
 import emailService from './EmailService.js';
 import contactOptInService from './ContactOptInService.js';
 import boothService from './BoothService.js';
@@ -731,7 +731,17 @@ class ApplicationPaymentService {
       }
       const statusUrl = await statusUrlFor(application);
       const accountUrl = application.contact?.accountCreatedAt ? await buyerAccountUrl(application.organizationId) : null;
-      return await emailService.sendApplicationReceipt(application, { statusUrl, accountUrl, paymentMethod, lines });
+      // Spec 014 phase 2: name the booth this payment bought and deep-link the public map.
+      let booth = null;
+      const owned = application.tier?.mapBound ? await boothService.boothForApplication(applicationId).catch(() => null) : null;
+      if (owned && owned.status === 'SOLD') {
+        booth = {
+          label: owned.label,
+          size: `${owned.w}\u00d7${owned.h}`,
+          mapUrl: await eventUrl(application.eventId, application.organizationId, `/map?booth=${encodeURIComponent(owned.label)}`).catch(() => null),
+        };
+      }
+      return await emailService.sendApplicationReceipt(application, { statusUrl, accountUrl, paymentMethod, lines, booth });
     } catch (error) {
       logger.error('Application receipt failed', { applicationId, error: error.message });
       return false;

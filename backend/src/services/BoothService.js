@@ -204,7 +204,7 @@ class BoothService {
   async boothForApplication(applicationId, { tx = prisma } = {}) {
     return tx.booth.findFirst({
       where: { OR: [{ applicationId }, { holdApplicationId: applicationId }] },
-      select: { id: true, label: true, status: true, holdExpiresAt: true, applicationId: true, holdApplicationId: true },
+      select: { id: true, mapId: true, label: true, status: true, w: true, h: true, holdExpiresAt: true, applicationId: true, holdApplicationId: true },
     });
   }
 
