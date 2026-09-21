@@ -412,8 +412,10 @@ class CustomerService {
     // uniqueness on organizationId + email.
     if (updates.email !== undefined && updates.email !== contact.email) {
       // Check for collision on organizationId + email
+      // The contact's own organization, never the caller's scope: a
+      // SYSTEM_ADMIN has no organization of their own (Gotcha 8).
       const existing = await prisma.contact.findUnique({
-        where: { organizationId_email: { organizationId, email: updates.email } },
+        where: { organizationId_email: { organizationId: contact.organizationId, email: updates.email } },
         select: { id: true },
       });
       if (existing && existing.id !== contactId) {
