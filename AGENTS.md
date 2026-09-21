@@ -71,6 +71,7 @@ cd frontend && npm run test:unit    # Vitest unit tests (lib/color.ts)
 | `SCANNER_API_KEY` | backend | Optional. Shared key for hardware ticket readers calling `POST /tickets/scan` / `/redeem` via `X-Scanner-Key`. Unset: only staff sessions can scan |
 | `RATE_LIMIT_<NAME>_LIMIT` / `_WINDOW_MS`, `RATE_LIMIT_ENFORCE_IN_TESTS` | backend | Optional. Per-IP limiter overrides (spec 020): `BASELINE`, `ORDER_CREATE`, `ORDER_LOOKUP`, `ORDER_VERIFY`, `SCANNER_AUTH`, `DOMAIN_RESOLVE`, `BUYER_AUTH_REQUEST`, `APPLICATION_SUBMIT`. Limiters are pass-throughs under test unless `RATE_LIMIT_ENFORCE_IN_TESTS=1` |
 | `ORDER_MAX_PENDING_PER_CONTACT`, `ORDER_SWEEP_INTERVAL_MS`, `ORDER_SWEEP_GRACE_MS` | backend | Optional. Open checkouts one email may hold per event (default 3, then 409); abandoned-checkout sweep interval (default 5 min) and grace past the 30-minute Checkout session (default 5 min) |
+| `SECURITY_CONTACT_EMAIL` | frontend | Optional. Serves RFC 9116 `/.well-known/security.txt` with this `Contact:` address (spec 023 phase 0); unset → 404 until the `security@` mailbox exists (launch checklist) |
 | `LEGAL_IP_SALT` | backend | Optional. Salt for the hashed IP on `LegalAcceptance` rows (spec 024 phase 3); falls back to `AUTH_SECRET`. The raw IP is never stored |
 | `TWO_STEP_TRUST_DAYS` | backend + frontend | Optional. "Remember this device" lifetime for two-step (default 30) (spec 030 C) |
 | `HIBP_CHECK` | backend | Optional. `false` skips the Have I Been Pwned range check when a password is set (default on, fail-open) (spec 030 B) |

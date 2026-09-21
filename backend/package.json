@@ -14,7 +14,6 @@
     "test:integration": "NODE_OPTIONS=--experimental-vm-modules jest tests/integration",
     "test:unit": "NODE_OPTIONS=--experimental-vm-modules jest tests/unit",
     "db:migrate": "prisma migrate dev",
-    "db:seed": "node src/database/seeds/seed.js",
     "db:reset": "prisma migrate reset",
     "db:studio": "prisma studio",
     "db:backfill:024": "node src/scripts/backfill-application-orders.js",

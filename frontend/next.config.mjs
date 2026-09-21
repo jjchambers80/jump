@@ -13,6 +13,13 @@ const nextConfig = {
       { source: '/privacy', destination: '/legal/privacy', permanent: true },
     ];
   },
+  async rewrites() {
+    // RFC 9116 security.txt: the route handler lives at /well-known/security.txt
+    // because Next.js App Router ignores segments starting with `.`.
+    return [
+      { source: '/.well-known/security.txt', destination: '/well-known/security.txt' },
+    ];
+  },
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
     NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
