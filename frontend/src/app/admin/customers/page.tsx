@@ -1,9 +1,15 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { Suspense, useEffect, useState, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import api from '@/services/api';
 import { useOrg } from '@/components/OrgContext';
+import {
+  customerDetailHref,
+  customerListQuery,
+  segmentBadgeClass,
+  type CustomerSegment,
+} from '@/lib/customers';
 
 interface Customer {
   id: string;
@@ -21,6 +27,7 @@ interface Customer {
   totalRefunded: number;
   lastActivityAt: string | null;
   createdAt: string;
+  segment: CustomerSegment;
 }
 
 interface CustomerListResponse {
@@ -42,18 +49,26 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
 }
 
-export default function CustomersPage() {
+function CustomersPageContent() {
   const { selectedOrgId } = useOrg();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialSearch = searchParams.get('search') || '';
+  const initialSegment = (searchParams.get('segment') || '') as CustomerSegment | '';
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(() => Math.max(1, Number(searchParams.get('page')) || 1));
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState(initialSearch);
+  const [search, setSearch] = useState(initialSearch);
+  const [segment, setSegment] = useState<CustomerSegment | ''>(initialSegment);
+  const [sort, setSort] = useState(searchParams.get('sort') || 'createdAt');
+  const [direction, setDirection] = useState<'asc' | 'desc'>(
+    searchParams.get('direction') === 'asc' ? 'asc' : 'desc'
+  );
 
   // Inline editing state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -68,6 +83,9 @@ export default function CustomersPage() {
       setError(null);
       const params = new URLSearchParams({ page: String(page), limit: '20' });
       if (search) params.set('search', search);
+      if (segment) params.set('segment', segment);
+      params.set('sort', sort);
+      params.set('direction', direction);
       const result = await api.get<CustomerListResponse>(`/admin/customers?${params}`);
       setCustomers(result.data);
       setTotal(result.pagination.total);
@@ -77,7 +95,7 @@ export default function CustomersPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedOrgId, page, search]);
+  }, [selectedOrgId, page, search, segment, sort, direction]);
 
   useEffect(() => {
     fetchCustomers();
@@ -86,7 +104,9 @@ export default function CustomersPage() {
   // Reset page when search changes
   useEffect(() => {
     setPage(1);
-  }, [search]);
+  }, [search, segment, sort, direction]);
+
+  const listQuery = customerListQuery({ page, search, segment, sort, direction });
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -178,6 +198,45 @@ export default function CustomersPage() {
         )}
       </form>
 
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <label className="text-xs font-medium text-gray-600 dark:text-slate-300" htmlFor="customer-segment">
+          Segment
+        </label>
+        <select
+          id="customer-segment"
+          value={segment}
+          onChange={(event) => setSegment(event.target.value as CustomerSegment | '')}
+          className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+        >
+          <option value="">All segments</option>
+          <option value="New">New</option>
+          <option value="Repeat">Repeat</option>
+          <option value="Lapsed">Lapsed</option>
+          <option value="Prospect">Prospect</option>
+        </select>
+        <label className="ml-auto text-xs font-medium text-gray-600 dark:text-slate-300" htmlFor="customer-sort">
+          Sort
+        </label>
+        <select
+          id="customer-sort"
+          value={`${sort}:${direction}`}
+          onChange={(event) => {
+            const [nextSort, nextDirection] = event.target.value.split(':');
+            setSort(nextSort);
+            setDirection(nextDirection as 'asc' | 'desc');
+          }}
+          className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+        >
+          <option value="createdAt:desc">Newest customer</option>
+          <option value="createdAt:asc">Oldest customer</option>
+          <option value="name:asc">Name A–Z</option>
+          <option value="name:desc">Name Z–A</option>
+          <option value="lastActivityAt:desc">Recent activity</option>
+          <option value="transactionCount:desc">Most transactions</option>
+          <option value="totalSpent:desc">Highest spend</option>
+        </select>
+      </div>
+
       {/* Error */}
       {error && (
         <div className="mb-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4">
@@ -201,7 +260,7 @@ export default function CustomersPage() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
           <p className="text-gray-500 dark:text-slate-400">
-            {search ? 'No customers match your search.' : 'No customers yet.'}
+            {search || segment ? 'No customers match these filters.' : 'No customers yet.'}
           </p>
         </div>
       )}
@@ -210,9 +269,10 @@ export default function CustomersPage() {
       {!loading && customers.length > 0 && (
         <div className="border border-gray-200 dark:border-slate-700 rounded-lg overflow-hidden bg-white dark:bg-slate-800">
           {/* Desktop header */}
-          <div className="hidden lg:grid grid-cols-[minmax(150px,1.5fr)_minmax(180px,2fr)_70px_minmax(100px,1fr)_70px_90px_minmax(120px,1.5fr)] gap-x-4 px-4 py-3 bg-gray-50 dark:bg-slate-800/80 border-b border-gray-200 dark:border-slate-700 text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+          <div className="hidden lg:grid grid-cols-[minmax(140px,1.4fr)_minmax(170px,1.8fr)_85px_60px_minmax(100px,1fr)_70px_90px_minmax(110px,1.3fr)] gap-x-4 px-4 py-3 bg-gray-50 dark:bg-slate-800/80 border-b border-gray-200 dark:border-slate-700 text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">
             <div>Name</div>
             <div>Email</div>
+            <div>Segment</div>
             <div className="text-center">Sub</div>
             <div>Location</div>
             <div className="text-right">Transactions</div>
@@ -226,8 +286,8 @@ export default function CustomersPage() {
               <div key={customer.id}>
                 {/* Desktop row */}
                 <div
-                  onClick={() => router.push(`/admin/customers/${customer.id}`)}
-                  className="hidden lg:grid grid-cols-[minmax(150px,1.5fr)_minmax(180px,2fr)_70px_minmax(100px,1fr)_70px_90px_minmax(120px,1.5fr)] gap-x-4 px-4 py-3 items-center hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors cursor-pointer">
+                  onClick={() => router.push(customerDetailHref(customer.id, listQuery))}
+                  className="hidden lg:grid grid-cols-[minmax(140px,1.4fr)_minmax(170px,1.8fr)_85px_60px_minmax(100px,1fr)_70px_90px_minmax(110px,1.3fr)] gap-x-4 px-4 py-3 items-center hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors cursor-pointer">
                   {/* Name */}
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
@@ -243,6 +303,12 @@ export default function CustomersPage() {
                   {/* Email */}
                   <div className="min-w-0">
                     <p className="text-sm text-gray-700 dark:text-slate-300 truncate">{customer.email}</p>
+                  </div>
+
+                  <div>
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${segmentBadgeClass(customer.segment)}`}>
+                      {customer.segment}
+                    </span>
                   </div>
 
                   {/* Email subscription toggle */}
@@ -341,7 +407,7 @@ export default function CustomersPage() {
                 </div>
 
                 {/* Mobile card */}
-                <div onClick={() => router.push(`/admin/customers/${customer.id}`)} className="lg:hidden p-4 space-y-2 cursor-pointer">
+                <div onClick={() => router.push(customerDetailHref(customer.id, listQuery))} className="lg:hidden p-4 space-y-2 cursor-pointer">
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="text-sm font-medium text-gray-900 dark:text-white">
@@ -349,20 +415,25 @@ export default function CustomersPage() {
                       </p>
                       <p className="text-xs text-gray-500 dark:text-slate-400">{customer.email}</p>
                     </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); toggleSubscription(customer); }}
-                      className={`inline-flex items-center justify-center w-8 h-5 rounded-full transition-colors flex-shrink-0 ${
-                        customer.emailSubscribed
-                          ? 'bg-green-500'
-                          : 'bg-gray-300 dark:bg-slate-600'
-                      }`}
-                    >
-                      <span
-                        className={`block w-3.5 h-3.5 rounded-full bg-white shadow transition-transform ${
-                          customer.emailSubscribed ? 'translate-x-1.5' : '-translate-x-1.5'
+                    <div className="flex items-center gap-2">
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${segmentBadgeClass(customer.segment)}`}>
+                        {customer.segment}
+                      </span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleSubscription(customer); }}
+                        className={`inline-flex items-center justify-center w-8 h-5 rounded-full transition-colors flex-shrink-0 ${
+                          customer.emailSubscribed
+                            ? 'bg-green-500'
+                            : 'bg-gray-300 dark:bg-slate-600'
                         }`}
-                      />
-                    </button>
+                      >
+                        <span
+                          className={`block w-3.5 h-3.5 rounded-full bg-white shadow transition-transform ${
+                            customer.emailSubscribed ? 'translate-x-1.5' : '-translate-x-1.5'
+                          }`}
+                        />
+                      </button>
+                    </div>
                   </div>
                   <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-slate-400">
                     <span>{customer.transactionCount} transaction{customer.transactionCount !== 1 ? 's' : ''}</span>
@@ -410,5 +481,13 @@ export default function CustomersPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function CustomersPage() {
+  return (
+    <Suspense fallback={<div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">Loading customers…</div>}>
+      <CustomersPageContent />
+    </Suspense>
   );
 }

@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { Suspense, useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import api from '@/services/api';
 import { useOrg } from '@/components/OrgContext';
 import { resolveAssetUrl } from '@/lib/assets';
+import { segmentBadgeClass, type CustomerSegment } from '@/lib/customers';
 
 interface OrderEvent {
   id: string;
@@ -66,6 +67,9 @@ interface CustomerDetail {
   lastActivityAt: string | null;
   orders: CustomerOrder[];
   applications: CustomerApplication[];
+  segment: CustomerSegment;
+  prevId: string | null;
+  nextId: string | null;
 }
 
 function formatCurrency(amount: number): string {
@@ -106,8 +110,10 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-export default function CustomerDetailPage() {
+function CustomerDetailPageContent() {
   const { contactId } = useParams<{ contactId: string }>();
+  const searchParams = useSearchParams();
+  const listQuery = searchParams.toString();
   const { selectedOrgId } = useOrg();
 
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
@@ -125,14 +131,16 @@ export default function CustomerDetailPage() {
     try {
       setLoading(true);
       setError(null);
-      const result = await api.get<CustomerDetail>(`/admin/customers/${contactId}`);
+      const result = await api.get<CustomerDetail>(
+        `/admin/customers/${contactId}${listQuery ? `?${listQuery}` : ''}`
+      );
       setCustomer(result);
     } catch (err: any) {
       setError(err.message || 'Failed to load customer');
     } finally {
       setLoading(false);
     }
-  }, [selectedOrgId, contactId]);
+  }, [selectedOrgId, contactId, listQuery]);
 
   useEffect(() => {
     fetchCustomer();
@@ -202,7 +210,7 @@ export default function CustomerDetailPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-6 text-center">
           <p className="text-red-800 dark:text-red-300">{error || 'Customer not found'}</p>
-          <Link href="/admin/customers" className="mt-3 inline-block text-sm text-indigo-600 dark:text-indigo-400 hover:underline">
+          <Link href={`/admin/customers${listQuery ? `?${listQuery}` : ''}`} className="mt-3 inline-block text-sm text-indigo-600 dark:text-indigo-400 hover:underline">
             Back to customers
           </Link>
         </div>
@@ -214,7 +222,7 @@ export default function CustomerDetailPage() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
       {/* Breadcrumb + Header */}
       <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-slate-400 mb-4">
-        <Link href="/admin/customers" className="hover:text-indigo-600 dark:hover:text-indigo-400">
+        <Link href={`/admin/customers${listQuery ? `?${listQuery}` : ''}`} className="hover:text-indigo-600 dark:hover:text-indigo-400">
           Customers
         </Link>
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -226,7 +234,13 @@ export default function CustomerDetailPage() {
       </div>
 
       {/* Stats bar */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+        <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg px-4 py-3">
+          <p className="text-xs text-gray-500 dark:text-slate-400 mb-1">Segment</p>
+          <span className={`inline-flex rounded-full px-2.5 py-1 text-sm font-semibold ${segmentBadgeClass(customer.segment)}`}>
+            {customer.segment}
+          </span>
+        </div>
         {[
           { label: 'Amount spent', value: formatCurrency(customer.totalSpent), hint: customer.totalRefunded > 0 ? `${formatCurrency(customer.totalRefunded)} refunded` : undefined },
           { label: 'Transactions', value: String(customer.transactionCount), hint: customer.applicationCount > 0 ? `${customer.ticketOrderCount} order${customer.ticketOrderCount !== 1 ? 's' : ''} · ${customer.applicationCount} application${customer.applicationCount !== 1 ? 's' : ''}` : undefined },
@@ -494,5 +508,13 @@ export default function CustomerDetailPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function CustomerDetailPage() {
+  return (
+    <Suspense fallback={<div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">Loading customer…</div>}>
+      <CustomerDetailPageContent />
+    </Suspense>
   );
 }

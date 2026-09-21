@@ -14,6 +14,32 @@ const sum = (rows, pick) => rows.reduce((total, r) => total + Number(pick(r) || 
 const latest = (dates) =>
   dates.filter(Boolean).reduce((max, d) => (!max || d > max ? d : max), null);
 
+export const CUSTOMER_SEGMENTS = ['Prospect', 'New', 'Repeat', 'Lapsed'];
+
+function segmentCutoff(now) {
+  const cutoff = new Date(now);
+  const day = cutoff.getUTCDate();
+  // Move to the 1st to avoid end-of-month rollover, subtract 18 months,
+  // then clamp the day to the last valid day of the target month.
+  cutoff.setUTCDate(1);
+  cutoff.setUTCMonth(cutoff.getUTCMonth() - 18);
+  const targetMonth = cutoff.getUTCMonth();
+  const lastDay = new Date(Date.UTC(cutoff.getUTCFullYear(), targetMonth + 1, 0)).getUTCDate();
+  cutoff.setUTCDate(Math.min(day, lastDay));
+  return cutoff;
+}
+
+/**
+ * Segment precedence is Prospect, then Lapsed, then order-count buckets.
+ * Orders passed here are already restricted to PAID_ORDER_STATUSES.
+ */
+export function customerSegment(orders, now = new Date()) {
+  if (orders.length === 0) return 'Prospect';
+  const lastPaidAt = latest(orders.map((o) => o.paidAt || o.createdAt));
+  if (lastPaidAt && lastPaidAt < segmentCutoff(now)) return 'Lapsed';
+  return orders.length === 1 ? 'New' : 'Repeat';
+}
+
 const ORDER_SELECT = {
   where: { status: { in: PAID_ORDER_STATUSES } },
   select: {
@@ -36,7 +62,7 @@ function customerPredicate() {
  * `totalRefunded` is reported beside it so the numbers reconcile with
  * Stripe's gross and refunded totals.
  */
-function aggregates(orders) {
+function aggregates(orders, now = new Date()) {
   const tickets = orders.filter((o) => o.kind !== 'APPLICATION');
   const applications = orders.filter((o) => o.kind === 'APPLICATION');
   const totalSpent = round(sum(orders, (o) => o.totalAmount));
@@ -52,6 +78,99 @@ function aggregates(orders) {
     totalRefunded,
     lastOrderDate: lastActivityAt, // alias kept for existing consumers
     lastActivityAt,
+    segment: customerSegment(orders, now),
+  };
+}
+
+function customerRow(contact, now = new Date()) {
+  return {
+    id: contact.id,
+    firstName: contact.firstName,
+    lastName: contact.lastName,
+    email: contact.email,
+    location: contact.location,
+    note: contact.note,
+    emailSubscribed: contact.emailSubscribed,
+    ...aggregates(contact.orders, now),
+    createdAt: contact.createdAt,
+  };
+}
+
+const normalizedSegment = (segment) =>
+  CUSTOMER_SEGMENTS.find((candidate) => candidate.toLowerCase() === String(segment || '').toLowerCase());
+
+function compareNullableDates(a, b) {
+  const left = a ? new Date(a).getTime() : 0;
+  const right = b ? new Date(b).getTime() : 0;
+  return left - right;
+}
+
+/** Compute filters and aggregate-aware ordering before pagination/navigation. */
+export function filterAndSortCustomers(contacts, options = {}) {
+  const { segment, sort = 'createdAt', direction = 'desc', now = new Date() } = options;
+  const wantedSegment = normalizedSegment(segment);
+  const rows = contacts.map((contact) => customerRow(contact, now));
+  const filtered = wantedSegment ? rows.filter((row) => row.segment === wantedSegment) : rows;
+  const multiplier = direction === 'asc' ? 1 : -1;
+
+  const compare = (a, b) => {
+    let result;
+    switch (sort) {
+      case 'name':
+        result = `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`);
+        break;
+      case 'email':
+        result = a.email.localeCompare(b.email);
+        break;
+      case 'transactionCount':
+        result = a.transactionCount - b.transactionCount;
+        break;
+      case 'totalSpent':
+        result = a.totalSpent - b.totalSpent;
+        break;
+      case 'lastActivityAt':
+        result = compareNullableDates(a.lastActivityAt, b.lastActivityAt);
+        break;
+      default:
+        result = compareNullableDates(a.createdAt, b.createdAt);
+    }
+    return result === 0 ? a.id.localeCompare(b.id) : result * multiplier;
+  };
+
+  return filtered.sort(compare);
+}
+
+export function customerNavigation(contacts, contactId, options = {}) {
+  const rows = filterAndSortCustomers(contacts, options);
+  const index = rows.findIndex((row) => row.id === contactId);
+  if (index < 0) return { prevId: null, nextId: null };
+  return {
+    prevId: index > 0 ? rows[index - 1].id : null,
+    nextId: index < rows.length - 1 ? rows[index + 1].id : null,
+  };
+}
+
+function customerWhere(organizationId, { search, tag } = {}) {
+  return {
+    ...(organizationId && { organizationId }),
+    ...customerPredicate(),
+    ...(tag && { tags: { has: tag } }),
+    ...(search && {
+      AND: [
+        {
+          OR: [
+            { email: { contains: search.toLowerCase(), mode: 'insensitive' } },
+            { firstName: { contains: search, mode: 'insensitive' } },
+            { lastName: { contains: search, mode: 'insensitive' } },
+            {
+              applicantProfiles: {
+                some: { businessName: { contains: search, mode: 'insensitive' } },
+              },
+            },
+          ],
+        },
+      ],
+    }),
   };
 }
 
@@ -63,55 +182,52 @@ class CustomerService {
    * @param {Object} options - { page, limit, search }
    * @returns {Promise<{ data: Customer[], pagination }>}
    */
-  async getCustomersByOrganization(organizationId, { page = 1, limit = 20, search } = {}) {
-    page = parseInt(page) || 1;
-    limit = parseInt(limit) || 20;
+  async getCustomersByOrganization(
+    organizationId,
+    { page = 1, limit = 20, search, tag, segment, sort = 'createdAt', direction = 'desc' } = {}
+  ) {
+    page = Math.max(1, parseInt(page) || 1);
+    limit = Math.max(1, parseInt(limit) || 20);
 
-    // Contacts are rows of their own organization (spec 007), so the org filter
-    // is a column match.
-    const where = {
-      ...(organizationId && { organizationId }),
-      ...customerPredicate(),
-      ...(search && {
-        AND: [
-          {
-            OR: [
-              { email: { contains: search.toLowerCase(), mode: 'insensitive' } },
-              { firstName: { contains: search, mode: 'insensitive' } },
-              { lastName: { contains: search, mode: 'insensitive' } },
-              {
-                applicantProfiles: {
-                  some: { businessName: { contains: search, mode: 'insensitive' } },
-                },
-              },
-            ],
-          },
-        ],
-      }),
-    };
+    // Segment and aggregate sorts are derived from paid orders, so filtering and
+    // ordering happen before pagination. The same helper powers detail navigation.
+    const where = customerWhere(organizationId, { search, tag });
+    const normalizedDirection = direction === 'asc' ? 'asc' : 'desc';
+    const databaseOrder =
+      sort === 'name'
+        ? [{ firstName: normalizedDirection }, { lastName: normalizedDirection }, { id: 'asc' }]
+        : sort === 'email'
+          ? [{ email: normalizedDirection }, { id: 'asc' }]
+          : [{ createdAt: normalizedDirection }, { id: 'asc' }];
+    const needsDerivedRows = Boolean(normalizedSegment(segment)) ||
+      ['transactionCount', 'totalSpent', 'lastActivityAt'].includes(sort);
 
-    const [contacts, total] = await Promise.all([
-      prisma.contact.findMany({
-        where,
-        include: { orders: ORDER_SELECT },
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      prisma.contact.count({ where }),
-    ]);
+    if (!needsDerivedRows) {
+      const [contacts, total] = await Promise.all([
+        prisma.contact.findMany({
+          where,
+          include: { orders: ORDER_SELECT },
+          orderBy: databaseOrder,
+          skip: (page - 1) * limit,
+          take: limit,
+        }),
+        prisma.contact.count({ where }),
+      ]);
+      return {
+        data: contacts.map((contact) => customerRow(contact)),
+        pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      };
+    }
 
-    const data = contacts.map((c) => ({
-      id: c.id,
-      firstName: c.firstName,
-      lastName: c.lastName,
-      email: c.email,
-      location: c.location,
-      note: c.note,
-      emailSubscribed: c.emailSubscribed,
-      ...aggregates(c.orders),
-      createdAt: c.createdAt,
-    }));
+    // Aggregate filters and sorts cannot be expressed by the Contact relation
+    // query; compute them before slicing so pagination totals stay correct.
+    const contacts = await prisma.contact.findMany({
+      where,
+      include: { orders: ORDER_SELECT },
+    });
+    const ordered = filterAndSortCustomers(contacts, { segment, sort, direction });
+    const total = ordered.length;
+    const data = ordered.slice((page - 1) * limit, page * limit);
 
     return {
       data,
@@ -126,7 +242,7 @@ class CustomerService {
    * @param {string|null} organizationId
    * @returns {Promise<Object>}
    */
-  async getCustomerById(contactId, organizationId) {
+  async getCustomerById(contactId, organizationId, listOptions = {}) {
     const contact = await prisma.contact.findFirst({
       where: { id: contactId, ...(organizationId && { organizationId }) },
       include: {
@@ -203,6 +319,12 @@ class CustomerService {
         detailUrl: `/admin/events/${o.application.eventId}/applications/${o.application.id}`,
       }));
 
+    const navigationContacts = await prisma.contact.findMany({
+      where: customerWhere(organizationId, listOptions),
+      include: { orders: ORDER_SELECT },
+    });
+    const navigation = customerNavigation(navigationContacts, contactId, listOptions);
+
     return {
       id: contact.id,
       firstName: contact.firstName,
@@ -213,6 +335,7 @@ class CustomerService {
       emailSubscribed: contact.emailSubscribed,
       createdAt: contact.createdAt,
       ...aggregates(contact.orders),
+      ...navigation,
       orders,
       applications,
     };
