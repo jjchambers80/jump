@@ -18,6 +18,7 @@ import feeService from './FeeService.js';
 import storeFileService from './StoreFileService.js';
 import imageService from './ImageService.js';
 import applicationFormService, { tierAmounts } from './ApplicationFormService.js';
+import floorMapTemplateService from './FloorMapTemplateService.js';
 
 class MapService {
   // ─── Admin CRUD ─────────────────────────────────────────────────────
@@ -92,20 +93,53 @@ class MapService {
     const existing = await prisma.floorMap.findUnique({ where: { eventId } });
     if (existing) throw new ConflictError('MAP_EXISTS — this event already has a floor map');
 
-    const map = await prisma.floorMap.create({
-      data: {
-        organizationId: orgId,
-        eventId,
-        name: data.name || event.name,
-        width: this._validateDimension('width', data.width, 50),
-        height: this._validateDimension('height', data.height, 40),
-        unit: data.unit && UNITS.has(data.unit) ? data.unit : 'ft',
-        gridSize: Number.isInteger(data.gridSize) ? Math.max(1, Math.min(100, data.gridSize)) : 10,
-        underlayFileId: data.underlayFileId || null,
-        underlayOpacity: Number.isInteger(data.underlayOpacity) ? data.underlayOpacity : 40,
-        layout: data.layout || EMPTY_LAYOUT,
-      },
-    });
+    let template = null;
+    let materialised = null;
+    if (data.templateId) {
+      template = await floorMapTemplateService.requireInScope(data.templateId, orgId);
+      materialised = floorMapTemplateService.materialise(template.definition, {
+        tierBindings: data.tierBindings ?? {},
+      });
+      const boundTierIds = [...new Set(materialised.booths.map((booth) => booth.tierId).filter(Boolean))];
+      if (boundTierIds.length > 0) {
+        const destinationTiers = await prisma.applicationTier.findMany({
+          where: { id: { in: boundTierIds }, form: { eventId } },
+          select: { id: true },
+        });
+        if (destinationTiers.length !== boundTierIds.length) {
+          throw new ValidationError('tierBindings must reference application tiers on the destination event');
+        }
+      }
+    }
+
+    const mapData = {
+      organizationId: orgId,
+      eventId,
+      name: data.name || event.name,
+      width: this._validateDimension('width', data.width, materialised?.width ?? 50),
+      height: this._validateDimension('height', data.height, materialised?.height ?? 40),
+      unit: data.unit && UNITS.has(data.unit) ? data.unit : (materialised?.unit ?? 'ft'),
+      gridSize: Number.isInteger(data.gridSize) ? Math.max(1, Math.min(100, data.gridSize)) : (materialised?.gridSize ?? 10),
+      underlayFileId: data.underlayFileId || null,
+      underlayOpacity: Number.isInteger(data.underlayOpacity) ? data.underlayOpacity : 40,
+      layout: data.layout || materialised?.layout || EMPTY_LAYOUT,
+      createdFromTemplateId: template?.id ?? null,
+    };
+
+    const map = materialised
+      ? await prisma.$transaction(async (tx) => {
+          const created = await tx.floorMap.create({ data: mapData });
+          if (materialised.booths.length > 0) {
+            await tx.booth.createMany({
+              data: materialised.booths.map(({ tierLabel: _tierLabel, ...booth }) => ({
+                ...booth,
+                mapId: created.id,
+              })),
+            });
+          }
+          return created;
+        })
+      : await prisma.floorMap.create({ data: mapData });
 
     logger.info('Floor map created', {
       event: 'floor_map_created', mapId: map.id, eventId, organizationId: orgId,

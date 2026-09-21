@@ -510,6 +510,7 @@ model Organization {
   menus                    Menu[]
   urlRedirects             UrlRedirect[]
   floorMaps                FloorMap[]
+  floorMapTemplates        FloorMapTemplate[]
 }
 
 // Custom content pages managed under Online Store. Content is stored as the
@@ -1197,6 +1198,7 @@ model FloorMap {
   underlayFileId  String? // StoreFile
   underlayOpacity Int            @default(40)
   layout          Json // { version: 1, elements: [...] }
+  createdFromTemplateId String? // informational; templates are snapshots, not parents
   publishedAt     DateTime?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
@@ -1207,6 +1209,24 @@ model FloorMap {
   booths       Booth[]
 
   @@index([organizationId])
+}
+
+// Spec 014 phase 3: reusable vector floor-map geometry. Live booth state,
+// tier ids, assignments, and vendor data are intentionally not stored here.
+model FloorMapTemplate {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  definition     Json
+  sourceMapId    String? // informational: the map this snapshot came from
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, name])
+  @@index([organizationId, updatedAt])
 }
 
 model Booth {

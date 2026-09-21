@@ -178,6 +178,7 @@ Outcome: an organizer draws a clean numbered floor plan for an event, binds boot
 - Public map (`/events/:slug/map` + event-page section): states, legend, tooltip / sheet with booth label, size, tier price, vendor name when sold; `?booth=` highlight; no-cache headers.
 - Tests: unit (layout schema validation, auto-number, publish sync of `quantityTotal`, assign / move locking with concurrent transactions), contract (`PUT` geometry, 409 delete sold booth, public route 404 for DRAFT), Playwright (draw a row, number it, assign, publish, public map shows the vendor) via `signInAsStaff`.
 - Non-goals: self-serve purchase, PDF, profiles, templates.
+- **Map templates (phase 3)**: `FloorMapTemplate` org-scoped JSON snapshots (schemas/014-phase-3/map-templates.md). Templates store geometry only — no booth state, tier ids, assignments, or vendor data. Create a map from a template via `POST /admin/maps { templateId, tierBindings }`; `MapService.create` materialises booths in one transaction. `saveFrom` on `POST /admin/maps/:mapId/templates` strips live IDs/state/assignments before persisting. Reusable template CRUD at `/admin/maps/templates*`. Definition validation rejects any event-specific field; `materialise()` output is deterministic and stable for downstream code. See `docs/wiki/features/map-templates.md`.
 
 ### Phase 2 — Vendor selects a spot and buys
 

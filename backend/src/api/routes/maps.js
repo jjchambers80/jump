@@ -9,10 +9,43 @@ import { activeOrgFor } from './adminScope.js';
 import { validateCreateMap, validateUpdateMap } from '../validators/mapValidators.js';
 import mapService from '../../services/MapService.js';
 import boothService from '../../services/BoothService.js';
+import floorMapTemplateService from '../../services/FloorMapTemplateService.js';
 
 const router = Router();
 
 router.use(requireAuth, requireOrganizer);
+
+// ─── Reusable templates ──────────────────────────────────────────────
+
+router.get('/templates', async (req, res, next) => {
+  try { res.json(await floorMapTemplateService.list(await activeOrgFor(req))); }
+  catch (error) { next(error); }
+});
+
+router.post('/templates', async (req, res, next) => {
+  try {
+    res.status(201).json(await floorMapTemplateService.create(
+      await activeOrgFor(req), req.body, { byUserId: req.user.id }
+    ));
+  } catch (error) { next(error); }
+});
+
+router.get('/templates/:templateId', async (req, res, next) => {
+  try { res.json(await floorMapTemplateService.get(req.params.templateId, await activeOrgFor(req))); }
+  catch (error) { next(error); }
+});
+
+router.put('/templates/:templateId', async (req, res, next) => {
+  try { res.json(await floorMapTemplateService.update(req.params.templateId, await activeOrgFor(req), req.body)); }
+  catch (error) { next(error); }
+});
+
+router.delete('/templates/:templateId', async (req, res, next) => {
+  try {
+    await floorMapTemplateService.remove(req.params.templateId, await activeOrgFor(req));
+    res.status(204).send();
+  } catch (error) { next(error); }
+});
 
 // ─── Map CRUD ────────────────────────────────────────────────────────
 
@@ -44,6 +77,19 @@ router.delete('/:mapId', async (req, res, next) => {
   try {
     await mapService.remove(await activeOrgFor(req), req.params.mapId);
     res.status(204).send();
+  } catch (error) { next(error); }
+});
+
+router.post('/:mapId/templates', async (req, res, next) => {
+  try {
+    const organizationId = await activeOrgFor(req);
+    const map = await mapService.get(organizationId, req.params.mapId);
+    res.status(201).json(await floorMapTemplateService.saveFrom(
+      map,
+      organizationId,
+      { name: req.body.name, replaceTemplateId: req.body.replaceTemplateId ?? null },
+      { byUserId: req.user.id }
+    ));
   } catch (error) { next(error); }
 });
 

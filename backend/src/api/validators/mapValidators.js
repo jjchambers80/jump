@@ -6,7 +6,7 @@ import {
   MAX_MAP_WIDTH, MIN_MAP_NAME_LENGTH, MAX_MAP_NAME_LENGTH, UNITS,
 } from '../../config/maps.js';
 
-const CREATE_FIELDS = new Set(['eventId', 'name', 'width', 'height', 'unit', 'gridSize', 'underlayFileId', 'underlayOpacity', 'layout']);
+const CREATE_FIELDS = new Set(['eventId', 'name', 'width', 'height', 'unit', 'gridSize', 'underlayFileId', 'underlayOpacity', 'layout', 'templateId', 'tierBindings']);
 const UPDATE_FIELDS = new Set(['name', 'width', 'height', 'unit', 'gridSize', 'underlayFileId', 'underlayOpacity', 'layout']);
 
 function rejectUnknown(body, allowed) {
@@ -24,6 +24,13 @@ export const validateCreateMap = (req, res, next) => {
     if (err) return next(new ValidationError(err));
 
     const { name, width, height, unit } = req.body;
+
+    if (req.body.templateId !== undefined && (typeof req.body.templateId !== 'string' || !req.body.templateId)) {
+      return next(new ValidationError('templateId must be an id'));
+    }
+    if (req.body.tierBindings !== undefined && (!req.body.tierBindings || typeof req.body.tierBindings !== 'object' || Array.isArray(req.body.tierBindings))) {
+      return next(new ValidationError('tierBindings must be an object'));
+    }
 
     if (name !== undefined && typeof name === 'string') {
       const trimmed = name.trim();
