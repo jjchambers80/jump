@@ -475,6 +475,18 @@ export interface PublicMapBooth {
   vendorName: string | null;
 }
 
+export interface PublicMapVendor {
+  id: string;
+  name: string;
+  description: string | null;
+  website: string | null;
+  socials: Record<string, string>;
+  imageUrl: string | null;
+  category: string;
+  tier: { id: string; name: string } | null;
+  booth: { id: string; label: string } | null;
+}
+
 export interface PublicMap {
   id: string;
   eventId: string;
@@ -488,6 +500,7 @@ export interface PublicMap {
   underlayUrl: string | null;
   underlayOpacity: number;
   legend: PublicMapLegendTier[];
+  vendors: PublicMapVendor[];
   booths: PublicMapBooth[];
   brandColor: string | null;
   themeMode: string;

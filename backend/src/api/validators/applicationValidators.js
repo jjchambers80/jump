@@ -87,14 +87,14 @@ export const validateTemplateBody = (req, res, next) => {
   }
 };
 
-/** Spec 019 phase 3: PATCH application meta — { boothLabel?, internalNote?, tags?, checkedIn?, checkedOut? }. Values are validated in the service. */
+/** PATCH organizer metadata, including the spec 014 public-directory opt-in. */
 export const validateMetaBody = (req, res, next) => {
   try {
     const body = req.body || {};
-    onlyFields(body, new Set(['boothLabel', 'internalNote', 'tags', 'checkedIn', 'checkedOut']), 'application');
+    onlyFields(body, new Set(['boothLabel', 'internalNote', 'tags', 'checkedIn', 'checkedOut', 'publicProfile']), 'application');
     if (Object.keys(body).length === 0) throw new ValidationError('Nothing to update');
     if (body.tags !== undefined && !Array.isArray(body.tags)) throw new ValidationError('tags must be an array of strings');
-    for (const key of ['checkedIn', 'checkedOut']) if (body[key] !== undefined && typeof body[key] !== 'boolean') throw new ValidationError(`${key} must be a boolean`);
+    for (const key of ['checkedIn', 'checkedOut', 'publicProfile']) if (body[key] !== undefined && typeof body[key] !== 'boolean') throw new ValidationError(`${key} must be a boolean`);
     next();
   } catch (error) {
     next(error);

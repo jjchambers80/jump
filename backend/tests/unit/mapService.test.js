@@ -132,6 +132,61 @@ describe('MapService', () => {
     });
   });
 
+  describe('public vendor directory', () => {
+    const now = new Date('2026-09-21T12:00:00.000Z');
+
+    function publishedMap() {
+      return {
+        id: 'map_1', eventId: 'evt_1', name: 'Expo', status: 'PUBLISHED',
+        width: 40, height: 20, unit: 'ft', gridSize: 10,
+        layout: { version: 1, elements: [] }, underlayFileId: null,
+        underlayOpacity: 40, underlay: null, updatedAt: now,
+        booths: [{
+          id: 'booth_1', label: 'A1', kind: 'BOOTH', x: 0, y: 0, w: 10, h: 10,
+          rotation: 0, status: 'SOLD', tierId: 'tier_1', applicationId: 'app_1', updatedAt: now,
+        }],
+        event: { taxRate: 0, venue: { organization: { id: 'org_1', brandColor: '#123456', themeMode: 'DARK', taxInclusivePricing: false } } },
+      };
+    }
+
+    test('queries approved opted-in vendors in the requested event and exposes only public profile fields', async () => {
+      mockPrisma.floorMap = { findUnique: jest.fn().mockResolvedValue(publishedMap()) };
+      mockPrisma.applicationTier = { findMany: jest.fn().mockResolvedValue([{
+        id: 'tier_1', name: 'Standard', price: 100,
+        form: { id: 'form_1', name: 'Vendors', slug: 'vendors', feeMode: 'ABSORB', taxable: false },
+      }]) };
+      mockPrisma.application = { findMany: jest.fn().mockResolvedValue([{
+        id: 'app_1', updatedAt: now,
+        booth: { id: 'booth_1', label: 'A1', status: 'SOLD' },
+        tier: { id: 'tier_1', name: 'Standard' },
+        form: { id: 'form_1', name: 'Vendors' },
+        profile: { businessName: 'Acme', description: 'Handmade goods', website: 'https://acme.test', socials: { instagram: 'acme' }, updatedAt: now, images: [] },
+      }]) };
+
+      const result = await service.publicMap('evt_1');
+
+      expect(mockPrisma.application.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: { eventId: 'evt_1', status: 'APPROVED', publicProfile: true, form: { kind: 'PAID' } },
+        orderBy: [{ profile: { businessName: 'asc' } }, { id: 'asc' }],
+      }));
+      expect(result.vendors).toEqual([expect.objectContaining({
+        id: 'app_1', name: 'Acme', category: 'Vendors', booth: { id: 'booth_1', label: 'A1' },
+      })]);
+      expect(result.vendors[0]).not.toHaveProperty('contact');
+      expect(result.vendors[0]).not.toHaveProperty('email');
+      expect(result.booths[0].vendorName).toBe('Acme');
+    });
+
+    test('returns a valid empty directory', async () => {
+      mockPrisma.floorMap = { findUnique: jest.fn().mockResolvedValue(publishedMap()) };
+      mockPrisma.applicationTier = { findMany: jest.fn().mockResolvedValue([]) };
+      mockPrisma.application = { findMany: jest.fn().mockResolvedValue([]) };
+      const result = await service.publicMap('evt_1');
+      expect(result.vendors).toEqual([]);
+      expect(result.booths[0].vendorName).toBeNull();
+    });
+  });
+
   describe('remove', () => {
     test('refuses delete with SOLD booths', async () => {
       mockPrisma.floorMap = { findFirst: jest.fn().mockResolvedValue({ id: 'm1', organizationId: 'org1' }) };

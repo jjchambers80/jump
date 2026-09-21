@@ -125,9 +125,38 @@ describe('Maps contract', () => {
         contactId: contact.id,
         profileId: profile.id,
         status: 'APPROVED',
+        publicProfile: false,
         capacitySlot: 'APPROVED',
         submittedAt: new Date(),
         statusTokenHash: `${TAG}-${testRunId}-hash-2`,
+      },
+    });
+    // Approved vendor in another event: public directory queries must not leak
+    // it into this event even though the organization/profile are shared.
+    const otherForm = await prisma.applicationForm.create({
+      data: {
+        eventId: otherEvent.id,
+        name: `${TAG} Other Vendor Form`,
+        slug: `${TAG}-other-vendor`,
+        kind: 'PAID',
+        chargeTiming: 'APPROVAL',
+      },
+    });
+    const otherTier = await prisma.applicationTier.create({
+      data: { formId: otherForm.id, name: 'Other Event Booth', price: 25, quantityTotal: 1 },
+    });
+    await prisma.application.create({
+      data: {
+        eventId: otherEvent.id,
+        organizationId: organization.id,
+        formId: otherForm.id,
+        tierId: otherTier.id,
+        contactId: contact.id,
+        profileId: profile.id,
+        status: 'APPROVED',
+        capacitySlot: 'APPROVED',
+        submittedAt: new Date(),
+        statusTokenHash: `${TAG}-${testRunId}-hash-other-event`,
       },
     });
   });
@@ -346,6 +375,16 @@ describe('Maps contract', () => {
     expect(res.body.legend[0].price).toBeGreaterThan(0);
     const sold = res.body.booths.find((b) => b.label === 'A1');
     expect(sold).toMatchObject({ status: 'SOLD', vendorName: `${TAG} Vendor Co` });
+    expect(res.body.vendors).toEqual([
+      expect.objectContaining({
+        id: application.id,
+        name: `${TAG} Vendor Co`,
+        category: `${TAG} Vendor Form`,
+        booth: { id: booth.id, label: 'A1' },
+      }),
+    ]);
+    expect(res.body.vendors[0]).not.toHaveProperty('contact');
+    expect(res.body.vendors[0]).not.toHaveProperty('email');
     const available = res.body.booths.find((b) => b.label !== 'A1');
     expect(available.vendorName).toBeNull();
     // Only the SOLD booth exposes its holder; nothing internal leaks.

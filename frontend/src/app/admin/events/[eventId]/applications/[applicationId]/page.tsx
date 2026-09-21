@@ -642,6 +642,31 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
               {app.booth && (
                 <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Managed by the map — edit on the map builder.</p>
               )}
+              {app.status === 'APPROVED' && (
+                <label className="mt-4 flex items-start gap-2 border-t border-gray-200 pt-4 text-sm text-gray-700 dark:border-slate-700 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={app.publicProfile}
+                    onChange={async (e) => {
+                      const before = app.publicProfile;
+                      const value = e.target.checked;
+                      setApp({ ...app, publicProfile: value });
+                      setError(null);
+                      try {
+                        setApp(await api.updateMeta(app.id, { publicProfile: value }));
+                        setNotice(value ? 'Vendor added to the public directory.' : 'Vendor hidden from the public directory.');
+                      } catch (err) {
+                        setApp({ ...app, publicProfile: before });
+                        setError(describeError(err, 'Could not update public visibility'));
+                      }
+                    }}
+                  />
+                  <span>
+                    <span className="block font-medium">Show in public vendor directory</span>
+                    <span className="block text-xs text-gray-500 dark:text-slate-400">Publishes the business profile, website, social links, first photo and booth. Contact details stay private.</span>
+                  </span>
+                </label>
+              )}
               <label htmlFor="internal-note" className="mt-3 block text-sm font-medium text-gray-700 dark:text-slate-300">
                 Internal note
               </label>

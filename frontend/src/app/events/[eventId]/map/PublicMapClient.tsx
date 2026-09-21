@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useTheme } from 'next-themes';
-import { api, mapsApi, type PublicMap, type PublicMapBooth, type PublicMapLegendTier, type MapBooth, type MapElement } from '@/services/api';
+import { api, mapsApi, type PublicMap, type PublicMapBooth, type PublicMapVendor, type MapBooth, type MapElement } from '@/services/api';
 import BrandScope from '@/components/BrandScope';
 import OrganizationHeader from '@/components/OrganizationHeader';
 import StorefrontFooter from '@/components/storefront/StorefrontFooter';
@@ -11,6 +11,7 @@ import MapCanvas from '@/components/maps/MapCanvas';
 import MapLegend, { type LegendTier } from '@/components/maps/MapLegend';
 import { resolveAssetUrl } from '@/lib/assets';
 import { formatPrice } from '@/lib/fees';
+import VendorDirectory from './VendorDirectory';
 
 interface PublicMapClientProps {
   params: { eventId: string };
@@ -28,10 +29,11 @@ interface BoothDetailProps {
     taxRate?: number;
     taxInclusivePricing?: boolean;
   };
+  vendor?: PublicMapVendor;
   onClose: () => void;
 }
 
-function BoothDetail({ booth, legend, event, onClose }: BoothDetailProps) {
+function BoothDetail({ booth, legend, event, vendor, onClose }: BoothDetailProps) {
   const { resolvedTheme } = useTheme();
   const dark = resolvedTheme === 'dark';
   const tier = legend.find((t) => t.id === booth.tier?.id);
@@ -42,11 +44,11 @@ function BoothDetail({ booth, legend, event, onClose }: BoothDetailProps) {
   let statusLabel = '';
   let vendorLabel = '';
   if (booth.status === 'SOLD') {
-    statusLabel = booth.vendorName ? `Sold to ${booth.vendorName}` : 'Sold';
-    vendorLabel = booth.vendorName || '';
+    vendorLabel = vendor?.name || booth.vendorName || '';
+    statusLabel = vendorLabel ? `Sold to ${vendorLabel}` : 'Sold';
   } else if (booth.status === 'RESERVED') {
-    statusLabel = booth.vendorName ? `Reserved for ${booth.vendorName}` : 'Reserved';
-    vendorLabel = booth.vendorName || '';
+    vendorLabel = vendor?.name || booth.vendorName || '';
+    statusLabel = vendorLabel ? `Reserved for ${vendorLabel}` : 'Reserved';
   } else if (booth.status === 'BLOCKED') {
     statusLabel = 'Not for sale';
   } else if (booth.status === 'AVAILABLE') {
@@ -354,6 +356,18 @@ export default function PublicMapClient({ params }: PublicMapClientProps) {
     }
   };
 
+  const focusBooth = (boothId: string) => {
+    const booth = mapData?.booths.find((candidate) => candidate.id === boothId);
+    if (!booth) return;
+    setHighlightBooth(booth.id);
+    setSelectedBooth(booth);
+    const node = document.querySelector<HTMLElement>(`[data-testid="booth-${CSS.escape(booth.label)}"]`);
+    if (transformRef.current && node) {
+      transformRef.current.zoomToElement(node, 2, reducedMotionRef.current ? 0 : 300);
+    }
+    node?.scrollIntoView({ block: 'center', behavior: reducedMotionRef.current ? 'auto' : 'smooth' });
+  };
+
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Escape' && selectedBooth) {
       setSelectedBooth(null);
@@ -470,6 +484,7 @@ export default function PublicMapClient({ params }: PublicMapClientProps) {
             </div>
           </div>
         </div>
+        <VendorDirectory vendors={mapData.vendors ?? []} onSelectBooth={focusBooth} />
       </div>
 
       {selectedBooth && (
@@ -477,6 +492,7 @@ export default function PublicMapClient({ params }: PublicMapClientProps) {
           booth={selectedBooth}
           legend={legendTiers}
           event={eventData || {}}
+          vendor={mapData.vendors?.find((candidate) => candidate.booth?.id === selectedBooth.id)}
           onClose={() => setSelectedBooth(null)}
         />
       )}

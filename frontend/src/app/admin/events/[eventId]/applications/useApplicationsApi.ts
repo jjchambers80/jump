@@ -36,6 +36,7 @@ export interface MetaPatch {
   tags?: string[];
   checkedIn?: boolean;
   checkedOut?: boolean;
+  publicProfile?: boolean;
 }
 
 /** Spec 019 phase 3: the meta PATCH for a row from any mount (the row knows its event). */

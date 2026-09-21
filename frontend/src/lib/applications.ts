@@ -442,6 +442,7 @@ export interface AdminApplication {
   boothLabel: string | null;
   /** Owned booth, or (spec 014 phase 2) the one HELD while the vendor pays. */
   booth: ApplicationBooth | null;
+  publicProfile: boolean;
   internalNote: string | null;
   tags: string[];
   checkedInAt: string | null;
