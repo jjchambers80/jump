@@ -458,6 +458,7 @@ export default function PublicMapClient({ params }: PublicMapClientProps) {
                 highlightBooth={highlightBooth ?? undefined}
                 transformRef={transformRef}
                 reducedMotion={reducedMotionRef.current}
+                tierSwatches={Object.fromEntries(mapData.legend.map((l) => [l.tierId, l.swatch]))}
               />
             </div>
           </div>

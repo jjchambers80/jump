@@ -39,6 +39,13 @@ interface MapCanvasProps {
   highlightBooth?: string;
   transformRef?: React.RefObject<ReactZoomPanPinchRef | null>;
   guides?: { axis: 'x' | 'y'; pos: number }[];
+  /** Legend swatch index per tier id; without it the swatch falls back to first-seen order. */
+  tierSwatches?: Record<string, number>;
+  /** Spec 014 phase 2 picker: booths of other tiers (faded) and booths that cannot be chosen. */
+  dimmedIds?: Set<string>;
+  disabledIds?: Set<string>;
+  /** Editor resize handles on selected booths (default); the picker shows a checkmark instead. */
+  selectionHandles?: boolean;
 }
 
 export default function MapCanvas({
@@ -63,6 +70,10 @@ export default function MapCanvas({
   highlightBooth,
   transformRef: externalTransformRef,
   guides,
+  tierSwatches,
+  dimmedIds,
+  disabledIds,
+  selectionHandles = true,
 }: MapCanvasProps) {
   const { resolvedTheme } = useTheme();
   const dark = resolvedTheme === 'dark';
@@ -134,7 +145,7 @@ export default function MapCanvas({
 
       {sortedBooths.map((booth) => {
         const tierIdx = booth.tierId
-          ? booths.findIndex((b) => b.tierId === booth.tierId) % 6
+          ? tierSwatches?.[booth.tierId] ?? booths.findIndex((b) => b.tierId === booth.tierId) % 6
           : -1;
         return (
           <Booth
@@ -147,6 +158,9 @@ export default function MapCanvas({
             onSelect={onSelect}
             onClick={onBoothClick}
             highlight={booth.id === highlightBooth}
+            dimmed={dimmedIds?.has(booth.id)}
+            disabled={disabledIds?.has(booth.id)}
+            handles={selectionHandles}
           />
         );
       })}

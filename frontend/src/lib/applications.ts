@@ -181,6 +181,18 @@ export interface AnswerView {
   image: { urls: Record<string, string> } | null;
 }
 
+/** A floor-map booth as an application sees it (spec 014). */
+export interface ApplicationBooth {
+  id: string;
+  mapId: string;
+  label: string;
+  status: 'AVAILABLE' | 'HELD' | 'SOLD' | 'RESERVED' | 'BLOCKED';
+  w: number | null;
+  h: number | null;
+  /** Set only while HELD. */
+  holdExpiresAt: string | null;
+}
+
 export interface ApplicantApplication {
   id: string;
   /** Order number of the application's order (spec 024); null on FREE forms. */
@@ -190,7 +202,8 @@ export interface ApplicantApplication {
   organization: { id: string; name: string } | null;
   status: ApplicationStatus;
   paymentStatus: PaymentStatus;
-  tier: { id: string; name: string } | null;
+  /** `mapBound` (spec 014): the tier is sold from the floor map, so an approved vendor picks a booth before paying. */
+  tier: { id: string; name: string; mapBound?: boolean } | null;
   amounts: TierAmounts & { currency: string };
   addOns: ApplicationAddOnLine[];
   /** Spec 018: organizer adjustments on the amount (discounts, fees), shown with their reasons. */
@@ -200,6 +213,10 @@ export interface ApplicantApplication {
   profile: ApplicantProfile;
   answers: AnswerView[];
   boothLabel: string | null;
+  /** Spec 014 phase 2: the booth owned (SOLD / RESERVED) or held while paying (HELD, with the deadline). */
+  booth?: ApplicationBooth | null;
+  /** Spec 014 phase 2: a saved card is charged off-session the moment a booth is chosen. */
+  hasCardOnFile?: boolean;
   submittedAt: string | null;
   decidedAt: string | null;
   paidAt: string | null;
@@ -241,6 +258,9 @@ export interface ApplicationRow {
   paymentDueAt: string | null;
   overdue: boolean;
   boothLabel: string | null;
+  /** Spec 014 phase 2: owned or held booth for the Booth column; `mapBound` tells "not chosen" from "no map". */
+  booth?: { id: string; label: string; status: ApplicationBooth['status'] } | null;
+  mapBound?: boolean;
   /** Spec 019 phase 3: organizer tags and on-site check-in (APPROVED only). */
   tags: string[];
   checkedInAt: string | null;
@@ -379,7 +399,7 @@ export interface AdminApplication {
   capacitySlot: 'NONE' | 'RESERVED' | 'APPROVED';
   contact: { id: string; email: string; firstName: string; lastName: string; accountCreatedAt: string | null };
   profile: ApplicantProfile;
-  tier: { id: string; name: string; price: number } | null;
+  tier: { id: string; name: string; price: number; mapBound?: boolean } | null;
   amounts: TierAmounts & { currency: string };
   /** What the tier + add-ons cost today vs the snapshot quoted at submission (PAID only; phase 3). */
   pricing: { currentApplicantPays: number; currentOrgReceives: number; changed: boolean } | null;
@@ -420,7 +440,8 @@ export interface AdminApplication {
   withdrawnBy: 'ORGANIZER' | 'APPLICANT' | 'SYSTEM' | null;
   withdrawReason: string | null;
   boothLabel: string | null;
-  booth: { id: string; label: string; mapId: string } | null;
+  /** Owned booth, or (spec 014 phase 2) the one HELD while the vendor pays. */
+  booth: ApplicationBooth | null;
   internalNote: string | null;
   tags: string[];
   checkedInAt: string | null;
@@ -531,6 +552,16 @@ export function formatDate(value?: string | null, withTime = false): string {
     year: 'numeric',
     ...(withTime ? { hour: 'numeric', minute: '2-digit' } : {}),
   });
+}
+
+/**
+ * Spec 014 phase 2: an approved vendor on a map-bound tier who still owes
+ * payment chooses a booth first — or finishes paying for the one they hold.
+ * A booth placed by staff (SOLD / RESERVED) keeps the plain pay-now path.
+ */
+export function needsBoothPicker(app: Pick<ApplicantApplication, 'status' | 'paymentStatus' | 'tier' | 'booth'>): boolean {
+  if (app.status !== 'APPROVED' || app.paymentStatus !== 'PAYMENT_DUE' || !app.tier?.mapBound) return false;
+  return !app.booth || app.booth.status === 'HELD';
 }
 
 /** Applicant-facing price line for a tier. */

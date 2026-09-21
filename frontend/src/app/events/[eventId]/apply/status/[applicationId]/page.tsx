@@ -2,14 +2,16 @@
 // email, right after submitting, or back from Stripe Checkout, with a signed
 // token in the URL. Paid applications can resume an abandoned Checkout or pay
 // an outstanding balance from here (phase 2); add-on lines (spec 012) are
-// itemised under the amount.
+// itemised under the amount. Approved vendors on a map-bound tier choose and
+// buy their booth here (spec 014 phase 2).
 'use client';
 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useState } from 'react';
-import api from '@/services/api';
-import { formatDate, money, PAYMENT_LABEL, STATUS_LABEL, STATUS_STYLE, type ApplicantApplication } from '@/lib/applications';
+import api, { mapsApi } from '@/services/api';
+import { formatDate, money, PAYMENT_LABEL, STATUS_LABEL, STATUS_STYLE, needsBoothPicker, type ApplicantApplication } from '@/lib/applications';
+import BoothPicker from '@/components/maps/BoothPicker';
 import ApplyShell from '../../ApplyShell';
 
 const STATUS_COPY: Record<ApplicantApplication['status'], string> = {
@@ -44,15 +46,21 @@ function StatusContent({ params }: { params: { eventId: string; applicationId: s
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const load = useCallback(() => {
+  const load = useCallback((): Promise<ApplicantApplication | null> => {
     if (!token) {
       setError('This link is missing its access token. Use the link from your email.');
-      return;
+      return Promise.resolve(null);
     }
-    api
+    return api
       .get<ApplicantApplication>(`/applications/${params.applicationId}/status?token=${encodeURIComponent(token)}`)
-      .then(setApp)
-      .catch((err) => setError(err?.message || 'Application not found'));
+      .then((next) => {
+        setApp(next);
+        return next;
+      })
+      .catch((err) => {
+        setError(err?.message || 'Application not found');
+        return null;
+      });
   }, [params.applicationId, token]);
 
   useEffect(() => {
@@ -88,6 +96,9 @@ function StatusContent({ params }: { params: { eventId: string; applicationId: s
         if (error) return <p role="alert" data-testid="apply-status-error" className="text-red-700 dark:text-red-300">{error}</p>;
         if (!app) return <p className="text-gray-600 dark:text-slate-400">Loading…</p>;
         const accountHref = event.organizationId ? `/organizations/${event.organizationId}/account` : null;
+        // Spec 014 phase 2: the picker owns paying while a booth is chosen or held;
+        // a booth placed by staff keeps the plain Pay button.
+        const pickBooth = needsBoothPicker(app);
         return (
           <div className="space-y-6" data-testid="apply-status">
             {checkout && CHECKOUT_NOTICE[checkout] && (
@@ -107,8 +118,19 @@ function StatusContent({ params }: { params: { eventId: string; applicationId: s
                 <span data-testid="apply-status-pill" className={`rounded-full px-3 py-1 text-sm font-semibold ${STATUS_STYLE[app.status]}`}>{STATUS_LABEL[app.status]}</span>
               </div>
               <p className="mt-4 text-gray-800 dark:text-slate-200">{STATUS_COPY[app.status]}</p>
-              {app.status === 'APPROVED' && app.boothLabel && (
-                <p className="mt-2 text-sm text-gray-700 dark:text-slate-300">Placement: <strong>{app.boothLabel}</strong></p>
+              {app.status === 'APPROVED' && (app.booth?.status === 'SOLD' || app.booth?.status === 'RESERVED' || (!app.booth && app.boothLabel)) && (
+                <p className="mt-2 text-sm text-gray-700 dark:text-slate-300" data-testid="apply-placement">
+                  {app.booth ? 'Booth' : 'Placement'}: <strong>{app.booth?.label ?? app.boothLabel}</strong>
+                  {app.booth?.w && app.booth?.h ? ` · ${app.booth.w}×${app.booth.h}` : ''}
+                  {app.booth && (
+                    <>
+                      {' · '}
+                      <Link href={`/events/${app.event.id}/map?booth=${encodeURIComponent(app.booth.label)}`} className="text-brand-link font-semibold hover:underline">
+                        See it on the map
+                      </Link>
+                    </>
+                  )}
+                </p>
               )}
               {app.form.kind === 'PAID' && (
                 <div className="mt-3 rounded-lg bg-gray-50 dark:bg-slate-900/40 p-3 text-sm text-gray-700 dark:text-slate-300" data-testid="apply-payment">
@@ -137,8 +159,12 @@ function StatusContent({ params }: { params: { eventId: string; applicationId: s
                       ))}
                     </ul>
                   )}
-                  {app.status !== 'DRAFT' && PAYMENT_COPY[app.paymentStatus] && <p className="mt-1 text-gray-600 dark:text-slate-400">{PAYMENT_COPY[app.paymentStatus]}</p>}
-                  {(app.canResume || app.canPay) && (
+                  {app.status !== 'DRAFT' && (pickBooth || PAYMENT_COPY[app.paymentStatus]) && (
+                    <p className="mt-1 text-gray-600 dark:text-slate-400">
+                      {pickBooth ? 'Choose your booth below to pay and confirm your spot.' : PAYMENT_COPY[app.paymentStatus]}
+                    </p>
+                  )}
+                  {(app.canResume || app.canPay) && !pickBooth && (
                     <div className="mt-3 flex flex-wrap items-center gap-3">
                       <button
                         type="button"
@@ -152,6 +178,17 @@ function StatusContent({ params }: { params: { eventId: string; applicationId: s
                       {actionError && <span role="alert" className="text-red-700 dark:text-red-300">{actionError}</span>}
                     </div>
                   )}
+                </div>
+              )}
+              {pickBooth && token && (
+                <div className="mt-4 border-t border-gray-200 pt-4 dark:border-slate-700">
+                  <BoothPicker
+                    eventId={app.event.id}
+                    application={app}
+                    chooseBooth={(boothId) => mapsApi.chooseBooth(app.id, boothId, token)}
+                    payNow={() => api.post<{ url: string }>(`/applications/${app.id}/pay?token=${encodeURIComponent(token)}`, {})}
+                    refresh={load}
+                  />
                 </div>
               )}
               <p className="mt-4 text-xs text-gray-500 dark:text-slate-400">
