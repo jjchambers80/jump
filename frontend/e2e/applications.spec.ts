@@ -89,7 +89,7 @@ function adminApp(status = 'SUBMITTED', decisions: unknown[] = []) {
     capacitySlot: 'NONE',
     contact: { id: 'c1', email: 'pat@retroweekly.example', firstName: 'Pat', lastName: 'Press', accountCreatedAt: null },
     profile,
-    tier: null,
+    tier: null as null | Record<string, unknown>,
     amounts,
     payment: { stripePaymentIntentId: null, stripePaymentMethodId: null, stripeAccountId: null, applicationFee: null, chargeAttempts: 0, paidAt: null, paymentDueAt: null, overdue: false },
     answers: [
@@ -164,7 +164,12 @@ async function mockAdmin(page: Page, baseURL: string, role: 'ADMIN' | 'ORGANIZER
   );
   await page.route(`${API}/events/${EVENT_ID}`, (route) => route.fulfill(json(event)));
 
-  const state = { app: adminApp(), forms: [adminPress], templates: [{ action: 'APPROVED', subject: 'You are approved for {{event.name}}', body: 'Hi {{applicant.firstName}},\n\nGood news.', isDefault: true, updatedAt: null }], digest: { enabled: true, lastRunAt: null as string | null } };
+  const state: {
+    app: ReturnType<typeof adminApp> & Record<string, unknown>;
+    forms: typeof adminPress[];
+    templates: { action: string; subject: string; body: string; isDefault: boolean; updatedAt: string | null }[];
+    digest: { enabled: boolean; lastRunAt: string | null };
+  } = { app: adminApp(), forms: [adminPress], templates: [{ action: 'APPROVED', subject: 'You are approved for {{event.name}}', body: 'Hi {{applicant.firstName}},\n\nGood news.', isDefault: true, updatedAt: null }], digest: { enabled: true, lastRunAt: null as string | null } };
   const calls: { method: string; path: string; body?: unknown }[] = [];
 
   await page.route(`${API}/admin/**`, async (route) => {
@@ -456,10 +461,10 @@ test('admin detail shows the price-changed note for a PAID application', async (
     ...adminApp(),
     form: { id: 'form-vendor', name: 'Vendor Space', slug: 'vendor-space', kind: 'PAID', chargeTiming: 'APPROVAL', feeMode: 'PASS' },
     paymentStatus: 'CARD_ON_FILE',
-    tier: { id: 't1', name: '10x10', price: 300 },
+    tier: { id: 't1', name: '10x10', price: 300 } as null | { id: string; name: string; price: number },
     amounts: { ...amounts, subtotal: 275, platformFee: 13.75, processingFee: 14.55, applicantPays: 303.3, orgReceives: 275 },
     pricing: { currentApplicantPays: 330.55, currentOrgReceives: 300, changed: true },
-  } as typeof api.state.app;
+  };
   await page.goto(`/admin/events/${EVENT_ID}/applications/${APP_ID}`);
   const note = page.getByTestId('application-price-changed');
   await expect(note).toContainText('Price changed since submission');

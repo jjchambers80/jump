@@ -27,7 +27,7 @@ test.describe('signup subscribe step', () => {
   });
 
   async function mock(page: Page, opts: { billing: boolean }) {
-    let pending = { id: 'org-new-1', name: 'New Org', slug: 'new-org', createdAt: '2027-01-01T00:00:00.000Z', step: 'subscribe', onboarding: { version: 1 } };
+    let pending: { id: string; name: string; slug: string; createdAt: string; step: string; onboarding: Record<string, unknown> } = { id: 'org-new-1', name: 'New Org', slug: 'new-org', createdAt: '2027-01-01T00:00:00.000Z', step: 'subscribe', onboarding: { version: 1 } };
     const calls: string[] = [];
     await page.route(`${API}/**`, async (route) => {
       const path = new URL(route.request().url()).pathname;

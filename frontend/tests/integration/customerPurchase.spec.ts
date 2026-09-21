@@ -23,7 +23,7 @@ test.describe('Customer Ticket Purchase Journey', () => {
     const firstEvent = eventCards.first();
     await expect(firstEvent).toBeVisible();
 
-    const eventName = await firstEvent.locator('[data-testid="event-name"]').textContent();
+    const eventName = (await firstEvent.locator('[data-testid="event-name"]').textContent())!;
     await firstEvent.locator('[data-testid="view-event-button"]').click();
 
     // Step 3: View event details

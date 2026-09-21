@@ -68,8 +68,7 @@ jobs:
       - run: npm run db:generate
       - name: Typecheck
         working-directory: frontend
-        # tsconfig.ci.json excludes e2e/ and tests/ until their 8 type errors are fixed (Kanban: JUMP-CI-TYPES)
-        run: npx tsc --noEmit -p tsconfig.ci.json
+        run: npx tsc --noEmit -p .
       - name: Unit tests
         working-directory: frontend
         run: npm run test:unit

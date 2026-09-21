@@ -49,7 +49,7 @@ const pressTemplate = {
   createdAt: '2026-09-10T00:00:00.000Z',
   updatedAt: '2026-09-11T00:00:00.000Z',
 };
-const summary = (t: typeof boothTemplate) => ({ id: t.id, name: t.name, kind: t.kind, tierCount: t.definition.tiers.length, questionCount: t.definition.questions.length, sourceFormId: t.sourceFormId, createdAt: t.createdAt, updatedAt: t.updatedAt });
+const summary = (t: typeof boothTemplate | typeof pressTemplate) => ({ id: t.id, name: t.name, kind: t.kind, tierCount: t.definition.tiers.length, questionCount: t.definition.questions.length, sourceFormId: t.sourceFormId, createdAt: t.createdAt, updatedAt: t.updatedAt });
 
 const vendorForm = {
   id: 'form-vendor',
@@ -94,7 +94,11 @@ async function mockAdmin(page: Page, baseURL: string, role: 'ADMIN' | 'ORGANIZER
   );
   await page.route(`${API}/events/${EXPO.id}`, (route) => route.fulfill(json({ ...EXPO, organizationId: ORG_ID, venue: { id: 'v1', name: 'RCC' }, priceTiers: [] })));
 
-  const state = { templates: [{ ...boothTemplate }, { ...pressTemplate }], form: { ...vendorForm }, createdForms: [] as { id: string; eventId: string; body: unknown }[] };
+  const state: {
+    templates: (typeof boothTemplate | typeof pressTemplate)[];
+    form: Omit<typeof vendorForm, 'tiers' | 'questions'> & { tiers: Record<string, unknown>[]; questions: Record<string, unknown>[] };
+    createdForms: { id: string; eventId: string; body: unknown }[];
+  } = { templates: [{ ...boothTemplate }, { ...pressTemplate }], form: { ...vendorForm }, createdForms: [] as { id: string; eventId: string; body: unknown }[] };
   const calls: { method: string; path: string; body?: unknown }[] = [];
   let seq = 0;
 
