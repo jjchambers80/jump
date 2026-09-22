@@ -11,6 +11,7 @@ import api from '@/services/api';
 import { useOrg } from '@/components/OrgContext';
 import { TierCard, TierEditDialog, type TierFormData } from '@/components/TierEditDialog';
 import SlugField from '@/components/SlugField';
+import QuickVenueDialog, { type CreatedVenue } from '@/components/QuickVenueDialog';
 
 interface Venue {
   id: string;
@@ -79,6 +80,7 @@ export default function CreateEventPage() {
   const [slugError, setSlugError] = useState<string | null>(null);
   const [priceTiers, setPriceTiers] = useState<PriceTierInput[]>([newTier()]);
   const [editingTierKey, setEditingTierKey] = useState<string | null>(null);
+  const [showVenueDialog, setShowVenueDialog] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -113,6 +115,13 @@ export default function CreateEventPage() {
     fetchVenues();
     fetchPresets();
   }, [fetchVenues, fetchPresets]);
+
+  // Quick-add venue: append and select it, no refetch needed.
+  const handleVenueCreated = (venue: CreatedVenue) => {
+    setVenues((prev) => [...prev, { id: venue.id, name: venue.name, address: venue.address }]);
+    setVenueId(venue.id);
+    setShowVenueDialog(false);
+  };
 
   const addTierFromPreset = (preset: TierPreset) => {
     const key = crypto.randomUUID();
@@ -284,21 +293,37 @@ export default function CreateEventPage() {
             </div>
 
             <div>
-              <label className={labelClass}>Venue *</label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="event-venue" className="block text-sm font-medium text-gray-700 dark:text-slate-300">
+                  Venue *
+                </label>
+                {selectedOrgId && (
+                  <button
+                    type="button"
+                    onClick={() => setShowVenueDialog(true)}
+                    className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
+                  >
+                    + New venue
+                  </button>
+                )}
+              </div>
               {venuesLoading ? (
                 <div className="animate-pulse h-10 bg-gray-200 dark:bg-slate-700 rounded" />
               ) : venues.length === 0 ? (
                 <p className="text-sm text-gray-500 dark:text-slate-400">
-                  No venues found.{' '}
-                  <a
-                    href="/admin/venues"
+                  No venues yet.{' '}
+                  <button
+                    type="button"
+                    onClick={() => setShowVenueDialog(true)}
                     className="text-indigo-600 dark:text-indigo-400 hover:underline"
                   >
-                    Create one first
-                  </a>
+                    Create one
+                  </button>{' '}
+                  to continue.
                 </p>
               ) : (
                 <select
+                  id="event-venue"
                   value={venueId}
                   onChange={(e) => setVenueId(e.target.value)}
                   className={inputClass}
@@ -446,6 +471,15 @@ export default function CreateEventPage() {
           </button>
         </div>
       </form>
+
+      {/* Rendered outside the event form: the dialog is its own <form> */}
+      {showVenueDialog && selectedOrgId && (
+        <QuickVenueDialog
+          orgId={selectedOrgId}
+          onClose={() => setShowVenueDialog(false)}
+          onCreated={handleVenueCreated}
+        />
+      )}
     </div>
   );
 }

@@ -14,6 +14,7 @@ import ImageUploader from '@/components/ImageUploader';
 import { TierCard, TierEditDialog, type TierFormData } from '@/components/TierEditDialog';
 import AddOnsSection from './AddOnsSection';
 import SlugField from '@/components/SlugField';
+import QuickVenueDialog, { type CreatedVenue } from '@/components/QuickVenueDialog';
 
 interface Venue {
   id: string;
@@ -172,6 +173,7 @@ function EditEventContent() {
 
   const [venues, setVenues] = useState<Venue[]>([]);
   const [venuesLoading, setVenuesLoading] = useState(false);
+  const [showVenueDialog, setShowVenueDialog] = useState(false);
   const [presets, setPresets] = useState<TierPreset[]>([]);
   const [showPresetMenu, setShowPresetMenu] = useState(false);
   const [eventData, setEventData] = useState<EventDetail | null>(null);
@@ -263,6 +265,13 @@ function EditEventContent() {
     fetchVenues();
     fetchPresets();
   }, [fetchVenues, fetchPresets]);
+
+  // Quick-add venue: append and select it, no refetch needed.
+  const handleVenueCreated = (venue: CreatedVenue) => {
+    setVenues((prev) => [...prev, { id: venue.id, name: venue.name, address: venue.address }]);
+    setVenueId(venue.id);
+    setShowVenueDialog(false);
+  };
 
   const addTierFromPreset = (preset: TierPreset) => {
     const key = crypto.randomUUID();
@@ -608,11 +617,23 @@ function EditEventContent() {
             </div>
 
             <div>
-              <label className={labelClass}>Venue *</label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="event-venue" className="block text-sm font-medium text-gray-700 dark:text-slate-300">
+                  Venue *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowVenueDialog(true)}
+                  className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
+                >
+                  + New venue
+                </button>
+              </div>
               {venuesLoading ? (
                 <div className="animate-pulse h-10 bg-gray-200 dark:bg-slate-700 rounded" />
               ) : (
                 <select
+                  id="event-venue"
                   value={venueId}
                   onChange={(e) => setVenueId(e.target.value)}
                   className={inputClass}
@@ -773,6 +794,15 @@ function EditEventContent() {
           </button>
         </div>
       </form>
+
+      {/* Rendered outside the event form: the dialog is its own <form> */}
+      {showVenueDialog && (
+        <QuickVenueDialog
+          orgId={orgId}
+          onClose={() => setShowVenueDialog(false)}
+          onCreated={handleVenueCreated}
+        />
+      )}
 
       {/* Add-ons (spec 012) — saved through their own API, outside the event form */}
       {eventData && (
