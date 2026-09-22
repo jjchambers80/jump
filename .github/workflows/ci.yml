@@ -18,6 +18,78 @@ env:
   NODE_VERSION: 22
 
 jobs:
+  migration-safety:
+    name: migration safety
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: jump_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/jump_test?schema=public
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run db:generate
+
+      # ── Check 1: no existing migration file was edited or deleted ──
+      - name: Immutable applied migrations
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          modified=$(git diff --name-status "$BASE_SHA...HEAD" -- packages/db/prisma/migrations/ | { grep -v '^A[[:space:]]' || true; })
+          if [ -n "$modified" ]; then
+            echo "::error::Applied migration files were modified or deleted. This is NOT allowed."
+            echo "::error::If you need to change the schema, create a NEW migration (npm run db:migrate)."
+            echo ""
+            echo "Offending changes:"
+            echo "$modified"
+            exit 1
+          fi
+          echo "No applied migrations modified — OK"
+
+      # ── Check 2: all migrations replay cleanly and the database matches schema.prisma ──
+      - name: Migration replay verification
+        working-directory: packages/db
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/jump_test?schema=public
+        run: |
+          set -e
+          echo "=== Applying all migrations ==="
+          npx prisma migrate deploy
+          echo ""
+          echo "=== Comparing database schema to schema.prisma ==="
+          set +e
+          diff_output=$(npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel ./prisma/schema.prisma --exit-code 2>&1)
+          diff_exit=$?
+          set -e
+          echo "$diff_output"
+          if [ $diff_exit -ne 0 ]; then
+            echo "::error::Migration history does not produce schema.prisma."
+            echo "::error::If you edited schema.prisma, run 'npm run db:migrate' to create a matching migration."
+            echo "::error::If you edited a migration file, revert the change and create a new migration instead."
+            exit 1
+          fi
+          echo "Migrations and schema are in sync — OK"
+
+  # ── Backend tests (unit + contract + integration) ────────────────────
   backend:
     name: backend tests
     runs-on: ubuntu-latest
@@ -54,6 +126,7 @@ jobs:
         working-directory: backend
         run: npm test -- --runInBand tests/contract tests/integration
 
+  # ── Frontend typecheck + unit tests ──────────────────────────────────
   frontend:
     name: frontend typecheck + unit
     runs-on: ubuntu-latest
