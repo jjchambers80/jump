@@ -51,7 +51,7 @@ export default function OrgSwitcher() {
   };
 
   const handleLogout = () => {
-    signOut({ callbackUrl: '/events' });
+    signOut({ callbackUrl: '/admin' });
   };
 
   const userName = session?.user?.name || 'User';
