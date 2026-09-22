@@ -13,7 +13,8 @@ import { StateSelect } from '@/components/StateSelect';
 import { useOrg } from '@/components/OrgContext';
 import ImageUploader from '@/components/ImageUploader';
 import SlugField from '@/components/SlugField';
-import TimeZoneSelect from '@/components/TimeZoneSelect';
+import VenueTimeZoneField from '@/components/VenueTimeZoneField';
+import { timeZoneLabel } from '@/lib/timeZones';
 
 interface Venue {
   id: string;
@@ -23,7 +24,10 @@ interface Venue {
   city: string | null;
   state: string | null;
   postalCode: string | null;
+  country?: string;
   timezone: string;
+  /** Spec 033: DERIVED / MANUAL / DEFAULT — MANUAL survives an address edit. */
+  timezoneSource?: 'DERIVED' | 'MANUAL' | 'DEFAULT';
   isPublic: boolean;
   logoUrl: string | null;
   organizationId: string;
@@ -41,7 +45,8 @@ interface VenueFormData {
   city: string;
   state: string;
   postalCode: string;
-  timezone: string;
+  /** null follows the address (spec 033); a value is the organizer's own choice. */
+  timezone: string | null;
   isPublic: boolean;
 }
 
@@ -52,7 +57,7 @@ const EMPTY_FORM: VenueFormData = {
   city: '',
   state: '',
   postalCode: '',
-  timezone: 'America/New_York',
+  timezone: null,
   isPublic: true,
 };
 
@@ -110,7 +115,9 @@ export default function VenuesPage() {
       city: venue.city || '',
       state: venue.state || '',
       postalCode: venue.postalCode || '',
-      timezone: venue.timezone,
+      // Only a hand-picked zone reopens as an override; a derived one follows
+      // the address so editing the ZIP re-resolves it.
+      timezone: venue.timezoneSource === 'MANUAL' ? venue.timezone : null,
       isPublic: venue.isPublic,
     });
     setEditingId(venue.id);
@@ -164,14 +171,21 @@ export default function VenuesPage() {
       setSaving(true);
       setError(null);
 
+      // Spec 033: a value is the organizer's own choice (stored MANUAL). On an
+      // edit, null is sent explicitly to drop a previous override and re-derive
+      // from the address; on a create there is nothing to drop, so the key is
+      // omitted and the backend derives it.
+      const { timezone, ...rest } = formData;
+      const payload = timezone ? { ...rest, timezone } : editingId ? { ...rest, timezone: null } : rest;
+
       let savedVenue: Venue;
       if (editingId) {
         savedVenue = await api.patch<Venue>(
           `/organizations/${selectedOrgId}/venues/${editingId}`,
-          formData
+          payload
         );
       } else {
-        savedVenue = await api.post<Venue>(`/organizations/${selectedOrgId}/venues`, formData);
+        savedVenue = await api.post<Venue>(`/organizations/${selectedOrgId}/venues`, payload);
       }
 
       if (selectedLogo) {
@@ -289,8 +303,10 @@ export default function VenuesPage() {
                 error={slugError}
               />
             </div>
-            <TimeZoneSelect
+            <VenueTimeZoneField
               id="venue-timezone"
+              state={formData.state}
+              postalCode={formData.postalCode}
               value={formData.timezone}
               onChange={(value) => setFormData({ ...formData, timezone: value })}
             />
@@ -427,7 +443,7 @@ export default function VenuesPage() {
                     </h3>
                     <p className="mt-1 break-words text-sm text-gray-500 dark:text-slate-400">{venue.address}</p>
                     <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-gray-400 dark:text-slate-500">
-                      <span>🕐 {venue.timezone}</span>
+                      <span>🕐 {timeZoneLabel(venue.timezone)}</span>
                       <span>{venue.isPublic ? '🌐 Public' : '🔒 Private'}</span>
                       {venue._count && (
                         <span>

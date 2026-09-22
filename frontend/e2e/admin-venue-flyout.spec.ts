@@ -63,8 +63,13 @@ test('creates a venue from the event form and selects it', async ({ page }) => {
   await dialog.getByLabel('Postal code').fill('27601');
   await dialog.getByLabel('URL slug').fill('Raleigh Convention Center');
   await dialog.getByLabel(/Public venue page/).uncheck();
-  // The timezone field is a dropdown of every IANA zone, not free text.
-  await dialog.getByLabel('Timezone').selectOption('America/Chicago');
+  // Spec 033: the zone is derived from the address and shown as text. A North
+  // Carolina ZIP resolves to Eastern without the organizer touching anything.
+  await expect(dialog.getByTestId('venue-flyout-timezone-resolved')).toContainText('New York');
+  // "Change" reveals the picker for the rare case the derivation is wrong.
+  await dialog.getByRole('button', { name: 'Change' }).click();
+  await dialog.getByLabel('Time zone').selectOption('America/Chicago');
+  await expect(dialog.getByTestId('venue-flyout-timezone-resolved')).toContainText('Chicago');
   await dialog.getByRole('button', { name: 'Create venue' }).click();
 
   await expect(dialog).toHaveCount(0);

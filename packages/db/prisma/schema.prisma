@@ -675,8 +675,15 @@ model Venue {
   postalCode     String?
   logoUrl        String?
   imageId        String?
-  timezone       String  @default("America/New_York")
-  isPublic       Boolean @default(true)
+  // Spec 033 phase 2: `country` exists so time-zone derivation can decline for a
+  // non-US address rather than misapply the US state table. It is not an
+  // organizer-facing field yet.
+  country        String              @default("US")
+  timezone       String              @default("America/New_York")
+  // Where `timezone` came from, so an address edit knows whether it may
+  // re-derive. Mirrors the Event.taxRateSource pattern.
+  timezoneSource VenueTimeZoneSource @default(DEFAULT)
+  isPublic       Boolean             @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1098,6 +1105,13 @@ enum OrganizationStatus {
 enum TaxSource {
   STRIPE
   MANUAL
+}
+
+// Spec 033 phase 2: how a venue's `timezone` was decided.
+enum VenueTimeZoneSource {
+  DERIVED // resolved from country + postal code + state
+  MANUAL // the organizer chose it explicitly
+  DEFAULT // never resolved — pre-033 rows, or nothing to resolve from
 }
 
 enum ThemeMode {
