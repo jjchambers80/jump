@@ -63,6 +63,7 @@ interface StateSelectProps {
   placeholder?: string;
   required?: boolean;
   className?: string;
+  id?: string;
 }
 
 export function StateSelect({
@@ -72,15 +73,17 @@ export function StateSelect({
   placeholder = 'Select state',
   required = false,
   className,
+  id,
 }: StateSelectProps) {
   return (
     <div>
       {label && (
-        <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+        <label htmlFor={id} className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
           {label}{required && ' *'}
         </label>
       )}
       <select
+        id={id}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         required={required}
