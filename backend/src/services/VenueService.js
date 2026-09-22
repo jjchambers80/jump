@@ -8,8 +8,43 @@ import { formatEventSummary } from '../utils/eventSummary.js';
 import taxService from './TaxService.js';
 import { rethrowSlugConflict, resolveUniqueSlug } from '../utils/slug.js';
 import { findByPublicIdentifier } from '../utils/publicIdentifier.js';
+import { resolveVenueTimeZone, DEFAULT_ZONE } from '../utils/usTimeZones.js';
 
 class VenueService {
+  /**
+   * The zone a venue falls back to when its address says nothing — no postal
+   * code yet, or a non-US country.
+   *
+   * Spec 021 adds `Organization.timezone` as the store's own zone; when it
+   * lands, read it here and this stays the only place that decides
+   * (spec 033 §9.4). Until then every organization falls back to Eastern, which
+   * is what the schema default has always been.
+   */
+  defaultTimeZoneFor(_organization) {
+    return DEFAULT_ZONE;
+  }
+
+  /**
+   * Spec 033 phase 2: work out a venue's zone and where it came from.
+   *
+   * An explicit `timezone` in the request is the organizer's own choice and is
+   * always MANUAL — it is never re-derived by a later address edit. Otherwise
+   * the address decides; when it cannot, the row keeps the fallback and stays
+   * DEFAULT so a later edit can still resolve it.
+   */
+  _resolveTimeZone(data, { organization = null } = {}) {
+    if (data.timezone) return { timezone: data.timezone, timezoneSource: 'MANUAL' };
+
+    const derived = resolveVenueTimeZone({
+      country: data.country,
+      state: data.state,
+      postalCode: data.postalCode,
+    });
+    if (derived.timezone) return { timezone: derived.timezone, timezoneSource: 'DERIVED' };
+
+    return { timezone: this.defaultTimeZoneFor(organization), timezoneSource: 'DEFAULT' };
+  }
+
   /** Create a new venue within an organization. */
   async createVenue(orgId, data) {
     const slugState = await resolveUniqueSlug(prisma.venue, {
@@ -27,7 +62,8 @@ class VenueService {
           city: data.city || null,
           state: data.state || null,
           postalCode: data.postalCode || null,
-          timezone: data.timezone || 'America/New_York',
+          country: data.country || 'US',
+          ...this._resolveTimeZone(data),
           isPublic: data.isPublic !== undefined ? data.isPublic : true,
         },
       });
@@ -156,7 +192,17 @@ class VenueService {
   async updateVenue(orgId, id, data) {
     const existing = await prisma.venue.findFirst({
       where: { id, organizationId: orgId },
-      select: { id: true, name: true, slug: true, slugCustomized: true },
+      // country / postalCode / state / timezoneSource feed the spec 033 re-derive rule.
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        slugCustomized: true,
+        country: true,
+        state: true,
+        postalCode: true,
+        timezoneSource: true,
+      },
     });
     if (!existing) {
       throw new NotFoundError('Venue not found');
@@ -180,8 +226,35 @@ class VenueService {
     if (data.city !== undefined) updateData.city = data.city;
     if (data.state !== undefined) updateData.state = data.state;
     if (data.postalCode !== undefined) updateData.postalCode = data.postalCode;
-    if (data.timezone !== undefined) updateData.timezone = data.timezone;
+    if (data.country !== undefined) updateData.country = data.country;
     if (data.isPublic !== undefined) updateData.isPublic = data.isPublic;
+
+    // Spec 033 phase 2. An explicit zone is the organizer's choice and sticks.
+    // Otherwise an address change re-derives — but only for a venue whose zone
+    // was never chosen by hand, so a MANUAL override is not silently undone.
+    const clearingOverride = data.timezone === null;
+    if (data.timezone) {
+      updateData.timezone = data.timezone;
+      updateData.timezoneSource = 'MANUAL';
+    } else if (
+      clearingOverride ||
+      (existing.timezoneSource !== 'MANUAL' &&
+        (data.state !== undefined || data.postalCode !== undefined || data.country !== undefined))
+    ) {
+      const derived = resolveVenueTimeZone({
+        country: data.country ?? existing.country,
+        state: data.state ?? existing.state,
+        postalCode: data.postalCode ?? existing.postalCode,
+      });
+      if (derived.timezone) {
+        updateData.timezone = derived.timezone;
+        updateData.timezoneSource = 'DERIVED';
+      } else if (clearingOverride) {
+        // Nothing to derive from any more: fall back and let a later edit resolve it.
+        updateData.timezone = this.defaultTimeZoneFor(null);
+        updateData.timezoneSource = 'DEFAULT';
+      }
+    }
 
     let venue;
     try {

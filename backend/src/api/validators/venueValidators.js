@@ -9,7 +9,23 @@ import { isValidTimeZone } from '../../utils/locales.js';
 // Zones are checked against the runtime's own IANA database (Intl), so the
 // multi-segment ids the venue form's dropdown offers — America/Argentina/
 // Buenos_Aires, Etc/GMT+5, UTC — are accepted, not just Region/City.
-const VENUE_FIELDS = new Set(['name', 'slug', 'address', 'city', 'state', 'postalCode', 'timezone', 'isPublic']);
+const VENUE_FIELDS = new Set(['name', 'slug', 'address', 'city', 'state', 'postalCode', 'country', 'timezone', 'isPublic']);
+
+// Spec 033 phase 2: ISO 3166-1 alpha-2. Not an organizer-facing field yet — it
+// exists so time-zone derivation can decline for a non-US address instead of
+// applying the US state table to it.
+function normalizeCountry(body) {
+  if (body.country === undefined) return null;
+  if (body.country === null || body.country === '') {
+    body.country = 'US';
+    return null;
+  }
+  if (typeof body.country !== 'string') return 'Country must be a two-letter ISO country code';
+  const code = body.country.trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(code)) return 'Country must be a two-letter ISO country code';
+  body.country = code;
+  return null;
+}
 
 /**
  * Venue.state keys the organization's tax regions (spec 009), so it must be a
@@ -75,6 +91,9 @@ export const validateCreateVenue = (req, res, next) => {
   const stateError = normalizeState(req.body);
   if (stateError) return next(new ValidationError(stateError));
 
+  const countryError = normalizeCountry(req.body);
+  if (countryError) return next(new ValidationError(countryError));
+
   // Normalize
   req.body.name = name.trim();
   req.body.address = address.trim();
@@ -114,7 +133,8 @@ export const validateUpdateVenue = (req, res, next) => {
     req.body.address = address.trim();
   }
 
-  if (timezone !== undefined) {
+  // Spec 033 phase 2: null means "stop overriding, follow the address again".
+  if (timezone !== undefined && timezone !== null) {
     if (!isValidTimeZone(timezone)) {
       return next(new ValidationError('Timezone must be a valid IANA timezone'));
     }
@@ -126,6 +146,9 @@ export const validateUpdateVenue = (req, res, next) => {
 
   const stateError = normalizeState(req.body);
   if (stateError) return next(new ValidationError(stateError));
+
+  const countryError = normalizeCountry(req.body);
+  if (countryError) return next(new ValidationError(countryError));
 
   try {
     if (req.body.slug !== undefined) req.body.slug = normalizeCustomSlug(req.body.slug);

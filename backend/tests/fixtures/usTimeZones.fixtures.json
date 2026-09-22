@@ -1,0 +1,232 @@
+{
+  "_comment": [
+    "Spec 033 phase 2 parity fixtures for resolveVenueTimeZone.",
+    "Asserted by BOTH backend/tests/unit/usTimeZones.test.js (Jest) and",
+    "frontend/tests/unit/usTimeZones.test.ts (Vitest): the venue form previews",
+    "the derivation client-side and the backend stores it, so the two must agree",
+    "exactly or an organizer sees one zone and saves another.",
+    "`confident: false` is not a failure — it means the UI asks the organizer to",
+    "confirm instead of asserting a guess."
+  ],
+
+  "cases": [
+    {
+      "name": "single-zone state, ZIP confirms it",
+      "address": { "state": "CO", "postalCode": "80218" },
+      "timezone": "America/Denver",
+      "confident": true,
+      "reason": "STATE"
+    },
+    {
+      "name": "single-zone state with no ZIP is still confident",
+      "address": { "state": "NY" },
+      "timezone": "America/New_York",
+      "confident": true,
+      "reason": "STATE"
+    },
+    {
+      "name": "California",
+      "address": { "state": "CA", "postalCode": "94115" },
+      "timezone": "America/Los_Angeles",
+      "confident": true,
+      "reason": "STATE"
+    },
+    {
+      "name": "North Carolina",
+      "address": { "state": "NC", "postalCode": "27601" },
+      "timezone": "America/New_York",
+      "confident": true,
+      "reason": "STATE"
+    },
+
+    {
+      "name": "Arizona does not observe DST",
+      "address": { "state": "AZ", "postalCode": "85004" },
+      "timezone": "America/Phoenix",
+      "confident": false,
+      "reason": "SPLIT_STATE"
+    },
+    {
+      "name": "Navajo Nation observes DST, so it is Mountain proper — and the prefix straddles the Hopi boundary",
+      "address": { "state": "AZ", "postalCode": "86515" },
+      "timezone": "America/Denver",
+      "confident": false,
+      "reason": "ZIP_SPANS_BOUNDARY"
+    },
+
+    {
+      "name": "Indiana is mostly Eastern",
+      "address": { "state": "IN", "postalCode": "46204" },
+      "timezone": "America/New_York",
+      "confident": true,
+      "reason": "ZIP"
+    },
+    {
+      "name": "north-west Indiana (Gary) runs on Chicago time",
+      "address": { "state": "IN", "postalCode": "46402" },
+      "timezone": "America/Chicago",
+      "confident": true,
+      "reason": "ZIP"
+    },
+
+    {
+      "name": "east Tennessee is Eastern",
+      "address": { "state": "TN", "postalCode": "37902" },
+      "timezone": "America/New_York",
+      "confident": true,
+      "reason": "ZIP"
+    },
+    {
+      "name": "Nashville is Central",
+      "address": { "state": "TN", "postalCode": "37203" },
+      "timezone": "America/Chicago",
+      "confident": true,
+      "reason": "ZIP"
+    },
+
+    {
+      "name": "the Florida panhandle is Central",
+      "address": { "state": "FL", "postalCode": "32502" },
+      "timezone": "America/Chicago",
+      "confident": true,
+      "reason": "ZIP"
+    },
+    {
+      "name": "Miami is Eastern",
+      "address": { "state": "FL", "postalCode": "33101" },
+      "timezone": "America/New_York",
+      "confident": true,
+      "reason": "ZIP"
+    },
+    {
+      "name": "Tallahassee is Eastern but its prefix reaches the Apalachicola line",
+      "address": { "state": "FL", "postalCode": "32301" },
+      "timezone": "America/New_York",
+      "confident": false,
+      "reason": "ZIP_SPANS_BOUNDARY"
+    },
+
+    {
+      "name": "El Paso is Mountain even though Texas is Central",
+      "address": { "state": "TX", "postalCode": "79901" },
+      "timezone": "America/Denver",
+      "confident": true,
+      "reason": "ZIP"
+    },
+    {
+      "name": "Houston is Central",
+      "address": { "state": "TX", "postalCode": "77002" },
+      "timezone": "America/Chicago",
+      "confident": false,
+      "reason": "SPLIT_STATE"
+    },
+
+    {
+      "name": "the Idaho panhandle is Pacific",
+      "address": { "state": "ID", "postalCode": "83814" },
+      "timezone": "America/Los_Angeles",
+      "confident": true,
+      "reason": "ZIP"
+    },
+    {
+      "name": "Malheur County, Oregon runs on Mountain time",
+      "address": { "state": "OR", "postalCode": "97914" },
+      "timezone": "America/Denver",
+      "confident": true,
+      "reason": "ZIP"
+    },
+    {
+      "name": "the western Upper Peninsula shares prefixes with Eastern Michigan, so it asks rather than guesses",
+      "address": { "state": "MI", "postalCode": "49801" },
+      "timezone": "America/New_York",
+      "confident": false,
+      "reason": "SPLIT_STATE"
+    },
+    {
+      "name": "West Wendover, Nevada keeps Mountain time",
+      "address": { "state": "NV", "postalCode": "89883" },
+      "timezone": "America/Denver",
+      "confident": true,
+      "reason": "ZIP"
+    },
+    {
+      "name": "western Kentucky is Central",
+      "address": { "state": "KY", "postalCode": "42101" },
+      "timezone": "America/Chicago",
+      "confident": true,
+      "reason": "ZIP"
+    },
+    {
+      "name": "Louisville is Eastern",
+      "address": { "state": "KY", "postalCode": "40202" },
+      "timezone": "America/New_York",
+      "confident": true,
+      "reason": "ZIP"
+    },
+
+    {
+      "name": "Hawaii",
+      "address": { "state": "HI", "postalCode": "96813" },
+      "timezone": "Pacific/Honolulu",
+      "confident": true,
+      "reason": "STATE"
+    },
+    {
+      "name": "Alaska",
+      "address": { "state": "AK", "postalCode": "99501" },
+      "timezone": "America/Anchorage",
+      "confident": false,
+      "reason": "ZIP_SPANS_BOUNDARY"
+    },
+    {
+      "name": "Puerto Rico",
+      "address": { "state": "PR", "postalCode": "00901" },
+      "timezone": "America/Puerto_Rico",
+      "confident": true,
+      "reason": "STATE"
+    },
+
+    {
+      "name": "a non-US address is declined rather than guessed",
+      "address": { "country": "CA", "state": "ON", "postalCode": "M5V 3L9" },
+      "timezone": null,
+      "confident": false,
+      "reason": "NON_US"
+    },
+    {
+      "name": "an explicit US country behaves like the default",
+      "address": { "country": "us", "state": "CO", "postalCode": "80218" },
+      "timezone": "America/Denver",
+      "confident": true,
+      "reason": "STATE"
+    },
+    {
+      "name": "nothing to go on",
+      "address": {},
+      "timezone": null,
+      "confident": false,
+      "reason": "UNKNOWN"
+    },
+    {
+      "name": "a ZIP that contradicts a single-zone state is not trusted",
+      "address": { "state": "NY", "postalCode": "79901" },
+      "timezone": "America/New_York",
+      "confident": false,
+      "reason": "ZIP_STATE_CONFLICT"
+    },
+    {
+      "name": "lowercase and padded state codes normalise",
+      "address": { "state": " co ", "postalCode": "80218" },
+      "timezone": "America/Denver",
+      "confident": true,
+      "reason": "STATE"
+    },
+    {
+      "name": "a ZIP+4 is read from its first three digits",
+      "address": { "state": "TN", "postalCode": "37902-1234" },
+      "timezone": "America/New_York",
+      "confident": true,
+      "reason": "ZIP"
+    }
+  ]
+}

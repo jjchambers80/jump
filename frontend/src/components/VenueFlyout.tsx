@@ -10,7 +10,7 @@ import api from '@/services/api';
 import { StateSelect } from '@/components/StateSelect';
 import SlugField from '@/components/SlugField';
 import ImageUploader from '@/components/ImageUploader';
-import TimeZoneSelect from '@/components/TimeZoneSelect';
+import VenueTimeZoneField from '@/components/VenueTimeZoneField';
 
 // Sentinel value of the "+ Add new venue…" option inside a venue <select>.
 export const NEW_VENUE_OPTION = '__new_venue__';
@@ -56,7 +56,8 @@ export default function VenueFlyout({ orgId, onClose, onCreated }: Props) {
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [postalCode, setPostalCode] = useState('');
-  const [timezone, setTimezone] = useState(defaultTimezone);
+  // Spec 033: null follows the address; a value is the organizer's own choice.
+  const [timezone, setTimezone] = useState<string | null>(null);
   const [isPublic, setIsPublic] = useState(true);
   const [logo, setLogo] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -99,7 +100,7 @@ export default function VenueFlyout({ orgId, onClose, onCreated }: Props) {
         city: city.trim() || undefined,
         state: state || undefined,
         postalCode: postalCode.trim() || undefined,
-        timezone: timezone.trim() || undefined,
+        timezone: timezone ?? undefined,
         isPublic,
       });
 
@@ -250,8 +251,10 @@ export default function VenueFlyout({ orgId, onClose, onCreated }: Props) {
             </div>
           </div>
 
-          <TimeZoneSelect
+          <VenueTimeZoneField
             id="venue-flyout-timezone"
+            state={state}
+            postalCode={postalCode}
             value={timezone}
             onChange={setTimezone}
             className={inputClass}
