@@ -60,6 +60,7 @@ const PUBLIC_PASS = [
   /^\/tickets(\/|$)/,
   /^\/venues(\/|$)/,
   /^\/legal(\/|$)/,
+  /^\/rsvp(\/|$)/,
 ];
 const PLATFORM_ONLY = [
   /^\/admin(\/|$)/,

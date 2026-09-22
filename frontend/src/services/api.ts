@@ -510,6 +510,49 @@ export interface PublicMap {
   etag: string;
 }
 
+// ===== RSVP Events (spec 034) =====
+
+export interface RsvpRow {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  partySize: number;
+  status: 'GOING' | 'CANCELLED';
+  subscribed: boolean;
+  createdAt: string;
+  cancelledAt: string | null;
+}
+
+export interface RsvpListResponse {
+  headcount: number;
+  rsvpCount: number;
+  cancelledCount: number;
+  data: RsvpRow[];
+}
+
+export interface RsvpCreatePayload {
+  firstName: string;
+  lastName: string;
+  email: string;
+  partySize?: number;
+  marketing: boolean;
+  acceptances: { document: string; version: string }[];
+}
+
+export interface RsvpCancelPayload {
+  token: string;
+}
+
+export const rsvpApi = {
+  create: (eventId: string, data: RsvpCreatePayload) =>
+    api.post<{ status: string }>(`/events/${eventId}/rsvps`, data),
+  cancel: (data: RsvpCancelPayload) =>
+    api.post<RsvpRow>('/rsvps/cancel', data),
+  listAdmin: (eventId: string) =>
+    api.get<RsvpListResponse>(`/admin/events/${eventId}/rsvps`),
+};
+
 export const mapsApi = {
   list: () => api.get<AdminMap[]>('/admin/maps'),
   create: (data: { eventId: string; name?: string; width?: number; height?: number; unit?: string }) =>

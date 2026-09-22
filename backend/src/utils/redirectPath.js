@@ -19,6 +19,7 @@ const RESERVED = [
   /^\/admin(\/|$)/,
   /^\/auth(\/|$)/,
   /^\/organizations(\/|$)/,
+  /^\/rsvp(\/|$)/,
   /^\/_next(\/|$)/,
 ];
 

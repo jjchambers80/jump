@@ -305,6 +305,12 @@ export default function DashboardEventsPage() {
                       >
                         Applications
                       </Link>
+                      <Link
+                        href={`/admin/events/${event.id}/rsvps?orgId=${selectedOrgId}`}
+                        className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
+                      >
+                        RSVPs
+                      </Link>
                       {event.status === 'PUBLISHED' && (
                         <Link
                           href={`/admin/events/${event.id}/analytics`}
