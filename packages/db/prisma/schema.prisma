@@ -725,6 +725,7 @@ model Contact {
   applicantProfiles ApplicantProfile[]
   applications      Application[]
   contactComments   ContactComment[]
+  rsvps             EventRsvp[]
 
   @@unique([organizationId, email])
   @@index([email])
@@ -789,9 +790,12 @@ model Event {
   date           DateTime
   capacity       Int
   category       String?
-  status         EventStatus @default(DRAFT)
-  taxRate        Decimal?    @db.Decimal(6, 5)
-  taxRateSource  TaxSource?
+  status           EventStatus   @default(DRAFT)
+  admissionMode    AdmissionMode @default(TICKETED)
+  rsvpLimit        Int?
+  rsvpMaxPartySize Int           @default(1)
+  taxRate          Decimal?      @db.Decimal(6, 5)
+  taxRateSource    TaxSource?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -805,10 +809,39 @@ model Event {
   applications     Application[]
   addOns           AddOn[]
   floorMap         FloorMap? // spec 014: one optional map per event
+  rsvps            EventRsvp[]
 
   @@index([venueId])
   @@index([status])
   @@index([date])
+}
+
+enum AdmissionMode {
+  TICKETED
+  RSVP
+}
+
+enum RsvpStatus {
+  GOING
+  CANCELLED
+}
+
+model EventRsvp {
+  id          String     @id @default(cuid())
+  eventId     String
+  contactId   String
+  partySize   Int        @default(1)
+  status      RsvpStatus @default(GOING)
+  cancelledAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  event   Event   @relation(fields: [eventId], references: [id])
+  contact Contact @relation(fields: [contactId], references: [id])
+
+  @@unique([eventId, contactId])
+  @@index([eventId, status])
+  @@index([contactId])
 }
 
 model PriceTier {
@@ -1362,6 +1395,7 @@ enum ApplicationAction {
 enum EmailSubscribedSource {
   CHECKOUT
   APPLY
+  RSVP
   ADMIN
   IMPORT
 }
@@ -1390,6 +1424,7 @@ enum LegalDocument {
 enum LegalSource {
   CHECKOUT
   APPLY
+  RSVP
   SIGNUP
   SUBSCRIBE
   CONNECT

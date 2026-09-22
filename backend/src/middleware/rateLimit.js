@@ -120,6 +120,11 @@ export const LIMITS = Object.freeze({
     limit: 30,
     message: 'Too many applications from this address. Try again later.',
   },
+  RSVP_CREATE: {
+    windowMs: 60 * 60 * 1000,
+    limit: 30,
+    message: 'Too many RSVPs from this address. Try again later.',
+  },
   BOOTH_CHOOSE: {
     windowMs: 60 * 1000,
     limit: 10,
