@@ -58,7 +58,8 @@ Generated and maintained by running `/doc-feature` after completing feature work
 - [Content › URL redirects](features/url-redirects.md) — Menus › URL redirects: per-organization 301s for paths that would 404 on the storefront (tenant middleware + platform catch-all), reserved live routes, list / create / edit / bulk delete (spec 028)
 - [Online Store Preferences](features/online-store-preferences.md) — Online store › Preferences: store access (private mode + password gate on every public storefront page), homepage SEO title/description + Open Graph
 - [Storefront Language Redirection](features/storefront-language-redirection.md) — Online store › Preferences › Automatic redirection: Language toggle ("redirect visitors to the language that matches their browser when available"); stored on `Organization.autoRedirectLanguage`, no runtime effect until the storefront is localized
-- [Venue Management](features/venue-management.md) — CRUD, logo uploads, timezone config
+- [Venue Management](features/venue-management.md) — CRUD, logo uploads, address
+- [Venue Time Zones](features/venue-time-zones.md) — event times render in the venue's zone (spec 033); the zone is derived from the address, `timezoneSource` provenance, the `eventTime` / `usTimeZones` parity pairs, backfill + reconciliation scripts
 - [Floor Maps](features/maps.md) — Builder, booth geometry, tier binding, public read (spec 014)
 - [Map Templates](features/map-templates.md) — Reusable vector geometry snapshots (spec 014 phase 3)
 - [Map Export](features/map-export.md) — Print-ready vector PDF export with vendor directory (spec 014 phase 3)

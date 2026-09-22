@@ -92,6 +92,16 @@ Products sold alongside a ticket tier (phase 1) or an application tier (phase 2)
 
 See `docs/wiki/features/application-orders.md` (and `application-payments-reporting.md` for the spec 018 history), `specs/024-application-orders/plan.md`.
 
+## Venue time zones (spec 033)
+
+- `Venue.timezone` is the wall clock every event date is rendered in. Any payload that carries an event date must carry the venue zone with it — event lists as well as detail, orders (flat `eventTimezone` on list rows), tickets, applications, search, maps. `backend/src/utils/eventTime.js` does the formatting and the `datetime-local` conversions; it is a **parity pair** with `frontend/src/lib/eventTime.ts` over `tests/fixtures/eventTime.fixtures.json`, asserted from both Jest and Vitest.
+- Derivation lives in `backend/src/utils/usTimeZones.js` (`resolveVenueTimeZone`), a second parity pair with `frontend/src/lib/usTimeZones.ts` over `tests/fixtures/usTimeZones.fixtures.json` — the venue form previews the result client-side and the backend stores it, so a divergence would show one zone and save another. A state table plus ZIP-prefix overrides; `confident: false` means "ask the organizer", and a prefix that genuinely straddles a line gets no override at all.
+- `VenueService._resolveTimeZone` sets `timezoneSource`: an explicit `timezone` is `MANUAL` (never re-derived), a resolved address is `DERIVED` (re-derives on an address edit), nothing to go on stays `DEFAULT`. `timezone: null` on a PATCH clears a `MANUAL` override and re-derives. `defaultTimeZoneFor(organization)` is the single fallback — spec 021's `Organization.timezone` plugs in there and nowhere else.
+- `Venue.country` gates derivation (non-US declines rather than applying the US state table). It defaults to `US` and is not an organizer-facing field.
+- Scripts: `npm run report:033` (read-only; which events change displayed time — run it before deploying phase 1) and `npm run db:backfill:033` (dry run by default, `-- --apply` to write; decides `DERIVED` / `MANUAL` for pre-033 rows). A `db push` dev database needs the phase-2 columns first or both fail with `P2022`.
+
+See `docs/wiki/features/venue-time-zones.md`.
+
 ## Capacity Enforcement (WHY: prevents overselling under concurrent load)
 
 ```sql
