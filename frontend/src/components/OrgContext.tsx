@@ -6,58 +6,25 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import api, { setActiveOrganizationId } from '@/services/api';
-import type { ThemeMode } from '@/lib/theme';
 import { onOrganizationCreated } from '@/lib/orgChannel';
+import {
+  readPersistedOrganizationId,
+  persistOrganizationId,
+  clearPersistedOrganizationId,
+  resolveSelectedOrgId,
+} from '@/lib/orgContextUtils';
+import type { Organization } from '@/lib/orgContextUtils';
 
-export const ACTIVE_ORG_STORAGE_PREFIX = 'jump.admin.activeOrg.';
-
-export function activeOrganizationStorageKey(userId: string) {
-  return `${ACTIVE_ORG_STORAGE_PREFIX}${userId}`;
-}
-
-function readPersistedOrganizationId(userId: string): string | null {
-  try {
-    return window.localStorage.getItem(activeOrganizationStorageKey(userId));
-  } catch {
-    return null;
-  }
-}
-
-function persistOrganizationId(userId: string, organizationId: string) {
-  try {
-    window.localStorage.setItem(activeOrganizationStorageKey(userId), organizationId);
-  } catch {
-    // Persistence is a convenience; the in-memory selection still works.
-  }
-}
-
-function clearPersistedOrganizationId(userId: string) {
-  try {
-    window.localStorage.removeItem(activeOrganizationStorageKey(userId));
-  } catch {
-    // ignore unavailable storage
-  }
-}
-
-export interface Organization {
-  id: string;
-  name: string;
-  /** URL-safe store handle; generated from the name, stable across renames. */
-  slug: string;
-  status: 'ACTIVE' | 'INACTIVE';
-  logoUrl?: string | null;
-  coverUrl?: string | null;
-  brandColor?: string | null;
-  themeMode?: ThemeMode;
-  createdAt: string;
-  updatedAt: string;
-  /** null while the organization is still in the /signup flow (spec 022) */
-  onboardingCompletedAt?: string | null;
-  _count?: {
-    venues: number;
-    users: number;
-  };
-}
+// Re-export types consumed by sibling modules.
+export type { Organization } from '@/lib/orgContextUtils';
+export {
+  ACTIVE_ORG_STORAGE_PREFIX,
+  activeOrganizationStorageKey,
+  readPersistedOrganizationId,
+  persistOrganizationId,
+  clearPersistedOrganizationId,
+  resolveSelectedOrgId,
+} from '@/lib/orgContextUtils';
 
 interface OrgContextValue {
   organizations: Organization[];
@@ -118,17 +85,12 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
       setOrganizations(data);
       // Resolve one-shot preferences first, then the user's saved choice. A
       // valid in-memory choice wins over session/default fallbacks on refresh.
-      if (data.length > 0) {
-        const preferred = preferredOrgIdRef.current;
-        preferredOrgIdRef.current = null;
-        const persisted = readPersistedOrganizationId(requestedUserId);
-        const prev = selectedOrgIdRef.current;
-        const next =
-          (preferred && data.some((o) => o.id === preferred) && preferred) ||
-          (persisted && data.some((o) => o.id === persisted) && persisted) ||
-          (prev && data.some((o) => o.id === prev) && prev) ||
-          (sessionOrgId && data.some((o) => o.id === sessionOrgId) && sessionOrgId) ||
-          data[0].id;
+      const preferred = preferredOrgIdRef.current;
+      preferredOrgIdRef.current = null;
+      const persisted = readPersistedOrganizationId(requestedUserId);
+      const prev = selectedOrgIdRef.current;
+      const next = resolveSelectedOrgId(data, preferred, persisted, prev, sessionOrgId);
+      if (next) {
         setSelectedOrgId(next);
       } else {
         preferredOrgIdRef.current = null;
