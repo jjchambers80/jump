@@ -1,28 +1,38 @@
 'use client';
 
-// Create a venue without leaving the event form. Covers the fields the
-// backend requires plus the address; slug, logo and the public page toggle
-// stay on Admin › Venues, which the dialog links to.
+// Create a venue without leaving the event form. The flyout carries every
+// field of the full venue form on Admin › Venues (name, URL slug, address,
+// timezone, public page toggle, logo), so nothing has to be finished there.
+// It slides in from the right on desktop and covers the screen on phones.
 
 import React, { useEffect, useRef, useState } from 'react';
 import api from '@/services/api';
 import { StateSelect } from '@/components/StateSelect';
+import SlugField from '@/components/SlugField';
+import ImageUploader from '@/components/ImageUploader';
+
+// Sentinel value of the "+ Add new venue…" option inside a venue <select>.
+export const NEW_VENUE_OPTION = '__new_venue__';
 
 export interface CreatedVenue {
   id: string;
   name: string;
+  slug?: string;
   address: string;
   city: string | null;
   state: string | null;
   postalCode: string | null;
   timezone: string;
   isPublic: boolean;
+  logoUrl?: string | null;
 }
 
 interface Props {
   orgId: string;
   onClose: () => void;
-  onCreated: (venue: CreatedVenue) => void;
+  // `warning` is set when the venue itself saved but a follow-up step (the
+  // logo upload) did not — the venue is still selected on the event form.
+  onCreated: (venue: CreatedVenue, warning?: string) => void;
 }
 
 const inputClass =
@@ -37,16 +47,21 @@ function defaultTimezone(): string {
   }
 }
 
-export default function QuickVenueDialog({ orgId, onClose, onCreated }: Props) {
+export default function VenueFlyout({ orgId, onClose, onCreated }: Props) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const [name, setName] = useState('');
+  const [slug, setSlug] = useState('');
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [postalCode, setPostalCode] = useState('');
   const [timezone, setTimezone] = useState(defaultTimezone);
+  const [isPublic, setIsPublic] = useState(true);
+  const [logo, setLogo] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [slugError, setSlugError] = useState<string | null>(null);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -63,23 +78,52 @@ export default function QuickVenueDialog({ orgId, onClose, onCreated }: Props) {
     };
   }, []);
 
+  // Object URLs from the logo picker are revoked when they are replaced.
+  useEffect(() => {
+    return () => {
+      if (logoPreview?.startsWith('blob:')) URL.revokeObjectURL(logoPreview);
+    };
+  }, [logoPreview]);
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     setError(null);
+    setSlugError(null);
     try {
       const venue = await api.post<CreatedVenue>(`/organizations/${orgId}/venues`, {
         name: name.trim(),
+        slug: slug.trim() || undefined,
         address: address.trim(),
         city: city.trim() || undefined,
         state: state || undefined,
         postalCode: postalCode.trim() || undefined,
         timezone: timezone.trim() || undefined,
-        isPublic: true,
+        isPublic,
       });
+
+      if (logo) {
+        try {
+          const uploadData = new FormData();
+          uploadData.append('logo', logo);
+          await api.upload(`/organizations/${orgId}/venues/${venue.id}/logo`, uploadData);
+        } catch (uploadError) {
+          onCreated(
+            venue,
+            `${venue.name} was created, but its logo could not be uploaded: ${
+              (uploadError as Error).message || 'Upload failed'
+            }. Add it under Venues.`
+          );
+          return;
+        }
+      }
+
       onCreated(venue);
     } catch (err) {
-      setError((err as Error).message || 'Could not create the venue');
+      const status = (err as { status?: number }).status;
+      const message = (err as Error).message || 'Could not create the venue';
+      if (status === 409) setSlugError(message);
+      else setError(message);
       setSaving(false);
     }
   };
@@ -89,21 +133,21 @@ export default function QuickVenueDialog({ orgId, onClose, onCreated }: Props) {
       ref={overlayRef}
       role="dialog"
       aria-modal="true"
-      aria-labelledby="quick-venue-title"
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+      aria-labelledby="venue-flyout-title"
+      className="fixed inset-0 z-50 flex justify-end"
       onClick={(e) => {
         if (e.target === overlayRef.current) onClose();
       }}
     >
-      <div className="fixed inset-0 bg-black/50" />
+      <div className="fixed inset-0 bg-black/50" aria-hidden />
 
       <form
         onSubmit={submit}
-        data-testid="quick-venue-dialog"
-        className="relative w-full sm:max-w-lg rounded-t-xl sm:rounded-lg bg-white dark:bg-slate-800 max-h-[90vh] overflow-y-auto shadow-xl"
+        data-testid="venue-flyout"
+        className="relative flex h-full w-full max-w-full flex-col bg-white shadow-xl motion-safe:animate-slide-up dark:bg-slate-800 sm:max-w-xl sm:motion-safe:animate-slide-in-right"
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4 dark:border-slate-700 dark:bg-slate-800">
-          <h3 id="quick-venue-title" className="text-lg font-semibold text-gray-900 dark:text-white">
+        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-4 dark:border-slate-700 sm:px-6">
+          <h3 id="venue-flyout-title" className="text-lg font-semibold text-gray-900 dark:text-white">
             New venue
           </h3>
           <button
@@ -118,10 +162,9 @@ export default function QuickVenueDialog({ orgId, onClose, onCreated }: Props) {
           </button>
         </div>
 
-        <div className="space-y-4 px-6 py-4">
+        <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-6">
           <p className="text-sm text-gray-600 dark:text-slate-400">
-            The venue is selected for this event as soon as it is saved. Add a logo or change its
-            URL later under Venues.
+            The venue is selected for this event as soon as it is saved.
           </p>
 
           {error && (
@@ -134,11 +177,11 @@ export default function QuickVenueDialog({ orgId, onClose, onCreated }: Props) {
           )}
 
           <div>
-            <label htmlFor="quick-venue-name" className={labelClass}>
+            <label htmlFor="venue-flyout-name" className={labelClass}>
               Name *
             </label>
             <input
-              id="quick-venue-name"
+              id="venue-flyout-name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -150,12 +193,22 @@ export default function QuickVenueDialog({ orgId, onClose, onCreated }: Props) {
             />
           </div>
 
+          <SlugField
+            id="venue-flyout-slug"
+            value={slug}
+            onChange={setSlug}
+            source={name}
+            prefix="/venues/"
+            baseUrl={typeof window !== 'undefined' ? window.location.origin : undefined}
+            error={slugError}
+          />
+
           <div>
-            <label htmlFor="quick-venue-address" className={labelClass}>
+            <label htmlFor="venue-flyout-address" className={labelClass}>
               Street address *
             </label>
             <input
-              id="quick-venue-address"
+              id="venue-flyout-address"
               type="text"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
@@ -168,11 +221,11 @@ export default function QuickVenueDialog({ orgId, onClose, onCreated }: Props) {
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
-              <label htmlFor="quick-venue-city" className={labelClass}>
+              <label htmlFor="venue-flyout-city" className={labelClass}>
                 City
               </label>
               <input
-                id="quick-venue-city"
+                id="venue-flyout-city"
                 type="text"
                 value={city}
                 onChange={(e) => setCity(e.target.value)}
@@ -180,13 +233,13 @@ export default function QuickVenueDialog({ orgId, onClose, onCreated }: Props) {
                 className={inputClass}
               />
             </div>
-            <StateSelect id="quick-venue-state" value={state} onChange={setState} />
+            <StateSelect id="venue-flyout-state" value={state} onChange={setState} />
             <div>
-              <label htmlFor="quick-venue-postal" className={labelClass}>
+              <label htmlFor="venue-flyout-postal" className={labelClass}>
                 Postal code
               </label>
               <input
-                id="quick-venue-postal"
+                id="venue-flyout-postal"
                 type="text"
                 value={postalCode}
                 onChange={(e) => setPostalCode(e.target.value)}
@@ -197,11 +250,11 @@ export default function QuickVenueDialog({ orgId, onClose, onCreated }: Props) {
           </div>
 
           <div>
-            <label htmlFor="quick-venue-timezone" className={labelClass}>
+            <label htmlFor="venue-flyout-timezone" className={labelClass}>
               Timezone
             </label>
             <input
-              id="quick-venue-timezone"
+              id="venue-flyout-timezone"
               type="text"
               value={timezone}
               onChange={(e) => setTimezone(e.target.value)}
@@ -209,9 +262,38 @@ export default function QuickVenueDialog({ orgId, onClose, onCreated }: Props) {
               className={inputClass}
             />
           </div>
+
+          <div className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              id="venue-flyout-public"
+              checked={isPublic}
+              onChange={(e) => setIsPublic(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+            />
+            <label htmlFor="venue-flyout-public" className="text-sm text-gray-700 dark:text-slate-300">
+              Public venue page enabled. When disabled, the public URL returns not found.
+            </label>
+          </div>
+
+          <div>
+            <label className={labelClass}>Venue logo</label>
+            <ImageUploader
+              currentPreview={logoPreview}
+              onFileSelect={(file) => {
+                setLogo(file);
+                setLogoPreview(URL.createObjectURL(file));
+              }}
+              onRemove={() => {
+                setLogo(null);
+                setLogoPreview(null);
+              }}
+              uploading={saving}
+            />
+          </div>
         </div>
 
-        <div className="flex justify-end gap-3 border-t border-gray-200 px-6 py-4 dark:border-slate-700">
+        <div className="flex justify-end gap-3 border-t border-gray-200 px-4 py-4 dark:border-slate-700 sm:px-6">
           <button
             type="button"
             onClick={onClose}

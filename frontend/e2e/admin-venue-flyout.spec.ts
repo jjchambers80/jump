@@ -1,5 +1,6 @@
-// Quick-add venue from the event form: the dialog posts to the venues API
-// and the new venue is appended to the select and chosen, no page change.
+// Add a venue from the event form: the "+ Add new venue…" option in the venue
+// select opens the flyout, which posts to the venues API; the new venue is
+// appended to the select and chosen, with no page change.
 import { expect, test, type Page } from '@playwright/test';
 import { signInAsStaff } from './helpers/session';
 
@@ -52,14 +53,16 @@ test('creates a venue from the event form and selects it', async ({ page }) => {
   const select = page.getByLabel('Venue *');
   await expect(select).toHaveValue('');
 
-  await page.getByRole('button', { name: '+ New venue' }).click();
-  const dialog = page.getByTestId('quick-venue-dialog');
+  await select.selectOption('__new_venue__');
+  const dialog = page.getByTestId('venue-flyout');
   await expect(dialog).toBeVisible();
   await dialog.getByLabel('Name *').fill('  Raleigh Convention Center ');
   await dialog.getByLabel('Street address *').fill('500 S Salisbury St');
   await dialog.getByLabel('City').fill('Raleigh');
   await dialog.getByLabel('State').selectOption('NC');
   await dialog.getByLabel('Postal code').fill('27601');
+  await dialog.getByLabel('URL slug').fill('Raleigh Convention Center');
+  await dialog.getByLabel(/Public venue page/).uncheck();
   await dialog.getByRole('button', { name: 'Create venue' }).click();
 
   await expect(dialog).toHaveCount(0);
@@ -69,20 +72,23 @@ test('creates a venue from the event form and selects it', async ({ page }) => {
     city: 'Raleigh',
     state: 'NC',
     postalCode: '27601',
-    isPublic: true,
+    slug: 'raleigh-convention-center',
+    isPublic: false,
   });
   await expect(select).toHaveValue('venue-new');
-  await expect(select.locator('option')).toHaveCount(3);
+  // placeholder + existing + created + "add new"
+  await expect(select.locator('option')).toHaveCount(4);
   await expect(page).toHaveURL(/\/admin\/events\/new$/);
 });
 
-test('empty venue list offers the dialog instead of a link away', async ({ page }) => {
+test('empty venue list offers the flyout from the select itself', async ({ page }) => {
   const getCreated = await mockApi(page, []);
   await page.goto('/admin/events/new');
-  await expect(page.getByText('No venues yet.')).toBeVisible();
+  const select = page.getByLabel('Venue *');
+  await expect(select.locator('option')).toHaveCount(2);
 
-  await page.getByRole('button', { name: 'Create one' }).click();
-  const dialog = page.getByTestId('quick-venue-dialog');
+  await select.selectOption('__new_venue__');
+  const dialog = page.getByTestId('venue-flyout');
   await dialog.getByLabel('Name *').fill('First Hall');
   await dialog.getByLabel('Street address *').fill('1 First St');
   await dialog.getByRole('button', { name: 'Create venue' }).click();
@@ -101,8 +107,8 @@ test('shows the API error and keeps the dialog open', async ({ page }) => {
     return route.fulfill(json([existingVenue]));
   });
   await page.goto('/admin/events/new');
-  await page.getByRole('button', { name: '+ New venue' }).click();
-  const dialog = page.getByTestId('quick-venue-dialog');
+  await page.getByLabel('Venue *').selectOption('__new_venue__');
+  const dialog = page.getByTestId('venue-flyout');
   await dialog.getByLabel('Name *').fill('Bad TZ');
   await dialog.getByLabel('Street address *').fill('1 Nowhere');
   await dialog.getByLabel('Timezone').fill('Mars/Olympus');

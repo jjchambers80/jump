@@ -16,20 +16,29 @@ interface SlugFieldProps {
   prefix?: string; // URL path prefix shown before the slug, e.g. '/events/'
   baseUrl?: string; // full live URL for the preview link
   error?: string | null;
+  id?: string; // unique when two slug fields share a page (event form + venue flyout)
 }
 
-export default function SlugField({ value, onChange, source, prefix, baseUrl, error }: SlugFieldProps) {
+export default function SlugField({
+  value,
+  onChange,
+  source,
+  prefix,
+  baseUrl,
+  error,
+  id = 'slug-input',
+}: SlugFieldProps) {
   const effective = value || slugify(source);
   const url = (baseUrl || '') + (prefix || '') + effective;
 
   return (
     <div>
-      <label htmlFor="slug-input" className={labelClass}>
+      <label htmlFor={id} className={labelClass}>
         URL slug
       </label>
       <div className="mt-1">
         <input
-          id="slug-input"
+          id={id}
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
