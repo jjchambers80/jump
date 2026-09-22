@@ -15,11 +15,15 @@ import { TierCard, TierEditDialog, type TierFormData } from '@/components/TierEd
 import AddOnsSection from './AddOnsSection';
 import SlugField from '@/components/SlugField';
 import VenueFlyout, { NEW_VENUE_OPTION, type CreatedVenue } from '@/components/VenueFlyout';
+import { DEFAULT_ZONE, formatEventTime, instantToZonedInput, zonedInputToInstant, zonedInputToIso } from '@/lib/eventTime';
+import { timeZoneLabel } from '@/lib/timeZones';
 
 interface Venue {
   id: string;
   name: string;
   address: string;
+  /** IANA zone the venue's wall clock belongs to (spec 033). */
+  timezone?: string | null;
 }
 
 interface TierPreset {
@@ -72,7 +76,7 @@ interface TierFormInput {
   isActive: boolean;
 }
 
-function tierToForm(t: PriceTier): TierFormInput {
+function tierToForm(t: PriceTier, zone: string | null | undefined): TierFormInput {
   return {
     key: t.id,
     isNew: false,
@@ -84,8 +88,8 @@ function tierToForm(t: PriceTier): TierFormInput {
     quantityReserved: t.quantityReserved ?? 0,
     minPerOrder: t.minPerOrder != null ? String(t.minPerOrder) : '',
     maxPerOrder: t.maxPerOrder != null ? String(t.maxPerOrder) : '',
-    saleStartDate: t.saleStartDate ? toDatetimeLocal(t.saleStartDate) : '',
-    saleEndDate: t.saleEndDate ? toDatetimeLocal(t.saleEndDate) : '',
+    saleStartDate: toDatetimeLocal(t.saleStartDate ?? '', zone),
+    saleEndDate: toDatetimeLocal(t.saleEndDate ?? '', zone),
     visibility: t.visibility,
     isRefundable: t.isRefundable,
     isActive: t.isActive,
@@ -126,6 +130,8 @@ interface EventDetail {
     id: string;
     name: string;
     address: string;
+    /** IANA zone the venue's wall clock belongs to (spec 033). */
+    timezone?: string | null;
   } | null;
   /** Cached sales tax for this event and where it came from (Settings › Tax). */
   tax?: { rate: number; source: 'STRIPE' | 'MANUAL' | null; region: string | null };
@@ -157,10 +163,9 @@ function EventTaxSummary({ tax }: { tax: NonNullable<EventDetail['tax']> }) {
   );
 }
 
-function toDatetimeLocal(iso: string): string {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+// Spec 033: the form shows and reads the venue's wall clock, never the browser's.
+function toDatetimeLocal(iso: string, zone: string | null | undefined): string {
+  return instantToZonedInput(iso, zone);
 }
 
 
@@ -182,6 +187,9 @@ function EditEventContent() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [venueId, setVenueId] = useState('');
+  // Spec 033: dates are typed in the selected venue's wall clock. Switching venue
+  // keeps the typed time and re-anchors it, rather than sliding the clock.
+  const venueZone = venues.find((v) => v.id === venueId)?.timezone ?? eventData?.venue?.timezone ?? null;
   const [date, setDate] = useState('');
   const [capacity, setCapacity] = useState('');
   const [category, setCategory] = useState('');
@@ -217,14 +225,14 @@ function EditEventContent() {
         setName(event.name);
         setDescription(event.description || '');
         setVenueId(event.venue?.id || '');
-        setDate(toDatetimeLocal(event.date));
+        setDate(toDatetimeLocal(event.date, event.venue?.timezone));
         setCapacity(String(event.capacity));
         setCategory(event.category || '');
         setLogoUrl(event.logoUrl || null);
         setSlug(event.slug || '');
         // Initialize tier form state from loaded tiers
         const sorted = [...event.priceTiers].sort((a, b) => a.displayOrder - b.displayOrder);
-        setPriceTiers(sorted.map(tierToForm));
+        setPriceTiers(sorted.map((t) => tierToForm(t, event.venue?.timezone)));
         setTiersInitialized(true);
       } catch (err: any) {
         setError(err.message || 'Failed to load event');
@@ -277,7 +285,7 @@ function EditEventContent() {
 
   // Quick-add venue: append and select it, no refetch needed.
   const handleVenueCreated = (venue: CreatedVenue, warning?: string) => {
-    setVenues((prev) => [...prev, { id: venue.id, name: venue.name, address: venue.address }]);
+    setVenues((prev) => [...prev, { id: venue.id, name: venue.name, address: venue.address, timezone: venue.timezone }]);
     setVenueId(venue.id);
     setShowVenueDialog(false);
     if (warning) setError(warning);
@@ -393,8 +401,8 @@ function EditEventContent() {
       if (slug !== (eventData?.slug || '')) payload.slug = slug;
       if (description !== (eventData?.description || '')) payload.description = description || null;
       if (venueId !== eventData?.venue?.id) payload.venueId = venueId;
-      if (date !== toDatetimeLocal(eventData?.date || ''))
-        payload.date = new Date(date).toISOString();
+      if (date !== toDatetimeLocal(eventData?.date || '', venueZone))
+        payload.date = zonedInputToIso(date, venueZone);
       if (capacity !== String(eventData?.capacity)) payload.capacity = parseInt(capacity);
       if (category !== (eventData?.category || '')) payload.category = category || null;
 
@@ -412,8 +420,8 @@ function EditEventContent() {
           quantityTotal: parseInt(tier.quantityTotal),
           minPerOrder: tier.minPerOrder ? parseInt(tier.minPerOrder) : undefined,
           maxPerOrder: tier.maxPerOrder ? parseInt(tier.maxPerOrder) : undefined,
-          saleStartDate: tier.saleStartDate ? new Date(tier.saleStartDate).toISOString() : null,
-          saleEndDate: tier.saleEndDate ? new Date(tier.saleEndDate).toISOString() : null,
+          saleStartDate: zonedInputToIso(tier.saleStartDate, venueZone),
+          saleEndDate: zonedInputToIso(tier.saleEndDate, venueZone),
           visibility: tier.visibility,
           isRefundable: tier.isRefundable,
         });
@@ -434,9 +442,9 @@ function EditEventContent() {
           patch.minPerOrder = tier.minPerOrder ? parseInt(tier.minPerOrder) : null;
         if ((tier.maxPerOrder ? parseInt(tier.maxPerOrder) : null) !== orig.maxPerOrder)
           patch.maxPerOrder = tier.maxPerOrder ? parseInt(tier.maxPerOrder) : null;
-        const newStart = tier.saleStartDate ? new Date(tier.saleStartDate).toISOString() : null;
+        const newStart = zonedInputToIso(tier.saleStartDate, venueZone);
         if (newStart !== orig.saleStartDate) patch.saleStartDate = newStart;
-        const newEnd = tier.saleEndDate ? new Date(tier.saleEndDate).toISOString() : null;
+        const newEnd = zonedInputToIso(tier.saleEndDate, venueZone);
         if (newEnd !== orig.saleEndDate) patch.saleEndDate = newEnd;
         if (tier.visibility !== orig.visibility) patch.visibility = tier.visibility;
         if (tier.isRefundable !== orig.isRefundable) patch.isRefundable = tier.isRefundable;
@@ -661,8 +669,14 @@ function EditEventContent() {
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
                 className={inputClass}
+                aria-describedby="event-date-zone"
                 required
               />
+              <p id="event-date-zone" className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                {date
+                  ? `${formatEventTime(zonedInputToInstant(date, venueZone), venueZone)} at the venue`
+                  : `Entered in the venue's time zone (${timeZoneLabel(venueZone ?? DEFAULT_ZONE)})`}
+              </p>
             </div>
 
             <div>

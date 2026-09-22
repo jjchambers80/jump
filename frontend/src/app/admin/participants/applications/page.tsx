@@ -13,6 +13,7 @@ import { describeError } from '@/app/admin/events/[eventId]/applications/useAppl
 import { NewApplicationDialog, NewTemplateDialog } from '@/components/applications/TemplateDialogs';
 import ParticipantsHeader from '../ParticipantsHeader';
 import { useParticipantsApi } from '../useParticipantsApi';
+import { formatEventDate } from '@/lib/eventTime';
 
 const FORM_STATUS_STYLE: Record<OrgForm['status'], string> = {
   DRAFT: 'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-200',
@@ -131,7 +132,7 @@ export default function ParticipantsApplicationsPage() {
                 <tr key={f.id} className="hover:bg-gray-50 dark:hover:bg-slate-700/40" data-testid={`participants-form-${f.id}`}>
                   <td className="px-3 py-2 text-gray-800 dark:text-slate-200">
                     {f.event.name}
-                    <div className="text-xs text-gray-600 dark:text-slate-400">{formatDate(f.event.date)}</div>
+                    <div className="text-xs text-gray-600 dark:text-slate-400">{formatEventDate(f.event.date, f.event.timezone)}</div>
                     {f.organization && <div className="text-xs text-gray-500 dark:text-slate-500">{f.organization.name}</div>}
                   </td>
                   <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">{f.name}</td>

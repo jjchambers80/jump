@@ -252,6 +252,8 @@ export interface OrderDetail {
       id: string;
       name: string;
       address: string;
+      /** IANA zone of the event's venue (spec 033). */
+      timezone?: string | null;
     };
   };
   contact: {
@@ -353,7 +355,7 @@ export interface AdminMap {
   soldCount: number;
   reservedCount: number;
   blockedCount: number;
-  event: { id: string; name: string; slug: string; date: string };
+  event: { id: string; name: string; slug: string; date: string; timezone?: string | null };
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;

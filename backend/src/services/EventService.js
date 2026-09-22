@@ -432,7 +432,7 @@ class EventService {
         where,
         include: {
           venue: {
-            select: { id: true, name: true, slug: true, address: true },
+            select: { id: true, name: true, slug: true, address: true, timezone: true },
           },
           priceTiers: {
             where: { isActive: true },
@@ -583,7 +583,7 @@ class EventService {
         venue: { organizationId: orgId },
       },
       include: {
-        venue: { select: { id: true, name: true } },
+        venue: { select: { id: true, name: true, timezone: true } },
         priceTiers: {
           orderBy: { displayOrder: 'asc' },
         },
@@ -728,7 +728,6 @@ class EventService {
             id: event.venue.id,
             slug: event.venue.slug,
             name: event.venue.name,
-            slug: event.venue.slug,
             address: event.venue.address,
             timezone: event.venue.timezone,
           }

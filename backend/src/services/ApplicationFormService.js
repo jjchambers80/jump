@@ -141,7 +141,7 @@ class ApplicationFormService {
       where: organizationId ? { event: { venue: { organizationId } } } : {},
       include: {
         _count: { select: { applications: { where: { status: { not: 'DRAFT' } } } } },
-        event: { select: { id: true, name: true, date: true, status: true, venue: { select: { organization: { select: { id: true, name: true } } } } } },
+        event: { select: { id: true, name: true, date: true, status: true, venue: { select: { timezone: true, organization: { select: { id: true, name: true } } } } } },
         questions: { where: { pinned: true, archivedAt: null }, select: { id: true, label: true, type: true }, orderBy: { displayOrder: 'asc' } },
       },
       orderBy: [{ event: { date: 'desc' } }, { displayOrder: 'asc' }, { createdAt: 'asc' }],
@@ -157,7 +157,7 @@ class ApplicationFormService {
     return forms.map((f) => ({
       id: f.id,
       eventId: f.eventId,
-      event: { id: f.event.id, name: f.event.name, date: f.event.date, status: f.event.status },
+      event: { id: f.event.id, name: f.event.name, date: f.event.date, status: f.event.status, timezone: f.event.venue?.timezone ?? null },
       ...(organizationId ? {} : { organization: f.event.venue.organization }),
       kind: f.kind,
       name: f.name,

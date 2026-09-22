@@ -12,11 +12,15 @@ import { useOrg } from '@/components/OrgContext';
 import { TierCard, TierEditDialog, type TierFormData } from '@/components/TierEditDialog';
 import SlugField from '@/components/SlugField';
 import VenueFlyout, { NEW_VENUE_OPTION, type CreatedVenue } from '@/components/VenueFlyout';
+import { DEFAULT_ZONE, formatEventTime, zonedInputToInstant, zonedInputToIso } from '@/lib/eventTime';
+import { timeZoneLabel } from '@/lib/timeZones';
 
 interface Venue {
   id: string;
   name: string;
   address: string;
+  /** IANA zone the venue's wall clock belongs to (spec 033). */
+  timezone?: string | null;
 }
 
 interface TierPreset {
@@ -73,6 +77,9 @@ export default function CreateEventPage() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [venueId, setVenueId] = useState('');
+  // Spec 033: the date and the sale windows are typed in the venue's wall clock,
+  // not the organizer's. Changing venue keeps the typed time and re-anchors it.
+  const venueZone = venues.find((v) => v.id === venueId)?.timezone ?? null;
   const [date, setDate] = useState('');
   const [capacity, setCapacity] = useState('');
   const [category, setCategory] = useState('');
@@ -127,7 +134,7 @@ export default function CreateEventPage() {
 
   // Quick-add venue: append and select it, no refetch needed.
   const handleVenueCreated = (venue: CreatedVenue, warning?: string) => {
-    setVenues((prev) => [...prev, { id: venue.id, name: venue.name, address: venue.address }]);
+    setVenues((prev) => [...prev, { id: venue.id, name: venue.name, address: venue.address, timezone: venue.timezone }]);
     setVenueId(venue.id);
     setShowVenueDialog(false);
     if (warning) setError(warning);
@@ -204,7 +211,7 @@ export default function CreateEventPage() {
         name,
         slug: slug || undefined,
         description: description || undefined,
-        date: new Date(date).toISOString(),
+        date: zonedInputToIso(date, venueZone),
         capacity: parseInt(capacity),
         category: category || undefined,
         priceTiers: priceTiers.map((t, i) => ({
@@ -215,8 +222,8 @@ export default function CreateEventPage() {
           displayOrder: i,
           minPerOrder: t.minPerOrder ? parseInt(t.minPerOrder) : undefined,
           maxPerOrder: t.maxPerOrder ? parseInt(t.maxPerOrder) : undefined,
-          saleStartDate: t.saleStartDate ? new Date(t.saleStartDate).toISOString() : null,
-          saleEndDate: t.saleEndDate ? new Date(t.saleEndDate).toISOString() : null,
+          saleStartDate: zonedInputToIso(t.saleStartDate, venueZone),
+          saleEndDate: zonedInputToIso(t.saleEndDate, venueZone),
           visibility: t.visibility,
           isRefundable: t.isRefundable,
         })),
@@ -336,8 +343,16 @@ export default function CreateEventPage() {
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
                 className={inputClass}
+                aria-describedby="event-date-zone"
                 required
               />
+              <p id="event-date-zone" className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                {venueId
+                  ? date
+                    ? `${formatEventTime(zonedInputToInstant(date, venueZone), venueZone)} at the venue`
+                    : `Entered in the venue's time zone (${timeZoneLabel(venueZone ?? DEFAULT_ZONE)})`
+                  : 'Pick a venue first — the time is entered in the venue\u2019s own time zone.'}
+              </p>
             </div>
 
             <div>

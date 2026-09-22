@@ -23,7 +23,7 @@ export interface AdminEvent {
   id: string;
   name: string;
   date: string;
-  venue: { id: string; name: string };
+  venue: { id: string; name: string; timezone?: string | null };
   organization?: { id: string; name: string };
   capacity: number;
   status: 'DRAFT' | 'PUBLISHED';

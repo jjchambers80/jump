@@ -12,6 +12,7 @@ import { useSession } from 'next-auth/react';
 import api from '@/services/api';
 import type { OrderAddOnLine } from '@/lib/addOns';
 import { ORDER_KIND_LABEL, ORDER_STATUS_CLASS, ORDER_STATUS_LABEL, type OrderItemKind, type OrderKind, type OrderStatus } from '@/lib/orders';
+import { formatEventDateTime } from '@/lib/eventTime';
 
 interface OrderTicket {
   id: string;
@@ -47,7 +48,7 @@ interface OrderDetail {
     id: string;
     name: string;
     date: string;
-    venue?: { id: string; name: string; address: string };
+    venue?: { id: string; name: string; address: string; timezone?: string | null };
   };
   contact: { firstName: string; lastName: string; email: string };
   quantity: number;
@@ -380,7 +381,7 @@ export default function AdminOrderDetailPage() {
       {/* Event */}
       <Section title="Event">
         <InfoRow label="Event" value={order.event.name} />
-        <InfoRow label="Date" value={formatDate(order.event.date)} />
+        <InfoRow label="Date" value={formatEventDateTime(order.event.date, order.event.venue?.timezone)} />
         {order.event.venue && (
           <>
             <InfoRow label="Venue" value={order.event.venue.name} />

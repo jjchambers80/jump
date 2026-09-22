@@ -13,6 +13,7 @@ import type { ThemeMode } from '@/lib/theme';
 import { formatDate } from '@/lib/applications';
 import StorefrontPasswordGate from '@/components/StorefrontPasswordGate';
 import { storefrontLockFrom, type StorefrontLock } from '@/lib/storefrontAccess';
+import { formatEventDate } from '@/lib/eventTime';
 
 export interface ApplyEvent {
   id: string;
@@ -24,7 +25,7 @@ export interface ApplyEvent {
   organizationLogoUrl?: string | null;
   organizationBrandColor?: string | null;
   organizationThemeMode?: ThemeMode | null;
-  venue: { name: string; city?: string | null; state?: string | null } | null;
+  venue: { name: string; city?: string | null; state?: string | null; timezone?: string | null } | null;
 }
 
 export default function ApplyShell({ eventId, title, children }: { eventId: string; title?: string; children: (event: ApplyEvent) => ReactNode }) {
@@ -96,7 +97,7 @@ export default function ApplyShell({ eventId, title, children }: { eventId: stri
         <header className="mt-4 mb-6">
           <p className="text-sm text-gray-600 dark:text-slate-400">
             {event.organizationName ? `${event.organizationName} · ` : ''}
-            {formatDate(event.date)}
+            {formatEventDate(event.date, event.venue?.timezone)}
             {event.venue ? ` · ${event.venue.name}` : ''}
           </p>
           <h1 className="mt-1 text-2xl sm:text-3xl font-bold text-gray-900 dark:text-slate-100">{title ?? `Get involved with ${event.name}`}</h1>

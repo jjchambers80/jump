@@ -1,0 +1,128 @@
+{
+  "_comment": [
+    "Spec 033 parity fixtures. Asserted by BOTH backend/tests/unit/eventTime.test.js",
+    "(Jest) and frontend/tests/unit/eventTime.test.ts (Vitest), so the two",
+    "implementations of eventTime cannot drift apart silently.",
+    "Same arrangement as the fee libraries. Edit one implementation, both suites fail."
+  ],
+
+  "format": [
+    {
+      "name": "Mountain, standard time",
+      "instant": "2026-11-09T03:00:00.000Z",
+      "zone": "America/Denver",
+      "dateTime": "Sun, Nov 8, 2026 · 8:00 PM MST",
+      "date": "Sun, Nov 8, 2026",
+      "time": "8:00 PM MST",
+      "abbreviation": "MST"
+    },
+    {
+      "name": "Mountain, daylight time",
+      "instant": "2026-07-04T02:00:00.000Z",
+      "zone": "America/Denver",
+      "dateTime": "Fri, Jul 3, 2026 · 8:00 PM MDT",
+      "date": "Fri, Jul 3, 2026",
+      "time": "8:00 PM MDT",
+      "abbreviation": "MDT"
+    },
+    {
+      "name": "Arizona never observes DST — same wall clock, MST in July",
+      "instant": "2026-07-04T03:00:00.000Z",
+      "zone": "America/Phoenix",
+      "dateTime": "Fri, Jul 3, 2026 · 8:00 PM MST",
+      "date": "Fri, Jul 3, 2026",
+      "time": "8:00 PM MST",
+      "abbreviation": "MST"
+    },
+    {
+      "name": "Eastern, standard time — the abbreviation shows even in the default zone (D6)",
+      "instant": "2026-11-09T01:00:00.000Z",
+      "zone": "America/New_York",
+      "dateTime": "Sun, Nov 8, 2026 · 8:00 PM EST",
+      "date": "Sun, Nov 8, 2026",
+      "time": "8:00 PM EST",
+      "abbreviation": "EST"
+    },
+    {
+      "name": "Indiana follows Eastern DST",
+      "instant": "2026-07-04T00:00:00.000Z",
+      "zone": "America/Indiana/Indianapolis",
+      "dateTime": "Fri, Jul 3, 2026 · 8:00 PM EDT",
+      "date": "Fri, Jul 3, 2026",
+      "time": "8:00 PM EDT",
+      "abbreviation": "EDT"
+    },
+    {
+      "name": "Alaska",
+      "instant": "2026-12-08T05:00:00.000Z",
+      "zone": "America/Anchorage",
+      "dateTime": "Mon, Dec 7, 2026 · 8:00 PM AKST",
+      "date": "Mon, Dec 7, 2026",
+      "time": "8:00 PM AKST",
+      "abbreviation": "AKST"
+    },
+    {
+      "name": "Hawaii",
+      "instant": "2026-06-16T06:30:00.000Z",
+      "zone": "Pacific/Honolulu",
+      "dateTime": "Mon, Jun 15, 2026 · 8:30 PM HST",
+      "date": "Mon, Jun 15, 2026",
+      "time": "8:30 PM HST",
+      "abbreviation": "HST"
+    },
+    {
+      "name": "An unknown zone falls back to the default rather than throwing",
+      "instant": "2026-11-09T01:00:00.000Z",
+      "zone": "Mars/Olympus",
+      "dateTime": "Sun, Nov 8, 2026 · 8:00 PM EST",
+      "date": "Sun, Nov 8, 2026",
+      "time": "8:00 PM EST",
+      "abbreviation": "EST"
+    }
+  ],
+
+  "roundTrip": [
+    {
+      "name": "Plain evening show in Mountain standard time",
+      "local": "2026-11-08T20:00",
+      "zone": "America/Denver",
+      "instant": "2026-11-09T03:00:00.000Z",
+      "backToLocal": "2026-11-08T20:00"
+    },
+    {
+      "name": "Plain morning slot, Pacific daylight time",
+      "local": "2026-06-15T09:05",
+      "zone": "America/Los_Angeles",
+      "instant": "2026-06-15T16:05:00.000Z",
+      "backToLocal": "2026-06-15T09:05"
+    },
+    {
+      "name": "Midnight in a zone that never shifts",
+      "local": "2026-01-01T00:00",
+      "zone": "Pacific/Honolulu",
+      "instant": "2026-01-01T10:00:00.000Z",
+      "backToLocal": "2026-01-01T00:00"
+    },
+    {
+      "name": "Spring-forward gap: 02:30 never happens, resolves forward to 03:30 EDT",
+      "local": "2026-03-08T02:30",
+      "zone": "America/New_York",
+      "instant": "2026-03-08T07:30:00.000Z",
+      "backToLocal": "2026-03-08T03:30"
+    },
+    {
+      "name": "Fall-back overlap: 01:30 happens twice, resolves to the first (EDT)",
+      "local": "2026-11-01T01:30",
+      "zone": "America/New_York",
+      "instant": "2026-11-01T05:30:00.000Z",
+      "backToLocal": "2026-11-01T01:30"
+    },
+    {
+      "name": "Last minute before the spring transition is untouched",
+      "local": "2026-03-08T01:59",
+      "zone": "America/New_York",
+      "instant": "2026-03-08T06:59:00.000Z",
+      "backToLocal": "2026-03-08T01:59"
+    }
+  ]
+}

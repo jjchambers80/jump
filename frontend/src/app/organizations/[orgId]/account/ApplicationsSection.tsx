@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { addOnSummary, formatDate, money, needsBoothPicker, PAYMENT_LABEL, STATUS_LABEL, STATUS_STYLE, type ApplicantApplication } from '@/lib/applications';
 import { mapsApi } from '@/services/api';
 import BoothPicker from '@/components/maps/BoothPicker';
+import { formatEventDate } from '@/lib/eventTime';
 
 export default function ApplicationsSection() {
   const [apps, setApps] = useState<ApplicantApplication[] | null>(null);
@@ -93,7 +94,7 @@ export default function ApplicationsSection() {
                 {a.event.name} · {a.form.name}{a.tier ? ` (${a.tier.name})` : ''}
               </p>
               <p className="text-sm text-gray-600 dark:text-slate-400">
-                {formatDate(a.event.date)} · {a.profile.businessName}
+                {formatEventDate(a.event.date, a.event.timezone)} · {a.profile.businessName}
                 {a.form.kind === 'PAID' ? ` · ${PAYMENT_LABEL[a.paymentStatus]}${a.amounts.applicantPays > 0 ? ` ${money(a.amounts.applicantPays)}` : ''}${a.paymentStatus === 'PAYMENT_DUE' && a.paymentDueAt ? ` by ${formatDate(a.paymentDueAt)}` : ''}` : ''}
                 {a.booth && a.booth.status !== 'HELD' ? ` · Booth ${a.booth.label}` : a.boothLabel && !a.booth ? ` · ${a.boothLabel}` : ''}
                 {a.orderRef ? <span className="font-mono"> · Order {a.orderRef}</span> : null}

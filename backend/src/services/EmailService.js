@@ -5,6 +5,7 @@
 import resend from '../config/resend.js';
 import logger from '../utils/logger.js';
 import { orderUrl } from '../utils/storefrontUrl.js';
+import { formatEventDateTime } from '../utils/eventTime.js';
 import { absoluteAssetUrl } from '../utils/publicUrl.js';
 
 function escapeHtml(value) {
@@ -413,6 +414,8 @@ ${manageTicketsHtml}
    * @param {Array} tickets - Tickets to notify (with contact relations)
    */
   async sendCancellationNotification(event, tickets) {
+    // Spec 033: the event date belongs to the venue's zone, not the server's.
+    const eventWhen = formatEventDateTime(event.date, event.venue?.timezone);
     // Group tickets by contact email to avoid duplicate emails
     const contactEmails = new Map();
     for (const ticket of tickets) {
@@ -441,6 +444,7 @@ ${manageTicketsHtml}
                 <div style="padding: 20px;">
                   <p>Hi ${contact.firstName || 'there'},</p>
                   <p>We're sorry to inform you that <strong>${event.name}</strong> has been cancelled.</p>
+                  ${eventWhen ? `<p style="color: #666; font-size: 14px; margin-top: -8px;">${escapeHtml(eventWhen)}</p>` : ''}
                   <p>Your tickets have been voided and a refund will be processed automatically.</p>
                   <p style="color: #666; font-size: 12px;">If you have questions, contact us at support@jump.events</p>
                 </div>
@@ -479,6 +483,8 @@ ${manageTicketsHtml}
   async sendApplicationReceipt(application, { statusUrl, accountUrl = null, paymentMethod = null, lines = [], booth = null }) {
     const order = application.order;
     const organization = application.event?.venue?.organization || {};
+    // Spec 033: the event date is wall-clock local to the venue.
+    const eventWhen = formatEventDateTime(application.event?.date, application.event?.venue?.timezone);
     const orgName = organization.name || 'the organizer';
     const to = application.contact?.email;
     if (!order || !to) return false;
@@ -500,6 +506,7 @@ ${manageTicketsHtml}
       `Hi ${application.contact?.firstName || 'there'},`,
       '',
       `This is your receipt for ${application.profile?.businessName || 'your'} application to ${application.event?.name || 'the event'}${application.tier ? ` (${application.tier.name})` : ''}.`,
+      ...(eventWhen ? [`When: ${eventWhen}`] : []),
       `Order number: ${order.orderRef}`,
       '',
       ...lines.map((l) => `${l.label}: ${money(l.amount)}`),
@@ -529,6 +536,7 @@ ${manageTicketsHtml}
               <p>This is your receipt for <strong>${escapeHtml(application.profile?.businessName || 'your')}</strong>'s application to <strong>${escapeHtml(application.event?.name || 'the event')}</strong>${application.tier ? ` (${escapeHtml(application.tier.name)})` : ''}.</p>
               <div style="background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 24px 0;">
                 <p style="margin: 0 0 12px; color: #666; font-size: 13px;">Order <strong style="color: #111827;">${escapeHtml(order.orderRef)}</strong> · ${escapeHtml(orgName)}</p>
+                ${eventWhen ? `<p style="margin: -6px 0 12px; color: #666; font-size: 13px;">${escapeHtml(eventWhen)}</p>` : ''}
                 <table style="width: 100%; border-collapse: collapse;">${rowsHtml}<tr><td colspan="2" style="border-top: 1px solid #e5e7eb; padding: 0;"></td></tr>${summaryRows}</table>
                 <p style="margin: 12px 0 0; color: #666; font-size: 13px;">Paid by ${escapeHtml(method)}${order.paidAt ? ` on ${new Date(order.paidAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}` : ''}.</p>
               </div>

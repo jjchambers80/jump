@@ -40,7 +40,7 @@ class AdminSearchService {
             name: true,
             date: true,
             status: true,
-            venue: { select: { name: true, organizationId: true } },
+            venue: { select: { name: true, organizationId: true, timezone: true } },
           },
           orderBy: [{ date: 'desc' }, { id: 'asc' }],
           take: 5,

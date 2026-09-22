@@ -8,6 +8,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import api from '@/services/api';
 import { useOrg } from '@/components/OrgContext';
+import { formatEventDateTime } from '@/lib/eventTime';
 
 interface TicketRow {
   id: string;
@@ -52,7 +53,7 @@ interface TicketDetail {
   createdAt: string;
   attendee: { id: string; firstName: string; lastName: string; email: string } | null;
   purchaser: { firstName: string; lastName: string; email: string } | null;
-  event: { id: string; name: string; date: string; venue: string };
+  event: { id: string; name: string; date: string; venue: string; timezone?: string | null };
   order: { id: string; orderRef: string; totalAmount: number; currency: string };
   payment: {
     status: string;
@@ -376,7 +377,7 @@ function TicketDetailModal({
                         {detail.event.venue && (
                           <p><span className="font-medium">Location:</span> {detail.event.venue}</p>
                         )}
-                        <p><span className="font-medium">Date & Time:</span> {formatDate(detail.event.date)}</p>
+                        <p><span className="font-medium">Date &amp; Time:</span> {formatEventDateTime(detail.event.date, detail.event.timezone)}</p>
                         <p><span className="font-medium">Amount charged:</span> {formatCurrency(detail.pricePaid)}</p>
                         <p><span className="font-medium">Confirmation:</span> {detail.barcode}</p>
                         <p><span className="font-medium">Order:</span>{' '}

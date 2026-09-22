@@ -465,7 +465,7 @@ class MapService {
             id: true,
             taxRate: true,
             // Events belong to organizations through the venue (Event → Venue → Organization).
-            venue: { select: { organization: { select: { id: true, brandColor: true, themeMode: true, taxInclusivePricing: true } } } },
+            venue: { select: { timezone: true, organization: { select: { id: true, brandColor: true, themeMode: true, taxInclusivePricing: true } } } },
           },
         },
       },

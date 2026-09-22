@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatEventDate, formatEventTime } from '@/lib/eventTime';
 
 interface TicketDisplayProps {
   ticket: {
@@ -10,7 +11,11 @@ interface TicketDisplayProps {
       venue: string;
       date?: string;
       eventDate?: string;
+      /** IANA zone the show's wall clock belongs to (spec 033). */
+      timezone?: string | null;
     };
+    /** Flattened alias used by the ticket-lookup payloads. */
+    eventTimezone?: string | null;
     customer?: {
       email: string;
     };
@@ -19,17 +24,12 @@ interface TicketDisplayProps {
 }
 
 export const TicketDisplay: React.FC<TicketDisplayProps> = ({ ticket }) => {
-  const eventDate = new Date(ticket.event.date || ticket.event.eventDate || '');
-  const formattedDate = eventDate.toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
-  const formattedTime = eventDate.toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  // Spec 033: a ticket is printed and shown at the door — it must read in the
+  // venue's own zone, with the abbreviation, whoever opens it.
+  const eventDate = ticket.event.date || ticket.event.eventDate || '';
+  const zone = ticket.event.timezone ?? ticket.eventTimezone ?? null;
+  const formattedDate = formatEventDate(eventDate, zone, { weekday: 'long', month: 'long' });
+  const formattedTime = formatEventTime(eventDate, zone);
   const holderEmail = ticket.customer?.email || ticket.customerEmail || '';
 
   return (

@@ -18,7 +18,7 @@ import { checkoutAcceptanceRequired } from '../config/legal.js';
 
 /** Include for org-wide order rows (spec 024 phase 2): enough to describe either kind without a second query. */
 const LIST_INCLUDE = {
-  event: { select: { id: true, name: true, date: true, venue: { select: { organization: { select: { id: true, name: true } } } } } },
+  event: { select: { id: true, name: true, date: true, venue: { select: { timezone: true, organization: { select: { id: true, name: true } } } } } },
   contact: { select: { id: true, firstName: true, lastName: true, email: true } },
   payment: { select: { source: true, stripePaymentIntentId: true, stripeAccountId: true, status: true } },
   items: { select: { kind: true, quantity: true, description: true, unitPrice: true, priceTier: { select: { name: true } } }, orderBy: { createdAt: 'asc' } },
@@ -526,6 +526,7 @@ class OrderService {
                 id: true,
                 name: true,
                 address: true,
+                timezone: true,
                 organization: { select: { id: true, name: true, logoUrl: true, brandColor: true, themeMode: true } },
               },
             },
@@ -635,6 +636,7 @@ class OrderService {
                 id: true,
                 name: true,
                 address: true,
+                timezone: true,
                 organization: { select: { id: true, name: true, logoUrl: true, brandColor: true, themeMode: true } },
               },
             },
@@ -797,7 +799,7 @@ class OrderService {
         where: { eventId },
         include: {
           event: {
-            select: { name: true, date: true },
+            select: { name: true, date: true, venue: { select: { timezone: true } } },
           },
           contact: {
             select: { firstName: true, lastName: true, email: true },
@@ -1121,6 +1123,8 @@ class OrderService {
               id: order.event.venue.id,
               name: order.event.venue.name,
               address: order.event.venue.address,
+              // Spec 033: the zone the event's wall clock belongs to.
+              timezone: order.event.venue.timezone ?? null,
             }
           : undefined,
       },
@@ -1233,6 +1237,8 @@ class OrderService {
       applicationId: order.applicationId ?? null,
       eventName: order.event?.name,
       eventDate: order.event?.date,
+      // Spec 033: event times are wall-clock local to the venue.
+      eventTimezone: order.event?.venue?.timezone ?? null,
       quantity: order.quantity,
       subtotalAmount: Number(order.subtotalAmount),
       platformFeeAmount: Number(order.platformFeeAmount),

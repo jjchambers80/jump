@@ -7,6 +7,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import api, { OrderDetail, OrderTicket } from '@/services/api';
+import { formatEventDate, formatEventTime } from '@/lib/eventTime';
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('en-US', {
@@ -197,7 +198,7 @@ export default function OrderLookupPage() {
                 {order.event.name}
               </h2>
               <p className="text-sm text-gray-500 dark:text-slate-400">
-                {formatDate(order.event.date)} at {formatTime(order.event.date)}
+                {formatEventDate(order.event.date, order.event.venue?.timezone, { weekday: 'long', month: 'long' })} at {formatEventTime(order.event.date, order.event.venue?.timezone)}
               </p>
               {order.event.venue && (
                 <p className="text-sm text-gray-500 dark:text-slate-400">

@@ -39,7 +39,7 @@ const PAYMENT_INCLUDE = {
   profile: { include: { images: { include: { image: { include: { file: true } } }, orderBy: { displayOrder: 'asc' } } } },
   tier: true,
   form: true,
-  event: { select: { id: true, name: true, date: true, venue: { select: { organizationId: true, organization: true } } } },
+  event: { select: { id: true, name: true, date: true, venue: { select: { organizationId: true, timezone: true, organization: true } } } },
   answers: { include: { question: true, image: { include: { file: true } } } },
   decisions: { orderBy: { createdAt: 'asc' } },
   order: { include: ORDER_INCLUDE },
