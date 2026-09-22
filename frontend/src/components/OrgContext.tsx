@@ -4,29 +4,27 @@
 // Fetches orgs once, shares selectedOrgId across all admin routes.
 
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
+import { useSession } from 'next-auth/react';
 import api, { setActiveOrganizationId } from '@/services/api';
-import type { ThemeMode } from '@/lib/theme';
 import { onOrganizationCreated } from '@/lib/orgChannel';
+import {
+  readPersistedOrganizationId,
+  persistOrganizationId,
+  clearPersistedOrganizationId,
+  resolveSelectedOrgId,
+} from '@/lib/orgContextUtils';
+import type { Organization } from '@/lib/orgContextUtils';
 
-export interface Organization {
-  id: string;
-  name: string;
-  /** URL-safe store handle; generated from the name, stable across renames. */
-  slug: string;
-  status: 'ACTIVE' | 'INACTIVE';
-  logoUrl?: string | null;
-  coverUrl?: string | null;
-  brandColor?: string | null;
-  themeMode?: ThemeMode;
-  createdAt: string;
-  updatedAt: string;
-  /** null while the organization is still in the /signup flow (spec 022) */
-  onboardingCompletedAt?: string | null;
-  _count?: {
-    venues: number;
-    users: number;
-  };
-}
+// Re-export types consumed by sibling modules.
+export type { Organization } from '@/lib/orgContextUtils';
+export {
+  ACTIVE_ORG_STORAGE_PREFIX,
+  activeOrganizationStorageKey,
+  readPersistedOrganizationId,
+  persistOrganizationId,
+  clearPersistedOrganizationId,
+  resolveSelectedOrgId,
+} from '@/lib/orgContextUtils';
 
 interface OrgContextValue {
   organizations: Organization[];
@@ -43,9 +41,13 @@ interface OrgContextValue {
 const OrgContext = createContext<OrgContextValue | null>(null);
 
 export function OrgProvider({ children }: { children: React.ReactNode }) {
+  const { data: session } = useSession();
+  const userId = session?.user?.id ?? null;
+  const sessionOrgId = session?.user?.organizationId ?? null;
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [selectedOrgId, setSelectedOrgIdState] = useState<string | null>(null);
   const selectedOrgIdRef = useRef<string | null>(null);
+  const activeUserIdRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,7 +58,8 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
     selectedOrgIdRef.current = id;
     setActiveOrganizationId(id);
     setSelectedOrgIdState(id);
-  }, []);
+    if (id && userId) persistOrganizationId(userId, id);
+  }, [userId]);
 
   // An organization to prefer once the list arrives: `?org=<id>` on the URL
   // (the signup flow lands on /admin/dashboard?org=…) or a cross-tab
@@ -64,31 +67,59 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
   const preferredOrgIdRef = useRef<string | null>(null);
 
   const fetchOrgs = useCallback(async () => {
+    const requestedUserId = userId;
+    if (!requestedUserId) {
+      setOrganizations([]);
+      setSelectedOrgId(null);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
       const data = await api.get<Organization[]>('/organizations');
+      // Ignore a response started for a session that has since signed out or
+      // changed users. It must not publish that user's organization globally.
+      if (activeUserIdRef.current !== requestedUserId) return;
       setOrganizations(data);
-      // Auto-select: the preferred org when it is in the list, else keep the
-      // current selection, else the first org
-      if (data.length > 0) {
-        const preferred = preferredOrgIdRef.current;
-        preferredOrgIdRef.current = null;
-        const prev = selectedOrgIdRef.current;
-        const next =
-          (preferred && data.some((o) => o.id === preferred) && preferred) ||
-          (prev && data.some((o) => o.id === prev) && prev) ||
-          data[0].id;
+      // Resolve one-shot preferences first, then the user's saved choice. A
+      // valid in-memory choice wins over session/default fallbacks on refresh.
+      const preferred = preferredOrgIdRef.current;
+      preferredOrgIdRef.current = null;
+      const persisted = readPersistedOrganizationId(requestedUserId);
+      const prev = selectedOrgIdRef.current;
+      const next = resolveSelectedOrgId(data, preferred, persisted, prev, sessionOrgId);
+      if (next) {
         setSelectedOrgId(next);
+      } else {
+        preferredOrgIdRef.current = null;
+        clearPersistedOrganizationId(requestedUserId);
+        setSelectedOrgId(null);
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to load organizations');
+      if (activeUserIdRef.current === requestedUserId) {
+        setError(err.message || 'Failed to load organizations');
+      }
     } finally {
-      setLoading(false);
+      if (activeUserIdRef.current === requestedUserId) setLoading(false);
     }
-  }, []);
+  }, [sessionOrgId, setSelectedOrgId, userId]);
 
   useEffect(() => {
+    // A provider can outlive an Auth.js session update. Reset module/context
+    // state before loading the next user's scoped persisted selection.
+    if (activeUserIdRef.current !== userId) {
+      activeUserIdRef.current = userId;
+      setOrganizations([]);
+      setSelectedOrgId(null);
+    }
+
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
+
     try {
       const url = new URL(window.location.href);
       const fromUrl = url.searchParams.get('org');
@@ -101,7 +132,7 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
       // ignore
     }
     fetchOrgs();
-  }, [fetchOrgs]);
+  }, [fetchOrgs, setSelectedOrgId, userId]);
 
   // The org switcher opens /signup in another tab; when it finishes, pick up
   // the new organization here without a reload.
