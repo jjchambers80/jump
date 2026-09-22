@@ -1,10 +1,11 @@
 export function formatEventSummary(event) {
-  const activePrices = event.priceTiers.map((tier) => Number(tier.price));
-  const availableTickets = event.priceTiers.reduce(
+  const ticketed = event.admissionMode !== 'RSVP';
+  const activePrices = ticketed ? event.priceTiers.map((tier) => Number(tier.price)) : [];
+  const availableTickets = ticketed ? event.priceTiers.reduce(
     (sum, tier) =>
       sum + (tier.quantityTotal - tier.quantitySold - tier.quantityReserved),
     0
-  );
+  ) : 0;
 
   return {
     id: event.id,
@@ -14,6 +15,9 @@ export function formatEventSummary(event) {
     venue: event.venue,
     category: event.category,
     status: event.status,
+    admissionMode: event.admissionMode || 'TICKETED',
+    rsvpLimit: event.rsvpLimit ?? null,
+    rsvpMaxPartySize: event.rsvpMaxPartySize ?? 1,
     priceRange:
       activePrices.length > 0
         ? { min: Math.min(...activePrices), max: Math.max(...activePrices) }

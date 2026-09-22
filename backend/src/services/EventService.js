@@ -13,6 +13,14 @@ import mapService from './MapService.js';
 import { PAID_ORDER_STATUSES } from './paidStatuses.js';
 import { rethrowSlugConflict, resolveUniqueSlug } from '../utils/slug.js';
 import { findByPublicIdentifier } from '../utils/publicIdentifier.js';
+import rsvpService, { remainingFor } from './RsvpService.js';
+import emailService from './EmailService.js';
+
+function admissionConflict(message) {
+  const error = new ConflictError(message);
+  error.code = 'ADMISSION_MODE_LOCKED';
+  return error;
+}
 
 class EventService {
   /**
@@ -23,6 +31,7 @@ class EventService {
    */
   async createEvent(orgId, data) {
     const { venueId, name, description, date, capacity, category, priceTiers } = data;
+    const admissionMode = data.admissionMode || 'TICKETED';
 
     // Validate venue belongs to org
     const venue = await prisma.venue.findFirst({
@@ -32,9 +41,14 @@ class EventService {
       throw new ValidationError('Venue not found in this organization');
     }
 
-    // Validate capacity
-    const capacityNum = parseInt(capacity);
-    if (isNaN(capacityNum) || capacityNum < 1 || capacityNum > 100000) {
+    const rsvpLimit = data.rsvpLimit === null || data.rsvpLimit === undefined ? null : parseInt(data.rsvpLimit);
+    const rsvpMaxPartySize = data.rsvpMaxPartySize === undefined ? 1 : parseInt(data.rsvpMaxPartySize);
+    if (admissionMode === 'RSVP' && rsvpLimit !== null && (isNaN(rsvpLimit) || rsvpLimit < 1 || rsvpLimit > 100000))
+      throw new ValidationError('RSVP limit must be between 1 and 100,000');
+    if (admissionMode === 'RSVP' && (isNaN(rsvpMaxPartySize) || rsvpMaxPartySize < 1 || rsvpMaxPartySize > 10))
+      throw new ValidationError('RSVP maximum party size must be between 1 and 10');
+    const capacityNum = admissionMode === 'RSVP' ? (rsvpLimit ?? 0) : parseInt(capacity);
+    if (admissionMode === 'TICKETED' && (isNaN(capacityNum) || capacityNum < 1 || capacityNum > 100000)) {
       throw new ValidationError('Capacity must be between 1 and 100,000');
     }
 
@@ -48,7 +62,7 @@ class EventService {
     }
 
     // Validate price tier capacity sum
-    if (priceTiers && priceTiers.length > 0) {
+    if (admissionMode === 'TICKETED' && priceTiers && priceTiers.length > 0) {
       const totalTierQuantity = priceTiers.reduce(
         (sum, t) => sum + (parseInt(t.quantityTotal) || 0),
         0
@@ -76,10 +90,13 @@ class EventService {
         description: description || null,
         date: eventDate,
         capacity: capacityNum,
+        admissionMode,
+        rsvpLimit,
+        rsvpMaxPartySize,
         category: category || null,
         status: 'DRAFT',
         priceTiers: {
-          create: (priceTiers || []).map((tier, index) => ({
+          create: (admissionMode === 'TICKETED' ? priceTiers || [] : []).map((tier, index) => ({
             name: tier.name,
             description: tier.description ?? null,
             price: tier.price,
@@ -151,6 +168,9 @@ class EventService {
           imageId: source.imageId,
           date: eventDate,
           capacity: source.capacity,
+          admissionMode: source.admissionMode,
+          rsvpLimit: source.rsvpLimit,
+          rsvpMaxPartySize: source.rsvpMaxPartySize,
           category: source.category,
           status: 'DRAFT',
           taxRate: source.taxRate,
@@ -217,6 +237,38 @@ class EventService {
     }
 
     const updateData = {};
+    const nextMode = updates.admissionMode ?? existing.admissionMode;
+    if (updates.admissionMode !== undefined && !['TICKETED', 'RSVP'].includes(updates.admissionMode))
+      throw new ValidationError('admissionMode must be TICKETED or RSVP');
+    if (updates.admissionMode && updates.admissionMode !== existing.admissionMode) {
+      if (updates.admissionMode === 'RSVP') {
+        if (await prisma.order.count({ where: { eventId } }))
+          throw admissionConflict('An event with orders cannot switch to RSVP admission');
+      } else if (await prisma.eventRsvp.count({ where: { eventId, status: 'GOING' } })) {
+        throw admissionConflict('An event with active RSVPs cannot switch to ticketed admission');
+      }
+      updateData.admissionMode = updates.admissionMode;
+    }
+    if (updates.rsvpLimit !== undefined) {
+      const limit = updates.rsvpLimit === null ? null : parseInt(updates.rsvpLimit);
+      if (limit !== null && (isNaN(limit) || limit < 1 || limit > 100000))
+        throw new ValidationError('RSVP limit must be between 1 and 100,000');
+      if (limit !== null && existing.admissionMode === 'RSVP') {
+        const { headcount } = await rsvpService.headcount(eventId);
+        if (headcount > limit) {
+          const error = new ConflictError('RSVP limit cannot be lower than the current headcount', { headcount });
+          error.code = 'RSVP_FULL';
+          throw error;
+        }
+      }
+      updateData.rsvpLimit = limit;
+    }
+    if (updates.rsvpMaxPartySize !== undefined) {
+      const max = parseInt(updates.rsvpMaxPartySize);
+      if (isNaN(max) || max < 1 || max > 10)
+        throw new ValidationError('RSVP maximum party size must be between 1 and 10');
+      updateData.rsvpMaxPartySize = max;
+    }
 
     if (updates.name !== undefined) {
       if (!updates.name || updates.name.length > 255) {
@@ -250,7 +302,7 @@ class EventService {
       updateData.date = eventDate;
     }
 
-    if (updates.capacity !== undefined) {
+    if (updates.capacity !== undefined && nextMode === 'TICKETED') {
       const cap = parseInt(updates.capacity);
       if (isNaN(cap) || cap < 1 || cap > 100000) {
         throw new ValidationError('Capacity must be between 1 and 100,000');
@@ -263,6 +315,9 @@ class EventService {
         );
       }
       updateData.capacity = cap;
+    }
+    if (nextMode === 'RSVP' && (updates.admissionMode !== undefined || updates.rsvpLimit !== undefined)) {
+      updateData.capacity = updates.rsvpLimit === null ? 0 : (updateData.rsvpLimit ?? existing.rsvpLimit ?? 0);
     }
 
     if (updates.category !== undefined) {
@@ -341,6 +396,12 @@ class EventService {
       );
     }
 
+    if (existing.admissionMode === 'TICKETED') {
+      const tierCount = await prisma.priceTier.count({ where: { eventId, isActive: true } });
+      if (tierCount === 0)
+        throw new ValidationError('At least one active price tier is required to publish');
+    }
+
     const event = await prisma.event.update({
       where: { id: eventId },
       data: { status: 'PUBLISHED' },
@@ -387,13 +448,28 @@ class EventService {
       );
     }
 
-    const event = await prisma.event.update({
-      where: { id: eventId },
-      data: { status: 'CANCELLED' },
-      include: {
-        venue: true,
-        priceTiers: { orderBy: { displayOrder: 'asc' } },
-      },
+    const { event, rsvps } = await prisma.$transaction(async (tx) => {
+      const rsvps = existing.admissionMode === 'RSVP'
+        ? await tx.eventRsvp.findMany({
+            where: { eventId, status: 'GOING' },
+            include: { contact: true },
+          })
+        : [];
+      const event = await tx.event.update({
+        where: { id: eventId },
+        data: { status: 'CANCELLED' },
+        include: {
+          venue: { include: { organization: true } },
+          priceTiers: { orderBy: { displayOrder: 'asc' } },
+        },
+      });
+      if (rsvps.length) {
+        await tx.eventRsvp.updateMany({
+          where: { eventId, status: 'GOING' },
+          data: { status: 'CANCELLED', cancelledAt: new Date() },
+        });
+      }
+      return { event, rsvps };
     });
 
     logger.info('Event cancelled', {
@@ -403,7 +479,7 @@ class EventService {
       eventName: event.name,
     });
 
-    // TODO: Notify ticket holders (T076)
+    if (rsvps.length) await emailService.sendCancellationNotification(event, rsvps);
 
     return this._formatEventDetail(event);
   }
@@ -488,7 +564,11 @@ class EventService {
       throw new NotFoundError('Event not found');
     }
 
-    return this._formatEventDetail(event);
+    if (event.admissionMode === 'RSVP') {
+      const { headcount } = await rsvpService.headcount(event.id);
+      event.rsvpHeadcount = headcount;
+    }
+    return this._formatEventDetail(event, { publicView: true });
   }
 
   /** Canonical public route data; intentionally bypasses the private-store gate. */
@@ -562,7 +642,7 @@ class EventService {
     return {
       ...event,
       soldTickets: event._count.tickets,
-      availableTickets: event.capacity - event._count.tickets,
+      availableTickets: event.admissionMode === 'RSVP' ? 0 : event.capacity - event._count.tickets,
     };
   }
 
@@ -692,7 +772,8 @@ class EventService {
   /**
    * Format event detail for API response
    */
-  _formatEventDetail(event) {
+  _formatEventDetail(event, { publicView = false } = {}) {
+    const hideTicketInventory = publicView && event.admissionMode === 'RSVP';
     return {
       id: event.id,
       slug: event.slug,
@@ -705,6 +786,12 @@ class EventService {
       capacity: event.capacity,
       category: event.category,
       status: event.status,
+      admissionMode: event.admissionMode || 'TICKETED',
+      rsvpLimit: event.rsvpLimit ?? null,
+      rsvpMaxPartySize: event.rsvpMaxPartySize ?? 1,
+      rsvpRemaining: event.admissionMode === 'RSVP'
+        ? remainingFor(event.rsvpLimit, event.rsvpHeadcount || 0)
+        : null,
       taxRate: event.taxRate ? Number(event.taxRate) : 0,
       // Where the cached rate came from (spec 009) so admins can see why it is what it is.
       tax: {
@@ -732,7 +819,7 @@ class EventService {
             timezone: event.venue.timezone,
           }
         : null,
-      priceTiers: (event.priceTiers || []).map((t) => {
+      priceTiers: (hideTicketInventory ? [] : event.priceTiers || []).map((t) => {
         const now = new Date();
         const saleStart = t.saleStartDate ? new Date(t.saleStartDate) : null;
         const saleEnd = t.saleEndDate ? new Date(t.saleEndDate) : null;
@@ -764,7 +851,7 @@ class EventService {
           updatedAt: t.updatedAt,
         };
       }),
-      ...(event.addOns && { addOns: event.addOns.map((a) => addOnService.serializePublic(a)) }),
+      ...(event.addOns && { addOns: hideTicketInventory ? [] : event.addOns.map((a) => addOnService.serializePublic(a)) }),
       createdAt: event.createdAt,
       updatedAt: event.updatedAt,
     };

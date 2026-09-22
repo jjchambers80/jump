@@ -26,6 +26,14 @@ function orgLogoHtml(logoUrl, orgName) {
   return `<img src="${src}" alt="${escapeHtml(orgName || 'Organizer')}" style="display: block; margin: 0 auto 16px; max-height: 60px; max-width: 240px; width: auto; height: auto;" />`;
 }
 
+function icsText(value) {
+  return String(value || '').replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;');
+}
+
+function icsDate(value) {
+  return new Date(value).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+}
+
 class EmailService {
   /**
    * Send order confirmation email with View Tickets link (FR-036)
@@ -416,6 +424,7 @@ ${manageTicketsHtml}
   async sendCancellationNotification(event, tickets) {
     // Spec 033: the event date belongs to the venue's zone, not the server's.
     const eventWhen = formatEventDateTime(event.date, event.venue?.timezone);
+    const isRsvp = event.admissionMode === 'RSVP';
     // Group tickets by contact email to avoid duplicate emails
     const contactEmails = new Map();
     for (const ticket of tickets) {
@@ -445,7 +454,7 @@ ${manageTicketsHtml}
                   <p>Hi ${contact.firstName || 'there'},</p>
                   <p>We're sorry to inform you that <strong>${event.name}</strong> has been cancelled.</p>
                   ${eventWhen ? `<p style="color: #666; font-size: 14px; margin-top: -8px;">${escapeHtml(eventWhen)}</p>` : ''}
-                  <p>Your tickets have been voided and a refund will be processed automatically.</p>
+                  <p>${isRsvp ? 'Your RSVP has been cancelled; no action is needed.' : 'Your tickets have been voided and a refund will be processed automatically.'}</p>
                   <p style="color: #666; font-size: 12px;">If you have questions, contact us at support@jump.events</p>
                 </div>
               </body>
@@ -467,6 +476,64 @@ ${manageTicketsHtml}
         });
         // Continue sending to other contacts
       }
+    }
+  }
+
+  /** Branded RSVP confirmation with a calendar attachment (spec 034). */
+  async sendRsvpConfirmation(rsvp, { cancelUrl }) {
+    const event = rsvp.event;
+    const contact = rsvp.contact;
+    const organization = event.venue?.organization || {};
+    const eventWhen = formatEventDateTime(event.date, event.venue?.timezone);
+    const startsAt = new Date(event.date);
+    const endsAt = new Date(startsAt.getTime() + 2 * 60 * 60 * 1000);
+    const location = [event.venue?.name, event.venue?.address].filter(Boolean).join(', ');
+    const calendar = [
+      'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Jump//RSVP//EN', 'METHOD:PUBLISH',
+      'BEGIN:VEVENT', `UID:rsvp-${rsvp.id}@jump.events`, `DTSTAMP:${icsDate(new Date())}`,
+      `DTSTART:${icsDate(startsAt)}`, `DTEND:${icsDate(endsAt)}`,
+      `SUMMARY:${icsText(event.name)}`, `LOCATION:${icsText(location)}`,
+      'END:VEVENT', 'END:VCALENDAR', '',
+    ].join('\r\n');
+    const msg = {
+      to: [contact.email],
+      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      subject: `You're on the list — ${event.name}`,
+      text: [
+        `Hi ${contact.firstName || 'there'},`, '', `You're on the list for ${event.name}.`,
+        ...(eventWhen ? [`When: ${eventWhen}`] : []), ...(location ? [`Where: ${location}`] : []),
+        `Party size: ${rsvp.partySize}`, '', `Can't make it? Cancel your RSVP: ${cancelUrl}`,
+      ].join('\n'),
+      html: `
+        <html><body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+          <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
+            ${orgLogoHtml(organization.logoUrl, organization.name)}
+            <h1 style="color: #333; font-size: 22px;">You're on the list</h1>
+          </div>
+          <div style="padding: 24px; color: #111827;">
+            <p>Hi ${escapeHtml(contact.firstName || 'there')},</p>
+            <p>Your RSVP for <strong>${escapeHtml(event.name)}</strong> is confirmed.</p>
+            <div style="background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 24px 0;">
+              ${eventWhen ? `<p style="margin: 4px 0;"><strong>When:</strong> ${escapeHtml(eventWhen)}</p>` : ''}
+              ${location ? `<p style="margin: 4px 0;"><strong>Where:</strong> ${escapeHtml(location)}</p>` : ''}
+              <p style="margin: 4px 0;"><strong>Party size:</strong> ${rsvp.partySize}</p>
+            </div>
+            <p style="color: #666; font-size: 13px;">Plans changed? <a href="${escapeHtml(cancelUrl)}" style="color: #2563eb;">Cancel your RSVP</a>.</p>
+          </div>
+        </body></html>`,
+      attachments: [{
+        filename: `${String(event.name || 'event').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'event'}.ics`,
+        content: Buffer.from(calendar),
+      }],
+      ...(organization.email && { reply_to: organization.email }),
+    };
+    try {
+      await resend.emails.send(msg);
+      logger.info('RSVP confirmation sent', { event: 'rsvp_confirmation_sent', rsvpId: rsvp.id });
+      return true;
+    } catch (error) {
+      logger.error('Failed to send RSVP confirmation', { rsvpId: rsvp.id, error: error.message });
+      return false;
     }
   }
 

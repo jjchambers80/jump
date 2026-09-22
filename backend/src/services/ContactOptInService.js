@@ -15,7 +15,7 @@ class ContactOptInService {
   /**
    * @param {import('@prisma/client').Prisma.TransactionClient|typeof prisma} db
    * @param {string} contactId
-   * @param {{ account?: boolean, marketing?: boolean, source: 'CHECKOUT'|'APPLY'|'ADMIN'|'IMPORT', reason?: string }} options
+   * @param {{ account?: boolean, marketing?: boolean, source: 'CHECKOUT'|'APPLY'|'RSVP'|'ADMIN'|'IMPORT', reason?: string }} options
    * @returns {Promise<{ accountJustCreated: boolean, marketingJustSubscribed: boolean }>}
    */
   async apply(db, contactId, { account = false, marketing = false, source }) {

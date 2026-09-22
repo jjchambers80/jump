@@ -195,6 +195,12 @@ class OrderService {
         throw new NotFoundError('Event not found');
       }
 
+      if (event.admissionMode === 'RSVP') {
+        const error = new ConflictError('RSVP events do not sell tickets');
+        error.code = 'EVENT_NOT_TICKETED';
+        throw error;
+      }
+
       if (event.status !== 'PUBLISHED') {
         throw new ValidationError('Event is not available for purchase');
       }
