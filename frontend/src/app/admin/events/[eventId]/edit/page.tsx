@@ -14,7 +14,7 @@ import ImageUploader from '@/components/ImageUploader';
 import { TierCard, TierEditDialog, type TierFormData } from '@/components/TierEditDialog';
 import AddOnsSection from './AddOnsSection';
 import SlugField from '@/components/SlugField';
-import QuickVenueDialog, { type CreatedVenue } from '@/components/QuickVenueDialog';
+import VenueFlyout, { NEW_VENUE_OPTION, type CreatedVenue } from '@/components/VenueFlyout';
 
 interface Venue {
   id: string;
@@ -266,11 +266,21 @@ function EditEventContent() {
     fetchPresets();
   }, [fetchVenues, fetchPresets]);
 
+  // "+ Add new venue…" opens the flyout; the selection itself stays put.
+  const handleVenueSelect = (value: string) => {
+    if (value === NEW_VENUE_OPTION) {
+      setShowVenueDialog(true);
+      return;
+    }
+    setVenueId(value);
+  };
+
   // Quick-add venue: append and select it, no refetch needed.
-  const handleVenueCreated = (venue: CreatedVenue) => {
+  const handleVenueCreated = (venue: CreatedVenue, warning?: string) => {
     setVenues((prev) => [...prev, { id: venue.id, name: venue.name, address: venue.address }]);
     setVenueId(venue.id);
     setShowVenueDialog(false);
+    if (warning) setError(warning);
   };
 
   const addTierFromPreset = (preset: TierPreset) => {
@@ -617,34 +627,28 @@ function EditEventContent() {
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label htmlFor="event-venue" className="block text-sm font-medium text-gray-700 dark:text-slate-300">
-                  Venue *
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setShowVenueDialog(true)}
-                  className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
-                >
-                  + New venue
-                </button>
-              </div>
+              <label htmlFor="event-venue" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                Venue *
+              </label>
               {venuesLoading ? (
                 <div className="animate-pulse h-10 bg-gray-200 dark:bg-slate-700 rounded" />
               ) : (
                 <select
                   id="event-venue"
                   value={venueId}
-                  onChange={(e) => setVenueId(e.target.value)}
+                  onChange={(e) => handleVenueSelect(e.target.value)}
                   className={inputClass}
                   required
                 >
-                  <option value="">Select a venue</option>
+                  <option value="">
+                    {venues.length === 0 ? 'No venues yet' : 'Select a venue'}
+                  </option>
                   {venues.map((v) => (
                     <option key={v.id} value={v.id}>
                       {v.name} — {v.address}
                     </option>
                   ))}
+                  <option value={NEW_VENUE_OPTION}>+ Add new venue…</option>
                 </select>
               )}
               {eventData?.tax && venueId === eventData.venue?.id && <EventTaxSummary tax={eventData.tax} />}
@@ -795,9 +799,9 @@ function EditEventContent() {
         </div>
       </form>
 
-      {/* Rendered outside the event form: the dialog is its own <form> */}
+      {/* Rendered outside the event form: the flyout is its own <form> */}
       {showVenueDialog && (
-        <QuickVenueDialog
+        <VenueFlyout
           orgId={orgId}
           onClose={() => setShowVenueDialog(false)}
           onCreated={handleVenueCreated}
