@@ -12,6 +12,7 @@ import SettingsDialog from '@/app/admin/settings/SettingsDialog';
 import CustomerTimeline from './CustomerTimeline';
 import UpcomingTickets, { type UpcomingTicket } from './UpcomingTickets';
 import { segmentBadgeClass, type CustomerSegment } from '@/lib/customers';
+import { formatEventDateTime } from '@/lib/eventTime';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -20,6 +21,8 @@ interface OrderEvent {
   name: string;
   date: string;
   logoUrl: string | null;
+  /** IANA zone of the event's venue (spec 033). */
+  timezone?: string | null;
 }
 
 interface CustomerOrder {
@@ -712,7 +715,7 @@ function CustomerDetailPageContent() {
                         )}
                       </div>
                       <p className="text-xs text-gray-500 dark:text-slate-400 truncate">
-                        {order.event.name} &middot; {formatDate(order.event.date)}
+                        {order.event.name} &middot; {formatEventDateTime(order.event.date, order.event.timezone)}
                       </p>
                     </div>
 

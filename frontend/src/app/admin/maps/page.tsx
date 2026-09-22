@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   Eye,
 } from 'lucide-react';
+import { formatEventDate } from '@/lib/eventTime';
 
 function MapsListContent() {
   const router = useRouter();
@@ -216,7 +217,7 @@ function MapsListContent() {
                   <td className="px-4 py-3 text-sm text-gray-600 dark:text-slate-400">
                     {m.event?.name || '—'}
                     <span className="text-xs ml-1 text-gray-400">
-                      {m.event?.date ? new Date(m.event.date).toLocaleDateString() : ''}
+                      {m.event?.date ? formatEventDate(m.event.date, m.event.timezone) : ''}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-center">

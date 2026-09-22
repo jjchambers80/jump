@@ -219,6 +219,8 @@ class TicketService {
         eventId: ticket.eventId,
         eventName: ticket.event.name,
         eventDate: ticket.event.date,
+        // Spec 033: event times are wall-clock local to the venue.
+        eventTimezone: ticket.event.venue?.timezone ?? null,
         venue: venueStr,
         pricePaid: Number(ticket.pricePaid),
         priceTierName: ticket.priceTier?.name,
@@ -237,6 +239,7 @@ class TicketService {
         event: {
           name: ticket.event.name,
           date: ticket.event.date,
+          timezone: ticket.event.venue?.timezone ?? null,
           venue: venueStr,
         },
       };
@@ -255,7 +258,7 @@ class TicketService {
       include: {
         event: {
           include: {
-            venue: { select: { name: true, address: true } },
+            venue: { select: { name: true, address: true, timezone: true } },
           },
         },
         priceTier: { select: { name: true, price: true, description: true, saleStartDate: true, saleEndDate: true, isRefundable: true } },
@@ -304,7 +307,7 @@ class TicketService {
     const ticket = await prisma.ticket.findUnique({
       where: { barcode },
       include: {
-        event: { select: { id: true, name: true, date: true, venue: { select: { organizationId: true } } } },
+        event: { select: { id: true, name: true, date: true, venue: { select: { organizationId: true, timezone: true } } } },
         priceTier: { select: { name: true } },
         contact: { select: { firstName: true, lastName: true, email: true } },
         // Add-ons bought with the order (spec 012) so staff can hand them over at the door
@@ -363,7 +366,7 @@ class TicketService {
     const ticket = await prisma.ticket.findUnique({
       where: { barcode },
       include: {
-        event: { select: { id: true, name: true, date: true, venue: { select: { organizationId: true } } } },
+        event: { select: { id: true, name: true, date: true, venue: { select: { organizationId: true, timezone: true } } } },
         priceTier: { select: { name: true } },
         contact: { select: { firstName: true, lastName: true } },
         order: { select: { addOns: { where: { refundedAt: null }, include: { addOn: { select: { name: true } } } } } },
@@ -482,7 +485,7 @@ class TicketService {
     const ticket = await prisma.ticket.findUnique({
       where: { id: ticketId },
       include: {
-        event: { select: { id: true, name: true, date: true, venue: { select: { organizationId: true } } } },
+        event: { select: { id: true, name: true, date: true, venue: { select: { organizationId: true, timezone: true } } } },
         priceTier: { select: { name: true } },
         contact: { select: { firstName: true, lastName: true } },
       },
@@ -580,7 +583,7 @@ class TicketService {
       include: {
         event: {
           include: {
-            venue: { select: { name: true, address: true } },
+            venue: { select: { name: true, address: true, timezone: true } },
           },
         },
         priceTier: { select: { name: true, price: true, description: true } },
@@ -657,6 +660,8 @@ class TicketService {
         id: ticket.event?.id,
         name: ticket.event?.name,
         date: ticket.event?.date,
+        // Spec 033: the zone the event's wall clock belongs to.
+        timezone: ticket.event?.venue?.timezone ?? null,
         venue: venueStr,
       },
       order: {
@@ -894,6 +899,7 @@ class TicketService {
         id: ticket.event?.id,
         name: ticket.event?.name,
         date: ticket.event?.date,
+        timezone: ticket.event?.venue?.timezone ?? null,
         status: ticket.event?.status,
         venue: venueStr,
       },

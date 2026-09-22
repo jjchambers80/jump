@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import ProtectedRoute from '../../../components/ProtectedRoute';
 import api, { OrderDetail, OrderTicket } from '@/services/api';
+import { formatEventDate, formatEventTime } from '@/lib/eventTime';
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('en-US', {
@@ -288,7 +289,7 @@ function OrderDetailContent() {
                 {order.event.name}
               </h1>
               <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
-                {formatDate(order.event.date)} at {formatTime(order.event.date)}
+                {formatEventDate(order.event.date, order.event.venue?.timezone, { weekday: 'long', month: 'long' })} at {formatEventTime(order.event.date, order.event.venue?.timezone)}
               </p>
               {order.event.venue && (
                 <p className="text-sm text-gray-500 dark:text-slate-400">

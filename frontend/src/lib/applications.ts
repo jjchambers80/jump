@@ -198,7 +198,7 @@ export interface ApplicantApplication {
   /** Order number of the application's order (spec 024); null on FREE forms. */
   orderRef: string | null;
   form: { id: string; name: string; kind: FormKind };
-  event: { id: string; name: string; date: string };
+  event: { id: string; name: string; date: string; timezone?: string | null };
   organization: { id: string; name: string } | null;
   status: ApplicationStatus;
   paymentStatus: PaymentStatus;
@@ -238,7 +238,7 @@ export interface ApplicationRow {
   orderId: string | null;
   orderRef: string | null;
   eventId: string;
-  event: { id: string; name: string; date: string } | null;
+  event: { id: string; name: string; date: string; timezone?: string | null } | null;
   /** Unscoped (SYSTEM_ADMIN) callers only. */
   organization?: { id: string; name: string };
   formId: string;
@@ -323,7 +323,7 @@ export interface FormTemplate {
 export interface OrgForm {
   id: string;
   eventId: string;
-  event: { id: string; name: string; date: string; status: string };
+  event: { id: string; name: string; date: string; status: string; timezone?: string | null };
   organization?: { id: string; name: string };
   kind: FormKind;
   name: string;
@@ -393,7 +393,7 @@ export interface AdminApplication {
   orderId: string | null;
   orderRef: string | null;
   form: { id: string; name: string; slug: string; kind: FormKind; chargeTiming: 'SUBMIT' | 'APPROVAL'; feeMode: string; paymentDueDays: number; overduePolicy: 'WITHDRAW' | 'HOLD' };
-  event: { id: string; name: string; date: string };
+  event: { id: string; name: string; date: string; timezone?: string | null };
   status: ApplicationStatus;
   paymentStatus: PaymentStatus;
   capacitySlot: 'NONE' | 'RESERVED' | 'APPROVED';

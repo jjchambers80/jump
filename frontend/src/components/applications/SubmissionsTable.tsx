@@ -33,6 +33,7 @@ import EditTagsDialog from './EditTagsDialog';
 import { useParticipantsApi, type ParticipantsQuery } from '@/app/admin/participants/useParticipantsApi';
 import BusinessCell from './BusinessCell';
 import RowActionsMenu from './RowActionsMenu';
+import { formatEventDate } from '@/lib/eventTime';
 
 const STATUS_ORDER: ApplicationStatus[] = ['SUBMITTED', 'WAITLISTED', 'APPROVED', 'REJECTED', 'WITHDRAWN'];
 /** Organization mount page size (plan §7.4); the per-event mount keeps the API default. */
@@ -550,7 +551,7 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
                     {row.tier && <div className="text-xs text-gray-600 dark:text-slate-400">{row.tier.name}</div>}
                     {orgWide && row.event && (
                       <div className="text-xs text-gray-600 dark:text-slate-400" data-testid={`application-event-${row.id}`}>
-                        {row.event.name} · {formatDate(row.event.date)}
+                        {row.event.name} · {formatEventDate(row.event.date, row.event.timezone)}
                       </div>
                     )}
                   </td>

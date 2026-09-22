@@ -10,6 +10,7 @@ import Link from 'next/link';
 import api from '@/services/api';
 import { useOrg } from '@/components/OrgContext';
 import DuplicateEventDialog from './DuplicateEventDialog';
+import { formatEventDateTime } from '@/lib/eventTime';
 
 interface PriceTier {
   id: string;
@@ -27,6 +28,8 @@ interface EventVenue {
   id: string;
   name: string;
   address: string;
+  /** IANA zone of the event's venue (spec 033). */
+  timezone?: string | null;
 }
 
 interface Event {
@@ -252,7 +255,7 @@ export default function DashboardEventsPage() {
                         </span>
                       </div>
                       <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-slate-400">
-                        <span>📅 {formatDate(event.date)}</span>
+                        <span>📅 {formatEventDateTime(event.date, event.venue?.timezone)}</span>
                         {event.venue && <span>📍 {event.venue.name}</span>}
                         {event.category && <span>🏷 {event.category}</span>}
                       </div>

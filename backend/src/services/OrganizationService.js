@@ -271,7 +271,7 @@ class OrganizationService {
                 date: true,
                 category: true,
                 status: true,
-venue: { select: { id: true, slug: true, name: true, address: true } },
+venue: { select: { id: true, slug: true, name: true, address: true, timezone: true } },
                 priceTiers: {
                   where: { isActive: true },
                   select: {

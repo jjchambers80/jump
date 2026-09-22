@@ -14,6 +14,7 @@ import BrandScope from '../../../../components/BrandScope';
 import ApplicationsSection from './ApplicationsSection';
 import ApplicantProfileSection from './ApplicantProfileSection';
 import type { ThemeMode } from '@/lib/theme';
+import { formatEventDate } from '@/lib/eventTime';
 
 interface OrganizationPublic {
   id: string;
@@ -42,6 +43,8 @@ interface OrderSummary {
   description?: string;
   eventName?: string;
   eventDate?: string;
+  /** IANA zone of the event's venue (spec 033). */
+  eventTimezone?: string | null;
   quantity: number;
   totalAmount: number;
   status: string;
@@ -55,6 +58,8 @@ interface BuyerTicket {
   eventId: string;
   eventName: string;
   eventDate: string;
+  /** IANA zone of the event's venue (spec 033). */
+  eventTimezone?: string | null;
   venue: string;
   priceTierName?: string;
   status: string;
@@ -426,7 +431,7 @@ export default function BuyerAccountPage({ params }: { params: { orgId: string }
                       <div>
                         <p className="font-semibold text-gray-900 dark:text-slate-100">{o.eventName || 'Event'}</p>
                         <p className="text-sm text-gray-600 dark:text-slate-400">
-                          {formatDate(o.eventDate)} ·{' '}
+                          {formatEventDate(o.eventDate, o.eventTimezone)} ·{' '}
                           {o.kind === 'APPLICATION' ? `Application${o.description ? ` — ${o.description}` : ''}` : `${o.quantity} ticket${o.quantity === 1 ? '' : 's'}`} · $
                           {o.totalAmount.toFixed(2)} · {o.orderRef}
                           {o.statusDetail ? ` · ${o.statusDetail.label}` : ''}
@@ -463,7 +468,7 @@ export default function BuyerAccountPage({ params }: { params: { orgId: string }
                           {t.eventName} · #{t.ticketNumber}
                         </p>
                         <p className="text-sm text-gray-600 dark:text-slate-400">
-                          {formatDate(t.eventDate)} · {t.venue}
+                          {formatEventDate(t.eventDate, t.eventTimezone)} · {t.venue}
                           {t.priceTierName ? ` · ${t.priceTierName}` : ''}
                         </p>
                         {refundTerms(t) && (

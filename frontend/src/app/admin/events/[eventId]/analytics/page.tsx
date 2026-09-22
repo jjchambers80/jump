@@ -13,6 +13,7 @@ import { useSession } from 'next-auth/react';
 import { useOrg } from '@/components/OrgContext';
 import api from '@/services/api';
 import type { AddOnSales } from '@/lib/addOns';
+import { formatEventDateTime } from '@/lib/eventTime';
 
 interface TierAnalytics {
   id: string;
@@ -32,7 +33,7 @@ interface EventAnalytics {
     date: string;
     status: string;
     capacity: number;
-    venue: { id: string; name: string } | null;
+    venue: { id: string; name: string; timezone?: string | null } | null;
   };
   totals: {
     sold: number;
@@ -200,7 +201,7 @@ export default function EventAnalyticsPage() {
                   {analytics.event.name}
                 </h2>
                 <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-slate-400 mt-1">
-                  <span>📅 {formatDate(analytics.event.date)}</span>
+                  <span>📅 {formatEventDateTime(analytics.event.date, analytics.event.venue?.timezone)}</span>
                   {analytics.event.venue && <span>📍 {analytics.event.venue.name}</span>}
                   <span>Capacity: {analytics.event.capacity}</span>
                 </div>

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { formatEventDate } from '@/lib/eventTime';
 
 export type UpcomingTicket = {
   id: string;
@@ -6,7 +7,7 @@ export type UpcomingTicket = {
   priceTierName?: string | null;
   status: string;
   redeemedAt: string | null;
-  event: { id: string; name: string; date: string };
+  event: { id: string; name: string; date: string; timezone?: string | null };
 };
 
 type EventGroup = {
@@ -74,7 +75,7 @@ export default function UpcomingTickets({ tickets }: { tickets: UpcomingTicket[]
                   <Link href={`/admin/events/${event.id}/edit`} className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-400">
                     {event.name}
                   </Link>
-                  <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">{formatDate(event.date)} · {eventTickets.length} ticket{eventTickets.length === 1 ? '' : 's'}</p>
+                  <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">{formatEventDate(event.date, event.timezone)} · {eventTickets.length} ticket{eventTickets.length === 1 ? '' : 's'}</p>
                   {summary(eventTickets).length > 0 && <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">{summary(eventTickets).join(' · ')}</p>}
                 </div>
               </div>

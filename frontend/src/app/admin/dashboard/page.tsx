@@ -13,6 +13,7 @@ import adminService, { AdminEvent, DashboardStats } from '@/services/adminServic
 import PayoutsBanner from './PayoutsBanner';
 import SetupGuide from './SetupGuide';
 import PlanBanner from './PlanBanner';
+import { formatEventDateTime } from '@/lib/eventTime';
 
 function DashboardContent() {
   const router = useRouter();
@@ -183,7 +184,7 @@ function DashboardContent() {
                       </span>
                     </div>
                     <div className="mt-1 text-sm text-gray-500 dark:text-slate-500 flex gap-4">
-                      <span>📅 {new Date(event.date).toLocaleDateString()}</span>
+                      <span>📅 {formatEventDateTime(event.date, event.venue?.timezone)}</span>
                       <span>📍 {event.venue?.name ?? 'No venue'}</span>
                       <span>
                         🎫 {event.ticketsSold}/{event.capacity} sold

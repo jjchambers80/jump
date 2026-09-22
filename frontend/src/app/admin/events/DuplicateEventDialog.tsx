@@ -6,10 +6,13 @@
 
 import { useState } from 'react';
 import api from '@/services/api';
+import { DEFAULT_ZONE, zonedInputToIso } from '@/lib/eventTime';
+import { timeZoneLabel } from '@/lib/timeZones';
 
 interface Props {
   orgId: string;
-  event: { id: string; name: string };
+  // Spec 033: the copy keeps the venue, so the new date is typed in that venue's zone.
+  event: { id: string; name: string; venue?: { timezone?: string | null } | null };
   onClose: () => void;
   onDone: (created: { id: string; name: string; copiedForms: number }) => void;
 }
@@ -33,7 +36,7 @@ export default function DuplicateEventDialog({ orgId, event, onClose, onDone }: 
     try {
       const created = await api.post<{ id: string; name: string; copiedForms: number }>(`/organizations/${orgId}/events/${event.id}/duplicate`, {
         name: name.trim() || undefined,
-        date: new Date(date).toISOString(),
+        date: zonedInputToIso(date, event.venue?.timezone),
       });
       onDone(created);
     } catch (err) {
@@ -57,7 +60,10 @@ export default function DuplicateEventDialog({ orgId, event, onClose, onDone }: 
         <label htmlFor="duplicate-name" className="mt-4 block text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-400">Name</label>
         <input id="duplicate-name" value={name} maxLength={255} onChange={(e) => setName(e.target.value)} className={`${field} mt-1`} />
         <label htmlFor="duplicate-date" className="mt-3 block text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-400">Date and time</label>
-        <input id="duplicate-date" type="datetime-local" required value={date} onChange={(e) => setDate(e.target.value)} className={`${field} mt-1`} />
+        <input id="duplicate-date" type="datetime-local" required value={date} onChange={(e) => setDate(e.target.value)} className={`${field} mt-1`} aria-describedby="duplicate-date-zone" />
+        <p id="duplicate-date-zone" className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+          Entered in the venue&rsquo;s time zone ({timeZoneLabel(event.venue?.timezone ?? DEFAULT_ZONE)}).
+        </p>
         <div className="mt-5 flex justify-end gap-2">
           <button type="button" onClick={onClose} disabled={busy} className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700">
             Cancel

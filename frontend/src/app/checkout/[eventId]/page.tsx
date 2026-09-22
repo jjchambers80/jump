@@ -11,6 +11,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '../../../services/api';
 import CartLineItem from '../../../components/CartLineItem';
 import ExpandCollapseAll from '../../../components/ExpandCollapseAll';
+import { formatEventDate, formatEventTime } from '@/lib/eventTime';
 import { computeOrderFees, formatPrice } from '../../../lib/fees';
 import { parseAddOnLines, type AddOn } from '../../../lib/addOns';
 import BrandScope from '../../../components/BrandScope';
@@ -25,6 +26,8 @@ interface EventVenue {
   id: string;
   name: string;
   address: string;
+  /** IANA zone the show's wall clock belongs to (spec 033). */
+  timezone?: string | null;
 }
 
 interface PriceTier {
@@ -330,17 +333,10 @@ export default function CheckoutPage({ params }: { params: { eventId: string } }
     );
   }
 
-  const eventDate = new Date(event.date);
-  const formattedDate = eventDate.toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
-  const formattedTime = eventDate.toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  // Spec 033: the venue's zone owns the show's wall clock.
+  const zone = event.venue?.timezone;
+  const formattedDate = formatEventDate(event.date, zone, { weekday: 'long', month: 'long' });
+  const formattedTime = formatEventTime(event.date, zone);
 
   const totalQuantity = selectedItems.reduce((sum, item) => sum + item.quantity, 0);
   const feeItems = [

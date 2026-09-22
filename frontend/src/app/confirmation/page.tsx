@@ -13,6 +13,7 @@ import { resolveAssetUrl } from '../../lib/assets';
 import BrandScope from '../../components/BrandScope';
 import OrganizationHeader from '../../components/OrganizationHeader';
 import type { ThemeMode } from '../../lib/theme';
+import { formatEventDate, formatEventTime } from '@/lib/eventTime';
 
 interface TicketInfo {
   id: string;
@@ -52,6 +53,8 @@ interface OrderDetail {
     venue: {
       name: string;
       address: string;
+      /** IANA zone the show's wall clock belongs to (spec 033). */
+      timezone?: string | null;
     } | null;
   };
   priceTier?: {
@@ -226,17 +229,10 @@ function ConfirmationContent() {
     );
   }
 
-  const eventDate = new Date(order.event.date);
-  const formattedDate = eventDate.toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
-  const formattedTime = eventDate.toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  // Spec 033: a confirmation gets printed and forwarded, so it names the venue's zone.
+  const zone = order.event.venue?.timezone;
+  const formattedDate = formatEventDate(order.event.date, zone, { weekday: 'long', month: 'long' });
+  const formattedTime = formatEventTime(order.event.date, zone);
 
   const isCompleted = order.status === 'COMPLETED';
   const isPending = order.status === 'PENDING';

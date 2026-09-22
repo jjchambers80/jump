@@ -23,6 +23,7 @@ import { computeOrderFees, computeTierAllInPrice, formatPrice } from '../../../l
 import AddOnPicker from '../../../components/AddOnPicker';
 import { offeredAddOns, addOnMaxQuantity, type AddOn } from '../../../lib/addOns';
 import type { ThemeMode } from '@/lib/theme';
+import { formatEventDate, formatEventTime } from '@/lib/eventTime';
 
 interface EventVenue {
   id: string;
@@ -215,16 +216,10 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
   }
 
   const eventDate = new Date(event.date);
-  const formattedDate = eventDate.toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
-  const formattedTime = eventDate.toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  // Spec 033: the show's wall clock belongs to the venue, not to whoever is looking.
+  const zone = event.venue?.timezone;
+  const formattedDate = formatEventDate(event.date, zone, { weekday: 'long', month: 'long' });
+  const formattedTime = formatEventTime(event.date, zone);
 
   const isPastEvent = eventDate < new Date();
   const activeTiers = event.priceTiers.filter((t) => t.isActive);

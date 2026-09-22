@@ -1,9 +1,12 @@
 import Link from 'next/link';
+import { formatEventDate, formatEventTime } from '@/lib/eventTime';
 
 export interface EventVenue {
   id: string;
   name: string;
   address: string;
+  /** IANA zone the show's wall clock belongs to (spec 033). */
+  timezone?: string | null;
 }
 
 export interface PriceRange {
@@ -28,18 +31,11 @@ export function formatPrice(dollars: number): string {
 }
 
 export default function EventCard({ event }: { event: EventSummary }) {
-  const eventDate = new Date(event.date);
   const href = event.slug ? `/events/${encodeURIComponent(event.slug)}` : `/events/${event.id}`;
-  const formattedDate = eventDate.toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
-  const formattedTime = eventDate.toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  // Spec 033: the venue's zone, never the viewer's, and always with the abbreviation.
+  const zone = event.venue?.timezone;
+  const formattedDate = formatEventDate(event.date, zone, { weekday: 'long', month: 'long' });
+  const formattedTime = formatEventTime(event.date, zone);
   const isSoldOut = event.availableTickets === 0;
   const isAlmostSoldOut = event.availableTickets > 0 && event.availableTickets <= 10;
 

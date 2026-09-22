@@ -9,6 +9,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useOrg } from '@/components/OrgContext';
 import api from '@/services/api';
+import { formatEventDateTime } from '@/lib/eventTime';
 
 interface EventSummary {
   id: string;
@@ -16,7 +17,7 @@ interface EventSummary {
   date: string;
   status: string;
   capacity: number;
-  venue: { id: string; name: string } | null;
+  venue: { id: string; name: string; timezone?: string | null } | null;
   priceTiers: {
     id: string;
     name: string;
@@ -238,7 +239,7 @@ export default function AnalyticsOverviewPage() {
                               )}
                             </div>
                           </td>
-                          <td className="px-6 py-4 text-sm">{formatDate(event.date)}</td>
+                          <td className="px-6 py-4 text-sm">{formatEventDateTime(event.date, event.venue?.timezone)}</td>
                           <td className="px-6 py-4">{sold}</td>
                           <td className="px-6 py-4">
                             <span
