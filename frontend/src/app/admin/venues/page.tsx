@@ -13,6 +13,7 @@ import { StateSelect } from '@/components/StateSelect';
 import { useOrg } from '@/components/OrgContext';
 import ImageUploader from '@/components/ImageUploader';
 import SlugField from '@/components/SlugField';
+import TimeZoneSelect from '@/components/TimeZoneSelect';
 
 interface Venue {
   id: string;
@@ -288,18 +289,11 @@ export default function VenuesPage() {
                 error={slugError}
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-                Timezone
-              </label>
-              <input
-                type="text"
-                value={formData.timezone}
-                onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
-                placeholder="America/New_York"
-                className="block w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              />
-            </div>
+            <TimeZoneSelect
+              id="venue-timezone"
+              value={formData.timezone}
+              onChange={(value) => setFormData({ ...formData, timezone: value })}
+            />
           </div>
 
           <div>

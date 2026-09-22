@@ -63,6 +63,8 @@ test('creates a venue from the event form and selects it', async ({ page }) => {
   await dialog.getByLabel('Postal code').fill('27601');
   await dialog.getByLabel('URL slug').fill('Raleigh Convention Center');
   await dialog.getByLabel(/Public venue page/).uncheck();
+  // The timezone field is a dropdown of every IANA zone, not free text.
+  await dialog.getByLabel('Timezone').selectOption('America/Chicago');
   await dialog.getByRole('button', { name: 'Create venue' }).click();
 
   await expect(dialog).toHaveCount(0);
@@ -73,6 +75,7 @@ test('creates a venue from the event form and selects it', async ({ page }) => {
     state: 'NC',
     postalCode: '27601',
     slug: 'raleigh-convention-center',
+    timezone: 'America/Chicago',
     isPublic: false,
   });
   await expect(select).toHaveValue('venue-new');
@@ -111,7 +114,6 @@ test('shows the API error and keeps the dialog open', async ({ page }) => {
   const dialog = page.getByTestId('venue-flyout');
   await dialog.getByLabel('Name *').fill('Bad TZ');
   await dialog.getByLabel('Street address *').fill('1 Nowhere');
-  await dialog.getByLabel('Timezone').fill('Mars/Olympus');
   await dialog.getByRole('button', { name: 'Create venue' }).click();
 
   await expect(dialog.getByRole('alert')).toContainText('valid IANA timezone');

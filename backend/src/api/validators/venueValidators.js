@@ -4,9 +4,11 @@
 import { ValidationError } from '../../middleware/errorHandler.js';
 import { normalizeStateCode } from '../../utils/usStates.js';
 import { normalizeCustomSlug } from '../../utils/slug.js';
+import { isValidTimeZone } from '../../utils/locales.js';
 
-// Common IANA timezone patterns (basic validation)
-const IANA_TZ_REGEX = /^[A-Za-z]+\/[A-Za-z_]+$/;
+// Zones are checked against the runtime's own IANA database (Intl), so the
+// multi-segment ids the venue form's dropdown offers — America/Argentina/
+// Buenos_Aires, Etc/GMT+5, UTC — are accepted, not just Region/City.
 const VENUE_FIELDS = new Set(['name', 'slug', 'address', 'city', 'state', 'postalCode', 'timezone', 'isPublic']);
 
 /**
@@ -59,7 +61,7 @@ export const validateCreateVenue = (req, res, next) => {
   }
 
   if (timezone !== undefined) {
-    if (typeof timezone !== 'string' || !IANA_TZ_REGEX.test(timezone)) {
+    if (!isValidTimeZone(timezone)) {
       return next(
         new ValidationError('Timezone must be a valid IANA timezone (e.g., America/New_York)')
       );
@@ -113,7 +115,7 @@ export const validateUpdateVenue = (req, res, next) => {
   }
 
   if (timezone !== undefined) {
-    if (typeof timezone !== 'string' || !IANA_TZ_REGEX.test(timezone)) {
+    if (!isValidTimeZone(timezone)) {
       return next(new ValidationError('Timezone must be a valid IANA timezone'));
     }
   }

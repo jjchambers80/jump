@@ -10,6 +10,7 @@ import api from '@/services/api';
 import { StateSelect } from '@/components/StateSelect';
 import SlugField from '@/components/SlugField';
 import ImageUploader from '@/components/ImageUploader';
+import TimeZoneSelect from '@/components/TimeZoneSelect';
 
 // Sentinel value of the "+ Add new venue…" option inside a venue <select>.
 export const NEW_VENUE_OPTION = '__new_venue__';
@@ -249,19 +250,13 @@ export default function VenueFlyout({ orgId, onClose, onCreated }: Props) {
             </div>
           </div>
 
-          <div>
-            <label htmlFor="venue-flyout-timezone" className={labelClass}>
-              Timezone
-            </label>
-            <input
-              id="venue-flyout-timezone"
-              type="text"
-              value={timezone}
-              onChange={(e) => setTimezone(e.target.value)}
-              placeholder="America/New_York"
-              className={inputClass}
-            />
-          </div>
+          <TimeZoneSelect
+            id="venue-flyout-timezone"
+            value={timezone}
+            onChange={setTimezone}
+            className={inputClass}
+            labelClassName={labelClass}
+          />
 
           <div className="flex items-start gap-2">
             <input
