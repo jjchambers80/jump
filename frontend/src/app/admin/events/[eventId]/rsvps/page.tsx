@@ -5,20 +5,18 @@
 
 import React, { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { rsvpApi, type RsvpRow, type RsvpListResponse } from '@/services/api';
+import { rsvpApi, getActiveOrganizationId, type RsvpRow, type RsvpListResponse } from '@/services/api';
+import { useOrg } from '@/components/OrgContext';
 import { useAccountFormat } from '@/lib/accountFormat';
 import { Download } from 'lucide-react';
 
 export default function RsvpsListPage({ params }: { params: { eventId: string } }) {
   const { data: session } = useSession();
+  const { selectedOrgId } = useOrg();
   const { formatDateTime } = useAccountFormat();
   const [data, setData] = useState<RsvpListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const orgId = typeof window !== 'undefined'
-    ? new URLSearchParams(window.location.search).get('orgId') || ''
-    : '';
-
   const fetchRsvps = async () => {
     try {
       setLoading(true);
@@ -32,19 +30,22 @@ export default function RsvpsListPage({ params }: { params: { eventId: string } 
     }
   };
 
+  // Wait for OrgContext: until it sets X-Jump-Org, a direct load or reload
+  // resolves no organization and the backend answers 404.
   useEffect(() => {
+    if (!selectedOrgId) return;
     fetchRsvps();
-  }, [params.eventId]);
+  }, [params.eventId, selectedOrgId]);
 
   const handleCsvExport = async () => {
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
-      const response = await fetch(`${API_URL}/admin/events/${params.eventId}/rsvps?format=csv`, {
-        headers: {
-          'Authorization': `Bearer ${(session as any)?.accessToken || ''}`,
-          'X-Jump-Org': orgId,
-        },
-      });
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${(session as any)?.accessToken || ''}`,
+      };
+      const activeOrg = getActiveOrganizationId();
+      if (activeOrg) headers['X-Jump-Org'] = activeOrg;
+      const response = await fetch(`${API_URL}/admin/events/${params.eventId}/rsvps?format=csv`, { headers });
       if (!response.ok) {
         setError('Failed to export CSV');
         return;
