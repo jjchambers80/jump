@@ -14,6 +14,22 @@ import SlugField from '@/components/SlugField';
 import VenueFlyout, { NEW_VENUE_OPTION, type CreatedVenue } from '@/components/VenueFlyout';
 import { DEFAULT_ZONE, formatEventTime, zonedInputToInstant, zonedInputToIso } from '@/lib/eventTime';
 import { timeZoneLabel } from '@/lib/timeZones';
+import {
+  AdmissionModeField,
+  EVENT_FORM_ID,
+  EventFormActions,
+  EventFormActionsCard,
+  EventFormHeader,
+  EventFormShell,
+  FormAlert,
+  FormCard,
+  RsvpSettingsFields,
+  TierHeaderActions,
+  hintClass,
+  inputClass,
+  labelClass,
+  type AdmissionMode,
+} from '@/components/events/EventFormLayout';
 
 interface Venue {
   id: string;
@@ -47,8 +63,6 @@ interface PriceTierInput {
   visibility: 'PUBLIC' | 'PRIVATE' | 'HIDDEN';
   isRefundable: boolean;
 }
-
-type AdmissionMode = 'TICKETED' | 'RSVP';
 
 function newTier(): PriceTierInput {
   return {
@@ -260,52 +274,51 @@ export default function CreateEventPage() {
     }
   };
 
-  const inputClass =
-    'block w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500';
-  const labelClass = 'block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1';
+  const cancel = () => router.push('/admin/events');
+  const submitDisabled = saving || !venueId || capacityExceeded;
+  const actionProps = {
+    submitLabel: 'Create Event',
+    savingLabel: 'Creating…',
+    saving,
+    disabled: submitDisabled,
+    onCancel: cancel,
+  };
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Create Event</h1>
-        <button
-          onClick={() => router.push('/admin/events')}
-          className="text-sm text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
-        >
-          ← Back to Events
-        </button>
-      </div>
+    <EventFormShell
+      header={
+        <EventFormHeader
+          title="Create Event"
+          actions={
+            <button
+              type="button"
+              onClick={cancel}
+              className="text-sm text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+            >
+              ← Back to Events
+            </button>
+          }
+        />
+      }
+      alerts={error && <FormAlert tone="error">{error}</FormAlert>}
+      main={
+        <form id={EVENT_FORM_ID} onSubmit={handleSubmit} className="space-y-6">
+          <FormCard id="event-details" title="Event Details">
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="event-name" className={labelClass}>Name *</label>
+                <input
+                  id="event-name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Event name"
+                  className={inputClass}
+                  required
+                  maxLength={255}
+                />
+              </div>
 
-      {error && (
-        <div className="mb-4 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4">
-          <p className="text-sm text-red-800 dark:text-red-300">{error}</p>
-        </div>
-      )}
-
-      <form
-        onSubmit={handleSubmit}
-        className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 space-y-6"
-      >
-        {/* Event Details */}
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            Event Details
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="md:col-span-2">
-              <label className={labelClass}>Name *</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Event name"
-                className={inputClass}
-                required
-                maxLength={255}
-              />
-            </div>
-
-            <div className="md:col-span-2">
               <SlugField
                 value={slug}
                 onChange={setSlug}
@@ -314,70 +327,145 @@ export default function CreateEventPage() {
                 baseUrl={typeof window !== 'undefined' ? window.location.origin : undefined}
                 error={slugError}
               />
-            </div>
 
-            <div className="md:col-span-2">
-              <label className={labelClass}>Description</label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Event description"
-                rows={3}
-                className={inputClass}
-              />
-            </div>
-
-            <div>
-              <label htmlFor="event-venue" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-                Venue *
-              </label>
-              {venuesLoading ? (
-                <div className="animate-pulse h-10 bg-gray-200 dark:bg-slate-700 rounded" />
-              ) : (
-                <select
-                  id="event-venue"
-                  value={venueId}
-                  onChange={(e) => handleVenueSelect(e.target.value)}
-                  className={inputClass}
-                  required
-                >
-                  <option value="">
-                    {venues.length === 0 ? 'No venues yet' : 'Select a venue'}
-                  </option>
-                  {venues.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.name} — {v.address}
-                    </option>
-                  ))}
-                  <option value={NEW_VENUE_OPTION}>+ Add new venue…</option>
-                </select>
-              )}
-            </div>
-
-            <div>
-              <label className={labelClass}>Date & Time *</label>
-              <input
-                type="datetime-local"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className={inputClass}
-                aria-describedby="event-date-zone"
-                required
-              />
-              <p id="event-date-zone" className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                {venueId
-                  ? date
-                    ? `${formatEventTime(zonedInputToInstant(date, venueZone), venueZone)} at the venue`
-                    : `Entered in the venue's time zone (${timeZoneLabel(venueZone ?? DEFAULT_ZONE)})`
-                  : 'Pick a venue first — the time is entered in the venue\u2019s own time zone.'}
-              </p>
-            </div>
-
-            {admissionMode === 'TICKETED' && (
               <div>
-                <label className={labelClass}>Capacity *</label>
+                <label htmlFor="event-description" className={labelClass}>Description</label>
+                <textarea
+                  id="event-description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Event description"
+                  rows={6}
+                  className={inputClass}
+                />
+              </div>
+            </div>
+          </FormCard>
+
+          {/* Price Tiers — only for ticketed events */}
+          {admissionMode === 'TICKETED' && (
+            <FormCard
+              id="event-price-tiers"
+              title="Price Tiers"
+              actions={
+                <TierHeaderActions
+                  presets={presets}
+                  open={showPresetMenu}
+                  onToggle={() => setShowPresetMenu(!showPresetMenu)}
+                  onPick={addTierFromPreset}
+                  onAdd={addTier}
+                />
+              }
+            >
+              {capacityExceeded && (
+                <div className="mb-3 rounded-md bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 p-3">
+                  <p className="text-sm text-yellow-800 dark:text-yellow-300">
+                    <span aria-hidden>⚠ </span>Total tier quantity ({totalTierQuantity}) exceeds event capacity ({capacityNum})
+                  </p>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                {priceTiers.map((tier, index) => (
+                  <TierCard
+                    key={tier.key}
+                    tier={tier}
+                    index={index}
+                    total={priceTiers.length}
+                    canDelete={priceTiers.length > 1}
+                    onEdit={() => setEditingTierKey(tier.key)}
+                    onMove={(dir) => moveTier(index, dir)}
+                    onDelete={() => removeTier(tier.key)}
+                  />
+                ))}
+              </div>
+
+              {editingTier && (
+                <TierEditDialog
+                  tier={editingTier}
+                  index={editingTierIndex}
+                  onSave={saveTierEdit}
+                  onCancel={() => setEditingTierKey(null)}
+                />
+              )}
+            </FormCard>
+          )}
+        </form>
+      }
+      aside={
+        <>
+          <EventFormActionsCard {...actionProps} />
+
+          <FormCard id="event-when-where" title="Date & Venue">
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="event-venue" className={labelClass}>
+                  Venue *
+                </label>
+                {venuesLoading ? (
+                  <div className="animate-pulse h-10 bg-gray-200 dark:bg-slate-700 rounded" />
+                ) : (
+                  <select
+                    id="event-venue"
+                    form={EVENT_FORM_ID}
+                    value={venueId}
+                    onChange={(e) => handleVenueSelect(e.target.value)}
+                    className={inputClass}
+                    required
+                  >
+                    <option value="">
+                      {venues.length === 0 ? 'No venues yet' : 'Select a venue'}
+                    </option>
+                    {venues.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.name} — {v.address}
+                      </option>
+                    ))}
+                    <option value={NEW_VENUE_OPTION}>+ Add new venue…</option>
+                  </select>
+                )}
+              </div>
+
+              <div>
+                <label htmlFor="event-date" className={labelClass}>Date & Time *</label>
                 <input
+                  id="event-date"
+                  type="datetime-local"
+                  form={EVENT_FORM_ID}
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className={inputClass}
+                  aria-describedby="event-date-zone"
+                  required
+                />
+                <p id="event-date-zone" className={hintClass}>
+                  {venueId
+                    ? date
+                      ? `${formatEventTime(zonedInputToInstant(date, venueZone), venueZone)} at the venue`
+                      : `Entered in the venue's time zone (${timeZoneLabel(venueZone ?? DEFAULT_ZONE)})`
+                    : 'Pick a venue first — the time is entered in the venue\u2019s own time zone.'}
+                </p>
+              </div>
+            </div>
+          </FormCard>
+
+          {/* Admission Mode (spec 034) */}
+          <FormCard id="event-admission" title="Admission">
+            <AdmissionModeField
+              value={admissionMode}
+              onChange={(mode) => {
+                setAdmissionMode(mode);
+                if (mode === 'TICKETED') setPriceTiers([newTier()]);
+              }}
+            />
+
+            {admissionMode === 'TICKETED' ? (
+              <div className="mt-4">
+                <label htmlFor="event-capacity" className={labelClass}>Capacity *</label>
+                <input
+                  id="event-capacity"
                   type="number"
+                  form={EVENT_FORM_ID}
                   value={capacity}
                   onChange={(e) => setCapacity(e.target.value)}
                   placeholder="1–100,000"
@@ -387,197 +475,34 @@ export default function CreateEventPage() {
                   required
                 />
               </div>
-            )}
-
-            <div>
-              <label className={labelClass}>Category</label>
-              <input
-                type="text"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                placeholder="e.g. Music, Sports, Conference"
-                className={inputClass}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Admission Mode (spec 034) */}
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Admission</h2>
-          <div className="flex rounded-lg border border-gray-300 dark:border-slate-600 overflow-hidden">
-            <button
-              type="button"
-              onClick={() => { setAdmissionMode('TICKETED'); setPriceTiers([newTier()]); }}
-              className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${
-                admissionMode === 'TICKETED'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700'
-              }`}
-            >
-              Ticketed
-            </button>
-            <button
-              type="button"
-              onClick={() => setAdmissionMode('RSVP')}
-              className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${
-                admissionMode === 'RSVP'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700'
-              }`}
-            >
-              RSVP
-            </button>
-          </div>
-
-          {admissionMode === 'RSVP' && (
-            <div className="mt-4 space-y-4">
-              <div className="flex items-center gap-3">
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={rsvpLimitEnabled}
-                    onChange={(e) => setRsvpLimitEnabled(e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300 dark:peer-focus:ring-indigo-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-600" />
-                </label>
-                <label className="text-sm text-gray-700 dark:text-slate-300 cursor-pointer" onClick={() => setRsvpLimitEnabled(!rsvpLimitEnabled)}>
-                  Limit RSVPs
-                </label>
-              </div>
-
-              {rsvpLimitEnabled && (
-                <div>
-                  <label className={labelClass}>RSVP Limit</label>
-                  <input
-                    type="number"
-                    value={rsvpLimit}
-                    onChange={(e) => setRsvpLimit(e.target.value)}
-                    placeholder="Max headcount"
-                    min={1}
-                    max={100000}
-                    className={inputClass}
-                  />
-                </div>
-              )}
-
-              <div>
-                <label className={labelClass}>Guests per RSVP</label>
-                <input
-                  type="number"
-                  value={rsvpMaxPartySize}
-                  onChange={(e) => setRsvpMaxPartySize(e.target.value)}
-                  placeholder="1–10"
-                  min={1}
-                  max={10}
-                  className={inputClass}
-                />
-                <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                  How many guests each attendee may bring (including themselves)
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Price Tiers — only for ticketed events */}
-        {admissionMode === 'TICKETED' && (
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Price Tiers</h2>
-              <div className="flex items-center gap-2">
-                {presets.length > 0 && (
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setShowPresetMenu(!showPresetMenu)}
-                      className="rounded-md border border-indigo-300 dark:border-indigo-700 px-3 py-1.5 text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
-                    >
-                      Add from Preset
-                    </button>
-                    {showPresetMenu && (
-                      <div className="absolute right-0 z-10 mt-1 w-56 rounded-md border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 shadow-lg">
-                        {presets.map((preset) => (
-                          <button
-                            key={preset.id}
-                            type="button"
-                            onClick={() => addTierFromPreset(preset)}
-                            className="block w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700"
-                          >
-                            <span className="font-medium">{preset.name}</span>
-                            <span className="ml-2 text-gray-400 dark:text-slate-500">
-                              {preset.price === 0 ? 'Free' : `$${preset.price.toFixed(2)}`}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={addTier}
-                  className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500"
-                >
-                  + Add Tier
-                </button>
-              </div>
-            </div>
-
-            {capacityExceeded && (
-              <div className="mb-3 rounded-md bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 p-3">
-                <p className="text-sm text-yellow-800 dark:text-yellow-300">
-                  ⚠ Total tier quantity ({totalTierQuantity}) exceeds event capacity ({capacityNum})
-                </p>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              {priceTiers.map((tier, index) => (
-                <TierCard
-                  key={tier.key}
-                  tier={tier}
-                  index={index}
-                  total={priceTiers.length}
-                  canDelete={priceTiers.length > 1}
-                  onEdit={() => setEditingTierKey(tier.key)}
-                  onMove={(dir) => moveTier(index, dir)}
-                  onDelete={() => removeTier(tier.key)}
-                />
-              ))}
-            </div>
-
-            {editingTier && (
-              <TierEditDialog
-                tier={editingTier}
-                index={editingTierIndex}
-                onSave={saveTierEdit}
-                onCancel={() => setEditingTierKey(null)}
+            ) : (
+              <RsvpSettingsFields
+                limitEnabled={rsvpLimitEnabled}
+                onLimitEnabledChange={setRsvpLimitEnabled}
+                limit={rsvpLimit}
+                onLimitChange={setRsvpLimit}
+                maxPartySize={rsvpMaxPartySize}
+                onMaxPartySizeChange={setRsvpMaxPartySize}
               />
             )}
-          </div>
-        )}
+          </FormCard>
 
-        {/* Submit */}
-        <div className="flex gap-3 pt-2">
-          <button
-            type="submit"
-            disabled={saving || !venueId || (admissionMode === 'TICKETED' && capacityExceeded)}
-            className="rounded-md bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50"
-          >
-            {saving ? 'Creating…' : 'Create Event'}
-          </button>
-          <button
-            type="button"
-            onClick={() => router.push('/admin/events')}
-            className="rounded-md border border-gray-300 dark:border-slate-600 px-6 py-2.5 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
-          >
-            Cancel
-          </button>
-        </div>
-      </form>
-
+          <FormCard id="event-listing" title="Listing">
+            <label htmlFor="event-category" className={labelClass}>Category</label>
+            <input
+              id="event-category"
+              type="text"
+              form={EVENT_FORM_ID}
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              placeholder="e.g. Music, Sports, Conference"
+              className={inputClass}
+            />
+          </FormCard>
+        </>
+      }
+      mobileActions={<EventFormActions {...actionProps} layout="row" />}
+    >
       {/* Rendered outside the event form: the flyout is its own <form> */}
       {showVenueDialog && selectedOrgId && (
         <VenueFlyout
@@ -586,6 +511,6 @@ export default function CreateEventPage() {
           onCreated={handleVenueCreated}
         />
       )}
-    </div>
+    </EventFormShell>
   );
 }
