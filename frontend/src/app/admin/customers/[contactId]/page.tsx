@@ -11,7 +11,7 @@ import { ChevronRightIcon, EllipsisIcon } from '@/app/admin/settings/icons';
 import SettingsDialog from '@/app/admin/settings/SettingsDialog';
 import CustomerTimeline from './CustomerTimeline';
 import UpcomingTickets, { type UpcomingTicket } from './UpcomingTickets';
-import { segmentBadgeClass, type CustomerSegment } from '@/lib/customers';
+import { guestAccountNote, segmentBadgeClass, type CustomerSegment } from '@/lib/customers';
 import { formatEventDateTime } from '@/lib/eventTime';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -1044,10 +1044,10 @@ function CustomerDetailPageContent() {
                     <svg className="w-4 h-4 text-gray-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
-                    <span className="text-sm text-gray-700 dark:text-slate-300">Guest checkout</span>
+                    <span className="text-sm text-gray-700 dark:text-slate-300">Guest</span>
                   </div>
                   <p className="text-xs text-gray-500 dark:text-slate-400 ml-6">
-                    This customer does not have an account. They completed their purchase as a guest.
+                    {guestAccountNote({ transactions: customer.transactionCount, rsvps: customer.rsvps.length })}
                   </p>
                 </>
               )}

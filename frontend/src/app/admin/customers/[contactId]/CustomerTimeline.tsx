@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import api from '@/services/api';
+import { rsvpTimelineText } from '@/lib/customers';
 
 type TimelineAuthor = {
   id: string;
@@ -43,7 +44,7 @@ function authorName(author?: TimelineAuthor | null): string {
 function itemText(item: TimelineItem): string {
   if (item.kind === 'COMMENT') return item.body || '';
   if (item.type === 'RSVP_CREATED') {
-    return `RSVP'd to ${item.event?.name || 'an event'}${item.partySize ? ` for ${item.partySize}` : ''}`;
+    return rsvpTimelineText(item.event?.name, item.partySize);
   }
   if (item.type === 'RSVP_CANCELLED') {
     return `Cancelled RSVP to ${item.event?.name || 'an event'}`;
