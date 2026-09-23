@@ -228,6 +228,7 @@ describe('Venue Contract Tests', () => {
               slug: expect.any(String),
               name: 'Public Contract Venue',
               address: '10 Public Plaza',
+              timezone: 'America/New_York',
             },
             category: expect.anything(),
             status: 'PUBLISHED',
