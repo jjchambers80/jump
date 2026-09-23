@@ -13,10 +13,12 @@ describe('customer list navigation helpers', () => {
         page: 2,
         search: 'Ada Lovelace',
         segment: 'Repeat',
+        rsvp: 'going',
+        eventId: 'event-1',
         sort: 'name',
         direction: 'asc',
       }).toString()
-    ).toBe('page=2&search=Ada+Lovelace&segment=Repeat&sort=name&direction=asc');
+    ).toBe('page=2&search=Ada+Lovelace&segment=Repeat&rsvp=going&eventId=event-1&sort=name&direction=asc');
   });
 
   it('preserves the list query when opening another customer', () => {

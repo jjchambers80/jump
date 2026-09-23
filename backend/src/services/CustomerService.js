@@ -151,10 +151,12 @@ export function customerNavigation(contacts, contactId, options = {}) {
   };
 }
 
-function customerWhere(organizationId, { search, tag, scope } = {}) {
+function customerWhere(organizationId, { search, tag, scope, rsvp, eventId } = {}) {
   return {
     ...(organizationId && { organizationId }),
-    ...customerPredicate(scope),
+    ...(rsvp === 'going'
+      ? { rsvps: { some: { status: 'GOING', ...(eventId && { eventId }) } } }
+      : customerPredicate(scope)),
     ...(tag && { tags: { has: tag } }),
     ...(search && {
       AND: [
@@ -180,19 +182,19 @@ class CustomerService {
    * List customers for an organization.
    *
    * @param {string|null} organizationId - null for system admins (unscoped)
-   * @param {Object} options - { page, limit, search, tag, scope, segment, sort, direction }
+   * @param {Object} options - { page, limit, search, tag, scope, segment, rsvp, eventId, sort, direction }
    * @returns {Promise<{ data: Customer[], pagination }>}
    */
   async getCustomersByOrganization(
     organizationId,
-    { page = 1, limit = 20, search, tag, scope, segment, sort = 'createdAt', direction = 'desc' } = {}
+    { page = 1, limit = 20, search, tag, scope, segment, rsvp, eventId, sort = 'createdAt', direction = 'desc' } = {}
   ) {
     page = Math.max(1, parseInt(page) || 1);
     limit = Math.max(1, parseInt(limit) || 20);
 
     // Segment and aggregate sorts are derived from paid orders, so filtering and
     // ordering happen before pagination. The same helper powers detail navigation.
-    const where = customerWhere(organizationId, { search, tag, scope });
+    const where = customerWhere(organizationId, { search, tag, scope, rsvp, eventId });
     const normalizedDirection = direction === 'asc' ? 'asc' : 'desc';
     const databaseOrder =
       sort === 'name'
@@ -269,6 +271,25 @@ class CustomerService {
             },
           },
           orderBy: [{ paidAt: 'desc' }, { createdAt: 'desc' }],
+        },
+        rsvps: {
+          select: {
+            id: true,
+            partySize: true,
+            status: true,
+            createdAt: true,
+            cancelledAt: true,
+            event: {
+              select: {
+                id: true,
+                name: true,
+                date: true,
+                logoUrl: true,
+                venue: { select: { timezone: true } },
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
         },
       },
     });
@@ -375,6 +396,14 @@ class CustomerService {
       ...navigation,
       orders,
       applications,
+      rsvps: (contact.rsvps || []).map((rsvp) => ({
+        ...rsvp,
+        event: {
+          ...rsvp.event,
+          timezone: rsvp.event.venue?.timezone ?? null,
+          venue: undefined,
+        },
+      })),
       upcomingTickets,
     };
   }

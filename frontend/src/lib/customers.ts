@@ -17,6 +17,8 @@ export interface CustomerListState {
   search?: string;
   tag?: string;
   segment?: CustomerSegment | '';
+  rsvp?: 'going' | '';
+  eventId?: string;
   sort?: string;
   direction?: 'asc' | 'desc';
 }
@@ -27,6 +29,8 @@ export function customerListQuery(state: CustomerListState): URLSearchParams {
   if (state.search) params.set('search', state.search);
   if (state.tag) params.set('tag', state.tag);
   if (state.segment) params.set('segment', state.segment);
+  if (state.rsvp) params.set('rsvp', state.rsvp);
+  if (state.rsvp && state.eventId) params.set('eventId', state.eventId);
   if (state.sort) params.set('sort', state.sort);
   if (state.direction) params.set('direction', state.direction);
   return params;

@@ -1460,9 +1460,15 @@ router.get('/customers', async (req, res, next) => {
       // Staff with no membership see no customers rather than every org's
       return res.json({ data: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } });
     }
-    const { page, limit, search, tag, segment, sort, direction, scope: customerScope = 'customers' } = req.query;
+    const { page, limit, search, tag, segment, rsvp, eventId, sort, direction, scope: customerScope = 'customers' } = req.query;
     if (!['customers', 'all'].includes(customerScope)) {
       throw new ValidationError('scope must be customers or all');
+    }
+    if (rsvp !== undefined && rsvp !== 'going') {
+      throw new ValidationError('rsvp must be going');
+    }
+    if (eventId && rsvp !== 'going') {
+      throw new ValidationError('eventId requires the RSVP filter');
     }
     const result = await customerService.getCustomersByOrganization(scope.organizationId, {
       page,
@@ -1471,6 +1477,8 @@ router.get('/customers', async (req, res, next) => {
       tag,
       scope: customerScope,
       segment,
+      rsvp,
+      eventId,
       sort,
       direction,
     });
@@ -1487,7 +1495,7 @@ router.get('/customers/:contactId', async (req, res, next) => {
     if (!isUnscoped(scope) && !scope.organizationId) {
       throw new NotFoundError('Customer not found');
     }
-    const { search, tag, segment, sort, direction, scope: customerScope = 'customers' } = req.query;
+    const { search, tag, segment, rsvp, eventId, sort, direction, scope: customerScope = 'customers' } = req.query;
     if (!['customers', 'all'].includes(customerScope)) {
       throw new ValidationError('scope must be customers or all');
     }
@@ -1496,6 +1504,8 @@ router.get('/customers/:contactId', async (req, res, next) => {
       tag,
       scope: customerScope,
       segment,
+      rsvp,
+      eventId,
       sort,
       direction,
     });

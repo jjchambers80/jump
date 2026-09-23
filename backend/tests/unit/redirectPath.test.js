@@ -31,6 +31,7 @@ describe('isReservedPath', () => {
       '/admin',
       '/auth/signin',
       '/organizations/o1',
+      '/rsvp/cancel',
     ]) {
       expect(isReservedPath(p)).toBe(true);
     }

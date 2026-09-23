@@ -166,11 +166,65 @@ describe('RSVP events contract', () => {
     await request(app).get(`/admin/events/${rsvpEvent.id}/rsvps`).set('Authorization', `Bearer ${otherToken}`).expect(404);
   });
 
+  it("filters RSVP'd contacts by organization and event without changing the default money list", async () => {
+    const email = `filter@${TAG}.test`;
+    await request(app).post(`/events/${rsvpEvent.id}/rsvps`).send(body(email)).expect(202);
+
+    const defaultList = await request(app)
+      .get(`/admin/customers?search=${encodeURIComponent(email)}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(defaultList.body.data).toHaveLength(0);
+
+    const allRsvps = await request(app)
+      .get(`/admin/customers?rsvp=going&search=${encodeURIComponent(email)}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(allRsvps.body.data.map((contact) => contact.email)).toEqual([email]);
+
+    const eventRsvps = await request(app)
+      .get(`/admin/customers?rsvp=going&eventId=${rsvpEvent.id}&search=${encodeURIComponent(email)}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(eventRsvps.body.data.map((contact) => contact.email)).toEqual([email]);
+
+    const otherEvent = await request(app)
+      .get(`/admin/customers?rsvp=going&eventId=${limitedEvent.id}&search=${encodeURIComponent(email)}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(otherEvent.body.data).toHaveLength(0);
+
+    const foreign = await request(app)
+      .get(`/admin/customers?rsvp=going&search=${encodeURIComponent(email)}`)
+      .set('Authorization', `Bearer ${otherToken}`)
+      .expect(200);
+    expect(foreign.body.data).toHaveLength(0);
+
+    const detail = await request(app)
+      .get(`/admin/customers/${allRsvps.body.data[0].id}?rsvp=going&eventId=${rsvpEvent.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(detail.body.rsvps).toEqual([
+      expect.objectContaining({
+        partySize: 1,
+        status: 'GOING',
+        event: expect.objectContaining({ id: rsvpEvent.id }),
+      }),
+    ]);
+  });
+
   it('keeps RSVPs out of orders and money analytics', async () => {
     expect(await prisma.order.count({ where: { eventId: rsvpEvent.id } })).toBe(0);
     const analytics = await request(app).get(`/organizations/${org.id}/events/${rsvpEvent.id}/analytics`).set('Authorization', `Bearer ${token}`).expect(200);
     expect(analytics.body.revenue.net).toBe(0);
     expect(analytics.body.totals.revenue).toBe(0);
+    expect(analytics.body.event).toMatchObject({ admissionMode: 'RSVP', rsvpLimit: 10 });
+    expect(analytics.body.rsvp).toMatchObject({
+      headcount: expect.any(Number),
+      rsvpCount: expect.any(Number),
+      cancelledCount: expect.any(Number),
+    });
+    expect(analytics.body.tiers).toEqual([]);
   });
 
   it('emails going guests and cancels their RSVPs when the event is cancelled', async () => {

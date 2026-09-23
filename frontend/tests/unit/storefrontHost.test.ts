@@ -90,6 +90,7 @@ describe('routeForTenantHost', () => {
       '/venues/v1',
       '/legal/terms',
       '/legal/privacy',
+      '/rsvp/cancel',
     ]) {
       expect(route(p)).toEqual({ kind: 'pass' });
     }

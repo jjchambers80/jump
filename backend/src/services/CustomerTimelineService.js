@@ -26,7 +26,7 @@ function compareNewest(a, b) {
   return time || String(b.id).localeCompare(String(a.id));
 }
 
-export function buildTimeline({ contact, comments = [], orders = [], applications = [] }) {
+export function buildTimeline({ contact, comments = [], orders = [], applications = [], rsvps = [] }) {
   const items = [];
 
   for (const comment of comments) {
@@ -91,6 +91,28 @@ export function buildTimeline({ contact, comments = [], orders = [], application
         type,
         createdAt: iso(decision.createdAt),
         ...applicationContext(application),
+      });
+    }
+  }
+
+  for (const rsvp of rsvps) {
+    const context = {
+      rsvpId: rsvp.id,
+      partySize: rsvp.partySize,
+      event: rsvp.event || null,
+    };
+    items.push({
+      id: eventId('RSVP_CREATED', rsvp.id),
+      type: 'RSVP_CREATED',
+      createdAt: iso(rsvp.createdAt),
+      ...context,
+    });
+    if (rsvp.cancelledAt) {
+      items.push({
+        id: eventId('RSVP_CANCELLED', rsvp.id),
+        type: 'RSVP_CANCELLED',
+        createdAt: iso(rsvp.cancelledAt),
+        ...context,
       });
     }
   }
@@ -182,7 +204,7 @@ class CustomerTimelineService {
 
   async getTimeline(contactId, organizationId, options = {}) {
     const contact = await this._contact(contactId, organizationId);
-    const [comments, orders, applications] = await Promise.all([
+    const [comments, orders, applications, rsvps] = await Promise.all([
       prisma.contactComment.findMany({
         where: { contactId, organizationId: contact.organizationId },
         include: { author: { select: { id: true, name: true, email: true } } },
@@ -212,8 +234,18 @@ class CustomerTimelineService {
           },
         },
       }),
+      prisma.eventRsvp.findMany({
+        where: { contactId },
+        select: {
+          id: true,
+          partySize: true,
+          createdAt: true,
+          cancelledAt: true,
+          event: { select: { id: true, name: true, date: true } },
+        },
+      }),
     ]);
-    return paginateTimeline(buildTimeline({ contact, comments, orders, applications }), options);
+    return paginateTimeline(buildTimeline({ contact, comments, orders, applications, rsvps }), options);
   }
 
   async createComment(contactId, organizationId, authorUserId, body) {

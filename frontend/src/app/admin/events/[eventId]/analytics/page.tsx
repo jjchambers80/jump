@@ -14,6 +14,7 @@ import { useOrg } from '@/components/OrgContext';
 import api from '@/services/api';
 import type { AddOnSales } from '@/lib/addOns';
 import { formatEventDateTime } from '@/lib/eventTime';
+import { rsvpAnalyticsCards, type RsvpAnalyticsSummary } from '@/lib/eventAnalytics';
 
 interface TierAnalytics {
   id: string;
@@ -33,6 +34,8 @@ interface EventAnalytics {
     date: string;
     status: string;
     capacity: number;
+    admissionMode: 'TICKETED' | 'RSVP';
+    rsvpLimit: number | null;
     venue: { id: string; name: string; timezone?: string | null } | null;
   };
   totals: {
@@ -51,6 +54,7 @@ interface EventAnalytics {
     net: number;
   };
   tiers: TierAnalytics[];
+  rsvp?: RsvpAnalyticsSummary;
 }
 
 // Amounts from the API are dollars (Prisma Decimal), not cents.
@@ -112,6 +116,7 @@ export default function EventAnalyticsPage() {
   const [csvError, setCsvError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const isRsvp = analytics?.event.admissionMode === 'RSVP';
 
   // Reset when org changes
   useEffect(() => {
@@ -203,7 +208,11 @@ export default function EventAnalyticsPage() {
                 <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-slate-400 mt-1">
                   <span>📅 {formatEventDateTime(analytics.event.date, analytics.event.venue?.timezone)}</span>
                   {analytics.event.venue && <span>📍 {analytics.event.venue.name}</span>}
-                  <span>Capacity: {analytics.event.capacity}</span>
+                  <span>
+                    {isRsvp
+                      ? `RSVP limit: ${analytics.event.rsvpLimit ?? 'Unlimited'}`
+                      : `Capacity: ${analytics.event.capacity}`}
+                  </span>
                 </div>
               </div>
               <span
@@ -222,38 +231,27 @@ export default function EventAnalyticsPage() {
 
           {/* Totals Summary */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-            <StatCard
-              label="Tickets Sold"
-              value={analytics.totals.sold}
-              subtext={`of ${analytics.event.capacity} capacity`}
-              color="indigo"
-            />
-            <StatCard
-              label="Redeemed"
-              value={analytics.totals.redeemed}
-              subtext={
-                analytics.totals.sold > 0
-                  ? `${Math.round((analytics.totals.redeemed / analytics.totals.sold) * 100)}% scan rate`
-                  : 'No tickets sold'
-              }
-              color="green"
-            />
-            <StatCard
-              label="Remaining"
-              value={analytics.totals.remaining}
-              subtext="tickets available"
-              color="blue"
-            />
-            <StatCard
-              label="Revenue"
-              value={formatCurrency(analytics.revenue?.net ?? analytics.totals.revenue)}
-              subtext={analytics.revenue ? 'net of application refunds' : undefined}
-              color="amber"
-            />
+            {isRsvp && analytics.rsvp
+              ? rsvpAnalyticsCards(analytics.rsvp, analytics.event.rsvpLimit).map((card) => (
+                  <StatCard key={card.label} {...card} />
+                ))
+              : (
+                <>
+                  <StatCard label="Tickets Sold" value={analytics.totals.sold} subtext={`of ${analytics.event.capacity} capacity`} color="indigo" />
+                  <StatCard
+                    label="Redeemed"
+                    value={analytics.totals.redeemed}
+                    subtext={analytics.totals.sold > 0 ? `${Math.round((analytics.totals.redeemed / analytics.totals.sold) * 100)}% scan rate` : 'No tickets sold'}
+                    color="green"
+                  />
+                  <StatCard label="Remaining" value={analytics.totals.remaining} subtext="tickets available" color="blue" />
+                  <StatCard label="Revenue" value={formatCurrency(analytics.revenue?.net ?? analytics.totals.revenue)} subtext={analytics.revenue ? 'net of application refunds' : undefined} color="amber" />
+                </>
+              )}
           </div>
 
           {/* Revenue by source (spec 018 phase 2) */}
-          {analytics.revenue && (
+          {!isRsvp && analytics.revenue && (
             <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden" data-testid="revenue-breakdown">
               <div className="px-6 py-4 border-b border-gray-200 dark:border-slate-700">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Revenue by source</h3>
@@ -279,7 +277,7 @@ export default function EventAnalyticsPage() {
           )}
 
           {/* Per-Tier Breakdown */}
-          <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden">
+          {!isRsvp && <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-200 dark:border-slate-700">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
                 Per-Tier Breakdown
@@ -351,10 +349,10 @@ export default function EventAnalyticsPage() {
                 </tbody>
               </table>
             </div>
-          </div>
+          </div>}
 
           {/* Add-on sales (spec 012) */}
-          {addOnSales && addOnSales.addOns.length > 0 && (
+          {!isRsvp && addOnSales && addOnSales.addOns.length > 0 && (
             <div className="mt-6 bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden" data-testid="add-on-sales">
               <div className="px-6 py-4 border-b border-gray-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">
                 <div>
