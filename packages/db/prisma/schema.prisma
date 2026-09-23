@@ -833,6 +833,7 @@ model EventRsvp {
   partySize   Int        @default(1)
   status      RsvpStatus @default(GOING)
   cancelledAt DateTime?
+  remindedAt  DateTime?
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 

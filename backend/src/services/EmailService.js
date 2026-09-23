@@ -479,6 +479,110 @@ ${manageTicketsHtml}
     }
   }
 
+  /**
+   * RSVP reminder sent ~24 h before the event (spec 034 §9.2). Branded with
+   * the organization's logo; includes the event name, date/time in the venue's
+   * timezone (spec 033), party size, a cancel link, and a marketing opt-in
+   * note. Fire-and-forget with async retry (3 attempts).
+   *
+   * @param {Object} rsvp - EventRsvp row with included event (incl. venue), contact
+   * @param {{ cancelUrl: string }} options
+   */
+  async sendRsvpReminder(rsvp, { cancelUrl }) {
+    const event = rsvp.event;
+    const contact = rsvp.contact;
+    const organization = event.venue?.organization || {};
+    const eventWhen = formatEventDateTime(event.date, event.venue?.timezone);
+    const orgName = organization.name || 'the organizer';
+    const maxRetries = 3;
+    let attempt = 0;
+    let lastError;
+
+    while (attempt < maxRetries) {
+      try {
+        attempt++;
+
+        const msg = {
+          to: [contact.email],
+          from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+          subject: `Reminder: ${event.name} is happening tomorrow — ${orgName}`,
+          html: `
+            <html>
+              <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+                <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
+                  ${orgLogoHtml(organization.logoUrl, orgName)}
+                  <h1 style="color: #333; font-size: 22px;">Event Reminder — ${escapeHtml(event.name)}</h1>
+                </div>
+                <div style="padding: 24px; color: #111827; font-size: 15px;">
+                  <p>Hi ${escapeHtml(contact.firstName || 'there')},</p>
+                  <p>This is a reminder that you're on the list for:</p>
+                  <div style="background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 24px 0;">
+                    <p style="margin: 0 0 8px; font-size: 17px; font-weight: bold; color: #111827;">${escapeHtml(event.name)}</p>
+                    ${eventWhen ? `<p style="margin: 4px 0; color: #666; font-size: 14px;"><strong>When:</strong> ${escapeHtml(eventWhen)}</p>` : ''}
+                    <p style="margin: 4px 0; color: #666; font-size: 14px;"><strong>Party size:</strong> ${rsvp.partySize}</p>
+                  </div>
+                  <p style="color: #666; font-size: 14px;">You can cancel your RSVP at any time. Please let us know if your plans change so we can open the spot to someone else.</p>
+                  <div style="text-align: center; margin: 24px 0;">
+                    <a href="${cancelUrl}" style="display: inline-block; background-color: #dc2626; color: #ffffff; font-size: 15px; font-weight: bold; padding: 12px 28px; border-radius: 8px; text-decoration: none;">Cancel RSVP</a>
+                  </div>
+                  <p style="color: #666; font-size: 12px; margin-top: 16px;">You received this because you RSVP'd to this event. If you no longer wish to receive marketing emails from ${escapeHtml(orgName)}, you can unsubscribe at any time.</p>
+                  <p style="color: #999; font-size: 12px; margin-top: 24px;">${escapeHtml(orgName)}</p>
+                </div>
+              </body>
+            </html>
+          `,
+          text: [
+            `Hi ${contact.firstName || 'there'},`,
+            '',
+            `This is a reminder that you're on the list for:`,
+            '',
+            `${event.name}`,
+            ...(eventWhen ? [`When: ${eventWhen}`] : []),
+            `Party size: ${rsvp.partySize}`,
+            '',
+            `You can cancel your RSVP at any time: ${cancelUrl}`,
+            '',
+            `You received this because you RSVP'd to this event. If you no longer wish to receive marketing emails from ${orgName}, you can unsubscribe at any time.`,
+            '',
+            orgName,
+          ].join('\n'),
+          ...(organization.email && { reply_to: organization.email }),
+        };
+
+        await resend.emails.send(msg);
+
+        logger.info('RSVP reminder sent', {
+          event: 'rsvp_reminder_sent',
+          rsvpId: rsvp.id,
+          eventId: rsvp.eventId,
+          contactId: rsvp.contactId,
+          email: contact.email,
+          attempt,
+        });
+
+        return;
+      } catch (error) {
+        lastError = error;
+        logger.warn('RSVP reminder email attempt failed', {
+          rsvpId: rsvp.id,
+          attempt,
+          error: error.message,
+        });
+        if (attempt < maxRetries) {
+          await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+        }
+      }
+    }
+
+    logger.error('Failed to send RSVP reminder after all retries', {
+      rsvpId: rsvp.id,
+      eventId: rsvp.eventId,
+      contactId: rsvp.contactId,
+      attempts: maxRetries,
+      error: lastError?.message,
+    });
+  }
+
   /** Branded RSVP confirmation with a calendar attachment (spec 034). */
   async sendRsvpConfirmation(rsvp, { cancelUrl }) {
     const event = rsvp.event;
