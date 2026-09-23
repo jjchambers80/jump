@@ -1,5 +1,17 @@
 export type CustomerSegment = 'Prospect' | 'New' | 'Repeat' | 'Lapsed';
 
+export const CUSTOMER_SEGMENTS: readonly CustomerSegment[] = [
+  'Prospect',
+  'New',
+  'Repeat',
+  'Lapsed',
+];
+
+export function customerSegmentFrom(value: string | null | undefined): CustomerSegment | '' {
+  if (!value) return '';
+  return CUSTOMER_SEGMENTS.find((segment) => segment.toLowerCase() === value.toLowerCase()) || '';
+}
+
 export interface CustomerListState {
   page?: number;
   search?: string;

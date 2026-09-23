@@ -41,6 +41,11 @@ const baseCustomer = {
   ],
 };
 
+type CustomerFixture = Omit<typeof baseCustomer, 'prevId' | 'nextId'> & {
+  prevId: string | null;
+  nextId: string | null;
+};
+
 async function mockOrganizations(page: Page) {
   await page.route(`${API}/organizations`, (route) =>
     route.fulfill({
@@ -51,7 +56,7 @@ async function mockOrganizations(page: Page) {
   );
 }
 
-async function mockCustomerDetail(page: Page, customer: typeof baseCustomer) {
+async function mockCustomerDetail(page: Page, customer: CustomerFixture) {
   await page.route(`${API}/admin/customers/${CUSTOMER_ID}**`, async (route) => {
     const request = route.request();
     if (request.method() === 'GET') {
@@ -71,7 +76,7 @@ async function mockTimeline(page: Page, timeline: unknown) {
   });
 }
 
-async function setup(page: Page, baseURL: string, user: StaffUser, timeline: unknown, customer = baseCustomer) {
+async function setup(page: Page, baseURL: string, user: StaffUser, timeline: unknown, customer: CustomerFixture = baseCustomer) {
   await signInAsStaff(page, user, baseURL);
   await mockOrganizations(page);
   await mockCustomerDetail(page, customer);
@@ -110,6 +115,24 @@ test('renders newest-first timeline, segment, grouped upcoming tickets, and stab
   await expect(page.getByRole('link', { name: 'Previous customer' })).toHaveAttribute('href', '/admin/customers/customer-prev?search=ada&sort=spent&direction=desc&segment=Repeat');
   await expect(page.getByRole('link', { name: 'Next customer' })).toHaveAttribute('href', '/admin/customers/customer-next?search=ada&sort=spent&direction=desc&segment=Repeat');
   await expect(page.locator('a[href*="search=ada"]', { hasText: 'Customers' })).toHaveAttribute('href', '/admin/customers?search=ada&sort=spent&direction=desc&segment=Repeat');
+});
+
+test('renders disabled previous and next controls at navigation boundaries', async ({ page, baseURL }) => {
+  await setup(
+    page,
+    baseURL!,
+    { id: 'admin-boundary', email: 'admin-boundary@test.com', role: 'ADMIN' },
+    { items: [], nextCursor: null },
+    { ...baseCustomer, prevId: null, nextId: null }
+  );
+
+  await page.goto(`/admin/customers/${CUSTOMER_ID}?segment=Repeat&sort=name&direction=asc`);
+
+  const navigation = page.getByRole('navigation', { name: 'Customer navigation' });
+  await expect(navigation.getByText('Previous', { exact: true })).toHaveAttribute('aria-disabled', 'true');
+  await expect(navigation.getByText('Next', { exact: true })).toHaveAttribute('aria-disabled', 'true');
+  await expect(navigation.getByRole('link', { name: 'Previous customer' })).toHaveCount(0);
+  await expect(navigation.getByRole('link', { name: 'Next customer' })).toHaveCount(0);
 });
 
 test('creates a plain-text comment and allows its author to delete it', async ({ page, baseURL }) => {

@@ -7,6 +7,7 @@ import { useOrg } from '@/components/OrgContext';
 import {
   customerDetailHref,
   customerListQuery,
+  customerSegmentFrom,
   segmentBadgeClass,
   type CustomerSegment,
 } from '@/lib/customers';
@@ -55,7 +56,7 @@ function CustomersPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialSearch = searchParams.get('search') || '';
-  const initialSegment = (searchParams.get('segment') || '') as CustomerSegment | '';
+  const initialSegment = customerSegmentFrom(searchParams.get('segment'));
   // Spec 032 phase 3: `all` also lists prospects (contacts with no paid order)
   const [scope, setScope] = useState<CustomerScope>(() => customerScopeFrom(searchParams));
   const noun = scope === 'all' ? 'contact' : 'customer';
@@ -116,6 +117,27 @@ function CustomersPageContent() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setSearch(searchInput.trim());
+  };
+
+  const handleSegmentChange = (nextSegment: CustomerSegment | '') => {
+    setSegment(nextSegment);
+    setPage(1);
+
+    // Keep the active list state shareable while preserving query values added
+    // by adjacent list controls (for example tag filters).
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete('page');
+    if (search) nextParams.set('search', search);
+    else nextParams.delete('search');
+    if (nextSegment) nextParams.set('segment', nextSegment);
+    else nextParams.delete('segment');
+    nextParams.set('sort', sort);
+    nextParams.set('direction', direction);
+    if (scope === 'all') nextParams.set('scope', scope);
+    else nextParams.delete('scope');
+
+    const query = nextParams.toString();
+    router.replace(`/admin/customers${query ? `?${query}` : ''}`, { scroll: false });
   };
 
   const startEdit = (customer: Customer, field: 'note' | 'location') => {
@@ -233,7 +255,7 @@ function CustomersPageContent() {
         <select
           id="customer-segment"
           value={segment}
-          onChange={(event) => setSegment(event.target.value as CustomerSegment | '')}
+          onChange={(event) => handleSegmentChange(event.target.value as CustomerSegment | '')}
           className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
         >
           <option value="">All segments</option>
