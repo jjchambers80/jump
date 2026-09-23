@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   customerDetailHref,
   customerListQuery,
+  customerSegmentFrom,
   segmentBadgeClass,
 } from '../../src/lib/customers';
 
@@ -28,5 +29,11 @@ describe('customer list navigation helpers', () => {
   it('returns distinct accessible badge classes for every segment', () => {
     const segments = ['Prospect', 'New', 'Repeat', 'Lapsed'] as const;
     expect(new Set(segments.map(segmentBadgeClass)).size).toBe(4);
+  });
+
+  it('normalizes valid segment query values and ignores invalid or missing values', () => {
+    expect(customerSegmentFrom('repeat')).toBe('Repeat');
+    expect(customerSegmentFrom('unknown')).toBe('');
+    expect(customerSegmentFrom(null)).toBe('');
   });
 });

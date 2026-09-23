@@ -90,6 +90,7 @@ interface Customer {
   totalRefunded: number;
   lastActivityAt: string | null;
   createdAt: string;
+  segment: 'Prospect' | 'New' | 'Repeat' | 'Lapsed';
 }
 
 // ── Fixture builders ────────────────────────────────────────────────────────
@@ -185,9 +186,9 @@ function buildGuestCustomer(): CustomerDetail {
 
 function buildCustomerList(overrides: Partial<Customer>[] = []): { data: Customer[]; pagination: { page: number; limit: number; total: number; totalPages: number } } {
   const base: Customer[] = [
-    { id: 'cust-001', firstName: 'Jane', lastName: 'Doe', email: 'jane.doe@example.com', location: 'Raleigh, NC', note: 'Prefers email.', emailSubscribed: true, transactionCount: 5, ticketOrderCount: 3, applicationCount: 2, totalSpent: 450, totalRefunded: 0, lastActivityAt: '2026-09-19T12:00:00.000Z', createdAt: '2026-06-01T08:00:00.000Z' },
-    { id: 'cust-002', firstName: 'Bob', lastName: 'Smith', email: 'bob@example.com', location: null, note: null, emailSubscribed: false, transactionCount: 1, ticketOrderCount: 1, applicationCount: 0, totalSpent: 25, totalRefunded: 0, lastActivityAt: null, createdAt: '2026-09-10T10:00:00.000Z' },
-    { id: 'cust-003', firstName: 'Alice', lastName: 'Johnson', email: 'alice@example.com', location: 'Durham, NC', note: 'Volunteer', emailSubscribed: true, transactionCount: 12, ticketOrderCount: 8, applicationCount: 4, totalSpent: 1200, totalRefunded: 50, lastActivityAt: '2026-09-20T08:00:00.000Z', createdAt: '2025-11-15T09:00:00.000Z' },
+    { id: 'cust-001', firstName: 'Jane', lastName: 'Doe', email: 'jane.doe@example.com', location: 'Raleigh, NC', note: 'Prefers email.', emailSubscribed: true, transactionCount: 5, ticketOrderCount: 3, applicationCount: 2, totalSpent: 450, totalRefunded: 0, lastActivityAt: '2026-09-19T12:00:00.000Z', createdAt: '2026-06-01T08:00:00.000Z', segment: 'Repeat' },
+    { id: 'cust-002', firstName: 'Bob', lastName: 'Smith', email: 'bob@example.com', location: null, note: null, emailSubscribed: false, transactionCount: 1, ticketOrderCount: 1, applicationCount: 0, totalSpent: 25, totalRefunded: 0, lastActivityAt: null, createdAt: '2026-09-10T10:00:00.000Z', segment: 'New' },
+    { id: 'cust-003', firstName: 'Alice', lastName: 'Johnson', email: 'alice@example.com', location: 'Durham, NC', note: 'Volunteer', emailSubscribed: true, transactionCount: 12, ticketOrderCount: 8, applicationCount: 4, totalSpent: 1200, totalRefunded: 50, lastActivityAt: '2026-09-20T08:00:00.000Z', createdAt: '2025-11-15T09:00:00.000Z', segment: 'Lapsed' },
   ];
   return {
     data: base.map((c, i) => ({ ...c, ...(overrides[i] || {}) })),
@@ -589,8 +590,14 @@ test.describe('Customer detail Phase 1', () => {
 
     test('copy account URL works from the Account card', async ({ page }) => {
       const fixture = buildCustomerAccount();
-      // Playwright can stub clipboard write
-      await page.context().grantPermissions(['clipboard-write', 'clipboard-read']);
+      // Keep this browser-neutral: Firefox does not expose Playwright's
+      // clipboard-write permission even though the page uses the Clipboard API.
+      await page.addInitScript(() => {
+        Object.defineProperty(navigator, 'clipboard', {
+          configurable: true,
+          value: { writeText: async () => undefined },
+        });
+      });
       await mockCustomerDetail(page, fixture);
 
       await page.goto(`/admin/customers/${fixture.id}`);
@@ -654,6 +661,43 @@ test.describe('Customer detail Phase 1', () => {
   });
 
   test.describe('Customer list scope and search', () => {
+    test('renders and persists the segment filter in the URL', async ({ page }) => {
+      const fullList = buildCustomerList();
+      await page.route(`${API}/admin/customers*`, async (route) => {
+        const segment = new URL(route.request().url()).searchParams.get('segment');
+        const data = segment ? fullList.data.filter((customer) => customer.segment === segment) : fullList.data;
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            data,
+            pagination: { page: 1, limit: 20, total: data.length, totalPages: 1 },
+          }),
+        });
+      });
+
+      await page.goto('/admin/customers?search=jane&sort=name&direction=asc&page=3');
+      await expect(page.getByText('Segment', { exact: true })).toBeVisible();
+      await expect(page.locator('span').filter({ hasText: /^Repeat$/ }).first()).toBeVisible();
+
+      await page.getByLabel('Segment').selectOption('Repeat');
+      await expect(page).toHaveURL(/segment=Repeat/);
+      await expect(page).toHaveURL(/search=jane/);
+      await expect(page).toHaveURL(/sort=name/);
+      await expect(page).not.toHaveURL(/page=3/);
+      await expect(page.getByText('Jane Doe').first()).toBeVisible();
+      await expect(page.getByText('Bob Smith')).toHaveCount(0);
+
+      await page.reload();
+      await expect(page.getByLabel('Segment')).toHaveValue('Repeat');
+      await expect(page.getByText('Jane Doe').first()).toBeVisible();
+
+      await page.getByLabel('Segment').selectOption('');
+      await expect(page).not.toHaveURL(/segment=/);
+      await expect(page).toHaveURL(/search=jane/);
+      await expect(page.getByText('Bob Smith').first()).toBeVisible();
+    });
+
     test('navigates customers list with scope toggle', async ({ page }) => {
       const listData = buildCustomerList();
       await mockCustomerList(page, listData);
