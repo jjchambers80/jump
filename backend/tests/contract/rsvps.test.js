@@ -145,6 +145,17 @@ describe('RSVP events contract', () => {
     expect(checkout.body.code).toBe('EVENT_NOT_TICKETED');
   });
 
+  it('carries the admission mode on organization and venue page cards', async () => {
+    const orgPage = await request(app).get(`/organizations/${org.id}/public`).expect(200);
+    const venuePage = await request(app).get(`/venues/${venue.id}`).expect(200);
+    for (const events of [orgPage.body.events, venuePage.body.events]) {
+      expect(events.find((e) => e.id === rsvpEvent.id)).toMatchObject({
+        admissionMode: 'RSVP', rsvpLimit: 10, rsvpMaxPartySize: 4,
+      });
+      expect(events.find((e) => e.id === ticketedEvent.id)).toMatchObject({ admissionMode: 'TICKETED' });
+    }
+  });
+
   it('locks both admission-mode switch directions', async () => {
     const contact = await prisma.contact.create({ data: { organizationId: org.id, email: `order@${TAG}.test`, firstName: 'Order', lastName: 'Buyer' } });
     await prisma.order.create({ data: { eventId: ticketedEvent.id, contactId: contact.id, orderRef: `JMP-${Date.now().toString(36).toUpperCase().slice(-6).padStart(6, 'A')}`, totalAmount: 0, quantity: 1 } });
