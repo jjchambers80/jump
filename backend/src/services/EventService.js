@@ -674,6 +674,46 @@ class EventService {
       throw new NotFoundError('Event not found');
     }
 
+    if (event.admissionMode === 'RSVP') {
+      const [going, cancelledCount] = await Promise.all([
+        prisma.eventRsvp.aggregate({
+          where: { eventId, status: 'GOING' },
+          _sum: { partySize: true },
+          _count: { id: true },
+        }),
+        prisma.eventRsvp.count({ where: { eventId, status: 'CANCELLED' } }),
+      ]);
+      const headcount = going._sum.partySize || 0;
+      return {
+        event: {
+          id: event.id,
+          name: event.name,
+          date: event.date,
+          status: event.status,
+          capacity: event.capacity,
+          admissionMode: event.admissionMode,
+          rsvpLimit: event.rsvpLimit,
+          venue: event.venue,
+        },
+        rsvp: {
+          headcount,
+          rsvpCount: going._count.id,
+          cancelledCount,
+          remaining: event.rsvpLimit === null ? null : Math.max(0, event.rsvpLimit - headcount),
+        },
+        totals: { sold: 0, redeemed: 0, remaining: 0, revenue: 0 },
+        revenue: {
+          tickets: 0,
+          addOns: 0,
+          applications: 0,
+          applicationCount: 0,
+          applicationRefunds: 0,
+          net: 0,
+        },
+        tiers: [],
+      };
+    }
+
     // Count redeemed tickets per tier
     const redeemedCounts = await prisma.ticket.groupBy({
       by: ['priceTierId'],
@@ -722,6 +762,8 @@ class EventService {
         date: event.date,
         status: event.status,
         capacity: event.capacity,
+        admissionMode: event.admissionMode,
+        rsvpLimit: event.rsvpLimit,
         venue: event.venue,
       },
       totals: {

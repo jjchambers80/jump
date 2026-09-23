@@ -26,6 +26,9 @@ async function cleanupFixtureData(orgIds) {
   await prisma.contactComment
     .deleteMany({ where: { organizationId: { in: orgIds } } })
     .catch(() => {});
+  await prisma.eventRsvp.deleteMany({
+    where: { event: { venue: { organizationId: { in: orgIds } } } },
+  });
   await prisma.contact.deleteMany({ where: { organizationId: { in: orgIds } } }).catch(() => {});
   await prisma.event
     .deleteMany({ where: { venue: { organizationId: { in: orgIds } } } })
@@ -119,6 +122,15 @@ describe('customer timeline and comments contract', () => {
       body: 'Called the buyer',
       kind: 'COMMENT',
     });
+    await prisma.eventRsvp.create({
+      data: {
+        eventId: own.event.id,
+        contactId: own.contact.id,
+        partySize: 2,
+        status: 'CANCELLED',
+        cancelledAt: new Date('2026-01-04T00:00:00Z'),
+      },
+    });
 
     const timeline = await request(app)
       .get(`/admin/customers/${own.contact.id}/timeline`)
@@ -132,6 +144,12 @@ describe('customer timeline and comments contract', () => {
           body: 'Called the buyer',
         }),
         expect.objectContaining({ type: 'ORDER_PAID', orderId: own.order.id }),
+        expect.objectContaining({
+          type: 'RSVP_CREATED',
+          partySize: 2,
+          event: expect.objectContaining({ id: own.event.id }),
+        }),
+        expect.objectContaining({ type: 'RSVP_CANCELLED', partySize: 2 }),
       ])
     );
   });

@@ -70,6 +70,10 @@ function CustomersPageContent() {
   const [searchInput, setSearchInput] = useState(initialSearch);
   const [search, setSearch] = useState(initialSearch);
   const [segment, setSegment] = useState<CustomerSegment | ''>(initialSegment);
+  const [rsvp, setRsvp] = useState<'going' | ''>(
+    searchParams.get('rsvp') === 'going' ? 'going' : ''
+  );
+  const eventId = searchParams.get('eventId') || '';
   const [sort, setSort] = useState(searchParams.get('sort') || 'createdAt');
   const [direction, setDirection] = useState<'asc' | 'desc'>(
     searchParams.get('direction') === 'asc' ? 'asc' : 'desc'
@@ -89,6 +93,8 @@ function CustomersPageContent() {
       const params = new URLSearchParams({ page: String(page), limit: '20', scope });
       if (search) params.set('search', search);
       if (segment) params.set('segment', segment);
+      if (rsvp) params.set('rsvp', rsvp);
+      if (rsvp && eventId) params.set('eventId', eventId);
       params.set('sort', sort);
       params.set('direction', direction);
       const result = await api.get<CustomerListResponse>(`/admin/customers?${params}`);
@@ -100,7 +106,7 @@ function CustomersPageContent() {
     } finally {
       setLoading(false);
     }
-  }, [selectedOrgId, page, search, segment, sort, direction, scope]);
+  }, [selectedOrgId, page, search, segment, rsvp, eventId, sort, direction, scope]);
 
   useEffect(() => {
     fetchCustomers();
@@ -109,9 +115,9 @@ function CustomersPageContent() {
   // Reset page when search changes
   useEffect(() => {
     setPage(1);
-  }, [search, segment, sort, direction, scope]);
+  }, [search, segment, rsvp, sort, direction, scope]);
 
-  const listQuery = customerListQuery({ page, search, segment, sort, direction });
+  const listQuery = customerListQuery({ page, search, segment, rsvp, eventId, sort, direction });
   if (scope === 'all') listQuery.set('scope', 'all');
 
   const handleSearch = (e: React.FormEvent) => {
@@ -138,6 +144,19 @@ function CustomersPageContent() {
 
     const query = nextParams.toString();
     router.replace(`/admin/customers${query ? `?${query}` : ''}`, { scroll: false });
+  };
+
+  const handleRsvpChange = (nextRsvp: 'going' | '') => {
+    setRsvp(nextRsvp);
+    setPage(1);
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete('page');
+    if (nextRsvp) nextParams.set('rsvp', nextRsvp);
+    else {
+      nextParams.delete('rsvp');
+      nextParams.delete('eventId');
+    }
+    router.replace(`/admin/customers${nextParams.size ? `?${nextParams}` : ''}`, { scroll: false });
   };
 
   const startEdit = (customer: Customer, field: 'note' | 'location') => {
@@ -264,6 +283,18 @@ function CustomersPageContent() {
           <option value="Lapsed">Lapsed</option>
           <option value="Prospect">Prospect</option>
         </select>
+        <label className="ml-2 text-xs font-medium text-gray-600 dark:text-slate-300" htmlFor="customer-rsvp">
+          RSVP
+        </label>
+        <select
+          id="customer-rsvp"
+          value={rsvp}
+          onChange={(event) => handleRsvpChange(event.target.value as 'going' | '')}
+          className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+        >
+          <option value="">All</option>
+          <option value="going">RSVP&apos;d{eventId ? ' to this event' : ''}</option>
+        </select>
         <label className="ml-auto text-xs font-medium text-gray-600 dark:text-slate-300" htmlFor="customer-sort">
           Sort
         </label>
@@ -310,7 +341,7 @@ function CustomersPageContent() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
           <p className="text-gray-500 dark:text-slate-400">
-            {search || segment ? `No ${noun}s match these filters.` : `No ${noun}s yet.`}
+            {search || segment || rsvp ? `No ${noun}s match these filters.` : `No ${noun}s yet.`}
           </p>
         </div>
       )}

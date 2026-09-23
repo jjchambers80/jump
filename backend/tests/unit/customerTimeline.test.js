@@ -111,6 +111,31 @@ describe('customer timeline', () => {
     ]);
   });
 
+  it('derives RSVP creation and cancellation entries with event context', () => {
+    const items = buildTimeline({
+      contact: { id: 'contact-1', createdAt: at('2026-01-01T00:00:00Z') },
+      rsvps: [
+        {
+          id: 'rsvp-1',
+          partySize: 3,
+          createdAt: at('2026-01-02T00:00:00Z'),
+          cancelledAt: at('2026-01-03T00:00:00Z'),
+          event: { id: 'event-1', name: 'Open House' },
+        },
+      ],
+    });
+
+    expect(items.slice(0, 2)).toEqual([
+      expect.objectContaining({
+        type: 'RSVP_CANCELLED',
+        rsvpId: 'rsvp-1',
+        partySize: 3,
+        event: { id: 'event-1', name: 'Open House' },
+      }),
+      expect.objectContaining({ type: 'RSVP_CREATED', rsvpId: 'rsvp-1' }),
+    ]);
+  });
+
   it('paginates without duplicates when timestamps are equal', () => {
     const items = ['d', 'c', 'b', 'a'].map((id) => ({
       id,

@@ -23,6 +23,8 @@ export type TimelineItem = {
   author?: TimelineAuthor | null;
   authorUserId?: string | null;
   canDelete?: boolean;
+  partySize?: number;
+  event?: { id: string; name: string } | null;
 };
 
 type TimelineResponse = {
@@ -39,9 +41,14 @@ function authorName(author?: TimelineAuthor | null): string {
 }
 
 function itemText(item: TimelineItem): string {
-  return item.kind === 'COMMENT'
-    ? item.body || ''
-    : item.text || item.message || item.type?.toLowerCase().replace(/_/g, ' ') || 'Customer activity';
+  if (item.kind === 'COMMENT') return item.body || '';
+  if (item.type === 'RSVP_CREATED') {
+    return `RSVP'd to ${item.event?.name || 'an event'}${item.partySize ? ` for ${item.partySize}` : ''}`;
+  }
+  if (item.type === 'RSVP_CANCELLED') {
+    return `Cancelled RSVP to ${item.event?.name || 'an event'}`;
+  }
+  return item.text || item.message || item.type?.toLowerCase().replace(/_/g, ' ') || 'Customer activity';
 }
 
 function formatTimestamp(value: string): string {

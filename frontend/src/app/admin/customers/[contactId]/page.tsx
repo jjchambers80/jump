@@ -58,6 +58,15 @@ interface CustomerApplication {
   orderRef?: string;
 }
 
+interface CustomerRsvp {
+  id: string;
+  partySize: number;
+  status: 'GOING' | 'CANCELLED';
+  createdAt: string;
+  cancelledAt: string | null;
+  event: OrderEvent;
+}
+
 interface CustomerDetail {
   id: string;
   firstName: string;
@@ -87,6 +96,7 @@ interface CustomerDetail {
   lastActivityAt: string | null;
   orders: CustomerOrder[];
   applications: CustomerApplication[];
+  rsvps: CustomerRsvp[];
 }
 
 // ── Tag helpers ───────────────────────────────────────────────────────────
@@ -773,6 +783,34 @@ function CustomerDetailPageContent() {
                       <p className="text-sm font-medium text-gray-900 dark:text-white">{formatCurrency(application.applicantPays)}</p>
                       <p className="text-xs text-gray-500 dark:text-slate-400">
                         {application.refunded > 0 ? `${formatCurrency(application.refunded)} refunded` : application.paidAt ? `Paid ${formatDate(application.paidAt)}` : application.status.toLowerCase()}
+                      </p>
+                    </div>
+                    <ChevronRightIcon className="w-4 h-4 text-gray-400 dark:text-slate-500 flex-shrink-0" />
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {customer.rsvps.length > 0 && (
+            <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg overflow-hidden" data-testid="customer-rsvps">
+              <div className="px-4 py-3 border-b border-gray-200 dark:border-slate-700">
+                <h2 className="text-sm font-semibold text-gray-900 dark:text-white">RSVPs</h2>
+              </div>
+              <div className="divide-y divide-gray-100 dark:divide-slate-700/50">
+                {customer.rsvps.map((rsvp) => (
+                  <Link
+                    key={rsvp.id}
+                    href={`/admin/events/${rsvp.event.id}/rsvps`}
+                    className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-900 dark:text-white truncate">{rsvp.event.name}</span>
+                        <StatusBadge status={rsvp.status} />
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-slate-400">
+                        {formatEventDateTime(rsvp.event.date, rsvp.event.timezone)} · Party of {rsvp.partySize}
                       </p>
                     </div>
                     <ChevronRightIcon className="w-4 h-4 text-gray-400 dark:text-slate-500 flex-shrink-0" />
