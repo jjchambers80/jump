@@ -155,6 +155,7 @@ class VenueService {
       name: venue.name,
       slug: venue.slug,
       address: venue.address,
+      timezone: venue.timezone,
     };
 
     return {
