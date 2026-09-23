@@ -48,6 +48,8 @@ interface PriceTierInput {
   isRefundable: boolean;
 }
 
+type AdmissionMode = 'TICKETED' | 'RSVP';
+
 function newTier(): PriceTierInput {
   return {
     key: crypto.randomUUID(),
@@ -85,6 +87,13 @@ export default function CreateEventPage() {
   const [category, setCategory] = useState('');
   const [slug, setSlug] = useState('');
   const [slugError, setSlugError] = useState<string | null>(null);
+
+  // Admission mode (spec 034)
+  const [admissionMode, setAdmissionMode] = useState<AdmissionMode>('TICKETED');
+  const [rsvpLimit, setRsvpLimit] = useState('');
+  const [rsvpLimitEnabled, setRsvpLimitEnabled] = useState(false);
+  const [rsvpMaxPartySize, setRsvpMaxPartySize] = useState('1');
+
   const [priceTiers, setPriceTiers] = useState<PriceTierInput[]>([newTier()]);
   const [editingTierKey, setEditingTierKey] = useState<string | null>(null);
   const [showVenueDialog, setShowVenueDialog] = useState(false);
@@ -196,7 +205,7 @@ export default function CreateEventPage() {
     0
   );
   const capacityNum = parseInt(capacity) || 0;
-  const capacityExceeded = capacityNum > 0 && totalTierQuantity > capacityNum;
+  const capacityExceeded = admissionMode === 'TICKETED' && capacityNum > 0 && totalTierQuantity > capacityNum;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -206,15 +215,19 @@ export default function CreateEventPage() {
       setSaving(true);
       setError(null);
 
-      const payload = {
+      const payload: Record<string, unknown> = {
         venueId,
         name,
         slug: slug || undefined,
         description: description || undefined,
         date: zonedInputToIso(date, venueZone),
-        capacity: parseInt(capacity),
         category: category || undefined,
-        priceTiers: priceTiers.map((t, i) => ({
+        admissionMode,
+      };
+
+      if (admissionMode === 'TICKETED') {
+        payload.capacity = parseInt(capacity);
+        payload.priceTiers = priceTiers.map((t, i) => ({
           name: t.name,
           description: t.description || undefined,
           price: parseFloat(t.price), // dollars - backend stores as Decimal
@@ -226,8 +239,13 @@ export default function CreateEventPage() {
           saleEndDate: zonedInputToIso(t.saleEndDate, venueZone),
           visibility: t.visibility,
           isRefundable: t.isRefundable,
-        })),
-      };
+        }));
+      } else {
+        // RSVP mode: capacity is computed from rsvpLimit on the backend
+        payload.capacity = rsvpLimitEnabled && rsvpLimit ? parseInt(rsvpLimit) : 0;
+        payload.rsvpLimit = rsvpLimitEnabled && rsvpLimit ? parseInt(rsvpLimit) : null;
+        payload.rsvpMaxPartySize = parseInt(rsvpMaxPartySize) || 1;
+      }
 
       await api.post(`/organizations/${selectedOrgId}/events`, payload);
       router.push('/admin/events');
@@ -355,19 +373,21 @@ export default function CreateEventPage() {
               </p>
             </div>
 
-            <div>
-              <label className={labelClass}>Capacity *</label>
-              <input
-                type="number"
-                value={capacity}
-                onChange={(e) => setCapacity(e.target.value)}
-                placeholder="1–100,000"
-                min={1}
-                max={100000}
-                className={inputClass}
-                required
-              />
-            </div>
+            {admissionMode === 'TICKETED' && (
+              <div>
+                <label className={labelClass}>Capacity *</label>
+                <input
+                  type="number"
+                  value={capacity}
+                  onChange={(e) => setCapacity(e.target.value)}
+                  placeholder="1–100,000"
+                  min={1}
+                  max={100000}
+                  className={inputClass}
+                  required
+                />
+              </div>
+            )}
 
             <div>
               <label className={labelClass}>Category</label>
@@ -382,87 +402,168 @@ export default function CreateEventPage() {
           </div>
         </div>
 
-        {/* Price Tiers */}
+        {/* Admission Mode (spec 034) */}
         <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Price Tiers</h2>
-            <div className="flex items-center gap-2">
-              {presets.length > 0 && (
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setShowPresetMenu(!showPresetMenu)}
-                    className="rounded-md border border-indigo-300 dark:border-indigo-700 px-3 py-1.5 text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
-                  >
-                    Add from Preset
-                  </button>
-                  {showPresetMenu && (
-                    <div className="absolute right-0 z-10 mt-1 w-56 rounded-md border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 shadow-lg">
-                      {presets.map((preset) => (
-                        <button
-                          key={preset.id}
-                          type="button"
-                          onClick={() => addTierFromPreset(preset)}
-                          className="block w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700"
-                        >
-                          <span className="font-medium">{preset.name}</span>
-                          <span className="ml-2 text-gray-400 dark:text-slate-500">
-                            {preset.price === 0 ? 'Free' : `$${preset.price.toFixed(2)}`}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Admission</h2>
+          <div className="flex rounded-lg border border-gray-300 dark:border-slate-600 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => { setAdmissionMode('TICKETED'); setPriceTiers([newTier()]); }}
+              className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${
+                admissionMode === 'TICKETED'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700'
+              }`}
+            >
+              Ticketed
+            </button>
+            <button
+              type="button"
+              onClick={() => setAdmissionMode('RSVP')}
+              className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${
+                admissionMode === 'RSVP'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700'
+              }`}
+            >
+              RSVP
+            </button>
+          </div>
+
+          {admissionMode === 'RSVP' && (
+            <div className="mt-4 space-y-4">
+              <div className="flex items-center gap-3">
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={rsvpLimitEnabled}
+                    onChange={(e) => setRsvpLimitEnabled(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300 dark:peer-focus:ring-indigo-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-600" />
+                </label>
+                <label className="text-sm text-gray-700 dark:text-slate-300 cursor-pointer" onClick={() => setRsvpLimitEnabled(!rsvpLimitEnabled)}>
+                  Limit RSVPs
+                </label>
+              </div>
+
+              {rsvpLimitEnabled && (
+                <div>
+                  <label className={labelClass}>RSVP Limit</label>
+                  <input
+                    type="number"
+                    value={rsvpLimit}
+                    onChange={(e) => setRsvpLimit(e.target.value)}
+                    placeholder="Max headcount"
+                    min={1}
+                    max={100000}
+                    className={inputClass}
+                  />
                 </div>
               )}
-              <button
-                type="button"
-                onClick={addTier}
-                className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500"
-              >
-                + Add Tier
-              </button>
+
+              <div>
+                <label className={labelClass}>Guests per RSVP</label>
+                <input
+                  type="number"
+                  value={rsvpMaxPartySize}
+                  onChange={(e) => setRsvpMaxPartySize(e.target.value)}
+                  placeholder="1–10"
+                  min={1}
+                  max={10}
+                  className={inputClass}
+                />
+                <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                  How many guests each attendee may bring (including themselves)
+                </p>
+              </div>
             </div>
-          </div>
-
-          {capacityExceeded && (
-            <div className="mb-3 rounded-md bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 p-3">
-              <p className="text-sm text-yellow-800 dark:text-yellow-300">
-                ⚠ Total tier quantity ({totalTierQuantity}) exceeds event capacity ({capacityNum})
-              </p>
-            </div>
-          )}
-
-          <div className="space-y-2">
-            {priceTiers.map((tier, index) => (
-              <TierCard
-                key={tier.key}
-                tier={tier}
-                index={index}
-                total={priceTiers.length}
-                canDelete={priceTiers.length > 1}
-                onEdit={() => setEditingTierKey(tier.key)}
-                onMove={(dir) => moveTier(index, dir)}
-                onDelete={() => removeTier(tier.key)}
-              />
-            ))}
-          </div>
-
-          {editingTier && (
-            <TierEditDialog
-              tier={editingTier}
-              index={editingTierIndex}
-              onSave={saveTierEdit}
-              onCancel={() => setEditingTierKey(null)}
-            />
           )}
         </div>
+
+        {/* Price Tiers — only for ticketed events */}
+        {admissionMode === 'TICKETED' && (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Price Tiers</h2>
+              <div className="flex items-center gap-2">
+                {presets.length > 0 && (
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowPresetMenu(!showPresetMenu)}
+                      className="rounded-md border border-indigo-300 dark:border-indigo-700 px-3 py-1.5 text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+                    >
+                      Add from Preset
+                    </button>
+                    {showPresetMenu && (
+                      <div className="absolute right-0 z-10 mt-1 w-56 rounded-md border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 shadow-lg">
+                        {presets.map((preset) => (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            onClick={() => addTierFromPreset(preset)}
+                            className="block w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700"
+                          >
+                            <span className="font-medium">{preset.name}</span>
+                            <span className="ml-2 text-gray-400 dark:text-slate-500">
+                              {preset.price === 0 ? 'Free' : `$${preset.price.toFixed(2)}`}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={addTier}
+                  className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500"
+                >
+                  + Add Tier
+                </button>
+              </div>
+            </div>
+
+            {capacityExceeded && (
+              <div className="mb-3 rounded-md bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 p-3">
+                <p className="text-sm text-yellow-800 dark:text-yellow-300">
+                  ⚠ Total tier quantity ({totalTierQuantity}) exceeds event capacity ({capacityNum})
+                </p>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              {priceTiers.map((tier, index) => (
+                <TierCard
+                  key={tier.key}
+                  tier={tier}
+                  index={index}
+                  total={priceTiers.length}
+                  canDelete={priceTiers.length > 1}
+                  onEdit={() => setEditingTierKey(tier.key)}
+                  onMove={(dir) => moveTier(index, dir)}
+                  onDelete={() => removeTier(tier.key)}
+                />
+              ))}
+            </div>
+
+            {editingTier && (
+              <TierEditDialog
+                tier={editingTier}
+                index={editingTierIndex}
+                onSave={saveTierEdit}
+                onCancel={() => setEditingTierKey(null)}
+              />
+            )}
+          </div>
+        )}
 
         {/* Submit */}
         <div className="flex gap-3 pt-2">
           <button
             type="submit"
-            disabled={saving || !venueId || capacityExceeded}
+            disabled={saving || !venueId || (admissionMode === 'TICKETED' && capacityExceeded)}
             className="rounded-md bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50"
           >
             {saving ? 'Creating…' : 'Create Event'}

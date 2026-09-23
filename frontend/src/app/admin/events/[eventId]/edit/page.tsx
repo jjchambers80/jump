@@ -18,6 +18,8 @@ import VenueFlyout, { NEW_VENUE_OPTION, type CreatedVenue } from '@/components/V
 import { DEFAULT_ZONE, formatEventTime, instantToZonedInput, zonedInputToInstant, zonedInputToIso } from '@/lib/eventTime';
 import { timeZoneLabel } from '@/lib/timeZones';
 
+type AdmissionMode = 'TICKETED' | 'RSVP';
+
 interface Venue {
   id: string;
   name: string;
@@ -126,6 +128,9 @@ interface EventDetail {
   capacity: number;
   category: string | null;
   status: string;
+  admissionMode: AdmissionMode;
+  rsvpLimit?: number | null;
+  rsvpMaxPartySize?: number;
   venue: {
     id: string;
     name: string;
@@ -198,8 +203,18 @@ function EditEventContent() {
   const [slug, setSlug] = useState('');
   const [slugError, setSlugError] = useState<string | null>(null);
 
+  // Admission mode (spec 034)
+  const [admissionMode, setAdmissionMode] = useState<AdmissionMode>('TICKETED');
+  const [rsvpLimit, setRsvpLimit] = useState('');
+  const [rsvpLimitEnabled, setRsvpLimitEnabled] = useState(false);
+  const [rsvpMaxPartySize, setRsvpMaxPartySize] = useState('1');
+
   const [priceTiers, setPriceTiers] = useState<TierFormInput[]>([]);
   const [tiersInitialized, setTiersInitialized] = useState(false);
+  // D11 lock: mode can't be changed once orders/RSVPs exist
+  const [modeLocked, setModeLocked] = useState(false);
+  const [modeLockReason, setModeLockReason] = useState<string | null>(null);
+  const [loadedAdmissionMode, setLoadedAdmissionMode] = useState<AdmissionMode | null>(null);
 
   const [editingTierKey, setEditingTierKey] = useState<string | null>(null);
 
@@ -230,6 +245,15 @@ function EditEventContent() {
         setCategory(event.category || '');
         setLogoUrl(event.logoUrl || null);
         setSlug(event.slug || '');
+
+        // Admission mode
+        const mode = event.admissionMode || 'TICKETED';
+        setAdmissionMode(mode);
+        setLoadedAdmissionMode(mode);
+        setRsvpLimit(event.rsvpLimit ? String(event.rsvpLimit) : '');
+        setRsvpLimitEnabled(event.rsvpLimit != null && event.rsvpLimit > 0);
+        setRsvpMaxPartySize(event.rsvpMaxPartySize ? String(event.rsvpMaxPartySize) : '1');
+
         // Initialize tier form state from loaded tiers
         const sorted = [...event.priceTiers].sort((a, b) => a.displayOrder - b.displayOrder);
         setPriceTiers(sorted.map((t) => tierToForm(t, event.venue?.timezone)));
@@ -242,6 +266,31 @@ function EditEventContent() {
     };
     fetchEvent();
   }, [orgId, eventId]);
+
+  // D11 lock: check if mode can be changed after loading
+  useEffect(() => {
+    if (!eventData || !loadedAdmissionMode) return;
+    if (loadedAdmissionMode === 'RSVP') {
+      // RSVP → TICKETED is locked if there are any GOING RSVPs
+      const checkLock = async () => {
+        try {
+          const rsvps = await api.get<{ rsvpCount: number }>(`/admin/events/${eventId}/rsvps`);
+          if (rsvps.rsvpCount > 0) {
+            setModeLocked(true);
+            setModeLockReason('RSVPs have been submitted for this event. The admission mode cannot be changed.');
+          }
+        } catch {
+          // If listing fails, don't lock — let the backend enforce it
+        }
+      };
+      checkLock();
+    } else {
+      // TICKETED → RSVP is locked if there are any orders
+      // We can't easily check orders from frontend, so let the backend enforce it
+      setModeLocked(false);
+      setModeLockReason(null);
+    }
+  }, [eventData, loadedAdmissionMode, eventId]);
 
   // Load venues for the org
   const fetchVenues = useCallback(async () => {
@@ -403,8 +452,23 @@ function EditEventContent() {
       if (venueId !== eventData?.venue?.id) payload.venueId = venueId;
       if (date !== toDatetimeLocal(eventData?.date || '', venueZone))
         payload.date = zonedInputToIso(date, venueZone);
-      if (capacity !== String(eventData?.capacity)) payload.capacity = parseInt(capacity);
       if (category !== (eventData?.category || '')) payload.category = category || null;
+
+      // Admission mode changes
+      if (admissionMode !== loadedAdmissionMode) {
+        payload.admissionMode = admissionMode;
+      }
+
+      if (admissionMode === 'RSVP') {
+        if (capacity !== String(eventData?.capacity))
+          payload.capacity = rsvpLimitEnabled && rsvpLimit ? parseInt(rsvpLimit) : 0;
+        const newRsvpLimit = rsvpLimitEnabled && rsvpLimit ? parseInt(rsvpLimit) : null;
+        if (newRsvpLimit !== eventData?.rsvpLimit) payload.rsvpLimit = newRsvpLimit;
+        const newRsvpMax = parseInt(rsvpMaxPartySize) || 1;
+        if (newRsvpMax !== eventData?.rsvpMaxPartySize) payload.rsvpMaxPartySize = newRsvpMax;
+      } else {
+        if (capacity !== String(eventData?.capacity)) payload.capacity = parseInt(capacity);
+      }
 
       // Save tier changes
       const tierBase = `/organizations/${orgId}/events/${eventId}/price-tiers`;
@@ -679,24 +743,26 @@ function EditEventContent() {
               </p>
             </div>
 
-            <div>
-              <label className={labelClass}>Capacity *</label>
-              <input
-                type="number"
-                value={capacity}
-                onChange={(e) => setCapacity(e.target.value)}
-                placeholder="1–100,000"
-                min={1}
-                max={100000}
-                className={inputClass}
-                required
-              />
-              {capacityExceeded && (
-                <p className="mt-1 text-xs text-yellow-600 dark:text-yellow-400">
-                  ⚠ Capacity is below total tier inventory ({totalTierQuantity})
-                </p>
-              )}
-            </div>
+            {admissionMode === 'TICKETED' && (
+              <div>
+                <label className={labelClass}>Capacity *</label>
+                <input
+                  type="number"
+                  value={capacity}
+                  onChange={(e) => setCapacity(e.target.value)}
+                  placeholder="1–100,000"
+                  min={1}
+                  max={100000}
+                  className={inputClass}
+                  required
+                />
+                {capacityExceeded && (
+                  <p className="mt-1 text-xs text-yellow-600 dark:text-yellow-400">
+                    ⚠ Capacity is below total tier inventory ({totalTierQuantity})
+                  </p>
+                )}
+              </div>
+            )}
 
             <div>
               <label className={labelClass}>Category</label>
@@ -711,94 +777,182 @@ function EditEventContent() {
           </div>
         </div>
 
-        {/* Price Tiers */}
+        {/* Admission Mode (spec 034) */}
         <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Price Tiers</h2>
-            <div className="flex items-center gap-2">
-              {presets.length > 0 && (
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setShowPresetMenu(!showPresetMenu)}
-                    className="rounded-md border border-indigo-300 dark:border-indigo-700 px-3 py-1.5 text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
-                  >
-                    Add from Preset
-                  </button>
-                  {showPresetMenu && (
-                    <div className="absolute right-0 z-10 mt-1 w-56 rounded-md border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 shadow-lg">
-                      {presets.map((preset) => (
-                        <button
-                          key={preset.id}
-                          type="button"
-                          onClick={() => addTierFromPreset(preset)}
-                          className="block w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700"
-                        >
-                          <span className="font-medium">{preset.name}</span>
-                          <span className="ml-2 text-gray-400 dark:text-slate-500">
-                            {preset.price === 0 ? 'Free' : `$${preset.price.toFixed(2)}`}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={addTier}
-                className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500"
-              >
-                + Add Tier
-              </button>
-            </div>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Admission</h2>
+          <div className="flex rounded-lg border border-gray-300 dark:border-slate-600 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => { if (!modeLocked) setAdmissionMode('TICKETED'); }}
+              disabled={modeLocked && admissionMode === 'RSVP'}
+              className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${
+                admissionMode === 'TICKETED'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700'
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              Ticketed
+            </button>
+            <button
+              type="button"
+              onClick={() => { if (!modeLocked) setAdmissionMode('RSVP'); }}
+              disabled={modeLocked && admissionMode === 'TICKETED'}
+              className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${
+                admissionMode === 'RSVP'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700'
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              RSVP
+            </button>
           </div>
-
-          {capacityExceeded && (
-            <div className="mb-3 rounded-md bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 p-3">
-              <p className="text-sm text-yellow-800 dark:text-yellow-300">
-                ⚠ Total tier quantity ({totalTierQuantity}) exceeds event capacity ({capacityNum})
-              </p>
-            </div>
-          )}
-
-          {priceTiers.length === 0 && (
-            <p className="text-sm text-gray-500 dark:text-slate-400 py-4 text-center">
-              No price tiers. Click &quot;+ Add Tier&quot; to create one.
+          {modeLocked && modeLockReason && (
+            <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+              {modeLockReason}
             </p>
           )}
 
-          <div className="space-y-2">
-            {priceTiers.map((tier, index) => (
-              <TierCard
-                key={tier.key}
-                tier={tier}
-                index={index}
-                total={priceTiers.length}
-                canDelete={tier.isNew || tier.quantitySold === 0}
-                deleteBlockedReason={!tier.isNew && tier.quantitySold > 0 ? "Can't delete a tier that has tickets sold" : undefined}
-                onEdit={() => setEditingTierKey(tier.key)}
-                onMove={(dir) => moveTier(index, dir)}
-                onDelete={() => removeTier(tier.key)}
-              />
-            ))}
-          </div>
+          {admissionMode === 'RSVP' && (
+            <div className="mt-4 space-y-4">
+              <div className="flex items-center gap-3">
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={rsvpLimitEnabled}
+                    onChange={(e) => setRsvpLimitEnabled(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300 dark:peer-focus:ring-indigo-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-600" />
+                </label>
+                <label className="text-sm text-gray-700 dark:text-slate-300 cursor-pointer" onClick={() => setRsvpLimitEnabled(!rsvpLimitEnabled)}>
+                  Limit RSVPs
+                </label>
+              </div>
 
-          {editingTier && (
-            <TierEditDialog
-              tier={editingTier}
-              index={editingTierIndex}
-              onSave={saveTierEdit}
-              onCancel={() => setEditingTierKey(null)}
-            />
+              {rsvpLimitEnabled && (
+                <div>
+                  <label className={labelClass}>RSVP Limit</label>
+                  <input
+                    type="number"
+                    value={rsvpLimit}
+                    onChange={(e) => setRsvpLimit(e.target.value)}
+                    placeholder="Max headcount"
+                    min={1}
+                    max={100000}
+                    className={inputClass}
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className={labelClass}>Guests per RSVP</label>
+                <input
+                  type="number"
+                  value={rsvpMaxPartySize}
+                  onChange={(e) => setRsvpMaxPartySize(e.target.value)}
+                  placeholder="1–10"
+                  min={1}
+                  max={10}
+                  className={inputClass}
+                />
+                <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                  How many guests each attendee may bring (including themselves)
+                </p>
+              </div>
+            </div>
           )}
         </div>
+
+        {/* Price Tiers — only for ticketed events */}
+        {admissionMode === 'TICKETED' && (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Price Tiers</h2>
+              <div className="flex items-center gap-2">
+                {presets.length > 0 && (
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowPresetMenu(!showPresetMenu)}
+                      className="rounded-md border border-indigo-300 dark:border-indigo-700 px-3 py-1.5 text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+                    >
+                      Add from Preset
+                    </button>
+                    {showPresetMenu && (
+                      <div className="absolute right-0 z-10 mt-1 w-56 rounded-md border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 shadow-lg">
+                        {presets.map((preset) => (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            onClick={() => addTierFromPreset(preset)}
+                            className="block w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700"
+                          >
+                            <span className="font-medium">{preset.name}</span>
+                            <span className="ml-2 text-gray-400 dark:text-slate-500">
+                              {preset.price === 0 ? 'Free' : `$${preset.price.toFixed(2)}`}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={addTier}
+                  className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500"
+                >
+                  + Add Tier
+                </button>
+              </div>
+            </div>
+
+            {capacityExceeded && (
+              <div className="mb-3 rounded-md bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 p-3">
+                <p className="text-sm text-yellow-800 dark:text-yellow-300">
+                  ⚠ Total tier quantity ({totalTierQuantity}) exceeds event capacity ({capacityNum})
+                </p>
+              </div>
+            )}
+
+            {priceTiers.length === 0 && (
+              <p className="text-sm text-gray-500 dark:text-slate-400 py-4 text-center">
+                No price tiers. Click &quot;+ Add Tier&quot; to create one.
+              </p>
+            )}
+
+            <div className="space-y-2">
+              {priceTiers.map((tier, index) => (
+                <TierCard
+                  key={tier.key}
+                  tier={tier}
+                  index={index}
+                  total={priceTiers.length}
+                  canDelete={tier.isNew || tier.quantitySold === 0}
+                  deleteBlockedReason={!tier.isNew && tier.quantitySold > 0 ? "Can't delete a tier that has tickets sold" : undefined}
+                  onEdit={() => setEditingTierKey(tier.key)}
+                  onMove={(dir) => moveTier(index, dir)}
+                  onDelete={() => removeTier(tier.key)}
+                />
+              ))}
+            </div>
+
+            {editingTier && (
+              <TierEditDialog
+                tier={editingTier}
+                index={editingTierIndex}
+                onSave={saveTierEdit}
+                onCancel={() => setEditingTierKey(null)}
+              />
+            )}
+          </div>
+        )}
 
         {/* Submit */}
         <div className="flex gap-3 pt-2">
           <button
             type="submit"
-            disabled={saving || !venueId || capacityExceeded}
+            disabled={saving || !venueId || (admissionMode === 'TICKETED' && capacityExceeded)}
             className="rounded-md bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50"
           >
             {saving ? 'Saving…' : 'Save Changes'}

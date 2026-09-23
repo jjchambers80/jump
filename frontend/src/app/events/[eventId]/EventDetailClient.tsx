@@ -2,6 +2,7 @@
 
 // Event detail page — displays event info with price tiers per FR-041
 // Uses new schema: venue object, priceTiers array, computed quantityAvailable
+// RSVP mode (spec 034): inline form instead of tiers, no Order Summary column
 
 import React, { useState, useEffect } from 'react';
 import StorefrontPasswordGate from '../../../components/StorefrontPasswordGate';
@@ -9,6 +10,7 @@ import { storefrontLockFrom, type StorefrontLock } from '../../../lib/storefront
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '../../../services/api';
+import { rsvpApi } from '../../../services/api';
 import { resolveAssetUrl } from '../../../lib/assets';
 import BrandScope from '../../../components/BrandScope';
 import OrganizationHeader from '../../../components/OrganizationHeader';
@@ -24,6 +26,7 @@ import AddOnPicker from '../../../components/AddOnPicker';
 import { offeredAddOns, addOnMaxQuantity, type AddOn } from '../../../lib/addOns';
 import type { ThemeMode } from '@/lib/theme';
 import { formatEventDate, formatEventTime } from '@/lib/eventTime';
+import { fetchLegalVersions, acceptancesFor, LEGAL_PAGES_ENABLED, LEGAL_PATHS, type LegalVersions, type LegalAcceptanceInput } from '@/lib/legal';
 
 interface EventVenue {
   id: string;
@@ -58,6 +61,10 @@ interface Event {
   capacity: number;
   category?: string;
   status: string;
+  admissionMode?: 'TICKETED' | 'RSVP';
+  rsvpLimit?: number | null;
+  rsvpMaxPartySize?: number;
+  rsvpRemaining?: number | null;
   taxRate: number;
   /** Listed tier prices already include tax (spec 009 phase 3). */
   taxInclusivePricing?: boolean;
@@ -92,8 +99,20 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
   // summary and the mobile drawer so both views always agree.
   const [openLines, setOpenLines] = useState<Record<string, boolean>>({});
 
+  // RSVP form state (spec 034)
+  const [legalVersions, setLegalVersions] = useState<LegalVersions | null>(null);
+  const [rsvpFirstName, setRsvpFirstName] = useState('');
+  const [rsvpLastName, setRsvpLastName] = useState('');
+  const [rsvpEmail, setRsvpEmail] = useState('');
+  const [rsvpPartySize, setRsvpPartySize] = useState(1);
+  const [rsvpMarketing, setRsvpMarketing] = useState(false);
+  const [rsvpSubmitted, setRsvpSubmitted] = useState(false);
+  const [rsvpSubmitting, setRsvpSubmitting] = useState(false);
+  const [rsvpError, setRsvpError] = useState<string | null>(null);
+
   useEffect(() => {
     fetchEventDetails();
+    fetchLegalVersions().then(setLegalVersions).catch(() => {});
   }, [params.eventId]);
 
   const fetchEventDetails = async () => {
@@ -117,9 +136,11 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
     }
   };
 
+  const isRsvpMode = event?.admissionMode === 'RSVP';
+
   const totalAvailable =
-    event?.priceTiers?.reduce((sum, t) => sum + (t.isActive ? t.quantityAvailable : 0), 0) ?? 0;
-  const isSoldOut = totalAvailable === 0;
+    isRsvpMode ? 0 : event?.priceTiers?.reduce((sum, t) => sum + (t.isActive ? t.quantityAvailable : 0), 0) ?? 0;
+  const isSoldOut = !isRsvpMode && totalAvailable === 0;
 
   const updateQuantity = (tier: PriceTier, direction: 1 | -1) => {
     setQuantities((current) => {
@@ -148,6 +169,39 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
       const search = new URLSearchParams({ items: JSON.stringify(cartItems) });
       if (addOnLines.length > 0) search.set('addOns', JSON.stringify(addOnLines));
       router.push(`/checkout/${params.eventId}?${search.toString()}`);
+    }
+  };
+
+  // RSVP submit handler
+  const handleRsvpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!event || !legalVersions) return;
+
+    try {
+      setRsvpSubmitting(true);
+      setRsvpError(null);
+
+      await rsvpApi.create(event.id, {
+        firstName: rsvpFirstName,
+        lastName: rsvpLastName,
+        email: rsvpEmail,
+        partySize: (event.rsvpMaxPartySize ?? 1) > 1 ? rsvpPartySize : undefined,
+        marketing: rsvpMarketing,
+        acceptances: acceptancesFor(legalVersions),
+      });
+
+      setRsvpSubmitted(true);
+    } catch (err: any) {
+      if (err?.code === 'RSVP_FULL') {
+        setRsvpError('RSVPs are full for this event.');
+      } else if (err?.code === 'LEGAL_VERSION_STALE') {
+        setRsvpError('The terms have been updated. Please refresh and try again.');
+        fetchLegalVersions().then(setLegalVersions).catch(() => {});
+      } else {
+        setRsvpError(err.message || 'Failed to submit RSVP. Please try again.');
+      }
+    } finally {
+      setRsvpSubmitting(false);
     }
   };
 
@@ -260,6 +314,9 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
     setOpenLines(Object.fromEntries(cartLines.map((line) => [line.key, next])));
   };
 
+  const rsvpFull = isRsvpMode && !isPastEvent && event.rsvpRemaining != null && event.rsvpRemaining <= 0;
+  const rsvpMaxPartySize = event.rsvpMaxPartySize ?? 1;
+
   return (
     <BrandScope color={event.organizationBrandColor} themeMode={event.organizationThemeMode} className="min-h-screen bg-gray-50 dark:bg-slate-900 pb-20 sm:pb-0">
       {event.organizationName && (
@@ -269,8 +326,8 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
           signIn={event.organizationSignInLinks !== false}
         />
       )}
-      <div className="max-w-6xl mx-auto px-0 sm:px-6 lg:px-8 py-0 sm:py-12 lg:flex lg:gap-6 lg:items-start">
-        <div className="flex-1 min-w-0 bg-transparent sm:bg-white sm:dark:bg-slate-800 rounded-none sm:rounded-lg sm:shadow-lg sm:dark:shadow-lg sm:dark:shadow-black/20 overflow-hidden">
+      <div className={`max-w-6xl mx-auto px-0 sm:px-6 lg:px-8 py-0 sm:py-12 ${isRsvpMode ? 'lg:block' : 'lg:flex lg:gap-6 lg:items-start'}`}>
+        <div className={`flex-1 min-w-0 bg-transparent sm:bg-white sm:dark:bg-slate-800 rounded-none sm:rounded-lg sm:shadow-lg sm:dark:shadow-lg sm:dark:shadow-black/20 overflow-hidden ${isRsvpMode ? '' : ''}`}>
           {/* Hero Header */}
           <div className="relative">
             {/* Background layers - clipped */}
@@ -414,175 +471,339 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
             )}
           </div>
 
-          {/* Price tiers inside content card */}
-          <div className="p-6 sm:p-8 pt-[2em] sm:pt-8">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-slate-100 mb-4">Tickets</h2>
+          {/* Content area: Tiers (ticketed) or RSVP form (RSVP mode) */}
+          <div className={`p-6 sm:p-8 ${event.logoUrl ? 'pt-[2em] sm:pt-8' : ''}`}>
+            {isRsvpMode ? (
+              <>
+                {/* RSVP section heading */}
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-slate-100 mb-4">RSVP</h2>
 
-            {isPastEvent ? (
-              <div className="text-center py-10">
-                <svg className="w-14 h-14 mx-auto mb-4 text-gray-300 dark:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <h3 className="text-lg font-semibold text-gray-700 dark:text-slate-300 mb-2">This event has ended</h3>
-                <p className="text-sm text-gray-500 dark:text-slate-400 max-w-sm mx-auto">
-                  This event took place on {formattedDate}. Tickets are no longer available for purchase.
-                </p>
-              </div>
-            ) : isSoldOut ? (
-              <div className="text-center py-8">
-                <span className="inline-block bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400 px-6 py-3 rounded-full text-lg font-semibold">
-                  Sold Out
-                </span>
-              </div>
-            ) : activeTiers.length === 0 ? (
-              <p className="text-gray-500 dark:text-slate-400 text-center py-4">
-                No ticket tiers available
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {activeTiers.map((tier) => {
-                  const tierSoldOut = tier.quantityAvailable === 0;
-                  // Only surface the remaining count once it's low enough to
-                  // create urgency; a large number is just noise.
-                  const availabilityText = tierSoldOut
-                    ? 'Sold out'
-                    : tier.quantityAvailable < 10
-                      ? `${tier.quantityAvailable} available`
-                      : null;
-                  const quantity = quantities[tier.id] ?? 0;
-                  const minQuantity = tier.minPerOrder ?? 1;
-                  const maxQuantity = Math.min(
-                    tier.quantityAvailable,
-                    tier.maxPerOrder ?? 10,
-                    10
-                  );
+                {/* RSVP states */}
+                {isPastEvent ? (
+                  <div className="text-center py-10">
+                    <svg className="w-14 h-14 mx-auto mb-4 text-gray-300 dark:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <h3 className="text-lg font-semibold text-gray-700 dark:text-slate-300 mb-2">This event has ended</h3>
+                    <p className="text-sm text-gray-500 dark:text-slate-400 max-w-sm mx-auto">
+                      This event took place on {formattedDate}. RSVPs are no longer being accepted.
+                    </p>
+                  </div>
+                ) : rsvpFull ? (
+                  <div className="text-center py-8">
+                    <span className="inline-block bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400 px-6 py-3 rounded-full text-lg font-semibold">
+                      RSVPs are full
+                    </span>
+                    <p className="text-sm text-gray-500 dark:text-slate-400 mt-3 max-w-sm mx-auto">
+                      All spots for this event have been reserved.
+                    </p>
+                  </div>
+                ) : rsvpSubmitted ? (
+                  <div className="text-center py-10">
+                    <svg className="w-16 h-16 mx-auto mb-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <h3 className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-2">You&apos;re on the list!</h3>
+                    <p className="text-sm text-gray-500 dark:text-slate-400">
+                      We sent a confirmation to {rsvpEmail}.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Spots remaining */}
+                    {event.rsvpLimit != null && event.rsvpRemaining != null && (
+                      <p className="text-sm text-gray-500 dark:text-slate-400 mb-4">
+                        {event.rsvpRemaining === 1
+                          ? '1 spot left'
+                          : `${event.rsvpRemaining} spots left`}
+                      </p>
+                    )}
 
-                  return (
-                    <div
-                      key={tier.id}
-                      className={`w-full p-4 rounded-lg border-2 transition-all duration-200 ${
-                        quantity > 0
-                          ? 'border-brand-link bg-gray-50 dark:bg-slate-900/40'
-                          : tierSoldOut
-                            ? 'border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900/50 opacity-60 cursor-not-allowed'
-                            : 'border-gray-200 dark:border-slate-700 hover:border-brand-link bg-white dark:bg-slate-800'
-                      }`}
-                    >
-                      <div className="flex items-stretch justify-between gap-4">
+                    {/* Inline RSVP form */}
+                    <form onSubmit={handleRsvpSubmit} className="max-w-md space-y-4" id="rsvp-form">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                          <h3 className="font-semibold text-gray-900 dark:text-slate-100 flex items-center gap-1.5">
-                            {tier.name}
-                            {tier.description && (
-                              <button
-                                type="button"
-                                onClick={() => setShowTierDescription(tier)}
-                                className="text-gray-400 dark:text-slate-500 hover:text-brand-link transition-colors"
-                                aria-label={`${tier.name} details`}
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                              </button>
-                            )}
-                          </h3>
-                          {availabilityText && (
-                            <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
-                              {availabilityText}
-                            </p>
-                          )}
-                          {(() => {
-                            const fees = computeTierAllInPrice(tier.price, event?.taxRate ?? 0, event?.taxInclusivePricing === true);
-                            return (
-                              <div className="mt-1">
-                                <span className="text-lg font-bold text-brand-link">
-                                  {formatPrice(fees.total)}
-                                </span>
-                                <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">
-                                  {fees.taxInclusive ? (
-                                    <>
-                                      Price: {formatPrice(fees.listedPrice)}
-                                      {fees.tax > 0 && <> (incl. {formatPrice(fees.tax)} tax)</>}
-                                    </>
-                                  ) : (
-                                    <>Base: {formatPrice(fees.basePrice)}</>
-                                  )}
-                                  {fees.fees > 0 && <> + Fees: {formatPrice(fees.fees)}</>}
-                                  {!fees.taxInclusive && fees.tax > 0 && <> + Tax: {formatPrice(fees.tax)}</>}
-                                </p>
-                              </div>
-                            );
-                          })()}
+                          <label htmlFor="rsvp-first-name" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                            First name *
+                          </label>
+                          <input
+                            id="rsvp-first-name"
+                            type="text"
+                            value={rsvpFirstName}
+                            onChange={(e) => setRsvpFirstName(e.target.value)}
+                            required
+                            className="block w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            placeholder="Jane"
+                          />
                         </div>
-                        <div
-                          className={`flex flex-col items-end gap-2 ${
-                            tier.isRefundable ? 'justify-center' : 'justify-between'
-                          }`}
-                        >
-                          {!tier.isRefundable && (
-                            <span className="relative inline-flex items-center text-xs text-amber-600 dark:text-amber-400 font-medium group cursor-help">
-                              Non-refundable
-                              <svg className="w-3.5 h-3.5 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                              <span className="invisible group-hover:visible absolute bottom-full right-0 mb-2 w-64 bg-gray-900 dark:bg-slate-700 text-white text-xs rounded-lg p-3 shadow-lg z-20 leading-relaxed">
-                                <span className="font-semibold block mb-1">Non-Refundable Ticket</span>
-                                This ticket is non-refundable, non-cancellable, and non-transferable after purchase. The delivery of the service is completed upon receiving this ticket by email.
-                                <span className="absolute top-full right-4 border-4 border-transparent border-t-gray-900 dark:border-t-slate-700" />
-                              </span>
-                            </span>
-                          )}
-                          <div className="flex items-center gap-3">
-                            <button
-                              type="button"
-                              aria-label={`Decrease ${tier.name} quantity`}
-                              onClick={() => updateQuantity(tier, -1)}
-                              disabled={tierSoldOut || quantity === 0}
-                              className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xl font-bold leading-none text-gray-700 dark:text-slate-200 transition-colors hover:border-gray-400 dark:hover:border-slate-500 disabled:opacity-30 disabled:hover:border-gray-300 dark:disabled:hover:border-slate-600"
-                            >
-                              −
-                            </button>
-                            <span
-                              className="min-w-6 text-center text-lg font-semibold text-gray-900 dark:text-slate-100"
-                              aria-label={`${tier.name} quantity`}
-                            >
-                              {quantity}
-                            </span>
-                            <button
-                              type="button"
-                              aria-label={`Increase ${tier.name} quantity`}
-                              onClick={() => updateQuantity(tier, 1)}
-                              disabled={
-                                tierSoldOut ||
-                                maxQuantity < minQuantity ||
-                                quantity >= maxQuantity
-                              }
-                              className="flex h-10 w-10 items-center justify-center rounded-full bg-brand text-brand-fg text-xl font-bold leading-none transition-opacity hover:opacity-90 disabled:opacity-30 disabled:hover:opacity-30"
-                            >
-                              +
-                            </button>
-                          </div>
+                        <div>
+                          <label htmlFor="rsvp-last-name" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                            Last name *
+                          </label>
+                          <input
+                            id="rsvp-last-name"
+                            type="text"
+                            value={rsvpLastName}
+                            onChange={(e) => setRsvpLastName(e.target.value)}
+                            required
+                            className="block w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            placeholder="Doe"
+                          />
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+
+                      <div>
+                        <label htmlFor="rsvp-email" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                          Email *
+                        </label>
+                        <input
+                          id="rsvp-email"
+                          type="email"
+                          value={rsvpEmail}
+                          onChange={(e) => setRsvpEmail(e.target.value)}
+                          required
+                          className="block w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          placeholder="jane@example.com"
+                        />
+                      </div>
+
+                      {rsvpMaxPartySize > 1 && (
+                        <div>
+                          <label htmlFor="rsvp-party-size" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                            Party size
+                          </label>
+                          <select
+                            id="rsvp-party-size"
+                            value={rsvpPartySize}
+                            onChange={(e) => setRsvpPartySize(parseInt(e.target.value))}
+                            className="block w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          >
+                            {Array.from({ length: rsvpMaxPartySize }, (_, i) => i + 1).map((n) => (
+                              <option key={n} value={n}>
+                                {n} {n === 1 ? 'guest' : 'guests'}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Marketing opt-in (D4) */}
+                      <label className="flex items-start gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={rsvpMarketing}
+                          onChange={(e) => setRsvpMarketing(e.target.checked)}
+                          className="mt-1 h-4 w-4 rounded border-gray-300 dark:border-slate-600 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="text-sm text-gray-600 dark:text-slate-400">
+                          Email me news and updates from {event.organizationName || 'the organizer'}
+                        </span>
+                      </label>
+
+                      {/* Legal consent (D13) */}
+                      <p className="text-xs text-gray-500 dark:text-slate-400">
+                        By RSVPing, you agree to{' '}
+                        {LEGAL_PAGES_ENABLED ? (
+                          <>
+                            <Link href={LEGAL_PATHS.terms} target="_blank" className="underline hover:text-gray-700 dark:hover:text-slate-300">Terms of Service</Link>
+                            {' and '}
+                            <Link href={LEGAL_PATHS.privacy} target="_blank" className="underline hover:text-gray-700 dark:hover:text-slate-300">Privacy Policy</Link>
+                          </>
+                        ) : (
+                          'the Terms of Service and Privacy Policy'
+                        )}
+                        . I agree to {event.organizationName || 'the organizer'} and Jump collecting and storing this information as described.
+                      </p>
+
+                      {rsvpError && (
+                        <div className="rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3">
+                          <p className="text-sm text-red-800 dark:text-red-300">{rsvpError}</p>
+                        </div>
+                      )}
+
+                      <button
+                        type="submit"
+                        disabled={rsvpSubmitting}
+                        className="w-full bg-brand hover:bg-brand-hover text-brand-fg font-bold py-3 px-6 rounded-lg transition-colors duration-200 text-lg disabled:opacity-50"
+                      >
+                        {rsvpSubmitting ? 'Sending…' : 'RSVP'}
+                      </button>
+                    </form>
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                {/* Ticketed mode — existing tiers */}
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-slate-100 mb-4">Tickets</h2>
+
+                {isPastEvent ? (
+                  <div className="text-center py-10">
+                    <svg className="w-14 h-14 mx-auto mb-4 text-gray-300 dark:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <h3 className="text-lg font-semibold text-gray-700 dark:text-slate-300 mb-2">This event has ended</h3>
+                    <p className="text-sm text-gray-500 dark:text-slate-400 max-w-sm mx-auto">
+                      This event took place on {formattedDate}. Tickets are no longer available for purchase.
+                    </p>
+                  </div>
+                ) : isSoldOut ? (
+                  <div className="text-center py-8">
+                    <span className="inline-block bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400 px-6 py-3 rounded-full text-lg font-semibold">
+                      Sold Out
+                    </span>
+                  </div>
+                ) : activeTiers.length === 0 ? (
+                  <p className="text-gray-500 dark:text-slate-400 text-center py-4">
+                    No ticket tiers available
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {activeTiers.map((tier) => {
+                      const tierSoldOut = tier.quantityAvailable === 0;
+                      // Only surface the remaining count once it's low enough to
+                      // create urgency; a large number is just noise.
+                      const availabilityText = tierSoldOut
+                        ? 'Sold out'
+                        : tier.quantityAvailable < 10
+                          ? `${tier.quantityAvailable} available`
+                          : null;
+                      const quantity = quantities[tier.id] ?? 0;
+                      const minQuantity = tier.minPerOrder ?? 1;
+                      const maxQuantity = Math.min(
+                        tier.quantityAvailable,
+                        tier.maxPerOrder ?? 10,
+                        10
+                      );
+
+                      return (
+                        <div
+                          key={tier.id}
+                          className={`w-full p-4 rounded-lg border-2 transition-all duration-200 ${
+                            quantity > 0
+                              ? 'border-brand-link bg-gray-50 dark:bg-slate-900/40'
+                              : tierSoldOut
+                                ? 'border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900/50 opacity-60 cursor-not-allowed'
+                                : 'border-gray-200 dark:border-slate-700 hover:border-brand-link bg-white dark:bg-slate-800'
+                          }`}
+                        >
+                          <div className="flex items-stretch justify-between gap-4">
+                            <div>
+                              <h3 className="font-semibold text-gray-900 dark:text-slate-100 flex items-center gap-1.5">
+                                {tier.name}
+                                {tier.description && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowTierDescription(tier)}
+                                    className="text-gray-400 dark:text-slate-500 hover:text-brand-link transition-colors"
+                                    aria-label={`${tier.name} details`}
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                  </button>
+                                )}
+                              </h3>
+                              {availabilityText && (
+                                <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
+                                  {availabilityText}
+                                </p>
+                              )}
+                              {(() => {
+                                const fees = computeTierAllInPrice(tier.price, event?.taxRate ?? 0, event?.taxInclusivePricing === true);
+                                return (
+                                  <div className="mt-1">
+                                    <span className="text-lg font-bold text-brand-link">
+                                      {formatPrice(fees.total)}
+                                    </span>
+                                    <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">
+                                      {fees.taxInclusive ? (
+                                        <>
+                                          Price: {formatPrice(fees.listedPrice)}
+                                          {fees.tax > 0 && <> (incl. {formatPrice(fees.tax)} tax)</>}
+                                        </>
+                                      ) : (
+                                        <>Base: {formatPrice(fees.basePrice)}</>
+                                      )}
+                                      {fees.fees > 0 && <> + Fees: {formatPrice(fees.fees)}</>}
+                                      {!fees.taxInclusive && fees.tax > 0 && <> + Tax: {formatPrice(fees.tax)}</>}
+                                    </p>
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                            <div
+                              className={`flex flex-col items-end gap-2 ${
+                                tier.isRefundable ? 'justify-center' : 'justify-between'
+                              }`}
+                            >
+                              {!tier.isRefundable && (
+                                <span className="relative inline-flex items-center text-xs text-amber-600 dark:text-amber-400 font-medium group cursor-help">
+                                  Non-refundable
+                                  <svg className="w-3.5 h-3.5 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                  <span className="invisible group-hover:visible absolute bottom-full right-0 mb-2 w-64 bg-gray-900 dark:bg-slate-700 text-white text-xs rounded-lg p-3 shadow-lg z-20 leading-relaxed">
+                                    <span className="font-semibold block mb-1">Non-Refundable Ticket</span>
+                                    This ticket is non-refundable, non-cancellable, and non-transferable after purchase. The delivery of the service is completed upon receiving this ticket by email.
+                                    <span className="absolute top-full right-4 border-4 border-transparent border-t-gray-900 dark:border-t-slate-700" />
+                                  </span>
+                                </span>
+                              )}
+                              <div className="flex items-center gap-3">
+                                <button
+                                  type="button"
+                                  aria-label={`Decrease ${tier.name} quantity`}
+                                  onClick={() => updateQuantity(tier, -1)}
+                                  disabled={tierSoldOut || quantity === 0}
+                                  className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xl font-bold leading-none text-gray-700 dark:text-slate-200 transition-colors hover:border-gray-400 dark:hover:border-slate-500 disabled:opacity-30 disabled:hover:border-gray-300 dark:disabled:hover:border-slate-600"
+                                >
+                                  −
+                                </button>
+                                <span
+                                  className="min-w-6 text-center text-lg font-semibold text-gray-900 dark:text-slate-100"
+                                  aria-label={`${tier.name} quantity`}
+                                >
+                                  {quantity}
+                                </span>
+                                <button
+                                  type="button"
+                                  aria-label={`Increase ${tier.name} quantity`}
+                                  onClick={() => updateQuantity(tier, 1)}
+                                  disabled={
+                                    tierSoldOut ||
+                                    maxQuantity < minQuantity ||
+                                    quantity >= maxQuantity
+                                  }
+                                  className="flex h-10 w-10 items-center justify-center rounded-full bg-brand text-brand-fg text-xl font-bold leading-none transition-opacity hover:opacity-90 disabled:opacity-30 disabled:hover:opacity-30"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Add-ons (spec 012): shown once the cart holds a ticket that offers them */}
+                {!isPastEvent && !isSoldOut && offered.length > 0 && (
+                  <div className="mt-8">
+                    <AddOnPicker
+                      addOns={offered}
+                      quantities={addOnQuantities}
+                      onChange={setAddOnQuantity}
+                      taxRate={event.taxRate ?? 0}
+                      taxInclusive={event.taxInclusivePricing === true}
+                      hint="Optional extras bought with your tickets."
+                    />
+                  </div>
+                )}
+              </>
             )}
           </div>
-
-          {/* Add-ons (spec 012): shown once the cart holds a ticket that offers them */}
-          {!isPastEvent && !isSoldOut && offered.length > 0 && (
-            <div className="px-6 sm:px-8 pb-8">
-              <AddOnPicker
-                addOns={offered}
-                quantities={addOnQuantities}
-                onChange={setAddOnQuantity}
-                taxRate={event.taxRate ?? 0}
-                taxInclusive={event.taxInclusivePricing === true}
-                hint="Optional extras bought with your tickets."
-              />
-            </div>
-          )}
 
           {/* Applications (spec 011): vendors, sponsors, press, panels */}
           <GetInvolved eventId={event.id} />
@@ -592,107 +813,121 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
         </div>
         {/* End content card */}
 
-        {/* Desktop sticky cart — separate column outside content card */}
-      {!isPastEvent && !isSoldOut && (
-        <div className="hidden lg:block lg:w-80 flex-shrink-0">
-          <div className="sticky top-8">
-            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg dark:shadow-lg dark:shadow-black/20 p-6">
-              <div className="mb-4">
-                <div className="flex items-center justify-between gap-4">
-                  <h3 className="text-lg font-bold text-gray-900 dark:text-slate-100">Order Summary</h3>
-                  <ExpandCollapseAll
-                    allOpen={allLinesOpen}
-                    onToggle={toggleAllLines}
-                    disabled={cartLines.length === 0}
-                  />
-                </div>
-                <p className="text-sm text-gray-500 dark:text-slate-400">Review your selection</p>
-              </div>
-
-              {cartItems.length === 0 ? (
-                <EmptyCart />
-              ) : (
-                <div className="space-y-3 mb-4" data-testid="cart-lines-desktop">
-                  {cartLines.map((line, index) => (
-                    <CartLineItem
-                      key={line.key}
-                      id={`desktop-${line.key}`}
-                      name={line.name}
-                      line={cartFees.lines[index]}
-                      open={!!openLines[line.key]}
-                      onToggle={() => toggleLine(line.key)}
-                      variant="compact"
+        {/* Desktop sticky cart — hidden in RSVP mode */}
+        {!isRsvpMode && !isPastEvent && !isSoldOut && (
+          <div className="hidden lg:block lg:w-80 flex-shrink-0">
+            <div className="sticky top-8">
+              <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg dark:shadow-lg dark:shadow-black/20 p-6">
+                <div className="mb-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-slate-100">Order Summary</h3>
+                    <ExpandCollapseAll
+                      allOpen={allLinesOpen}
+                      onToggle={toggleAllLines}
+                      disabled={cartLines.length === 0}
                     />
-                  ))}
+                  </div>
+                  <p className="text-sm text-gray-500 dark:text-slate-400">Review your selection</p>
                 </div>
-              )}
 
-              {cartItems.length > 0 && (
-                <>
-                  <OrderTotals
-                    fees={cartFees}
-                    totalLabel={`Total (${totalQuantity} ${totalQuantity === 1 ? 'ticket' : 'tickets'})`}
-                    className="border-t border-gray-200 dark:border-slate-700 pt-4 mb-4"
-                  />
+                {cartItems.length === 0 ? (
+                  <EmptyCart />
+                ) : (
+                  <div className="space-y-3 mb-4" data-testid="cart-lines-desktop">
+                    {cartLines.map((line, index) => (
+                      <CartLineItem
+                        key={line.key}
+                        id={`desktop-${line.key}`}
+                        name={line.name}
+                        line={cartFees.lines[index]}
+                        open={!!openLines[line.key]}
+                        onToggle={() => toggleLine(line.key)}
+                        variant="compact"
+                      />
+                    ))}
+                  </div>
+                )}
 
-                  <button
-                    onClick={handleProceedToCheckout}
-                    className="w-full bg-brand hover:bg-brand-hover text-brand-fg font-bold py-3 px-6 rounded-lg transition-colors duration-200 text-lg"
-                  >
-                    Proceed to Checkout
-                  </button>
-                </>
-              )}
+                {cartItems.length > 0 && (
+                  <>
+                    <OrderTotals
+                      fees={cartFees}
+                      totalLabel={`Total (${totalQuantity} ${totalQuantity === 1 ? 'ticket' : 'tickets'})`}
+                      className="border-t border-gray-200 dark:border-slate-700 pt-4 mb-4"
+                    />
+
+                    <button
+                      onClick={handleProceedToCheckout}
+                      className="w-full bg-brand hover:bg-brand-hover text-brand-fg font-bold py-3 px-6 rounded-lg transition-colors duration-200 text-lg"
+                    >
+                      Proceed to Checkout
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
       </div>
 
-      {/* Mobile floating checkout bar — slides up when tickets selected */}
-      {!isPastEvent && !isSoldOut && (
+      {/* Mobile floating bar — checkout for ticketed, RSVP scroll-to for RSVP */}
+      {!isPastEvent && !(isRsvpMode && rsvpFull) && (
         <div
           className={`lg:hidden fixed bottom-0 left-0 right-0 z-40 transition-transform duration-300 ease-out ${
-            totalQuantity > 0 ? 'translate-y-0' : 'translate-y-full'
+            isRsvpMode
+              ? !rsvpSubmitted ? 'translate-y-0' : 'translate-y-full'
+              : totalQuantity > 0 ? 'translate-y-0' : 'translate-y-full'
           }`}
         >
-          <div className="bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 shadow-[0_-4px_12px_rgba(0,0,0,0.1)] dark:shadow-[0_-4px_12px_rgba(0,0,0,0.3)] px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-            <div className="flex items-center gap-3">
-              {/* Cart icon button — opens drawer */}
+          {isRsvpMode ? (
+            /* Mobile RSVP bar — scrolls to the form */
+            <div className="bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 shadow-[0_-4px_12px_rgba(0,0,0,0.1)] dark:shadow-[0_-4px_12px_rgba(0,0,0,0.3)] px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
               <button
                 type="button"
-                onClick={() => setShowMobileCart(true)}
-                className="relative flex items-center justify-center w-12 h-12 rounded-lg bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-200"
-                aria-label="View cart"
+                onClick={() => document.getElementById('rsvp-form')?.scrollIntoView({ behavior: 'smooth' })}
+                className="w-full bg-brand hover:bg-brand-hover text-brand-fg font-bold py-3 px-4 rounded-lg transition-colors duration-200 text-base"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z" />
-                </svg>
-                {totalQuantity > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-brand text-brand-fg text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
-                    {totalQuantity}
-                  </span>
-                )}
-              </button>
-
-              {/* Checkout button — 75% width */}
-              <button
-                onClick={handleProceedToCheckout}
-                disabled={cartItems.length === 0}
-                className="flex-1 bg-brand hover:bg-brand-hover disabled:bg-gray-400 disabled:cursor-not-allowed text-brand-fg disabled:text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200 text-base flex items-center justify-center gap-2"
-              >
-                <span>Checkout {formatPrice(totalAmount)}</span>
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
+                RSVP Now
               </button>
             </div>
-          </div>
+          ) : (
+            /* Mobile checkout bar */
+            <div className="bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 shadow-[0_-4px_12px_rgba(0,0,0,0.1)] dark:shadow-[0_-4px_12px_rgba(0,0,0,0.3)] px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowMobileCart(true)}
+                  className="relative flex items-center justify-center w-12 h-12 rounded-lg bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-200"
+                  aria-label="View cart"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z" />
+                  </svg>
+                  {totalQuantity > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-brand text-brand-fg text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                      {totalQuantity}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  onClick={handleProceedToCheckout}
+                  disabled={cartItems.length === 0}
+                  className="flex-1 bg-brand hover:bg-brand-hover disabled:bg-gray-400 disabled:cursor-not-allowed text-brand-fg disabled:text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200 text-base flex items-center justify-center gap-2"
+                >
+                  <span>Checkout {formatPrice(totalAmount)}</span>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Mobile cart drawer */}
-      {showMobileCart && (
+      {/* Mobile cart drawer — only for ticketed events */}
+      {!isRsvpMode && showMobileCart && (
         <div
           className="lg:hidden fixed inset-0 z-50 flex items-end bg-black/60"
           onClick={() => setShowMobileCart(false)}

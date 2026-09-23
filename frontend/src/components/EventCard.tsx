@@ -22,6 +22,9 @@ export interface EventSummary {
   venue: EventVenue;
   category?: string | null;
   status: string;
+  admissionMode: 'TICKETED' | 'RSVP';
+  rsvpLimit?: number | null;
+  rsvpMaxPartySize?: number;
   priceRange: PriceRange | null;
   availableTickets: number;
 }
@@ -36,8 +39,9 @@ export default function EventCard({ event }: { event: EventSummary }) {
   const zone = event.venue?.timezone;
   const formattedDate = formatEventDate(event.date, zone, { weekday: 'long', month: 'long' });
   const formattedTime = formatEventTime(event.date, zone);
-  const isSoldOut = event.availableTickets === 0;
-  const isAlmostSoldOut = event.availableTickets > 0 && event.availableTickets <= 10;
+  const isRsvp = event.admissionMode === 'RSVP';
+  const isSoldOut = !isRsvp && event.availableTickets === 0;
+  const isAlmostSoldOut = !isRsvp && event.availableTickets > 0 && event.availableTickets <= 10;
 
   return (
     <Link
@@ -76,7 +80,9 @@ export default function EventCard({ event }: { event: EventSummary }) {
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center">
-            {event.priceRange ? (
+            {isRsvp ? (
+              <span className="text-sm font-medium text-brand-link">Free · RSVP</span>
+            ) : event.priceRange ? (
               <>
                 <span className="text-3xl font-bold text-brand-link">
                   {formatPrice(event.priceRange.min)}
@@ -93,7 +99,11 @@ export default function EventCard({ event }: { event: EventSummary }) {
           </div>
 
           <div className="text-right">
-            {isSoldOut ? (
+            {isRsvp ? (
+              <span className="text-green-700 dark:text-green-400 text-sm font-semibold">
+                RSVP
+              </span>
+            ) : isSoldOut ? (
               <span className="bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400 px-3 py-1 rounded-full text-sm font-semibold">Sold Out</span>
             ) : isAlmostSoldOut ? (
               <span className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400 px-3 py-1 rounded-full text-sm font-semibold">Almost Sold Out</span>
@@ -105,9 +115,14 @@ export default function EventCard({ event }: { event: EventSummary }) {
           </div>
         </div>
 
-        {!isSoldOut && (
+        {!isSoldOut && !isRsvp && (
           <div className="mt-4 w-full bg-brand hover:bg-brand-hover text-center text-brand-fg font-bold py-2 px-4 rounded transition-colors duration-200">
             View Details &amp; Purchase
+          </div>
+        )}
+        {isRsvp && (
+          <div className="mt-4 w-full bg-brand hover:bg-brand-hover text-center text-brand-fg font-bold py-2 px-4 rounded transition-colors duration-200">
+            View Details &amp; RSVP
           </div>
         )}
       </div>
