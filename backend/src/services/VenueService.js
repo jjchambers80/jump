@@ -118,6 +118,9 @@ class VenueService {
             date: true,
             category: true,
             status: true,
+            admissionMode: true,
+            rsvpLimit: true,
+            rsvpMaxPartySize: true,
             priceTiers: {
               where: { isActive: true },
               select: {

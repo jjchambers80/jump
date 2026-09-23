@@ -271,6 +271,9 @@ class OrganizationService {
                 date: true,
                 category: true,
                 status: true,
+                admissionMode: true,
+                rsvpLimit: true,
+                rsvpMaxPartySize: true,
 venue: { select: { id: true, slug: true, name: true, address: true, timezone: true } },
                 priceTiers: {
                   where: { isActive: true },
