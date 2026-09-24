@@ -58,7 +58,14 @@ export const CONTENT_HTML = {
 
 export function sanitizeContentHtml(html) {
   if (typeof html !== 'string') return '';
-  return sanitize(html, CONTENT_HTML).trim();
+  const result = sanitize(html, CONTENT_HTML).trim();
+  // Collapse multiple spaces in text content, preserving pre/code whitespace
+  // This normalises extra spacing from copy-paste while keeping intentional
+  // formatting in <pre> and <code> blocks.
+  return result.replace(
+    /<pre\b[^>]*>[\s\S]*?<\/pre>|<code\b[^>]*>[\s\S]*?<\/code>| {2,}/g,
+    (match) => (match.startsWith('<') ? match : ' ')
+  );
 }
 
 /** Plain text of sanitised HTML — for excerpts and meta descriptions. */

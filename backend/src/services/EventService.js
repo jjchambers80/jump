@@ -88,7 +88,7 @@ class EventService {
         venueId,
         name,
         ...slugState,
-        description: description ? sanitizeContentHtml(description) : null,
+        description: description != null ? sanitizeContentHtml(description) : null,
         date: eventDate,
         capacity: capacityNum,
         admissionMode,
@@ -292,7 +292,7 @@ class EventService {
     }
 
     if (updates.description !== undefined) {
-      updateData.description = sanitizeContentHtml(updates.description);
+      updateData.description = updates.description === null ? null : sanitizeContentHtml(updates.description);
     }
 
     if (updates.date !== undefined) {
