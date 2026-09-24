@@ -466,3 +466,217 @@ test('search announces result count status region', async ({ page }) => {
   const statusRegion = page.getByRole('status').first();
   await expect(statusRegion).toContainText('Showing 1\u20135 of 5 events');
 });
+
+// ── §5 Accessibility coverage ──
+
+test('h1 and article+h2 structure on every card', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockApi(page);
+  await page.goto(`/admin/events?orgId=${ORG_ID}`);
+
+  // Page has exactly one h1
+  const h1 = page.getByRole('heading', { level: 1 });
+  await expect(h1).toHaveCount(1);
+  await expect(h1).toHaveText('Events');
+
+  // Every event is an article with aria-labelledby pointing to an h2 heading
+  const articles = page.getByRole('article');
+  await expect(articles).toHaveCount(5);
+
+  for (const article of await articles.all()) {
+    // Each article has an h2
+    const h2 = article.getByRole('heading', { level: 2 });
+    await expect(h2).toHaveCount(1);
+
+    // The article's aria-labelledby id matches the h2 element id
+    const labelledBy = await article.getAttribute('aria-labelledby');
+    expect(labelledBy).toBeTruthy();
+    const headingId = await h2.getAttribute('id');
+    expect(headingId).toBeTruthy();
+    expect(headingId).toBe(labelledBy);
+
+    // The h2 contains a link to edit (the event name)
+    const link = h2.getByRole('link');
+    await expect(link).toHaveCount(1);
+    expect(await link.getAttribute('href')).toContain('/edit');
+  }
+});
+
+test('radiogroup labelled and each radio has accessible name with count', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockApi(page);
+  await page.goto(`/admin/events?orgId=${ORG_ID}`);
+
+  // Radiogroup has aria-label
+  const rg = page.getByRole('radiogroup', { name: 'Filter by status' });
+  await expect(rg).toBeVisible();
+  await expect(rg.locator('button[role="radio"]')).toHaveCount(4);
+
+  // Each radio has aria-checked (default checked on "All")
+  await expect(page.getByRole('radio', { name: 'All, 5 events' })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByRole('radio', { name: 'Draft, 1 event' })).toHaveAttribute('aria-checked', 'false');
+  await expect(page.getByRole('radio', { name: 'Published, 3 events' })).toHaveAttribute('aria-checked', 'false');
+  await expect(page.getByRole('radio', { name: 'Cancelled, 1 event' })).toHaveAttribute('aria-checked', 'false');
+});
+
+test('search, category select, and sort select are labelled', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockApi(page);
+  await page.goto(`/admin/events?orgId=${ORG_ID}`);
+
+  // Search is an input[type="search"] with aria-label
+  const search = page.getByRole('searchbox', { name: 'Search events' });
+  await expect(search).toBeVisible();
+  await expect(search).toHaveAttribute('type', 'search');
+
+  // Category is a select with aria-label
+  const cat = page.getByRole('combobox', { name: 'Filter by category' });
+  await expect(cat).toBeVisible();
+
+  // Sort is a select with aria-label
+  const sort = page.getByRole('combobox', { name: 'Sort events' });
+  await expect(sort).toBeVisible();
+});
+
+test('no horizontal scroll at 320px', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 });
+  await mockApi(page);
+  await page.goto(`/admin/events?orgId=${ORG_ID}`);
+
+  // Wait for the page to render
+  await expect(page.getByRole('radiogroup', { name: 'Filter by status' })).toBeVisible();
+
+  const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(scrollWidth).toBeLessThanOrEqual(320);
+});
+
+test('24 px minimum target size on every interactive control', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockApi(page);
+  await page.goto(`/admin/events?orgId=${ORG_ID}`);
+
+  // Check every interactive element is at least 24x24 px (WCAG 2.2 SC 2.5.8)
+  const smallTargets = await page.evaluate(() => {
+    const selectors = 'button, a, input, select, textarea, [role="button"], [role="link"], [role="menuitem"], [role="radio"]';
+    const elements = document.querySelectorAll<HTMLElement>(selectors);
+    const small: { tag: string; text: string; width: number; height: number }[] = [];
+    for (const el of elements) {
+      const rect = el.getBoundingClientRect();
+      if (rect.width < 24 || rect.height < 24) {
+        small.push({
+          tag: el.tagName.toLowerCase(),
+          text: (el.textContent || el.getAttribute('aria-label') || '').trim().slice(0, 60),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+        });
+      }
+    }
+    return small;
+  });
+
+  expect(smallTargets).toEqual([]);
+});
+
+test('light mode full page screenshot at 1440px', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockApi(page);
+  await page.goto(`/admin/events?orgId=${ORG_ID}`);
+
+  // Ensure light mode
+  await page.emulateMedia({ colorScheme: 'light' });
+
+  await expect(page.getByRole('heading', { name: 'Events' })).toBeVisible();
+  await page.waitForTimeout(500); // let animations settle
+
+  await expect(page).toHaveScreenshot('admin-events-light.png', { fullPage: true });
+});
+
+test('dark mode full page screenshot at 1440px', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockApi(page);
+  await page.goto(`/admin/events?orgId=${ORG_ID}`);
+
+  // Ensure dark mode
+  await page.emulateMedia({ colorScheme: 'dark' });
+
+  await expect(page.getByRole('heading', { name: 'Events' })).toBeVisible();
+  await page.waitForTimeout(500); // let animations settle
+
+  await expect(page).toHaveScreenshot('admin-events-dark.png', { fullPage: true });
+});
+
+test('pagination nav with aria-current on active page', async ({ page, baseURL }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  // Generate 30 events so pagination shows (25 per page = 2 pages)
+  const manyEvents = Array.from({ length: 30 }, (_, i) => ({
+    id: `evt-page-${i + 1}`,
+    name: `Paginated Event ${i + 1}`,
+    description: `Event number ${i + 1}`,
+    date: futureDate(30 + i),
+    capacity: 100,
+    category: i < 10 ? 'Music' : i < 20 ? 'Comedy' : 'Workshop',
+    status: i < 10 ? 'PUBLISHED' : i < 20 ? 'DRAFT' : 'PUBLISHED',
+    admissionMode: 'TICKETED' as const,
+    slug: `paginated-event-${i + 1}`,
+    venue,
+    rsvpLimit: null,
+    rsvpGoingCount: 0,
+    priceTiers: [
+      { id: `tier-${i}`, name: 'General', price: 25, quantityTotal: 100, quantitySold: i * 3, quantityReserved: 0, quantityAvailable: 100 - i * 3, displayOrder: 0, isActive: true },
+    ],
+    createdAt: new Date(Date.now() - i * 86400000).toISOString(),
+    updatedAt: new Date(Date.now() - i * 43200000).toISOString(),
+  }));
+
+  const page1Events = manyEvents.slice(0, 25);
+  const page2Events = manyEvents.slice(25, 30);
+
+  // Mock API with pagination-aware route
+  await signInAsStaff(page, { id: 'events-admin', email: 'events-admin@test.com', role: 'ADMIN' }, baseURL!);
+  await page.route(`${API}/organizations`, (route) =>
+    route.fulfill(json([{ id: ORG_ID, name: 'Events List Org', status: 'ACTIVE' }]))
+  );
+  await page.route(`${API}/organizations/${ORG_ID}/events/summary*`, (route) =>
+    route.fulfill(json({
+      counts: { all: 30, DRAFT: 10, PUBLISHED: 20, CANCELLED: 0 },
+      published: { count: 20, capacity: 2000 },
+      drafts: { count: 10 },
+      registered: { tickets: 1000, rsvps: 0 },
+      inventory: { available: 2000, tiers: 30 },
+      categories: ['Comedy', 'Music', 'Workshop'],
+    }))
+  );
+  await page.route(`${API}/organizations/${ORG_ID}/events?*`, async (route) => {
+    const url = new URL(route.request().url());
+    const pageNum = parseInt(url.searchParams.get('page') || '1', 10);
+    const isPage2 = pageNum >= 2;
+    return route.fulfill(
+      json({
+        events: isPage2 ? page2Events : page1Events,
+        pagination: {
+          page: isPage2 ? 2 : 1,
+          limit: 25,
+          total: 30,
+          totalPages: 2,
+        },
+      })
+    );
+  });
+
+  await page.goto(`/admin/events?orgId=${ORG_ID}`);
+
+  // Wait for events to render and pagination to appear
+  await expect(page.getByRole('navigation', { name: 'Pagination' })).toBeVisible();
+
+  // The first page button should have aria-current page
+  await expect(page.getByRole('button', { name: '1' })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('button', { name: '2' })).not.toHaveAttribute('aria-current');
+
+  // Click page 2
+  await page.getByRole('button', { name: '2' }).click();
+
+  // Now page 2 should have aria-current
+  await expect(page.getByRole('button', { name: '2' })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('button', { name: '1' })).not.toHaveAttribute('aria-current');
+});
