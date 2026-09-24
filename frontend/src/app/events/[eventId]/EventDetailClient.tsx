@@ -27,6 +27,7 @@ import { offeredAddOns, addOnMaxQuantity, type AddOn } from '../../../lib/addOns
 import type { ThemeMode } from '@/lib/theme';
 import { formatEventDate, formatEventTime } from '@/lib/eventTime';
 import { fetchLegalVersions, acceptancesFor, LEGAL_PAGES_ENABLED, LEGAL_PATHS, type LegalVersions, type LegalAcceptanceInput } from '@/lib/legal';
+import ContentHtml from '@/components/storefront/ContentHtml';
 
 interface EventVenue {
   id: string;
@@ -1102,9 +1103,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
               </button>
             </div>
             <div className="px-4 pb-6 overflow-y-auto max-h-[70vh]">
-              <p className="text-gray-700 dark:text-slate-300 text-base leading-relaxed whitespace-pre-wrap">
-                {event.description}
-              </p>
+              <ContentHtml html={event.description} className="text-base" />
             </div>
           </div>
           {/* Desktop: centered dialog */}
@@ -1126,9 +1125,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
               </button>
             </div>
             <div className="p-6">
-              <p className="text-gray-700 dark:text-slate-300 text-lg leading-relaxed whitespace-pre-wrap">
-                {event.description}
-              </p>
+              <ContentHtml html={event.description} className="text-lg" />
             </div>
           </div>
         </div>
