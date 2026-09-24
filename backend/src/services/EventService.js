@@ -609,7 +609,7 @@ class EventService {
 
     const eventInclude = {
       venue: {
-        select: { id: true, name: true, slug: true, address: true, timezone: true },
+        select: { id: true, name: true, slug: true, address: true, state: true, timezone: true },
       },
       priceTiers: { orderBy: { displayOrder: 'asc' } },
     };
