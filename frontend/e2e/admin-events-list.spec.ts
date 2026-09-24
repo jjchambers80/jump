@@ -750,16 +750,17 @@ test('pagination nav with aria-current on active page', async ({ page, baseURL }
   await page.goto(`/admin/events?orgId=${ORG_ID}`);
 
   // Wait for events to render and pagination to appear
-  await expect(page.getByRole('navigation', { name: 'Pagination' })).toBeVisible();
+  const pager = page.getByRole('navigation', { name: 'Pagination' });
+  await expect(pager).toBeVisible();
 
   // The first page button should have aria-current page
-  await expect(page.getByRole('button', { name: '1' })).toHaveAttribute('aria-current', 'page');
-  await expect(page.getByRole('button', { name: '2' })).not.toHaveAttribute('aria-current');
+  await expect(pager.getByRole('button', { name: '1', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(pager.getByRole('button', { name: '2', exact: true })).not.toHaveAttribute('aria-current');
 
   // Click page 2
-  await page.getByRole('button', { name: '2' }).click();
+  await pager.getByRole('button', { name: '2', exact: true }).click();
 
   // Now page 2 should have aria-current
-  await expect(page.getByRole('button', { name: '2' })).toHaveAttribute('aria-current', 'page');
-  await expect(page.getByRole('button', { name: '1' })).not.toHaveAttribute('aria-current');
+  await expect(pager.getByRole('button', { name: '2', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(pager.getByRole('button', { name: '1', exact: true })).not.toHaveAttribute('aria-current');
 });
