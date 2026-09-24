@@ -31,6 +31,7 @@ describe('Events API Contract Tests', () => {
   let testVenueId;
   let publishedEventId;
   let draftEventId;
+  let searchOrgId;
 
   beforeAll(async () => {
     adminToken = await staffToken({ role: 'ADMIN', email: 'admin@events-test.com' });
@@ -481,6 +482,404 @@ describe('Events API Contract Tests', () => {
         .set('Authorization', `Bearer ${organizerToken}`);
 
       expect(res.status).toBe(409);
+    });
+  });
+
+  describe('JUMP-035A: Events list — search, category, sort', () => {
+    let searchVenueId;
+    const searchOrgName = '035A Search Org';
+
+    beforeAll(async () => {
+      const orgRes = await request(app)
+        .post('/organizations')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ name: searchOrgName });
+      searchOrgId = orgRes.body.id;
+      await joinOrgByToken(adminToken, searchOrgId, 'ADMIN');
+      await joinOrgByToken(organizerToken, searchOrgId, 'ORGANIZER');
+
+      const venueRes = await request(app)
+        .post(`/organizations/${searchOrgId}/venues`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({ name: '035A Search Venue', address: '1 Search St' });
+      searchVenueId = venueRes.body.id;
+    });
+
+    afterAll(async () => {
+      await prisma.eventRsvp.deleteMany({ where: { event: { venue: { organizationId: searchOrgId } } } });
+      await prisma.order.deleteMany({ where: { event: { venue: { organizationId: searchOrgId } } } });
+      await prisma.priceTier.deleteMany({ where: { event: { venue: { organizationId: searchOrgId } } } });
+      await prisma.event.deleteMany({ where: { venue: { organizationId: searchOrgId } } });
+      await prisma.venue.deleteMany({ where: { organizationId: searchOrgId } });
+      await prisma.organization.deleteMany({ where: { id: searchOrgId } });
+    });
+
+    async function createEvent(name, overrides = {}) {
+      const res = await request(app)
+        .post(`/organizations/${searchOrgId}/events`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({
+          venueId: searchVenueId,
+          name,
+          date: overrides.date || '2027-07-15T19:00:00.000Z',
+          capacity: overrides.capacity || 100,
+          category: overrides.category || null,
+          admissionMode: overrides.admissionMode || 'TICKETED',
+          ...(overrides.admissionMode === 'RSVP' ? {} : { priceTiers: overrides.priceTiers || [{ name: 'GA', price: 25, quantityTotal: 100 }] }),
+          ...overrides,
+        });
+      return res.body;
+    }
+
+    describe('search (q)', () => {
+      beforeAll(async () => {
+        await createEvent('Alpha Show', { date: '2027-08-01T19:00:00.000Z', category: 'music' });
+        await createEvent('Beta Concert', { date: '2027-08-02T19:00:00.000Z', category: 'music' });
+        await createEvent('Gamma Night', { date: '2027-08-03T19:00:00.000Z', category: 'tech' });
+      });
+
+      it('filters by event name (case-insensitive substring)', async () => {
+        const res = await request(app)
+          .get(`/organizations/${searchOrgId}/events?q=alpha`)
+          .set('Authorization', `Bearer ${organizerToken}`)
+          .expect(200);
+
+        expect(res.body.events).toHaveLength(1);
+        expect(res.body.events[0].name).toBe('Alpha Show');
+      });
+
+      it('returns all events when q matches multiple names', async () => {
+        const res = await request(app)
+          .get(`/organizations/${searchOrgId}/events?q=a`)
+          .set('Authorization', `Bearer ${organizerToken}`)
+          .expect(200);
+
+        expect(res.body.events.length).toBeGreaterThan(1);
+      });
+
+      it('returns empty list when q matches nothing', async () => {
+        const res = await request(app)
+          .get(`/organizations/${searchOrgId}/events?q=zzzzzznonexistent`)
+          .set('Authorization', `Bearer ${organizerToken}`)
+          .expect(200);
+
+        expect(res.body.events).toHaveLength(0);
+        expect(res.body.pagination.total).toBe(0);
+      });
+    });
+
+    describe('category filter', () => {
+      it('filters by category', async () => {
+        const res = await request(app)
+          .get(`/organizations/${searchOrgId}/events?category=music`)
+          .set('Authorization', `Bearer ${organizerToken}`)
+          .expect(200);
+
+        expect(res.body.events.length).toBeGreaterThan(0);
+        res.body.events.forEach((e) => {
+          expect(e.category).toBe('music');
+        });
+      });
+
+      it('returns empty list for non-existent category', async () => {
+        const res = await request(app)
+          .get(`/organizations/${searchOrgId}/events?category=nonexistent`)
+          .set('Authorization', `Bearer ${organizerToken}`)
+          .expect(200);
+
+        expect(res.body.events).toHaveLength(0);
+      });
+    });
+
+    describe('sort', () => {
+      it('rejects unknown sort with 400', async () => {
+        const res = await request(app)
+          .get(`/organizations/${searchOrgId}/events?sort=invalid_sort`)
+          .set('Authorization', `Bearer ${organizerToken}`);
+
+        expect(res.status).toBe(400);
+      });
+
+      it('defaults to upcoming sort', async () => {
+        const res = await request(app)
+          .get(`/organizations/${searchOrgId}/events`)
+          .set('Authorization', `Bearer ${organizerToken}`)
+          .expect(200);
+
+        expect(res.body.events.length).toBeGreaterThan(0);
+      });
+
+      it('sorts by date_desc', async () => {
+        const res = await request(app)
+          .get(`/organizations/${searchOrgId}/events?sort=date_desc`)
+          .set('Authorization', `Bearer ${organizerToken}`)
+          .expect(200);
+
+        const dates = res.body.events.map((e) => new Date(e.date).getTime());
+        for (let i = 1; i < dates.length; i++) {
+          expect(dates[i - 1]).toBeGreaterThanOrEqual(dates[i]);
+        }
+      });
+
+      it('sorts by name_asc', async () => {
+        const res = await request(app)
+          .get(`/organizations/${searchOrgId}/events?sort=name_asc`)
+          .set('Authorization', `Bearer ${organizerToken}`)
+          .expect(200);
+
+        const names = res.body.events.map((e) => e.name);
+        const sorted = [...names].sort((a, b) => a.localeCompare(b));
+        expect(names).toEqual(sorted);
+      });
+
+      it('sorts by created_desc', async () => {
+        const res = await request(app)
+          .get(`/organizations/${searchOrgId}/events?sort=created_desc`)
+          .set('Authorization', `Bearer ${organizerToken}`)
+          .expect(200);
+
+        const createdAt = res.body.events.map((e) => new Date(e.createdAt).getTime());
+        for (let i = 1; i < createdAt.length; i++) {
+          expect(createdAt[i - 1]).toBeGreaterThanOrEqual(createdAt[i]);
+        }
+      });
+    });
+
+    describe('rsvpGoingCount', () => {
+      let rsvpEventId;
+
+      beforeAll(async () => {
+        const event = await createEvent('RSVP Party', {
+          admissionMode: 'RSVP',
+          rsvpLimit: 50,
+          rsvpMaxPartySize: 5,
+          priceTiers: undefined,
+          date: '2027-09-01T19:00:00.000Z',
+        });
+        rsvpEventId = event.id;
+
+        await request(app)
+          .post(`/organizations/${searchOrgId}/events/${rsvpEventId}/publish`)
+          .set('Authorization', `Bearer ${organizerToken}`);
+      });
+
+      it('includes rsvpGoingCount for RSVP events', async () => {
+        const res = await request(app)
+          .get(`/organizations/${searchOrgId}/events`)
+          .set('Authorization', `Bearer ${organizerToken}`)
+          .expect(200);
+
+        const rsvpEvent = res.body.events.find((e) => e.id === rsvpEventId);
+        expect(rsvpEvent).toBeDefined();
+        expect(rsvpEvent.rsvpGoingCount).toBe(0);
+        expect(rsvpEvent.admissionMode).toBe('RSVP');
+      });
+
+      it('returns null rsvpGoingCount for ticketed events', async () => {
+        const res = await request(app)
+          .get(`/organizations/${searchOrgId}/events`)
+          .set('Authorization', `Bearer ${organizerToken}`)
+          .expect(200);
+
+        const ticketedEvent = res.body.events.find((e) => e.admissionMode === 'TICKETED');
+        expect(ticketedEvent).toBeDefined();
+        expect(ticketedEvent.rsvpGoingCount).toBeNull();
+      });
+    });
+  });
+
+  describe('JUMP-035A: Events summary', () => {
+    let summaryOrgId;
+    let summaryVenueId;
+    let summaryPublishedEventId;
+    let summarySecondPublishedId;
+    let summaryRsvpEventId;
+
+    beforeAll(async () => {
+      const orgRes = await request(app)
+        .post('/organizations')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ name: '035A Summary Org' });
+      summaryOrgId = orgRes.body.id;
+      await joinOrgByToken(adminToken, summaryOrgId, 'ADMIN');
+      await joinOrgByToken(organizerToken, summaryOrgId, 'ORGANIZER');
+
+      const venueRes = await request(app)
+        .post(`/organizations/${summaryOrgId}/venues`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({ name: '035A Summary Venue', address: '2 Summary St' });
+      summaryVenueId = venueRes.body.id;
+
+      // Create TICKETED published event with sales
+      const pub1 = await request(app)
+        .post(`/organizations/${summaryOrgId}/events`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({
+          venueId: summaryVenueId,
+          name: 'Summary Published Concert',
+          date: '2027-08-15T19:00:00.000Z',
+          capacity: 500,
+          category: 'music',
+          priceTiers: [{ name: 'GA', price: 25, quantityTotal: 400 }, { name: 'VIP', price: 75, quantityTotal: 100 }],
+        });
+      summaryPublishedEventId = pub1.body.id;
+      await request(app)
+        .post(`/organizations/${summaryOrgId}/events/${summaryPublishedEventId}/publish`)
+        .set('Authorization', `Bearer ${organizerToken}`);
+
+      // Another published event
+      const pub2 = await request(app)
+        .post(`/organizations/${summaryOrgId}/events`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({
+          venueId: summaryVenueId,
+          name: 'Summary Tech Talk',
+          date: '2027-09-01T18:00:00.000Z',
+          capacity: 200,
+          category: 'tech',
+          priceTiers: [{ name: 'Standard', price: 10, quantityTotal: 200 }],
+        });
+      summarySecondPublishedId = pub2.body.id;
+      await request(app)
+        .post(`/organizations/${summaryOrgId}/events/${summarySecondPublishedId}/publish`)
+        .set('Authorization', `Bearer ${organizerToken}`);
+
+      // Create a draft (TICKETED)
+      const draft = await request(app)
+        .post(`/organizations/${summaryOrgId}/events`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({
+          venueId: summaryVenueId,
+          name: 'Summary Draft Event',
+          date: '2027-10-01T18:00:00.000Z',
+          capacity: 100,
+          category: 'music',
+          priceTiers: [{ name: 'GA', price: 10, quantityTotal: 100 }],
+        });
+      // Leave as DRAFT
+
+      // Create an RSVP event and publish it
+      const rsvp = await request(app)
+        .post(`/organizations/${summaryOrgId}/events`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({
+          venueId: summaryVenueId,
+          name: 'Summary RSVP Party',
+          admissionMode: 'RSVP',
+          rsvpLimit: 50,
+          rsvpMaxPartySize: 5,
+          date: '2027-09-15T20:00:00.000Z',
+          category: 'tech',
+        });
+      summaryRsvpEventId = rsvp.body.id;
+      await request(app)
+        .post(`/organizations/${summaryOrgId}/events/${summaryRsvpEventId}/publish`)
+        .set('Authorization', `Bearer ${organizerToken}`);
+
+      // Create a cancelled event (publish then cancel)
+      const canc = await request(app)
+        .post(`/organizations/${summaryOrgId}/events`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({
+          venueId: summaryVenueId,
+          name: 'Summary Cancelled Event',
+          date: '2027-11-01T18:00:00.000Z',
+          capacity: 50,
+          category: 'sports',
+          priceTiers: [{ name: 'GA', price: 5, quantityTotal: 50 }],
+        });
+      await request(app)
+        .post(`/organizations/${summaryOrgId}/events/${canc.body.id}/publish`)
+        .set('Authorization', `Bearer ${organizerToken}`);
+      await request(app)
+        .post(`/organizations/${summaryOrgId}/events/${canc.body.id}/cancel`)
+        .set('Authorization', `Bearer ${organizerToken}`);
+    });
+
+    afterAll(async () => {
+      await prisma.eventRsvp.deleteMany({ where: { event: { venue: { organizationId: summaryOrgId } } } });
+      await prisma.order.deleteMany({ where: { event: { venue: { organizationId: summaryOrgId } } } });
+      await prisma.priceTier.deleteMany({ where: { event: { venue: { organizationId: summaryOrgId } } } });
+      await prisma.event.deleteMany({ where: { venue: { organizationId: summaryOrgId } } });
+      await prisma.venue.deleteMany({ where: { organizationId: summaryOrgId } });
+      await prisma.organization.deleteMany({ where: { id: summaryOrgId } });
+    });
+
+    it('returns summary with counts, published, drafts, registered, inventory, and categories', async () => {
+      const res = await request(app)
+        .get(`/organizations/${summaryOrgId}/events/summary`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .expect(200);
+
+      expect(res.body).toHaveProperty('counts');
+      expect(res.body.counts).toMatchObject({
+        all: expect.any(Number),
+        DRAFT: expect.any(Number),
+        PUBLISHED: expect.any(Number),
+        CANCELLED: expect.any(Number),
+      });
+      expect(res.body.counts.DRAFT).toBeGreaterThanOrEqual(1);
+      expect(res.body.counts.PUBLISHED).toBeGreaterThanOrEqual(3); // 2 ticketed + 1 RSVP
+      expect(res.body.counts.CANCELLED).toBeGreaterThanOrEqual(1);
+
+      expect(res.body).toHaveProperty('published');
+      expect(res.body.published.count).toBeGreaterThanOrEqual(3);
+      expect(res.body.published.capacity).toBeGreaterThan(0);
+
+      expect(res.body).toHaveProperty('drafts');
+      expect(res.body.drafts.count).toBeGreaterThanOrEqual(1);
+
+      expect(res.body).toHaveProperty('registered');
+      expect(res.body.registered).toMatchObject({
+        tickets: expect.any(Number),
+        rsvps: expect.any(Number),
+      });
+
+      expect(res.body).toHaveProperty('inventory');
+      expect(res.body.inventory).toMatchObject({
+        available: expect.any(Number),
+        tiers: expect.any(Number),
+      });
+      expect(res.body.inventory.tiers).toBe(3); // 2 published ticketed events with 2+1 tiers
+
+      expect(res.body).toHaveProperty('categories');
+      expect(Array.isArray(res.body.categories)).toBe(true);
+      expect(res.body.categories).toContain('music');
+      expect(res.body.categories).toContain('tech');
+    });
+
+    it('respects category filter — categories reflect unfiltered set', async () => {
+      const res = await request(app)
+        .get(`/organizations/${summaryOrgId}/events/summary?category=tech`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .expect(200);
+
+      // Counts honor the filter: only tech events
+      expect(res.body.counts.PUBLISHED).toBeGreaterThanOrEqual(2); // Tech Talk + RSVP Party
+      // Categories come from the unfiltered set (spec §6.2)
+      expect(res.body.categories).toContain('music');
+      expect(res.body.categories).toContain('tech');
+    });
+
+    it('respects q filter', async () => {
+      const res = await request(app)
+        .get(`/organizations/${summaryOrgId}/events/summary?q=concert`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .expect(200);
+
+      expect(res.body.counts.all).toBeGreaterThanOrEqual(1);
+      expect(res.body.categories).toContain('music');
+    });
+
+    it('does not count another org events', async () => {
+      const res = await request(app)
+        .get(`/organizations/${searchOrgId}/events/summary`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .expect(200);
+
+      // searchOrgId has the 035A search events but not the summary events
+      expect(res.body.counts.all).toBeGreaterThanOrEqual(0);
+      expect(res.body.counts.all).toBeLessThan(10);
     });
   });
 });

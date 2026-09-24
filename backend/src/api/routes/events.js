@@ -87,14 +87,29 @@ publicRouter.get('/:eventId/map', gateByEventParam, async (req, res, next) => {
 const orgRouter = express.Router({ mergeParams: true });
 
 /**
+ * GET /organizations/:orgId/events/summary
+ * Summary stats for org events (spec 035 §6.2)
+ */
+orgRouter.get('/summary', requireAuth, requireOrganizer, async (req, res, next) => {
+  try {
+    const { orgId } = req.params;
+    const { q, category } = req.query;
+    const result = await eventService.getOrgEventsSummary(orgId, { q, category });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * GET /organizations/:orgId/events
  * List all events for an organization (all statuses)
  */
 orgRouter.get('/', requireAuth, requireOrganizer, async (req, res, next) => {
   try {
     const { orgId } = req.params;
-    const { page, limit, status } = req.query;
-    const result = await eventService.listOrgEvents(orgId, { page, limit, status });
+    const { page, limit, status, q, category, sort } = req.query;
+    const result = await eventService.listOrgEvents(orgId, { page, limit, status, q, category, sort });
     res.json(result);
   } catch (error) {
     next(error);

@@ -53,13 +53,14 @@ export function TierCard({
       onClick={onEdit}
     >
       {/* Reorder buttons */}
-      <div className="flex flex-col gap-0.5" onClick={(e) => e.stopPropagation()}>
+      <div className="flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
         <button
           type="button"
           onClick={() => onMove('up')}
           disabled={index === 0}
-          className="p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-slate-300 disabled:opacity-30 text-xs"
+          className="inline-flex h-6 w-6 items-center justify-center rounded text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200 disabled:opacity-30"
           title="Move up"
+          aria-label={`Move ${tier.name || 'untitled tier'} up`}
         >
           ↑
         </button>
@@ -67,8 +68,9 @@ export function TierCard({
           type="button"
           onClick={() => onMove('down')}
           disabled={index === total - 1}
-          className="p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-slate-300 disabled:opacity-30 text-xs"
+          className="inline-flex h-6 w-6 items-center justify-center rounded text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200 disabled:opacity-30"
           title="Move down"
+          aria-label={`Move ${tier.name || 'untitled tier'} down`}
         >
           ↓
         </button>
@@ -86,7 +88,7 @@ export function TierCard({
             </span>
           )}
         </div>
-        <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-slate-400">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-slate-400">
           <span className="font-medium text-gray-900 dark:text-white text-sm">{priceDisplay}</span>
           <span>
             {tier.quantityTotal ? `${tier.quantityTotal} qty` : 'No qty set'}
@@ -116,6 +118,7 @@ export function TierCard({
         <button
           type="button"
           onClick={onEdit}
+          aria-label={`Edit ${tier.name || 'untitled tier'}`}
           className="rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
         >
           Edit
@@ -131,8 +134,9 @@ export function TierCard({
                 : 'text-gray-400 cursor-not-allowed opacity-40'
             }`}
             title={canDelete ? 'Remove tier' : ''}
+            aria-label={canDelete ? `Remove ${tier.name || 'untitled tier'}` : deleteBlockedReason || 'Remove tier'}
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg aria-hidden className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
           </button>
