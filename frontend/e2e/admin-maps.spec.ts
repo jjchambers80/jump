@@ -141,6 +141,9 @@ const assignableApps = [
 ];
 
 async function mockMapsApi(page: Page) {
+  // Deep clone fixture data so previous tests' mutations don't leak
+  const initialBooths: Booth[] = structuredClone(booths);
+  const initialTiers: Tier[] = structuredClone(tiers);
   // The admin shell resolves the active org from this list; without it every
   // org-scoped page stays on its loading state.
   await page.route(`${API}/organizations`, (route) =>
@@ -188,15 +191,15 @@ async function mockMapsApi(page: Page) {
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(mapDetail),
+      body: JSON.stringify({ ...mapDetail, booths: initialBooths, tiers: initialTiers }),
     })
   );
 
   await page.route(`${API}/admin/maps/${MAP_ID}/booths/*/assignable*`, async (route) => {
     const url = new URL(route.request().url());
     const boothId = url.pathname.split('/booths/')[1].split('/assignable')[0];
-    // Return different apps based on booth tier
-    const results = boothId === 'booth-a1' ? assignableApps : [];
+    // Return apps for any assignable booth
+    const results = assignableApps;
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -208,7 +211,7 @@ async function mockMapsApi(page: Page) {
     const request = route.request();
     const body = request.postDataJSON() as { applicationId: string; force?: boolean };
     const boothId = new URL(request.url()).pathname.split('/booths/')[1].split('/assign')[0];
-    const booth = booths.find((b) => b.id === boothId);
+    const booth = initialBooths.find((b) => b.id === boothId);
     if (!booth || (booth.status !== 'AVAILABLE' && booth.status !== 'RESERVED')) {
       return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ message: 'Booth not available' }) });
     }
@@ -225,7 +228,7 @@ async function mockMapsApi(page: Page) {
 
   await page.route(`${API}/admin/maps/${MAP_ID}/booths/*/unassign`, async (route) => {
     const boothId = new URL(route.request().url()).pathname.split('/booths/')[1].split('/unassign')[0];
-    const booth = booths.find((b) => b.id === boothId);
+    const booth = initialBooths.find((b) => b.id === boothId);
     if (!booth || booth.status !== 'SOLD') {
       return route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ message: 'Booth not sold' }) });
     }
@@ -244,8 +247,8 @@ async function mockMapsApi(page: Page) {
     const request = route.request();
     const body = request.postDataJSON() as { targetBoothId: string };
     const fromBoothId = new URL(request.url()).pathname.split('/booths/')[1].split('/move')[0];
-    const fromBooth = booths.find((b) => b.id === fromBoothId);
-    const toBooth = booths.find((b) => b.id === body.targetBoothId);
+    const fromBooth = initialBooths.find((b) => b.id === fromBoothId);
+    const toBooth = initialBooths.find((b) => b.id === body.targetBoothId);
     const canReceive = (status: string) => status === 'AVAILABLE' || status === 'RESERVED' || status === 'SOLD';
     if (!fromBooth || !toBooth || fromBooth.status !== 'SOLD' || !canReceive(toBooth.status)) {
       return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ message: 'Invalid move' }) });
@@ -286,7 +289,7 @@ async function mockMapsApi(page: Page) {
     const request = route.request();
     const body = request.postDataJSON() as { status: 'AVAILABLE' | 'RESERVED' | 'BLOCKED' };
     const boothId = new URL(request.url()).pathname.split('/booths/')[1].split('/status')[0];
-    const booth = booths.find((b) => b.id === boothId);
+    const booth = initialBooths.find((b) => b.id === boothId);
     if (!booth || booth.status === 'SOLD') {
       return route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ message: 'Cannot change status of sold booth' }) });
     }
@@ -364,12 +367,22 @@ test('unassigns a booth from the booth panel', async ({ page }) => {
 });
 
 test('moves a holder to another booth via Move to…', async ({ page }) => {
+  // Assign booth A2 first, then move to A1
   await gotoBuilder(page);
-  await selectBooth(page, 'A3');
+  await selectBooth(page, 'A2');
+  await page.getByRole('button', { name: 'Assign', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByPlaceholder('Search by business name or contact…').fill('Vendor');
+  await expect(dialog.getByText('Vendor Two')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Assign', exact: true }).first().click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Vendor Two' })).toBeVisible();
+
+  // Booth A2 already has Properties panel open — click Move to…
   await page.getByRole('button', { name: 'Move to…' }).click();
   await page.getByTestId('booth-A1').click();
   await expect(page.getByTestId('booth-A1')).toHaveAttribute('aria-label', /Sold/);
-  await expect(page.getByTestId('booth-A3')).toHaveAttribute('aria-label', /Available/);
+  await expect(page.getByTestId('booth-A2')).toHaveAttribute('aria-label', /Available/);
 });
 
 test('blocks a booth and makes it available again', async ({ page }) => {

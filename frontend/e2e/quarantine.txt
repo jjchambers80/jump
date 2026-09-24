@@ -3,27 +3,3 @@
 # unmocked endpoints and specs that never sign in. Fix a spec, delete its line, and CI
 # guards it from then on. Never add a line to silence a new failure — fix it.
 # Tracked on the Kanban board: t_7bd3fe04.
-e2e/account-devices.spec.ts
-e2e/admin-access.spec.ts
-e2e/admin-branding-color.spec.ts
-e2e/admin-customer-detail.spec.ts
-e2e/admin-domains.spec.ts
-e2e/admin-maps.spec.ts
-e2e/admin-menus.spec.ts
-e2e/admin-mobile.spec.ts
-e2e/admin-navbar.spec.ts
-e2e/admin-org-theme-mode.spec.ts
-e2e/admin-payments-settings.spec.ts
-e2e/admin-tax-settings.spec.ts
-e2e/application-orders-reporting.spec.ts
-e2e/applications-payments.spec.ts
-e2e/applications.spec.ts
-e2e/customer-detail-phase2.spec.ts
-e2e/participants.spec.ts
-e2e/signup.spec.ts
-e2e/theme-modes.spec.ts
-e2e/wcag-contrast.spec.ts
-tests/integration/adminEventCreation.spec.ts
-tests/integration/customerHistory.spec.ts
-tests/integration/customerProspectFilter.spec.ts
-tests/integration/customerPurchase.spec.ts

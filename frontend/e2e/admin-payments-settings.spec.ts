@@ -121,7 +121,7 @@ test('Payments appears in Settings with the provider card, derived statement nam
   const nav = page.getByRole('navigation', { name: 'Settings sections' });
   await expect(nav.getByRole('link', { name: 'Payments' })).toHaveAttribute('aria-current', 'page');
   // Shopify order: Payments sits between Domains and Tax
-  await expect(nav.getByRole('link')).toHaveText(['General', 'Domains', 'Payments', 'Tax', 'Users']);
+  await expect(nav.getByRole('link')).toHaveText(['General', 'Domains', 'Payments', 'Tax', 'Applications', 'Customer accounts', 'Users']);
   await expect(page.getByRole('heading', { name: 'Payments', exact: true })).toBeVisible();
 
   const providerCard = page.getByTestId('payments-provider-card');

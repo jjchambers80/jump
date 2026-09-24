@@ -41,6 +41,9 @@ async function mockOrgApi(page: Page) {
   let eventMode: ThemeMode | null = null;
   const patches: Record<string, unknown>[] = [];
 
+  await page.route(`${API}/organizations?*`, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([current]) })
+  );
   await page.route(`${API}/organizations`, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([current]) })
   );
