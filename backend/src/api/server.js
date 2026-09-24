@@ -91,6 +91,8 @@ app.use(
         .catch(() => callback(null, false));
     },
     credentials: true,
+    // Lets the admin read the server's CSV filename (services/api.ts downloadCsv).
+    exposedHeaders: ['Content-Disposition'],
   })
 );
 
