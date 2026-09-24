@@ -366,6 +366,25 @@ test('... menu keyboard navigation + focus return', async ({ page }) => {
   await expect(page.getByRole('menu')).not.toBeVisible();
 });
 
+test('... menu is not clipped by its card', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockApi(page);
+  await page.goto(`/admin/events?orgId=${ORG_ID}`);
+
+  const card = page.getByRole('article', { name: 'Summer Music Festival' });
+  await card.getByRole('button', { name: /More actions for Summer Music Festival/ }).click();
+
+  // The last item sits below the card's bottom edge; it must still be the
+  // topmost element at its own center (an overflow-hidden card clips it).
+  const last = page.getByRole('menuitem', { name: /Cancel event/ });
+  await expect(last).toBeVisible();
+  const hit = await last.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return el.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2));
+  });
+  expect(hit).toBe(true);
+});
+
 test('cancelled event shows Duplicate as primary action', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockApi(page);

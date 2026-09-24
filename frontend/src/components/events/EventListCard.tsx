@@ -139,15 +139,17 @@ export default function EventListCard({
         isPast && event.status !== 'CANCELLED'
           ? 'border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60'
           : 'border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800'
-      } overflow-hidden`}
+      }`}
     >
-      {/* Status accent bar */}
-      <div
-        className={`absolute left-0 top-0 bottom-0 w-1 ${accentColor} ${
-          isPast && event.status !== 'CANCELLED' ? 'opacity-40' : ''
-        }`}
-        aria-hidden="true"
-      />
+      {/* Status accent bar. Clipped by its own wrapper, not the card: an
+          overflow-hidden card cuts off the ⋯ actions menu. */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]" aria-hidden="true">
+        <div
+          className={`absolute left-0 top-0 bottom-0 w-1 ${accentColor} ${
+            isPast && event.status !== 'CANCELLED' ? 'opacity-40' : ''
+          }`}
+        />
+      </div>
 
       {/* Card body grid */}
       <div className="pl-4 sm:pl-5">
