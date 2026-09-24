@@ -1,7 +1,7 @@
 # Required checks for main. Kept deliberately small and deterministic so the
 # Kanban PR completion contract (hermes kanban, docs/development/kanban-workflow.md)
 # has a green signal to accept: a PR is done when these pass, not when a worker
-# says so. Playwright and the Claude review stay separate (cost, flakiness).
+# says so. Playwright runs in e2e.yml (not required yet); the Claude review stays separate.
 
 name: CI
 
