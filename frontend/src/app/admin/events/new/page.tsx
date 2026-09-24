@@ -15,6 +15,7 @@ import VenueFlyout, { NEW_VENUE_OPTION, type CreatedVenue } from '@/components/V
 import { DEFAULT_ZONE, formatEventTime, zonedInputToInstant, zonedInputToIso } from '@/lib/eventTime';
 import { timeZoneLabel } from '@/lib/timeZones';
 import RichTextEditorField from '@/components/editor/RichTextEditorField';
+import { EventMediaCard } from '@/components/events/EventMediaCard';
 import {
   AdmissionModeField,
   EVENT_FORM_ID,
@@ -115,6 +116,19 @@ export default function CreateEventPage() {
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // The image needs an event id, so it is held here and uploaded right after create.
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  useEffect(() => {
+    if (!imageFile) {
+      setImagePreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(imageFile);
+    setImagePreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [imageFile]);
 
   const fetchVenues = useCallback(async () => {
     if (!selectedOrgId) return;
@@ -262,7 +276,18 @@ export default function CreateEventPage() {
         payload.rsvpMaxPartySize = parseInt(rsvpMaxPartySize) || 1;
       }
 
-      await api.post(`/organizations/${selectedOrgId}/events`, payload);
+      const created = await api.post<{ id: string }>(`/organizations/${selectedOrgId}/events`, payload);
+      if (imageFile) {
+        try {
+          const formData = new FormData();
+          formData.append('logo', imageFile);
+          await api.upload(`/organizations/${selectedOrgId}/events/${created.id}/logo`, formData);
+        } catch {
+          // The event exists; send the organizer to its edit page to retry the image.
+          router.push(`/admin/events/${created.id}/edit?orgId=${selectedOrgId}&imageUpload=failed`);
+          return;
+        }
+      }
       router.push('/admin/events');
     } catch (err: any) {
       if (err?.status === 409) {
@@ -341,6 +366,14 @@ export default function CreateEventPage() {
               </div>
             </div>
           </FormCard>
+
+          <EventMediaCard
+            preview={imagePreview}
+            eventName={name}
+            uploading={saving && !!imageFile}
+            onFileSelect={setImageFile}
+            onRemove={() => setImageFile(null)}
+          />
 
           {/* Price Tiers — only for ticketed events */}
           {admissionMode === 'TICKETED' && (
