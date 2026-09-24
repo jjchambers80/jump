@@ -224,7 +224,13 @@ function EventsListContent() {
   return (
     <div className="mx-auto w-full max-w-screen-2xl px-4 sm:px-6 py-6 sm:py-8">
       {/* Header */}
-      <EventsPageHeader selectedOrgId={selectedOrgId} total={total} />
+      <EventsPageHeader
+        selectedOrgId={selectedOrgId}
+        total={total}
+        filterParams={new URLSearchParams({
+          ...(statusFilter ? { status: statusFilter } : {}),
+        }).toString()}
+      />
 
       {/* KPI Strip */}
       <EventsSummary summary={summary} loading={summaryLoading} />

@@ -117,6 +117,26 @@ orgRouter.get('/', requireAuth, requireOrganizer, async (req, res, next) => {
 });
 
 /**
+ * GET /organizations/:orgId/events/export.csv
+ * Export filtered events list as CSV (spec 035 §6.3). Same filters as the
+ * list endpoint, no pagination.
+ */
+orgRouter.get('/export.csv', requireAuth, requireOrganizer, async (req, res, next) => {
+  try {
+    const { orgId } = req.params;
+    const { status, q, category, sort } = req.query;
+    const csv = await eventService.exportEventsCsv(orgId, { status, q, category, sort });
+    const orgSlug = (await prisma.organization.findUnique({ where: { id: orgId }, select: { slug: true } }))?.slug || orgId;
+    const dateStr = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="events-${orgSlug}-${dateStr}.csv"`);
+    res.send(csv);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * POST /organizations/:orgId/events
  * Create a new event with price tiers (org-scoped)
  */

@@ -1,17 +1,33 @@
 'use client';
 
-// Events page header: icon tile, h1, total pill, subtitle, Create Event button.
+// Events page header: icon tile, h1, total pill, subtitle, Export CSV, Create Event button.
 // Matches the EventFormShell shell pattern mx-auto w-full max-w-screen-2xl px-4 sm:px-6.
 
 import Link from 'next/link';
-import { Calendar } from 'lucide-react';
+import { Calendar, Download } from 'lucide-react';
+import { downloadCsv } from '@/services/api';
 
 interface EventsPageHeaderProps {
   selectedOrgId: string | null;
   total: number;
+  /** Current URL search params (status, q, category, sort) to pass to the CSV export. */
+  filterParams?: string;
 }
 
-export default function EventsPageHeader({ selectedOrgId, total }: EventsPageHeaderProps) {
+export default function EventsPageHeader({ selectedOrgId, total, filterParams = '' }: EventsPageHeaderProps) {
+  const handleExportCsv = async () => {
+    if (!selectedOrgId) return;
+    try {
+      const query = filterParams ? `?${filterParams}` : '';
+      await downloadCsv(
+        `/organizations/${selectedOrgId}/events/export.csv${query}`,
+        `events-export-${new Date().toISOString().slice(0, 10)}.csv`
+      );
+    } catch {
+      // Silently fail — the download function logs errors
+    }
+  };
+
   return (
     <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
       <div className="flex items-center gap-3 min-w-0">
@@ -30,14 +46,24 @@ export default function EventsPageHeader({ selectedOrgId, total }: EventsPageHea
           </p>
         </div>
       </div>
-      {selectedOrgId && (
+      <div className="flex items-center gap-3">
+        {selectedOrgId && (
+          <button
+            onClick={handleExportCsv}
+            className="inline-flex items-center gap-2 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-slate-200 shadow-sm hover:bg-gray-50 dark:hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900"
+            aria-label="Export events list as CSV"
+          >
+            <Download className="h-4 w-4" aria-hidden="true" />
+            Export CSV
+          </button>
+        )}
         <Link
           href="/admin/events/new"
           className="inline-flex min-h-11 items-center rounded-md bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900"
         >
           Create Event
         </Link>
-      )}
+      </div>
     </div>
   );
 }

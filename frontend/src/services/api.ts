@@ -709,3 +709,44 @@ export interface OrderScanResult {
 
 export const api = new ApiClient();
 export default api;
+
+/**
+ * Download a CSV from the API as a file. Injects auth, X-Jump-Org headers
+ * like `api.request`, but returns the response as a Blob for download rather
+ * than parsing JSON. Triggers a browser download via a temporary anchor.
+ */
+export async function downloadCsv(endpoint: string, filename: string): Promise<void> {
+  const url = `${API_URL}${endpoint}`;
+  const headers: Record<string, string> = {};
+
+  if (activeOrganizationId) {
+    headers['X-Jump-Org'] = activeOrganizationId;
+  }
+
+  if (typeof window !== 'undefined') {
+    try {
+      const session = (await (await import('next-auth/react')).getSession()) as any;
+      if (session?.accessToken) {
+        headers['Authorization'] = `Bearer ${session.accessToken}`;
+      }
+    } catch {
+      // No session — proceed without auth
+    }
+  }
+
+  const response = await fetch(url, { headers });
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw { status: response.status, message: text || 'CSV download failed' };
+  }
+
+  const blob = await response.blob();
+  const blobUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = blobUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(blobUrl);
+}
