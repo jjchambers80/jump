@@ -13,8 +13,23 @@ import mapService from './MapService.js';
 import { PAID_ORDER_STATUSES } from './paidStatuses.js';
 import { rethrowSlugConflict, resolveUniqueSlug } from '../utils/slug.js';
 import { findByPublicIdentifier } from '../utils/publicIdentifier.js';
+import { sanitizeContentHtml } from '../utils/sanitizeHtml.js';
+import { formatEventDateTime } from '../utils/eventTime.js';
 import rsvpService, { remainingFor } from './RsvpService.js';
 import emailService from './EmailService.js';
+
+/**
+ * Safe CSV cell: quotes `,`, `"`, newlines, and protects against formula
+ * injection by prefixing cells that start with `=`, `+`, `-`, or `@` with `'`.
+ */
+function csvCell(value) {
+  if (value === null || value === undefined) return '';
+  let text = String(value);
+  if (/^[=+\-@\t]/.test(text)) {
+    text = `'${text}`;
+  }
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
 
 function admissionConflict(message) {
   const error = new ConflictError(message);
@@ -87,7 +102,7 @@ class EventService {
         venueId,
         name,
         ...slugState,
-        description: description || null,
+        description: description ? sanitizeContentHtml(description) : null,
         date: eventDate,
         capacity: capacityNum,
         admissionMode,
@@ -291,7 +306,7 @@ class EventService {
     }
 
     if (updates.description !== undefined) {
-      updateData.description = updates.description;
+      updateData.description = updates.description === null ? null : sanitizeContentHtml(updates.description);
     }
 
     if (updates.date !== undefined) {
@@ -1002,6 +1017,107 @@ class EventService {
       applicationRefunds: round(refunds),
       net: round(tickets + addOns + applicationGross - refunds),
     };
+  }
+
+  /**
+   * Export organization events as CSV (spec 035 §6.3).
+   * Same `q`, `category`, `status`, `sort` as the list endpoint; returns
+   * all matching rows (no pagination). One row per event.
+   *
+   * Columns: name, status, admission mode, date (venue zone: ISO + zone
+   * abbreviation), venue, category, tiers, sold, available, capacity,
+   * RSVPs going, public URL (slug).
+   */
+  async exportEventsCsv(orgId, { status, q, category, sort } = {}) {
+    const VALID_SORTS = ['upcoming', 'date_desc', 'created_desc', 'name_asc'];
+    if (sort && !VALID_SORTS.includes(sort)) {
+      throw new ValidationError(`Invalid sort parameter "${sort}". Must be one of: ${VALID_SORTS.join(', ')}`);
+    }
+    const resolvedSort = sort || 'upcoming';
+
+    const where = { venue: { organizationId: orgId } };
+    if (status) where.status = status;
+    if (category) where.category = category;
+    if (q) {
+      where.OR = [
+        { name: { contains: q, mode: 'insensitive' } },
+        { venue: { name: { contains: q, mode: 'insensitive' } } },
+      ];
+    }
+
+    const include = {
+      venue: {
+        select: { id: true, name: true, slug: true, timezone: true },
+      },
+      priceTiers: { orderBy: { displayOrder: 'asc' } },
+    };
+
+    let events;
+    if (resolvedSort === 'upcoming') {
+      const futureWhere = { ...where, date: { gt: new Date() } };
+      const pastWhere = { ...where, date: { lte: new Date() } };
+      const [futureEvents, pastEvents] = await Promise.all([
+        prisma.event.findMany({ where: futureWhere, include, orderBy: { date: 'asc' } }),
+        prisma.event.findMany({ where: pastWhere, include, orderBy: { date: 'desc' } }),
+      ]);
+      events = [...futureEvents, ...pastEvents];
+    } else {
+      const orderByMap = {
+        date_desc: { date: 'desc' },
+        created_desc: { createdAt: 'desc' },
+        name_asc: { name: 'asc' },
+      };
+      events = await prisma.event.findMany({ where, include, orderBy: orderByMap[resolvedSort] });
+    }
+
+    // Batch RSVP going counts for RSVP events
+    const rsvpEventIds = events.filter((e) => e.admissionMode === 'RSVP').map((e) => e.id);
+    const rsvpGoingMap = {};
+    if (rsvpEventIds.length > 0) {
+      const rsvpCounts = await prisma.eventRsvp.groupBy({
+        by: ['eventId'],
+        where: { eventId: { in: rsvpEventIds }, status: 'GOING' },
+        _sum: { partySize: true },
+      });
+      for (const row of rsvpCounts) {
+        rsvpGoingMap[row.eventId] = Number(row._sum.partySize || 0);
+      }
+    }
+
+    const header = [
+      'name', 'status', 'admissionMode', 'date', 'venue', 'category',
+      'tiers', 'sold', 'available', 'capacity', 'rsvpsGoing', 'publicUrl',
+    ];
+
+    const lines = events.map((e) => {
+      const zone = e.venue?.timezone || null;
+      const dateStr = formatEventDateTime(e.date, zone);
+      const tierNames = e.priceTiers.map((t) => t.name).join('; ');
+      const totalSold = e.priceTiers.reduce((s, t) => s + t.quantitySold, 0);
+      const totalReserved = e.priceTiers.reduce((s, t) => s + t.quantityReserved, 0);
+      const totalAvailable = e.priceTiers.reduce((s, t) => s + (t.quantityTotal - t.quantitySold - t.quantityReserved), 0);
+      const rsvpGoing = e.admissionMode === 'RSVP' ? (rsvpGoingMap[e.id] || 0) : '';
+
+      return [
+        e.name,
+        e.status,
+        e.admissionMode,
+        dateStr,
+        e.venue?.name || '',
+        e.category || '',
+        e.admissionMode === 'TICKETED' ? tierNames : '',
+        e.admissionMode === 'TICKETED' ? totalSold : '',
+        e.admissionMode === 'TICKETED' ? totalAvailable : '',
+        e.capacity,
+        rsvpGoing,
+        `/events/${e.slug}`,
+      ];
+    });
+
+    return [
+      header.map(csvCell).join(','),
+      ...lines.map((row) => row.map(csvCell).join(',')),
+    ].join('\r\n');
   }
 
   /**

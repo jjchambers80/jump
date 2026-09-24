@@ -882,4 +882,200 @@ describe('Events API Contract Tests', () => {
       expect(res.body.counts.all).toBeLessThan(10);
     });
   });
+
+  describe('JUMP-035D: Events CSV export', () => {
+    let csvOrgId;
+    let csvVenueId;
+
+    beforeAll(async () => {
+      const orgRes = await request(app)
+        .post('/organizations')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ name: '035D CSV Org' });
+      csvOrgId = orgRes.body.id;
+      await joinOrgByToken(adminToken, csvOrgId, 'ADMIN');
+      await joinOrgByToken(organizerToken, csvOrgId, 'ORGANIZER');
+
+      const venueRes = await request(app)
+        .post(`/organizations/${csvOrgId}/venues`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({ name: 'CSV Venue', address: '1 CSV St' });
+      csvVenueId = venueRes.body.id;
+
+      // TICKETED published event
+      const ticketedRes = await request(app)
+        .post(`/organizations/${csvOrgId}/events`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({
+          venueId: csvVenueId,
+          name: 'CSV Concert',
+          date: '2027-08-15T19:00:00.000Z',
+          capacity: 300,
+          category: 'music',
+          priceTiers: [
+            { name: 'GA', price: 25, quantityTotal: 200 },
+            { name: 'VIP', price: 75, quantityTotal: 100 },
+          ],
+        });
+      await request(app)
+        .post(`/organizations/${csvOrgId}/events/${ticketedRes.body.id}/publish`)
+        .set('Authorization', `Bearer ${organizerToken}`);
+
+      // RSVP published event
+      const rsvpRes = await request(app)
+        .post(`/organizations/${csvOrgId}/events`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({
+          venueId: csvVenueId,
+          name: 'CSV RSVP Party',
+          admissionMode: 'RSVP',
+          rsvpLimit: 50,
+          rsvpMaxPartySize: 5,
+          date: '2027-09-01T20:00:00.000Z',
+        });
+      await request(app)
+        .post(`/organizations/${csvOrgId}/events/${rsvpRes.body.id}/publish`)
+        .set('Authorization', `Bearer ${organizerToken}`);
+
+      // Draft event with formula-injection-prone name
+      await request(app)
+        .post(`/organizations/${csvOrgId}/events`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({
+          venueId: csvVenueId,
+          name: '=SUM(A1:A10)',
+          date: '2027-10-01T18:00:00.000Z',
+          capacity: 100,
+          category: 'tech',
+          priceTiers: [{ name: 'GA', price: 10, quantityTotal: 100 }],
+        });
+    });
+
+    afterAll(async () => {
+      await prisma.eventRsvp.deleteMany({ where: { event: { venue: { organizationId: csvOrgId } } } });
+      await prisma.priceTier.deleteMany({ where: { event: { venue: { organizationId: csvOrgId } } } });
+      await prisma.event.deleteMany({ where: { venue: { organizationId: csvOrgId } } });
+      await prisma.venue.deleteMany({ where: { organizationId: csvOrgId } });
+      await prisma.organization.deleteMany({ where: { id: csvOrgId } });
+    });
+
+    it('returns CSV with expected headers and rows', async () => {
+      const res = await request(app)
+        .get(`/organizations/${csvOrgId}/events/export.csv`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .expect(200);
+
+      expect(res.headers['content-type']).toMatch(/text\/csv/);
+      expect(res.headers['content-disposition']).toMatch(/attachment;/);
+      expect(res.headers['content-disposition']).toMatch(/events-csv-org-.*\.csv/);
+
+      const lines = res.text.split('\r\n').filter(Boolean);
+      // Header + 3 events
+      expect(lines.length).toBeGreaterThanOrEqual(4);
+
+      const header = lines[0].split(',');
+      expect(header).toContain('name');
+      expect(header).toContain('status');
+      expect(header).toContain('admissionMode');
+      expect(header).toContain('date');
+      expect(header).toContain('venue');
+      expect(header).toContain('category');
+      expect(header).toContain('tiers');
+
+      // Find the ticketed CSV Concert row
+      const concertLine = lines.find((l) => l.startsWith('CSV Concert'));
+      expect(concertLine).toBeDefined();
+      expect(concertLine).toContain('PUBLISHED');
+      expect(concertLine).toContain('TICKETED');
+      expect(concertLine).toContain('CSV Venue');
+      expect(concertLine).toContain('music');
+      // should contain tier names
+      expect(concertLine).toContain('GA; VIP');
+
+      // Find the RSVP event row
+      const rsvpLine = lines.find((l) => l.startsWith('CSV RSVP Party'));
+      expect(rsvpLine).toBeDefined();
+      expect(rsvpLine).toContain('RSVP');
+      // RSVP events should have empty tiers and rsvpsGoing=0
+      const rsvpCells = rsvpLine.split(',');
+      const tiersIdx = header.indexOf('tiers');
+      const rsvpGoingIdx = header.indexOf('rsvpsGoing');
+      expect(rsvpCells[tiersIdx]).toBe(''); // empty tiers column
+      expect(rsvpCells[rsvpGoingIdx]).toBe('0'); // rsvps going at 0
+    });
+
+    it('escapes formula-injection cells starting with =', async () => {
+      const res = await request(app)
+        .get(`/organizations/${csvOrgId}/events/export.csv`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .expect(200);
+
+      const lines = res.text.split('\r\n').filter(Boolean);
+      const formulaLine = lines.find((l) => l.includes('SUM'));
+      expect(formulaLine).toBeDefined();
+      // Name starts with =SUM, so the cell should be escaped with leading '
+      expect(formulaLine).toMatch(/^'=SUM/);
+    });
+
+    it('honors status filter', async () => {
+      const res = await request(app)
+        .get(`/organizations/${csvOrgId}/events/export.csv?status=DRAFT`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .expect(200);
+
+      const lines = res.text.split('\r\n').filter(Boolean);
+      // Header + draft events only
+      const dataLines = lines.slice(1);
+      expect(dataLines.length).toBeGreaterThanOrEqual(1);
+      for (const line of dataLines) {
+        expect(line).toContain('DRAFT');
+      }
+      // No published events
+      const publishedLine = dataLines.find((l) => l.includes('PUBLISHED'));
+      expect(publishedLine).toBeUndefined();
+    });
+
+    it('honors category filter', async () => {
+      const res = await request(app)
+        .get(`/organizations/${csvOrgId}/events/export.csv?category=music`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .expect(200);
+
+      const lines = res.text.split('\r\n').filter(Boolean);
+      const dataLines = lines.slice(1);
+      expect(dataLines.length).toBeGreaterThanOrEqual(1);
+      for (const line of dataLines) {
+        expect(line).toContain('music');
+      }
+      // No non-music events
+      const techLine = dataLines.find((l) => l.includes('tech'));
+      expect(techLine).toBeUndefined();
+    });
+
+    it('respects org isolation — another org is empty', async () => {
+      // searchOrgId from 035A has events but not csvOrgId's events
+      const res = await request(app)
+        .get(`/organizations/${searchOrgId}/events/export.csv?status=PUBLISHED`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .expect(200);
+
+      const lines = res.text.split('\r\n').filter(Boolean);
+      // searchOrgId has its own events; they should not show csv org's events
+      const csvConcertLine = lines.find((l) => l.startsWith('CSV Concert'));
+      expect(csvConcertLine).toBeUndefined();
+    });
+
+    it('requires auth', async () => {
+      await request(app)
+        .get(`/organizations/${csvOrgId}/events/export.csv`)
+        .expect(401);
+    });
+
+    it('returns 400 for invalid sort', async () => {
+      await request(app)
+        .get(`/organizations/${csvOrgId}/events/export.csv?sort=invalid`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .expect(400);
+    });
+  });
 });
