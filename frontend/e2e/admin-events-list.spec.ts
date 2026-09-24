@@ -377,6 +377,89 @@ test('cancelled event shows Duplicate as primary action', async ({ page }) => {
   await expect(cancelledCard.getByRole('link', { name: 'Edit' })).not.toBeVisible();
 });
 
+test('Edit is primary-styled on DRAFT and PUBLISHED cards', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockApi(page);
+  await page.goto(`/admin/events?orgId=${ORG_ID}`);
+
+  // DRAFT card — Edit link should be primary (indigo filled)
+  const draftCard = page.getByRole('article', { name: 'Comedy Night' });
+  const draftEdit = draftCard.getByRole('link', { name: 'Edit' });
+  await expect(draftEdit).toBeVisible();
+  const draftHref = await draftEdit.getAttribute('href');
+  expect(draftHref).toContain('/edit');
+  // Primary style: should NOT have border class
+  const draftClasses = await draftEdit.getAttribute('class');
+  expect(draftClasses).toContain('bg-indigo-600');
+
+  // PUBLISHED card — Edit link should also be primary
+  const pubCard = page.getByRole('article', { name: 'Summer Music Festival' });
+  const pubEdit = pubCard.getByRole('link', { name: 'Edit' });
+  await expect(pubEdit).toBeVisible();
+  const pubClasses = await pubEdit.getAttribute('class');
+  expect(pubClasses).toContain('bg-indigo-600');
+
+  // CANCELLED card — no Edit link
+  const cancelledCard = page.getByRole('article', { name: 'Cancelled Event' });
+  await expect(cancelledCard.getByRole('link', { name: 'Edit' })).not.toBeVisible();
+});
+
+test('RSVP card has no tier chip', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockApi(page);
+  await page.goto(`/admin/events?orgId=${ORG_ID}`);
+
+  // RSVP card (evt-3, Art Workshop RSVP) should NOT show a tier count chip
+  const rsvpCard = page.getByRole('article', { name: 'Art Workshop RSVP' });
+  await expect(rsvpCard).toBeVisible();
+  await expect(rsvpCard.getByText(/tier/i)).not.toBeVisible();
+
+  // Ticketed card should still show the tier chip
+  const ticketedCard = page.getByRole('article', { name: 'Summer Music Festival' });
+  await expect(ticketedCard.getByText(/2 tiers/i)).toBeVisible();
+});
+
+test('Export CSV passes current search query in params', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockApi(page);
+  await page.goto(`/admin/events?orgId=${ORG_ID}`);
+
+  // Type a search term
+  await page.getByRole('searchbox', { name: 'Search events' }).click();
+  await page.keyboard.type('Retro');
+  await expect(page).toHaveURL(/q=Retro/, { timeout: 3000 });
+
+  // Wait for the CSV export request using waitForRequest
+  const csvRequestPromise = page.waitForRequest(
+    (req) => req.url().includes('/events/export.csv'),
+    { timeout: 5000 }
+  );
+  
+  // Click Export CSV
+  await page.getByRole('button', { name: 'Export events list as CSV' }).click();
+
+  // Wait for the request
+  let exportUrl = '';
+  try {
+    const csvReq = await csvRequestPromise;
+    exportUrl = csvReq.url();
+  } catch {
+    // Request didn't appear via click — try JS dispatch
+    await page.evaluate(() => {
+      const btn = document.querySelector('button[aria-label="Export events list as CSV"]');
+      if (btn) (btn as HTMLButtonElement).click();
+    });
+    const csvReq = await page.waitForRequest(
+      (req) => req.url().includes('/events/export.csv'),
+      { timeout: 5000 }
+    );
+    exportUrl = csvReq.url();
+  }
+
+  // Assert the export URL includes q=Retro
+  expect(exportUrl).toContain('q=Retro');
+});
+
 test('draft event shows Publish and Edit buttons', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockApi(page);

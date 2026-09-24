@@ -714,6 +714,8 @@ export default api;
  * Download a CSV from the API as a file. Injects auth, X-Jump-Org headers
  * like `api.request`, but returns the response as a Blob for download rather
  * than parsing JSON. Triggers a browser download via a temporary anchor.
+ * Prefers the server's Content-Disposition filename if present; falls back
+ * to the provided `filename`.
  */
 export async function downloadCsv(endpoint: string, filename: string): Promise<void> {
   const url = `${API_URL}${endpoint}`;
@@ -744,7 +746,12 @@ export async function downloadCsv(endpoint: string, filename: string): Promise<v
   const blobUrl = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = blobUrl;
-  a.download = filename;
+
+  // Prefer the server's Content-Disposition filename
+  const cd = response.headers.get('Content-Disposition');
+  const serverFilename = cd ? cd.match(/filename="?([^";]+)"?/)?.[1] : null;
+  a.download = serverFilename || filename;
+
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

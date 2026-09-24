@@ -204,10 +204,12 @@ export default function EventListCard({
                   {event.category}
                 </span>
               )}
-              {/* Tier count chip */}
-              <span className="inline-flex items-center gap-1 rounded-md border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-700/50 px-2 py-0.5 text-xs font-medium text-gray-500 dark:text-slate-400 tabular-nums">
-                {event.priceTiers.length} tier{event.priceTiers.length !== 1 ? 's' : ''}
-              </span>
+              {/* Tier count chip (hidden on RSVP — no tiers; branch on admissionMode, not count) */}
+              {!isRsvp && (
+                <span className="inline-flex items-center gap-1 rounded-md border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-700/50 px-2 py-0.5 text-xs font-medium text-gray-500 dark:text-slate-400 tabular-nums">
+                  {event.priceTiers.length} tier{event.priceTiers.length !== 1 ? 's' : ''}
+                </span>
+              )}
             </div>
 
             {/* Date line with zone abbreviation */}
@@ -276,7 +278,7 @@ export default function EventListCard({
               {event.status !== 'CANCELLED' && (
                 <Link
                   href={`/admin/events/${event.id}/edit?orgId=${selectedOrgId}`}
-                  className="inline-flex min-h-9 items-center rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                  className="inline-flex min-h-9 items-center rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                 >
                   Edit
                 </Link>
