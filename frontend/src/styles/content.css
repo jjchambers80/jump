@@ -104,6 +104,17 @@
 .dark .jump-prose--editor a {
   color: rgb(165 180 252);
 }
+/* The editor root is itself .jump-prose (so toolbar + content share the type
+   styles); drop the flow spacing between its toolbar and content box. */
+.jump-prose--editor > * + * {
+  margin-top: 0;
+}
+/* ...and apply it to the document inside ProseMirror instead, so paragraphs
+   space as they do on the storefront. :where() keeps the specificity equal to
+   `.jump-prose > * + *`, so the heading margins above still win. */
+:where(.jump-prose--editor) .ProseMirror > * + * {
+  margin-top: 1em;
+}
 .jump-prose--editor .ProseMirror {
   outline: none;
   min-height: 14rem;
