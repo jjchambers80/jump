@@ -220,15 +220,14 @@ describe('Event Description Sanitising', () => {
       expect(res.body.description).toContain('<blockquote>Quote</blockquote>');
     });
 
-    it('sets description to empty string when updating to null', async () => {
+    it('clears description to null when updating to null', async () => {
       const res = await request(app)
         .patch(`/organizations/${testOrgId}/events/${testEventId}`)
         .set('Authorization', `Bearer ${organizerToken}`)
         .send({ description: null });
 
       expect(res.status).toBe(200);
-      // sanitizeContentHtml(null) returns '' (see utils/sanitizeHtml.js)
-      expect(res.body.description).toBe('');
+      expect(res.body.description).toBeNull();
     });
 
     it('sets description to empty string when updating to empty string', async () => {
