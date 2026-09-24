@@ -51,3 +51,18 @@ const SEGMENT_BADGE_CLASSES: Record<CustomerSegment, string> = {
 export function segmentBadgeClass(segment: CustomerSegment): string {
   return SEGMENT_BADGE_CLASSES[segment];
 }
+
+/** Timeline line for an RSVP; the party size is shown only when the guest brings others. */
+export function rsvpTimelineText(eventName: string | null | undefined, partySize?: number | null): string {
+  const party = partySize && partySize > 1 ? ` (party of ${partySize})` : '';
+  return `RSVP'd to ${eventName || 'an event'}${party}`;
+}
+
+/** Account card note for a contact without an account: only a buyer "completed a purchase". */
+export function guestAccountNote({ transactions, rsvps }: { transactions: number; rsvps: number }): string {
+  if (transactions > 0) {
+    return 'This customer does not have an account. They completed their purchase as a guest.';
+  }
+  if (rsvps > 0) return 'This contact does not have an account. They RSVP’d as a guest.';
+  return 'This contact does not have an account.';
+}
