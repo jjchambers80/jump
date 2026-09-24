@@ -1,0 +1,62 @@
+# Playwright e2e (frontend/e2e + frontend/tests/integration). Every spec mocks
+# the backend with page.route and signs staff in with an HS256 cookie
+# (e2e/helpers/session.ts), so no API server, database or network is needed.
+#
+# Kept out of ci.yml and NOT a required check yet: CI's header keeps the
+# required set small and deterministic for the Kanban PR contract. Promote it
+# to required once it has stayed green on main for a week.
+
+name: E2E
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: e2e-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: 22
+
+jobs:
+  playwright:
+    name: playwright (${{ matrix.shard }}/3)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    env:
+      # Test-only values: the session helper signs cookies with this secret and
+      # the Next edge middleware verifies them with the same one.
+      AUTH_SECRET: e2e-ci-secret-not-used-anywhere-else-000000
+      NEXT_PUBLIC_API_URL: http://localhost:3002
+      DATABASE_URL: postgresql://unused:unused@localhost:5432/unused
+      PLAYWRIGHT_PORT: 3001
+      E2E_QUARANTINE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run db:generate
+      - name: Install Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Playwright (chromium)
+        working-directory: frontend
+        run: npx playwright test --project=chromium --shard=${{ matrix.shard }}/3 --workers=2 --reporter=line
+      - name: Upload report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.shard }}
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+          retention-days: 7
