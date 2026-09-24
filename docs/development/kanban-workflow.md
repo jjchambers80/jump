@@ -50,7 +50,7 @@ The worker must report changed files, tests and results, migrations, risks, comm
 
 ### Completion contracts
 
-Cards created with a PR contract (`--completion-contract <pr-url>` or the repo `jjchambers80/jump`) only close when the PR's **required** GitHub checks are green. `.github/workflows/ci.yml` (`backend tests`, `frontend typecheck + unit`) is required on `main` for exactly this reason — before 2026-09-21 the repository had no required checks, so every PR contract failed with `PR acceptance missing` and the cards cycled through Blocked (t_dfd5e571, t_c2dc0a85). Review cards for already-merged PRs, decisions and docs-only work take `--completion-contract local-only`.
+Cards created with a PR contract (`--completion-contract <pr-url>` or the repo `jjchambers80/jump`) only close when the PR's **required** GitHub checks are green. `.github/workflows/ci.yml` (`backend tests`, `frontend typecheck + unit`, `migration safety`) and `.github/workflows/e2e.yml` (`playwright (1/3)`–`(3/3)`, required since 2026-09-24) are required on `main` for exactly this reason — before 2026-09-21 the repository had no required checks, so every PR contract failed with `PR acceptance missing` and the cards cycled through Blocked (t_dfd5e571, t_c2dc0a85). Review cards for already-merged PRs, decisions and docs-only work take `--completion-contract local-only`.
 
 ### Review
 
