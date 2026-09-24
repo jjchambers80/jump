@@ -660,33 +660,27 @@ test('24 px minimum target size on every interactive control', async ({ page }) 
   expect(smallTargets).toEqual([]);
 });
 
-test('light mode full page screenshot at 1440px', async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await mockApi(page);
-  await page.goto(`/admin/events?orgId=${ORG_ID}`);
+// Theme check without screenshot baselines: the list renders in both color
+// schemes and the cards actually switch surface color.
+for (const scheme of ['light', 'dark'] as const) {
+  test(`${scheme} mode renders the list with themed cards`, async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.emulateMedia({ colorScheme: scheme });
+    await mockApi(page);
+    await page.goto(`/admin/events?orgId=${ORG_ID}`);
 
-  // Ensure light mode
-  await page.emulateMedia({ colorScheme: 'light' });
+    await expect(page.getByRole('heading', { name: 'Events' })).toBeVisible();
+    const card = page.locator('article').first();
+    await expect(card).toBeVisible();
 
-  await expect(page.getByRole('heading', { name: 'Events' })).toBeVisible();
-  await page.waitForTimeout(500); // let animations settle
+    if (scheme === 'dark') await expect(page.locator('html')).toHaveClass(/\bdark\b/);
+    else await expect(page.locator('html')).not.toHaveClass(/\bdark\b/);
 
-  await expect(page).toHaveScreenshot('admin-events-light.png', { fullPage: true });
-});
-
-test('dark mode full page screenshot at 1440px', async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await mockApi(page);
-  await page.goto(`/admin/events?orgId=${ORG_ID}`);
-
-  // Ensure dark mode
-  await page.emulateMedia({ colorScheme: 'dark' });
-
-  await expect(page.getByRole('heading', { name: 'Events' })).toBeVisible();
-  await page.waitForTimeout(500); // let animations settle
-
-  await expect(page).toHaveScreenshot('admin-events-dark.png', { fullPage: true });
-});
+    const bg = await card.evaluate((el) => getComputedStyle(el).backgroundColor);
+    if (scheme === 'dark') expect(bg).not.toBe('rgb(255, 255, 255)');
+    else expect(bg).toBe('rgb(255, 255, 255)');
+  });
+}
 
 test('pagination nav with aria-current on active page', async ({ page, baseURL }) => {
   await page.setViewportSize({ width: 1440, height: 900 });

@@ -27,7 +27,6 @@ coverage/
 test-results/
 playwright-report/
 playwright/.cache/
-*.spec.ts-snapshots/
 
 # IDE
 .vscode/
