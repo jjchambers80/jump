@@ -52,6 +52,54 @@ function convertToHtml(text) {
 }
 
 /**
+ * Pure decision logic for the backfill -- testable without a database.
+ *
+ * Accepts an array of objects with at least { id, name, description }
+ * and returns an array of decision records.
+ *
+ * @param {Array<{id: string|number, name: string, description: string|null|undefined}>} events
+ * @returns {Array<{id: string|number, name: string, action: 'CONVERT'|'SKIP_HTML'|'SKIP_EMPTY'|'SKIP_NOCHANGE'|'SKIP_ERROR', from?: string, to?: string, reason: string}>}
+ */
+export function planEventBackfill(events) {
+  return events.map((event) => {
+    const { id, name, description } = event;
+
+    // Skip null / empty descriptions
+    if (!description || description.trim() === '') {
+      return { id, name, action: 'SKIP_EMPTY', reason: 'Description is null or empty' };
+    }
+
+    // Skip descriptions that already contain HTML tags
+    if (isHtml(description)) {
+      return { id, name, action: 'SKIP_HTML', reason: 'Already contains HTML tags' };
+    }
+
+    // Convert plain text to HTML
+    try {
+      const html = convertToHtml(description);
+
+      // If the conversion didn't change anything (single word with no newlines
+      // should always change since plainToHtml wraps in <p> when there's content,
+      // but guard against edge cases)
+      if (html === description) {
+        return { id, name, action: 'SKIP_NOCHANGE', reason: 'Conversion produced identical output' };
+      }
+
+      return {
+        id,
+        name,
+        action: 'CONVERT',
+        from: description,
+        to: html,
+        reason: `${description.length} chars \u2192 ${html.length} chars`,
+      };
+    } catch (err) {
+      return { id, name, action: 'SKIP_ERROR', reason: err.message };
+    }
+  });
+}
+
+/**
  * Run the backfill. Set DRY_RUN=true (default) to only log intended changes.
  *
  * @param {object} [opts]
@@ -61,7 +109,7 @@ function convertToHtml(text) {
  */
 export async function run({ dryRun = process.env.DRY_RUN !== 'false', log = console.log } = {}) {
   const start = Date.now();
-  log(`[025] Backfill event descriptions — ${dryRun ? 'DRY RUN (no writes)' : 'LIVE'}`);
+  log(`[025] Backfill event descriptions \u2014 ${dryRun ? 'DRY RUN (no writes)' : 'LIVE'}`);
   log('');
 
   const events = await prisma.event.findMany({
@@ -72,6 +120,8 @@ export async function run({ dryRun = process.env.DRY_RUN !== 'false', log = cons
   log(`[025] Found ${events.length} event(s)`);
   log('');
 
+  const plan = planEventBackfill(events);
+
   let checked = 0;
   let wouldConvert = 0;
   let converted = 0;
@@ -81,66 +131,38 @@ export async function run({ dryRun = process.env.DRY_RUN !== 'false', log = cons
 
   const total = events.length;
   const batchSize = 50;
+  const convertDecisions = plan.filter((d) => d.action === 'CONVERT');
 
-  for (let i = 0; i < total; i += batchSize) {
-    const batch = events.slice(i, i + batchSize);
+  for (let i = 0; i < convertDecisions.length; i += batchSize) {
+    const batch = convertDecisions.slice(i, i + batchSize);
     const batchOps = [];
 
-    for (const event of batch) {
+    for (const decision of batch) {
       checked++;
 
-      // Progress indicator (compact: every 5th event if > 20 total, no per-event when small)
-      if (total > 20 && checked % 5 === 0 && checked <= total) {
-        process.stderr.write(`\r[025] Progress: ${checked}/${total}`);
+      // Progress indicator (compact: every 5th if > 20 total)
+      if (total > 20 && checked % 5 === 0) {
+        process.stderr.write(`\r[025] Progress: ${checked}/${convertDecisions.length}`);
       }
 
-      const { id, name, description } = event;
+      wouldConvert++;
 
-      // Skip null / empty descriptions
-      if (!description || description.trim() === '') {
-        skippedEmpty++;
-        continue;
+      if (total > 20) {
+        log(`  [${checked}/${total}] "${decision.name}" \u2014 ${decision.from.length} chars \u2192 ${decision.to.length} chars`);
+      } else {
+        log(`  [${checked}] "${decision.name}":`);
+        log(`       from: ${JSON.stringify(decision.from.slice(0, 80))}${decision.from.length > 80 ? '\u2026' : ''}`);
+        log(`         to: ${JSON.stringify(decision.to.slice(0, 120))}${decision.to.length > 120 ? '\u2026' : ''}`);
+        log('');
       }
 
-      // Skip descriptions that already contain HTML tags
-      if (isHtml(description)) {
-        skippedHtml++;
-        continue;
-      }
-
-      // Convert plain text to HTML
-      try {
-        const html = convertToHtml(description);
-
-        // If the conversion didn't change anything (e.g. a single word with no
-        // newlines becomes <p>word</p> — it always changes when there's content)
-        if (html === description) {
-          skippedEmpty++;
-          continue;
-        }
-
-        wouldConvert++;
-
-        if (total > 20) {
-          log(`  [${checked}/${total}] "${name}" — ${description.length} chars → ${html.length} chars`);
-        } else {
-          log(`  [${checked}] "${name}":`);
-          log(`       from: ${JSON.stringify(description.slice(0, 80))}${description.length > 80 ? '…' : ''}`);
-          log(`         to: ${JSON.stringify(html.slice(0, 120))}${html.length > 120 ? '…' : ''}`);
-          log('');
-        }
-
-        if (!dryRun) {
-          batchOps.push(
-            prisma.event.update({
-              where: { id },
-              data: { description: html },
-            })
-          );
-        }
-      } catch (err) {
-        errors++;
-        log(`  [${checked}] ERROR "${name}": ${err.message}`);
+      if (!dryRun) {
+        batchOps.push(
+          prisma.event.update({
+            where: { id: decision.id },
+            data: { description: decision.to },
+          })
+        );
       }
     }
 
@@ -151,6 +173,13 @@ export async function run({ dryRun = process.env.DRY_RUN !== 'false', log = cons
   }
 
   if (total > 20) process.stderr.write('\n');
+
+  // Tally SKIP counts from the full plan
+  for (const d of plan) {
+    if (d.action === 'SKIP_HTML') skippedHtml++;
+    if (d.action === 'SKIP_EMPTY' || d.action === 'SKIP_NOCHANGE') skippedEmpty++;
+    if (d.action === 'SKIP_ERROR') errors++;
+  }
 
   const elapsed = ((Date.now() - start) / 1000).toFixed(1);
   log('');
@@ -164,7 +193,7 @@ export async function run({ dryRun = process.env.DRY_RUN !== 'false', log = cons
 
   if (dryRun && wouldConvert > 0) {
     log('');
-    log(`  → Run with DRY_RUN=false to write ${wouldConvert} change(s).`);
+    log(`  \u2192 Run with DRY_RUN=false to write ${wouldConvert} change(s).`);
   }
 
   return { checked, wouldConvert, converted, skippedHtml, skippedEmpty, errors };
