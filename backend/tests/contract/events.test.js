@@ -967,7 +967,7 @@ describe('Events API Contract Tests', () => {
 
       expect(res.headers['content-type']).toMatch(/text\/csv/);
       expect(res.headers['content-disposition']).toMatch(/attachment;/);
-      expect(res.headers['content-disposition']).toMatch(/events-csv-org-.*\.csv/);
+      expect(res.headers['content-disposition']).toMatch(/events-[a-z0-9-]+-\d{4}-\d{2}-\d{2}\.csv/);
 
       const lines = res.text.split('\r\n').filter(Boolean);
       // Header + 3 events
