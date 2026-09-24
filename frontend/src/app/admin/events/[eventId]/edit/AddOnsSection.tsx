@@ -266,8 +266,8 @@ export default function AddOnsSection({ orgId, eventId, priceTiers, taxRate, tax
               </div>
               {canEdit && (
                 <div className="flex items-center gap-1 shrink-0">
-                  <button type="button" onClick={() => move(index, -1)} disabled={index === 0 || busyId !== null} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 disabled:opacity-30" aria-label={`Move ${a.name} up`}>↑</button>
-                  <button type="button" onClick={() => move(index, 1)} disabled={index === addOns!.length - 1 || busyId !== null} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 disabled:opacity-30" aria-label={`Move ${a.name} down`}>↓</button>
+                  <button type="button" onClick={() => move(index, -1)} disabled={index === 0 || busyId !== null} className="inline-flex h-6 w-6 items-center justify-center rounded text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200 disabled:opacity-30" aria-label={`Move ${a.name} up`}>↑</button>
+                  <button type="button" onClick={() => move(index, 1)} disabled={index === addOns!.length - 1 || busyId !== null} className="inline-flex h-6 w-6 items-center justify-center rounded text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200 disabled:opacity-30" aria-label={`Move ${a.name} down`}>↓</button>
                   <button type="button" onClick={() => openEdit(a)} className="px-2 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded">Edit</button>
                   <button type="button" onClick={() => setActive(a, !a.isActive)} disabled={busyId === a.id} className="px-2 py-1 text-xs font-medium text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded">
                     {a.isActive ? 'Deactivate' : 'Activate'}

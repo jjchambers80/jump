@@ -118,3 +118,15 @@ test('admission mode is a keyboard radio group', async ({ page }) => {
   await expect(page.getByLabel('Guests per RSVP')).toBeVisible();
   await expect(page.getByLabel('Capacity *')).toHaveCount(0);
 });
+
+test('tier reorder buttons meet the 24px target size (WCAG 2.5.8)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockApi(page);
+  await page.goto(`/admin/events/${EVENT_ID}/edit?orgId=${ORG_ID}`);
+
+  for (const name of ['Move General Admission up', 'Move General Admission down']) {
+    const box = (await page.getByRole('button', { name }).boundingBox())!;
+    expect(box.width).toBeGreaterThanOrEqual(24);
+    expect(box.height).toBeGreaterThanOrEqual(24);
+  }
+});

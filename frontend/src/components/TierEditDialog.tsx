@@ -53,12 +53,12 @@ export function TierCard({
       onClick={onEdit}
     >
       {/* Reorder buttons */}
-      <div className="flex flex-col gap-0.5" onClick={(e) => e.stopPropagation()}>
+      <div className="flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
         <button
           type="button"
           onClick={() => onMove('up')}
           disabled={index === 0}
-          className="p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-slate-300 disabled:opacity-30 text-xs"
+          className="inline-flex h-6 w-6 items-center justify-center rounded text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200 disabled:opacity-30"
           title="Move up"
           aria-label={`Move ${tier.name || 'untitled tier'} up`}
         >
@@ -68,7 +68,7 @@ export function TierCard({
           type="button"
           onClick={() => onMove('down')}
           disabled={index === total - 1}
-          className="p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-slate-300 disabled:opacity-30 text-xs"
+          className="inline-flex h-6 w-6 items-center justify-center rounded text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200 disabled:opacity-30"
           title="Move down"
           aria-label={`Move ${tier.name || 'untitled tier'} down`}
         >
