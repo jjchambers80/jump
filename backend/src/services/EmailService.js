@@ -525,7 +525,7 @@ ${manageTicketsHtml}
                   <div style="text-align: center; margin: 24px 0;">
                     <a href="${cancelUrl}" style="display: inline-block; background-color: #dc2626; color: #ffffff; font-size: 15px; font-weight: bold; padding: 12px 28px; border-radius: 8px; text-decoration: none;">Cancel RSVP</a>
                   </div>
-                  <p style="color: #666; font-size: 12px; margin-top: 16px;">You received this because you RSVP'd to this event. If you no longer wish to receive marketing emails from ${escapeHtml(orgName)}, you can unsubscribe at any time.</p>
+                  <p style="color: #666; font-size: 12px; margin-top: 16px;">You received this reminder because you RSVP'd to this event. Cancelling your RSVP stops further emails about it.</p>
                   <p style="color: #999; font-size: 12px; margin-top: 24px;">${escapeHtml(orgName)}</p>
                 </div>
               </body>
@@ -542,7 +542,7 @@ ${manageTicketsHtml}
             '',
             `You can cancel your RSVP at any time: ${cancelUrl}`,
             '',
-            `You received this because you RSVP'd to this event. If you no longer wish to receive marketing emails from ${orgName}, you can unsubscribe at any time.`,
+            `You received this reminder because you RSVP'd to this event. Cancelling your RSVP stops further emails about it.`,
             '',
             orgName,
           ].join('\n'),
