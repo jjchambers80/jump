@@ -10,7 +10,7 @@ import Link from 'next/link';
 import { ExternalLink } from 'lucide-react';
 import api from '@/services/api';
 import { resolveAssetUrl } from '@/lib/assets';
-import ImageUploader from '@/components/ImageUploader';
+import { EventMediaCard } from '@/components/events/EventMediaCard';
 import RichTextEditorField from '@/components/editor/RichTextEditorField';
 import { TierCard, TierEditDialog, type TierFormData } from '@/components/TierEditDialog';
 import AddOnsSection from './AddOnsSection';
@@ -667,18 +667,6 @@ function EditEventContent() {
             <FormCard id="event-details" title="Event Details">
               <div className="space-y-4">
                 <div>
-                  <span id="event-logo-label" className={labelClass}>Event Logo</span>
-                  <div role="group" aria-labelledby="event-logo-label">
-                    <ImageUploader
-                      currentPreview={logoSrc}
-                      onFileSelect={handleLogoUpload}
-                      onRemove={handleLogoRemove}
-                      uploading={logoUploading}
-                    />
-                  </div>
-                </div>
-
-                <div>
                   <label htmlFor="event-name" className={labelClass}>Name *</label>
                   <input
                     id="event-name"
@@ -713,6 +701,14 @@ function EditEventContent() {
                 </div>
               </div>
             </FormCard>
+
+            <EventMediaCard
+              preview={logoSrc}
+              eventName={name}
+              uploading={logoUploading}
+              onFileSelect={handleLogoUpload}
+              onRemove={handleLogoRemove}
+            />
 
             {/* Price Tiers — only for ticketed events */}
             {admissionMode === 'TICKETED' && (

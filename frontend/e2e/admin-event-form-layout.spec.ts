@@ -12,7 +12,7 @@ const EVENT_ID = 'evt-layout';
 const json = (body: unknown, status = 200) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
 const venue = { id: 'venue-1', name: 'Test Hall', address: '1 Main St', timezone: 'America/New_York' };
 
-async function mockApi(page: Page) {
+async function mockApi(page: Page, eventOverrides: Record<string, unknown> = {}) {
   const future = new Date();
   future.setFullYear(future.getFullYear() + 1);
   const event = {
@@ -30,6 +30,7 @@ async function mockApi(page: Page) {
     priceTiers: [
       { id: 'tier-ga', name: 'General Admission', price: 25, description: null, quantityTotal: 150, quantitySold: 0, quantityReserved: 0, displayOrder: 0, minPerOrder: null, maxPerOrder: null, isActive: true, isRefundable: true, saleStartDate: null, saleEndDate: null, visibility: 'PUBLIC' },
     ],
+    ...eventOverrides,
   };
   const posts: string[] = [];
   await page.route(`${API}/organizations`, (route) => route.fulfill(json([{ id: ORG_ID, name: 'Layout Org', status: 'ACTIVE' }])));
@@ -129,4 +130,32 @@ test('tier reorder buttons meet the 24px target size (WCAG 2.5.8)', async ({ pag
     expect(box.width).toBeGreaterThanOrEqual(24);
     expect(box.height).toBeGreaterThanOrEqual(24);
   }
+});
+
+test('media card sits under the description and holds the event image', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockApi(page);
+  await page.goto(`/admin/events/${EVENT_ID}/edit?orgId=${ORG_ID}`);
+
+  const details = page.getByRole('region', { name: 'Event Details' });
+  const media = page.getByRole('region', { name: 'Media' });
+  await expect(media.getByRole('button', { name: 'Upload new' })).toBeVisible();
+  const d = (await details.boundingBox())!;
+  const m = (await media.boundingBox())!;
+  expect(m.y).toBeGreaterThanOrEqual(d.y + d.height);
+  await expect(details.getByText('Event Logo')).toHaveCount(0);
+});
+
+test('media card: an uploaded image offers replace and remove', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkaPhfDwAEhgGAfq3m2wAAAABJRU5ErkJggg==', 'base64');
+  await page.route('https://images.test/logo.png', (route) => route.fulfill({ status: 200, contentType: 'image/png', body: png }));
+  await mockApi(page, { logoUrl: 'https://images.test/logo.png' });
+  await page.goto(`/admin/events/${EVENT_ID}/edit?orgId=${ORG_ID}`);
+
+  const media = page.getByRole('region', { name: 'Media' });
+  await expect(media.getByRole('img', { name: 'Layout Test Event event image' })).toBeVisible();
+  await expect(media.getByRole('button', { name: 'Replace' })).toBeVisible();
+  await expect(media.getByRole('button', { name: 'Remove image' })).toBeAttached();
+  await expect(media.getByRole('button', { name: 'Upload new' })).toHaveCount(0);
 });
