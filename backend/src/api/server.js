@@ -51,6 +51,7 @@ import applicationPaymentService from '../services/ApplicationPaymentService.js'
 import applicationDigestService from '../services/ApplicationDigestService.js';
 import orderService from '../services/OrderService.js';
 import boothService from '../services/BoothService.js';
+import rsvpReminderService from '../services/RsvpReminderService.js';
 import { BOOTH_SWEEP_INTERVAL_MS } from '../config/applications.js';
 
 const app = express();
@@ -251,6 +252,12 @@ if (process.env.NODE_ENV !== 'test') {
   const SESSION_SWEEP_MS = Number(process.env.SESSION_SWEEP_INTERVAL_MS) || 24 * 60 * 60 * 1000;
   setTimeout(() => sessionService.sweep().catch(() => {}), 90 * 1000).unref();
   setInterval(() => sessionService.sweep().catch(() => {}), SESSION_SWEEP_MS).unref();
+
+  // RSVP reminder sweep (spec 034 §9.2): send reminder emails ~24 h before
+  // an RSVP event starts. Idempotent per RSVP via remindedAt stamp.
+  const RSVP_REMINDER_MS = Number(process.env.RSVP_REMINDER_SWEEP_INTERVAL_MS) || 60 * 60 * 1000;
+  setTimeout(() => rsvpReminderService.sendDue().catch(() => {}), 60 * 1000).unref();
+  setInterval(() => rsvpReminderService.sendDue().catch(() => {}), RSVP_REMINDER_MS).unref();
 }
 
 export default app;

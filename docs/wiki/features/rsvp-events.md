@@ -8,6 +8,18 @@ An RSVP event is a free event that collects headcount and marketing opt-in witho
 
 The mode is set by `Event.admissionMode` (enum: `TICKETED` or `RSVP`). Every surface branches on the mode, never on `priceTiers.length === 0`.
 
+## Reminder emails (§9.2)
+
+A background sweep (~hourly) sends a reminder email to GOING RSVPs when the event is approximately 24 hours away.
+
+- **Sweep service**: `backend/src/services/RsvpReminderService.js`
+- **Timer**: registered in `server.js`, first tick 60 s after boot, then every `RSVP_REMINDER_SWEEP_INTERVAL_MS` (default 1 h)
+- **Idempotent**: stamps `EventRsvp.remindedAt` atomically with `updateMany` before sending; a concurrent replica claims zero rows
+- **Window**: events whose UTC date is 20–26 hours ahead of the sweep tick are eligible (survives ~4 h sweep delays)
+- **Email**: branded shell with org logo, event name, date/time in venue timezone (spec 033), party size, Cancel RSVP button
+- **Configuration**: `RSVP_REMINDER_SWEEP_INTERVAL_MS` env var
+- **Unit tests**: `backend/tests/unit/rsvpReminder.test.js` (8 tests, all mock prisma)
+
 ## Data model
 
 ```prisma
@@ -28,6 +40,7 @@ model EventRsvp {
   partySize   Int        @default(1)
   status      RsvpStatus @default(GOING)
   cancelledAt DateTime?
+  remindedAt  DateTime?   // set by the reminder sweep
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
