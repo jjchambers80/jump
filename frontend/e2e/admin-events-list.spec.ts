@@ -377,6 +377,89 @@ test('cancelled event shows Duplicate as primary action', async ({ page }) => {
   await expect(cancelledCard.getByRole('link', { name: 'Edit' })).not.toBeVisible();
 });
 
+test('Edit is primary-styled on DRAFT and PUBLISHED cards', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockApi(page);
+  await page.goto(`/admin/events?orgId=${ORG_ID}`);
+
+  // DRAFT card — Edit link should be primary (indigo filled)
+  const draftCard = page.getByRole('article', { name: 'Comedy Night' });
+  const draftEdit = draftCard.getByRole('link', { name: 'Edit' });
+  await expect(draftEdit).toBeVisible();
+  const draftHref = await draftEdit.getAttribute('href');
+  expect(draftHref).toContain('/edit');
+  // Primary style: should NOT have border class
+  const draftClasses = await draftEdit.getAttribute('class');
+  expect(draftClasses).toContain('bg-indigo-600');
+
+  // PUBLISHED card — Edit link should also be primary
+  const pubCard = page.getByRole('article', { name: 'Summer Music Festival' });
+  const pubEdit = pubCard.getByRole('link', { name: 'Edit' });
+  await expect(pubEdit).toBeVisible();
+  const pubClasses = await pubEdit.getAttribute('class');
+  expect(pubClasses).toContain('bg-indigo-600');
+
+  // CANCELLED card — no Edit link
+  const cancelledCard = page.getByRole('article', { name: 'Cancelled Event' });
+  await expect(cancelledCard.getByRole('link', { name: 'Edit' })).not.toBeVisible();
+});
+
+test('RSVP card has no tier chip', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockApi(page);
+  await page.goto(`/admin/events?orgId=${ORG_ID}`);
+
+  // RSVP card (evt-3, Art Workshop RSVP) should NOT show a tier count chip
+  const rsvpCard = page.getByRole('article', { name: 'Art Workshop RSVP' });
+  await expect(rsvpCard).toBeVisible();
+  await expect(rsvpCard.getByText(/tier/i)).not.toBeVisible();
+
+  // Ticketed card should still show the tier chip
+  const ticketedCard = page.getByRole('article', { name: 'Summer Music Festival' });
+  await expect(ticketedCard.getByText(/2 tiers/i)).toBeVisible();
+});
+
+test('Export CSV passes current search query in params', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockApi(page);
+  await page.goto(`/admin/events?orgId=${ORG_ID}`);
+
+  // Type a search term
+  await page.getByRole('searchbox', { name: 'Search events' }).click();
+  await page.keyboard.type('Retro');
+  await expect(page).toHaveURL(/q=Retro/, { timeout: 3000 });
+
+  // Wait for the CSV export request using waitForRequest
+  const csvRequestPromise = page.waitForRequest(
+    (req) => req.url().includes('/events/export.csv'),
+    { timeout: 5000 }
+  );
+  
+  // Click Export CSV
+  await page.getByRole('button', { name: 'Export events list as CSV' }).click();
+
+  // Wait for the request
+  let exportUrl = '';
+  try {
+    const csvReq = await csvRequestPromise;
+    exportUrl = csvReq.url();
+  } catch {
+    // Request didn't appear via click — try JS dispatch
+    await page.evaluate(() => {
+      const btn = document.querySelector('button[aria-label="Export events list as CSV"]');
+      if (btn) (btn as HTMLButtonElement).click();
+    });
+    const csvReq = await page.waitForRequest(
+      (req) => req.url().includes('/events/export.csv'),
+      { timeout: 5000 }
+    );
+    exportUrl = csvReq.url();
+  }
+
+  // Assert the export URL includes q=Retro
+  expect(exportUrl).toContain('q=Retro');
+});
+
 test('draft event shows Publish and Edit buttons', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockApi(page);
@@ -577,43 +660,27 @@ test('24 px minimum target size on every interactive control', async ({ page }) 
   expect(smallTargets).toEqual([]);
 });
 
-test('light mode full page screenshot at 1440px', async ({ page }, testInfo) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await mockApi(page);
-  await page.goto(`/admin/events?orgId=${ORG_ID}`);
+// Theme check without screenshot baselines: the list renders in both color
+// schemes and the cards actually switch surface color.
+for (const scheme of ['light', 'dark'] as const) {
+  test(`${scheme} mode renders the list with themed cards`, async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.emulateMedia({ colorScheme: scheme });
+    await mockApi(page);
+    await page.goto(`/admin/events?orgId=${ORG_ID}`);
 
-  // Ensure light mode
-  await page.emulateMedia({ colorScheme: 'light' });
+    await expect(page.getByRole('heading', { name: 'Events' })).toBeVisible();
+    const card = page.locator('article').first();
+    await expect(card).toBeVisible();
 
-  await expect(page.getByRole('heading', { name: 'Events' })).toBeVisible();
-  await page.waitForTimeout(500); // let animations settle
+    if (scheme === 'dark') await expect(page.locator('html')).toHaveClass(/\bdark\b/);
+    else await expect(page.locator('html')).not.toHaveClass(/\bdark\b/);
 
-  // No committed baselines (they are per-platform), so toHaveScreenshot only ever
-  // wrote one and passed on retry. Attach the capture to the report for review.
-  await testInfo.attach('admin-events-light.png', {
-    body: await page.screenshot({ fullPage: true }),
-    contentType: 'image/png',
+    const bg = await card.evaluate((el) => getComputedStyle(el).backgroundColor);
+    if (scheme === 'dark') expect(bg).not.toBe('rgb(255, 255, 255)');
+    else expect(bg).toBe('rgb(255, 255, 255)');
   });
-});
-
-test('dark mode full page screenshot at 1440px', async ({ page }, testInfo) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await mockApi(page);
-  await page.goto(`/admin/events?orgId=${ORG_ID}`);
-
-  // Ensure dark mode
-  await page.emulateMedia({ colorScheme: 'dark' });
-
-  await expect(page.getByRole('heading', { name: 'Events' })).toBeVisible();
-  await page.waitForTimeout(500); // let animations settle
-
-  // No committed baselines (they are per-platform), so toHaveScreenshot only ever
-  // wrote one and passed on retry. Attach the capture to the report for review.
-  await testInfo.attach('admin-events-dark.png', {
-    body: await page.screenshot({ fullPage: true }),
-    contentType: 'image/png',
-  });
-});
+}
 
 test('pagination nav with aria-current on active page', async ({ page, baseURL }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -677,18 +744,17 @@ test('pagination nav with aria-current on active page', async ({ page, baseURL }
   await page.goto(`/admin/events?orgId=${ORG_ID}`);
 
   // Wait for events to render and pagination to appear
-  // Scope to the pagination nav: event cards also contain buttons named "1"/"2".
-  const pagination = page.getByRole('navigation', { name: 'Pagination' });
-  await expect(pagination).toBeVisible();
+  const pager = page.getByRole('navigation', { name: 'Pagination' });
+  await expect(pager).toBeVisible();
 
   // The first page button should have aria-current page
-  await expect(pagination.getByRole('button', { name: '1', exact: true })).toHaveAttribute('aria-current', 'page');
-  await expect(pagination.getByRole('button', { name: '2', exact: true })).not.toHaveAttribute('aria-current');
+  await expect(pager.getByRole('button', { name: '1', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(pager.getByRole('button', { name: '2', exact: true })).not.toHaveAttribute('aria-current');
 
   // Click page 2
-  await pagination.getByRole('button', { name: '2', exact: true }).click();
+  await pager.getByRole('button', { name: '2', exact: true }).click();
 
   // Now page 2 should have aria-current
-  await expect(pagination.getByRole('button', { name: '2', exact: true })).toHaveAttribute('aria-current', 'page');
-  await expect(pagination.getByRole('button', { name: '1', exact: true })).not.toHaveAttribute('aria-current');
+  await expect(pager.getByRole('button', { name: '2', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(pager.getByRole('button', { name: '1', exact: true })).not.toHaveAttribute('aria-current');
 });

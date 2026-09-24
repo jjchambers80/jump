@@ -229,6 +229,9 @@ function EventsListContent() {
         total={total}
         filterParams={new URLSearchParams({
           ...(statusFilter ? { status: statusFilter } : {}),
+          ...(searchQ ? { q: searchQ } : {}),
+          ...(category ? { category } : {}),
+          ...(sort !== DEFAULT_SORT ? { sort } : {}),
         }).toString()}
       />
 

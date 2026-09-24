@@ -14,7 +14,8 @@ import { PAID_ORDER_STATUSES } from './paidStatuses.js';
 import { rethrowSlugConflict, resolveUniqueSlug } from '../utils/slug.js';
 import { findByPublicIdentifier } from '../utils/publicIdentifier.js';
 import { sanitizeContentHtml } from '../utils/sanitizeHtml.js';
-import { formatEventDateTime } from '../utils/eventTime.js';
+import { zoneOffsetMinutes } from '../utils/eventTime.js';
+import { storefrontFor } from '../utils/storefrontUrl.js';
 import rsvpService, { remainingFor } from './RsvpService.js';
 import emailService from './EmailService.js';
 
@@ -1087,22 +1088,46 @@ class EventService {
     const header = [
       'name', 'status', 'admissionMode', 'date', 'venue', 'category',
       'tiers', 'sold', 'available', 'capacity', 'rsvpsGoing', 'publicUrl',
+      'timezone',
     ];
+
+    // Resolve storefront base for absolute publicUrl
+    const { base: storefrontBase } = await storefrontFor(orgId);
 
     const lines = events.map((e) => {
       const zone = e.venue?.timezone || null;
-      const dateStr = formatEventDateTime(e.date, zone);
       const tierNames = e.priceTiers.map((t) => t.name).join('; ');
       const totalSold = e.priceTiers.reduce((s, t) => s + t.quantitySold, 0);
       const totalReserved = e.priceTiers.reduce((s, t) => s + t.quantityReserved, 0);
       const totalAvailable = e.priceTiers.reduce((s, t) => s + (t.quantityTotal - t.quantitySold - t.quantityReserved), 0);
       const rsvpGoing = e.admissionMode === 'RSVP' ? (rsvpGoingMap[e.id] || 0) : '';
 
+      // ISO 8601 date with venue offset — e.g. "2027-08-15T15:00:00-04:00"
+      const eventDate = new Date(e.date);
+      const offsetMin = zone ? zoneOffsetMinutes(eventDate, zone) : 0;
+      const offsetSign = offsetMin >= 0 ? '+' : '-';
+      const absOffsetMin = Math.abs(offsetMin);
+      const offsetHours = String(Math.floor(absOffsetMin / 60)).padStart(2, '0');
+      const offsetMins = String(absOffsetMin % 60).padStart(2, '0');
+      // Format the date parts in the venue's zone (en-CA gives yyyy-mm-dd naturally)
+      const isoParts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: zone || 'UTC',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      }).formatToParts(eventDate);
+      const isoAt = (type) => String(Number(isoParts.find((p) => p.type === type)?.value || 0)).padStart(2, '0');
+      const formattedDate = `${isoAt('year')}-${isoAt('month')}-${isoAt('day')}T${isoAt('hour')}:${isoAt('minute')}:${isoAt('second')}${offsetSign}${offsetHours}:${offsetMins}`;
+
       return [
         e.name,
         e.status,
         e.admissionMode,
-        dateStr,
+        formattedDate,
         e.venue?.name || '',
         e.category || '',
         e.admissionMode === 'TICKETED' ? tierNames : '',
@@ -1110,7 +1135,8 @@ class EventService {
         e.admissionMode === 'TICKETED' ? totalAvailable : '',
         e.capacity,
         rsvpGoing,
-        `/events/${e.slug}`,
+        `${storefrontBase}/events/${e.slug}`,
+        zone || '',
       ];
     });
 

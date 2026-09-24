@@ -987,10 +987,29 @@ describe('Events API Contract Tests', () => {
       expect(header).toContain('venue');
       expect(header).toContain('category');
       expect(header).toContain('tiers');
+      expect(header).toContain('publicUrl');
+      expect(header).toContain('timezone');
 
       // Find the ticketed CSV Concert row
       const concertLine = lines.find((l) => l.startsWith('CSV Concert'));
       expect(concertLine).toBeDefined();
+      const concertCells = parseCsvLine(concertLine);
+      const publicUrlIdx = header.indexOf('publicUrl');
+      const timezoneIdx = header.indexOf('timezone');
+      const dateIdx = header.indexOf('date');
+
+      // publicUrl must be absolute
+      expect(concertCells[publicUrlIdx]).toMatch(/^https?:\/\//);
+      expect(concertCells[publicUrlIdx]).toContain('/events/');
+
+      // timezone column present and non-empty
+      expect(concertCells[timezoneIdx]).toBeTruthy();
+
+      // date column must be ISO 8601 with offset (e.g. 2027-08-15T15:00:00-04:00)
+      expect(concertCells[dateIdx]).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/);
+      // Parsable as valid date
+      expect(Number.isNaN(Date.parse(concertCells[dateIdx]))).toBe(false);
+
       expect(concertLine).toContain('PUBLISHED');
       expect(concertLine).toContain('TICKETED');
       expect(concertLine).toContain('CSV Venue');
@@ -1008,6 +1027,8 @@ describe('Events API Contract Tests', () => {
       const rsvpGoingIdx = header.indexOf('rsvpsGoing');
       expect(rsvpCells[tiersIdx]).toBe(''); // empty tiers column
       expect(rsvpCells[rsvpGoingIdx]).toBe('0'); // rsvps going at 0
+      // RSVP rows have timezone too
+      expect(rsvpCells[timezoneIdx]).toBeTruthy();
     });
 
     it('escapes formula-injection cells starting with =', async () => {
@@ -1056,6 +1077,22 @@ describe('Events API Contract Tests', () => {
       // No non-music events
       const techLine = dataLines.find((l) => l.includes('tech'));
       expect(techLine).toBeUndefined();
+    });
+
+    it('honors category filter + q + sort combined', async () => {
+      const res = await request(app)
+        .get(`/organizations/${csvOrgId}/events/export.csv?q=CSV+Concert&category=music&sort=name_asc`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .expect(200);
+
+      const lines = res.text.split('\r\n').filter(Boolean);
+      const dataLines = lines.slice(1);
+      // Only CSV Concert matches (q + category)
+      expect(dataLines.length).toBe(1);
+      expect(dataLines[0]).toContain('CSV Concert');
+      // Does not match the RSVP or formula events
+      const rsvpLine = dataLines.find((l) => l.includes('RSVP'));
+      expect(rsvpLine).toBeUndefined();
     });
 
     it('respects org isolation — another org is empty', async () => {
