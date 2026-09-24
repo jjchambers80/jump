@@ -2,9 +2,9 @@
 # the backend with page.route and signs staff in with an HS256 cookie
 # (e2e/helpers/session.ts), so no API server, database or network is needed.
 #
-# Kept out of ci.yml and NOT a required check yet: CI's header keeps the
-# required set small and deterministic for the Kanban PR contract. Promote it
-# to required once it has stayed green on main for a week.
+# The three shards are REQUIRED checks on main since 2026-09-24 (#164 merged
+# with a failing spec while they were optional). Keep them deterministic: a
+# flaky spec goes into e2e/quarantine.txt with a Kanban card, never a retry bump.
 
 name: E2E
 
