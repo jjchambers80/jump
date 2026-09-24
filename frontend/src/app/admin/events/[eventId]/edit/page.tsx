@@ -11,6 +11,7 @@ import { ExternalLink } from 'lucide-react';
 import api from '@/services/api';
 import { resolveAssetUrl } from '@/lib/assets';
 import ImageUploader from '@/components/ImageUploader';
+import RichTextEditorField from '@/components/editor/RichTextEditorField';
 import { TierCard, TierEditDialog, type TierFormData } from '@/components/TierEditDialog';
 import AddOnsSection from './AddOnsSection';
 import SlugField from '@/components/SlugField';
@@ -702,13 +703,12 @@ function EditEventContent() {
 
                 <div>
                   <label htmlFor="event-description" className={labelClass}>Description</label>
-                  <textarea
-                    id="event-description"
+                  <RichTextEditorField
                     value={description}
-                    onChange={(e) => setDescription(e.target.value)}
+                    onChange={setDescription}
+                    variant="full"
                     placeholder="Event description"
-                    rows={6}
-                    className={inputClass}
+                    aria-label="Event description"
                   />
                 </div>
               </div>

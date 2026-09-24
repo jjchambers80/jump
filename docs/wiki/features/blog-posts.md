@@ -57,7 +57,7 @@ Public routes: `/organizations/:orgId/blogs/:blogHandle` (listing, 12 per page) 
 
 ## Gotchas
 
-- **Sanitise on write is the trust boundary.** Every path that stores organizer HTML (`BlogPostService`, `PageService`) runs `sanitizeContentHtml`; the storefront renders through `ContentHtml` only. Run `node backend/scripts/sanitize-pages.js` once after deploying to clean pre-existing pages.
+- **Sanitise on write is the trust boundary.** Every path that stores organizer HTML (`BlogPostService`, `PageService`, `EventService`) runs `sanitizeContentHtml`; the storefront renders through `ContentHtml` only. Run `node backend/scripts/sanitize-pages.js` once after deploying to clean pre-existing pages.
 - **`sanitize-html` is pinned to 2.16.x**: 2.17 pulls an ESM-only `htmlparser2` that Jest (no transform) cannot load.
 - **Tiptap must not render on the server** — always mount through `RichTextEditorField` (`next/dynamic`, `ssr: false`) and keep `immediatelyRender: false`. StarterKit v3 already bundles Link and Underline; do not add those extensions again.
 - The editor emits `''` (not `<p></p>`) when empty; `RichTextEditor` pushes external value changes (Discard) with `setContent` and skips its own emissions.
