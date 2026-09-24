@@ -36,6 +36,7 @@ jobs:
       NEXT_PUBLIC_API_URL: http://localhost:3002
       DATABASE_URL: postgresql://unused:unused@localhost:5432/unused
       PLAYWRIGHT_PORT: 3001
+      E2E_QUARANTINE: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
