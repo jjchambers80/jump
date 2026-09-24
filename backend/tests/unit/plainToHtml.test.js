@@ -1,4 +1,4 @@
-// Plain-text-to-HTML conversion (spec 025 backfill helper).
+// Plain-text-to-HTML conversion (event description backfill helper).
 // Tests: empty string, single paragraph, multiple paragraphs,
 // single newline within paragraph, trailing newlines, mixed newlines,
 // HTML entities, null/undefined.

@@ -205,22 +205,17 @@ test.describe('Event description HTML rendering', () => {
     const dialogHeading = page.getByRole('heading', { name: 'Event Information' });
     await expect(dialogHeading).toBeVisible({ timeout: 5000 });
 
-    // Check that <p> and <strong> elements are rendered as actual DOM elements
-    // (not as literal text like "&lt;p&gt;")
-    const dialogContent = page.getByText('This event features');
-    await expect(dialogContent).toBeVisible();
+    // The page mounts both the mobile drawer and the desktop dialog and hides
+    // one with CSS, so scope every check to the visible copy.
+    const prose = page.locator('.jump-prose:visible');
+    await expect(prose).toHaveCount(1);
 
-    // Verify the <strong> element is an actual <strong> in the DOM
-    const strongElements = dialogContent.locator('strong');
-    await expect(strongElements.first()).toBeVisible();
-    await expect(strongElements.first()).toContainText('live music');
-
-    // Verify there are two <p> elements rendered
-    const paragraphs = page.locator('.jump-prose p');
-    await expect(paragraphs).toHaveCount(2);
-
-    // Verify the second paragraph text
-    await expect(page.getByText('Doors open at 7pm')).toBeVisible();
+    // <p> and <strong> render as DOM elements, not literal "&lt;p&gt;" text
+    await expect(prose.getByText('This event features')).toBeVisible();
+    await expect(prose.locator('strong').first()).toContainText('live music');
+    await expect(prose.locator('p')).toHaveCount(2);
+    await expect(prose.getByText('Doors open at 7pm')).toBeVisible();
+    await expect(prose).not.toContainText('<p>');
   });
 
   test('storefront event page shows description as HTML in mobile drawer', async ({ page }) => {
@@ -240,14 +235,11 @@ test.describe('Event description HTML rendering', () => {
     const dialogHeading = page.getByRole('heading', { name: 'Event Information' });
     await expect(dialogHeading).toBeVisible({ timeout: 5000 });
 
-    // Verify HTML renders as elements in mobile drawer
-    const strongElements = page.locator('strong');
-    await expect(strongElements.first()).toBeVisible();
-    await expect(strongElements.first()).toContainText('live music');
-
-    // Verify <p> elements render
-    const paragraphs = page.locator('.jump-prose p');
-    await expect(paragraphs).toHaveCount(2);
+    // Only the drawer is visible at this width; the desktop dialog is hidden
+    const prose = page.locator('.jump-prose:visible');
+    await expect(prose).toHaveCount(1);
+    await expect(prose.locator('strong').first()).toContainText('live music');
+    await expect(prose.locator('p')).toHaveCount(2);
   });
 });
 

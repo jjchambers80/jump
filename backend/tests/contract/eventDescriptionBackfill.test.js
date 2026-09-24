@@ -1,4 +1,4 @@
-// Contract tests for the Event description backfill script (spec 025).
+// Contract tests for the Event description backfill script.
 //
 // Tests the pure planEventBackfill() function against the database:
 // creates events, runs the planner on only those events, applies
@@ -37,7 +37,7 @@ async function runBackfill(eventIds, { dryRun = false } = {}) {
 
 const FUTURE = new Date('2030-09-15T19:00:00.000Z');
 
-describe('Event description backfill (spec 025)', () => {
+describe('Event description backfill', () => {
   let orgId;
   let venueId;
   const ids = {};

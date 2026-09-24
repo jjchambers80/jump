@@ -1,5 +1,5 @@
 /**
- * Spec 025 / WYSIWYG: backfill existing Event.description rows that are
+ * Event description WYSIWYG (PR #157): backfill existing Event.description rows that are
  * plain text (no HTML tags) by running them through plainToHtml() then
  * sanitizeContentHtml().
  *
@@ -7,8 +7,8 @@
  * run finds nothing to change and prints 0 converted.
  *
  * Usage:
- *   cd backend && npm run db:backfill:025                  # dry run (DRY_RUN=true)
- *   cd backend && DRY_RUN=false npm run db:backfill:025    # write changes
+ *   cd backend && npm run db:backfill:event-descriptions                  # dry run (DRY_RUN=true)
+ *   cd backend && DRY_RUN=false npm run db:backfill:event-descriptions    # write changes
  *   DRY_RUN=false node src/scripts/backfill-event-descriptions.js
  *
  * On production: set DRY_RUN=false and monitor the counts.
@@ -109,7 +109,7 @@ export function planEventBackfill(events) {
  */
 export async function run({ dryRun = process.env.DRY_RUN !== 'false', log = console.log } = {}) {
   const start = Date.now();
-  log(`[025] Backfill event descriptions \u2014 ${dryRun ? 'DRY RUN (no writes)' : 'LIVE'}`);
+  log(`[event-descriptions] Backfill event descriptions \u2014 ${dryRun ? 'DRY RUN (no writes)' : 'LIVE'}`);
   log('');
 
   const events = await prisma.event.findMany({
@@ -117,7 +117,7 @@ export async function run({ dryRun = process.env.DRY_RUN !== 'false', log = cons
     orderBy: { id: 'asc' },
   });
 
-  log(`[025] Found ${events.length} event(s)`);
+  log(`[event-descriptions] Found ${events.length} event(s)`);
   log('');
 
   const plan = planEventBackfill(events);
@@ -142,7 +142,7 @@ export async function run({ dryRun = process.env.DRY_RUN !== 'false', log = cons
 
       // Progress indicator (compact: every 5th if > 20 total)
       if (total > 20 && checked % 5 === 0) {
-        process.stderr.write(`\r[025] Progress: ${checked}/${convertDecisions.length}`);
+        process.stderr.write(`\r[event-descriptions] Progress: ${checked}/${convertDecisions.length}`);
       }
 
       wouldConvert++;
@@ -183,7 +183,7 @@ export async function run({ dryRun = process.env.DRY_RUN !== 'false', log = cons
 
   const elapsed = ((Date.now() - start) / 1000).toFixed(1);
   log('');
-  log(`[025] Summary (${elapsed}s):`);
+  log(`[event-descriptions] Summary (${elapsed}s):`);
   log(`      Checked:         ${checked}`);
   log(`      Already HTML:    ${skippedHtml}`);
   log(`      Empty/skipped:   ${skippedEmpty}`);
@@ -207,7 +207,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   run()
     .then(() => prisma.$disconnect())
     .catch(async (err) => {
-      console.error('[025] Fatal:', err.message);
+      console.error('[event-descriptions] Fatal:', err.message);
       await prisma.$disconnect();
       process.exit(1);
     });
