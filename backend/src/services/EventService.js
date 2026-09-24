@@ -584,39 +584,232 @@ class EventService {
   /**
    * List events for an organization (all statuses, org-scoped)
    * @param {string} orgId - Organization ID
-   * @param {Object} options - Pagination and filter options
+   * @param {Object} options - Pagination, filter, search, and sort options
    * @returns {Promise<Object>} Paginated org events
    */
-  async listOrgEvents(orgId, { page = 1, limit = 20, status } = {}) {
+  async listOrgEvents(orgId, { page = 1, limit = 25, status, q, category, sort } = {}) {
+    const VALID_SORTS = ['upcoming', 'date_desc', 'created_desc', 'name_asc'];
+    if (sort && !VALID_SORTS.includes(sort)) {
+      throw new ValidationError(`Invalid sort parameter "${sort}". Must be one of: ${VALID_SORTS.join(', ')}`);
+    }
+    const resolvedSort = sort || 'upcoming';
     const pageNum = Math.max(1, parseInt(page) || 1);
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 20));
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 25));
     const skip = (pageNum - 1) * limitNum;
 
     const where = { venue: { organizationId: orgId } };
     if (status) where.status = status;
+    if (category) where.category = category;
+    if (q) {
+      where.OR = [
+        { name: { contains: q, mode: 'insensitive' } },
+        { venue: { name: { contains: q, mode: 'insensitive' } } },
+      ];
+    }
 
-    const [events, total] = await Promise.all([
-      prisma.event.findMany({
-        where,
-        include: {
-          venue: true,
-          priceTiers: { orderBy: { displayOrder: 'asc' } },
-        },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limitNum,
-      }),
-      prisma.event.count({ where }),
-    ]);
+    const eventInclude = {
+      venue: {
+        select: { id: true, name: true, slug: true, address: true, timezone: true },
+      },
+      priceTiers: { orderBy: { displayOrder: 'asc' } },
+    };
+
+    let events;
+    let total;
+
+    if (resolvedSort === 'upcoming') {
+      // Future events by date asc, then past events by date desc (spec 035 D7)
+      const futureWhere = { ...where, date: { gt: new Date() } };
+      const pastWhere = { ...where, date: { lte: new Date() } };
+      const futureCount = await prisma.event.count({ where: futureWhere });
+
+      if (skip < futureCount) {
+        // Page starts in future events
+        const futureTake = Math.min(limitNum, futureCount - skip);
+        events = await prisma.event.findMany({
+          where: futureWhere,
+          include: eventInclude,
+          orderBy: { date: 'asc' },
+          take: futureTake,
+          skip,
+        });
+        if (events.length < limitNum) {
+          const pastTake = limitNum - events.length;
+          const pastEvents = await prisma.event.findMany({
+            where: pastWhere,
+            include: eventInclude,
+            orderBy: { date: 'desc' },
+            take: pastTake,
+            skip: 0,
+          });
+          events = [...events, ...pastEvents];
+        }
+      } else {
+        // Page starts in past events
+        const pastSkip = skip - futureCount;
+        events = await prisma.event.findMany({
+          where: pastWhere,
+          include: eventInclude,
+          orderBy: { date: 'desc' },
+          take: limitNum,
+          skip: pastSkip,
+        });
+      }
+
+      const pastCount = await prisma.event.count({ where: pastWhere });
+      total = futureCount + pastCount;
+    } else {
+      const orderByMap = {
+        date_desc: { date: 'desc' },
+        created_desc: { createdAt: 'desc' },
+        name_asc: { name: 'asc' },
+      };
+      const orderBy = orderByMap[resolvedSort];
+
+      [events, total] = await Promise.all([
+        prisma.event.findMany({
+          where,
+          include: eventInclude,
+          orderBy,
+          skip,
+          take: limitNum,
+        }),
+        prisma.event.count({ where }),
+      ]);
+    }
+
+    // Batch query RSVP going counts for RSVP events
+    const rsvpEventIds = events.filter((e) => e.admissionMode === 'RSVP').map((e) => e.id);
+    const rsvpGoingMap = {};
+    if (rsvpEventIds.length > 0) {
+      const rsvpCounts = await prisma.eventRsvp.groupBy({
+        by: ['eventId'],
+        where: { eventId: { in: rsvpEventIds }, status: 'GOING' },
+        _sum: { partySize: true },
+      });
+      for (const row of rsvpCounts) {
+        rsvpGoingMap[row.eventId] = Number(row._sum.partySize || 0);
+      }
+    }
+
+    const formattedEvents = events.map((e) => ({
+      ...this._formatEventDetail(e),
+      rsvpGoingCount: e.admissionMode === 'RSVP' ? (rsvpGoingMap[e.id] || 0) : null,
+    }));
 
     return {
-      events: events.map((e) => this._formatEventDetail(e)),
+      events: formattedEvents,
       pagination: {
         page: pageNum,
         limit: limitNum,
         total,
         totalPages: Math.ceil(total / limitNum),
       },
+    };
+  }
+
+  /**
+   * Get organization events summary (spec 035 §6.2): counts, registered,
+   * inventory, categories — honors q and category filters but not status.
+   * @param {string} orgId - Organization ID
+   * @param {Object} options - Optional { q, category } filters
+   * @returns {Promise<Object>} Summary object
+   */
+  async getOrgEventsSummary(orgId, { q, category } = {}) {
+    const baseWhere = { venue: { organizationId: orgId } };
+    if (category) baseWhere.category = category;
+    if (q) {
+      baseWhere.OR = [
+        { name: { contains: q, mode: 'insensitive' } },
+        { venue: { name: { contains: q, mode: 'insensitive' } } },
+      ];
+    }
+
+    // Status counts (all events matching filters)
+    const statusCounts = await prisma.event.groupBy({
+      by: ['status'],
+      where: baseWhere,
+      _count: { id: true },
+    });
+    const counts = { all: 0, DRAFT: 0, PUBLISHED: 0, CANCELLED: 0 };
+    for (const row of statusCounts) {
+      counts[row.status] = row._count.id;
+      counts.all += row._count.id;
+    }
+
+    // Published stats
+    const publishedWhere = { ...baseWhere, status: 'PUBLISHED' };
+    const publishedEvents = await prisma.event.findMany({
+      where: publishedWhere,
+      select: { capacity: true, id: true },
+    });
+    const publishedCount = publishedEvents.length;
+    const publishedCapacity = publishedEvents.reduce((sum, e) => sum + e.capacity, 0);
+
+    // Draft count
+    const draftsCount = counts.DRAFT || 0;
+
+    // Registered: tickets from PAID_ORDER_STATUSES + RSVP going headcount
+    const [ticketCountResult, rsvpResult] = await Promise.all([
+      prisma.order.aggregate({
+        where: {
+          event: { venue: { organizationId: orgId }, ...(category ? { category } : {}), ...(q ? { OR: baseWhere.OR } : {}) },
+          kind: 'TICKET',
+          status: { in: PAID_ORDER_STATUSES },
+        },
+        _sum: { quantity: true },
+      }),
+      prisma.eventRsvp.aggregate({
+        where: {
+          status: 'GOING',
+          event: {
+            venue: { organizationId: orgId },
+            ...(category ? { category } : {}),
+            ...(q ? { name: { contains: q, mode: 'insensitive' } } : {}),
+          },
+        },
+        _sum: { partySize: true },
+      }),
+    ]);
+    const registeredTickets = Number(ticketCountResult._sum.quantity || 0);
+    const registeredRsvps = Number(rsvpResult._sum.partySize || 0);
+
+    // Inventory over PUBLISHED events
+    const publishedWithTiers = await prisma.event.findMany({
+      where: { ...publishedWhere, admissionMode: 'TICKETED' },
+      select: {
+        priceTiers: {
+          select: { quantityTotal: true, quantitySold: true, quantityReserved: true },
+        },
+      },
+    });
+    let inventoryAvailable = 0;
+    let inventoryTiers = 0;
+    for (const evt of publishedWithTiers) {
+      for (const tier of evt.priceTiers) {
+        inventoryAvailable += tier.quantityTotal - tier.quantitySold - tier.quantityReserved;
+        inventoryTiers += 1;
+      }
+    }
+
+    // Distinct categories
+    const categoryRows = await prisma.event.findMany({
+      where: { venue: { organizationId: orgId } },
+      select: { category: true },
+      distinct: ['category'],
+    });
+    const categories = categoryRows
+      .map((r) => r.category)
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+
+    return {
+      counts,
+      published: { count: publishedCount, capacity: publishedCapacity },
+      drafts: { count: draftsCount },
+      registered: { tickets: registeredTickets, rsvps: registeredRsvps },
+      inventory: { available: inventoryAvailable, tiers: inventoryTiers },
+      categories,
     };
   }
 
