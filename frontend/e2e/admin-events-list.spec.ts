@@ -577,7 +577,7 @@ test('24 px minimum target size on every interactive control', async ({ page }) 
   expect(smallTargets).toEqual([]);
 });
 
-test('light mode full page screenshot at 1440px', async ({ page }) => {
+test('light mode full page screenshot at 1440px', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockApi(page);
   await page.goto(`/admin/events?orgId=${ORG_ID}`);
@@ -588,10 +588,15 @@ test('light mode full page screenshot at 1440px', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Events' })).toBeVisible();
   await page.waitForTimeout(500); // let animations settle
 
-  await expect(page).toHaveScreenshot('admin-events-light.png', { fullPage: true });
+  // No committed baselines (they are per-platform), so toHaveScreenshot only ever
+  // wrote one and passed on retry. Attach the capture to the report for review.
+  await testInfo.attach('admin-events-light.png', {
+    body: await page.screenshot({ fullPage: true }),
+    contentType: 'image/png',
+  });
 });
 
-test('dark mode full page screenshot at 1440px', async ({ page }) => {
+test('dark mode full page screenshot at 1440px', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockApi(page);
   await page.goto(`/admin/events?orgId=${ORG_ID}`);
@@ -602,7 +607,12 @@ test('dark mode full page screenshot at 1440px', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Events' })).toBeVisible();
   await page.waitForTimeout(500); // let animations settle
 
-  await expect(page).toHaveScreenshot('admin-events-dark.png', { fullPage: true });
+  // No committed baselines (they are per-platform), so toHaveScreenshot only ever
+  // wrote one and passed on retry. Attach the capture to the report for review.
+  await testInfo.attach('admin-events-dark.png', {
+    body: await page.screenshot({ fullPage: true }),
+    contentType: 'image/png',
+  });
 });
 
 test('pagination nav with aria-current on active page', async ({ page, baseURL }) => {
@@ -667,16 +677,18 @@ test('pagination nav with aria-current on active page', async ({ page, baseURL }
   await page.goto(`/admin/events?orgId=${ORG_ID}`);
 
   // Wait for events to render and pagination to appear
-  await expect(page.getByRole('navigation', { name: 'Pagination' })).toBeVisible();
+  // Scope to the pagination nav: event cards also contain buttons named "1"/"2".
+  const pagination = page.getByRole('navigation', { name: 'Pagination' });
+  await expect(pagination).toBeVisible();
 
   // The first page button should have aria-current page
-  await expect(page.getByRole('button', { name: '1' })).toHaveAttribute('aria-current', 'page');
-  await expect(page.getByRole('button', { name: '2' })).not.toHaveAttribute('aria-current');
+  await expect(pagination.getByRole('button', { name: '1', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(pagination.getByRole('button', { name: '2', exact: true })).not.toHaveAttribute('aria-current');
 
   // Click page 2
-  await page.getByRole('button', { name: '2' }).click();
+  await pagination.getByRole('button', { name: '2', exact: true }).click();
 
   // Now page 2 should have aria-current
-  await expect(page.getByRole('button', { name: '2' })).toHaveAttribute('aria-current', 'page');
-  await expect(page.getByRole('button', { name: '1' })).not.toHaveAttribute('aria-current');
+  await expect(pagination.getByRole('button', { name: '2', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(pagination.getByRole('button', { name: '1', exact: true })).not.toHaveAttribute('aria-current');
 });
