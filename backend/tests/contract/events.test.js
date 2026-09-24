@@ -1044,6 +1044,16 @@ describe('Events API Contract Tests', () => {
       expect(formulaLine).toMatch(/^'=SUM/);
     });
 
+    it('exposes Content-Disposition to the admin origin', async () => {
+      const res = await request(app)
+        .get(`/organizations/${csvOrgId}/events/export.csv`)
+        .set('Origin', 'http://localhost:3001')
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .expect(200);
+
+      expect(res.headers['access-control-expose-headers']).toMatch(/Content-Disposition/i);
+    });
+
     it('honors status filter', async () => {
       const res = await request(app)
         .get(`/organizations/${csvOrgId}/events/export.csv?status=DRAFT`)
