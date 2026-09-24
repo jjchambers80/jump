@@ -13,6 +13,7 @@ import mapService from './MapService.js';
 import { PAID_ORDER_STATUSES } from './paidStatuses.js';
 import { rethrowSlugConflict, resolveUniqueSlug } from '../utils/slug.js';
 import { findByPublicIdentifier } from '../utils/publicIdentifier.js';
+import { sanitizeContentHtml } from '../utils/sanitizeHtml.js';
 import rsvpService, { remainingFor } from './RsvpService.js';
 import emailService from './EmailService.js';
 
@@ -87,7 +88,7 @@ class EventService {
         venueId,
         name,
         ...slugState,
-        description: description || null,
+        description: description ? sanitizeContentHtml(description) : null,
         date: eventDate,
         capacity: capacityNum,
         admissionMode,
@@ -291,7 +292,7 @@ class EventService {
     }
 
     if (updates.description !== undefined) {
-      updateData.description = updates.description;
+      updateData.description = updates.description === null ? null : sanitizeContentHtml(updates.description);
     }
 
     if (updates.date !== undefined) {
