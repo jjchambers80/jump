@@ -28,6 +28,7 @@ const baseCustomer = {
   applicationCount: 0,
   totalSpent: 42,
   totalRefunded: 0,
+  rsvps: [],
   lastActivityAt: '2026-09-10T12:00:00.000Z',
   segment: 'Repeat',
   prevId: 'customer-prev',

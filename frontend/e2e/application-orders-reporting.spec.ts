@@ -39,6 +39,7 @@ test('customer detail lists paid applications beside orders with combined totals
         applicationCount: 1,
         totalSpent: 236.95,
         totalRefunded: 5,
+        rsvps: [],
         lastActivityAt: '2026-09-05T12:00:00.000Z',
         lastOrderDate: '2026-09-05T12:00:00.000Z',
         orders: [{ id: 'o1', orderRef: 'JMP-1', totalAmount: 21.45, refunded: 0, quantity: 1, status: 'COMPLETED', createdAt: '2026-09-03T12:00:00.000Z', ticketCount: 1, event }],
