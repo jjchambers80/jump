@@ -3,6 +3,8 @@ import {
   customerDetailHref,
   customerListQuery,
   customerSegmentFrom,
+  guestAccountNote,
+  rsvpTimelineText,
   segmentBadgeClass,
 } from '../../src/lib/customers';
 
@@ -37,5 +39,21 @@ describe('customer list navigation helpers', () => {
     expect(customerSegmentFrom('repeat')).toBe('Repeat');
     expect(customerSegmentFrom('unknown')).toBe('');
     expect(customerSegmentFrom(null)).toBe('');
+  });
+});
+
+describe('customer detail copy', () => {
+  it('shows the party size on an RSVP only when the guest brings others', () => {
+    expect(rsvpTimelineText('Open House', 1)).toBe("RSVP'd to Open House");
+    expect(rsvpTimelineText('Open House', 3)).toBe("RSVP'd to Open House (party of 3)");
+    expect(rsvpTimelineText(null, null)).toBe("RSVP'd to an event");
+  });
+
+  it('only mentions a purchase when the contact has a transaction', () => {
+    expect(guestAccountNote({ transactions: 1, rsvps: 1 })).toMatch(/completed their purchase/);
+    expect(guestAccountNote({ transactions: 0, rsvps: 2 })).toBe(
+      'This contact does not have an account. They RSVP’d as a guest.'
+    );
+    expect(guestAccountNote({ transactions: 0, rsvps: 0 })).toBe('This contact does not have an account.');
   });
 });

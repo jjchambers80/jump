@@ -40,6 +40,7 @@ interface CustomerDetail {
   lastActivityAt: string | null;
   orders: CustomerOrder[];
   applications: CustomerApplication[];
+  rsvps: unknown[];
 }
 
 interface CustomerOrder {
@@ -163,6 +164,7 @@ function buildCustomerAccount(overrides: Partial<CustomerDetail> = {}): Customer
         detailUrl: '/admin/applications/app-001',
       },
     ],
+    rsvps: [],
     ...overrides,
   };
 }
@@ -533,7 +535,7 @@ test.describe('Customer detail Phase 1', () => {
       await page.goto(`/admin/customers/${fixture.id}`);
 
       await expect(page.getByRole('heading', { name: 'Account' })).toBeVisible();
-      await expect(page.getByText('Guest checkout')).toBeVisible();
+      await expect(page.getByText('Guest', { exact: true })).toBeVisible();
       await expect(page.getByText(/completed their purchase as a guest/i)).toBeVisible();
       // No account buttons for guests
       await expect(page.getByRole('button', { name: /Send sign-in link/i })).toHaveCount(0);
