@@ -887,6 +887,12 @@ describe('Events API Contract Tests', () => {
     let csvOrgId;
     let csvVenueId;
 
+    /** Parse a CSV line respecting quoted fields. */
+    function parseCsvLine(line) {
+      const re = /,(?=(?:[^"]*"[^"]*")*[^"]*$)/;
+      return line.split(re).map((cell) => cell.replace(/^"|"$/g, ''));
+    }
+
     beforeAll(async () => {
       const orgRes = await request(app)
         .post('/organizations')
@@ -973,7 +979,7 @@ describe('Events API Contract Tests', () => {
       // Header + 3 events
       expect(lines.length).toBeGreaterThanOrEqual(4);
 
-      const header = lines[0].split(',');
+      const header = parseCsvLine(lines[0]);
       expect(header).toContain('name');
       expect(header).toContain('status');
       expect(header).toContain('admissionMode');
@@ -997,7 +1003,7 @@ describe('Events API Contract Tests', () => {
       expect(rsvpLine).toBeDefined();
       expect(rsvpLine).toContain('RSVP');
       // RSVP events should have empty tiers and rsvpsGoing=0
-      const rsvpCells = rsvpLine.split(',');
+      const rsvpCells = parseCsvLine(rsvpLine);
       const tiersIdx = header.indexOf('tiers');
       const rsvpGoingIdx = header.indexOf('rsvpsGoing');
       expect(rsvpCells[tiersIdx]).toBe(''); // empty tiers column
