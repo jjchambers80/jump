@@ -101,11 +101,11 @@ Order is chosen so each card ships on its own and the page never regresses.
 
 | Card | Title | Scope | Depends on | Size |
 |---|---|---|---|---|
-| **035A** | Events list API: search, category, sort, summary | §6.1, §6.2 + contract tests | — | M |
-| **035B** | Events list: full-width shell, header, new card | F1, F2 (minus Export), F8, D3–D6, D8, D9; component split; uses the existing list payload | — (parallel with A) | L |
-| **035C** | Events list: KPI strip + filter toolbar | F3, F4–F7, F10, URL state, D7 | A, B | M |
-| **035D** | Events list: CSV export | §6.3 + header button | A | S |
-| **035E** | Events list: a11y + responsive e2e, wiki page | §5 checks in Playwright, `/doc-feature` → `docs/wiki/features/events-list.md` | B, C | S |
+| **035A** `t_2171f25c` | Events list API: search, category, sort, summary | §6.1, §6.2 + contract tests | — | M |
+| **035B** `t_235d5afc` | Events list: full-width shell, header, new card | F1, F2 (minus Export), F8, D3–D6, D8, D9; component split; uses the existing list payload | — (parallel with A) | L |
+| **035C** `t_3c3cc3cd` | Events list: KPI strip + filter toolbar | F3, F4–F7, F10, URL state, D7 | A, B | M |
+| **035D** `t_ddb49911` | Events list: CSV export | §6.3 + header button | A | S |
+| **035E** `t_7d16ff9b` | Events list: a11y + responsive e2e, wiki page | §5 checks in Playwright, `/doc-feature` → `docs/wiki/features/events-list.md` | B, C | S |
 
 A and B run in parallel (separate worktrees); C is the merge point. Each card: PR with required checks green, before/after screenshots at 1440 and 390 in the PR body.
 
