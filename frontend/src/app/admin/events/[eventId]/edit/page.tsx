@@ -236,7 +236,11 @@ function EditEventContent() {
   const [editingTierKey, setEditingTierKey] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() =>
+    searchParams.get('imageUpload') === 'failed'
+      ? 'The event was created, but its image failed to upload. Add it again under Media.'
+      : null
+  );
   const [success, setSuccess] = useState(false);
 
   // Load event data

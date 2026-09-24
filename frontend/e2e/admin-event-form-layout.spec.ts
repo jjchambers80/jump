@@ -159,3 +159,50 @@ test('media card: an uploaded image offers replace and remove', async ({ page })
   await expect(media.getByRole('button', { name: 'Remove image' })).toBeAttached();
   await expect(media.getByRole('button', { name: 'Upload new' })).toHaveCount(0);
 });
+
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkaPhfDwAEhgGAfq3m2wAAAABJRU5ErkJggg==', 'base64');
+
+async function fillRsvpEvent(page: Page) {
+  await page.getByLabel('Name *').fill('Media Create Event');
+  await page.getByLabel('Venue *').selectOption(venue.id);
+  await page.getByLabel('Date & Time *').fill('2027-06-01T20:00');
+  await page.getByRole('group', { name: 'Admission mode' }).getByText('RSVP', { exact: true }).click();
+  const media = page.getByRole('region', { name: 'Media' });
+  await media.locator('input[type="file"]').setInputFiles({ name: 'poster.png', mimeType: 'image/png', buffer: PNG });
+  await expect(media.getByRole('img', { name: 'Media Create Event event image' })).toBeVisible();
+}
+
+test('create: the chosen image uploads once the event exists', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const posts = await mockApi(page);
+  const uploads: string[] = [];
+  await page.route(`${API}/organizations/${ORG_ID}/events/evt-new/logo`, (route) => {
+    uploads.push(route.request().method());
+    return route.fulfill(json({ id: 'evt-new', logoUrl: 'https://images.test/poster.png' }));
+  });
+  await page.goto(`/admin/events/new?orgId=${ORG_ID}`);
+  await fillRsvpEvent(page);
+
+  await page.getByRole('button', { name: 'Create Event' }).first().click();
+  await expect(page).toHaveURL(/\/admin\/events$/);
+  expect(posts).toHaveLength(1);
+  expect(uploads).toEqual(['POST']);
+});
+
+test('create: a failed image upload lands on the edit page with a notice', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockApi(page);
+  await page.route(`${API}/organizations/${ORG_ID}/events`, (route) =>
+    route.request().method() === 'POST' ? route.fulfill(json({ id: EVENT_ID }, 201)) : route.fallback()
+  );
+  await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/logo`, (route) =>
+    route.fulfill(json({ message: 'Storage unavailable' }, 500))
+  );
+  await page.goto(`/admin/events/new?orgId=${ORG_ID}`);
+  await fillRsvpEvent(page);
+
+  await page.getByRole('button', { name: 'Create Event' }).first().click();
+  await expect(page).toHaveURL(new RegExp(`/admin/events/${EVENT_ID}/edit\\?orgId=${ORG_ID}&imageUpload=failed`));
+  await expect(page.getByRole('alert').filter({ hasText: 'its image failed to upload' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Media' }).getByRole('button', { name: 'Upload new' })).toBeVisible();
+});
