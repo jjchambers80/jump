@@ -1,5 +1,5 @@
-// Events list page: full-width shell, new header, event cards (spec 035B).
-// Mock API, signInAsStaff.
+// Events list page: KPI strip + filter toolbar + URL state (spec 035C).
+// Extends 035B tests with new UI. Mock API, signInAsStaff.
 import { expect, test, type Page } from '@playwright/test';
 import { signInAsStaff } from './helpers/session';
 
@@ -121,19 +121,42 @@ const sampleEvents = [
   },
 ];
 
+const summaryData = {
+  counts: { all: 5, DRAFT: 1, PUBLISHED: 3, CANCELLED: 1 },
+  published: { count: 3, capacity: 5250 },
+  drafts: { count: 1 },
+  registered: { tickets: 1550, rsvps: 18 },
+  inventory: { available: 2360, tiers: 4 },
+  categories: ['Comedy', 'Music', 'Other', 'Tech', 'Workshop'],
+};
+
 async function mockApi(page: Page) {
   // Org list for OrgContext
   await page.route(`${API}/organizations`, (route) =>
     route.fulfill(json([{ id: ORG_ID, name: 'Events List Org', status: 'ACTIVE' }]))
   );
 
-  // Events list — honor status filter
+  // Summary
+  await page.route(`${API}/organizations/${ORG_ID}/events/summary*`, (route) =>
+    route.fulfill(json(summaryData))
+  );
+
+  // Events list — honor status, q, category, sort filters
   await page.route(`${API}/organizations/${ORG_ID}/events?*`, async (route) => {
     const url = new URL(route.request().url());
     const status = url.searchParams.get('status');
-    const filtered = status
-      ? sampleEvents.filter((e) => e.status === status)
-      : sampleEvents;
+    const q = url.searchParams.get('q');
+    const category = url.searchParams.get('category');
+    let filtered = [...sampleEvents];
+    if (status) filtered = filtered.filter((e) => e.status === status);
+    if (q) {
+      const lq = q.toLocaleLowerCase();
+      filtered = filtered.filter((e) =>
+        e.name.toLocaleLowerCase().includes(lq) ||
+        (e.venue?.name.toLocaleLowerCase() || '').includes(lq)
+      );
+    }
+    if (category) filtered = filtered.filter((e) => e.category === category);
     return route.fulfill(
       json({
         events: filtered,
@@ -153,6 +176,18 @@ async function mockApi(page: Page) {
       json({
         events: [],
         pagination: { page: 1, limit: 25, total: 0, totalPages: 0 },
+      })
+    )
+  );
+  await page.route(`${API}/organizations/${ALT_ORG_ID}/events/summary*`, (route) =>
+    route.fulfill(
+      json({
+        counts: { all: 0, DRAFT: 0, PUBLISHED: 0, CANCELLED: 0 },
+        published: { count: 0, capacity: 0 },
+        drafts: { count: 0 },
+        registered: { tickets: 0, rsvps: 0 },
+        inventory: { available: 0, tiers: 0 },
+        categories: [],
       })
     )
   );
@@ -178,6 +213,12 @@ test('full width at 1440px — shell max-w-screen-2xl', async ({ page }) => {
 
   // Create Event button
   await expect(page.getByRole('link', { name: 'Create Event' })).toBeVisible();
+
+  // KPI strip visible with 4 cards
+  await expect(page.getByText('Registered', { exact: true })).toBeVisible();
+  await expect(page.getByText('Published', { exact: true })).toBeVisible();
+  await expect(page.getByText('Drafts', { exact: true })).toBeVisible();
+  await expect(page.getByText('Available inventory', { exact: true })).toBeVisible();
 });
 
 test('no horizontal scroll at 390px — one column', async ({ page }) => {
@@ -188,8 +229,56 @@ test('no horizontal scroll at 390px — one column', async ({ page }) => {
   const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
   expect(scrollWidth).toBeLessThanOrEqual(390);
 
-  // The status filter bar is visible (not forced offscreen)
-  await expect(page.getByRole('button', { name: 'All' })).toBeVisible();
+  // The toolbar's radiogroup is visible (not forced offscreen)
+  await expect(page.getByRole('radiogroup', { name: 'Filter by status' })).toBeVisible();
+
+  // KPI strip is 2x2 at this width (4 cards visible within the summary grid)
+  const kpiGrid = page.locator('div.grid.grid-cols-2').first();
+  await expect(kpiGrid.getByText('Registered', { exact: true })).toBeVisible();
+  await expect(kpiGrid.getByText('Published', { exact: true })).toBeVisible();
+  await expect(kpiGrid.getByText('Drafts', { exact: true })).toBeVisible();
+  await expect(kpiGrid.getByText('Available inventory', { exact: true })).toBeVisible();
+});
+
+test('KPI values match summary data', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockApi(page);
+  await page.goto(`/admin/events?orgId=${ORG_ID}`);
+
+  // Registered: tickets (1550) + RSVPs (18) = 1568
+  const registeredCard = page.locator('div').filter({ hasText: /^Registered/ }).last();
+  await expect(registeredCard).toContainText('1,568');
+  // Subtitle shows the detail
+  await expect(page.getByText('tickets 1550 + RSVPs 18')).toBeVisible();
+
+  // Published count + capacity
+  const publishedCard = page.getByText('Published', { exact: true }).locator('..').locator('..');
+  await expect(publishedCard).toContainText('3');
+  await expect(page.getByText('capacity 5,250')).toBeVisible();
+
+  // Drafts count
+  const draftsCard = page.getByText('Drafts', { exact: true }).locator('..').locator('..');
+  await expect(draftsCard).toContainText('1');
+
+  // Available inventory
+  const inventoryCard = page.getByText('Available inventory', { exact: true }).locator('..').locator('..');
+  await expect(inventoryCard).toContainText('2,360');
+  await expect(page.getByText('across 4 tiers')).toBeVisible();
+});
+
+test('status radiogroup shows counts per status', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockApi(page);
+  await page.goto(`/admin/events?orgId=${ORG_ID}`);
+
+  // Each radio button has the count in its accessible name
+  const allRadio = page.getByRole('radio', { name: 'All, 5 events' });
+  await expect(allRadio).toBeVisible();
+  await expect(allRadio).toHaveAttribute('aria-checked', 'true'); // default selected
+
+  await expect(page.getByRole('radio', { name: 'Draft, 1 event' })).toBeVisible();
+  await expect(page.getByRole('radio', { name: 'Published, 3 events' })).toBeVisible();
+  await expect(page.getByRole('radio', { name: 'Cancelled, 1 event' })).toBeVisible();
 });
 
 test('RSVP card shows RSVPs and not Analytics', async ({ page }) => {
@@ -234,13 +323,13 @@ test('cancel requires dialog confirm (not window.confirm)', async ({ page }) => 
     return route.fulfill(json({ status: 'CANCELLED' }));
   });
 
-  // Open the ⋯ menu on the DRAFT event (evt-2) and click Cancel event…
+  // Open the ... menu on the DRAFT event (evt-2) and click Cancel event...
   const card = page.getByRole('article', { name: 'Comedy Night' });
   const menuButton = card.getByRole('button', { name: /More actions for Comedy Night/ });
   await menuButton.click();
 
-  // Click Cancel event… in the menu
-  await page.getByRole('menuitem', { name: 'Cancel event…' }).click();
+  // Click Cancel event... in the menu
+  await page.getByRole('menuitem', { name: /Cancel event/ }).click();
 
   // Dialog should appear (not window.confirm)
   const dialog = page.getByRole('dialog', { name: 'Cancel event' });
@@ -254,7 +343,7 @@ test('cancel requires dialog confirm (not window.confirm)', async ({ page }) => 
   expect(cancelCalled).toBe(false);
 });
 
-test('⋯ menu keyboard navigation + focus return', async ({ page }) => {
+test('... menu keyboard navigation + focus return', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockApi(page);
   await page.goto(`/admin/events?orgId=${ORG_ID}`);
@@ -330,7 +419,7 @@ test('sell-through numbers visible on ticketed cards', async ({ page }) => {
   await expect(publishedCard.getByText(/sold \/.*avail/i)).toBeVisible();
 });
 
-test('status filter buttons work', async ({ page }) => {
+test('status filter radiogroup filters events', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockApi(page);
   await page.goto(`/admin/events?orgId=${ORG_ID}`);
@@ -338,8 +427,42 @@ test('status filter buttons work', async ({ page }) => {
   // All 5 events visible initially
   await expect(page.getByRole('article')).toHaveCount(5);
 
-  // Click DRAFT filter
-  await page.getByRole('button', { name: 'DRAFT' }).click();
+  // Click DRAFT radio
+  await page.getByRole('radio', { name: 'Draft, 1 event' }).click();
   await expect(page.getByRole('article')).toHaveCount(1);
-  await expect(page.getByText('Comedy Night')).toBeVisible();
+  await expect(page.getByText('Comedy Night', { exact: true })).toBeVisible();
+});
+
+test('filters round-trip through URL reload', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockApi(page);
+  await page.goto(`/admin/events?orgId=${ORG_ID}`);
+
+  // Apply status filter
+  await page.getByRole('radio', { name: 'Published, 3 events' }).click();
+  await expect(page).toHaveURL(/status=PUBLISHED/);
+
+  // Apply search filter — type each key to trigger input events
+  await page.getByRole('searchbox', { name: 'Search events' }).click();
+  await page.keyboard.type('Summer');
+  // Wait for the 300ms debounce to fire and URL to update
+  await expect(page).toHaveURL(/q=Summer/, { timeout: 3000 });
+
+  // Reload — filters should persist
+  await page.reload();
+  await expect(page).toHaveURL(/status=PUBLISHED/);
+  await expect(page).toHaveURL(/q=Summer/);
+  // The published Summer event should show
+  await expect(page.getByRole('article')).toHaveCount(1);
+  await expect(page.getByText('Summer Music Festival')).toBeVisible();
+});
+
+test('search announces result count status region', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockApi(page);
+  await page.goto(`/admin/events?orgId=${ORG_ID}`);
+
+  // Status region shows the count
+  const statusRegion = page.getByRole('status').first();
+  await expect(statusRegion).toContainText('Showing 1\u20135 of 5 events');
 });
