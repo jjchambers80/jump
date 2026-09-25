@@ -101,7 +101,7 @@ export const validateMetaBody = (req, res, next) => {
   }
 };
 
-/** Spec 034: door check-in. POST { via? } — the arrival itself carries no other input. */
+/** Spec 036: door check-in. POST { via? } — the arrival itself carries no other input. */
 export const validateCheckInBody = (req, res, next) => {
   try {
     const body = req.body || {};
@@ -113,7 +113,7 @@ export const validateCheckInBody = (req, res, next) => {
   }
 };
 
-/** Spec 034: door scan. POST { payload } — whatever the camera or keyboard read. */
+/** Spec 036: door scan. POST { payload } — whatever the camera or keyboard read. */
 export const validateScanBody = (req, res, next) => {
   try {
     const body = req.body || {};

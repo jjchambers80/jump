@@ -1,4 +1,4 @@
-// Contract tests for vendor door check-in (spec 034)
+// Contract tests for vendor door check-in (spec 036)
 //
 // The door is the one surface where a retry is the normal case, not the edge
 // case: staff on venue wifi double-tap, the request times out and the phone
@@ -17,7 +17,7 @@ const { default: qrService } = await import('../../src/services/QRService.js');
 
 const TAG = 'door-ct';
 
-describe('Vendor door check-in (spec 034)', () => {
+describe('Vendor door check-in (spec 036)', () => {
   let organizerToken;
   let otherOrgToken;
   let org;

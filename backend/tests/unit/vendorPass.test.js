@@ -1,4 +1,4 @@
-// Unit tests for the vendor door pass payload (spec 034)
+// Unit tests for the vendor door pass payload (spec 036)
 //
 // Parsing runs before any database work, on whatever a camera in bad light or
 // a staffer's thumb produced. It must accept every shape a vendor can actually
@@ -20,7 +20,7 @@ const APP = 'clx1vendor000000000000001';
 const EVENT = 'clx1event0000000000000001';
 const TOKEN = 'a'.repeat(64);
 
-describe('vendor door pass (spec 034)', () => {
+describe('vendor door pass (spec 036)', () => {
   describe('generateVendorQRPayload', () => {
     it('round-trips through the parser', () => {
       const payload = QRService.generateVendorQRPayload(APP, EVENT, TOKEN);

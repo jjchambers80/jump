@@ -1,4 +1,4 @@
-// Vendor door check-in (spec 034)
+// Vendor door check-in (spec 036)
 //
 // Event-day surface: staff stand at a loading dock with a phone on venue wifi,
 // find an approved vendor by name or by scanning the vendor's status-link QR,
@@ -186,7 +186,7 @@ class VendorCheckInService {
     return organizationId ? { eventId, organizationId } : { eventId };
   }
 
-  /** The vendor's own door pass payload, for the status page QR (spec 034). */
+  /** The vendor's own door pass payload, for the status page QR (spec 036). */
   passPayloadFor(application) {
     return qrService.generateVendorQRPayload(application.id, application.eventId, statusToken(application.id));
   }

@@ -59,7 +59,7 @@ class QRService {
   }
 
   /**
-   * Generate the door QR payload for a vendor application (spec 034).
+   * Generate the door QR payload for a vendor application (spec 036).
    * Format: jump://vendor?id={applicationId}&e={eventId}&t={statusToken}
    *
    * The token is `applicationLinks.statusToken()` — the same HMAC already in

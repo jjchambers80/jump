@@ -728,7 +728,7 @@ router.post('/events/:eventId/applications/:applicationId/offline-payment', requ
   res.json(await applicationService.recordOfflinePayment(eventId, applicationId, await scopedOrgFor(req), req.body, { byUserId: req.user.id, sendEmail: req.body.sendEmail }));
 }));
 
-// ─── Door check-in (spec 034) ─────────────────────────────────────────────
+// ─── Door check-in (spec 036) ─────────────────────────────────────────────
 // Event-day surface for staff on a phone. Every route is scoped by the active
 // organization *and* the event id, so staff working one door can never see or
 // stamp another event's vendors. Check-in is idempotent (see

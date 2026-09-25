@@ -691,7 +691,7 @@ class ApplicationService {
    * `checkedIn` / `checkedOut` booleans that stamp or clear the timestamps.
    * Check-in is refused (409) unless the application is APPROVED.
    *
-   * Spec 034: setting a stamp goes through the same conditional write the door
+   * Spec 036: setting a stamp goes through the same conditional write the door
    * page uses, so the table checkbox and a scan at the door cannot overwrite
    * each other's timestamp when they land in the same second.
    */
@@ -736,7 +736,7 @@ class ApplicationService {
       for (const column of stamping) {
         // Conditional on the column still being null: the first writer wins and
         // a concurrent toggle / door scan reads that timestamp back instead of
-        // replacing it (spec 034).
+        // replacing it (spec 036).
         await prisma.application.updateMany({
           where: { id: applicationId, eventId, status: 'APPROVED', [column]: null },
           data: column === 'checkedInAt' ? { checkedInAt: now, checkedInById: byUserId, checkedInVia: 'TOGGLE' } : { checkedOutAt: now },

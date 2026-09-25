@@ -1,4 +1,4 @@
--- Spec 034: vendor check-in at the door.
+-- Spec 036: vendor check-in at the door.
 --
 -- Additive only. The arrival record stays `Application.checkedInAt` (spec 019
 -- phase 3); these columns record *who* stamped it and *how*, so the arrivals
