@@ -47,6 +47,7 @@ All three endpoints behave identically, including `/webhooks/stripe/connect` and
 | First delivery | Row created `RECEIVED`, handler runs, `settle` marks it `PROCESSED`, `IGNORED` (unhandled type) or `FAILED` |
 | Redelivery of a settled event | `deliveries` incremented, **handler skipped**, response is `{"received":true,"duplicate":true}` |
 | Redelivery while the first is still in flight (`RECEIVED`) | Skipped. The in-flight one finishes; if it fails, Stripe's next retry takes the `FAILED` path |
+| Redelivery of a `RECEIVED` row older than 5 minutes | **Let through.** A row that never settled means the process died mid-handler; treating that as "in flight" forever would lose the event permanently. Logs `stripe_webhook_stale_in_flight` |
 | Redelivery of a `FAILED` event | **Let through.** Stripe retrying is the recovery path, and the handlers are individually idempotent |
 | Same event id on two endpoints | Two rows, both processed — the endpoint is part of the key |
 | Event with no id (local fixtures) | Processed, not recorded. Nothing to dedup on |
@@ -98,7 +99,7 @@ Stripe expires idempotency keys after 24 h, so this covers retries and double-cl
 
 ```bash
 cd backend && npm test                                     # includes webhookReplay + webhookSignature
-npx jest tests/contract/webhookReplay.test.js              # 11 cases: duplicate, concurrent, out-of-order, fail-closed
+npx jest tests/contract/webhookReplay.test.js              # 13 cases: duplicate, concurrent, stale, out-of-order, fail-closed
 npx jest tests/unit/refundService.test.js                  # key scopes + the "no key" guard
 ```
 

@@ -207,6 +207,48 @@ describe('Stripe webhook replay safety (EVE-3)', () => {
     });
   });
 
+  describe('a delivery that never settled', () => {
+    it('lets a retry through once the in-flight row goes stale, instead of swallowing it forever', async () => {
+      // A row is stamped RECEIVED before the handler runs. If the process dies
+      // in between — OOM, a restart mid-request — it never settles. Treating
+      // that as "a concurrent delivery is in flight" forever would lose the
+      // event permanently, so past the 5-minute window a retry may claim it.
+      const id = evtId('stuck');
+      const objectId = `cs_test_${TAG}_${RUN}_stuck`;
+      await prisma.stripeWebhookEvent.create({
+        data: {
+          endpoint: 'PLATFORM',
+          stripeEventId: id,
+          type: 'ping.contract_test',
+          objectId,
+          status: 'RECEIVED',
+          receivedAt: new Date(Date.now() - 6 * 60 * 1000),
+        },
+      });
+
+      const res = await post('/webhooks/stripe', { id, object: 'event', created: 1_800_003_000, type: 'ping.contract_test', data: { object: { id: objectId } } }, SECRET);
+      expect(res.status).toBe(200);
+      // Processed, not skipped — no `duplicate: true`.
+      expect(res.body).toEqual({ received: true });
+
+      const row = await ledgerRow(id);
+      expect(row.status).toBe('IGNORED');
+      expect(row.deliveries).toBe(2);
+      expect(row.processedAt).not.toBeNull();
+    });
+
+    it('still skips a retry while the first delivery is genuinely in flight', async () => {
+      const id = evtId('inflight');
+      await prisma.stripeWebhookEvent.create({
+        data: { endpoint: 'PLATFORM', stripeEventId: id, type: 'ping.contract_test', status: 'RECEIVED' },
+      });
+
+      const res = await post('/webhooks/stripe', { id, object: 'event', created: 1_800_003_100, type: 'ping.contract_test', data: { object: { id: 'x' } } }, SECRET);
+      expect(res.body).toEqual({ received: true, duplicate: true });
+      expect((await ledgerRow(id)).status).toBe('RECEIVED');
+    });
+  });
+
   describe('out-of-order delivery', () => {
     it('records both deliveries with Stripe\'s clock so the late one is identifiable', async () => {
       // B was created after A, but arrives first — the ordering Stripe makes no

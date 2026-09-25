@@ -23,6 +23,18 @@ export const ENDPOINTS = { PLATFORM: 'PLATFORM', CONNECT: 'CONNECT', BILLING: 'B
 /** Terminal states — a redelivery in one of these is a pure duplicate. */
 const SETTLED = new Set(['PROCESSED', 'IGNORED']);
 
+/**
+ * How long a `RECEIVED` row may sit before a redelivery is allowed to retry it.
+ *
+ * A row is stamped RECEIVED before the handler runs and updated after. If the
+ * process dies in between — OOM, a Railway restart mid-request, a hung Stripe
+ * call — it never settles. Without this, every subsequent Stripe retry would be
+ * skipped as "a concurrent delivery is in flight" and the event would be lost
+ * for good. Five minutes is comfortably longer than any handler here and well
+ * inside Stripe's retry schedule.
+ */
+const STALE_IN_FLIGHT_MS = 5 * 60 * 1000;
+
 function objectIdOf(event) {
   const obj = event?.data?.object;
   return obj && typeof obj.id === 'string' ? obj.id : null;
@@ -97,6 +109,16 @@ async function claimExisting(endpoint, event, stripeEventId) {
     // where the failure happened after the money moved.
     const retryAfterFailure = existing.status === 'FAILED';
 
+    // RECEIVED normally means a concurrent delivery is mid-flight, and stopping
+    // is the safe read. But a row that never settled because the process died
+    // would otherwise swallow every retry forever, so past the staleness window
+    // a redelivery is allowed to pick it up.
+    const stale =
+      existing.status === 'RECEIVED' &&
+      Date.now() - new Date(existing.receivedAt).getTime() > STALE_IN_FLIGHT_MS;
+
+    const reprocessing = retryAfterFailure || stale;
+
     logger.info('Stripe webhook redelivered', {
       event: 'stripe_webhook_duplicate',
       endpoint,
@@ -104,13 +126,21 @@ async function claimExisting(endpoint, event, stripeEventId) {
       type: existing.type,
       priorStatus: existing.status,
       deliveries: existing.deliveries,
-      reprocessing: retryAfterFailure,
+      reprocessing,
+      ...(stale && { staleInFlight: true, firstReceivedAt: new Date(existing.receivedAt).toISOString() }),
     });
 
-    if (SETTLED.has(existing.status) || existing.status === 'RECEIVED') {
-      // RECEIVED means a concurrent delivery is mid-flight. Stopping here is
-      // the safe read: the in-flight one will finish, and if it fails Stripe
-      // retries again and the FAILED branch above picks it up.
+    if (stale) {
+      logger.warn('Stripe webhook retrying a delivery that never settled', {
+        event: 'stripe_webhook_stale_in_flight',
+        endpoint,
+        stripeEventId,
+        type: existing.type,
+        firstReceivedAt: new Date(existing.receivedAt).toISOString(),
+      });
+    }
+
+    if (!reprocessing && (SETTLED.has(existing.status) || existing.status === 'RECEIVED')) {
       return { proceed: false, recordId: existing.id, duplicate: true, priorStatus: existing.status };
     }
     return { proceed: true, recordId: existing.id, duplicate: true, priorStatus: existing.status };
