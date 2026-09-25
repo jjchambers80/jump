@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { mapsApi, type ChooseBoothResult, type MapBooth, type MapElement, type PublicMap } from '@/services/api';
 import type { ApplicantApplication } from '@/lib/applications';
 import { formatPrice } from '@/lib/fees';
+import { LEGAL_PAGES_ENABLED, LEGAL_PATHS } from '@/lib/legal';
 import MapCanvas from './MapCanvas';
 import MapLegend, { type LegendTier } from './MapLegend';
 import { describeBooth, formatCountdown, holdRemaining, nextStepAfterChoose, selectability } from './boothSelection';
@@ -373,6 +374,25 @@ export default function BoothPicker({ eventId, application, chooseBooth, payNow,
               </button>
             </div>
           </div>
+          {/* Counsel's checkout sentence (EVE-17 §2). A reminder, not a fresh
+              consent: the binding CARD_AUTHORIZATION was recorded at submit
+              with its presented text, and `payNow` records nothing. Shown
+              only on the hosted-Checkout path — with a card on file the
+              charge happens here and there is no Stripe page to finish on.
+              "Terms of Service" degrades to a span while the pages are dark. */}
+          {!application.hasCardOnFile && (
+            <p className="mt-3 text-xs text-gray-500 dark:text-slate-400" data-testid="booth-buy-terms">
+              Booth {activeBooth.label} is held while you pay. You&apos;ll finish on Stripe&apos;s secure payment page. This completes the booth purchase you authorized when you applied — see our{' '}
+              {LEGAL_PAGES_ENABLED ? (
+                <a href={LEGAL_PATHS.terms} className="text-brand-link hover:underline">
+                  Terms of Service
+                </a>
+              ) : (
+                <span>Terms of Service</span>
+              )}
+              .
+            </p>
+          )}
         </div>
       ) : (
         <p className="text-xs text-gray-500 dark:text-slate-400" data-testid="booth-picker-hint">
