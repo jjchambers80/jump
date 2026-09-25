@@ -17,6 +17,10 @@ process.env.STRIPE_SECRET_KEY = 'sk_test_fake_key';
 // change test behaviour. Suites that need them set them explicitly.
 process.env.STRIPE_WEBHOOK_SECRET = '';
 process.env.STRIPE_CONNECT_WEBHOOK_SECRET = '';
+// Unsigned webhook bodies are refused unless this is explicitly set (see
+// routes/webhooks.js). Suites post unsigned fixtures, so opt in here — this is
+// the ONLY place outside a developer's own backend/.env that may set it.
+process.env.STRIPE_WEBHOOK_ALLOW_UNSIGNED = 'true';
 process.env.STRIPE_CONNECT_ENABLED = '';
 process.env.APPLICATIONS_PAYMENTS_ENABLED = '';
 process.env.RESEND_API_KEY = 're_test_fake_key';

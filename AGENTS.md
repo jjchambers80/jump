@@ -50,6 +50,7 @@ cd frontend && npm run test:unit    # Vitest unit tests (lib/color.ts)
 | `AUTH_SECRET` | backend + frontend | **Must match** |
 | `STRIPE_SECRET_KEY` | backend | |
 | `STRIPE_WEBHOOK_SECRET` | backend | |
+| `STRIPE_WEBHOOK_ALLOW_UNSIGNED` | backend | Optional, **local development only**. Without a signing secret every `/webhooks/stripe*` endpoint refuses the event with 500; `true` restores the old permissive parse so `stripe trigger` works without `stripe listen`. Only `backend/tests/setup.js` and a developer's own `backend/.env` may set it — never a deployed service |
 | `RESEND_API_KEY` | backend | |
 | `NEXT_PUBLIC_API_URL` | frontend | Points to backend URL |
 | `BUCKET_NAME`, `BUCKET_ENDPOINT`, `BUCKET_ACCESS_KEY_ID`, `BUCKET_SECRET_ACCESS_KEY`, `BUCKET_REGION` | backend | S3-compatible image storage (Railway Bucket). Unset → local `uploads/` disk (ephemeral on Railway) |
@@ -155,7 +156,7 @@ Auth.js v5 (JWT HS256) · Resend email · Redis caching · Railway deployment
 
 1. AUTH_SECRET mismatch → silent JWT verification failure
 2. Prisma client not regenerated after schema change → stale types
-3. Stripe webhooks locally need: `stripe listen --forward-to localhost:3000/webhooks/stripe` (add `--forward-connect-to localhost:3000/webhooks/stripe/connect` when `STRIPE_CONNECT_ENABLED=true`)
+3. Stripe webhooks locally need: `stripe listen --forward-to localhost:3000/webhooks/stripe` (add `--forward-connect-to localhost:3000/webhooks/stripe/connect` when `STRIPE_CONNECT_ENABLED=true`). Without a signing secret every webhook endpoint now **refuses** the event with 500 — set the `whsec_…` the CLI prints, or `STRIPE_WEBHOOK_ALLOW_UNSIGNED=true` for hand-rolled local posts. An unexpected handler error is also a 500 so Stripe retries; only deliberately ignored events answer 200
 4. Capacity is per-tier, not per-event
 5. Railway services need explicit PORT env var
 6. Public org/venue/event pages use `brand` Tailwind tokens (CSS vars set by `BrandScope`), not raw blue classes — see `docs/wiki/features/organization-branding.md`
