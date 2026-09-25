@@ -294,6 +294,23 @@ class TicketService {
   }
 
   /**
+   * A ticket to a cancelled event never opens the door.
+   *
+   * `EventService.cancelEvent` voids every VALID ticket, so this is normally
+   * unreachable. It is here for the order that was mid-checkout when the
+   * organizer cancelled: the Stripe webhook lands afterwards and mints fresh
+   * VALID tickets for an event that no longer exists. Requires `event.status`
+   * in the caller's select.
+   */
+  _assertEventNotCancelled(ticket) {
+    if (ticket.event?.status !== 'CANCELLED') return;
+    const error = new ConflictError('This event has been cancelled');
+    error.redemptionStatus = 'EVENT_CANCELLED';
+    error.ticketId = ticket.id;
+    throw error;
+  }
+
+  /**
    * Look up a ticket by barcode without redeeming it.
    * Used by the scan preview step (scan → show info → confirm).
    *
@@ -307,7 +324,7 @@ class TicketService {
     const ticket = await prisma.ticket.findUnique({
       where: { barcode },
       include: {
-        event: { select: { id: true, name: true, date: true, venue: { select: { organizationId: true, timezone: true } } } },
+        event: { select: { id: true, name: true, date: true, status: true, venue: { select: { organizationId: true, timezone: true } } } },
         priceTier: { select: { name: true } },
         contact: { select: { firstName: true, lastName: true, email: true } },
         // Add-ons bought with the order (spec 012) so staff can hand them over at the door
@@ -328,6 +345,8 @@ class TicketService {
       error.statusCode = 403;
       throw error;
     }
+
+    this._assertEventNotCancelled(ticket);
 
     // Lazy expiration
     if (ticket.status === 'VALID' && new Date(ticket.event.date) < new Date()) {
@@ -366,7 +385,7 @@ class TicketService {
     const ticket = await prisma.ticket.findUnique({
       where: { barcode },
       include: {
-        event: { select: { id: true, name: true, date: true, venue: { select: { organizationId: true, timezone: true } } } },
+        event: { select: { id: true, name: true, date: true, status: true, venue: { select: { organizationId: true, timezone: true } } } },
         priceTier: { select: { name: true } },
         contact: { select: { firstName: true, lastName: true } },
         order: { select: { addOns: { where: { refundedAt: null }, include: { addOn: { select: { name: true } } } } } },
@@ -386,6 +405,8 @@ class TicketService {
       error.statusCode = 403;
       throw error;
     }
+
+    this._assertEventNotCancelled(ticket);
 
     // Lazy expiration
     if (ticket.status === 'VALID' && new Date(ticket.event.date) < new Date()) {
@@ -485,7 +506,7 @@ class TicketService {
     const ticket = await prisma.ticket.findUnique({
       where: { id: ticketId },
       include: {
-        event: { select: { id: true, name: true, date: true, venue: { select: { organizationId: true, timezone: true } } } },
+        event: { select: { id: true, name: true, date: true, status: true, venue: { select: { organizationId: true, timezone: true } } } },
         priceTier: { select: { name: true } },
         contact: { select: { firstName: true, lastName: true } },
       },
@@ -505,6 +526,8 @@ class TicketService {
       wrongEventError.statusCode = 403;
       throw wrongEventError;
     }
+
+    this._assertEventNotCancelled(ticket);
 
     // 4. Lazy expiration
     if (ticket.status === 'VALID' && new Date(ticket.event.date) < new Date()) {
@@ -734,10 +757,12 @@ class TicketService {
   async adminCheckIn(ticketId) {
     const ticket = await prisma.ticket.findUnique({
       where: { id: ticketId },
-      select: { id: true, status: true },
+      select: { id: true, status: true, event: { select: { status: true } } },
     });
 
     if (!ticket) throw new NotFoundError('Ticket not found');
+    if (ticket.event?.status === 'CANCELLED')
+      throw new ConflictError('Cannot check in a ticket for a cancelled event');
     if (ticket.status === 'REDEEMED') throw new ConflictError('Ticket already checked in');
     if (ticket.status === 'VOIDED') throw new ConflictError('Cannot check in a voided ticket');
     if (ticket.status === 'EXPIRED') throw new ConflictError('Cannot check in an expired ticket');

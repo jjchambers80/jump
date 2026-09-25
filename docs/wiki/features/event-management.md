@@ -20,7 +20,7 @@ Events have a strict lifecycle: DRAFT -> PUBLISHED -> CANCELLED (terminal). Even
 1. **Create** (`POST /organizations/:orgId/events`): Validates venue belongs to org, capacity is 1--100,000, date is in the future, and sum of tier `quantityTotal` does not exceed capacity. Creates event in DRAFT status with nested price tiers. Tax rate is computed from venue postal code (non-blocking).
 2. **Update** (`PATCH /organizations/:orgId/events/:eventId`): Validates org ownership via `event.venue.organizationId`. Capacity floor check prevents reducing below existing tier inventory total. Venue change triggers tax rate refresh.
 3. **Publish** (`POST .../events/:eventId/publish`): Only DRAFT -> PUBLISHED allowed. Tax rate refreshed on publish to ensure accuracy.
-4. **Cancel** (`POST .../events/:eventId/cancel`): Only PUBLISHED -> CANCELLED allowed. Ticket holder notification is a TODO (T076).
+4. **Cancel** (`POST .../events/:eventId/cancel`): Only PUBLISHED -> CANCELLED allowed. In the same transaction it emails everyone still holding a live ticket (or, on an RSVP event, every `GOING` guest) and flips every `VALID` ticket to `VOIDED`. A `REDEEMED` ticket is notified but not voided -- that person already came through the door. **No refund is issued**: who owes a cancellation refund is an open policy question, so the email says the tickets are void and points the buyer at support rather than promising money back.
 5. **Public listing** (`GET /events`): Returns only PUBLISHED events with pagination, category filter, and date range filter. Includes venue summary and active tier availability.
 6. **Public detail** (`GET /events/:eventId`): Returns single event only if status is PUBLISHED.
 7. **Org listing** (`GET /organizations/:orgId/events`): Returns all statuses for the org with optional status filter.
@@ -47,7 +47,9 @@ Events have a strict lifecycle: DRAFT -> PUBLISHED -> CANCELLED (terminal). Even
 - **Only PUBLISHED events visible to public.** `getEventById` throws `NotFoundError` for non-PUBLISHED events.
 - **Capacity is on Event but actual inventory tracked per-tier.** `Event.capacity` is a ceiling; real availability is `sum(priceTier.quantityTotal - quantitySold - quantityReserved)`.
 - **Org ownership resolved transitively** via `venue.organizationId` -- Event has no direct `organizationId` column.
-- **CANCELLED is terminal** -- no transition back to DRAFT or PUBLISHED.
+- **CANCELLED is terminal** -- no transition back to DRAFT or PUBLISHED. That is what makes cancellation idempotent: a second cancel is a 409, so nobody is emailed twice and no ticket is voided twice.
+- **Cancellation does not restore tier inventory.** The event is over; `quantitySold` stays as the record of what was sold. (A later refund through `RefundService` is what moves inventory, and it refunds `order.totalAmount` regardless of ticket status.)
+- **A ticket for a CANCELLED event never opens the door.** Voiding covers the tickets that existed at cancellation; `TicketService._assertEventNotCancelled` covers the ones that did not -- an order mid-checkout whose Stripe webhook lands afterwards mints fresh `VALID` tickets. Scan, redeem and admin check-in all refuse it (`EVENT_CANCELLED`).
 - **Tax rate refresh is non-blocking** -- event is created/updated even if Stripe Tax API fails. `taxRate` stays null/0 on failure.
 - **Capacity floor check on update** -- cannot reduce capacity below sum of existing tier quantities.
 
