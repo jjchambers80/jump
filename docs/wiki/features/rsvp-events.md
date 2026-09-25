@@ -15,10 +15,11 @@ A background sweep (~hourly) sends a reminder email to GOING RSVPs when the even
 - **Sweep service**: `backend/src/services/RsvpReminderService.js`
 - **Timer**: registered in `server.js`, first tick 60 s after boot, then every `RSVP_REMINDER_SWEEP_INTERVAL_MS` (default 1 h)
 - **Idempotent**: stamps `EventRsvp.remindedAt` atomically with `updateMany` before sending; a concurrent replica claims zero rows
+- **Retry**: a send that throws releases its own stamp (`updateMany` guarded on `remindedAt` equal to the value that sweep wrote), so the next sweep re-claims the row. Retries are bounded by the window — at most ~6 hourly sweeps. The trade: a provider that accepted the send but failed to acknowledge it can produce a duplicate reminder, which is preferred over a silently missing one
 - **Window**: events whose UTC date is 20–26 hours ahead of the sweep tick are eligible (survives ~4 h sweep delays)
 - **Email**: branded shell with org logo, event name, date/time in venue timezone (spec 033), party size, Cancel RSVP button
 - **Configuration**: `RSVP_REMINDER_SWEEP_INTERVAL_MS` env var
-- **Unit tests**: `backend/tests/unit/rsvpReminder.test.js` (8 tests, all mock prisma)
+- **Unit tests**: `backend/tests/unit/rsvpReminder.test.js` (11 tests, all mock prisma)
 
 ## Live headcount (admin)
 
