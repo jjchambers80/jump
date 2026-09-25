@@ -663,12 +663,12 @@ model OrganizationPerson {
 }
 
 model Venue {
-  id             String              @id @default(cuid())
+  id             String  @id @default(cuid())
   organizationId String
   name           String
   // Public namespace is /venues/:slug, so venue slugs are globally unique.
-  slug           String              @unique @default(cuid())
-  slugCustomized Boolean             @default(false)
+  slug           String  @unique @default(cuid())
+  slugCustomized Boolean @default(false)
   address        String
   city           String?
   state          String?
@@ -712,7 +712,7 @@ model Contact {
   emailUnsubscribedAt   DateTime?
   accountCreatedAt      DateTime? // null = guest checkout; set = login-enabled buyer account
   phone                 String?
-  tags                  String[]               @default([])
+  tags                  String[]              @default([])
   stripeCustomerId      String?                @unique // spec 011: platform-account Customer holding the applicant's saved card
 
   createdAt DateTime @default(now())
@@ -778,18 +778,18 @@ model BuyerLoginToken {
 }
 
 model Event {
-  id               String        @id @default(cuid())
-  venueId          String
-  name             String
+  id             String      @id @default(cuid())
+  venueId        String
+  name           String
   // Public namespace is /events/:slug, so event slugs are globally unique.
-  slug             String        @unique @default(cuid())
-  slugCustomized   Boolean       @default(false)
-  description      String?
-  logoUrl          String?
-  imageId          String?
-  date             DateTime
-  capacity         Int
-  category         String?
+  slug           String      @unique @default(cuid())
+  slugCustomized Boolean     @default(false)
+  description    String?
+  logoUrl        String?
+  imageId        String?
+  date           DateTime
+  capacity       Int
+  category       String?
   status           EventStatus   @default(DRAFT)
   admissionMode    AdmissionMode @default(TICKETED)
   rsvpLimit        Int?
@@ -1234,22 +1234,22 @@ enum BoothStatus {
 }
 
 model FloorMap {
-  id                    String         @id @default(cuid())
-  organizationId        String
-  eventId               String         @unique // one map per event in v1
-  name                  String
-  status                FloorMapStatus @default(DRAFT)
-  unit                  String         @default("ft") // display only
-  gridSize              Int            @default(10) // px per grid unit in the editor
-  width                 Int // grid units
-  height                Int
-  underlayFileId        String? // StoreFile
-  underlayOpacity       Int            @default(40)
-  layout                Json // { version: 1, elements: [...] }
+  id              String         @id @default(cuid())
+  organizationId  String
+  eventId         String         @unique // one map per event in v1
+  name            String
+  status          FloorMapStatus @default(DRAFT)
+  unit            String         @default("ft") // display only
+  gridSize        Int            @default(10) // px per grid unit in the editor
+  width           Int // grid units
+  height          Int
+  underlayFileId  String? // StoreFile
+  underlayOpacity Int            @default(40)
+  layout          Json // { version: 1, elements: [...] }
   createdFromTemplateId String? // informational; templates are snapshots, not parents
-  publishedAt           DateTime?
-  createdAt             DateTime       @default(now())
-  updatedAt             DateTime       @updatedAt
+  publishedAt     DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   event        Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
