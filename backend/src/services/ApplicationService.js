@@ -264,6 +264,17 @@ class ApplicationService {
       throw new ValidationError('This form has no tiers');
     }
 
+    // Booth-first (spec 037): a tier sold from a published floor map is applied
+    // for *with* a specific booth, chosen on the form before submission.
+    // `mapBound` is the existing signal for "this tier sells a spot on the map",
+    // so there is no second switch to keep in sync with it — but a map that is
+    // not published yet has nothing to pick from, and those forms keep the
+    // approval-first flow (approve, then the vendor picks from the status page).
+    const boothFirst = Boolean(tier?.mapBound) && (await applicationFormService.mapPublished(eventId));
+    const boothId = body.boothId ? String(body.boothId) : null;
+    if (boothId && !boothFirst) throw new ValidationError('This option is not sold from the floor map');
+    if (boothFirst && !boothId) throw new ValidationError('Choose a booth on the floor map to continue');
+
     const profileData = applicantProfileService.validate(body.profile || {});
     if ((files.profilePhotos || []).length > MAX_PROFILE_PHOTOS) throw new ValidationError(`At most ${MAX_PROFILE_PHOTOS} profile photos`);
     const answers = this._validateAnswers(form.questions, body.answers || {}, files.answerPhotos || {});
@@ -319,6 +330,11 @@ class ApplicationService {
       // An abandoned checkout (DRAFT) is replaced by the new submission: it is
       // withdrawn, never deleted, so its order stays in the ledger as CANCELLED.
       if (dup) {
+        // Its booth goes back first. Otherwise the applicant's own abandoned
+        // draft is still holding the booth they are re-picking, and the unique
+        // index on `holdApplicationId` would reject the new hold below — the
+        // applicant would be locked out of the map by themselves.
+        await boothService.releaseForApplication(dup.id, { tx });
         await this._transition(
           tx,
           dup.id,
@@ -364,6 +380,19 @@ class ApplicationService {
         },
         select: { id: true, eventId: true, contactId: true },
       });
+      // Booth-first: the hold happens in this same transaction, so the booth and
+      // the application commit together. There is never an application without
+      // its booth, nor a booth held by a submission that rolled back. Losing the
+      // race here (409 BOOTH_TAKEN) aborts the whole submission — the applicant
+      // picks another booth rather than ending up applied-for-nothing.
+      if (boothId) {
+        const hold = await boothService.holdForReview(created.id, boothId, {
+          tx,
+          submittedAt: new Date(),
+          eventStartsAt: event.date,
+        });
+        await tx.application.update({ where: { id: created.id }, data: { boothLabel: hold.label } });
+      }
       if (orderData)
         await orderService.createApplicationOrder(tx, { application: created, data: orderData });
       await legalAcceptanceService.record(
@@ -407,6 +436,19 @@ class ApplicationService {
       logger.error('Application checkout session failed', { applicationId: application.id, error: error.message });
     }
     return { applicationId: application.id, orderRef, statusUrl, next: 'checkout', checkoutUrl };
+  }
+
+  /**
+   * Whether this application already holds the booth it applied for — i.e. it
+   * came through the booth-first flow (spec 037) rather than waiting to pick
+   * one after approval.
+   */
+  async _heldFromApplication(tx, applicationId) {
+    const booth = await tx.booth.findFirst({
+      where: { holdApplicationId: applicationId, status: 'HELD', holdKind: 'APPLICATION' },
+      select: { id: true },
+    });
+    return Boolean(booth);
   }
 
   /** Guest status page: token must match; returns the applicant-facing view. */
@@ -817,12 +859,24 @@ class ApplicationService {
             await this._takeCapacity(tx, application, 'RESERVED');
             data.capacitySlot = 'RESERVED';
           }
-          if (tier?.mapBound) {
-            // A map-bound approval is an invitation to select inventory. Money
-            // moves only after the applicant holds a specific booth.
+          const dueAt = new Date(Date.now() + (tier.form.paymentDueDays ?? 7) * 86_400_000);
+          // Booth-first (spec 037): the applicant already holds the booth they
+          // applied for, so approval is the moment to charge — there is nothing
+          // left to choose. The hold moves off the review clock and onto the
+          // payment clock first, so a declined card leaves them their spot until
+          // the balance is genuinely overdue instead of for the next 15 minutes.
+          const heldFirst = tier?.mapBound ? await this._heldFromApplication(tx, applicationId) : false;
+          if (tier?.mapBound && !heldFirst) {
+            // Approval-first: a map-bound approval with no booth yet is an
+            // invitation to select inventory. Money moves only once the
+            // applicant holds a specific booth.
             data.paymentStatus = 'PAYMENT_DUE';
-            orderData.dueAt = new Date(Date.now() + (tier.form.paymentDueDays ?? 7) * 86_400_000);
+            orderData.dueAt = dueAt;
           } else {
+            if (heldFirst) {
+              orderData.dueAt = dueAt;
+              await boothService.extendApplicationHold(applicationId, dueAt, { tx });
+            }
             data.paymentStatus = 'PROCESSING';
             data.chargeAttempts = application.chargeAttempts + 1;
             chargeNow = true;
@@ -835,8 +889,16 @@ class ApplicationService {
         await this._releaseCapacity(tx, application);
         data.capacitySlot = 'NONE';
       }
-      if (spec.to === 'WITHDRAWN') {
+      // Any decision that is not an approval ends this application's claim on
+      // its booth (spec 037). Rejection is the obvious one; waitlisting counts
+      // too, because a waitlisted vendor holding a specific booth is inventory
+      // the organizer cannot sell to anyone they did approve. If they are
+      // approved off the waitlist later they pick again from the map.
+      if (['REJECTED', 'WAITLISTED', 'WITHDRAWN'].includes(spec.to)) {
         await boothService.releaseForApplication(applicationId, { tx });
+        data.boothLabel = null;
+      }
+      if (spec.to === 'WITHDRAWN') {
         data.withdrawnBy = 'ORGANIZER';
         data.withdrawReason = note;
       }

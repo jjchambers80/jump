@@ -503,7 +503,8 @@ class ApplicationFormService {
       orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
     });
     const addOns = await this._addOnsForEvent(eventId, { activeOnly: true });
-    return forms.map((f) => this._serializePublicForm(f, event, addOns));
+    const mapPublished = await this.mapPublished(eventId);
+    return forms.map((f) => this._serializePublicForm(f, event, addOns, mapPublished));
   }
 
   async publicForm(eventId, slug) {
@@ -511,7 +512,12 @@ class ApplicationFormService {
     if (event.status !== 'PUBLISHED') throw new NotFoundError('Event not found');
     const form = await prisma.applicationForm.findFirst({ where: { eventId, slug, status: { in: ['OPEN', 'CLOSED'] } }, include: FORM_INCLUDE });
     if (!form) throw new NotFoundError('Application form not found');
-    return this._serializePublicForm(form, event, await this._addOnsForEvent(eventId, { activeOnly: true }));
+    return this._serializePublicForm(
+      form,
+      event,
+      await this._addOnsForEvent(eventId, { activeOnly: true }),
+      await this.mapPublished(eventId)
+    );
   }
 
   /** Whether the form accepts submissions right now; reason when not. */
@@ -732,7 +738,13 @@ class ApplicationFormService {
   }
 
   /** Applicant-facing: no internal counters, only the applicant price and availability. */
-  _serializePublicForm(form, event, addOns = []) {
+  /** Whether this event's floor map is live, i.e. whether booths can be picked (spec 037). */
+  async mapPublished(eventId) {
+    const map = await prisma.floorMap.findUnique({ where: { eventId }, select: { status: true } });
+    return map?.status === 'PUBLISHED';
+  }
+
+  _serializePublicForm(form, event, addOns = [], mapPublished = false) {
     const organization = event.venue.organization;
     return {
       id: form.id,
@@ -759,6 +771,10 @@ class ApplicationFormService {
             feesIncluded: amounts.feeMode === 'PASS' ? Math.round((amounts.applicantPays - amounts.subtotal - amounts.tax) * 100) / 100 : 0,
             tax: amounts.tax,
             soldOut: t.quantityTotal - t.quantityApproved - t.quantityReserved <= 0,
+            // Spec 037: true when applying to this tier means picking a booth on
+            // the form first. `mapBound` alone is not enough — an unpublished map
+            // has nothing to pick from, so those tiers stay approval-first.
+            boothFirst: Boolean(t.mapBound) && mapPublished,
             // Spec 012: optional extras with the per-unit applicant price under this form's fee mode.
             addOns: this._offeredOnTier(t, addOns).map((a) => this._serializePublicAddOn(a, form, event, organization)),
           };

@@ -17,10 +17,24 @@
 // A hold without an expiry leaks inventory, so every hold carries
 // `holdExpiresAt` and `sweepExpiredHolds` reclaims it — except while Stripe may
 // still settle the payment.
+//
+// Spec 037 adds a second kind of hold. `Booth.holdKind` names the clock a hold
+// runs on. It is written once, when the hold is created, and never changed:
+//
+//   CHECKOUT     the vendor picked this booth after approval and money is about
+//                to move. BOOTH_HOLD_MS (15 min). A declined card releases it,
+//                because the pick was speculative — they simply choose again.
+//   APPLICATION  the vendor picked this booth *on the apply form*, before anyone
+//                had decided anything. It is their committed spot, so it
+//                outlives a declined card and is released only by a decision
+//                that ends the application (reject / waitlist / withdraw /
+//                refund / overdue) or by the sweep once its deadline passes.
+//                That deadline is the review deadline, moved out to the order's
+//                payment due date when the application is approved.
 
 import { prisma } from '@jump/db';
 import { ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
-import { BOOTH_HOLD_MS } from '../config/applications.js';
+import { BOOTH_HOLD_MS, BOOTH_REVIEW_HOLD_DAYS } from '../config/applications.js';
 import logger from '../utils/logger.js';
 
 function coded(error, code) {
@@ -34,6 +48,18 @@ const UNIQUE_VIOLATION = ['P2002', '23505'];
 
 function isUniqueViolation(error) {
   return UNIQUE_VIOLATION.includes(error?.code) || UNIQUE_VIOLATION.includes(String(error?.meta?.code));
+}
+
+/**
+ * When a booth-first hold gives up if nobody ever decides: BOOTH_REVIEW_HOLD_DAYS
+ * after submission, or the event's start, whichever comes first. Never in the
+ * past — an application submitted for an event that already started would
+ * otherwise take a hold the very next sweep reclaims.
+ */
+export function reviewDeadline(submittedAt = new Date(), eventStartsAt = null) {
+  const byReview = new Date(submittedAt.getTime() + BOOTH_REVIEW_HOLD_DAYS * 86_400_000);
+  const deadline = eventStartsAt && new Date(eventStartsAt) < byReview ? new Date(eventStartsAt) : byReview;
+  return deadline > new Date() ? deadline : byReview;
 }
 
 class BoothService {
@@ -93,6 +119,99 @@ class BoothService {
       throw coded(new ConflictError('This application is already holding a booth'), 'ALREADY_HOLDING_BOOTH');
     }
 
+    return this._takeHold(tx, {
+      applicationId,
+      boothId,
+      eventId: application.eventId,
+      tierId: application.tierId,
+      holdKind: 'CHECKOUT',
+      holdExpiresAt: new Date(Date.now() + BOOTH_HOLD_MS),
+    });
+  }
+
+  /**
+   * Booth-first (spec 037): hold a booth for an application that nobody has
+   * decided on yet. Called from inside the submit transaction, right after the
+   * Application row is created, so the booth and the application become
+   * unavailable-to-everyone-else in the same commit — there is no window where
+   * an application exists without its booth, or a booth is held by an
+   * application that was rolled back.
+   *
+   * `submittedAt` anchors the review deadline; `eventStartsAt` clamps it,
+   * because a hold that outlives the event reserves nothing.
+   */
+  async holdForReview(applicationId, boothId, { tx = null, submittedAt = new Date(), eventStartsAt = null } = {}) {
+    if (!boothId || typeof boothId !== 'string') {
+      throw coded(new ValidationError('boothId is required'), 'INVALID_PURCHASE');
+    }
+    if (!tx) {
+      return prisma.$transaction((inner) =>
+        this.holdForReview(applicationId, boothId, { tx: inner, submittedAt, eventStartsAt })
+      );
+    }
+
+    const lockedApplication = await tx.$queryRawUnsafe(
+      'SELECT "id" FROM "Application" WHERE "id" = $1 FOR UPDATE',
+      applicationId
+    );
+    if (!lockedApplication[0]) throw new NotFoundError('Application not found');
+
+    const application = await tx.application.findUnique({
+      where: { id: applicationId },
+      select: {
+        id: true,
+        status: true,
+        tierId: true,
+        eventId: true,
+        tier: { select: { id: true, mapBound: true } },
+      },
+    });
+    // Booth-first runs before any decision. DRAFT is the paid path (the card is
+    // saved next); SUBMITTED is the already-banked path. Anything decided uses
+    // chooseBooth instead.
+    if (!application || !['DRAFT', 'SUBMITTED'].includes(application.status)) {
+      throw coded(new ValidationError('Only an undecided application can reserve a booth'), 'APPLICATION_DECIDED');
+    }
+    if (!application.tierId) {
+      throw coded(new ValidationError('This application has no tier'), 'NO_TIER');
+    }
+    if (!application.tier?.mapBound) {
+      throw coded(new ValidationError('This application tier is not sold from a floor map'), 'FORM_NOT_MAP_BOUND');
+    }
+
+    return this._takeHold(tx, {
+      applicationId,
+      boothId,
+      eventId: application.eventId,
+      tierId: application.tierId,
+      holdKind: 'APPLICATION',
+      // A DRAFT is not under review yet — it is mid card-capture on Stripe, so
+      // it runs on the checkout clock. Giving it the full review window would
+      // mean every abandoned Checkout parks a booth for a month. `promoteToReview`
+      // moves it to the review clock the moment the card actually lands.
+      holdExpiresAt:
+        application.status === 'DRAFT'
+          ? new Date(Date.now() + BOOTH_HOLD_MS)
+          : reviewDeadline(submittedAt, eventStartsAt),
+    });
+  }
+
+  /**
+   * The card landed and the application is now genuinely under review: move its
+   * booth-first hold from the checkout clock to the review clock (spec 037).
+   * Returns null when the hold is already gone — the applicant took longer on
+   * Stripe than the hold lasted and somebody else bought the booth.
+   */
+  async promoteToReview(applicationId, { tx = null, submittedAt = new Date(), eventStartsAt = null } = {}) {
+    return this.extendApplicationHold(applicationId, reviewDeadline(submittedAt, eventStartsAt), { tx });
+  }
+
+  /**
+   * Lock the booth, prove the applicant may have it, and take the hold. Shared
+   * by both entry points so the concurrency story and the tenant scoping are
+   * written once. The caller has already locked the Application row.
+   */
+  async _takeHold(tx, { applicationId, boothId, eventId, tierId, holdKind, holdExpiresAt }) {
     const [booth] = await tx.$queryRawUnsafe(
       'SELECT * FROM "Booth" WHERE "id" = $1 FOR UPDATE',
       boothId
@@ -109,23 +228,23 @@ class BoothService {
       where: { id: booth.mapId },
       select: { status: true, eventId: true },
     });
-    if (!map || map.eventId !== application.eventId) {
+    if (!map || map.eventId !== eventId) {
       throw new NotFoundError('Booth not found');
     }
-    if (booth.tierId !== application.tierId) {
+    if (booth.tierId !== tierId) {
       throw coded(new ValidationError('This booth belongs to a different tier'), 'BOOTH_TIER_MISMATCH');
     }
     if (map.status !== 'PUBLISHED') {
       throw coded(new ValidationError('This floor map is not published'), 'MAP_NOT_PUBLISHED');
     }
 
-    const holdExpiresAt = new Date(Date.now() + BOOTH_HOLD_MS);
     try {
       await tx.booth.update({
         where: { id: boothId },
         data: {
           status: 'HELD',
           holdApplicationId: applicationId,
+          holdKind,
           holdExpiresAt,
           applicationId: null,
           assignedById: null,
@@ -141,8 +260,29 @@ class BoothService {
       }
       throw error;
     }
-    logger.info('Booth held for purchase', { event: 'booth_held', boothId, applicationId, holdExpiresAt });
-    return { boothId, holdExpiresAt, status: 'HELD' };
+    logger.info('Booth held', { event: 'booth_held', boothId, applicationId, holdKind, holdExpiresAt });
+    return { boothId, label: booth.label, holdKind, holdExpiresAt, status: 'HELD' };
+  }
+
+  /**
+   * Approval moves a booth-first hold off the review clock and onto the payment
+   * clock (spec 037). A no-op for a CHECKOUT hold, which has its own short
+   * deadline, and for an application with no hold at all.
+   */
+  async extendApplicationHold(applicationId, expiresAt, { tx = null } = {}) {
+    if (!expiresAt) return null;
+    if (!tx) return prisma.$transaction((inner) => this.extendApplicationHold(applicationId, expiresAt, { tx: inner }));
+    const [booth] = await tx.$queryRawUnsafe(
+      `SELECT * FROM "Booth" WHERE "holdApplicationId" = $1 FOR UPDATE`,
+      applicationId
+    );
+    if (!booth || booth.status !== 'HELD' || booth.holdKind !== 'APPLICATION') return null;
+    // Only ever push the deadline out; never shorten a hold the vendor already has.
+    if (booth.holdExpiresAt && new Date(booth.holdExpiresAt) >= new Date(expiresAt)) {
+      return { boothId: booth.id, holdExpiresAt: booth.holdExpiresAt };
+    }
+    await tx.booth.update({ where: { id: booth.id }, data: { holdExpiresAt: expiresAt } });
+    return { boothId: booth.id, holdExpiresAt: expiresAt };
   }
 
   /** Guard a map-bound settlement and protect its booth while payment is in flight. */
@@ -208,14 +348,23 @@ class BoothService {
     }
     await tx.booth.update({
       where: { id: booth.id },
-      data: { status: 'SOLD', applicationId, holdApplicationId: null, holdExpiresAt: null, assignedById: null },
+      data: { status: 'SOLD', applicationId, holdApplicationId: null, holdKind: null, holdExpiresAt: null, assignedById: null },
     });
     await tx.application.update({ where: { id: applicationId }, data: { boothLabel: booth.label } });
     logger.info('Booth purchase completed', { event: 'booth_sold', boothId: booth.id, applicationId });
     return { boothId: booth.id, label: booth.label, status: 'SOLD' };
   }
 
-  /** Release an active hold after a decline, cancellation or abandoned checkout. */
+  /**
+   * A charge failed, a checkout was abandoned or cancelled.
+   *
+   * A CHECKOUT hold goes back to the pool: that pick was speculative, made after
+   * approval, and the vendor picks again from the map. An APPLICATION hold does
+   * not (spec 037) — the vendor chose that booth on the apply form and was
+   * approved for it, so a declined card must not hand their spot to the next
+   * person. It stays held until the payment due date, and the overdue sweep or
+   * an organizer decision is what finally releases it.
+   */
   async releaseHoldOnFailure(applicationId, { tx = null } = {}) {
     if (!tx) return prisma.$transaction((inner) => this.releaseHoldOnFailure(applicationId, { tx: inner }));
     const [booth] = await tx.$queryRawUnsafe(
@@ -223,9 +372,15 @@ class BoothService {
       applicationId
     );
     if (!booth || booth.status !== 'HELD') return null;
+    if (booth.holdKind === 'APPLICATION') {
+      logger.info('Booth-first hold kept through a payment failure', {
+        event: 'booth_hold_kept', boothId: booth.id, applicationId, holdExpiresAt: booth.holdExpiresAt,
+      });
+      return { boothId: booth.id, status: 'HELD', kept: true };
+    }
     await tx.booth.update({
       where: { id: booth.id },
-      data: { status: 'AVAILABLE', holdApplicationId: null, holdExpiresAt: null, applicationId: null, assignedById: null },
+      data: { status: 'AVAILABLE', holdApplicationId: null, holdKind: null, holdExpiresAt: null, applicationId: null, assignedById: null },
     });
     return { boothId: booth.id, status: 'AVAILABLE' };
   }
@@ -240,7 +395,7 @@ class BoothService {
     if (!booth) return null;
     await tx.booth.update({
       where: { id: booth.id },
-      data: { status: 'AVAILABLE', applicationId: null, holdApplicationId: null, holdExpiresAt: null, assignedById: null },
+      data: { status: 'AVAILABLE', applicationId: null, holdApplicationId: null, holdKind: null, holdExpiresAt: null, assignedById: null },
     });
     await tx.application.update({ where: { id: applicationId }, data: { boothLabel: null } });
     return { boothId: booth.id, status: 'AVAILABLE' };
@@ -249,11 +404,18 @@ class BoothService {
   async boothForApplication(applicationId, { tx = prisma } = {}) {
     return tx.booth.findFirst({
       where: { OR: [{ applicationId }, { holdApplicationId: applicationId }] },
-      select: { id: true, mapId: true, label: true, status: true, w: true, h: true, holdExpiresAt: true, applicationId: true, holdApplicationId: true },
+      select: { id: true, mapId: true, label: true, status: true, w: true, h: true, holdKind: true, holdExpiresAt: true, applicationId: true, holdApplicationId: true },
     });
   }
 
-  /** Expire stale holds, except while Stripe may still settle the payment. */
+  /**
+   * Expire stale holds, except while Stripe may still settle the payment. One
+   * query covers both clocks (spec 037): `holdExpiresAt` already carries the
+   * right deadline for the hold's kind — minutes for CHECKOUT, the review or
+   * payment-due date for APPLICATION — so the sweep only has to ask whether it
+   * has passed. This is the reclaim path that keeps an abandoned booth-first
+   * application from leaking inventory until the map is empty.
+   */
   async sweepExpiredHolds(now = new Date()) {
     const expired = await prisma.booth.findMany({
       where: { status: 'HELD', holdExpiresAt: { lte: now }, holdApplicationId: { not: null } },
@@ -270,8 +432,17 @@ class BoothService {
         if (application && ['PROCESSING', 'PAID'].includes(application.paymentStatus)) return 'protected';
         await tx.booth.update({
           where: { id: booth.id },
-          data: { status: 'AVAILABLE', holdApplicationId: null, holdExpiresAt: null, applicationId: null, assignedById: null },
+          data: { status: 'AVAILABLE', holdApplicationId: null, holdKind: null, holdExpiresAt: null, applicationId: null, assignedById: null },
         });
+        // A booth-first application carries its booth's label from submission,
+        // so reclaiming the booth has to take the label back with it — otherwise
+        // the status page and the organizer's list keep naming a booth that
+        // somebody else can now buy.
+        if (booth.holdKind === 'APPLICATION') {
+          await tx.application
+            .update({ where: { id: booth.holdApplicationId }, data: { boothLabel: null } })
+            .catch(() => {});
+        }
         return 'released';
       });
       if (outcome === 'released') released += 1;
@@ -337,6 +508,7 @@ class BoothService {
           status: 'SOLD',
           applicationId,
           holdApplicationId: null,
+          holdKind: null,
           holdExpiresAt: null,
           assignedById: byUserId || null,
         },
@@ -389,7 +561,7 @@ class BoothService {
 
       await tx.booth.update({
         where: { id: boothId },
-        data: { status: 'AVAILABLE', applicationId: null, holdApplicationId: null, holdExpiresAt: null, assignedById: null },
+        data: { status: 'AVAILABLE', applicationId: null, holdApplicationId: null, holdKind: null, holdExpiresAt: null, assignedById: null },
       });
 
       if (applicationId) {
@@ -485,7 +657,7 @@ class BoothService {
       // Normal move: clear source, set target
       await tx.booth.update({
         where: { id: fromBooth.id },
-        data: { status: 'AVAILABLE', applicationId: null, holdApplicationId: null, holdExpiresAt: null, assignedById: null },
+        data: { status: 'AVAILABLE', applicationId: null, holdApplicationId: null, holdKind: null, holdExpiresAt: null, assignedById: null },
       });
 
       await tx.booth.update({

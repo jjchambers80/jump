@@ -21,6 +21,14 @@ export const MAX_PINNED_QUESTIONS = 2;
 /** Spec 014 phase 2: self-serve booth holds and their expiry sweep. */
 export const BOOTH_HOLD_MS = Number.parseInt(process.env.BOOTH_HOLD_MS || '900000', 10);
 export const BOOTH_SWEEP_INTERVAL_MS = Number.parseInt(process.env.BOOTH_SWEEP_INTERVAL_MS || '60000', 10);
+/**
+ * Spec 037: how long a booth-first hold survives while nobody has decided on the
+ * application. Long, because the clock it replaces is the organizer's review, not
+ * a checkout — but finite, so an application that is never decided and never
+ * withdrawn returns its booth to the pool instead of leaking it forever. Always
+ * clamped to the event start as well; a booth is worth nothing after that.
+ */
+export const BOOTH_REVIEW_HOLD_DAYS = Number.parseInt(process.env.BOOTH_REVIEW_HOLD_DAYS || '30', 10);
 
 export const QUESTION_TYPES = new Set([
   'SHORT_TEXT',
