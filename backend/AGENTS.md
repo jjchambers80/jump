@@ -92,6 +92,13 @@ Products sold alongside a ticket tier (phase 1) or an application tier (phase 2)
 
 See `docs/wiki/features/application-orders.md` (and `application-payments-reporting.md` for the spec 018 history), `specs/024-application-orders/plan.md`.
 
+## Refunds — what goes back, and reconciling it
+
+- **A refund returns everything the buyer paid for that line**, not the listed price. `Ticket.pricePaid` is the *listed* tier price; the card was charged that plus the platform fee, the processing fee and tax, all recorded per line on `OrderItem`. `services/ticketAmounts.js` `ticketAmountPaid(ticket)` is the one place that adds them up (running-remainder split, so N per-ticket refunds sum to the line total to the cent) — use it, and its `TICKET_AMOUNT_INCLUDE`, anywhere a per-ticket amount is quoted or paid. `RefundPolicyService.evaluateRefundPolicy` quotes from the same number, so the account page can never show one amount and pay another. A retained policy fee (spec 031 `Refund.feeAmount`) stays a function of the listed price — that is what organizers set their policy against.
+- **`Order.status = REFUNDED` means the money is back**, not that every line is closed: both `refundTicket` and `refundOrder` compare Σ SUCCEEDED `Refund.amount` against `order.totalAmount` before writing it. Never restore a "no open lines" test — an order marked REFUNDED with money still held also makes `refundOrder` refuse the remainder (409).
+- **Reconciliation**: `npm run report:refunds` (`src/scripts/audit-refund-completeness.js`, READ ONLY, exit 1 on any finding) checks both directions — order status against the money that actually went back, and `--stripe` matches every `Refund` row to a Stripe refund *and every Stripe refund back to a row*, so a dashboard refund or a dispute shows up. The classifier is pure (`services/refundAudit.js`, integer cents) and unit-tested without Postgres. A live-mode key needs `ALLOW_LIVE_STRIPE_READ=1`. Run it before any deploy that changes refund amounts or statuses.
+- Disputes/chargebacks are **not** handled yet: nothing reacts to `charge.dispute.*`, so a disputed order stays COMPLETED and counts as revenue. `report:refunds` surfaces those as `REFUND_ON_UNREFUNDED_ORDER` once the money moves.
+
 ## Venue time zones (spec 033)
 
 - `Venue.timezone` is the wall clock every event date is rendered in. Any payload that carries an event date must carry the venue zone with it — event lists as well as detail, orders (flat `eventTimezone` on list rows), tickets, applications, search, maps. `backend/src/utils/eventTime.js` does the formatting and the `datetime-local` conversions; it is a **parity pair** with `frontend/src/lib/eventTime.ts` over `tests/fixtures/eventTime.fixtures.json`, asserted from both Jest and Vitest.
