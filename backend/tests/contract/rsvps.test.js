@@ -29,6 +29,9 @@ describe('RSVP events contract', () => {
   let draftEvent;
   let pastEvent;
   let ticketedEvent;
+  let doubleEvent;
+  let countEvent;
+  let siblingEvent;
 
   beforeAll(async () => {
     token = await staffToken({ role: 'ADMIN', email: `admin@${TAG}.test` });
@@ -46,6 +49,11 @@ describe('RSVP events contract', () => {
     rsvpEvent = await createEvent({ name: 'Open House', slug: 'open-house', rsvpLimit: 10, rsvpMaxPartySize: 4 });
     limitedEvent = await createEvent({ name: 'Limited', slug: 'limited', rsvpLimit: 1 });
     draftEvent = await createEvent({ name: 'Draft', slug: 'draft', status: 'DRAFT' });
+    // Unlimited events of their own so the headcount assertions below are
+    // absolute numbers instead of deltas on a shared fixture.
+    doubleEvent = await createEvent({ name: 'Double Submit', slug: 'double-submit', rsvpMaxPartySize: 4 });
+    countEvent = await createEvent({ name: 'Counted', slug: 'counted', rsvpMaxPartySize: 4 });
+    siblingEvent = await createEvent({ name: 'Sibling', slug: 'sibling', rsvpMaxPartySize: 4 });
     pastEvent = await createEvent({ name: 'Past', slug: 'past', date: new Date(Date.now() - 60_000) });
     ticketedEvent = await prisma.event.create({
       data: { venueId: venue.id, name: `Ticketed ${TAG}`, slug: `ticketed-${TAG}`, date: future, capacity: 10, status: 'PUBLISHED', admissionMode: 'TICKETED', priceTiers: { create: { name: 'GA', price: 10, quantityTotal: 10 } } },
@@ -133,6 +141,83 @@ describe('RSVP events contract', () => {
     await request(app).post('/rsvps/cancel').send({ token: raw }).expect(200, { status: 'ok' });
     await request(app).post('/rsvps/cancel').send({ token: raw }).expect(200, { status: 'ok' });
     expect(await prisma.eventRsvp.findUnique({ where: { id: row.id } })).toMatchObject({ status: 'CANCELLED' });
+  });
+
+  it('collapses a simultaneous double submit into one contact and one RSVP', async () => {
+    // Both requests serialise on the event row lock, so the second one upserts
+    // the row the first created instead of inserting a duplicate.
+    const email = `double@${TAG}.test`;
+    const responses = await Promise.all([
+      request(app).post(`/events/${doubleEvent.id}/rsvps`).send(body(email, { partySize: 2 })),
+      request(app).post(`/events/${doubleEvent.id}/rsvps`).send(body(email, { partySize: 2 })),
+    ]);
+    expect(responses.map((r) => r.status)).toEqual([202, 202]);
+    expect(responses[1].body).toEqual(responses[0].body);
+    expect(await prisma.contact.count({ where: { organizationId: org.id, email } })).toBe(1);
+    const rows = await prisma.eventRsvp.findMany({ where: { eventId: doubleEvent.id } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ partySize: 2, status: 'GOING' });
+    const summary = await request(app)
+      .get(`/admin/events/${doubleEvent.id}/rsvps`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(summary.body).toMatchObject({ headcount: 2, rsvpCount: 1, cancelledCount: 0 });
+  });
+
+  it('reports a headcount that matches the rows, before and after a cancellation', async () => {
+    const parties = [3, 2, 1];
+    for (const [index, partySize] of parties.entries()) {
+      await request(app)
+        .post(`/events/${countEvent.id}/rsvps`)
+        .send(body(`count-${index}@${TAG}.test`, { partySize }))
+        .expect(202);
+    }
+    const goingRows = () => prisma.eventRsvp.findMany({ where: { eventId: countEvent.id, status: 'GOING' } });
+
+    const before = await request(app)
+      .get(`/admin/events/${countEvent.id}/rsvps`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    const rowsBefore = await goingRows();
+    expect(before.body).toMatchObject({ headcount: 6, rsvpCount: 3, cancelledCount: 0 });
+    expect(before.body.headcount).toBe(rowsBefore.reduce((sum, row) => sum + row.partySize, 0));
+    expect(before.body.rsvpCount).toBe(rowsBefore.length);
+
+    const cancelled = rowsBefore.find((row) => row.partySize === 3);
+    await request(app).post('/rsvps/cancel').send({ token: cancelToken(cancelled.id) }).expect(200);
+
+    const after = await request(app)
+      .get(`/admin/events/${countEvent.id}/rsvps`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    const rowsAfter = await goingRows();
+    expect(after.body).toMatchObject({ headcount: 3, rsvpCount: 2, cancelledCount: 1 });
+    expect(after.body.headcount).toBe(rowsAfter.reduce((sum, row) => sum + row.partySize, 0));
+    expect(after.body.rsvpCount).toBe(rowsAfter.length);
+    // The cancelled row stays visible in the table, just outside the count.
+    expect(after.body.data).toHaveLength(3);
+    expect(after.body.data.filter((row) => row.status === 'CANCELLED')).toHaveLength(1);
+  });
+
+  it("never counts a sibling event's RSVPs in this event's headcount", async () => {
+    const email = `both-events@${TAG}.test`;
+    await request(app).post(`/events/${siblingEvent.id}/rsvps`).send(body(email, { partySize: 4 })).expect(202);
+    await request(app).post(`/events/${countEvent.id}/rsvps`).send(body(email, { partySize: 1 })).expect(202);
+
+    const sibling = await request(app)
+      .get(`/admin/events/${siblingEvent.id}/rsvps`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(sibling.body).toMatchObject({ headcount: 4, rsvpCount: 1 });
+    expect(sibling.body.data.map((row) => row.email)).toEqual([email]);
+
+    // Same contact, same organization, different event: 3 going + the new 1.
+    const counted = await request(app)
+      .get(`/admin/events/${countEvent.id}/rsvps`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(counted.body).toMatchObject({ headcount: 4, rsvpCount: 3 });
+    expect(counted.body.data.filter((row) => row.email === email)).toHaveLength(1);
   });
 
   it('hides ticket inventory publicly and checkout refuses RSVP events', async () => {
