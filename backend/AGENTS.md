@@ -133,6 +133,18 @@ total = subtotal + platformFee + processingFee + tax
 - tax = subtotal × taxRate, or backed out of the listed price when `Organization.taxInclusivePricing` (then subtotal = listed ÷ (1 + rate)) (venue-based; `Event.taxRate` is resolved from the organization's `TaxRegion` for the venue's state — not collecting → 0, MANUAL → flat rate, STRIPE → Stripe Tax lookup by postal code. See `docs/wiki/features/tax-calculation.md`)
 ```
 
+## Stripe webhooks and refunds (EVE-3)
+
+- `routes/webhooks.js` `readStripeEvent` verifies the signature and **throws in production when the secret is unset** — the endpoint then answers 500, never a trusted body. All three endpoints (`/stripe`, `/stripe/connect`, `/stripe/billing`) behave the same even while Connect and Billing are flagged off: an unused endpoint that trusts unsigned bodies is still an authenticated-write bypass. Outside production the secret stays optional so tests can post plain JSON.
+- `verifyAndClaim` is the shared front half. **Never dispatch a handler before it returns** — `WebhookEventService.claim` is what makes the dedup real, and `duplicate: true` is only ever produced ahead of dispatch.
+- `StripeWebhookEvent` is one row per `(endpoint, stripeEventId)`; the unique insert is the lock. Settled (`PROCESSED` / `IGNORED`) and in-flight (`RECEIVED`) redeliveries are skipped, `FAILED` ones are reprocessed because Stripe's retry is the recovery path. The service **fails open**: a ledger write failure logs `stripe_webhook_ledger_error` and processes anyway. Out-of-order deliveries are logged (`stripe_webhook_out_of_order`), never reordered — the existing guards cover it (`OrderService.failOrder` refuses a non-`PENDING` order).
+- The platform endpoint still answers 200 on a handler error and records `FAILED`, because `OrderService.sweepAbandoned` / `ApplicationPaymentService.sweepOverdue` are the recovery path. `/stripe/billing` has no sweep, so it answers 500 and leans on Stripe's retry.
+- `createStripeRefund` (`services/stripeRefund.js`) **throws without an `idempotencyKey`**. Build it with `refundIdempotencyKey(scope)` from the *operation* — `ticket:<ticketId>`, `order:<orderId>:full`, `order-add-on:<lineId>` — not from the `PENDING` `Refund` row, which a rolled-back transaction discards. Application-order partials are the one exception (`application-order:<orderId>:<refundId>`): amounts are caller-chosen, two equal partials are legitimate, and that row is committed before Stripe is called.
+- **Any contract test that posts a webhook must namespace its Stripe event ids per run** and delete them in `afterAll`; a fixed id makes the suite's second run a replay. See `tests/contract/webhookReplay.test.js`.
+- Manual, network-touching verification lives in `src/scripts/verify-stripe-testmode.js` (`npm run verify:stripe [-- --charge]`) and `src/scripts/verify-checkout-tax.js` (`npm run verify:checkout-tax`). Both refuse a non-`sk_test_` key and are kept out of `npm test`, which must stay offline and deterministic.
+
+See `docs/wiki/features/webhook-reliability.md`.
+
 ## Tests
 
 - `npm test` is self-sufficient: `tests/globalSetup.js` derives the test DB from `backend/.env` `DATABASE_URL` (database renamed to `jump_test`), creates it if missing and runs `prisma migrate deploy`. Override with `TEST_DATABASE_URL`; skip provisioning with `SKIP_TEST_DB_SETUP=1`.
