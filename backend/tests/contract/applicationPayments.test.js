@@ -49,6 +49,10 @@ const { statusToken } = await import('../../src/services/applicationLinks.js');
 const { appRow: loadRow, attachOrder, cleanupApplicationOrders } = await import('../helpers/applicationRow.js');
 
 const TAG = 'apppay-ct';
+// EVE-3: every webhook delivery is now recorded and deduped on its Stripe
+// event id, so a fixed id makes the *second* run of this suite a replay that
+// never reaches a handler. Namespace them per run and clear them in afterAll.
+const EVT = `evt_${TAG}_${Date.now()}${Math.floor(Math.random() * 1000)}`;
 const ACCT = 'acct_apppay_ct';
 
 paymentSettingsService._statusCache = {
@@ -194,6 +198,9 @@ describe('Application payments contract (spec 011 phase 2, spec 037 phase 5)', (
   afterAll(async () => {
     delete process.env.APPLICATIONS_PAYMENTS_ENABLED;
     delete process.env.STRIPE_CONNECT_ENABLED;
+    await prisma.stripeWebhookEvent
+      .deleteMany({ where: { stripeEventId: { startsWith: EVT } } })
+      .catch(() => {});
     await cleanupApplicationOrders(org.id);
     await prisma.application.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
     await prisma.applicantProfile.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
@@ -449,7 +456,7 @@ describe('Application payments contract (spec 011 phase 2, spec 037 phase 5)', (
 
     // payment_intent.succeeded after the fact is idempotent
     const before = sentEmails.length;
-    await webhook({ id: 'evt_pi_ok', type: 'payment_intent.succeeded', data: { object: { id: row.stripePaymentIntentId, status: 'succeeded', metadata: { applicationId: cardApp, purpose: 'approval' } } } });
+    await webhook({ id: `${EVT}_pi_ok`, type: 'payment_intent.succeeded', data: { object: { id: row.stripePaymentIntentId, status: 'succeeded', metadata: { applicationId: cardApp, purpose: 'approval' } } } });
     expect(sentEmails).toHaveLength(before);
   });
 
@@ -511,7 +518,7 @@ describe('Application payments contract (spec 011 phase 2, spec 037 phase 5)', (
     // Pay again, then Stripe expires that session: the space goes back.
     await pay(id);
     const session = (await appRow(id)).stripeCheckoutSessionId;
-    const expired = await webhook({ id: 'evt_exp', type: 'checkout.session.expired', data: { object: { id: session, mode: 'payment', metadata: { applicationId: id, purpose: 'pay_now' } } } });
+    const expired = await webhook({ id: `${EVT}_exp`, type: 'checkout.session.expired', data: { object: { id: session, mode: 'payment', metadata: { applicationId: id, purpose: 'pay_now' } } } });
     expect(expired.status).toBe(200);
     expect(await appRow(id)).toMatchObject({ paymentStatus: 'AWAITING_SELECTION', selectionHeldUntil: null, orderId: null });
     expect((await prisma.order.findFirst({ where: { applicationId: id } })).status).toBe('CANCELLED');
@@ -545,7 +552,7 @@ describe('Application payments contract (spec 011 phase 2, spec 037 phase 5)', (
     expect(mockRefundsCreate.mock.calls[0][0]).toMatchObject({ payment_intent: `pi_${TAG}_sponsor`, amount: 25000, reason: 'requested_by_customer', metadata: { applicationId: sponsorApp } });
 
     const hook = await webhook({
-      id: 'evt_refund',
+      id: `${EVT}_refund`,
       type: 'charge.refunded',
       data: { object: { id: 'ch_1', payment_intent: `pi_${TAG}_sponsor`, refunds: { data: [{ id: `re_${TAG}_1`, amount: 25000, reason: null }, { id: 're_external', amount: 10000, reason: 'duplicate' }] } } },
     });
@@ -609,9 +616,11 @@ describe('Application payments contract (spec 011 phase 2, spec 037 phase 5)', (
     const blocked = await request(app).post(`${adminBase()}/applications/${id}/decision`).set(...auth(organizerToken)).send({ decision: 'WITHDRAW' });
     expect(blocked.status).toBe(409);
 
-    const failed = { id: 'evt_fail', type: 'payment_intent.payment_failed', data: { object: { id: `pi_${TAG}_slow`, status: 'requires_payment_method', last_payment_error: { message: 'Insufficient funds' }, metadata: { applicationId: id, purpose: 'approval' } } } };
-    expect((await webhook(failed)).status).toBe(200);
-    expect((await webhook(failed)).status).toBe(200);
+    const failed = { type: 'payment_intent.payment_failed', data: { object: { id: `pi_${TAG}_slow`, status: 'requires_payment_method', last_payment_error: { message: 'Insufficient funds' }, metadata: { applicationId: id, purpose: 'approval' } } } };
+    // Two distinct event ids carrying the same failure (Stripe re-emits): the
+    // webhook ledger lets both through, so this exercises the handler's own idempotency.
+    expect((await webhook({ ...failed, id: `${EVT}_fail_a` })).status).toBe(200);
+    expect((await webhook({ ...failed, id: `${EVT}_fail_b` })).status).toBe(200);
     expect(await appRow(id)).toMatchObject({ paymentStatus: 'AWAITING_SELECTION', capacitySlot: 'RESERVED', selectionHeldUntil: null });
     expect(sentEmails.map((e) => e.subject)).toEqual([expect.stringMatching(/Payment needed/)]);
     expect(await prisma.applicationDecision.count({ where: { applicationId: id, action: 'PAYMENT_DUE' } })).toBe(1);

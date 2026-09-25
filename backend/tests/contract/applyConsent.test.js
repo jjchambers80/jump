@@ -44,6 +44,9 @@ const { default: paymentSettingsService } =
   await import('../../src/services/PaymentSettingsService.js');
 
 const TAG = 'consent';
+// EVE-3: webhook deliveries are deduped on the Stripe event id, so these must
+// be unique per run or the second run replays instead of processing.
+const EVT = `evt_${TAG}_${Date.now()}${Math.floor(Math.random() * 1000)}`;
 const auth = (token) => ['Authorization', `Bearer ${token}`];
 
 paymentSettingsService._statusCache = {
@@ -159,6 +162,9 @@ describe('Apply-form opt-ins and legal acceptances (spec 024 phase 3)', () => {
   afterAll(async () => {
     delete process.env.APPLICATIONS_PAYMENTS_ENABLED;
     delete process.env.LEGAL_ACCEPTANCE_REQUIRED;
+    await prisma.stripeWebhookEvent
+      .deleteMany({ where: { stripeEventId: { startsWith: EVT } } })
+      .catch(() => {});
     await prisma.legalAcceptance.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
     await prisma.refund.deleteMany({ where: { order: { eventId } } }).catch(() => {});
     await prisma.paymentTransaction.deleteMany({ where: { order: { eventId } } }).catch(() => {});
