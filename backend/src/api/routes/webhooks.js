@@ -14,6 +14,51 @@ import logger from '../../utils/logger.js';
 const router = express.Router();
 
 /**
+ * Events that move money out of the account. A handler failure on one of these
+ * must NOT be swallowed with a 200 — Stripe would record a successful delivery
+ * and never retry, and the refund would be lost from Orders for good.
+ */
+const REFUND_EVENT_TYPES = new Set([
+  'charge.refunded',
+  'refund.created',
+  'refund.updated',
+  'charge.refund.updated',
+]);
+
+/** Stripe fields are an id or an expanded object depending on the endpoint. */
+const idOf = (value) => (typeof value === 'string' ? value : (value?.id ?? null));
+
+/** Per-request options for a connected-account event; platform events send none. */
+const forAccount = (account) => (account ? { stripeAccount: account } : undefined);
+
+/**
+ * The refunds belonging to a `charge.refunded` event.
+ *
+ * Stripe does not put a `refunds` key on the charge it delivers in this event —
+ * verified against every real charge.refunded on the test account, 3 of 3 with
+ * no such key (the field was dropped from the charge object in the API version
+ * the endpoint is pinned to). Reading `charge.refunds.data` therefore silently
+ * yielded nothing. The refunds are read back from the API instead: Stripe is
+ * the source of truth and the Orders row is the projection. An embedded list is
+ * still honoured when one is present.
+ */
+async function refundsForCharge(charge, account) {
+  if (charge.refunds?.data) return charge.refunds.data;
+  const page = await stripe.refunds.list({ charge: charge.id, limit: 100 }, forAccount(account));
+  return page.data;
+}
+
+/** The refund's payment intent, read back from its charge when not inlined. */
+async function paymentIntentForRefund(refund, account) {
+  const direct = idOf(refund.payment_intent);
+  if (direct) return direct;
+  const chargeId = idOf(refund.charge);
+  if (!chargeId) return null;
+  const charge = await stripe.charges.retrieve(chargeId, forAccount(account));
+  return idOf(charge?.payment_intent);
+}
+
+/**
  * Parse and (when a secret is configured) verify a Stripe webhook body.
  * Without a secret — development and tests — the body is trusted and a warning
  * is logged. Throws on a bad signature.
@@ -114,17 +159,48 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
 
       case 'charge.refunded': {
         const charge = event.data.object;
+        const refunds = await refundsForCharge(charge, event.account);
         logger.info('Stripe charge refunded', {
           chargeId: charge.id,
           paymentIntentId: charge.payment_intent,
+          refunds: refunds.length,
         });
-
-        // Process each refund on the charge
-        if (charge.refunds?.data) {
-          for (const refund of charge.refunds.data) {
-            await RefundService.handleExternalRefund(charge.payment_intent, refund);
-          }
+        if (refunds.length === 0) {
+          // amount_refunded says money left; if Stripe lists no refund for the
+          // charge we have nothing to record and must not pretend otherwise.
+          logger.error('charge.refunded carried no refunds', {
+            event: 'charge_refunded_empty',
+            chargeId: charge.id,
+            amountRefunded: charge.amount_refunded,
+          });
         }
+        for (const refund of refunds) {
+          await RefundService.handleExternalRefund(
+            idOf(refund.payment_intent) || idOf(charge.payment_intent),
+            refund
+          );
+        }
+        break;
+      }
+
+      // The refund object arrives directly on these, with its settlement
+      // status, so a refund that starts pending and settles later lands in the
+      // ledger correctly. They overlap with charge.refunded on purpose — every
+      // handler is idempotent on the Stripe refund id, and two independent
+      // routes into the ledger is the point. Requires these event types to be
+      // selected on the endpoint in the Stripe dashboard.
+      case 'refund.created':
+      case 'refund.updated':
+      case 'charge.refund.updated': {
+        const refund = event.data.object;
+        const paymentIntentId = await paymentIntentForRefund(refund, event.account);
+        logger.info('Stripe refund event', {
+          type: event.type,
+          refundId: refund.id,
+          status: refund.status,
+          paymentIntentId,
+        });
+        await RefundService.handleExternalRefund(paymentIntentId, refund);
         break;
       }
 
@@ -138,7 +214,12 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
       type: event?.type,
       error: error.message,
     });
-    // Still return 200 to prevent Stripe from retrying
+    if (REFUND_EVENT_TYPES.has(event?.type)) {
+      // Money already left the account. A 200 here would end Stripe's delivery
+      // attempts with the refund still missing from Orders, so ask for a retry.
+      return res.status(500).json({ error: 'Refund webhook processing failed' });
+    }
+    // Other events: 200 so Stripe does not retry; their recovery is elsewhere
     res.json({ received: true, error: error.message });
   }
 });

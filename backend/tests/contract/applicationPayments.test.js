@@ -5,6 +5,7 @@
 // approvals on a 1-slot tier; webhook dispatch and idempotency; overdue sweep.
 // Stripe and Resend mocked; Postgres is real.
 
+import fs from 'node:fs';
 import { jest } from '@jest/globals';
 import request from 'supertest';
 import { staffToken, joinOrgByToken, cleanupStaff } from '../helpers/staff.js';
@@ -21,6 +22,8 @@ const mockIntentsCreate = jest.fn();
 const mockIntentsRetrieve = jest.fn();
 const mockSetupIntentsRetrieve = jest.fn();
 const mockRefundsCreate = jest.fn();
+const mockRefundsList = jest.fn();
+const mockChargesRetrieve = jest.fn();
 
 jest.unstable_mockModule('../../src/config/stripe.js', () => ({
   default: {
@@ -28,7 +31,8 @@ jest.unstable_mockModule('../../src/config/stripe.js', () => ({
     customers: { create: mockCustomersCreate },
     paymentIntents: { create: mockIntentsCreate, retrieve: mockIntentsRetrieve },
     setupIntents: { retrieve: mockSetupIntentsRetrieve },
-    refunds: { create: mockRefundsCreate },
+    refunds: { create: mockRefundsCreate, list: mockRefundsList },
+    charges: { retrieve: mockChargesRetrieve },
     webhooks: { constructEvent: jest.fn() },
   },
 }));
@@ -85,6 +89,48 @@ function resetStripeMocks() {
     refundN += 1;
     return { id: `re_${TAG}_${refundN}`, amount: params.amount, status: 'succeeded' };
   });
+  mockRefundsList.mockReset().mockResolvedValue({ data: [] });
+  mockChargesRetrieve.mockReset().mockResolvedValue(null);
+}
+
+// Real Stripe payloads, recorded from the test-mode account. The charge in a
+// charge.refunded event has NO `refunds` key — a hand-built fixture that
+// invents one passes against a dead code path, which is exactly how refunds
+// issued from the Stripe dashboard went unnoticed. Build events from these.
+const RECORDED = JSON.parse(
+  fs.readFileSync(new URL('../fixtures/stripeRefundEvents.json', import.meta.url), 'utf8')
+);
+
+let eventN = 0;
+
+/** charge.refunded exactly as Stripe sends it, with this test's ids. */
+function chargeRefundedEvent({ chargeId, paymentIntentId, amountRefunded }) {
+  return {
+    id: `evt_${TAG}_cr_${(eventN += 1)}`,
+    type: 'charge.refunded',
+    api_version: RECORDED.chargeRefunded.api_version,
+    data: {
+      object: {
+        ...RECORDED.chargeRefunded.data.object,
+        id: chargeId,
+        payment_intent: paymentIntentId,
+        amount_refunded: amountRefunded,
+      },
+    },
+  };
+}
+
+/** A refund object in the shape refunds.list and the refund.* events carry. */
+const refundObject = (overrides) => ({ ...RECORDED.refundCreated.data.object, ...overrides });
+
+/** refund.created / refund.updated / charge.refund.updated, as Stripe sends them. */
+function refundEvent(type, overrides) {
+  return {
+    id: `evt_${TAG}_re_${(eventN += 1)}`,
+    type,
+    api_version: RECORDED.refundCreated.api_version,
+    data: { object: refundObject(overrides) },
+  };
 }
 
 function cardDecline(code = 'card_declined') {
@@ -507,17 +553,33 @@ describe('Application payments contract (spec 011 phase 2)', () => {
     expect(partial.body.refunds[0]).toMatchObject({ amount: 250, status: 'SUCCEEDED', reason: 'Smaller booth', initiatedBy: adminUserId });
     expect(mockRefundsCreate.mock.calls[0][0]).toMatchObject({ payment_intent: `pi_${TAG}_sponsor`, amount: 25000, reason: 'requested_by_customer', metadata: { applicationId: sponsorApp } });
     expect(mockRefundsCreate.mock.calls[0][0].reverse_transfer).toBeUndefined();
+    // Every create-charge/refund call carries an idempotency key, so a retry
+    // after a lost response resolves to the same Stripe refund (see below).
+    expect(mockRefundsCreate.mock.calls[0][1]).toMatchObject({ idempotencyKey: expect.any(String) });
 
-    // Dashboard refund arrives by webhook: the first is already recorded, the second is new
-    const hook = await webhook({
-      id: 'evt_refund',
-      type: 'charge.refunded',
-      data: { object: { id: 'ch_1', payment_intent: `pi_${TAG}_sponsor`, refunds: { data: [{ id: `re_${TAG}_1`, amount: 25000, reason: null }, { id: 're_external', amount: 10000, reason: 'duplicate' }] } } },
+    // Dashboard refund arrives by webhook, in the shape Stripe really sends:
+    // the charge carries no `refunds`, so the handler reads them off the API.
+    mockRefundsList.mockResolvedValue({
+      data: [
+        refundObject({ id: `re_${TAG}_1`, payment_intent: `pi_${TAG}_sponsor`, amount: 25000, reason: null, status: 'succeeded' }),
+        refundObject({ id: 're_external', payment_intent: `pi_${TAG}_sponsor`, amount: 10000, reason: 'duplicate', status: 'succeeded' }),
+      ],
     });
+    const event = chargeRefundedEvent({ chargeId: 'ch_1', paymentIntentId: `pi_${TAG}_sponsor`, amountRefunded: 35000 });
+    expect('refunds' in event.data.object).toBe(false); // the whole point of the recorded fixture
+    const hook = await webhook(event);
     expect(hook.status).toBe(200);
+    expect(mockRefundsList).toHaveBeenCalledWith({ charge: 'ch_1', limit: 100 }, undefined);
     let row = await appRow(sponsorApp);
+    // re_..._1 is the admin refund above, already recorded; re_external is new
     expect(row.refunds).toHaveLength(2);
+    expect(row.refunds.map((r) => r.stripeRefundId).sort()).toEqual([`re_${TAG}_1`, 're_external']);
     expect(row.paymentStatus).toBe('PARTIALLY_REFUNDED');
+
+    // Redelivery of the same event changes nothing (Stripe retries; so does a replay).
+    expect((await webhook(event)).status).toBe(200);
+    row = await appRow(sponsorApp);
+    expect(row.refunds).toHaveLength(2);
 
     const full = await request(app).post(`${adminBase()}/applications/${sponsorApp}/refund`).set(...auth(adminToken)).send({});
     expect(full.status).toBe(200);
@@ -529,6 +591,97 @@ describe('Application payments contract (spec 011 phase 2)', () => {
     expect(nothingLeft.status).toBe(409);
     row = await appRow(sponsorApp);
     expect(row.status).toBe('APPROVED'); // refund never changes the review status
+  });
+
+  // ─── Dashboard refunds reach Orders (EVE-30) ─────────────────────────────
+
+  // Builds a fresh paid application so the refund assertions below start clean.
+  async function paidApplication(email, intentSuffix) {
+    const tier = submitForm.tiers[0];
+    const created = await submit('sponsors', tier.id, `${email}@${TAG}.test`, 'Ledger Co');
+    const id = created.body.applicationId;
+    const row = await appRow(id);
+    const paymentIntentId = `pi_${TAG}_${intentSuffix}`;
+    await webhook(checkoutCompleted({ id: row.stripeCheckoutSessionId, mode: 'payment', payment_status: 'paid', payment_intent: paymentIntentId, metadata: { applicationId: id, purpose: 'submit' } }));
+    return { id, paymentIntentId };
+  }
+
+  it('refund.* events carry the refund directly and settle the ledger; pending is recorded but not counted, failed is never counted', async () => {
+    const { id, paymentIntentId } = await paidApplication('pending', 'pending');
+    const chargeId = `ch_${TAG}_pending`;
+
+    // refund.created while the refund is still in flight: recorded, not counted.
+    const pending = { id: `re_${TAG}_pending`, payment_intent: paymentIntentId, charge: chargeId, amount: 30000, status: 'pending', reason: null };
+    expect((await webhook(refundEvent('refund.created', pending))).status).toBe(200);
+    let row = await appRow(id);
+    expect(row.refunds).toHaveLength(1);
+    expect(row.refunds[0]).toMatchObject({ stripeRefundId: `re_${TAG}_pending`, status: 'PENDING' });
+    expect(row.paymentStatus).toBe('PAID'); // no money counted as returned yet
+
+    // refund.updated says it settled: the same row is promoted, not duplicated.
+    expect((await webhook(refundEvent('refund.updated', { ...pending, status: 'succeeded' }))).status).toBe(200);
+    row = await appRow(id);
+    expect(row.refunds).toHaveLength(1);
+    expect(row.refunds[0]).toMatchObject({ status: 'SUCCEEDED' });
+    expect(Number(row.refunds[0].amount)).toBe(300);
+    expect(row.paymentStatus).toBe('PARTIALLY_REFUNDED');
+
+    // charge.refund.updated redelivering the settled state is a no-op.
+    expect((await webhook(refundEvent('charge.refund.updated', { ...pending, status: 'succeeded' }))).status).toBe(200);
+    expect((await appRow(id)).refunds).toHaveLength(1);
+
+    // A refund that failed at the bank was never money out: nothing recorded.
+    expect((await webhook(refundEvent('refund.created', { id: `re_${TAG}_failed`, payment_intent: paymentIntentId, charge: chargeId, amount: 10000, status: 'failed', reason: null }))).status).toBe(200);
+    expect((await appRow(id)).refunds).toHaveLength(1);
+
+    // No payment_intent inlined: the handler reads it back off the charge.
+    mockChargesRetrieve.mockResolvedValue({ id: chargeId, payment_intent: paymentIntentId });
+    expect((await webhook(refundEvent('refund.created', { id: `re_${TAG}_nopi`, payment_intent: null, charge: chargeId, amount: 5000, status: 'succeeded', reason: null }))).status).toBe(200);
+    expect(mockChargesRetrieve).toHaveBeenCalledWith(chargeId, undefined);
+    expect((await appRow(id)).refunds).toHaveLength(2);
+  });
+
+  it('a refund whose Stripe response is lost is retried onto the same Stripe refund, not a second one', async () => {
+    const { id, paymentIntentId } = await paidApplication('retry', 'retry');
+
+    // The refund reaches Stripe; the response does not come back.
+    const timeout = new Error('Request aborted due to timeout');
+    timeout.type = 'StripeConnectionError';
+    mockRefundsCreate.mockRejectedValueOnce(timeout);
+
+    const failed = await request(app).post(`${adminBase()}/applications/${id}/refund`).set(...auth(adminToken)).send({ amount: 250 });
+    expect(failed.status).toBe(400);
+    const firstCall = mockRefundsCreate.mock.calls.at(-1);
+
+    // The row stays PENDING — marking it FAILED would hide it from the
+    // remaining-refundable guard and invite a second refund — and PENDING is
+    // excluded from refunded totals, so nothing is counted as returned yet.
+    let row = await appRow(id);
+    expect(row.refunds).toHaveLength(1);
+    expect(row.refunds[0]).toMatchObject({ status: 'PENDING', stripeRefundId: null });
+    expect(Number(row.refunds[0].amount)).toBe(250);
+    expect(row.paymentStatus).toBe('PAID');
+
+    // The admin retries. Same idempotency key, so Stripe returns the refund it
+    // already made instead of issuing a second one.
+    const retry = await request(app).post(`${adminBase()}/applications/${id}/refund`).set(...auth(adminToken)).send({ amount: 250 });
+    expect(retry.status).toBe(200);
+    const retryCall = mockRefundsCreate.mock.calls.at(-1);
+    expect(retryCall[1].idempotencyKey).toBe(firstCall[1].idempotencyKey);
+
+    // One refund on the ledger, not two: the PENDING row was reused.
+    row = await appRow(id);
+    expect(row.refunds).toHaveLength(1);
+    expect(row.refunds[0]).toMatchObject({ status: 'SUCCEEDED' });
+    expect(Number(row.refunds[0].amount)).toBe(250);
+    expect(row.paymentStatus).toBe('PARTIALLY_REFUNDED');
+
+    // A genuine second refund of the same amount is a different key, so Stripe
+    // does issue it — the key must not collapse distinct refunds.
+    const second = await request(app).post(`${adminBase()}/applications/${id}/refund`).set(...auth(adminToken)).send({ amount: 250 });
+    expect(second.status).toBe(200);
+    expect(mockRefundsCreate.mock.calls.at(-1)[1].idempotencyKey).not.toBe(retryCall[1].idempotencyKey);
+    expect((await appRow(id)).refunds).toHaveLength(2);
   });
 
   // ─── Connect routing ─────────────────────────────────────────────────────
