@@ -680,8 +680,8 @@ class ApplicationService {
   }
 
   /** Kept for callers of the phase 1 name; `updateMeta` is the full version. */
-  async updateNotes(eventId, applicationId, organizationId, fields) {
-    return this.updateMeta(eventId, applicationId, organizationId, fields);
+  async updateNotes(eventId, applicationId, organizationId, fields, options) {
+    return this.updateMeta(eventId, applicationId, organizationId, fields, options);
   }
 
   /**
@@ -690,8 +690,12 @@ class ApplicationService {
    * — first spelling wins — at most MAX_TAGS × MAX_TAG_LENGTH), and
    * `checkedIn` / `checkedOut` booleans that stamp or clear the timestamps.
    * Check-in is refused (409) unless the application is APPROVED.
+   *
+   * Spec 034: setting a stamp goes through the same conditional write the door
+   * page uses, so the table checkbox and a scan at the door cannot overwrite
+   * each other's timestamp when they land in the same second.
    */
-  async updateMeta(eventId, applicationId, organizationId, { boothLabel, internalNote, tags, checkedIn, checkedOut, publicProfile }) {
+  async updateMeta(eventId, applicationId, organizationId, { boothLabel, internalNote, tags, checkedIn, checkedOut, publicProfile }, { byUserId = null } = {}) {
     await applicationFormService.requireEvent(eventId, organizationId);
     const data = {};
     if (boothLabel !== undefined) {
@@ -707,21 +711,37 @@ class ApplicationService {
       if (typeof publicProfile !== 'boolean') throw new ValidationError('publicProfile must be a boolean');
       data.publicProfile = publicProfile;
     }
+    // Stamps are applied separately from `data` (see below); `touched` keeps
+    // "nothing to update" honest when the body is only a check-in toggle.
+    const stamping = [];
+    let touched = Object.keys(data).length;
     for (const [key, column] of [['checkedIn', 'checkedInAt'], ['checkedOut', 'checkedOutAt']]) {
       const value = key === 'checkedIn' ? checkedIn : checkedOut;
       if (value === undefined) continue;
       if (typeof value !== 'boolean') throw new ValidationError(`${key} must be a boolean`);
-      data[column] = value;
+      touched += 1;
+      // true stamps (idempotently, below); false clears in the ordinary write.
+      if (value) stamping.push(column);
+      else if (column === 'checkedInAt') Object.assign(data, { checkedInAt: null, checkedInById: null, checkedInVia: null });
+      else data[column] = null;
     }
-    if (Object.keys(data).length === 0) throw new ValidationError('Nothing to update');
+    if (touched === 0) throw new ValidationError('Nothing to update');
     const existing = await prisma.application.findFirst({ where: { id: applicationId, eventId }, select: { id: true, status: true, checkedInAt: true, checkedOutAt: true } });
     if (!existing || existing.status === 'DRAFT') throw new NotFoundError('Application not found');
-    const now = new Date();
-    for (const column of ['checkedInAt', 'checkedOutAt']) {
-      if (data[column] === undefined) continue;
-      if (existing.status !== 'APPROVED') throw new ConflictError('Only approved applications can be checked in');
-      // true keeps an existing stamp; false clears it.
-      data[column] = data[column] ? existing[column] ?? now : null;
+    if ((stamping.length || data.checkedInAt !== undefined || data.checkedOutAt !== undefined) && existing.status !== 'APPROVED') {
+      throw new ConflictError('Only approved applications can be checked in');
+    }
+    if (stamping.length) {
+      const now = new Date();
+      for (const column of stamping) {
+        // Conditional on the column still being null: the first writer wins and
+        // a concurrent toggle / door scan reads that timestamp back instead of
+        // replacing it (spec 034).
+        await prisma.application.updateMany({
+          where: { id: applicationId, eventId, status: 'APPROVED', [column]: null },
+          data: column === 'checkedInAt' ? { checkedInAt: now, checkedInById: byUserId, checkedInVia: 'TOGGLE' } : { checkedOutAt: now },
+        });
+      }
     }
     const application = await prisma.application.update({ where: { id: applicationId }, data, include: DETAIL_INCLUDE });
     await attachBooths([application]);

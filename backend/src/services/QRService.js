@@ -59,6 +59,81 @@ class QRService {
   }
 
   /**
+   * Generate the door QR payload for a vendor application (spec 034).
+   * Format: jump://vendor?id={applicationId}&e={eventId}&t={statusToken}
+   *
+   * The token is `applicationLinks.statusToken()` — the same HMAC already in
+   * every approval email, so a vendor's existing status link is a valid
+   * credential and no new one has to be issued.
+   *
+   * @param {string} applicationId - Application CUID
+   * @param {string} eventId - Event CUID
+   * @param {string} token - Status token (HMAC of the application id)
+   * @returns {string} QR payload string
+   */
+  generateVendorQRPayload(applicationId, eventId, token) {
+    return `jump://vendor?id=${encodeURIComponent(applicationId)}&e=${encodeURIComponent(eventId)}&t=${encodeURIComponent(token)}`;
+  }
+
+  /**
+   * Parse whatever the door scanner read into { applicationId, eventId, token }.
+   *
+   * Accepts three shapes, because a vendor at the door may present any of them:
+   *   - `jump://vendor?id=…&e=…&t=…` (the badge QR above)
+   *   - the storefront status URL `…/events/{eventId}/apply/status/{id}?token=…`
+   *     straight out of the approval email
+   *   - a bare `{applicationId}:{token}` pair (typed in, or a reader that
+   *     strips the scheme)
+   *
+   * Returns null when the string is not a vendor credential at all. Never
+   * validates the token — that is the service's job, against the stored hash.
+   *
+   * @param {string} payload - Raw string from the scanner or manual entry
+   * @returns {{ applicationId: string, eventId: string|null, token: string } | null}
+   */
+  parseVendorPayload(payload) {
+    const raw = typeof payload === 'string' ? payload.trim() : '';
+    if (!raw) return null;
+
+    if (raw.startsWith('jump://vendor?')) {
+      try {
+        const url = new URL(raw.replace('jump://', 'https://'));
+        const applicationId = url.searchParams.get('id');
+        const token = url.searchParams.get('t');
+        if (!applicationId || !token) return null;
+        return { applicationId, eventId: url.searchParams.get('e') || null, token };
+      } catch {
+        return null;
+      }
+    }
+
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      try {
+        const url = new URL(raw);
+        const token = url.searchParams.get('token');
+        // /events/{eventId}/apply/status/{applicationId} — also matches the
+        // custom-domain shortening /apply/status/{applicationId}.
+        const parts = url.pathname.split('/').filter(Boolean);
+        const statusAt = parts.lastIndexOf('status');
+        const applicationId = statusAt >= 0 ? parts[statusAt + 1] : null;
+        if (!applicationId || !token) return null;
+        const eventsAt = parts.indexOf('events');
+        return { applicationId, eventId: eventsAt >= 0 ? parts[eventsAt + 1] || null : null, token };
+      } catch {
+        return null;
+      }
+    }
+
+    // Bare `{applicationId}:{token}` — deliberately strict, because a colon
+    // appears in every other payload too. Without the shape check a ticket QR
+    // held up at the vendor door parses as id `jump`, and staff get "no vendor
+    // matches" instead of "that is a ticket".
+    const pair = raw.match(/^([a-z0-9]{8,32}):([a-f0-9]{64})$/i);
+    if (pair) return { applicationId: pair[1], eventId: null, token: pair[2] };
+    return null;
+  }
+
+  /**
    * Generate QR code JWT for a ticket (legacy format).
    * Payload: { sub: ticketId, eventId, barcode, iat, exp }
    * Signed with HS256 using AUTH_SECRET.

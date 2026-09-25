@@ -1359,6 +1359,13 @@ enum ApplicationPayment {
   PARTIALLY_REFUNDED
 }
 
+// How an arrival was recorded at the door (spec 034).
+enum CheckInMethod {
+  SEARCH // staff found the vendor in the roster and tapped Check in
+  SCAN // staff scanned the vendor's status-link QR
+  TOGGLE // the submissions-table / detail-page checkbox (spec 019)
+}
+
 enum CapacitySlot {
   NONE
   RESERVED
@@ -1622,6 +1629,10 @@ model Application {
   tags            String[]     @default([]) // spec 019 phase 3: free-form organizer tags
   checkedInAt     DateTime? // spec 019 phase 3: on-site check-in (APPROVED only)
   checkedOutAt    DateTime?
+  // Door check-in (spec 034): who recorded the arrival and how. `checkedInById`
+  // is null for a stamp made by a hardware reader or an older toggle.
+  checkedInById   String?
+  checkedInVia    CheckInMethod?
   statusTokenHash String       @unique // guest status-page token, sha256 of the raw token
 
   createdAt DateTime @default(now())
