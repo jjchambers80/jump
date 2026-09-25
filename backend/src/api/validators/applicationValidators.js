@@ -134,8 +134,16 @@ export const validateRefundBody = (req, res, next) => {
   try {
     const body = req.body || {};
     onlyFields(body, new Set(['amount', 'reason']), 'refund');
-    if (body.amount !== undefined && body.amount !== null && (typeof body.amount !== 'number' || !Number.isFinite(body.amount) || body.amount <= 0)) {
-      throw new ValidationError('amount must be a positive number');
+    if (body.amount !== undefined && body.amount !== null) {
+      if (typeof body.amount !== 'number' || !Number.isFinite(body.amount) || body.amount <= 0) {
+        throw new ValidationError('amount must be a positive number');
+      }
+      // Money is whole cents. A sub-cent amount has no correct refund — it
+      // rounds one way into the Stripe call and could round another way into
+      // anything else that re-derives cents from it. Refuse it at the edge.
+      if (Math.abs(body.amount * 100 - Math.round(body.amount * 100)) > 1e-6) {
+        throw new ValidationError('amount must be a whole number of cents');
+      }
     }
     if (body.reason !== undefined && body.reason !== null && typeof body.reason !== 'string') throw new ValidationError('reason must be a string');
     next();
