@@ -9,21 +9,73 @@ import RefundService from '../../services/RefundService.js';
 import ConnectService from '../../services/ConnectService.js';
 import ApplicationPaymentService from '../../services/ApplicationPaymentService.js';
 import BillingService from '../../services/BillingService.js';
+import WebhookEventService, { ENDPOINTS } from '../../services/WebhookEventService.js';
 import logger from '../../utils/logger.js';
 
 const router = express.Router();
 
+/** A missing signing secret in production — our misconfiguration, not the caller's. */
+class WebhookNotConfiguredError extends Error {}
+
 /**
- * Parse and (when a secret is configured) verify a Stripe webhook body.
- * Without a secret — development and tests — the body is trusted and a warning
- * is logged. Throws on a bad signature.
+ * Parse and verify a Stripe webhook body.
+ *
+ * WHY this fails closed in production: without a secret the body is trusted,
+ * which makes the endpoint an unauthenticated write path into the ledger —
+ * anyone on the internet could post a `checkout.session.completed` and mint
+ * tickets. Outside production the secret stays optional so local development
+ * and the contract suite can post plain JSON.
+ *
+ * Throws WebhookNotConfiguredError when the secret is missing in production,
+ * and the usual Stripe signature error on a bad signature.
  */
-function readStripeEvent(req, secret, label) {
+function readStripeEvent(req, secretName, label) {
+  const secret = process.env[secretName];
   if (secret) return stripe.webhooks.constructEvent(req.body, req.headers['stripe-signature'], secret);
-  logger.warn(`Stripe ${label} webhook signature verification skipped (no secret configured)`);
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new WebhookNotConfiguredError(
+      `${secretName} is not set; refusing to trust an unverified ${label} webhook`
+    );
+  }
+
+  logger.warn(`Stripe ${label} webhook signature verification skipped (no ${secretName} configured)`);
   if (Buffer.isBuffer(req.body)) return JSON.parse(req.body.toString());
   if (typeof req.body === 'string') return JSON.parse(req.body);
   return req.body;
+}
+
+/**
+ * Shared front half of every endpoint: verify, then claim the delivery in the
+ * webhook ledger. Returns null when the caller has already answered.
+ */
+async function verifyAndClaim(req, res, { secretName, label, endpoint }) {
+  let event;
+  try {
+    event = readStripeEvent(req, secretName, label);
+  } catch (err) {
+    if (err instanceof WebhookNotConfiguredError) {
+      logger.error(`Stripe ${label} webhook rejected: signing secret not configured`, {
+        event: 'stripe_webhook_not_configured',
+        endpoint,
+        secretName,
+      });
+      // 500, not 400: the delivery is fine, we are not. Stripe retries for up
+      // to three days, so the backlog drains once the secret is set.
+      res.status(500).json({ error: 'Webhook endpoint is not configured' });
+      return null;
+    }
+    logger.error(`Stripe ${label} webhook signature verification failed`, { error: err.message });
+    res.status(400).send(`Webhook Error: ${err.message}`);
+    return null;
+  }
+
+  const claim = await WebhookEventService.claim(endpoint, event);
+  if (!claim.proceed) {
+    res.json({ received: true, duplicate: true });
+    return null;
+  }
+  return { event, recordId: claim.recordId };
 }
 
 /**
@@ -32,38 +84,20 @@ function readStripeEvent(req, secret, label) {
  * Idempotent: safe to receive the same event multiple times.
  */
 router.post('/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-  let event;
-
-  try {
-    if (webhookSecret) {
-      event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
-    } else {
-      // In development/test, skip signature verification
-      // Body may already be parsed by express.json() or may be a Buffer
-      if (Buffer.isBuffer(req.body)) {
-        event = JSON.parse(req.body.toString());
-      } else if (typeof req.body === 'string') {
-        event = JSON.parse(req.body);
-      } else {
-        event = req.body;
-      }
-      logger.warn('Stripe webhook signature verification skipped (no STRIPE_WEBHOOK_SECRET)');
-    }
-  } catch (err) {
-    logger.error('Webhook signature verification failed', {
-      error: err.message,
-    });
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
+  const claimed = await verifyAndClaim(req, res, {
+    secretName: 'STRIPE_WEBHOOK_SECRET',
+    label: 'platform',
+    endpoint: ENDPOINTS.PLATFORM,
+  });
+  if (!claimed) return;
+  const { event, recordId } = claimed;
 
   try {
     // Jump subscription events belong on /webhooks/stripe/billing (spec 022);
     // one registered here by mistake must not be mistaken for an order.
     if (BillingService.isBillingEvent(event)) {
       logger.warn('Billing event received on the platform endpoint; ignored', { type: event.type });
+      await WebhookEventService.settle(recordId, 'IGNORED');
       return res.json({ received: true, ignored: true });
     }
 
@@ -74,6 +108,7 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
     // the order kind.
     if (ApplicationPaymentService.isApplicationEvent(event)) {
       await ApplicationPaymentService.handleEvent(event);
+      await WebhookEventService.settle(recordId, 'PROCESSED');
       return res.json({ received: true });
     }
 
@@ -130,15 +165,26 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
 
       default:
         logger.info('Unhandled Stripe webhook event', { type: event.type });
+        await WebhookEventService.settle(recordId, 'IGNORED');
+        return res.json({ received: true });
     }
 
+    await WebhookEventService.settle(recordId, 'PROCESSED');
     res.json({ received: true });
   } catch (error) {
     logger.error('Error processing webhook', {
+      event: 'stripe_webhook_failed',
+      endpoint: ENDPOINTS.PLATFORM,
+      stripeEventId: event?.id,
       type: event?.type,
       error: error.message,
     });
-    // Still return 200 to prevent Stripe from retrying
+    // Still return 200 to prevent Stripe from retrying: the order sweeps
+    // (OrderService.sweepAbandoned, ApplicationPaymentService.sweepOverdue)
+    // are the recovery path, and a retry storm against a failing handler is
+    // worse than a swept order. The FAILED row is how you find it afterwards:
+    //   SELECT * FROM "StripeWebhookEvent" WHERE status = 'FAILED';
+    await WebhookEventService.settle(recordId, 'FAILED', error.message);
     res.json({ received: true, error: error.message });
   }
 });
@@ -152,18 +198,19 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
  * connected account id, which is the only key the handlers use.
  */
 router.post('/stripe/connect', express.raw({ type: 'application/json' }), async (req, res) => {
-  let event;
-  try {
-    event = readStripeEvent(req, process.env.STRIPE_CONNECT_WEBHOOK_SECRET, 'Connect');
-  } catch (err) {
-    logger.error('Connect webhook signature verification failed', { error: err.message });
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
+  const claimed = await verifyAndClaim(req, res, {
+    secretName: 'STRIPE_CONNECT_WEBHOOK_SECRET',
+    label: 'Connect',
+    endpoint: ENDPOINTS.CONNECT,
+  });
+  if (!claimed) return;
+  const { event, recordId } = claimed;
 
   const accountId = event.account;
   try {
     if (!accountId) {
       logger.warn('Connect webhook without an account id', { type: event.type });
+      await WebhookEventService.settle(recordId, 'IGNORED');
       return res.json({ received: true });
     }
 
@@ -193,12 +240,23 @@ router.post('/stripe/connect', express.raw({ type: 'application/json' }), async 
 
       default:
         logger.info('Unhandled Stripe Connect webhook event', { type: event.type, account: accountId });
+        await WebhookEventService.settle(recordId, 'IGNORED');
+        return res.json({ received: true });
     }
 
+    await WebhookEventService.settle(recordId, 'PROCESSED');
     res.json({ received: true });
   } catch (error) {
-    logger.error('Error processing Connect webhook', { type: event.type, account: accountId, error: error.message });
+    logger.error('Error processing Connect webhook', {
+      event: 'stripe_webhook_failed',
+      endpoint: ENDPOINTS.CONNECT,
+      stripeEventId: event?.id,
+      type: event.type,
+      account: accountId,
+      error: error.message,
+    });
     // 200 so Stripe does not retry; the page's Sync button is the recovery path
+    await WebhookEventService.settle(recordId, 'FAILED', error.message);
     res.json({ received: true, error: error.message });
   }
 });
@@ -211,23 +269,35 @@ router.post('/stripe/connect', express.raw({ type: 'application/json' }), async 
  * subscription events never reach the order dispatch and vice versa.
  */
 router.post('/stripe/billing', express.raw({ type: 'application/json' }), async (req, res) => {
-  let event;
-  try {
-    event = readStripeEvent(req, process.env.STRIPE_BILLING_WEBHOOK_SECRET, 'Billing');
-  } catch (err) {
-    logger.error('Billing webhook signature verification failed', { error: err.message });
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
+  const claimed = await verifyAndClaim(req, res, {
+    secretName: 'STRIPE_BILLING_WEBHOOK_SECRET',
+    label: 'Billing',
+    endpoint: ENDPOINTS.BILLING,
+  });
+  if (!claimed) return;
+  const { event, recordId } = claimed;
 
   try {
     if (!BillingService.isBillingEvent(event)) {
       logger.info('Ignoring non-billing event on the billing endpoint', { type: event.type });
+      await WebhookEventService.settle(recordId, 'IGNORED');
       return res.json({ received: true, ignored: true });
     }
     await BillingService.handleEvent(event);
+    await WebhookEventService.settle(recordId, 'PROCESSED');
     res.json({ received: true });
   } catch (error) {
-    logger.error('Billing webhook processing failed', { type: event.type, error: error.message });
+    logger.error('Billing webhook processing failed', {
+      event: 'stripe_webhook_failed',
+      endpoint: ENDPOINTS.BILLING,
+      stripeEventId: event?.id,
+      type: event.type,
+      error: error.message,
+    });
+    // Unlike the other two, billing has no sweep to fall back on, so Stripe's
+    // retry is the recovery path: answer 500 and let it come back. The FAILED
+    // row lets the retry through (WebhookEventService.claim).
+    await WebhookEventService.settle(recordId, 'FAILED', error.message);
     res.status(500).json({ error: 'Webhook processing failed' });
   }
 });
