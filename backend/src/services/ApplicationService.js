@@ -628,11 +628,18 @@ class ApplicationService {
     if (application.paymentStatus === 'PROCESSING') throw new ConflictError('A payment is in progress; try again in a moment');
     const updated = await prisma.$transaction(async (tx) => {
       await this._releaseCapacity(tx, application);
+      // The applicant walking away ends their claim on the booth just as much
+      // as an organizer's reject or waitlist does (spec 037). Without this the
+      // booth sits HELD until `sweepExpiredHolds` reaches the review deadline —
+      // weeks of inventory the organizer cannot re-sell, and a self-service way
+      // for one vendor to park booths by applying and withdrawing.
+      await boothService.releaseForApplication(application.id, { tx });
       return this._transition(tx, application.id, {
         status: 'WITHDRAWN',
         withdrawnBy: 'APPLICANT',
         decidedAt: new Date(),
         capacitySlot: 'NONE',
+        boothLabel: null,
         decisions: {
           create: { action: 'WITHDRAWN', byUserId: null, note: 'Withdrawn by applicant' },
         },

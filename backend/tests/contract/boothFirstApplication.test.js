@@ -42,6 +42,7 @@ jest.unstable_mockModule('../../src/config/stripe.js', () => ({
 const { default: app } = await import('../../src/api/server.js');
 const { prisma } = await import('@jump/db');
 const { default: boothService } = await import('../../src/services/BoothService.js');
+const { default: buyerAuthService } = await import('../../src/services/BuyerAuthService.js');
 
 const TAG = `boothfirst-${Date.now()}`;
 
@@ -103,6 +104,17 @@ describe('Booth-first application flow (spec 037)', () => {
       .post(`/admin/events/${event.id}/applications/${applicationId}/decision`)
       .set(...auth())
       .send({ decision, sendEmail: false });
+
+  /** The applicant withdrawing themselves, from their own status page. */
+  async function withdrawAsApplicant(applicationId) {
+    const row = await prisma.application.findUnique({ where: { id: applicationId }, include: { contact: true } });
+    const token = buyerAuthService.signSession({
+      contactId: row.contactId,
+      organizationId: row.organizationId,
+      email: row.contact.email,
+    });
+    return request(app).post(`/buyer/me/applications/${applicationId}/withdraw`).set('Authorization', `Bearer ${token}`);
+  }
 
   /** Drive a DRAFT card-on-file application to SUBMITTED through the setup webhook. */
   async function cardOnFile(applicationId) {
@@ -332,11 +344,47 @@ describe('Booth-first application flow (spec 037)', () => {
       const application = await submitted(`rejected@${TAG}.test`, booths[0].id);
       expect((await decide(application.id, 'REJECT')).status).toBe(200);
 
+      // Every trace of the claim, not just the status: a booth left carrying a
+      // rejected application's id or a stale deadline is one the next vendor
+      // cannot take and the sweep will "reclaim" from nobody.
       const booth = await boothRow(booths[0].id);
       expect(booth.status).toBe('AVAILABLE');
+      expect(booth.applicationId).toBeNull();
       expect(booth.holdApplicationId).toBeNull();
       expect(booth.holdKind).toBeNull();
+      expect(booth.holdExpiresAt).toBeNull();
       expect((await appRow(application.id)).boothLabel).toBeNull();
+    });
+
+    it('releases the booth when the applicant withdraws themselves', async () => {
+      // The self-service mirror of reject: nothing in the organizer's inbox
+      // triggers this, so the booth has to come back on the withdrawal itself.
+      const application = await submitted(`selfwithdrew@${TAG}.test`, booths[0].id);
+      const res = await withdrawAsApplicant(application.id);
+      expect(res.status).toBe(200);
+
+      const booth = await boothRow(booths[0].id);
+      expect(booth.status).toBe('AVAILABLE');
+      expect(booth.applicationId).toBeNull();
+      expect(booth.holdApplicationId).toBeNull();
+      expect(booth.holdKind).toBeNull();
+      expect(booth.holdExpiresAt).toBeNull();
+
+      const row = await appRow(application.id);
+      expect(row.status).toBe('WITHDRAWN');
+      expect(row.withdrawnBy).toBe('APPLICANT');
+      expect(row.boothLabel).toBeNull();
+    });
+
+    it('frees a self-withdrawn booth for the next vendor immediately', async () => {
+      // The leak this closes is only real if somebody else can take the booth
+      // back without waiting for `sweepExpiredHolds` to reach the review date.
+      const application = await submitted(`abandoner@${TAG}.test`, booths[0].id);
+      expect((await withdrawAsApplicant(application.id)).status).toBe(200);
+
+      const next = await submit(`nextinline@${TAG}.test`, booths[0].id);
+      expect(next.status).toBe(201);
+      expect((await boothRow(booths[0].id)).holdApplicationId).toBe(next.body.applicationId);
     });
 
     it('releases the booth when the application is waitlisted', async () => {
