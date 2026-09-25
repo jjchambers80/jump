@@ -11,6 +11,7 @@ import api from '@/services/api';
 import { acceptanceLine, estimatedApplicantTotal, money, SOCIAL_FIELDS, tierPriceLine, type PublicForm, type Question } from '@/lib/applications';
 import { acceptancesFor, applyConsentText, cardAuthorizationText, fetchLegalVersions, LEGAL_PAGES_ENABLED, LEGAL_PATHS, type LegalVersions } from '@/lib/legal';
 import AddOnPicker from '@/components/AddOnPicker';
+import ApplyBoothStep from '@/components/maps/ApplyBoothStep';
 import ApplyShell from '../ApplyShell';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
@@ -37,6 +38,10 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [tierId, setTierId] = useState('');
+  // Booth-first (spec 037): on a tier sold from a published floor map, the booth
+  // is part of the submission. `boothRefresh` re-pulls the map after a lost race.
+  const [boothId, setBoothId] = useState<string | null>(null);
+  const [boothRefresh, setBoothRefresh] = useState(0);
   const [addOnQty, setAddOnQty] = useState<Record<string, number>>({});
   const [contact, setContact] = useState({ email: '', firstName: '', lastName: '' });
   const [profile, setProfile] = useState({ businessName: '', description: '', website: '' });
@@ -100,12 +105,17 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
   };
 
   const needsCardAuthorization = form?.kind === 'PAID' && form.chargeTiming === 'APPROVAL';
+  const boothFirst = Boolean(selectedTier?.boothFirst);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!form || submitting) return;
     if (form.kind === 'PAID' && !tierId) {
       setError('Choose an option to continue.');
+      return;
+    }
+    if (boothFirst && !boothId) {
+      setError('Choose a booth on the floor map to continue.');
       return;
     }
     if (!consent) {
@@ -123,6 +133,7 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
       const payload = {
         formSlug: form.slug,
         ...(form.kind === 'PAID' && { tierId }),
+        ...(boothFirst && boothId && { boothId }),
         ...(addOnLines.length > 0 && { addOns: addOnLines }),
         contact,
         profile: { ...profile, socials },
@@ -140,6 +151,13 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
       if (!res.ok) {
         // The versions moved under us: forget the cached ones so the next try shows the current text.
         if (data.code === 'LEGAL_VERSION_STALE') setLegalVersions(null);
+        // Somebody bought that booth between the map render and this submit.
+        // Nothing was created — drop the selection and refetch the map.
+        if (data.code === 'BOOTH_TAKEN') {
+          setBoothId(null);
+          setBoothRefresh((n) => n + 1);
+          throw new Error('That booth was just taken. Pick another one and submit again.');
+        }
         throw new Error(data.message || data.error || 'Could not submit your application');
       }
       if (data.next === 'checkout' && data.checkoutUrl) {
@@ -199,6 +217,19 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
                     title="Add-ons"
                     hint="Optional extras for your spot. Charged with your application."
                   />
+                )}
+                {selectedTier && boothFirst && (
+                  <div className="pt-2">
+                    <h3 className="text-base font-semibold text-gray-900 dark:text-slate-100 mb-2">Choose your booth</h3>
+                    <ApplyBoothStep
+                      eventId={params.eventId}
+                      tierId={tierId || null}
+                      tierName={selectedTier.name}
+                      selectedBoothId={boothId}
+                      onSelect={setBoothId}
+                      refreshKey={boothRefresh}
+                    />
+                  </div>
                 )}
                 {selectedTier && (
                   <div className="text-sm text-gray-700 dark:text-slate-300 space-y-1" data-testid="apply-price-note">

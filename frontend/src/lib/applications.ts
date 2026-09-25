@@ -138,6 +138,12 @@ export interface PublicTier {
   feesIncluded: number;
   tax: number;
   soldOut: boolean;
+  /**
+   * Spec 037: applying to this tier means picking a booth on the form first.
+   * True only when the tier is map-bound *and* the map is published — an
+   * unpublished map has nothing to pick from, so those tiers stay approval-first.
+   */
+  boothFirst?: boolean;
   addOns: PublicTierAddOn[];
 }
 
