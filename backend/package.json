@@ -21,7 +21,9 @@
     "db:backfill:033": "node src/scripts/backfill-venue-time-zones.js",
     "report:033": "node src/scripts/reconcile-venue-time-zones.js",
     "lint": "eslint src tests --ext .js",
-    "format": "prettier --write \"src/**/*.js\" \"tests/**/*.js\""
+    "format": "prettier --write \"src/**/*.js\" \"tests/**/*.js\"",
+    "verify:stripe": "node src/scripts/verify-stripe-testmode.js",
+    "verify:checkout-tax": "node src/scripts/verify-checkout-tax.js"
   },
   "keywords": [
     "ticketing",
