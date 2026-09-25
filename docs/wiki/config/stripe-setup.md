@@ -71,12 +71,18 @@ Use any future expiry date and any 3-digit CVC.
 
 ## Production
 
+> Going live for the first time? Follow the [Live Stripe Activation Runbook](live-stripe-activation-runbook.md) instead of this section — the order of those steps matters and several are one-way. This section stays the reference for what each endpoint is.
+
 ### Webhook Configuration
 
 1. Go to Stripe Dashboard → Developers → Webhooks
 2. Add endpoint: `https://your-backend-domain.up.railway.app/webhooks/stripe`
-3. Select events: `checkout.session.completed`, `checkout.session.expired`, `charge.refunded`; with application payments (spec 011, `APPLICATIONS_PAYMENTS_ENABLED`) also `payment_intent.succeeded`, `payment_intent.payment_failed`, `payment_intent.canceled`
+3. Select events — the full set `webhooks.js` dispatches: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `checkout.session.expired`, `charge.refunded`; with application payments (spec 011, `APPLICATIONS_PAYMENTS_ENABLED`) also `payment_intent.succeeded`, `payment_intent.processing`, `payment_intent.payment_failed`, `payment_intent.canceled`
 4. Copy the signing secret to `STRIPE_WEBHOOK_SECRET` on Railway
+
+The `async_payment_*` events are required by every non-card method in `PAYMENT_METHOD_ALLOWLIST` (Cash App, Affirm, Klarna, Afterpay): those settle after the Checkout redirect, so without them a buyer is charged and never receives a ticket. Subscribe to them even when only cards are enabled.
+
+**In production, an endpoint with no signing secret rejects every event with 503** (logged as `webhook_secret_missing`) rather than trusting an unsigned body. Set the secret in the same change as the key.
 
 ### Connect Webhook Configuration (spec 010 phase 2)
 
