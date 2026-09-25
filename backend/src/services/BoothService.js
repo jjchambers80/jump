@@ -16,6 +16,13 @@ function coded(error, code) {
   return error;
 }
 
+// `Booth_holdApplicationId_key` (migration 20261022200000_booth_hold_uniqueness)
+// surfaces as P2002 through the Prisma client and as 23505 through raw SQL. A
+// caller that skips the Application lock gets a 409, not a 500.
+const UNIQUE_VIOLATION = ['P2002', '23505'];
+const isUniqueViolation = (error) =>
+  UNIQUE_VIOLATION.includes(error?.code) || UNIQUE_VIOLATION.includes(String(error?.meta?.code));
+
 class BoothService {
   /**
    * Spec 037 phase 5: application tiers sold from the event's published floor
@@ -62,7 +69,7 @@ class BoothService {
 
     const application = await tx.application.findUnique({
       where: { id: applicationId },
-      select: { id: true, status: true, paymentStatus: true, tierId: true },
+      select: { id: true, status: true, paymentStatus: true, tierId: true, eventId: true },
     });
     if (!application || application.status !== 'APPROVED') {
       throw coded(new ValidationError('Only an approved application can choose a booth'), 'APPLICATION_NOT_APPROVED');
@@ -95,25 +102,33 @@ class BoothService {
     if (booth.status !== 'AVAILABLE') {
       throw coded(new ConflictError('This booth is no longer available'), 'BOOTH_TAKEN');
     }
+    const map = await tx.floorMap.findUnique({ where: { id: booth.mapId }, select: { status: true, eventId: true } });
+    // Tenant isolation: a booth on another event (another organizer) is "not
+    // found", never a category mismatch.
+    if (!map || map.eventId !== application.eventId) throw new NotFoundError('Booth not found');
     if (booth.tierId !== application.tierId) {
       throw coded(new ValidationError('This booth belongs to a different category'), 'BOOTH_TIER_MISMATCH');
     }
-    const map = await tx.floorMap.findUnique({ where: { id: booth.mapId }, select: { status: true, eventId: true } });
-    if (!map || map.status !== 'PUBLISHED') {
+    if (map.status !== 'PUBLISHED') {
       throw coded(new ValidationError('This floor map is not published'), 'MAP_NOT_PUBLISHED');
     }
 
     const expires = holdExpiresAt || new Date(Date.now() + BOOTH_HOLD_MS);
-    await tx.booth.update({
-      where: { id: boothId },
-      data: {
-        status: 'HELD',
-        holdApplicationId: applicationId,
-        holdExpiresAt: expires,
-        applicationId: null,
-        assignedById: null,
-      },
-    });
+    try {
+      await tx.booth.update({
+        where: { id: boothId },
+        data: {
+          status: 'HELD',
+          holdApplicationId: applicationId,
+          holdExpiresAt: expires,
+          applicationId: null,
+          assignedById: null,
+        },
+      });
+    } catch (error) {
+      if (!isUniqueViolation(error)) throw error;
+      throw coded(new ConflictError('This application is already holding a booth'), 'ALREADY_HOLDING_BOOTH');
+    }
     logger.info('Booth held for purchase', { event: 'booth_held', boothId, applicationId, holdExpiresAt: expires });
     // Spec 039: the price read under the row lock is the one the order charges.
     return { boothId, label: booth.label, price: booth.price ?? null, holdExpiresAt: expires, status: 'HELD' };
