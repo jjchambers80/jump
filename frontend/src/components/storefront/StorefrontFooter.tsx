@@ -49,7 +49,9 @@ export default function StorefrontFooter({ organization }: StorefrontFooterProps
 
   const plain = items.filter((item) => !item.children.length);
   const groups = items.filter((item) => item.children.length);
-  const link = 'text-sm text-gray-600 hover:text-brand-link hover:underline dark:text-slate-300';
+  // inline-flex + min-height gives thumbs a real target; the rows were 17px tall.
+  const link =
+    'inline-flex min-h-[2.25rem] items-center text-sm text-gray-600 hover:text-brand-link hover:underline dark:text-slate-300';
 
   return (
     <footer
@@ -59,7 +61,7 @@ export default function StorefrontFooter({ organization }: StorefrontFooterProps
       <nav aria-label="Footer" className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
           {plain.length > 0 && (
-            <ul className="space-y-2">
+            <ul className="space-y-1">
               {plain.map((item) => (
                 <li key={item.id}>
                   <FooterLink item={item} orgId={organization.id} className={link} />
@@ -73,10 +75,10 @@ export default function StorefrontFooter({ organization }: StorefrontFooterProps
                 <FooterLink
                   item={group}
                   orgId={organization.id}
-                  className="hover:text-brand-link hover:underline"
+                  className="inline-flex min-h-[2.25rem] items-center hover:text-brand-link hover:underline"
                 />
               </h2>
-              <ul className="mt-3 space-y-2">
+              <ul className="mt-2 space-y-1">
                 {group.children.map((child) => (
                   <li key={child.id}>
                     <FooterLink item={child} orgId={organization.id} className={link} />
