@@ -553,6 +553,41 @@ export const rsvpApi = {
     api.get<RsvpListResponse>(`/admin/events/${eventId}/rsvps`),
 };
 
+// ===== Vendor door check-in (spec 036) =====
+
+export interface DoorVendor {
+  id: string;
+  shortId: string;
+  businessName: string;
+  contactName: string | null;
+  email: string | null;
+  phone: string | null;
+  formName: string | null;
+  tierName: string | null;
+  booth: { id: string; mapId: string; label: string; status: string } | null;
+  boothLabel: string | null;
+  checkedInAt: string | null;
+  checkedInById: string | null;
+  checkedInVia: 'SEARCH' | 'SCAN' | 'TOGGLE' | null;
+}
+
+export interface DoorRoster {
+  event: { id: string; name: string; date: string; venueName: string | null; timezone: string | null } | null;
+  counts: { expected: number; arrived: number; awaiting: number };
+  data: DoorVendor[];
+}
+
+/** Every write here is idempotent server-side, so the door page may retry freely. */
+export const checkInApi = {
+  roster: (eventId: string) => api.get<DoorRoster>(`/admin/events/${eventId}/check-in`),
+  scan: (eventId: string, payload: string) =>
+    api.post<DoorVendor>(`/admin/events/${eventId}/check-in/scan`, { payload }),
+  checkIn: (eventId: string, applicationId: string, via: 'SEARCH' | 'SCAN' = 'SEARCH') =>
+    api.post<{ alreadyCheckedIn: boolean; vendor: DoorVendor }>(`/admin/events/${eventId}/check-in/${applicationId}`, { via }),
+  undo: (eventId: string, applicationId: string) =>
+    api.delete<{ alreadyCheckedIn: boolean; vendor: DoorVendor }>(`/admin/events/${eventId}/check-in/${applicationId}`),
+};
+
 export const mapsApi = {
   list: () => api.get<AdminMap[]>('/admin/maps'),
   create: (data: { eventId: string; name?: string; width?: number; height?: number; unit?: string }) =>
