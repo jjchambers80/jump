@@ -20,6 +20,17 @@ A background sweep (~hourly) sends a reminder email to GOING RSVPs when the even
 - **Configuration**: `RSVP_REMINDER_SWEEP_INTERVAL_MS` env var
 - **Unit tests**: `backend/tests/unit/rsvpReminder.test.js` (8 tests, all mock prisma)
 
+## Live headcount (admin)
+
+`/admin/events/:eventId/rsvps` is the organizer's door view: Expected Headcount (Σ `partySize` of GOING), RSVPs (count of GOING), Cancelled, and the table.
+
+- **Re-reads itself every 30 s** while the tab is in front, and immediately when the tab comes back — RSVPs arrive right up to the doors.
+- A **Refresh** button forces a read; an `Updated hh:mm:ss` stamp (viewer's account zone, spec 030) says how fresh the number is.
+- A failed background poll keeps the last good numbers on screen instead of replacing the table with an error.
+- The table scrolls horizontally on a phone rather than clipping its last columns.
+
+Guards: `frontend/e2e/admin-rsvps.spec.ts` (desktop + 375 px) and `frontend/e2e/public-rsvp.spec.ts` (the patron form at 375 px, including the double-tap case).
+
 ## Data model
 
 ```prisma
