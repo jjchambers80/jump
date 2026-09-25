@@ -10,6 +10,8 @@ import {
   LEGEND_STATE_DARK,
   LEGEND_STATE_STROKE_LIGHT,
   LEGEND_STATE_STROKE_DARK,
+  BOOTH_LABEL_LIGHT,
+  BOOTH_LABEL_DARK,
 } from './mapTheme';
 
 export interface LegendTier {
@@ -81,17 +83,35 @@ export default function MapLegend({
             States
           </h4>
           <div className="space-y-1">
-            {(['AVAILABLE', 'SOLD', 'RESERVED', 'BLOCKED'] as const).map((state) => (
+            {/* Lifecycle order. HELD is a real state a visitor meets on the map
+                — someone is checking out right now — so it needs a row, or an
+                amber booth with a clock on it means nothing to them. */}
+            {(['AVAILABLE', 'HELD', 'SOLD', 'RESERVED', 'BLOCKED'] as const).map((state) => (
               <div key={state} className="flex items-center gap-2 px-2 py-0.5">
                 <span
-                  className="w-3 h-3 rounded-sm shrink-0"
+                  className="relative w-3 h-3 rounded-sm shrink-0"
                   style={{
                     backgroundColor: dark ? LEGEND_STATE_DARK[state] : LEGEND_STATE_LIGHT[state],
                     border: `1px solid ${
                       dark ? LEGEND_STATE_STROKE_DARK[state] : LEGEND_STATE_STROKE_LIGHT[state]
                     }`,
                   }}
-                />
+                >
+                  {state === 'HELD' && (
+                    // The same clock the booth carries, so the two read as one thing.
+                    <svg
+                      viewBox="0 0 12 12"
+                      aria-hidden="true"
+                      className="absolute inset-0 w-full h-full"
+                      fill="none"
+                      stroke={dark ? BOOTH_LABEL_DARK : BOOTH_LABEL_LIGHT}
+                      strokeWidth={1}
+                    >
+                      <circle cx={6} cy={6} r={3.2} />
+                      <path d="M 6 4.2 v 2 h 1.4" />
+                    </svg>
+                  )}
+                </span>
                 <span className="text-xs text-gray-600 dark:text-slate-400">
                   {STATUS_LABELS[state] || state}
                 </span>

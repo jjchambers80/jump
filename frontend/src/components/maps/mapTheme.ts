@@ -191,26 +191,32 @@ export const LEGEND_HOVER_BG_LIGHT = 'hover:bg-gray-50';
 export const LEGEND_HOVER_BG_DARK = 'dark:hover:bg-slate-700';
 
 /** Legend state block fill colours. */
+// HELD shares RESERVED's amber — both mean "taken, but not sold". The legend
+// tells them apart with the same clock mark the booth carries on the map.
 export const LEGEND_STATE_LIGHT: Record<string, string> = {
   AVAILABLE: '#e5e7eb',
+  HELD: '#fef3c7',
   SOLD: '#dbeafe',
   RESERVED: '#fef3c7',
   BLOCKED: '#f3f4f6',
 };
 export const LEGEND_STATE_DARK: Record<string, string> = {
   AVAILABLE: '#374151',
+  HELD: '#78350f',
   SOLD: '#1e3a5f',
   RESERVED: '#78350f',
   BLOCKED: '#1f2937',
 };
 export const LEGEND_STATE_STROKE_LIGHT: Record<string, string> = {
   AVAILABLE: '#d1d5db',
+  HELD: '#f59e0b',
   SOLD: '#3b82f6',
   RESERVED: '#f59e0b',
   BLOCKED: '#9ca3af',
 };
 export const LEGEND_STATE_STROKE_DARK: Record<string, string> = {
   AVAILABLE: '#4b5563',
+  HELD: '#fbbf24',
   SOLD: '#60a5fa',
   RESERVED: '#fbbf24',
   BLOCKED: '#6b7280',
