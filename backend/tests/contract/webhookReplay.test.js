@@ -300,6 +300,23 @@ describe('Stripe webhook replay safety (EVE-3)', () => {
       expect(await ledgerRow(id, 'PLATFORM')).toBeNull();
     });
 
+    it('refuses an unverified event on a live key even when NODE_ENV is not production', async () => {
+      // Nothing in railpack.backend.json sets NODE_ENV — it comes from the
+      // platform. A live Stripe key is the unambiguous signal that real money
+      // is moving, so it must fail closed on its own.
+      const previousKey = process.env.STRIPE_SECRET_KEY;
+      process.env.STRIPE_SECRET_KEY = 'sk_live_not_a_real_key';
+      delete process.env.STRIPE_WEBHOOK_SECRET;
+      try {
+        const id = evtId('livekey');
+        const res = await post('/webhooks/stripe', { id, object: 'event', created: 1_800_002_050, type: 'checkout.session.completed', data: { object: { id: sessionId, payment_status: 'paid' } } }, null);
+        expect(res.status).toBe(500);
+        expect(await ledgerRow(id)).toBeNull();
+      } finally {
+        process.env.STRIPE_SECRET_KEY = previousKey;
+      }
+    });
+
     it('still accepts a correctly signed event in production', async () => {
       process.env.NODE_ENV = 'production';
       const id = evtId('prod_signed');

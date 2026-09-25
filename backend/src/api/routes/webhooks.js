@@ -10,30 +10,46 @@ import ConnectService from '../../services/ConnectService.js';
 import ApplicationPaymentService from '../../services/ApplicationPaymentService.js';
 import BillingService from '../../services/BillingService.js';
 import WebhookEventService, { ENDPOINTS } from '../../services/WebhookEventService.js';
+import { stripeMode } from '../../services/PaymentSettingsService.js';
 import logger from '../../utils/logger.js';
 
 const router = express.Router();
 
-/** A missing signing secret in production — our misconfiguration, not the caller's. */
+/** A missing signing secret where real money is at stake — our misconfiguration, not the caller's. */
 class WebhookNotConfiguredError extends Error {}
+
+/**
+ * Where an unverified body must never be trusted.
+ *
+ * Deliberately two conditions, not one. `NODE_ENV` is the obvious signal, but
+ * nothing in `railpack.backend.json` sets it — it comes from the platform, and
+ * a security control should not rest on that holding. A **live Stripe key** is
+ * unambiguous: real money is moving, whatever the environment claims to be.
+ * `stripeMode()` treats anything that is not `sk_test_` as live, which is the
+ * safe direction to be wrong in.
+ */
+function mustVerify() {
+  return process.env.NODE_ENV === 'production' || stripeMode() === 'live';
+}
 
 /**
  * Parse and verify a Stripe webhook body.
  *
- * WHY this fails closed in production: without a secret the body is trusted,
- * which makes the endpoint an unauthenticated write path into the ledger —
- * anyone on the internet could post a `checkout.session.completed` and mint
- * tickets. Outside production the secret stays optional so local development
- * and the contract suite can post plain JSON.
+ * WHY this fails closed: without a secret the body is trusted, which makes the
+ * endpoint an unauthenticated write path into the ledger — anyone on the
+ * internet could post a `checkout.session.completed` and mint tickets. In
+ * development, against a test key, the secret stays optional so local work and
+ * the contract suite can post plain JSON.
  *
- * Throws WebhookNotConfiguredError when the secret is missing in production,
- * and the usual Stripe signature error on a bad signature.
+ * Throws WebhookNotConfiguredError when the secret is missing somewhere it
+ * matters (see `mustVerify`), and the usual Stripe signature error on a bad
+ * signature.
  */
 function readStripeEvent(req, secretName, label) {
   const secret = process.env[secretName];
   if (secret) return stripe.webhooks.constructEvent(req.body, req.headers['stripe-signature'], secret);
 
-  if (process.env.NODE_ENV === 'production') {
+  if (mustVerify()) {
     throw new WebhookNotConfiguredError(
       `${secretName} is not set; refusing to trust an unverified ${label} webhook`
     );

@@ -27,12 +27,14 @@ Three changes address them: the endpoints **fail closed in production**, every d
 
 ## How It Works
 
-### Failing closed in production
+### Failing closed
 
 `readStripeEvent(req, secretName, label)` verifies with `stripe.webhooks.constructEvent` when the secret is set. When it is **not** set:
 
-- Outside production it logs a warning and parses the body, so local development and the contract suite can post plain JSON.
-- In production it throws, and the endpoint answers **500** with `{"error":"Webhook endpoint is not configured"}`.
+- Where it does not matter it logs a warning and parses the body, so local development and the contract suite can post plain JSON.
+- Where it does, it throws and the endpoint answers **500** with `{"error":"Webhook endpoint is not configured"}`.
+
+"Where it matters" is `mustVerify()`: **`NODE_ENV === 'production'` OR a live Stripe key.** Two conditions on purpose. `NODE_ENV` is the obvious signal, but nothing in `railpack.backend.json` sets it — it comes from the platform, and a security control should not rest on that holding. A live `sk_live_` key is unambiguous: real money is moving, whatever the environment claims to be. `stripeMode()` treats anything that is not `sk_test_` as live, which is the safe direction to be wrong in.
 
 500 rather than 400 is deliberate: the delivery was fine, our configuration is not. Stripe retries a 5xx for up to three days, so the backlog drains by itself once the secret is set — nothing is silently lost. A 400 would tell Stripe the event was bad and it would stop.
 
@@ -99,7 +101,7 @@ Stripe expires idempotency keys after 24 h, so this covers retries and double-cl
 
 ```bash
 cd backend && npm test                                     # includes webhookReplay + webhookSignature
-npx jest tests/contract/webhookReplay.test.js              # 13 cases: duplicate, concurrent, stale, out-of-order, fail-closed
+npx jest tests/contract/webhookReplay.test.js              # 14 cases: duplicate, concurrent, stale, out-of-order, fail-closed
 npx jest tests/unit/refundService.test.js                  # key scopes + the "no key" guard
 ```
 
@@ -121,7 +123,7 @@ Both scripts refuse to run against a key that is not `sk_test_`.
 - **Contract tests must namespace their Stripe event ids per run.** A fixed id makes the second run of a suite a *duplicate* and changes the response. `webhookSignature.test.js` and `webhookReplay.test.js` both suffix ids with a run token and clear their rows in `afterAll`.
 - **Never dispatch a handler before `verifyAndClaim` returns.** It is what makes the dedup real.
 - **Do not "fix" the 200-on-error behaviour of the platform endpoint** without also removing the order sweeps — see above.
-- **A missing secret in production is now a 500, not a silent success.** If webhooks stop after a deploy, check `stripe_webhook_not_configured` before anything else.
+- **A missing secret in production, or on a live key, is now a 500 — not a silent success.** If webhooks stop after a deploy, check `stripe_webhook_not_configured` before anything else.
 - **The ledger is not a reconciliation source.** It records deliveries, not money. `Order` / `PaymentTransaction` / `Refund` remain the ledger (spec 024).
 
 ## Related Features
