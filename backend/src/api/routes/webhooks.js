@@ -13,17 +13,46 @@ import logger from '../../utils/logger.js';
 
 const router = express.Router();
 
+/** No signing secret configured on an endpoint that requires one. */
+class WebhookSecretMissingError extends Error {}
+
 /**
- * Parse and (when a secret is configured) verify a Stripe webhook body.
- * Without a secret — development and tests — the body is trusted and a warning
- * is logged. Throws on a bad signature.
+ * Parse and verify a Stripe webhook body.
+ *
+ * With a secret, the signature is verified and a bad one throws. Without one,
+ * behaviour depends on the environment: development and tests trust the body
+ * and log a warning, but production **fails closed** — an endpoint that accepts
+ * unsigned events is an unauthenticated write path into the ledger, and a
+ * missing or mistyped Railway variable must not silently open one.
  */
 function readStripeEvent(req, secret, label) {
   if (secret) return stripe.webhooks.constructEvent(req.body, req.headers['stripe-signature'], secret);
+  if (process.env.NODE_ENV === 'production') {
+    throw new WebhookSecretMissingError(`Stripe ${label} webhook has no signing secret configured`);
+  }
   logger.warn(`Stripe ${label} webhook signature verification skipped (no secret configured)`);
   if (Buffer.isBuffer(req.body)) return JSON.parse(req.body.toString());
   if (typeof req.body === 'string') return JSON.parse(req.body);
   return req.body;
+}
+
+/**
+ * Answer a request whose event could not be verified. A missing secret is an
+ * operator error, so it answers 503 and Stripe keeps retrying for days — the
+ * events survive until the secret is set. A bad signature is 400: retrying a
+ * body we will never accept is pointless.
+ */
+function rejectUnverified(res, label, error) {
+  if (error instanceof WebhookSecretMissingError) {
+    logger.error('Stripe webhook rejected: no signing secret configured', {
+      event: 'webhook_secret_missing',
+      endpoint: label,
+      error: error.message,
+    });
+    return res.status(503).send('Webhook Error: signing secret not configured');
+  }
+  logger.error(`Stripe ${label} webhook signature verification failed`, { error: error.message });
+  return res.status(400).send(`Webhook Error: ${error.message}`);
 }
 
 /**
@@ -32,31 +61,11 @@ function readStripeEvent(req, secret, label) {
  * Idempotent: safe to receive the same event multiple times.
  */
 router.post('/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
   let event;
-
   try {
-    if (webhookSecret) {
-      event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
-    } else {
-      // In development/test, skip signature verification
-      // Body may already be parsed by express.json() or may be a Buffer
-      if (Buffer.isBuffer(req.body)) {
-        event = JSON.parse(req.body.toString());
-      } else if (typeof req.body === 'string') {
-        event = JSON.parse(req.body);
-      } else {
-        event = req.body;
-      }
-      logger.warn('Stripe webhook signature verification skipped (no STRIPE_WEBHOOK_SECRET)');
-    }
+    event = readStripeEvent(req, process.env.STRIPE_WEBHOOK_SECRET, 'platform');
   } catch (err) {
-    logger.error('Webhook signature verification failed', {
-      error: err.message,
-    });
-    return res.status(400).send(`Webhook Error: ${err.message}`);
+    return rejectUnverified(res, 'platform', err);
   }
 
   try {
@@ -156,8 +165,7 @@ router.post('/stripe/connect', express.raw({ type: 'application/json' }), async 
   try {
     event = readStripeEvent(req, process.env.STRIPE_CONNECT_WEBHOOK_SECRET, 'Connect');
   } catch (err) {
-    logger.error('Connect webhook signature verification failed', { error: err.message });
-    return res.status(400).send(`Webhook Error: ${err.message}`);
+    return rejectUnverified(res, 'Connect', err);
   }
 
   const accountId = event.account;
@@ -215,8 +223,7 @@ router.post('/stripe/billing', express.raw({ type: 'application/json' }), async 
   try {
     event = readStripeEvent(req, process.env.STRIPE_BILLING_WEBHOOK_SECRET, 'Billing');
   } catch (err) {
-    logger.error('Billing webhook signature verification failed', { error: err.message });
-    return res.status(400).send(`Webhook Error: ${err.message}`);
+    return rejectUnverified(res, 'Billing', err);
   }
 
   try {

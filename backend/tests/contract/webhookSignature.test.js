@@ -56,3 +56,61 @@ describe('Stripe webhook signature', () => {
     expect(res.headers['content-type']).toMatch(/json/);
   });
 });
+
+// An endpoint that accepts unsigned events is an unauthenticated write path
+// into the ledger. Outside production a missing secret is a convenience (the
+// Stripe CLI signs with its own secret); in production it must fail closed, so
+// a missing or mistyped Railway variable cannot silently open that path.
+describe('Stripe webhook endpoints with no signing secret configured', () => {
+  const ENDPOINTS = [
+    ['platform', '/webhooks/stripe', 'STRIPE_WEBHOOK_SECRET'],
+    ['Connect', '/webhooks/stripe/connect', 'STRIPE_CONNECT_WEBHOOK_SECRET'],
+    ['billing', '/webhooks/stripe/billing', 'STRIPE_BILLING_WEBHOOK_SECRET'],
+  ];
+  const SECRET_NAMES = ENDPOINTS.map(([, , name]) => name);
+  const previous = {};
+  const event = JSON.stringify({ id: 'evt_unsigned', object: 'event', account: 'acct_x', type: 'ping.contract_test', data: { object: { id: 'x' } } });
+
+  beforeAll(() => {
+    previous.nodeEnv = process.env.NODE_ENV;
+    for (const name of SECRET_NAMES) previous[name] = process.env[name];
+  });
+  afterAll(() => {
+    process.env.NODE_ENV = previous.nodeEnv;
+    for (const name of SECRET_NAMES) {
+      if (previous[name] === undefined) delete process.env[name];
+      else process.env[name] = previous[name];
+    }
+  });
+
+  beforeEach(() => {
+    for (const name of SECRET_NAMES) delete process.env[name];
+  });
+
+  describe.each(ENDPOINTS)('%s endpoint', (label, path) => {
+    it('rejects an unsigned event with 503 under NODE_ENV=production', async () => {
+      process.env.NODE_ENV = 'production';
+      const res = await request(app).post(path).set('Content-Type', 'application/json').send(event);
+      // 503, not 400: Stripe keeps retrying, so the events survive until the
+      // secret is configured rather than being dropped on the floor.
+      expect(res.status).toBe(503);
+      expect(res.text).toMatch(/signing secret not configured/);
+    });
+
+    it('rejects an attacker-signed event with 503 under NODE_ENV=production', async () => {
+      process.env.NODE_ENV = 'production';
+      const res = await request(app)
+        .post(path)
+        .set('stripe-signature', signed(event, 'whsec_attacker_chosen'))
+        .set('Content-Type', 'application/json')
+        .send(event);
+      expect(res.status).toBe(503);
+    });
+
+    it('still accepts an unsigned event outside production', async () => {
+      process.env.NODE_ENV = 'test';
+      const res = await request(app).post(path).set('Content-Type', 'application/json').send(event);
+      expect(res.status).toBe(200);
+    });
+  });
+});
