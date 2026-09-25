@@ -138,6 +138,9 @@ describe('Booth-first application flow (spec 037)', () => {
       where: { mapId: map.id },
       data: { status: 'AVAILABLE', applicationId: null, holdApplicationId: null, holdKind: null, holdExpiresAt: null, assignedById: null },
     });
+    // Orders are RESTRICT-referenced by their transactions, so the charge rows
+    // a settled approval leaves behind have to go first.
+    await prisma.paymentTransaction.deleteMany({ where: { order: { application: { organizationId: org.id } } } });
     await prisma.order.deleteMany({ where: { application: { organizationId: org.id } } });
     await prisma.legalAcceptance.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
     await prisma.application.deleteMany({ where: { organizationId: org.id } });

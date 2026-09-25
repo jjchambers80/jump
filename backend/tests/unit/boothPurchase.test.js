@@ -107,7 +107,7 @@ describe('BoothService vendor purchase flow', () => {
     expect(result).toEqual({ boothId: 'booth_1', label: 'A1', status: 'SOLD' });
     expect(tx.booth.update).toHaveBeenCalledWith({
       where: { id: 'booth_1' },
-      data: { status: 'SOLD', applicationId: 'app_1', holdApplicationId: null, holdExpiresAt: null, assignedById: null },
+      data: { status: 'SOLD', applicationId: 'app_1', holdApplicationId: null, holdExpiresAt: null, holdKind: null, assignedById: null },
     });
     expect(tx.application.update).toHaveBeenCalledWith({ where: { id: 'app_1' }, data: { boothLabel: 'A1' } });
   });
@@ -136,7 +136,7 @@ describe('BoothService vendor purchase flow', () => {
     });
     expect(tx.booth.update).toHaveBeenCalledWith({
       where: { id: 'booth_1' },
-      data: { status: 'AVAILABLE', holdApplicationId: null, holdExpiresAt: null, applicationId: null, assignedById: null },
+      data: { status: 'AVAILABLE', holdApplicationId: null, holdExpiresAt: null, holdKind: null, applicationId: null, assignedById: null },
     });
   });
 
@@ -178,7 +178,7 @@ describe('BoothService vendor purchase flow', () => {
     await expect(service.sweepExpiredHolds(new Date())).resolves.toEqual({ released: 1, protected: 0 });
     expect(update).toHaveBeenCalledWith({
       where: { id: 'booth_1' },
-      data: { status: 'AVAILABLE', holdApplicationId: null, holdExpiresAt: null, applicationId: null, assignedById: null },
+      data: { status: 'AVAILABLE', holdApplicationId: null, holdExpiresAt: null, holdKind: null, applicationId: null, assignedById: null },
     });
   });
 });
