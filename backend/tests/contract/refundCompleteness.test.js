@@ -28,7 +28,10 @@ const TAG = 'refund-completeness-ct';
 
 // One ticket: $100 listed, $115 actually charged to the card.
 const BASE = 100;
-const FEES_AND_TAX = 15;
+const PLATFORM_FEE = 5;
+const PROCESSING_FEE = 4;
+const TAX = 6;
+const FEES_AND_TAX = PLATFORM_FEE + PROCESSING_FEE + TAX;
 const TOTAL = BASE + FEES_AND_TAX;
 
 describe('Refund completeness against the amount actually charged', () => {
@@ -50,12 +53,25 @@ describe('Refund completeness against the amount actually charged', () => {
         orderRef: `${TAG}-${seq}`,
         totalAmount: total,
         subtotalAmount: subtotal,
-        platformFee: 5 * tickets,
-        processingFee: 4 * tickets,
-        taxAmount: 6 * tickets,
+        platformFeeAmount: PLATFORM_FEE * tickets,
+        processingFeeAmount: PROCESSING_FEE * tickets,
+        taxAmount: TAX * tickets,
         quantity: tickets,
         status: 'COMPLETED',
-        items: { create: [{ priceTierId: tier.id, quantity: tickets, unitPrice: BASE }] },
+        // The per-line fee and tax columns the real checkout writes — what
+        // `ticketAmountPaid` reads to work out the all-in per-ticket amount.
+        items: {
+          create: [
+            {
+              priceTierId: tier.id,
+              quantity: tickets,
+              unitPrice: BASE,
+              platformFee: PLATFORM_FEE * tickets,
+              processingFee: PROCESSING_FEE * tickets,
+              tax: TAX * tickets,
+            },
+          ],
+        },
         payment: {
           create: {
             stripePaymentIntentId: `pi_${TAG}_${seq}`,
