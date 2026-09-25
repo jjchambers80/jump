@@ -663,12 +663,12 @@ model OrganizationPerson {
 }
 
 model Venue {
-  id             String  @id @default(cuid())
+  id             String              @id @default(cuid())
   organizationId String
   name           String
   // Public namespace is /venues/:slug, so venue slugs are globally unique.
-  slug           String  @unique @default(cuid())
-  slugCustomized Boolean @default(false)
+  slug           String              @unique @default(cuid())
+  slugCustomized Boolean             @default(false)
   address        String
   city           String?
   state          String?
@@ -712,7 +712,7 @@ model Contact {
   emailUnsubscribedAt   DateTime?
   accountCreatedAt      DateTime? // null = guest checkout; set = login-enabled buyer account
   phone                 String?
-  tags                  String[]              @default([])
+  tags                  String[]               @default([])
   stripeCustomerId      String?                @unique // spec 011: platform-account Customer holding the applicant's saved card
 
   createdAt DateTime @default(now())
@@ -778,18 +778,18 @@ model BuyerLoginToken {
 }
 
 model Event {
-  id             String      @id @default(cuid())
-  venueId        String
-  name           String
+  id               String        @id @default(cuid())
+  venueId          String
+  name             String
   // Public namespace is /events/:slug, so event slugs are globally unique.
-  slug           String      @unique @default(cuid())
-  slugCustomized Boolean     @default(false)
-  description    String?
-  logoUrl        String?
-  imageId        String?
-  date           DateTime
-  capacity       Int
-  category       String?
+  slug             String        @unique @default(cuid())
+  slugCustomized   Boolean       @default(false)
+  description      String?
+  logoUrl          String?
+  imageId          String?
+  date             DateTime
+  capacity         Int
+  category         String?
   status           EventStatus   @default(DRAFT)
   admissionMode    AdmissionMode @default(TICKETED)
   rsvpLimit        Int?
@@ -1234,22 +1234,22 @@ enum BoothStatus {
 }
 
 model FloorMap {
-  id              String         @id @default(cuid())
-  organizationId  String
-  eventId         String         @unique // one map per event in v1
-  name            String
-  status          FloorMapStatus @default(DRAFT)
-  unit            String         @default("ft") // display only
-  gridSize        Int            @default(10) // px per grid unit in the editor
-  width           Int // grid units
-  height          Int
-  underlayFileId  String? // StoreFile
-  underlayOpacity Int            @default(40)
-  layout          Json // { version: 1, elements: [...] }
+  id                    String         @id @default(cuid())
+  organizationId        String
+  eventId               String         @unique // one map per event in v1
+  name                  String
+  status                FloorMapStatus @default(DRAFT)
+  unit                  String         @default("ft") // display only
+  gridSize              Int            @default(10) // px per grid unit in the editor
+  width                 Int // grid units
+  height                Int
+  underlayFileId        String? // StoreFile
+  underlayOpacity       Int            @default(40)
+  layout                Json // { version: 1, elements: [...] }
   createdFromTemplateId String? // informational; templates are snapshots, not parents
-  publishedAt     DateTime?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  publishedAt           DateTime?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   event        Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
@@ -1789,4 +1789,44 @@ model OrderAddOn {
 
   @@unique([orderId, addOnId])
   @@index([addOnId])
+}
+
+// Every Stripe webhook delivery, on every endpoint (spec 035 / EVE-3).
+//
+// WHY a table and not just a log line: Stripe delivers the same event more than
+// once and does not guarantee order. Handlers are individually idempotent, but
+// nothing recorded *that* a delivery happened, so a missed or mis-ordered event
+// was undebuggable after the fact. This row is the receipt.
+//
+// `(endpoint, stripeEventId)` is the dedup key — the insert itself is the lock,
+// so two concurrent deliveries of the same event cannot both reach a handler.
+// Append-mostly: a row is written on receipt and updated once with the outcome.
+model StripeWebhookEvent {
+  id              String    @id @default(cuid())
+  // PLATFORM | CONNECT | BILLING — which registered endpoint received it.
+  // Part of the dedup key: the same event id may legitimately arrive on two
+  // endpoints, and each has its own handler.
+  endpoint        String
+  stripeEventId   String
+  type            String
+  // event.account on Connect deliveries, null on the platform account.
+  accountId       String?
+  // event.data.object.id — the Stripe object this delivery is about. Used to
+  // detect out-of-order delivery against the same object.
+  objectId        String?
+  apiVersion      String?
+  // RECEIVED | PROCESSED | IGNORED | FAILED
+  status          String    @default("RECEIVED")
+  // Deliveries seen for this event id, including the first.
+  deliveries      Int       @default(1)
+  error           String?
+  // event.created, Stripe's own ordering clock — not our receipt time.
+  stripeCreatedAt DateTime?
+  receivedAt      DateTime  @default(now())
+  processedAt     DateTime?
+
+  @@unique([endpoint, stripeEventId])
+  @@index([type, receivedAt])
+  @@index([status, receivedAt])
+  @@index([objectId])
 }

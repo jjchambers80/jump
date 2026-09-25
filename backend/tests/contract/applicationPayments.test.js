@@ -45,6 +45,10 @@ const {
 } = await import('../helpers/applicationRow.js');
 
 const TAG = 'apppay-ct';
+// EVE-3: every webhook delivery is now recorded and deduped on its Stripe
+// event id, so a fixed id makes the *second* run of this suite a replay that
+// never reaches a handler. Namespace them per run and clear them in afterAll.
+const EVT = `evt_${TAG}_${Date.now()}${Math.floor(Math.random() * 1000)}`;
 const ACCT = 'acct_apppay_ct';
 
 paymentSettingsService._statusCache = {
@@ -171,6 +175,9 @@ describe('Application payments contract (spec 011 phase 2)', () => {
   afterAll(async () => {
     delete process.env.APPLICATIONS_PAYMENTS_ENABLED;
     delete process.env.STRIPE_CONNECT_ENABLED;
+    await prisma.stripeWebhookEvent
+      .deleteMany({ where: { stripeEventId: { startsWith: EVT } } })
+      .catch(() => {});
     await cleanupApplicationOrders(org.id);
     await prisma.application.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
     await prisma.applicantProfile.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
@@ -312,7 +319,7 @@ describe('Application payments contract (spec 011 phase 2)', () => {
     expect(decision.emailSubject).toMatch(/approved/);
 
     // payment_intent.succeeded after the fact is idempotent (no second email)
-    const hook = await webhook({ id: 'evt_pi_ok', type: 'payment_intent.succeeded', data: { object: { id: `pi_${TAG}_1`, status: 'succeeded', metadata: { applicationId: cardApp, purpose: 'approval' } } } });
+    const hook = await webhook({ id: `${EVT}_pi_ok`, type: 'payment_intent.succeeded', data: { object: { id: `pi_${TAG}_1`, status: 'succeeded', metadata: { applicationId: cardApp, purpose: 'approval' } } } });
     expect(hook.status).toBe(200);
     expect(sentEmails).toHaveLength(2); // receipt + approval from before; nothing new
     expect((await appRow(cardApp)).paymentStatus).toBe('PAID');
@@ -510,7 +517,7 @@ describe('Application payments contract (spec 011 phase 2)', () => {
 
     // Dashboard refund arrives by webhook: the first is already recorded, the second is new
     const hook = await webhook({
-      id: 'evt_refund',
+      id: `${EVT}_refund`,
       type: 'charge.refunded',
       data: { object: { id: 'ch_1', payment_intent: `pi_${TAG}_sponsor`, refunds: { data: [{ id: `re_${TAG}_1`, amount: 25000, reason: null }, { id: 're_external', amount: 10000, reason: 'duplicate' }] } } },
     });
@@ -585,9 +592,12 @@ describe('Application payments contract (spec 011 phase 2)', () => {
     const blocked = await request(app).post(`${adminBase()}/applications/${id}/decision`).set(...auth(organizerToken)).send({ decision: 'WITHDRAW' });
     expect(blocked.status).toBe(409);
 
-    const failed = { id: 'evt_fail', type: 'payment_intent.payment_failed', data: { object: { id: `pi_${TAG}_slow`, status: 'requires_payment_method', last_payment_error: { message: 'Insufficient funds' }, metadata: { applicationId: id, purpose: 'approval' } } } };
-    expect((await webhook(failed)).status).toBe(200);
-    expect((await webhook(failed)).status).toBe(200);
+    const failedBody = { type: 'payment_intent.payment_failed', data: { object: { id: `pi_${TAG}_slow`, status: 'requires_payment_method', last_payment_error: { message: 'Insufficient funds' }, metadata: { applicationId: id, purpose: 'approval' } } } };
+    // Two distinct event ids carrying the same failure — what Stripe actually
+    // does when it re-emits. The webhook ledger deliberately lets these
+    // through, so this still exercises the handler's own idempotency.
+    expect((await webhook({ ...failedBody, id: `${EVT}_fail_a` })).status).toBe(200);
+    expect((await webhook({ ...failedBody, id: `${EVT}_fail_b` })).status).toBe(200);
     const row = await appRow(id);
     expect(row).toMatchObject({ paymentStatus: 'PAYMENT_DUE', capacitySlot: 'RESERVED' });
     expect(sentEmails.map((e) => e.subject)).toEqual([expect.stringMatching(/Payment needed/)]);
