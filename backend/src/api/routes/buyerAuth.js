@@ -27,6 +27,7 @@ import { requireBuyer } from '../../middleware/buyerAuth.js';
 import { ForbiddenError, NotFoundError, ValidationError } from '../../middleware/errorHandler.js';
 import { buyerVerifyUrl } from '../../utils/storefrontUrl.js';
 import { evaluateRefundPolicy, REFUND_POLICY_MESSAGES, REFUND_POLICY_SELECT } from '../../services/RefundPolicyService.js';
+import { TICKET_AMOUNT_INCLUDE } from '../../services/ticketAmounts.js';
 import { prisma } from '@jump/db';
 import { MAX_PHOTO_MB, MAX_PROFILE_PHOTOS } from '../../config/applications.js';
 import logger from '../../utils/logger.js';
@@ -289,8 +290,12 @@ router.post('/me/tickets/:ticketId/refund', requireBuyer, async (req, res, next)
         contactId: true,
         status: true,
         pricePaid: true,
+        priceTierId: true,
+        ticketNumber: true,
         priceTier: { select: { isRefundable: true } },
         event: { select: { date: true, venue: { select: { organization: { select: REFUND_POLICY_SELECT } } } } },
+        // The quoted refund is the all-in amount paid, so it needs the order lines.
+        ...TICKET_AMOUNT_INCLUDE,
       },
     });
     if (!ticket) throw new NotFoundError('Ticket not found');

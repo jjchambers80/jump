@@ -3,6 +3,8 @@
 // the account page shows), so the two can never disagree. Staff refunds from
 // /admin/orders never go through here: they refund the full amount at any time.
 
+import { ticketAmountPaid } from './ticketAmounts.js';
+
 const round = (v) => Math.round((v + Number.EPSILON) * 100) / 100;
 
 export const REFUND_POLICY_MESSAGES = {
@@ -43,16 +45,24 @@ export function refundDeadline(policy, eventDate) {
 /**
  * Evaluate whether `ticket` may be self-refunded under `policy` right now.
  *
+ * The quoted `refundAmount` is what the buyer actually paid for the ticket —
+ * the listed price plus its share of fees and tax (`ticketAmountPaid`) — less
+ * the policy fee, so the quote always matches what `refundTicket` returns.
+ * The fee itself stays a function of the listed price, which is what the
+ * organizer set the policy against.
+ *
  * @param {object} policy - organization row (REFUND_POLICY_SELECT fields)
- * @param {object} ticket - `{ status, pricePaid, priceTier: { isRefundable }, event: { date } }`
+ * @param {object} ticket - `{ status, pricePaid, priceTier: { isRefundable }, event: { date } }`,
+ *   ideally queried with `TICKET_AMOUNT_INCLUDE`
  * @param {Date} [now]
  * @returns {{ eligible: boolean, reason: string|null, deadline: Date|null, fee: number, refundAmount: number }}
  */
 export function evaluateRefundPolicy(policy, ticket, now = new Date()) {
   const deadline = refundDeadline(policy, ticket.event?.date);
-  const pricePaid = round(Number(ticket.pricePaid) || 0);
-  const fee = refundFee(policy, pricePaid);
-  const refundAmount = round(pricePaid - fee);
+  const listedPrice = round(Number(ticket.pricePaid) || 0);
+  const amountPaid = ticketAmountPaid(ticket);
+  const fee = refundFee(policy, listedPrice);
+  const refundAmount = round(amountPaid - fee);
   const result = { eligible: false, reason: null, deadline, fee, refundAmount };
 
   if (!policy.selfServeRefundsEnabled) return { ...result, reason: 'DISABLED' };
