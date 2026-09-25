@@ -126,7 +126,7 @@ test('Domains appears under General in Settings and lists the Jump URL when noth
 
   const nav = page.getByRole('navigation', { name: 'Settings sections' });
   const links = nav.getByRole('link');
-  await expect(links).toHaveText(['General', 'Domains', 'Tax', 'Users']);
+  await expect(links).toHaveText(['General', 'Domains', 'Payments', 'Tax', 'Applications', 'Customer accounts', 'Users']);
   await expect(nav.getByRole('link', { name: 'Domains' })).toHaveAttribute('aria-current', 'page');
 
   await expect(page.getByRole('heading', { name: 'Domains' })).toBeVisible();

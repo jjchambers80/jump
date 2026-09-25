@@ -1,21 +1,22 @@
 // E2E tests for mobile admin layout (T110-T111)
 // US5: Responsive sidebar with hamburger toggle
 import { test, expect } from '@playwright/test';
+import { signInAsStaff } from './helpers/session';
+
+const API = 'http://localhost:3002';
 
 test.describe('US5: Mobile responsive admin', () => {
   test.use({ viewport: { width: 375, height: 812 } }); // iPhone X viewport
 
-  test('T110: Mobile shows hamburger menu, sidebar hidden by default', async ({ page }) => {
-    // Login as ADMIN
-    await page.goto('/auth/signin');
-    await page.getByLabel('Email').fill('admin@example.com');
-    await page.getByLabel('Password').fill('password');
-    await page.getByRole('button', { name: /sign in/i }).click();
-    await page.waitForURL('/events');
+  test.beforeEach(async ({ page, baseURL }) => {
+    await signInAsStaff(page, { id: 'mobile-admin', email: 'mobile@test.com', role: 'ADMIN' }, baseURL!);
+    await page.route(`${API}/organizations`, (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'org-1', name: 'Test Org', status: 'ACTIVE', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }]) })
+    );
+  });
 
-    // Navigate to admin
-    await page.goto('/admin');
-    await page.waitForURL('/admin/dashboard');
+  test('T110: Mobile shows hamburger menu, sidebar hidden by default', async ({ page }) => {
+    await page.goto('/admin/dashboard');
 
     // Hamburger button visible on mobile
     const hamburger = page.getByLabel('Open sidebar');
@@ -27,12 +28,6 @@ test.describe('US5: Mobile responsive admin', () => {
   });
 
   test('T111: Hamburger toggle opens/closes sidebar overlay', async ({ page }) => {
-    await page.goto('/auth/signin');
-    await page.getByLabel('Email').fill('admin@example.com');
-    await page.getByLabel('Password').fill('password');
-    await page.getByRole('button', { name: /sign in/i }).click();
-    await page.waitForURL('/events');
-
     await page.goto('/admin/dashboard');
 
     // Click hamburger to open sidebar
@@ -44,17 +39,21 @@ test.describe('US5: Mobile responsive admin', () => {
 
     // Backdrop should be present
     const backdrop = page.locator('[data-testid="sidebar-backdrop"]');
-    // If backdrop exists, clicking it should close sidebar
-    if (await backdrop.isVisible()) {
-      await backdrop.click();
-      await expect(dashboardLink).not.toBeInViewport();
-    } else {
-      // Close via close button or navigation
-      const closeBtn = page.getByLabel('Close sidebar');
-      if (await closeBtn.isVisible()) {
-        await closeBtn.click();
-        await expect(dashboardLink).not.toBeInViewport();
-      }
-    }
+    await expect(backdrop).toBeVisible();
+
+    // Use close button to close sidebar (backdrop has lower z-index than sidebar)
+    const closeBtn = page.getByLabel('Close sidebar');
+    await expect(closeBtn).toBeVisible();
+    await closeBtn.click();
+    await expect(dashboardLink).not.toBeInViewport();
+
+    // Re-open and click backdrop with force since sidebar intercepts
+    await page.getByLabel('Open sidebar').click();
+    await expect(dashboardLink).toBeVisible();
+    await expect(backdrop).toBeVisible();
+    await backdrop.click({ force: true });
+    // Wait for the CSS transition to complete
+    await page.waitForTimeout(300);
+    await expect(dashboardLink).not.toBeInViewport();
   });
 });

@@ -211,8 +211,8 @@ test('sidebar entry and the org-wide list: events, short ids, tags, status sort,
   await expect(page.getByLabel('Form').locator('option')).toHaveCount(2);
 
   await page.getByLabel('Event').selectOption('');
-  await page.getByLabel('Search').fill('xelpins1');
-  await page.getByRole('button', { name: 'Search' }).click();
+  await page.getByRole('textbox', { name: 'Search', exact: true }).first().fill('xelpins1');
+  await page.getByRole('button', { name: 'Search' }).first().click();
   await expect(page).toHaveURL(/q=xelpins1/);
   await expect(table).toContainText('Pixel Pins');
   await expect(table).not.toContainText('Retro Weekly');
@@ -336,12 +336,12 @@ test('tags: edit with suggestions from the ⋯ menu, filter by tag, search a tag
   await expect(table).not.toContainText('Pia Talks');
   await page.getByTestId('applications-tag-filter').selectOption('');
   await expect(page).not.toHaveURL(/tag=/);
-  await page.getByLabel('Search').fill('panelist');
-  await page.getByRole('button', { name: 'Search' }).click();
+  await page.getByRole('textbox', { name: 'Search', exact: true }).first().fill('panelist');
+  await page.getByRole('button', { name: 'Search' }).first().click();
   await expect(table).toContainText('Pia Talks');
   await expect(table).not.toContainText('Retro Weekly');
-  await page.getByLabel('Search').fill('');
-  await page.getByRole('button', { name: 'Search' }).click();
+  await page.getByRole('textbox', { name: 'Search', exact: true }).first().fill('');
+  await page.getByRole('button', { name: 'Search' }).first().click();
   await expect(page).not.toHaveURL(/q=/);
 
   // Check-in: only the approved row shows ticks; optimistic tick persists on reload.

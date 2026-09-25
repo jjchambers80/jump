@@ -20,19 +20,11 @@ const pages = [
 test.describe('WCAG AA Color Contrast — Light Mode', () => {
   for (const { name, path } of pages) {
     test(`${name} page has no contrast violations in light mode`, async ({ page }) => {
-      // Force light mode
       await page.emulateMedia({ colorScheme: 'light' });
       await page.goto(path);
-
-      // Set theme to light explicitly
-      await page.evaluate(() => {
-        localStorage.setItem('theme', 'light');
-      });
+      await page.evaluate(() => localStorage.setItem('theme', 'light'));
       await page.reload();
-      await page.waitForLoadState('domcontentloaded');
-
-      // Wait for theme toggle to be visible (ensures page is fully rendered)
-      await page.waitForSelector('[data-testid="theme-toggle"]', { timeout: 10000 });
+      await page.waitForLoadState('networkidle');
 
       const results = await new AxeBuilder({ page }).withRules(['color-contrast']).analyze();
 
@@ -47,19 +39,11 @@ test.describe('WCAG AA Color Contrast — Light Mode', () => {
 test.describe('WCAG AA Color Contrast — Dark Mode', () => {
   for (const { name, path } of pages) {
     test(`${name} page has no contrast violations in dark mode`, async ({ page }) => {
-      // Force dark mode
       await page.emulateMedia({ colorScheme: 'dark' });
       await page.goto(path);
-
-      // Set theme to dark explicitly
-      await page.evaluate(() => {
-        localStorage.setItem('theme', 'dark');
-      });
+      await page.evaluate(() => localStorage.setItem('theme', 'dark'));
       await page.reload();
-      await page.waitForLoadState('domcontentloaded');
-
-      // Wait for theme toggle and dark class
-      await page.waitForSelector('[data-testid="theme-toggle"]', { timeout: 10000 });
+      await page.waitForLoadState('networkidle');
       await expect(page.locator('html')).toHaveClass(/dark/);
 
       const results = await new AxeBuilder({ page }).withRules(['color-contrast']).analyze();

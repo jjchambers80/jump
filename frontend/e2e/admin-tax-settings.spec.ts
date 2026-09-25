@@ -409,7 +409,7 @@ test('Collected tax report lists regions with totals and downloads a CSV', async
 
   // Re-run with a custom range sends it to the API
   await page.getByLabel('From').fill('2026-03-01');
-  await page.getByLabel('To').fill('2026-03-31');
+  await page.getByRole('textbox', { name: 'To' }).fill('2026-03-31');
   await page.getByRole('button', { name: 'Run report' }).click();
   await expect.poll(() => api.calls.filter((c) => c.path === '/report').at(-1)?.query).toMatchObject({ from: '2026-03-01', to: '2026-03-31' });
 

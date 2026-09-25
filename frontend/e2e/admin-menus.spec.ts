@@ -197,7 +197,7 @@ test('edits the tree: add with the picker, nest, move, save the whole tree', asy
   // Add a page link at the root through the picker.
   await page.getByRole('button', { name: 'Add menu item', exact: true }).click();
   await page.getByLabel('Label').fill('Vendors');
-  await page.getByRole('combobox').fill('vend');
+  await page.getByRole('combobox', { name: 'Link' }).fill('vend');
   await page.getByRole('option', { name: /Vendors/ }).click();
   await page.getByRole('button', { name: 'Confirm item' }).click();
   await expect(page.getByTestId('menu-item-row')).toHaveCount(4);
@@ -206,7 +206,7 @@ test('edits the tree: add with the picker, nest, move, save the whole tree', asy
   // Add a child under Vendors: external link, new tab.
   await page.getByRole('button', { name: 'Add menu item to Vendors' }).click();
   await page.getByLabel('Label').fill('Packet');
-  await page.getByRole('combobox').fill('https://x.test/packet.pdf');
+  await page.getByRole('combobox', { name: 'Link' }).fill('https://x.test/packet.pdf');
   await page
     .getByRole('option', { name: /x\.test\/packet\.pdf/ })
     .first()
