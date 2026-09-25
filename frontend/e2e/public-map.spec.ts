@@ -61,6 +61,9 @@ const MAP = {
     { id: 'b-1', label: 'A1', kind: 'BOOTH', x: 0, y: 0, w: 10, h: 10, rotation: 0, status: 'SOLD', tier: { id: 't-1', name: '10×10 booth', price: 275 }, vendorName: 'Acme Crafts' },
     { id: 'b-2', label: 'A2', kind: 'BOOTH', x: 12, y: 0, w: 10, h: 10, rotation: 0, status: 'AVAILABLE', tier: { id: 't-1', name: '10×10 booth', price: 275 }, vendorName: null },
     { id: 'b-3', label: 'A3', kind: 'BOOTH', x: 24, y: 0, w: 10, h: 10, rotation: 0, status: 'BLOCKED', tier: null, vendorName: null },
+    // A vendor is mid-checkout on A4. Taken to every other visitor, but not
+    // sold — so the map must not name a holder for it. See spec 014 phase 2.
+    { id: 'b-4', label: 'A4', kind: 'BOOTH', x: 12, y: 11, w: 8, h: 8, rotation: 0, status: 'HELD', tier: { id: 't-1', name: '10×10 booth', price: 275 }, vendorName: null },
   ],
   brandColor: '#b91c1c',
   themeMode: 'SYSTEM',
@@ -111,6 +114,33 @@ test.describe('public floor map', () => {
     await expect(dialog).toBeVisible();
     // Sheet (mobile) and popover (desktop) both mount; only the viewport's copy is visible.
     await expect(page.getByText('Sold to Acme Crafts').locator('visible=true')).toHaveCount(1);
+  });
+
+  test('tells open booths apart from taken ones, and never names a holder mid-checkout', async ({ page }) => {
+    await mockEvent(page);
+    await page.goto('/events/ev-map/map');
+
+    // Open vs. taken has to be legible at a glance, so each state carries its
+    // own word in the accessible name — not just a fill colour.
+    await expect(page.getByTestId('booth-A2')).toHaveAttribute('aria-label', /Available$/);
+    await expect(page.getByTestId('booth-A1')).toHaveAttribute('aria-label', /Sold$/);
+    await expect(page.getByTestId('booth-A4')).toHaveAttribute('aria-label', /Held$/);
+    await expect(page.getByTestId('booth-A3')).toHaveAttribute('aria-label', /Blocked$/);
+
+    // Every state on the map has to be named in the legend, Held included —
+    // an amber booth with a clock on it is meaningless otherwise.
+    for (const state of ['Available', 'Held', 'Sold', 'Reserved', 'Blocked']) {
+      await expect(page.getByText(state, { exact: true }).locator('visible=true').first()).toBeVisible();
+    }
+
+    // test-results/ is gitignored; this is the open-vs-taken evidence shot,
+    // taken before any selection so the whole floor is in frame.
+    await page.screenshot({ path: 'test-results/public-map-booth-states.png', fullPage: true });
+
+    await page.getByTestId('booth-A4').click();
+    await expect(page.getByRole('dialog').getByRole('heading', { name: 'Booth A4' })).toBeVisible();
+    // A hold is not a sale: whoever is checking out stays anonymous until they pay.
+    await expect(page.getByText(/Sold to/).locator('visible=true')).toHaveCount(0);
   });
 
   test('?booth= accepts stable booth ids and legacy labels', async ({ page }) => {
