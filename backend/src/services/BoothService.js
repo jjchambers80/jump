@@ -1,7 +1,22 @@
-// Booth Service (spec 014 phase 1)
-// Manual booth assignment operations: assign, unassign, move, setStatus.
-// Every mutation starts with SELECT … FOR UPDATE on the affected booth row(s).
-// Phase 2 will add hold / release / sold here.
+// Booth Service (spec 014 phases 1–2)
+// Self-serve holds (chooseBooth / beginPayment / claimBooth / release / sweep)
+// and manual assignment (assign, unassign, move, setStatus).
+//
+// Two vendors clicking the same booth in the same second is the default case,
+// not the edge case, so this file has two layers of defence and both matter:
+//
+//  1. Every mutation runs inside one transaction and takes SELECT … FOR UPDATE
+//     on the affected row(s), always Application → Booth (`move` sorts booth ids
+//     to avoid deadlock). That is what turns a race into a clean 409.
+//  2. Postgres holds the invariant even if a future caller forgets layer 1:
+//     `Booth.applicationId` is unique (SOLD) and `Booth.holdApplicationId` is
+//     unique (HELD), with a CHECK pinning status = 'HELD' to exactly the rows
+//     that have a holder and a deadline. See the schema comment on `Booth` and
+//     migration 20261009100000_booth_hold_uniqueness.
+//
+// A hold without an expiry leaks inventory, so every hold carries
+// `holdExpiresAt` and `sweepExpiredHolds` reclaims it — except while Stripe may
+// still settle the payment.
 
 import { prisma } from '@jump/db';
 import { ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
@@ -11,6 +26,14 @@ import logger from '../utils/logger.js';
 function coded(error, code) {
   error.code = code;
   return error;
+}
+
+// `Booth_holdApplicationId_key` (migration 20261009100000_booth_hold_uniqueness)
+// surfaces as P2002 through the Prisma client and as 23505 through raw SQL.
+const UNIQUE_VIOLATION = ['P2002', '23505'];
+
+function isUniqueViolation(error) {
+  return UNIQUE_VIOLATION.includes(error?.code) || UNIQUE_VIOLATION.includes(String(error?.meta?.code));
 }
 
 class BoothService {
@@ -39,6 +62,7 @@ class BoothService {
         status: true,
         paymentStatus: true,
         tierId: true,
+        eventId: true,
         boothLabel: true,
         tier: { select: { id: true, mapBound: true } },
       },
@@ -77,25 +101,46 @@ class BoothService {
     if (booth.status !== 'AVAILABLE') {
       throw coded(new ConflictError('This booth is no longer available'), 'BOOTH_TAKEN');
     }
+    // Multi-tenant isolation: the booth must live on this application's own
+    // event. Tier ids are cuids so a foreign booth would almost certainly fail
+    // the tier check below anyway, but "almost certainly" is not a scoping rule
+    // — an applicant must never be able to reach another organizer's inventory.
+    const map = await tx.floorMap.findUnique({
+      where: { id: booth.mapId },
+      select: { status: true, eventId: true },
+    });
+    if (!map || map.eventId !== application.eventId) {
+      throw new NotFoundError('Booth not found');
+    }
     if (booth.tierId !== application.tierId) {
       throw coded(new ValidationError('This booth belongs to a different tier'), 'BOOTH_TIER_MISMATCH');
     }
-    const map = await tx.floorMap.findUnique({ where: { id: booth.mapId }, select: { status: true } });
-    if (!map || map.status !== 'PUBLISHED') {
+    if (map.status !== 'PUBLISHED') {
       throw coded(new ValidationError('This floor map is not published'), 'MAP_NOT_PUBLISHED');
     }
 
     const holdExpiresAt = new Date(Date.now() + BOOTH_HOLD_MS);
-    await tx.booth.update({
-      where: { id: boothId },
-      data: {
-        status: 'HELD',
-        holdApplicationId: applicationId,
-        holdExpiresAt,
-        applicationId: null,
-        assignedById: null,
-      },
-    });
+    try {
+      await tx.booth.update({
+        where: { id: boothId },
+        data: {
+          status: 'HELD',
+          holdApplicationId: applicationId,
+          holdExpiresAt,
+          applicationId: null,
+          assignedById: null,
+        },
+      });
+    } catch (error) {
+      // `Booth_holdApplicationId_key` is the database's own answer to "this
+      // application already holds a booth". Reaching it means a caller skipped
+      // the Application lock above; the constraint still refuses, and the
+      // applicant gets the same actionable conflict the lock would have given.
+      if (isUniqueViolation(error)) {
+        throw coded(new ConflictError('This application is already holding a booth'), 'ALREADY_HOLDING_BOOTH');
+      }
+      throw error;
+    }
     logger.info('Booth held for purchase', { event: 'booth_held', boothId, applicationId, holdExpiresAt });
     return { boothId, holdExpiresAt, status: 'HELD' };
   }
