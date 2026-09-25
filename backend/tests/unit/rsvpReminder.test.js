@@ -157,6 +157,69 @@ describe('RsvpReminderService.sendDue', () => {
     );
   });
 
+  it('releases the stamp of a failed send so the next sweep retries it', async () => {
+    const now = new Date('2026-09-22T12:00:00Z');
+    const rsvp1 = makeRsvp({ id: 'rsvp_1' });
+    const rsvp2 = makeRsvp({ id: 'rsvp_2' });
+    mockUpdateMany.mockResolvedValue({ count: 2 });
+    mockFindMany.mockResolvedValue([rsvp1, rsvp2]);
+    mockSendRsvpReminder
+      .mockResolvedValueOnce()                            // rsvp1 succeeds
+      .mockRejectedValueOnce(new Error('Resend outage')); // rsvp2 fails
+
+    const result = await service.sendDue(now);
+
+    expect(result).toEqual({ checked: 2, sent: 1, failed: 1 });
+    // Only the failed RSVP is un-stamped, and only the stamp this sweep set
+    // (remindedAt: now) — a concurrent replica's claim is never cleared.
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['rsvp_2'] }, remindedAt: now },
+      data: { remindedAt: null },
+    });
+    // The RSVP that sent keeps its stamp: no release call mentions it.
+    const releaseCalls = mockUpdateMany.mock.calls.filter(
+      ([args]) => args.data?.remindedAt === null
+    );
+    expect(releaseCalls).toHaveLength(1);
+    expect(releaseCalls[0][0].where.id.in).not.toContain('rsvp_1');
+  });
+
+  it('does not release anything when every send succeeds', async () => {
+    mockUpdateMany.mockResolvedValue({ count: 2 });
+    mockFindMany.mockResolvedValue([makeRsvp({ id: 'rsvp_1' }), makeRsvp({ id: 'rsvp_2' })]);
+    mockSendRsvpReminder.mockResolvedValue();
+
+    const result = await service.sendDue(new Date());
+
+    expect(result).toEqual({ checked: 2, sent: 2, failed: 0 });
+    // One claim call, no release call.
+    expect(mockUpdateMany).toHaveBeenCalledTimes(1);
+    expect(mockUpdateMany.mock.calls[0][0].data).toEqual({ remindedAt: expect.any(Date) });
+  });
+
+  it('a released RSVP sends on the following sweep', async () => {
+    const rsvp = makeRsvp({ id: 'rsvp_1' });
+
+    // Sweep 1: the send fails, the stamp is released.
+    mockUpdateMany.mockResolvedValue({ count: 1 });
+    mockFindMany.mockResolvedValue([rsvp]);
+    mockSendRsvpReminder.mockRejectedValueOnce(new Error('Resend outage'));
+    const first = await service.sendDue(new Date('2026-09-22T12:00:00Z'));
+    expect(first).toEqual({ checked: 1, sent: 0, failed: 1 });
+
+    // Sweep 2: the row is claimable again (remindedAt back to null) and sends.
+    jest.clearAllMocks();
+    mockUpdateMany.mockResolvedValue({ count: 1 });
+    mockFindMany.mockResolvedValue([{ ...rsvp, remindedAt: null }]);
+    mockSendRsvpReminder.mockResolvedValue();
+    const second = await service.sendDue(new Date('2026-09-22T13:00:00Z'));
+
+    expect(second).toEqual({ checked: 1, sent: 1, failed: 0 });
+    expect(mockSendRsvpReminder).toHaveBeenCalledTimes(1);
+    // No release on the successful retry.
+    expect(mockUpdateMany).toHaveBeenCalledTimes(1);
+  });
+
   it('concurrent replica guard: updateMany returns 0', async () => {
     mockUpdateMany.mockResolvedValue({ count: 0 });
 

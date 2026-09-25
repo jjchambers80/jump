@@ -3,6 +3,11 @@
 // in approximately 24 hours. Idempotent per RSVP via the `remindedAt` stamp:
 // the stamp is set atomically with updateMany before any send, so concurrent
 // replicas never double-send.
+//
+// A send that throws releases its own stamp so the next sweep retries it.
+// Without that, a single Resend blip silently costs a patron their reminder
+// forever. Retries are bounded by the reminder window: at most ~6 hourly
+// sweeps, and only while the event is still 20-26 h out.
 
 import { prisma } from '@jump/db';
 import emailService from './EmailService.js';
@@ -55,6 +60,7 @@ class RsvpReminderService {
 
     let sent = 0;
     let failed = 0;
+    const failedIds = [];
 
     for (const rsvp of rsvps) {
       try {
@@ -63,6 +69,7 @@ class RsvpReminderService {
         sent++;
       } catch (error) {
         failed++;
+        failedIds.push(rsvp.id);
         logger.error('RSVP reminder send failed', {
           rsvpId: rsvp.id,
           eventId: rsvp.eventId,
@@ -70,6 +77,18 @@ class RsvpReminderService {
           error: error.message,
         });
       }
+    }
+
+    if (failedIds.length > 0) {
+      // Release only the stamps this sweep set (`remindedAt: now`), so a
+      // concurrent replica's claim is never cleared out from under it.
+      // Releasing can only ever re-send a reminder that the provider already
+      // accepted but failed to acknowledge — a duplicate reminder beats a
+      // silently missing one.
+      await prisma.eventRsvp.updateMany({
+        where: { id: { in: failedIds }, remindedAt: now },
+        data: { remindedAt: null },
+      });
     }
 
     logger.info('RSVP reminder sweep', {
