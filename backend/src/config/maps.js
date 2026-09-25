@@ -46,8 +46,12 @@ export const SWATCH_COUNT = 6;
 /** Default empty layout. */
 export const EMPTY_LAYOUT = { version: 1, elements: [] };
 
-/** Booth hold duration (15 min, used in phase 2). */
-export const BOOTH_HOLD_MS = 15 * 60 * 1000;
+// The booth hold duration lives in `config/applications.js` as the
+// env-tunable `BOOTH_HOLD_MS`, which is what `BoothService` enforces and what
+// `holdExpiresAt` — and the countdown the paying vendor watches — is derived
+// from. A second hardcoded copy used to sit here; it was never imported, and
+// two constants with one name is how a displayed expiry and an enforced
+// expiry come to disagree.
 
 /** Minimum map name length. */
 export const MIN_MAP_NAME_LENGTH = 1;
