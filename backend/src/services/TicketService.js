@@ -8,6 +8,7 @@ import qrService from './QRService.js';
 import logger from '../utils/logger.js';
 import { NotFoundError, ConflictError, ValidationError } from '../middleware/errorHandler.js';
 import { evaluateRefundPolicy, REFUND_POLICY_SELECT } from './RefundPolicyService.js';
+import { TICKET_AMOUNT_INCLUDE } from './ticketAmounts.js';
 
 class TicketService {
   /**
@@ -183,7 +184,15 @@ class TicketService {
           },
         },
         priceTier: { select: { name: true, price: true, description: true, saleStartDate: true, saleEndDate: true, isRefundable: true } },
-        order: { select: { orderRef: true, createdAt: true } },
+        order: {
+          select: {
+            orderRef: true,
+            createdAt: true,
+            // Spec 031: the quoted refund is the all-in amount paid, which
+            // lives on the order's lines, not on Ticket.pricePaid.
+            ...(refundPolicy ? TICKET_AMOUNT_INCLUDE.order.select : {}),
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
