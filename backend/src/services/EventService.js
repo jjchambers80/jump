@@ -464,13 +464,25 @@ class EventService {
       );
     }
 
-    const { event, rsvps } = await prisma.$transaction(async (tx) => {
-      const rsvps = existing.admissionMode === 'RSVP'
+    const isRsvp = existing.admissionMode === 'RSVP';
+
+    const { event, notify, voidedTickets } = await prisma.$transaction(async (tx) => {
+      const rsvps = isRsvp
         ? await tx.eventRsvp.findMany({
             where: { eventId, status: 'GOING' },
             include: { contact: true },
           })
         : [];
+      // Ticketed events: everyone still holding a live ticket must be told.
+      // REDEEMED tickets are included in the notification but not voided —
+      // that person already came through the door and the attendance record
+      // stands.
+      const tickets = isRsvp
+        ? []
+        : await tx.ticket.findMany({
+            where: { eventId, status: { in: ['VALID', 'REDEEMED'] } },
+            include: { contact: true },
+          });
       const event = await tx.event.update({
         where: { id: eventId },
         data: { status: 'CANCELLED' },
@@ -485,7 +497,16 @@ class EventService {
           data: { status: 'CANCELLED', cancelledAt: new Date() },
         });
       }
-      return { event, rsvps };
+      // A ticket to a cancelled event must not open the door. Inventory is
+      // deliberately NOT restored: the event is over, and the tier counters
+      // are the record of what was sold.
+      const { count: voidedTickets } = isRsvp
+        ? { count: 0 }
+        : await tx.ticket.updateMany({
+            where: { eventId, status: 'VALID' },
+            data: { status: 'VOIDED' },
+          });
+      return { event, notify: isRsvp ? rsvps : tickets, voidedTickets };
     });
 
     logger.info('Event cancelled', {
@@ -493,9 +514,14 @@ class EventService {
       orgId,
       eventId: event.id,
       eventName: event.name,
+      admissionMode: event.admissionMode,
+      notified: notify.length,
+      voidedTickets,
     });
 
-    if (rsvps.length) await emailService.sendCancellationNotification(event, rsvps);
+    // The status guard above means a second cancel is a 409, so this runs
+    // exactly once per event — no duplicate notifications.
+    if (notify.length) await emailService.sendCancellationNotification(event, notify);
 
     return this._formatEventDetail(event);
   }

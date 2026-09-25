@@ -417,9 +417,15 @@ ${manageTicketsHtml}
   }
 
   /**
-   * Send cancellation notification to all ticket holders (FR-037)
+   * Send cancellation notification to all ticket holders (FR-037).
+   *
+   * The refund sentence is deliberately non-committal: nothing in the product
+   * refunds a ticket when an event is cancelled yet, and who owes that refund
+   * is still an open question (OQ-R4 on the legal drafts). Do not restore a
+   * promise of an automatic refund here until the refund actually runs.
+   *
    * @param {Object} event - Event object
-   * @param {Array} tickets - Tickets to notify (with contact relations)
+   * @param {Array} tickets - Tickets or RSVPs to notify (with contact relations)
    */
   async sendCancellationNotification(event, tickets) {
     // Spec 033: the event date belongs to the venue's zone, not the server's.
@@ -454,7 +460,8 @@ ${manageTicketsHtml}
                   <p>Hi ${contact.firstName || 'there'},</p>
                   <p>We're sorry to inform you that <strong>${event.name}</strong> has been cancelled.</p>
                   ${eventWhen ? `<p style="color: #666; font-size: 14px; margin-top: -8px;">${escapeHtml(eventWhen)}</p>` : ''}
-                  <p>${isRsvp ? 'Your RSVP has been cancelled; no action is needed.' : 'Your tickets have been voided and a refund will be processed automatically.'}</p>
+                  <p>${isRsvp ? 'Your RSVP has been cancelled; no action is needed.' : 'Your tickets have been voided and can no longer be used for entry.'}</p>
+                  ${isRsvp ? '' : '<p>If you paid for these tickets, get in touch using the address below and we will sort out your refund.</p>'}
                   <p style="color: #666; font-size: 12px;">If you have questions, contact us at support@jump.events</p>
                 </div>
               </body>
