@@ -18,7 +18,6 @@
 //      can never take money back out of an order whose dispute Jump won.
 
 import { prisma } from '@jump/db';
-import stripe from '../config/stripe.js';
 import addOnService from './AddOnService.js';
 import refundService from './RefundService.js';
 import emailService from './EmailService.js';
@@ -160,6 +159,9 @@ class DisputeService {
       const chargeId = typeof dispute.charge === 'string' ? dispute.charge : dispute.charge?.id ?? null;
       if (!chargeId) return null;
       try {
+        // Imported here, not at the top: `reconcile` below is read-only and
+        // must run (npm run report:disputes) without a Stripe key.
+        const { default: stripe } = await import('../config/stripe.js');
         const charge = await stripe.charges.retrieve(chargeId);
         paymentIntentId = typeof charge?.payment_intent === 'string' ? charge.payment_intent : charge?.payment_intent?.id ?? null;
       } catch (error) {

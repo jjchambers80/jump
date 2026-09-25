@@ -8,6 +8,7 @@
 //
 // Optional: ORGANIZATION_ID=<id> to scope to one organization.
 
+import 'dotenv/config';
 import { prisma } from '@jump/db';
 import disputeService from '../services/DisputeService.js';
 
