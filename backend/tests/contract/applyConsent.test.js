@@ -73,6 +73,7 @@ describe('Apply-form opt-ins and legal acceptances (spec 024 phase 3)', () => {
   let eventId;
   let freeForm;
   let paidForm;
+  let boothForm;
   let priceTier;
   const emails = [`admin@${TAG}.test`];
 
@@ -147,7 +148,26 @@ describe('Apply-form opt-ins and legal acceptances (spec 024 phase 3)', () => {
         tiers: [{ name: '10x10', price: 250, quantityTotal: 10 }],
       });
     paidForm = p.body;
-    for (const form of [freeForm, paidForm]) {
+    // A booth form: same shape, but its tier is sold from a floor map, so
+    // approval opens the picker instead of charging the saved card. Marked
+    // map-bound directly — publishing a map is MapService's business, and
+    // the flag is all the consent text reads.
+    const b = await request(app)
+      .post(`/admin/events/${eventId}/application-forms`)
+      .set(...auth(adminToken))
+      .send({
+        kind: 'PAID',
+        name: 'Booths',
+        chargeTiming: 'APPROVAL',
+        paymentDueDays: 7,
+        tiers: [{ name: 'Corner 10x10', price: 400, quantityTotal: 10 }],
+      });
+    boothForm = b.body;
+    await prisma.applicationTier.update({
+      where: { id: boothForm.tiers[0].id },
+      data: { mapBound: true },
+    });
+    for (const form of [freeForm, paidForm, boothForm]) {
       const opened = await request(app)
         .patch(`/admin/events/${eventId}/application-forms/${form.id}`)
         .set(...auth(adminToken))
@@ -342,6 +362,10 @@ describe('Apply-form opt-ins and legal acceptances (spec 024 phase 3)', () => {
     expect(card.presentedText).toContain(`$${Number(order.totalAmount).toFixed(2)}`);
     expect(card.presentedText).toContain('only if my application is approved');
     expect(card.presentedText).toContain('5 days');
+    // This tier is not map-bound, so the card really is charged at approval:
+    // the booth variant must not be what was stored.
+    expect(card.presentedText).toContain('I authorize');
+    expect(card.presentedText).not.toContain('pick my booth');
 
     // Abandoned: a resubmission replaces the DRAFT; the first one's opt-ins never applied.
     const again = await submit(paidForm.slug, tier.id, email, {
@@ -403,6 +427,59 @@ describe('Apply-form opt-ins and legal acceptances (spec 024 phase 3)', () => {
     expect(
       await prisma.buyerLoginToken.count({ where: { contactId: contact.id, purpose: 'WELCOME' } })
     ).toBe(1);
+  });
+
+  // A map-bound tier is forced to chargeTiming APPROVAL, and APPROVAL is what
+  // makes CARD_AUTHORIZATION mandatory — so every booth applicant accepts
+  // this text. Approval does not charge their card: it sets PAYMENT_DUE and
+  // the money moves when they come back and hold a booth. The stored
+  // `presentedText` has to say that, because it is the consent record for the
+  // one flow that takes real money.
+  it('a booth applicant is shown and has recorded the map-bound authorization, and the public form says which variant to show', async () => {
+    const email = `booth@${TAG}.test`;
+    const tier = boothForm.tiers[0];
+
+    // What the apply form reads to pick the variant it renders.
+    const published = await request(app).get(
+      `/events/${eventId}/applications/forms/${boothForm.slug}`
+    );
+    expect(published.status).toBe(200);
+    expect(published.body.tiers.find((t) => t.id === tier.id).mapBound).toBe(true);
+    const notBooth = await request(app).get(
+      `/events/${eventId}/applications/forms/${paidForm.slug}`
+    );
+    expect(notBooth.body.tiers.every((t) => t.mapBound === false)).toBe(true);
+
+    const res = await submit(boothForm.slug, tier.id, email, {
+      acceptances: acceptances({ cardAuthorization: true }),
+    });
+    expect(res.status).toBe(201);
+    const rows = await acceptancesFor(res.body.applicationId);
+    const card = rows.find((r) => r.document === 'CARD_AUTHORIZATION');
+    const order = await prisma.order.findUnique({
+      where: { applicationId: res.body.applicationId },
+    });
+
+    // Byte-for-byte the booth variant, rendered server-side from the same
+    // inputs the client used — never the client's own string.
+    expect(card.presentedText).toBe(
+      cardAuthorizationText({
+        amount: Number(order.totalAmount),
+        paymentDueDays: 7,
+        organizationName: org.name,
+        mapBound: true,
+      })
+    );
+    expect(card.presentedText).toContain('I come back to pick my booth and pay');
+    expect(card.presentedText).toContain(`$${Number(order.totalAmount).toFixed(2)}`);
+    expect(card.presentedText).toContain('7 days');
+    // The sentence this correction replaces, which described a charge the
+    // map-bound path never makes.
+    expect(card.presentedText).not.toContain('I authorize');
+    expect(card.presentedText).not.toContain('If the charge fails');
+    // The trail can tell a new acceptance from an old one.
+    expect(card.version).toBe(LEGAL_VERSIONS.cardAuthorization);
+    expect(LEGAL_VERSIONS.cardAuthorization).not.toBe('2026-09-19-draft');
   });
 
   it('checkout records TERMS + PRIVACY on the order; missing acceptances are logged until the legal pages go live, then refused; stale is always refused', async () => {

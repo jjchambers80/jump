@@ -106,9 +106,45 @@ describe('texts and flags', () => {
     expect(cardAuthorizationText({ amount: 10 })).toContain('the organizer');
   });
 
+  // The booth variant exists because a map-bound approval does not charge the
+  // saved card — it sets PAYMENT_DUE and the vendor pays after holding a
+  // booth. The non-map-bound sentence would describe a charge that never
+  // happens, and it is that sentence which is stored as `presentedText`.
+  test('a map-bound tier gets the booth authorization, not the charge-on-approval one', () => {
+    const booth = cardAuthorizationText({
+      amount: 288.5,
+      paymentDueDays: 7,
+      organizationName: 'Geek Expo',
+      mapBound: true,
+    });
+    expect(booth).toBe(
+      'I save my card now so Geek Expo can hold my place. Nothing is charged unless my application is approved — if it is, I come back to pick my booth and pay $288.50 then. I have 7 days to do that; my spot may be released to someone else after that.'
+    );
+    expect(booth).not.toContain('I authorize');
+
+    const card = cardAuthorizationText({
+      amount: 288.5,
+      paymentDueDays: 7,
+      organizationName: 'Geek Expo',
+    });
+    expect(card).toBe(
+      'I authorize Geek Expo to charge $288.50 to the card I save now, only if my application is approved. If the charge fails I have 7 days to pay from my application status page or update my card; my spot may be released to someone else after that.'
+    );
+    expect(card).not.toContain('pick my booth');
+
+    // Both say where the spot goes, and the window is config, never hardcoded.
+    for (const text of [booth, card]) expect(text).toContain('released to someone else');
+    expect(cardAuthorizationText({ amount: 10, paymentDueDays: 1, mapBound: true })).toContain('1 day ');
+  });
+
   test('consent text names the organizer; checkout acceptance is optional until the flag flips', () => {
     expect(applyConsentText({ organizationName: 'Geek Expo' })).toMatch(
       /^I agree to Geek Expo and Jump collecting/
+    );
+    // The public listing goes live on approval and `publicProfile` defaults
+    // on; the applicant cannot learn that from the first sentence.
+    expect(applyConsentText({ organizationName: 'Geek Expo' })).toContain(
+      "will be shown on the event's public page"
     );
     const before = process.env.LEGAL_ACCEPTANCE_REQUIRED;
     delete process.env.LEGAL_ACCEPTANCE_REQUIRED;

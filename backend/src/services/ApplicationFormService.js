@@ -759,6 +759,10 @@ class ApplicationFormService {
             feesIncluded: amounts.feeMode === 'PASS' ? Math.round((amounts.applicantPays - amounts.subtotal - amounts.tax) * 100) / 100 : 0,
             tax: amounts.tax,
             soldOut: t.quantityTotal - t.quantityApproved - t.quantityReserved <= 0,
+            // Spec 014: sold from the floor map, so approval opens the booth
+            // picker instead of charging the saved card. The apply form needs
+            // this to show the card-authorization label that matches.
+            mapBound: t.mapBound === true,
             // Spec 012: optional extras with the per-unit applicant price under this form's fee mode.
             addOns: this._offeredOnTier(t, addOns).map((a) => this._serializePublicAddOn(a, form, event, organization)),
           };

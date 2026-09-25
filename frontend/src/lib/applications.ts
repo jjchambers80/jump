@@ -138,6 +138,8 @@ export interface PublicTier {
   feesIncluded: number;
   tax: number;
   soldOut: boolean;
+  /** Spec 014: sold from the floor map — approval opens the booth picker rather than charging the saved card, so the card-authorization label differs. */
+  mapBound?: boolean;
   addOns: PublicTierAddOn[];
 }
 
