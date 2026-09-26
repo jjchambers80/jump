@@ -46,7 +46,8 @@ interface CustomerApplication {
   businessName: string | null;
   status: string;
   paymentStatus: string;
-  paymentSource: 'stripe' | 'offline';
+  // FREE forms have no order (spec 037 C2): no payment source, nothing paid.
+  paymentSource: 'stripe' | 'offline' | null;
   applicantPays: number;
   refunded: number;
   paidAt: string | null;
@@ -54,8 +55,9 @@ interface CustomerApplication {
   createdAt: string;
   event: OrderEvent;
   detailUrl: string;
-  orderId?: string;
-  orderRef?: string;
+  orderId: string | null;
+  orderRef: string | null;
+  orderStatus: string | null;
 }
 
 interface CustomerRsvp {
@@ -772,7 +774,7 @@ function CustomerDetailPageContent() {
                         <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
                           {application.businessName || application.form.name}
                         </span>
-                        <StatusBadge status={application.paymentStatus} />
+                        <StatusBadge status={application.form.kind === 'FREE' ? application.status : application.paymentStatus} />
                       </div>
                       <p className="text-xs text-gray-500 dark:text-slate-400 truncate">
                         {application.event.name} &middot; {application.form.name}
@@ -780,7 +782,7 @@ function CustomerDetailPageContent() {
                       </p>
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">{formatCurrency(application.applicantPays)}</p>
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">{application.form.kind === 'FREE' ? 'Free' : formatCurrency(application.applicantPays)}</p>
                       <p className="text-xs text-gray-500 dark:text-slate-400">
                         {application.refunded > 0 ? `${formatCurrency(application.refunded)} refunded` : application.paidAt ? `Paid ${formatDate(application.paidAt)}` : application.status.toLowerCase()}
                       </p>

@@ -40,6 +40,7 @@ describe('Application orders reporting contract (spec 024)', () => {
   let contacts = {};
   let taxableForm;
   let untaxedForm;
+  let freeForm;
   const emails = [`admin@${TAG}.test`];
 
   let seq = 0;
@@ -130,10 +131,13 @@ describe('Application orders reporting contract (spec 024)', () => {
       vendor: await mk(`vendor@${TAG}.test`, 'Vic', 'Vendor'), // applications only
       both: await mk(`both@${TAG}.test`, 'Bo', 'Both'), // one of each
       pending: await mk(`pending@${TAG}.test`, 'Pat', 'Pending'), // PAYMENT_DUE only: not a customer
+      free: await mk(`free@${TAG}.test`, 'Fay', 'Free'), // FREE-form applicant only: not a customer (spec 037 D11)
+      rsvp: await mk(`rsvp@${TAG}.test`, 'Ray', 'Rsvp'), // RSVP only: not a customer (spec 037 D11)
     };
 
     taxableForm = await prisma.applicationForm.create({ data: { eventId: event.id, kind: 'PAID', name: 'Vendors', slug: 'vendors', status: 'OPEN', taxable: true, tiers: { create: { name: '10x10', price: 200, quantityTotal: 10 } } }, include: { tiers: true } });
     untaxedForm = await prisma.applicationForm.create({ data: { eventId: event.id, kind: 'PAID', name: 'Sponsors', slug: 'sponsors', status: 'OPEN', taxable: false, tiers: { create: { name: 'Gold', price: 500, quantityTotal: 5 } } }, include: { tiers: true } });
+    freeForm = await prisma.applicationForm.create({ data: { eventId: event.id, kind: 'FREE', name: 'Press', slug: 'press', status: 'OPEN' } });
     const profiles = {};
     for (const [key, c] of Object.entries(contacts)) {
       profiles[key] = await prisma.applicantProfile.create({ data: { organizationId: org.id, contactId: c.id, businessName: `${c.firstName} Co` } });
@@ -148,10 +152,16 @@ describe('Application orders reporting contract (spec 024)', () => {
     await application({ form: untaxedForm, contact: contacts.vendor, profile: profiles.vendor, paymentStatus: 'PARTIALLY_REFUNDED', subtotal: 500, paidAt: T(4), refund: 100 });
     await application({ form: taxableForm, contact: contacts.both, profile: profiles.both, paymentStatus: 'PAID', subtotal: 200, tax: 14.5, paidAt: T(5) });
     await application({ form: taxableForm, contact: contacts.pending, profile: profiles.pending, paymentStatus: 'PAYMENT_DUE', subtotal: 200, tax: 14.5, paidAt: null, dueAt: T(12) });
+    // FREE form: no order at all (spec 024); RSVP: an EventRsvp row, never an order.
+    await prisma.application.create({
+      data: { formId: freeForm.id, eventId: event.id, organizationId: org.id, contactId: contacts.free.id, profileId: profiles.free.id, status: 'SUBMITTED', paymentStatus: 'NOT_REQUIRED', submittedAt: T(7), statusTokenHash: sha(`${TAG}-free`) },
+    });
+    await prisma.eventRsvp.create({ data: { eventId: event.id, contactId: contacts.rsvp.id, partySize: 2 } });
   });
 
   afterAll(async () => {
     await prisma.refund.deleteMany({ where: { order: { eventId: event.id } } }).catch(() => {});
+    await prisma.eventRsvp.deleteMany({ where: { eventId: event.id } }).catch(() => {});
     await prisma.application.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
     await prisma.applicantProfile.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
     await prisma.applicationForm.deleteMany({ where: { eventId: event.id } }).catch(() => {});
@@ -169,7 +179,7 @@ describe('Application orders reporting contract (spec 024)', () => {
 
   // ─── Customers ───────────────────────────────────────────────────────────
 
-  it('customers include contacts with paid applications; totals cover both; pending money does not make a customer', async () => {
+  it('customers include contacts with paid applications; totals cover both; pending money, FREE applicants and RSVPs do not make a customer', async () => {
     const res = await request(app).get(`/admin/customers?search=${encodeURIComponent(`@${TAG}.test`)}`).set(...auth(adminToken));
     expect(res.status).toBe(200);
     const byEmail = Object.fromEntries(res.body.data.map((c) => [c.email, c]));
@@ -198,7 +208,9 @@ describe('Application orders reporting contract (spec 024)', () => {
     expect(all.body.data.map((c) => c.email).sort()).toEqual([
       `both@${TAG}.test`,
       `buyer@${TAG}.test`,
+      `free@${TAG}.test`,
       `pending@${TAG}.test`,
+      `rsvp@${TAG}.test`,
       `vendor@${TAG}.test`,
     ]);
     expect(all.body.data.find((c) => c.id === contacts.pending.id)).toMatchObject({
@@ -255,7 +267,35 @@ describe('Application orders reporting contract (spec 024)', () => {
       totalSpent: 0,
       totalRefunded: 0,
       orders: [],
-      applications: [],
+    });
+    // Spec 037 C2: every application is listed, unpaid ones with their payment state.
+    expect(pending.body.applications).toHaveLength(1);
+    expect(pending.body.applications[0]).toMatchObject({
+      form: { name: 'Vendors', kind: 'PAID' },
+      status: 'APPROVED',
+      paymentStatus: 'PAYMENT_DUE',
+      orderStatus: 'PENDING',
+      applicantPays: 215.5,
+      paidAt: null,
+    });
+
+    const free = await request(app).get(`/admin/customers/${contacts.free.id}`).set(...auth(adminToken));
+    expect(free.status).toBe(200);
+    expect(free.body.orders).toEqual([]);
+    expect(free.body.applications).toHaveLength(1);
+    expect(free.body.applications[0]).toMatchObject({
+      form: { name: 'Press', kind: 'FREE' },
+      status: 'SUBMITTED',
+      paymentStatus: 'NOT_REQUIRED',
+      orderId: null,
+      orderRef: null,
+      orderStatus: null,
+      paymentSource: null,
+      applicantPays: 0,
+      refunded: 0,
+      paidAt: null,
+      event: { id: event.id, name: `${TAG} Expo` },
+      detailUrl: `/admin/events/${event.id}/applications/${free.body.applications[0].id}`,
     });
   });
 

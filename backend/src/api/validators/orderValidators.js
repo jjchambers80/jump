@@ -3,6 +3,7 @@
 // Per FR-052, contracts/api.yaml
 
 import { ValidationError } from '../../middleware/errorHandler.js';
+import { normalizeEmail } from '../../utils/normalizeEmail.js';
 
 /**
  * Validate POST /orders body
@@ -74,6 +75,9 @@ export const validateCreateOrder = (req, res, next) => {
   if (!contact) {
     errors.push({ field: 'contact', message: 'contact is required' });
   } else {
+    // One normalization for every Contact key (spec 037 C3): a pasted address
+    // with stray spaces or capitals is the same customer.
+    if (typeof contact.email === 'string') contact.email = normalizeEmail(contact.email);
     if (!contact.email) {
       errors.push({ field: 'contact.email', message: 'contact.email is required' });
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email)) {
@@ -108,6 +112,7 @@ export const validateCreateOrder = (req, res, next) => {
  */
 export const validateOrderLookup = (req, res, next) => {
   const errors = [];
+  if (typeof req.body.email === 'string') req.body.email = normalizeEmail(req.body.email);
   const { email, orderRef } = req.body;
 
   if (!email) {

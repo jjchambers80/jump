@@ -16,6 +16,7 @@ import { createHash, randomBytes, randomInt, timingSafeEqual } from 'crypto';
 import jwt from 'jsonwebtoken';
 import { prisma } from '@jump/db';
 import logger from '../utils/logger.js';
+import { normalizeEmail } from '../utils/normalizeEmail.js';
 import { AuthenticationError } from '../middleware/errorHandler.js';
 
 const TOKEN_TTL_MS = {
@@ -40,7 +41,7 @@ function hashToken(rawToken) {
 
 /** A code is bound to the organization and address it was sent to. */
 function hashCode(organizationId, email, code) {
-  return hashToken(`code:${organizationId}:${email.toLowerCase()}:${code}`);
+  return hashToken(`code:${organizationId}:${normalizeEmail(email)}:${code}`);
 }
 
 function isCodeShaped(value) {
@@ -119,7 +120,7 @@ class BuyerAuthService {
    */
   async requestLogin(organizationId, email) {
     const contact = await prisma.contact.findUnique({
-      where: { organizationId_email: { organizationId, email: email.toLowerCase() } },
+      where: { organizationId_email: { organizationId, email: normalizeEmail(email) } },
       select: {
         id: true,
         organizationId: true,
@@ -155,7 +156,7 @@ class BuyerAuthService {
     if (!organizationId || typeof email !== 'string' || !isCodeShaped(code)) throw invalid();
 
     const now = new Date();
-    const normalizedEmail = email.toLowerCase();
+    const normalizedEmail = normalizeEmail(email);
     const token = await prisma.buyerLoginToken.findFirst({
       where: {
         organizationId,

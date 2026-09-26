@@ -15,6 +15,8 @@ import { confirmationUrl, eventUrl } from '../utils/storefrontUrl.js';
 import orderLineService, { ORDER_INCLUDE } from './OrderLineService.js';
 import legalAcceptanceService from './LegalAcceptanceService.js';
 import { checkoutAcceptanceRequired } from '../config/legal.js';
+import { normalizeEmail } from '../utils/normalizeEmail.js';
+import { upsertContactFillBlanks } from './contactRecord.js';
 
 /** Include for org-wide order rows (spec 024 phase 2): enough to describe either kind without a second query. */
 const LIST_INCLUDE = {
@@ -212,7 +214,7 @@ class OrderService {
       // 1b. Per-buyer hold cap (spec 020): open (PENDING) checkouts for this
       // email on this event, before anything is reserved. Abandoned holds are
       // released by the sweep and by Stripe's session expiry.
-      const holdEmail = String(contact.email || '').toLowerCase();
+      const holdEmail = normalizeEmail(contact.email);
       const [{ open }] = await tx.$queryRaw`
         SELECT COUNT(*)::int AS open FROM "Order" o
         JOIN "Contact" c ON c."id" = o."contactId"
@@ -283,23 +285,18 @@ class OrderService {
       // 3. Upsert contact — scoped to the event's organization (spec 007).
       // The same email buying from two organizations is two Contact rows.
       const organizationId = event.venue.organizationId;
-      const email = contact.email.toLowerCase();
+      const email = normalizeEmail(contact.email);
       // Opt-ins are recorded on the Order (below) and applied to the Contact
       // by PaymentService once the payment completes, never here.
       // Buyers are never linked to User (spec 007 D1); a staff session in the
       // browser must not attach itself to the buyer record.
-      const contactRecord = await tx.contact.upsert({
-        where: { organizationId_email: { organizationId, email } },
-        update: {
-          firstName: contact.firstName,
-          lastName: contact.lastName,
-        },
-        create: {
-          organizationId,
-          email,
-          firstName: contact.firstName,
-          lastName: contact.lastName,
-        },
+      // A missing name is filled in; an existing one is never overwritten
+      // (spec 037 D12): last buyer on a shared email must not win.
+      const contactRecord = await upsertContactFillBlanks(tx, {
+        organizationId,
+        email,
+        firstName: contact.firstName,
+        lastName: contact.lastName,
       });
 
       // 4. Calculate total with fee breakdown (FTC all-in pricing)
@@ -632,7 +629,7 @@ class OrderService {
     const order = await prisma.order.findFirst({
       where: {
         orderRef: orderRef.toUpperCase(),
-        contact: { email: email.toLowerCase() },
+        contact: { email: normalizeEmail(email) },
       },
       include: {
         event: {

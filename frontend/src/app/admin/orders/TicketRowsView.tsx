@@ -131,7 +131,9 @@ function TicketDetailModal({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingAttendee, setEditingAttendee] = useState(false);
-  const [attendeeForm, setAttendeeForm] = useState({ firstName: '', lastName: '', email: '' });
+  // Name only (spec 037 D13): the buyer email is their customer identity and
+  // changes on the customer page, never from a ticket.
+  const [attendeeForm, setAttendeeForm] = useState({ firstName: '', lastName: '' });
   const [saving, setSaving] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const backdropRef = useRef<HTMLDivElement>(null);
@@ -146,7 +148,6 @@ function TicketDetailModal({
         setAttendeeForm({
           firstName: data.attendee.firstName,
           lastName: data.attendee.lastName,
-          email: data.attendee.email,
         });
       }
     } catch (err: any) {
@@ -309,13 +310,6 @@ function TicketDetailModal({
                                   className="w-full px-2 py-1.5 text-sm rounded border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
                                 />
                               </div>
-                              <input
-                                type="email"
-                                value={attendeeForm.email}
-                                onChange={(e) => setAttendeeForm({ ...attendeeForm, email: e.target.value })}
-                                placeholder="Email"
-                                className="w-full px-2 py-1.5 text-sm rounded border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
-                              />
                               <div className="flex gap-2">
                                 <button
                                   onClick={handleSaveAttendee}
@@ -331,7 +325,6 @@ function TicketDetailModal({
                                       setAttendeeForm({
                                         firstName: detail.attendee.firstName,
                                         lastName: detail.attendee.lastName,
-                                        email: detail.attendee.email,
                                       });
                                     }
                                   }}
@@ -355,6 +348,9 @@ function TicketDetailModal({
                               ) : (
                                 <p className="text-sm text-gray-400">No attendee info</p>
                               )}
+                              {/* A multi-ticket order shares one buyer: renaming it
+                                  from one ticket would rename all of them (spec 037 C1). */}
+                              {detail.siblingTickets.length === 0 && (
                               <button
                                 onClick={() => setEditingAttendee(true)}
                                 className="mt-1 inline-flex items-center gap-1 text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
@@ -362,8 +358,9 @@ function TicketDetailModal({
                                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                                 </svg>
-                                edit
+                                edit name
                               </button>
+                              )}
                             </>
                           )}
                         </div>
