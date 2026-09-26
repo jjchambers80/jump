@@ -48,3 +48,22 @@ body {
 .dark .signup-stage {
   background: radial-gradient(ellipse at 50% 30%, #0f1f1c 0%, #070d0c 60%, #050807 100%);
 }
+
+/*
+ * RSVP admission pass (app/events/[eventId]/RsvpPass.tsx): two notches cut
+ * where the stub meets the form. A mask instead of page-colored circles, so the
+ * pass works on the white card (sm+) and on the bare page (mobile) alike.
+ * --notch-y must equal the stub height (h-28 = 7rem).
+ */
+.rsvp-pass {
+  --notch: 11px;
+  --notch-y: 7rem;
+  -webkit-mask:
+    radial-gradient(circle var(--notch) at left var(--notch-y), transparent 97%, #000 100%),
+    radial-gradient(circle var(--notch) at right var(--notch-y), transparent 97%, #000 100%);
+  -webkit-mask-composite: source-in;
+  mask:
+    radial-gradient(circle var(--notch) at left var(--notch-y), transparent 97%, #000 100%),
+    radial-gradient(circle var(--notch) at right var(--notch-y), transparent 97%, #000 100%);
+  mask-composite: intersect;
+}
