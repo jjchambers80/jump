@@ -9,12 +9,14 @@ Things a human has to do or decide before Jump takes real money. Code and tests 
 Blocking items, in the order to do them. Details in the sections below.
 
 - [ ] **Set the statement descriptor prefix on the Stripe account** (added 2026-09-14) — Stripe Dashboard › Settings › Business › Public details › Statement descriptor. Use something short like `JUMP` so organizations keep 16 characters for their own name. Until this is set, buyers see the raw account name on their card statement and Settings › Payments cannot save a statement name. See [Stripe payments](#stripe-payments).
-- [ ] Live `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` on Railway; activate the account. See [Stripe payments](#stripe-payments).
+- [ ] Live `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` on Railway; activate the account. **Set both in the same change, the secret never after the key** — with a live key and no webhook secret, signatures are not verified and anyone who can POST to the backend can forge a `checkout.session.completed` and receive free tickets (reproduced, not theoretical). Also confirm `NODE_ENV=production` on the backend service. See [Stripe payments](#stripe-payments).
 - [ ] Decide NY and CA tax regions; activate Stripe Tax or keep manual rates. See [Stripe Tax](#stripe-tax-settings--tax-spec-009).
 - [ ] Stripe Connect platform setup, then `STRIPE_CONNECT_ENABLED=true` (added 2026-09-16) — only after the live key; see [Stripe Connect](#stripe-connect-spec-010-phase-2).
 - [x] **Ship spec 020 phase 1 (abuse protection) before the first public on-sale** (added 2026-09-18; shipped 2026-09-19) — `POST /orders` is unauthenticated, unlimited, and reserves tier inventory for 30 minutes before payment, so a script can hold a whole tier for free. Phase 1 adds per-IP and per-buyer limits plus an abandoned-order sweep. See [Abuse protection](#abuse-protection-and-edge-layer-spec-020).
 - [ ] **Spec 023 phase 1: publish counsel's Terms, Privacy Policy, Organizer Terms, copyright page** (added 2026-09-19) — phase-0 scaffolding is on `main`: `/legal/<slug>` renders `frontend/content/legal/<slug>.md` once `NEXT_PUBLIC_LEGAL_PAGES_ENABLED=true` (build-time), `/terms` + `/privacy` redirect there, `LegalAcceptance` capture is live (spec 024 phase 3), the dead `POST /customers/:id/delete-data` route is gone. To go live: drop the `.md` files in (front matter `version` must match `backend/src/config/legal.js` `LEGAL_VERSIONS`, then bump the `-draft` versions), set the frontend flag and `LEGAL_ACCEPTANCE_REQUIRED=true` on the backend, redeploy both. Blocked on counsel's text; DMCA agent registration and `security.txt` need the legal entity name and a monitored `security@` mailbox.
-- [ ] **Decide the edge layer (Cloudflare or Railway-only) before the first production custom domain** (added 2026-09-18) — moving behind Cloudflare later changes every organization's CNAME target. See [Abuse protection](#abuse-protection-and-edge-layer-spec-020).
+- [x] **Decide the edge layer (Cloudflare or Railway-only) before the first production custom domain** (added 2026-09-18; decided 2026-09-18) — **B: Railway-only for launch**, revisit Cloudflare + Cloudflare for SaaS at launch-plus-one-quarter. Recorded under [Abuse protection](#abuse-protection-and-edge-layer-spec-020) ("Edge-layer decision recorded"). Moving behind Cloudflare later changes every organization's CNAME target.
+- [ ] **Set `AUTH_RESEND_FROM` on the frontend service** (added 2026-09-25) — `frontend/src/auth.config.ts` falls back to `onboarding@resend.dev`, Resend's sandbox sender, which only delivers to the Resend account owner's own address. Unset ⇒ staff magic-link sign-in silently fails for everyone else. See [Email senders](#email-senders).
+- [ ] **Set `RESEND_FROM_EMAIL` on the backend service and verify the sending domain in Resend** (added 2026-09-25) — `backend/src/services/EmailService.js` falls back to `Jump <noreply@jump.events>` in ten places, which only delivers if `jump.events` is a verified Resend domain. Carries order and RSVP confirmations, RSVP reminders and vendor `PAYMENT_DUE` mail. See [Email senders](#email-senders).
 
 ## Stripe Tax (Settings › Tax, spec 009)
 
@@ -77,7 +79,7 @@ Reviewed 2026-09-18 against `main`: production has no edge layer (Railway only, 
 
 - [x] **Phase 1 merged and deployed 2026-09-19** — limiters on the money paths (`backend/src/middleware/rateLimit.js`), per-buyer hold cap (`ORDER_MAX_PENDING_PER_CONTACT`), abandoned-checkout sweep (`OrderService.sweepAbandoned`, every `ORDER_SWEEP_INTERVAL_MS`), `20260930200000_order_abuse_indexes`. Verify in prod: `GET /health` unlimited; 11th `POST /orders` from one IP in 15 min → 429 (`RateLimit-*` headers); `rate_limited_total` visible on `/metrics`. Limits are tunable per limiter without a deploy (`RATE_LIMIT_<NAME>_LIMIT` / `_WINDOW_MS`).
 - [ ] **Phase 2 merged and deployed** — magic-link guard, `helmet`, Next security headers with CSP report-only. Verify: storefront, checkout (Stripe redirect), admin with an uploaded image, Google sign-in — zero CSP reports for a week, then enforce.
-- [ ] **Edge-layer decision recorded** (plan §7.1): **B — Railway-only for launch**, with phases 1–2 and optional Turnstile; revisit Cloudflare + Cloudflare for SaaS at launch-plus-one-quarter or sooner if metrics justify it. Date: 2026-09-18. Option C (platform hosts only) rejected because custom-domain storefronts would remain exposed.
+- [x] **Edge-layer decision recorded** (plan §7.1): **B — Railway-only for launch**, with phases 1–2 and optional Turnstile; revisit Cloudflare + Cloudflare for SaaS at launch-plus-one-quarter or sooner if metrics justify it. Date: 2026-09-18. Option C (platform hosts only) rejected because custom-domain storefronts would remain exposed.
 - [ ] **Staff invite-first flow recorded** (plan §7.3): invite staff through Settings › People before magic-link sign-in; unknown/deleted addresses receive the same success-shaped response but no email and no `User` row. Google sign-in is unaffected.
 - [ ] **Box-office tuning trigger** (plan §7.2): monitor shared-NAT/box-office rate-limit reports after launch; if legitimate traffic from a venue box office hits the `ORDER_CREATE` limit, raise `RATE_LIMIT_ORDER_CREATE_LIMIT` from 10 to 30 via the environment override — no code change needed.
 - [ ] Optional: `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` on checkout, buyer sign-in and application submit — works without moving DNS to Cloudflare.
@@ -105,12 +107,21 @@ Spec written 2026-09-18 (`specs/023-legal-compliance/spec.md`). Phase 0 shipped 
 
 - [ ] Answer spec 023 §12 Q1–Q4, Q7 with counsel; hand the spec's §4 content requirements to the attorney.
 - [ ] Register the DMCA designated agent (copyright.gov) and publish the contact on `/legal/copyright`.
-- [ ] Create and monitor `legal@`, `privacy@`, `security@` and the DMCA mailbox; publish `security.txt`.
+- [ ] Create and monitor `legal@`, `privacy@`, `security@` and the DMCA mailbox; publish `security.txt` — set `SECURITY_CONTACT_EMAIL` on the frontend service **and redeploy**, not just set it. The route is statically rendered on `main`, so the value is baked in at build time and the path keeps returning 404 until the frontend rebuilds (audit 6.4; the `force-dynamic` fix is tracked separately). Setting the variable on Railway triggers a redeploy — confirm the new deploy finished before concluding the feature is broken.
 - [ ] Record vendor DPA / terms acceptance (Stripe, Resend, Railway, Google OAuth) in `docs/wiki/config/privacy-register.md`.
 - [ ] Drop counsel's Markdown into `frontend/content/legal/`, set versions, flip `NEXT_PUBLIC_LEGAL_PAGES_ENABLED=true`, verify the footer and `/legal/*` on the platform host and on one custom domain.
 - [ ] Verify one PAID application form shows the card-authorization checkbox and the acceptance row is written; verify one checkout writes `LegalAcceptance` rows.
 - [ ] Before `BILLING_ENABLED`: subscribe-step renewal / cancellation disclosure text approved (spec 023 Q8).
 - [ ] Before `STRIPE_CONNECT_ENABLED`: Organizer Terms Connect annex approved; payouts interstitial live.
+
+## Email senders
+
+Added 2026-09-25 from the launch-readiness audit. Both senders fall back to an address that does not deliver in production, and neither failure is visible in the app — the send is accepted and the mail never arrives.
+
+- [ ] **`AUTH_RESEND_FROM` on the frontend service** — the Auth.js Resend provider's `from` (`frontend/src/auth.config.ts`). Fallback `onboarding@resend.dev` is Resend's sandbox sender: it only delivers to the Resend account owner's own address, so staff magic-link sign-in works for the account owner and silently fails for every other person invited. Set it to an address on the verified domain, e.g. `Jump <no-reply@jump.events>`.
+- [ ] **`RESEND_FROM_EMAIL` on the backend service** — every transactional email (`backend/src/services/EmailService.js`, ten call sites). Fallback `Jump <noreply@jump.events>` delivers only if `jump.events` is verified. Carries order confirmations, RSVP confirmations and reminders, and vendor `PAYMENT_DUE` mail.
+- [ ] **Verify the sending domain in Resend** (Resend › Domains: SPF + DKIM, and DMARC if the apex is already covered). Until the domain shows *Verified*, both variables are inert whatever they are set to.
+- [ ] **Smoke both after setting**: request a staff magic link to an address that is *not* the Resend account owner's, and place one test order — confirm both land and the `From` header reads as intended.
 
 ## Related
 
