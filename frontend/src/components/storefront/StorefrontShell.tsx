@@ -58,7 +58,10 @@ export default function StorefrontShell<T extends { organization: StorefrontOrga
         aria-busy="true"
         aria-label="Loading"
       >
-        <div className="h-28 animate-pulse border-b border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-800" />
+        <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:px-6 sm:py-5 lg:px-8">
+          <div className="h-12 w-12 animate-pulse rounded-lg bg-gray-200 dark:bg-slate-700" />
+          <div className="h-5 w-40 animate-pulse rounded bg-gray-200 dark:bg-slate-700" />
+        </div>
         <div className="mx-auto max-w-3xl space-y-4 px-4 py-10">
           <div className="h-8 w-2/3 animate-pulse rounded bg-gray-200 dark:bg-slate-700" />
           <div className="h-64 animate-pulse rounded-lg bg-gray-200 dark:bg-slate-700" />

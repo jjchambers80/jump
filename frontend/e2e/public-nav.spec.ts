@@ -153,3 +153,48 @@ test('header renders no nav row when the main menu is empty', async ({ page }) =
   await expect(page.getByTestId('storefront-nav')).toHaveCount(0);
   await expect(page.getByTestId('storefront-footer')).toHaveCount(0);
 });
+
+test('header and footer sit on the page surface with no background or border', async ({ page }) => {
+  await mockStorefront(page);
+  await page.goto('/organizations/org-nav');
+  for (const id of ['organization-header', 'storefront-footer']) {
+    const style = await page.getByTestId(id).evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { bg: s.backgroundColor, top: s.borderTopWidth, bottom: s.borderBottomWidth };
+    });
+    expect(style).toEqual({ bg: 'rgba(0, 0, 0, 0)', top: '0px', bottom: '0px' });
+  }
+});
+
+test('skip link moves focus past the header', async ({ page }) => {
+  await mockStorefront(page);
+  await page.goto('/organizations/org-nav');
+  const skip = page.getByRole('link', { name: 'Skip to content' });
+  await skip.focus();
+  await expect(skip).toBeVisible();
+  await page.keyboard.press('Enter');
+  const inHeader = await page.evaluate(
+    () => !!document.activeElement?.closest('[data-testid="organization-header"]')
+  );
+  expect(inHeader).toBe(false);
+});
+
+test('mobile drawer traps focus and returns it to the menu button', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await mockStorefront(page);
+  await page.goto('/organizations/org-nav');
+  const openButton = page.getByRole('button', { name: 'Open menu' });
+  const box = (await openButton.boundingBox())!;
+  expect(box.width).toBeGreaterThanOrEqual(44);
+  expect(box.height).toBeGreaterThanOrEqual(44);
+  await openButton.click();
+  const drawer = page.getByRole('dialog', { name: 'Menu' });
+  await expect(drawer.getByRole('button', { name: 'Close menu' })).toBeFocused();
+  for (let i = 0; i < 12; i += 1) {
+    await page.keyboard.press('Tab');
+    expect(await drawer.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+  }
+  await page.keyboard.press('Escape');
+  await expect(drawer).toHaveCount(0);
+  await expect(openButton).toBeFocused();
+});

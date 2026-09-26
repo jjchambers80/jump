@@ -3,6 +3,8 @@
 // Main menu on the storefront: desktop row with hover / click dropdowns (two
 // nested levels), mobile hamburger drawer with accordion. Brand tokens for
 // the active state; motion is short and off under prefers-reduced-motion.
+// The drawer is a modal dialog: focus moves in, Tab is trapped, Escape and
+// the scrim close it, and focus returns to the menu button.
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -118,7 +120,7 @@ function Dropdown({ item, orgId }: { item: PublicMenuItem; orgId: string }) {
         aria-expanded={open}
         aria-controls={id}
         onClick={toggle}
-        className="inline-flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium text-gray-700 hover:text-brand-link focus:outline-none focus:ring-2 focus:ring-brand dark:text-slate-200"
+        className="inline-flex min-h-11 items-center gap-1 rounded-md px-3 text-sm font-medium text-gray-700 transition-colors hover:text-brand-link motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-brand dark:text-slate-200"
       >
         {item.label}
         <ChevronDown
@@ -129,7 +131,7 @@ function Dropdown({ item, orgId }: { item: PublicMenuItem; orgId: string }) {
       {open && (
         <div
           id={id}
-          className="absolute left-0 top-full z-30 mt-1 min-w-[14rem] rounded-lg border border-gray-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-800"
+          className="absolute right-0 top-full z-30 mt-1 min-w-[14rem] rounded-xl bg-white p-2 shadow-lg ring-1 ring-black/5 dark:bg-slate-800 dark:ring-white/10"
         >
           <ul className="space-y-0.5">
             {item.children.map((child) => (
@@ -137,16 +139,16 @@ function Dropdown({ item, orgId }: { item: PublicMenuItem; orgId: string }) {
                 <NavLink
                   item={child}
                   orgId={orgId}
-                  className="block rounded-md px-3 py-1.5 text-sm text-gray-800 hover:bg-gray-50 hover:text-brand-link aria-[current=page]:font-semibold aria-[current=page]:text-brand-link dark:text-slate-100 dark:hover:bg-slate-700"
+                  className="block rounded-md px-3 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-brand-link aria-[current=page]:font-semibold aria-[current=page]:text-brand-link focus:outline-none focus-visible:ring-2 focus-visible:ring-brand dark:text-slate-100 dark:hover:bg-slate-700"
                 />
                 {child.children.length > 0 && (
-                  <ul className="ml-3 border-l border-gray-200 pl-2 dark:border-slate-600">
+                  <ul className="pl-3">
                     {child.children.map((grand) => (
                       <li key={grand.id}>
                         <NavLink
                           item={grand}
                           orgId={orgId}
-                          className="block rounded-md px-3 py-1 text-sm text-gray-600 hover:bg-gray-50 hover:text-brand-link aria-[current=page]:text-brand-link dark:text-slate-300 dark:hover:bg-slate-700"
+                          className="block rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 hover:text-brand-link aria-[current=page]:text-brand-link focus:outline-none focus-visible:ring-2 focus-visible:ring-brand dark:text-slate-300 dark:hover:bg-slate-700"
                         />
                       </li>
                     ))}
@@ -173,7 +175,7 @@ function DrawerItem({
   onNavigate: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const padding = depth === 0 ? 'pl-4' : depth === 1 ? 'pl-8' : 'pl-12';
+  const padding = depth === 0 ? 'pl-6' : depth === 1 ? 'pl-10' : 'pl-14';
   if (!item.children.length) {
     return (
       <li>
@@ -181,7 +183,7 @@ function DrawerItem({
           item={item}
           orgId={orgId}
           onNavigate={onNavigate}
-          className={`block ${padding} py-2 pr-4 text-base text-gray-800 aria-[current=page]:font-semibold aria-[current=page]:text-brand-link dark:text-slate-100`}
+          className={`flex min-h-12 items-center ${padding} pr-6 text-base text-gray-800 aria-[current=page]:font-semibold aria-[current=page]:text-brand-link focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand dark:text-slate-100`}
         />
       </li>
     );
@@ -193,14 +195,14 @@ function DrawerItem({
           item={item}
           orgId={orgId}
           onNavigate={onNavigate}
-          className={`flex-1 ${padding} py-2 text-base text-gray-800 aria-[current=page]:font-semibold aria-[current=page]:text-brand-link dark:text-slate-100`}
+          className={`flex min-h-12 flex-1 items-center ${padding} text-base text-gray-800 aria-[current=page]:font-semibold aria-[current=page]:text-brand-link focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand dark:text-slate-100`}
         />
         <button
           type="button"
           aria-expanded={open}
           aria-label={open ? `Collapse ${item.label}` : `Expand ${item.label}`}
           onClick={() => setOpen((v) => !v)}
-          className="mr-2 inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-700"
+          className="mr-3 inline-flex h-11 w-11 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand dark:text-slate-300 dark:hover:bg-slate-800"
         >
           <ChevronDown
             className={`h-5 w-5 transition-transform duration-150 motion-reduce:transition-none ${open ? 'rotate-180' : ''}`}
@@ -234,12 +236,28 @@ export default function StorefrontNav({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const openButtonRef = useRef<HTMLButtonElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!drawerOpen) return;
     closeButtonRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setDrawerOpen(false);
+      if (event.key === 'Escape') {
+        setDrawerOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab' || !drawerRef.current) return;
+      const focusable = drawerRef.current.querySelectorAll<HTMLElement>('a[href], button:not([disabled])');
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener('keydown', onKey);
     const previousOverflow = document.body.style.overflow;
@@ -256,7 +274,7 @@ export default function StorefrontNav({
   if (variant === 'desktop') {
     return (
       <nav aria-label="Main" className={className} data-testid="storefront-nav">
-        <ul className="flex items-center gap-1">
+        <ul className="flex flex-wrap items-center justify-end gap-x-1">
           {items.map((item) =>
             item.children.length ? (
               <Dropdown key={item.id} item={item} orgId={orgId} />
@@ -265,7 +283,7 @@ export default function StorefrontNav({
                 <NavLink
                   item={item}
                   orgId={orgId}
-                  className="inline-flex rounded-md px-3 py-2 text-sm font-medium text-gray-700 hover:text-brand-link focus:outline-none focus:ring-2 focus:ring-brand aria-[current=page]:text-brand-link dark:text-slate-200"
+                  className="inline-flex min-h-11 items-center rounded-md px-3 text-sm font-medium text-gray-700 transition-colors hover:text-brand-link motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-brand aria-[current=page]:text-brand-link aria-[current=page]:underline aria-[current=page]:decoration-2 aria-[current=page]:underline-offset-8 dark:text-slate-200"
                 />
               </li>
             )
@@ -284,37 +302,38 @@ export default function StorefrontNav({
         aria-expanded={drawerOpen}
         aria-controls="storefront-drawer"
         onClick={() => setDrawerOpen(true)}
-        className="inline-flex h-10 w-10 items-center justify-center rounded-md text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-brand dark:text-slate-200 dark:hover:bg-slate-700"
+        className="inline-flex h-11 w-11 items-center justify-center rounded-md text-gray-700 transition-colors hover:text-brand-link motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-brand dark:text-slate-200"
       >
         <MenuIcon className="h-6 w-6" aria-hidden />
       </button>
       {drawerOpen && (
         <div className="fixed inset-0 z-50">
           <div
-            className="absolute inset-0 bg-black/50"
+            className="absolute inset-0 bg-black/40"
             onClick={() => setDrawerOpen(false)}
             aria-hidden
           />
           <div
+            ref={drawerRef}
             id="storefront-drawer"
             role="dialog"
             aria-modal="true"
             aria-label="Menu"
-            className="absolute inset-y-0 left-0 flex w-80 max-w-[85vw] flex-col bg-white shadow-xl dark:bg-slate-900"
+            className="absolute inset-y-0 right-0 flex w-80 max-w-[85vw] flex-col bg-white shadow-xl dark:bg-slate-900"
           >
-            <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-slate-700">
-              <span className="text-sm font-semibold text-gray-900 dark:text-white">Menu</span>
+            <div className="flex items-center justify-between py-2 pl-6 pr-3">
+              <span className="text-xs font-semibold uppercase tracking-widest text-gray-600 dark:text-slate-300">Menu</span>
               <button
                 ref={closeButtonRef}
                 type="button"
                 aria-label="Close menu"
                 onClick={() => setDrawerOpen(false)}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-700"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand dark:text-slate-300 dark:hover:bg-slate-800"
               >
                 <X className="h-5 w-5" aria-hidden />
               </button>
             </div>
-            <ul className="flex-1 overflow-y-auto py-2">
+            <ul className="flex-1 overflow-y-auto pb-6">
               {items.map((item) => (
                 <DrawerItem
                   key={item.id}

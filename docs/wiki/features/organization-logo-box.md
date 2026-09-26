@@ -1,11 +1,11 @@
 # Organization Logo Header
 
 **Status:** Implemented
-**Last Updated:** 2026-09-19
+**Last Updated:** 2026-09-26
 
 ## Overview
 
-Every public storefront page opens with a full-width organization header: the organization logo (square box, 80px on mobile, 96px from the `sm` breakpoint) next to the organization name. On `/organizations/[orgId]` the name is the page `<h1>`; on event, apply, checkout and confirmation pages the whole header links back to the organization page. Logos of any aspect ratio fit the box with `object-contain` over a flat background — no blurred backdrop.
+Every public storefront page opens with a full-width organization header: the organization logo (square box; 56px on mobile and 64px from `sm` on the organization page, 40px / 48px elsewhere) next to the organization name. Layout, menu and accessibility details live in [Storefront Header and Footer](storefront-header-footer.md). On `/organizations/[orgId]` the name is the page `<h1>`; on event, apply, checkout and confirmation pages the whole header links back to the organization page. Logos of any aspect ratio fit the box with `object-contain` over a flat background — no blurred backdrop.
 
 ## Key Files
 
@@ -57,10 +57,11 @@ Reads `Organization.logoUrl` and `Organization.coverUrl` (see [Organization Bran
 
 - **One header component.** Add new public storefront routes through `OrganizationHeader`; do not hand-roll a logo `<img>` so only one accessible logo image exists per page.
 - **Only one `<h1>` per page.** Use `as="h1"` only on the organization page; event and checkout pages already have their own `<h1>`.
-- **Header spacing is coupled to the responsive logo widths.** If the `w-20 sm:w-24` sizes change, verify the header's padding, long-name wrapping, and cover position at both mobile and desktop widths.
+- **Header spacing is coupled to the responsive logo widths.** If the `w-14 sm:w-16` / `w-10 sm:w-12` sizes change, verify the header's padding, long-name wrapping, and cover position at both mobile and desktop widths.
 
 ## Related Features
 
+- [Storefront Header and Footer](storefront-header-footer.md) — minimal, accessible header/footer layout
 - [Organization Branding](organization-branding.md) — logo/cover upload endpoints and `ImageService`
 - [Organization Theme Mode](organization-theme-mode.md) — `BrandScope` wrapper on the same pages
 - [Theme System](theme-system.md) — `dark:` classes on the box background

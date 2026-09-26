@@ -239,7 +239,10 @@ function groupByMonth(events: EventSummary[]) {
 function StorefrontSkeleton() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900" aria-busy="true" aria-label="Loading">
-      <div className="h-24 border-b border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-800 sm:h-32" />
+      <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:gap-4 sm:px-6 sm:py-5 lg:px-8">
+        <div className="h-14 w-14 animate-pulse rounded-lg bg-gray-200 dark:bg-slate-700 sm:h-16 sm:w-16" />
+        <div className="h-6 w-48 animate-pulse rounded bg-gray-200 dark:bg-slate-700" />
+      </div>
       <div className="mx-auto max-w-7xl space-y-4 px-4 pt-12 sm:px-6 lg:px-8">
         <div className="mb-8 h-8 w-56 animate-pulse rounded-lg bg-gray-200 dark:bg-slate-800" />
         {[0, 1, 2].map((i) => (
