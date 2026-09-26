@@ -232,10 +232,16 @@ if (process.env.NODE_ENV !== 'test') {
   setTimeout(applicationSweep, 30 * 1000).unref();
   setInterval(applicationSweep, APPLICATION_SWEEP_MS).unref();
 
-  // Self-serve booth holds (spec 014 phase 2): release expired inventory, but
-  // BoothService preserves holds whose payment is still PROCESSING.
-  setTimeout(() => boothService.sweepExpiredHolds().catch(() => {}), BOOTH_SWEEP_INTERVAL_MS).unref();
-  setInterval(() => boothService.sweepExpiredHolds().catch(() => {}), BOOTH_SWEEP_INTERVAL_MS).unref();
+  // Self-serve holds (spec 014 phase 2, spec 037 phase 5): a vendor's chosen
+  // space (booth or category slot, add-ons, order) lapses as a whole after 15
+  // minutes; then stray booth holds. Holds whose payment is still PROCESSING
+  // are left to their Checkout session.
+  const holdSweep = async () => {
+    await applicationPaymentService.sweepExpiredSelections().catch(() => {});
+    await boothService.sweepExpiredHolds().catch(() => {});
+  };
+  setTimeout(holdSweep, BOOTH_SWEEP_INTERVAL_MS).unref();
+  setInterval(holdSweep, BOOTH_SWEEP_INTERVAL_MS).unref();
 
   // Abandoned-checkout sweep (spec 020): PENDING ticket orders past the
   // Checkout session lifetime + grace are settled against Stripe (hold

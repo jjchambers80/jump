@@ -158,9 +158,11 @@ class MapService {
 
     const tiers = await prisma.applicationTier.findMany({
       where: { form: { eventId: map.eventId, kind: 'PAID' } },
-      select: { id: true, name: true, price: true, mapBound: true, quantityTotal: true, formId: true, displayOrder: true },
+      select: { id: true, name: true, price: true, quantityTotal: true, formId: true, displayOrder: true },
       orderBy: [{ form: { displayOrder: 'asc' } }, { displayOrder: 'asc' }],
     });
+    // Spec 037 phase 5: a tier is map-bound when this map has booths on it.
+    const boundTierIds = new Set(map.booths.map((b) => b.tierId).filter(Boolean));
 
     const formIds = [...new Set(tiers.map((t) => t.formId))];
     const forms = formIds.length > 0
@@ -187,7 +189,7 @@ class MapService {
       ...this._serialize(map),
       tiers: tiers.map((t) => ({
         id: t.id, name: t.name, price: Number(t.price),
-        mapBound: t.mapBound, quantityTotal: t.quantityTotal,
+        mapBound: boundTierIds.has(t.id), quantityTotal: t.quantityTotal,
         form: formMap[t.formId] ? { id: t.formId, name: formMap[t.formId].name, slug: formMap[t.formId].slug } : null,
         displayOrder: t.displayOrder,
       })),
@@ -379,7 +381,12 @@ class MapService {
 
   // ─── Publish / Unpublish ────────────────────────────────────────────
 
-  /** Publish: set PUBLISHED, sync mapBound tier quantities, check oversold. */
+  /**
+   * Publish: set PUBLISHED, set every bound tier's quantity to its booth
+   * count, check oversold. Spec 037 phase 5: "bound" is derived — any tier a
+   * booth on this map points at — and every PAID form sells its space after
+   * approval, so the form's legacy `chargeTiming` no longer matters here.
+   */
   async publish(orgId, mapId) {
     const map = await this._requireInOrg(orgId, mapId);
     if (map.status === 'PUBLISHED') return this.get(orgId, mapId);
@@ -408,15 +415,11 @@ class MapService {
       const tiers = tierIds.length > 0
         ? await tx.applicationTier.findMany({
             where: { id: { in: tierIds } },
-            select: { id: true, name: true, quantityApproved: true, quantityReserved: true, form: { select: { chargeTiming: true, name: true } } },
+            select: { id: true, name: true, quantityApproved: true, quantityReserved: true },
           })
         : [];
 
       for (const tier of tiers) {
-        // Booths are bought after approval; a charge-at-submission form has no spot to sell.
-        if (tier.form.chargeTiming !== 'APPROVAL') {
-          throw new ConflictError(`TIER_CHARGE_TIMING — form "${tier.form.name}" charges at submission; set it to charge on approval before binding "${tier.name}" to the map`);
-        }
         const count = tierCounts[tier.id];
         const used = tier.quantityApproved + tier.quantityReserved;
         if (count < used) {
@@ -426,7 +429,7 @@ class MapService {
 
       for (const tierId of tierIds) {
         await tx.applicationTier.updateMany({
-          where: { id: tierId, mapBound: true },
+          where: { id: tierId },
           data: { quantityTotal: tierCounts[tierId] },
         });
       }

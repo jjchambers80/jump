@@ -38,7 +38,7 @@ jest.unstable_mockModule('../../src/config/stripe.js', () => ({
 
 const { default: app } = await import('../../src/api/server.js');
 const { prisma } = await import('@jump/db');
-const { LEGAL_VERSIONS, cardAuthorizationText, applyConsentText } =
+const { LEGAL_VERSIONS, applyConsentText } =
   await import('../../src/config/legal.js');
 const { default: paymentSettingsService } =
   await import('../../src/services/PaymentSettingsService.js');
@@ -306,103 +306,46 @@ describe('Apply-form opt-ins and legal acceptances (spec 024 phase 3)', () => {
     expect(await prisma.legalAcceptance.count({ where: { email } })).toBe(0);
   });
 
-  it('PAID form charging at approval needs the card authorization; opt-ins wait for the card step and an abandoned DRAFT never applies them', async () => {
+  it('PAID form (spec 037 phase 5): no card authorization — nothing is saved or charged when applying; opt-ins apply at submission; an abandoned legacy DRAFT never applies its own', async () => {
     const email = `paid@${TAG}.test`;
-    const tier = paidForm.tiers[0];
-    const noCard = await submit(paidForm.slug, tier.id, email, {
-      optInAccount: true,
-      optInMarketing: true,
+    // A DRAFT left over from the card-on-file flow, with opt-ins recorded on it.
+    const draftContact = await prisma.contact.create({ data: { organizationId: org.id, email, firstName: 'Vee', lastName: 'Vendor' } });
+    const draftProfile = await prisma.applicantProfile.create({ data: { organizationId: org.id, contactId: draftContact.id, businessName: 'Old Draft Co' } });
+    const draft = await prisma.application.create({
+      data: { formId: paidForm.id, eventId, organizationId: org.id, contactId: draftContact.id, profileId: draftProfile.id, tierId: paidForm.tiers[0].id, status: 'DRAFT', paymentStatus: 'AWAITING_CARD', optInAccount: true, optInMarketing: true, statusTokenHash: `draft-${TAG}` },
     });
-    expect(noCard.status).toBe(400);
-    expect(noCard.body.code).toBe('LEGAL_ACCEPTANCE_REQUIRED');
-    expect(noCard.body.message).toMatch(/card authorization/);
 
-    const res = await submit(paidForm.slug, tier.id, email, {
+    sentEmails.length = 0;
+    const res = await submit(paidForm.slug, undefined, email, {
       optInAccount: true,
       optInMarketing: true,
-      acceptances: acceptances({ cardAuthorization: true }),
+      acceptances: acceptances(), // TERMS + PRIVACY; no card authorization is asked for
     });
     expect(res.status).toBe(201);
-    expect(res.body.next).toBe('checkout');
-    const draftId = res.body.applicationId;
-    let contact = await contactOf(email);
-    expect(contact.accountCreatedAt).toBeNull();
-    expect(contact.emailSubscribed).toBe(false);
-    const rows = await acceptancesFor(draftId);
-    expect(rows.map((r) => r.document)).toEqual(['CARD_AUTHORIZATION', 'PRIVACY', 'TERMS']);
-    const card = rows.find((r) => r.document === 'CARD_AUTHORIZATION');
-    const order = await prisma.order.findUnique({ where: { applicationId: draftId } });
-    expect(card.presentedText).toBe(
-      cardAuthorizationText({
-        amount: Number(order.totalAmount),
-        paymentDueDays: 5,
-        organizationName: org.name,
-      })
-    );
-    expect(card.presentedText).toContain(`$${Number(order.totalAmount).toFixed(2)}`);
-    expect(card.presentedText).toContain('only if my application is approved');
-    expect(card.presentedText).toContain('5 days');
+    expect(res.body).toMatchObject({ next: 'done', orderRef: null });
+    const id = res.body.applicationId;
+    expect(await prisma.application.findUnique({ where: { id } })).toMatchObject({ status: 'SUBMITTED', paymentStatus: 'NOT_DUE' });
+    const rows = await acceptancesFor(id);
+    expect(rows.map((r) => r.document)).toEqual(['PRIVACY', 'TERMS']);
 
-    // Abandoned: a resubmission replaces the DRAFT; the first one's opt-ins never applied.
-    const again = await submit(paidForm.slug, tier.id, email, {
-      optInAccount: true,
-      optInMarketing: true,
-      acceptances: acceptances({ cardAuthorization: true }),
-    });
-    expect(again.status).toBe(201);
-    expect(
-      (await prisma.application.findUnique({ where: { id: draftId } })).optInsAppliedAt
-    ).toBeNull();
-    contact = await contactOf(email);
-    expect(contact.accountCreatedAt).toBeNull();
-
-    // Card saved → SUBMITTED → opt-ins apply, RECEIVED carries the sign-in link.
-    sentEmails.length = 0;
-    const row = await prisma.application.findUnique({
-      where: { id: again.body.applicationId },
-      include: { contact: true },
-    });
-    const hook = await webhook({
-      id: `evt_${TAG}_setup`,
-      type: 'checkout.session.completed',
-      data: {
-        object: {
-          id: row.stripeCheckoutSessionId,
-          mode: 'setup',
-          setup_intent: `seti_${row.id}`,
-          customer: row.contact.stripeCustomerId,
-          metadata: { applicationId: row.id, purpose: 'submit' },
-        },
-      },
-    });
-    expect(hook.status).toBe(200);
-    const submitted = await prisma.application.findUnique({ where: { id: row.id } });
-    expect(submitted).toMatchObject({ status: 'SUBMITTED', paymentStatus: 'CARD_ON_FILE' });
+    // The DRAFT was replaced (withdrawn) and never applied its opt-ins; the new submission did.
+    const replaced = await prisma.application.findUnique({ where: { id: draft.id } });
+    expect(replaced).toMatchObject({ status: 'WITHDRAWN', withdrawReason: 'replaced', optInsAppliedAt: null });
+    const submitted = await prisma.application.findUnique({ where: { id } });
     expect(submitted.optInsAppliedAt).toBeTruthy();
-    contact = await contactOf(email);
+    const contact = await contactOf(email);
     expect(contact.accountCreatedAt).toBeTruthy();
     expect(contact).toMatchObject({ emailSubscribed: true, emailSubscribedSource: 'APPLY' });
     expect(sentEmails).toHaveLength(1);
     expect(sentEmails[0].subject).toMatch(/received your application/);
     expect(sentEmails[0].text).toContain('is ready');
     expect(sentEmails[0].text).toMatch(/\/account\/verify\?token=/);
-    // Replaying the webhook applies nothing twice.
-    await webhook({
-      id: `evt_${TAG}_setup2`,
-      type: 'checkout.session.completed',
-      data: {
-        object: {
-          id: row.stripeCheckoutSessionId,
-          mode: 'setup',
-          setup_intent: `seti_${row.id}`,
-          customer: row.contact.stripeCustomerId,
-          metadata: { applicationId: row.id, purpose: 'submit' },
-        },
-      },
-    });
-    expect(
-      await prisma.buyerLoginToken.count({ where: { contactId: contact.id, purpose: 'WELCOME' } })
-    ).toBe(1);
+    expect(await prisma.buyerLoginToken.count({ where: { contactId: contact.id, purpose: 'WELCOME' } })).toBe(1);
+
+    // An old tab still sending the card authorization is accepted; it is not recorded.
+    const legacy = await submit(paidForm.slug, undefined, `paid-legacy@${TAG}.test`, { acceptances: acceptances({ cardAuthorization: true }) });
+    expect(legacy.status).toBe(201);
+    expect((await acceptancesFor(legacy.body.applicationId)).map((r) => r.document)).toEqual(['PRIVACY', 'TERMS']);
   });
 
   it('checkout records TERMS + PRIVACY on the order; missing acceptances are logged until the legal pages go live, then refused; stale is always refused', async () => {

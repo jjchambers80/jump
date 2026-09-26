@@ -324,6 +324,7 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
   const statusSort = query.sort === 'status' ? 'ascending' : query.sort === 'status_desc' ? 'descending' : 'none';
   // Spec 014 phase 2: a Booth column once any row in view sells from a map or carries a placement.
   const showBooth = (list?.data ?? []).some((r) => r.mapBound || r.booth || r.boothLabel);
+  const awaitingSpaceActive = query.status === 'APPROVED' && query.payment === 'AWAITING_SELECTION';
   const columns = 10 + (showOrganization ? 1 : 0) + pinnedColumns.length + (showAnswers ? 1 : 0) + (showBooth ? 1 : 0);
   const detailHref = (row: ApplicationRow) => `/admin/events/${row.eventId ?? eventId}/applications/${row.id}`;
 
@@ -335,10 +336,21 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
           All {Object.values(summary).reduce((s, n) => s + (n ?? 0), 0)}
         </button>
         {STATUS_ORDER.map((s) => (
-          <button key={s} type="button" onClick={() => setQuery({ status: s })} className={`${btn} ${query.status === s ? 'ring-2 ring-indigo-500' : ''}`}>
+          <button key={s} type="button" onClick={() => setQuery({ status: s, payment: undefined })} className={`${btn} ${query.status === s && !awaitingSpaceActive ? 'ring-2 ring-indigo-500' : ''}`}>
             {STATUS_LABEL[s]} <span className="ml-1 text-gray-500 dark:text-slate-400">{summary[s] ?? 0}</span>
           </button>
         ))}
+        {/* Spec 037 phase 5: approved vendors who still have to choose a space and pay. */}
+        {(list?.awaitingSpace ?? 0) > 0 || awaitingSpaceActive ? (
+          <button
+            type="button"
+            onClick={() => setQuery(awaitingSpaceActive ? { status: undefined, payment: undefined } : { status: 'APPROVED', payment: 'AWAITING_SELECTION' })}
+            className={`${btn} ${awaitingSpaceActive ? 'ring-2 ring-indigo-500' : ''}`}
+            data-testid="applications-awaiting-space"
+          >
+            Awaiting space <span className="ml-1 text-gray-500 dark:text-slate-400">{list?.awaitingSpace ?? 0}</span>
+          </button>
+        ) : null}
       </div>
 
       {/* Filters */}

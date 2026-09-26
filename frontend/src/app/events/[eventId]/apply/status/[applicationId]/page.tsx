@@ -1,17 +1,18 @@
 // Public application status page (spec 011): reached from the confirmation
 // email, right after submitting, or back from Stripe Checkout, with a signed
-// token in the URL. Paid applications can resume an abandoned Checkout or pay
-// an outstanding balance from here (phase 2); add-on lines (spec 012) are
-// itemised under the amount. Approved vendors on a map-bound tier choose and
-// buy their booth here (spec 014 phase 2).
+// token in the URL. Spec 037 phase 5 (apply-then-choose): an approved vendor
+// on a PAID form chooses their space here — from the list or on the floor
+// map — and pays (ChooseSpace). Add-on lines (spec 012) are itemised under the
+// amount once a space is chosen. Rows from before the change can still resume
+// an abandoned Checkout or pay an outstanding balance.
 'use client';
 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import api, { mapsApi } from '@/services/api';
-import { formatDate, money, PAYMENT_LABEL, STATUS_LABEL, STATUS_STYLE, needsBoothPicker, type ApplicantApplication } from '@/lib/applications';
-import BoothPicker from '@/components/maps/BoothPicker';
+import api, { type ChooseBoothResult } from '@/services/api';
+import { formatDate, money, PAYMENT_LABEL, STATUS_LABEL, STATUS_STYLE, needsSpaceChoice, type AddOnLineInput, type ApplicantApplication } from '@/lib/applications';
+import ChooseSpace from '@/components/applications/ChooseSpace';
 import ApplyShell from '../../ApplyShell';
 
 const STATUS_COPY: Record<ApplicantApplication['status'], string> = {
@@ -31,6 +32,7 @@ const CHECKOUT_NOTICE: Record<string, string> = {
 };
 
 const PAYMENT_COPY: Partial<Record<ApplicantApplication['paymentStatus'], string>> = {
+  NOT_DUE: 'Nothing to pay now. If you are approved, you will choose your space and pay then.',
   AWAITING_CARD: 'No card saved yet.',
   CARD_ON_FILE: 'Your card is on file and will only be charged if you are accepted.',
   PROCESSING: 'Your payment is being confirmed.',
@@ -109,9 +111,15 @@ function StatusContent({ params }: { params: { eventId: string; applicationId: s
         if (error) return <p role="alert" data-testid="apply-status-error" className="text-red-700 dark:text-red-300">{error}</p>;
         if (!app) return <p className="text-gray-600 dark:text-slate-400">Loading…</p>;
         const accountHref = event.organizationId ? `/organizations/${event.organizationId}/account` : null;
-        // Spec 014 phase 2: the picker owns paying while a booth is chosen or held;
-        // a booth placed by staff keeps the plain Pay button.
-        const pickBooth = needsBoothPicker(app);
+        // Spec 037 phase 5: choosing (and paying for) the space owns the payment step.
+        const choosing = needsSpaceChoice(app);
+        const guest = token ? encodeURIComponent(token) : '';
+        const spaceApi = {
+          select: (body: { boothId?: string | null; addOns: AddOnLineInput[]; useSavedCard?: boolean }) =>
+            api.post<ChooseBoothResult & { orderRef?: string | null }>(`/applications/${app.id}/select?token=${guest}`, body),
+          pay: () => api.post<{ url: string }>(`/applications/${app.id}/pay?token=${guest}`, {}),
+          release: () => api.post(`/applications/${app.id}/release?token=${guest}`, {}),
+        };
         return (
           <div className="space-y-6" data-testid="apply-status">
             {checkout && CHECKOUT_NOTICE[checkout] && (
@@ -130,7 +138,9 @@ function StatusContent({ params }: { params: { eventId: string; applicationId: s
                 </div>
                 <span data-testid="apply-status-pill" className={`rounded-full px-3 py-1 text-sm font-semibold ${STATUS_STYLE[app.status]}`}>{STATUS_LABEL[app.status]}</span>
               </div>
-              <p className="mt-4 text-gray-800 dark:text-slate-200">{STATUS_COPY[app.status]}</p>
+              <p className="mt-4 text-gray-800 dark:text-slate-200" data-testid="apply-status-copy">
+                {choosing ? 'You are approved! Choose your space below and pay to confirm your spot.' : STATUS_COPY[app.status]}
+              </p>
               {app.status === 'APPROVED' && (app.booth?.status === 'SOLD' || app.booth?.status === 'RESERVED' || (!app.booth && app.boothLabel)) && (
                 <p className="mt-2 text-sm text-gray-700 dark:text-slate-300" data-testid="apply-placement">
                   {app.booth ? 'Booth' : 'Placement'}: <strong>{app.booth?.label ?? app.boothLabel}</strong>
@@ -150,7 +160,7 @@ function StatusContent({ params }: { params: { eventId: string; applicationId: s
                   <p>
                     <span className="font-semibold">Payment:</span> {PAYMENT_LABEL[app.paymentStatus]}
                     {app.amounts.applicantPays > 0 ? ` · ${money(app.amounts.applicantPays)}` : ''}
-                    {app.paymentStatus === 'PAYMENT_DUE' && app.paymentDueAt ? ` · due ${formatDate(app.paymentDueAt)}` : ''}
+                    {['PAYMENT_DUE', 'AWAITING_SELECTION'].includes(app.paymentStatus) && app.paymentDueAt ? ` · due ${formatDate(app.paymentDueAt)}` : ''}
                     {app.refundedTotal > 0 ? ` · ${money(app.refundedTotal)} refunded` : ''}
                   </p>
                   {(app.addOns?.length > 0 || (app.adjustments?.length ?? 0) > 0) && (
@@ -172,12 +182,12 @@ function StatusContent({ params }: { params: { eventId: string; applicationId: s
                       ))}
                     </ul>
                   )}
-                  {app.status !== 'DRAFT' && (pickBooth || PAYMENT_COPY[app.paymentStatus]) && (
+                  {app.status !== 'DRAFT' && (choosing || PAYMENT_COPY[app.paymentStatus]) && (
                     <p className="mt-1 text-gray-600 dark:text-slate-400">
-                      {pickBooth ? 'Choose your booth below to pay and confirm your spot.' : PAYMENT_COPY[app.paymentStatus]}
+                      {choosing ? 'Choose your space below and pay to confirm your spot.' : PAYMENT_COPY[app.paymentStatus]}
                     </p>
                   )}
-                  {(app.canResume || app.canPay) && !pickBooth && (
+                  {(app.canResume || app.canPay) && !choosing && (
                     <div className="mt-3 flex flex-wrap items-center gap-3">
                       <button
                         type="button"
@@ -193,15 +203,9 @@ function StatusContent({ params }: { params: { eventId: string; applicationId: s
                   )}
                 </div>
               )}
-              {pickBooth && token && (
-                <div className="mt-4 border-t border-gray-200 pt-4 dark:border-slate-700">
-                  <BoothPicker
-                    eventId={app.event.id}
-                    application={app}
-                    chooseBooth={(boothId) => mapsApi.chooseBooth(app.id, boothId, token)}
-                    payNow={() => api.post<{ url: string }>(`/applications/${app.id}/pay?token=${encodeURIComponent(token)}`, {})}
-                    refresh={load}
-                  />
+              {choosing && token && (
+                <div className="mt-5 border-t border-gray-200 pt-5 dark:border-slate-700">
+                  <ChooseSpace application={app} spaceApi={spaceApi} refresh={load} />
                 </div>
               )}
               <p className="mt-4 text-xs text-gray-500 dark:text-slate-400">

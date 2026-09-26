@@ -1,7 +1,8 @@
-// Vendor booth purchase (spec 014 phase 2): the approved-vendor status page
-// mounts the booth picker over the public map — backend mocked at the network
-// layer like public-map.spec.ts. The picker never marks anything sold itself:
-// "paid" appears only once the status poll returns PAID.
+// Choose your space (spec 037 phase 5, apply-then-choose) on the approved
+// vendor's status page: a List | Map toggle over the category and the public
+// floor map (spec 014's booth picker), backend mocked at the network layer
+// like public-map.spec.ts. Nothing here marks anything sold itself: "paid"
+// appears only once the status poll returns PAID.
 
 import { expect, test, type Page } from '@playwright/test';
 
@@ -31,6 +32,7 @@ const event = {
   taxInclusivePricing: false,
 };
 
+const noAmounts = { subtotal: 0, platformFee: 0, processingFee: 0, tax: 0, applicantPays: 0, orgReceives: 0, feeMode: 'PASS', currency: 'usd' };
 const amounts = { subtotal: 275, platformFee: 13.75, processingFee: 14.55, tax: 0, applicantPays: 303.3, orgReceives: 275, feeMode: 'PASS', currency: 'usd' };
 const profile = { id: 'prof-1', businessName: 'Acme Crafts', description: null, website: null, socials: {}, photos: [] };
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) => ({ status, contentType: 'application/json', headers, body: JSON.stringify(body) });
@@ -81,20 +83,36 @@ function mapPayload(states: Record<string, BoothState>, version: number) {
   };
 }
 
+function selection(over: Record<string, unknown> = {}) {
+  return {
+    state: 'CHOOSE',
+    heldUntil: null,
+    dueAt: '2026-10-02T00:00:00.000Z',
+    reserveOnApproval: true,
+    category: { id: TIER.id, name: TIER.name, description: 'Corner-friendly 10×10 floor space', price: 275, applicantPays: 303.3, feesIncluded: 28.3, tax: 0, spacesLeft: 3, guaranteed: true },
+    addOns: [],
+    map: { available: true, mapId: 'map-1', boothsAvailable: 1 },
+    placedBooth: null,
+    savedCard: { brand: 'visa', last4: '4242' },
+    ...over,
+  };
+}
+
 function applicantApp(over: Record<string, unknown> = {}) {
   return {
     id: APP_ID,
-    orderRef: 'JMP-BOOTH1',
+    orderRef: null,
     form: { id: 'form-vendor', name: 'Vendor Space', kind: 'PAID' },
     event: { id: EVENT_ID, name: event.name, date: event.date },
     organization: { id: ORG_ID, name: 'Map Org' },
     status: 'APPROVED',
-    paymentStatus: 'PAYMENT_DUE',
+    paymentStatus: 'AWAITING_SELECTION',
     tier: { ...TIER, mapBound: true },
-    amounts,
+    amounts: noAmounts,
     addOns: [],
     adjustments: [],
-    paymentDueAt: '2026-09-28T00:00:00.000Z',
+    paymentDueAt: '2026-10-02T00:00:00.000Z',
+    selection: selection(),
     profile,
     answers: [],
     boothLabel: null,
@@ -106,22 +124,26 @@ function applicantApp(over: Record<string, unknown> = {}) {
     refundedTotal: 0,
     canWithdraw: false,
     canResume: false,
-    canPay: true,
+    canPay: false,
     canUpdateCard: true,
     ...over,
   };
 }
 
+const paidApp = (label = 'A2') =>
+  applicantApp({ paymentStatus: 'PAID', selection: null, orderRef: 'JMP-BOOTH1', amounts, canPay: false, paidAt: new Date().toISOString(), boothLabel: label, booth: { id: 'b-2', mapId: 'map-1', label, status: 'SOLD', w: 10, h: 10, holdExpiresAt: null } });
+
 interface Scenario {
   app: ReturnType<typeof applicantApp>;
   states: Record<string, BoothState>;
   version: number;
-  /** What POST …/booth answers; `taken` = 409 BOOTH_TAKEN once, `declined` = a card-on-file decline (200, booth released). */
+  /** What POST …/select answers: `card` = saved card charged, `no-card` = hold then Checkout, `taken` = 409 once, `declined` = released. */
   choose: 'card' | 'no-card' | 'taken' | 'declined';
 }
 
 async function mockVendor(page: Page, scenario: Scenario) {
   const calls: string[] = [];
+  const bodies: Record<string, unknown>[] = [];
   const base = { ...scenario, states: { 'b-1': 'SOLD', 'b-3': 'BLOCKED', 'b-4': 'HELD', ...scenario.states } as Record<string, BoothState> };
   await page.route(`${API}/events/${EVENT_ID}/meta`, (route) => route.fulfill(json({ slug: EVENT_ID })));
   await page.route(`${API}/events/${EVENT_ID}`, (route) => route.fulfill(json(event)));
@@ -137,59 +159,74 @@ async function mockVendor(page: Page, scenario: Scenario) {
     calls.push(`${route.request().method()} ${url.pathname}`);
     if (url.searchParams.get('token') !== TOKEN) return route.fulfill(json({ error: 'NotFoundError', message: 'Application not found' }, 404));
     if (url.pathname.endsWith('/status')) return route.fulfill(json(base.app));
-    if (url.pathname.endsWith('/booth')) {
-      const { boothId } = route.request().postDataJSON() as { boothId: string };
+    if (url.pathname.endsWith('/select')) {
+      const body = route.request().postDataJSON() as { boothId?: string; addOns: unknown[]; useSavedCard?: boolean };
+      bodies.push(body);
+      const holdExpiresAt = new Date(Date.now() + 15 * 60_000).toISOString();
+      const boothId = body.boothId ?? null;
       if (base.choose === 'taken') {
         // Someone else bought it a moment ago: the map has moved on.
-        base.states[boothId] = 'SOLD';
+        if (boothId) base.states[boothId] = 'SOLD';
         base.version += 1;
         base.choose = 'card';
         return route.fulfill(json({ error: 'ConflictError', message: 'This booth is no longer available', code: 'BOOTH_TAKEN' }, 409));
       }
       if (base.choose === 'declined') {
-        // Card on file, but the off-session charge is declined: the server
-        // releases the hold in the same request and reports it as available.
+        // The saved card is declined: the server releases the hold in the same request.
         base.version += 1;
-        return route.fulfill(json({ boothId, holdExpiresAt: new Date(Date.now() + 15 * 60_000).toISOString(), status: 'AVAILABLE', paymentStatus: 'PAYMENT_DUE' }));
+        return route.fulfill(json({ boothId, holdExpiresAt, status: 'AVAILABLE', paymentStatus: 'AWAITING_SELECTION' }));
       }
-      base.states[boothId] = 'HELD';
+      if (boothId) base.states[boothId] = 'HELD';
       base.version += 1;
-      const holdExpiresAt = new Date(Date.now() + 15 * 60_000).toISOString();
       if (base.choose === 'no-card') {
-        base.app = applicantApp({ ...base.app, hasCardOnFile: false, booth: { id: boothId, mapId: 'map-1', label: 'A2', status: 'HELD', w: 10, h: 10, holdExpiresAt } });
-        return route.fulfill(json({ boothId, holdExpiresAt, status: 'HELD', paymentStatus: 'PAYMENT_DUE' }));
+        base.app = applicantApp({
+          paymentStatus: 'PAYMENT_DUE',
+          canPay: true,
+          hasCardOnFile: false,
+          amounts,
+          orderRef: 'JMP-BOOTH1',
+          selection: selection({ state: 'HELD', heldUntil: holdExpiresAt, savedCard: null }),
+          booth: boothId ? { id: boothId, mapId: 'map-1', label: 'A2', status: 'HELD', w: 10, h: 10, holdExpiresAt } : null,
+        });
+        return route.fulfill(json({ boothId, holdExpiresAt, status: boothId ? 'HELD' : 'AVAILABLE', paymentStatus: 'PAYMENT_DUE', orderRef: 'JMP-BOOTH1' }));
       }
-      // Card on file: charged off-session; the webhook lands before the first poll.
-      base.app = applicantApp({ paymentStatus: 'PAID', canPay: false, paidAt: new Date().toISOString(), boothLabel: 'A2', booth: { id: boothId, mapId: 'map-1', label: 'A2', status: 'SOLD', w: 10, h: 10, holdExpiresAt: null } });
-      base.states[boothId] = 'SOLD';
+      // Saved card: charged off-session; the webhook lands before the first poll.
+      base.app = paidApp();
+      if (boothId) base.states[boothId] = 'SOLD';
       base.version += 1;
-      return route.fulfill(json({ boothId, holdExpiresAt, status: 'HELD', paymentStatus: 'PROCESSING' }));
+      return route.fulfill(json({ boothId, holdExpiresAt, status: 'HELD', paymentStatus: 'PROCESSING', orderRef: 'JMP-BOOTH1' }));
     }
     if (url.pathname.endsWith('/pay')) {
-      base.app = applicantApp({ paymentStatus: 'PAID', canPay: false, paidAt: new Date().toISOString(), boothLabel: 'A2', booth: { id: 'b-2', mapId: 'map-1', label: 'A2', status: 'SOLD', w: 10, h: 10, holdExpiresAt: null } });
+      base.app = paidApp();
       return route.fulfill(json({ url: `http://localhost:${process.env.PLAYWRIGHT_PORT || '3001'}/events/${EVENT_ID}/apply/status/${APP_ID}?token=${TOKEN}&checkout=paid` }));
+    }
+    if (url.pathname.endsWith('/release')) {
+      base.app = applicantApp({ selection: selection({ savedCard: null }), hasCardOnFile: false });
+      return route.fulfill(json({ released: true, paymentStatus: 'AWAITING_SELECTION' }));
     }
     return route.fulfill(json({ error: 'NotFoundError', message: 'unmocked' }, 404));
   });
-  return calls;
+  return { calls, bodies };
 }
 
 const statusUrl = `/events/${EVENT_ID}/apply/status/${APP_ID}?token=${TOKEN}`;
 
-test.describe('vendor booth purchase', () => {
+test.describe('choose your space', () => {
   test.describe.configure({ mode: 'serial' });
 
-  test('an approved vendor with a card on file picks an available booth and reaches the paid state', async ({ page }) => {
-    const calls = await mockVendor(page, { app: applicantApp(), states: {}, version: 1, choose: 'card' });
+  test('map: a vendor with a saved card picks an available booth of their category and reaches the paid state', async ({ page }) => {
+    const { calls, bodies } = await mockVendor(page, { app: applicantApp(), states: {}, version: 1, choose: 'card' });
     await page.goto(statusUrl);
     await expect(page.getByTestId('apply-status-pill')).toHaveText('Approved');
-    const picker = page.getByTestId('booth-picker');
-    await expect(picker).toBeVisible();
-    // The plain pay-now button yields to the picker while a booth must be chosen.
+    const choose = page.getByTestId('choose-space');
+    await expect(choose).toBeVisible();
+    await expect(choose).toContainText('You are approved as 10×10 booth');
+    // Map is the default when the event's map sells the category; the pay-now button is not offered.
+    await expect(page.getByTestId('space-mode-map')).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByTestId('apply-pay-now')).toHaveCount(0);
     await expect(page.getByTestId('booth-picker-hint')).toContainText('1 booth available in your tier');
 
-    // Sold, held and blocked booths, and the other tier, are not selectable.
+    // Sold, held and blocked booths, and the other category, are not selectable.
     for (const label of ['A1', 'A3', 'A4', 'T1']) {
       const booth = page.getByTestId(`booth-${label}`);
       await expect(booth).toHaveAttribute('aria-disabled', 'true');
@@ -197,87 +234,114 @@ test.describe('vendor booth purchase', () => {
       await expect(page.getByTestId('booth-buy-sheet')).toHaveCount(0);
     }
 
-    const available = page.getByTestId('booth-A2');
-    await expect(available).not.toHaveAttribute('aria-disabled', 'true');
-    await available.click();
+    await page.getByTestId('booth-A2').click();
     const sheet = page.getByTestId('booth-buy-sheet');
-    await expect(sheet).toBeVisible();
     await expect(page.getByTestId('booth-buy-summary')).toHaveText('Booth A2 · 10×10 · $303.30 all-in');
     await expect(sheet).toContainText('card on file is charged');
 
     await page.getByTestId('booth-buy').click();
-    await expect(page.getByTestId('booth-charging')).toContainText('Charging your card');
-    // The status poll returns PAID: the page re-renders as paid with the booth and the picker goes away.
+    // The status poll returns PAID: the page re-renders as paid with the booth and the chooser goes away.
     await expect(page.getByTestId('apply-payment')).toContainText('Paid', { timeout: 10_000 });
     await expect(page.getByTestId('apply-placement')).toContainText('Booth: A2 · 10×10');
-    await expect(page.getByTestId('booth-picker')).toHaveCount(0);
-    expect(calls).toContain(`POST /applications/${APP_ID}/booth`);
+    await expect(page.getByTestId('choose-space')).toHaveCount(0);
+    expect(bodies[0]).toEqual({ boothId: 'b-2', addOns: [], useSavedCard: true });
     // Success came from the status poll, never from the hold response.
     expect(calls.filter((c) => c === `GET /applications/${APP_ID}/status`).length).toBeGreaterThanOrEqual(2);
   });
 
-  test('without a card on file the picker holds the booth and follows the pay-now checkout', async ({ page }) => {
-    const calls = await mockVendor(page, { app: applicantApp({ hasCardOnFile: false }), states: {}, version: 1, choose: 'no-card' });
+  test('map: paying on Checkout instead holds the booth and follows the pay-now checkout', async ({ page }) => {
+    const { calls, bodies } = await mockVendor(page, { app: applicantApp(), states: {}, version: 1, choose: 'no-card' });
     await page.goto(statusUrl);
+    await page.getByTestId('space-pay-with').getByLabel(/secure checkout page/).check();
     await page.getByTestId('booth-A2').click();
     await expect(page.getByTestId('booth-buy-sheet')).toContainText('secure checkout page');
     await page.getByTestId('booth-buy').click();
-    // "Stripe" sends the vendor straight back with the outcome.
     await expect(page).toHaveURL(/checkout=paid/);
     await expect(page.getByTestId('apply-checkout-notice')).toContainText('Payment received');
-    expect(calls).toContain(`POST /applications/${APP_ID}/booth`);
-    expect(calls).toContain(`POST /applications/${APP_ID}/pay`);
-    expect(calls.indexOf(`POST /applications/${APP_ID}/pay`)).toBeGreaterThan(calls.indexOf(`POST /applications/${APP_ID}/booth`));
+    expect(bodies[0]).toEqual({ boothId: 'b-2', addOns: [], useSavedCard: false });
+    expect(calls.indexOf(`POST /applications/${APP_ID}/pay`)).toBeGreaterThan(calls.indexOf(`POST /applications/${APP_ID}/select`));
   });
 
-  test('a booth that was just taken shows the message and refetches the map', async ({ page }) => {
-    const calls = await mockVendor(page, { app: applicantApp(), states: {}, version: 1, choose: 'taken' });
+  test('map: a booth that was just taken shows the message and refetches the map', async ({ page }) => {
+    const { calls } = await mockVendor(page, { app: applicantApp(), states: {}, version: 1, choose: 'taken' });
     await page.goto(statusUrl);
     await page.getByTestId('booth-A2').click();
     const mapFetches = () => calls.filter((c) => c.startsWith('GET map')).length;
     const before = mapFetches();
     await page.getByTestId('booth-buy').click();
-    const notice = page.getByTestId('booth-picker-notice');
-    await expect(notice).toContainText('That booth was just taken');
+    await expect(page.getByTestId('booth-picker-notice')).toContainText('That booth was just taken');
     await expect(page.getByTestId('booth-buy-sheet')).toHaveCount(0);
-    // The refetch brought the new state: A2 is sold now and cannot be picked again.
     await expect(page.getByTestId('booth-A2')).toHaveAttribute('aria-label', /Sold/);
     await expect(page.getByTestId('booth-A2')).toHaveAttribute('aria-disabled', 'true');
     expect(mapFetches()).toBeGreaterThan(before);
     await expect(page.getByTestId('booth-picker-hint')).toContainText('No booths are left');
   });
 
-  test('a declined card on file releases the booth and lets the vendor pick again', async ({ page }) => {
+  test('map: a declined saved card releases the booth and lets the vendor pick again', async ({ page }) => {
     await mockVendor(page, { app: applicantApp(), states: {}, version: 1, choose: 'declined' });
     await page.goto(statusUrl);
     await page.getByTestId('booth-A2').click();
     await page.getByTestId('booth-buy').click();
-    const notice = page.getByTestId('booth-picker-notice');
-    await expect(notice).toContainText('We could not charge your card');
-    // The buy sheet closes and the booth is selectable again — nothing was sold.
+    await expect(page.getByTestId('booth-picker-notice')).toContainText('We could not charge your card');
     await expect(page.getByTestId('booth-buy-sheet')).toHaveCount(0);
     await expect(page.getByTestId('apply-payment')).not.toContainText('Paid');
     await expect(page.getByTestId('booth-A2')).not.toHaveAttribute('aria-disabled', 'true');
   });
 
-  test('a booth already placed by staff keeps the plain pay button', async ({ page }) => {
-    await mockVendor(page, {
-      app: applicantApp({ boothLabel: 'A4', booth: { id: 'b-4', mapId: 'map-1', label: 'A4', status: 'SOLD', w: 10, h: 10, holdExpiresAt: null } }),
-      states: { 'b-4': 'SOLD' },
-      version: 1,
-      choose: 'card',
-    });
+  test('list: the tabs switch by keyboard; holding any open space opens Checkout; a held space counts down and can be given back', async ({ page }) => {
+    const { calls, bodies } = await mockVendor(page, { app: applicantApp({ selection: selection({ savedCard: null }), hasCardOnFile: false }), states: {}, version: 1, choose: 'no-card' });
+    // Stay on the page: the pay step here is triggered from the held view below.
     await page.goto(statusUrl);
-    await expect(page.getByTestId('apply-placement')).toContainText('Booth: A4 · 10×10');
-    await expect(page.getByTestId('apply-pay-now')).toBeVisible();
-    await expect(page.getByTestId('booth-picker')).toHaveCount(0);
+    await page.getByTestId('space-mode-map').focus();
+    await page.keyboard.press('ArrowLeft');
+    await expect(page.getByTestId('space-mode-list')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByTestId('space-mode-list')).toBeFocused();
+    const list = page.getByRole('tabpanel');
+    await expect(list).toContainText('Any open space in this category');
+    await expect(page.getByTestId('space-left')).toContainText('Your space is reserved');
+    await expect(page.getByTestId('space-total')).toContainText('$303.30');
+
+    // Hold from the list; the checkout redirect is intercepted by making /pay fail once.
+    await page.route(`${API}/applications/${APP_ID}/pay**`, (route) => route.fulfill(json({ error: 'ServiceUnavailable', message: 'Checkout is down for a moment' }, 503)), { times: 1 });
+    await page.getByTestId('space-hold').click();
+    await expect(page.getByTestId('space-notice')).toContainText('Checkout is down for a moment');
+    expect(bodies[0]).toEqual({ addOns: [], useSavedCard: false });
+
+    // The refreshed page shows the held space with its countdown and lines.
+    const held = page.locator('[data-testid="choose-space"][data-state="HELD"]');
+    await expect(held).toBeVisible();
+    await expect(page.getByTestId('space-hold-countdown')).toContainText(/Held for 1[45]:\d\d/);
+    await expect(page.getByTestId('space-held-lines')).toContainText('$303.30');
+
+    await page.getByTestId('space-release').click();
+    await expect(page.locator('[data-testid="choose-space"][data-state="CHOOSE"]')).toBeVisible();
+    expect(calls).toContain(`POST /applications/${APP_ID}/release`);
   });
 
-  test('an application that is not approved shows no map and no Buy', async ({ page }) => {
-    await mockVendor(page, { app: applicantApp({ status: 'SUBMITTED', paymentStatus: 'CARD_ON_FILE', canPay: false, canWithdraw: true }), states: {}, version: 1, choose: 'card' });
+  test('a booth already placed by staff: no map, the vendor pays for the category from the list', async ({ page }) => {
+    await mockVendor(page, {
+      app: applicantApp({
+        boothLabel: 'A4',
+        booth: { id: 'b-4', mapId: 'map-1', label: 'A4', status: 'SOLD', w: 10, h: 10, holdExpiresAt: null },
+        selection: selection({ map: { available: false, mapId: null, boothsAvailable: 0 }, placedBooth: { id: 'b-4', label: 'A4', w: 10, h: 10 }, savedCard: null }),
+        hasCardOnFile: false,
+      }),
+      states: { 'b-4': 'SOLD' },
+      version: 1,
+      choose: 'no-card',
+    });
+    await page.goto(statusUrl);
+    await expect(page.getByTestId('space-placed-booth')).toContainText('booth A4');
+    await expect(page.getByTestId('space-mode-map')).toHaveCount(0);
+    await expect(page.getByTestId('space-hold')).toHaveText('Hold this space and pay $303.30');
+  });
+
+  test('an application under review shows no chooser, no map and no Buy', async ({ page }) => {
+    await mockVendor(page, { app: applicantApp({ status: 'SUBMITTED', paymentStatus: 'NOT_DUE', selection: null, canWithdraw: true }), states: {}, version: 1, choose: 'card' });
     await page.goto(statusUrl);
     await expect(page.getByTestId('apply-status-pill')).toHaveText('Submitted');
-    await expect(page.getByTestId('booth-picker')).toHaveCount(0);
+    await expect(page.getByTestId('apply-payment')).toContainText('Nothing to pay now');
+    await expect(page.getByTestId('choose-space')).toHaveCount(0);
     await expect(page.getByTestId('booth-buy')).toHaveCount(0);
     await expect(page.getByTestId('booth-A2')).toHaveCount(0);
   });

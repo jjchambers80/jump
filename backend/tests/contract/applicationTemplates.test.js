@@ -99,6 +99,7 @@ describe('Application form templates (spec 019 phase 2)', () => {
         taxable: true,
         paymentDueDays: 10,
         overduePolicy: 'HOLD',
+        reserveOnApproval: true, // spec 037 phase 5
         tiers: [
           { name: '10x10', description: null, price: 275, quantityTotal: 5, isActive: true },
           { name: 'Corner', description: 'Two open sides', price: 350, quantityTotal: 2, isActive: false },
@@ -171,7 +172,7 @@ describe('Application form templates (spec 019 phase 2)', () => {
     it('ADMIN creates an empty template, updates name and definition, and a name collision is 409', async () => {
       const created = await request(app).post('/admin/application-templates').set(...auth(adminToken)).send({ name: 'Panel proposals', kind: 'FREE' });
       expect(created.status).toBe(201);
-      expect(created.body.definition).toEqual({ intro: null, chargeTiming: null, feeMode: null, taxable: null, paymentDueDays: null, overduePolicy: null, tiers: [], questions: [] });
+      expect(created.body.definition).toEqual({ intro: null, chargeTiming: null, feeMode: null, taxable: null, paymentDueDays: null, overduePolicy: null, reserveOnApproval: null, tiers: [], questions: [] });
 
       const updated = await request(app)
         .put(`/admin/application-templates/${created.body.id}`)

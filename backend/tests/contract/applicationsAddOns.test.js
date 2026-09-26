@@ -1,9 +1,10 @@
-// Contract tests for add-ons on applications (spec 012 phase 2): tier
-// attachments and the public form payload, submission lines + snapshot math
-// (PASS / ABSORB with a taxable mix), approval reservation with a sold-out
-// 409 that rolls the tier back, line edits per state with the
-// ADD_ONS_CHANGED email, itemised Stripe charges, releases on withdraw /
-// overdue, list filter + CSV columns, and event duplication.
+// Contract tests for add-ons on applications (spec 012 phase 2), on the
+// spec 037 phase 5 flow — add-ons are chosen with the space after approval:
+// tier attachments and the public form payload, selection lines + order math
+// (PASS / ABSORB with a taxable mix), reservation at selection with a
+// sold-out 409 that holds nothing, line edits on a held space with the
+// ADD_ONS_CHANGED email, itemised Stripe charges, releases on a lapsed hold /
+// decline / withdraw / overdue, list filter + CSV columns, event duplication.
 // Stripe and Resend mocked; Postgres is real.
 
 import { jest } from '@jest/globals';
@@ -111,27 +112,51 @@ describe('Applications with add-ons (spec 012 phase 2)', () => {
   const adminBase = () => `/admin/events/${eventId}`;
   const addOnBase = () => `/organizations/${org.id}/events/${eventId}/add-ons`;
 
-  const submit = (formSlug, tierId, email, addOns, businessName = 'Hidden Block Games') =>
+  // Spec 037 phase 5: add-ons are chosen with the space, after approval.
+  const submit = (formSlug, email, businessName = 'Hidden Block Games') =>
     request(app)
       .post(`/events/${eventId}/applications`)
-      .send({ formSlug, tierId, contact: { email, firstName: 'Vee', lastName: 'Vendor' }, acceptances: allAcceptances(), profile: { businessName }, answers: {}, ...(addOns !== undefined && { addOns }) });
+      .send({ formSlug, contact: { email, firstName: 'Vee', lastName: 'Vendor' }, acceptances: allAcceptances(), profile: { businessName }, answers: {} });
 
   const appRow = (id) => loadRow(id, { tier: true, contact: true, decisions: true });
   const addOnRow = (id) => prisma.addOn.findUnique({ where: { id } });
   const tierRow = (id) => prisma.applicationTier.findUnique({ where: { id } });
 
-  /** DRAFT card-on-file → SUBMITTED via the setup webhook. */
-  async function cardOnFile(applicationId) {
-    const row = await appRow(applicationId);
-    const res = await webhook(
-      checkoutCompleted({ id: row.stripeCheckoutSessionId, mode: 'setup', setup_intent: `seti_${applicationId}`, customer: row.contact.stripeCustomerId, metadata: { applicationId, purpose: 'submit' } })
-    );
-    expect(res.status).toBe(200);
-    return appRow(applicationId);
+  const decide = (id, decision, token = organizerToken, extra = {}) => request(app).post(`${adminBase()}/applications/${id}/decision`).set(...auth(token)).send({ decision, ...extra });
+  const patchAddOns = (id, addOns, token = organizerToken) => request(app).patch(`${adminBase()}/applications/${id}/add-ons`).set(...auth(token)).send({ addOns });
+  const select = (id, body = {}) => request(app).post(`/applications/${id}/select?token=${statusToken(id)}`).send(body);
+  const pay = (id) => request(app).post(`/applications/${id}/pay?token=${statusToken(id)}`);
+
+  /** Submitted and approved into `tierId`: AWAITING_SELECTION (the form reserves the slot). */
+  async function approved(formSlug, tierId, email, businessName) {
+    const res = await submit(formSlug, email, businessName);
+    expect(res.status).toBe(201);
+    const ok = await decide(res.body.applicationId, 'APPROVE', organizerToken, { tierId });
+    expect(ok.status).toBe(200);
+    return res.body.applicationId;
   }
 
-  const decide = (id, decision, token = organizerToken) => request(app).post(`${adminBase()}/applications/${id}/decision`).set(...auth(token)).send({ decision });
-  const patchAddOns = (id, addOns, token = organizerToken) => request(app).patch(`${adminBase()}/applications/${id}/add-ons`).set(...auth(token)).send({ addOns });
+  /** Approved and holding the chosen space with `addOns`: PAYMENT_DUE, order PENDING. */
+  async function chosen(formSlug, tierId, email, addOns, businessName) {
+    const id = await approved(formSlug, tierId, email, businessName);
+    const res = await select(id, { addOns });
+    expect(res.status).toBe(200);
+    return id;
+  }
+
+  /** Settle the application's hosted Checkout the way Stripe's webhook does. */
+  async function checkoutPaid(id, intentId) {
+    const res = await webhook(checkoutCompleted({ id: (await appRow(id)).stripeCheckoutSessionId, mode: 'payment', payment_status: 'paid', payment_intent: intentId, metadata: { applicationId: id, purpose: 'pay_now' } }));
+    expect(res.status).toBe(200);
+    return appRow(id);
+  }
+
+  /** A card saved before apply-then-choose (a migrated row). */
+  async function giveSavedCard(id) {
+    const row = await appRow(id);
+    await prisma.contact.update({ where: { id: row.contactId }, data: { stripeCustomerId: `cus_${TAG}_${row.contactId}` } });
+    await prisma.application.update({ where: { id }, data: { stripePaymentMethodId: `pm_${TAG}_${id}` } });
+  }
 
   beforeAll(async () => {
     process.env.APPLICATIONS_PAYMENTS_ENABLED = 'true';
@@ -255,36 +280,39 @@ describe('Applications with add-ons (spec 012 phase 2)', () => {
     });
   });
 
-  // ─── Submission ──────────────────────────────────────────────────────────
+  // ─── Selection (spec 037 phase 5: add-ons are chosen with the space) ─────
 
-  describe('submission', () => {
-    it('rejects lines that are not offered, over the max, duplicated, unknown, or on a FREE form', async () => {
+  describe('selection', () => {
+    it('rejects lines that are not offered, over the max, duplicated or unknown; nothing is held or ordered', async () => {
+      const onBooth = await approved(form.slug, booth.id, `bad1@${TAG}.test`, 'Bad Booth');
+      const onCorner = await approved(form.slug, corner.id, `bad2@${TAG}.test`, 'Bad Corner');
       const cases = [
-        [{ formSlug: form.slug, tierId: corner.id, addOns: [{ addOnId: badge.id, quantity: 1 }] }, 400, /not offered/],
-        [{ formSlug: form.slug, tierId: booth.id, addOns: [{ addOnId: parking.id, quantity: 1 }] }, 400, /not sold with applications/],
-        [{ formSlug: form.slug, tierId: booth.id, addOns: [{ addOnId: badge.id, quantity: 5 }] }, 400, /Maximum quantity/],
-        [{ formSlug: form.slug, tierId: booth.id, addOns: [{ addOnId: badge.id, quantity: 1 }, { addOnId: badge.id, quantity: 1 }] }, 400, /repeat/],
-        [{ formSlug: form.slug, tierId: booth.id, addOns: [{ addOnId: 'nope', quantity: 1 }] }, 404, /not found/i],
-        [{ formSlug: form.slug, tierId: booth.id, addOns: [{ addOnId: power.id, quantity: 0 }] }, 400, /quantity/],
-        [{ formSlug: form.slug, tierId: booth.id, addOns: 'power' }, 400, /array/],
+        [onCorner, [{ addOnId: badge.id, quantity: 1 }], 400, /not offered/],
+        [onBooth, [{ addOnId: parking.id, quantity: 1 }], 400, /not sold with applications/],
+        [onBooth, [{ addOnId: badge.id, quantity: 5 }], 400, /Maximum quantity/],
+        [onBooth, [{ addOnId: badge.id, quantity: 1 }, { addOnId: badge.id, quantity: 1 }], 400, /repeat/],
+        [onBooth, [{ addOnId: 'nope', quantity: 1 }], 404, /not found/i],
+        [onBooth, [{ addOnId: power.id, quantity: 0 }], 400, /quantity/],
+        [onBooth, 'power', 400, /array/],
       ];
-      for (const [body, status, re] of cases) {
-        const res = await request(app)
-          .post(`/events/${eventId}/applications`)
-          .send({ contact: { email: `bad@${TAG}.test`, firstName: 'B', lastName: 'B' }, acceptances: allAcceptances(), profile: { businessName: 'Bad' }, answers: {}, ...body });
+      for (const [id, addOns, status, re] of cases) {
+        const res = await select(id, { addOns });
         expect([res.status, res.body.message]).toEqual([status, expect.stringMatching(re)]);
       }
-      expect(await prisma.application.count({ where: { organizationId: org.id } })).toBe(0);
+      expect(await prisma.order.count({ where: { applicationId: { in: [onBooth, onCorner] } } })).toBe(0);
+      expect((await addOnRow(power.id)).quantityReserved).toBe(0);
+      // Free their approval slots (Corner has one) for the tests below.
+      for (const id of [onBooth, onCorner]) expect((await decide(id, 'WITHDRAW', organizerToken, { sendEmail: false })).status).toBe(200);
+      expect(await tierRow(corner.id)).toMatchObject({ quantityReserved: 0 });
     });
 
     let appA;
 
-    it('PASS form: the snapshot sums tier + add-on lines with tax on taxable lines only, and each line keeps its share', async () => {
-      const res = await submit(form.slug, booth.id, `a@${TAG}.test`, [{ addOnId: power.id, quantity: 1 }, { addOnId: badge.id, quantity: 2 }, { addOnId: table.id, quantity: 1 }]);
-      expect(res.status).toBe(201);
-      expect(res.body.next).toBe('checkout');
-      appA = await appRow(res.body.applicationId);
-      expect(appA.status).toBe('DRAFT');
+    it('PASS form: the order sums tier + add-on lines with tax on taxable lines only, each line keeps its share, and the lines are held', async () => {
+      const boothBefore = await tierRow(booth.id);
+      const id = await chosen(form.slug, booth.id, `a@${TAG}.test`, [{ addOnId: power.id, quantity: 1 }, { addOnId: badge.id, quantity: 2 }, { addOnId: table.id, quantity: 1 }]);
+      appA = await appRow(id);
+      expect(appA).toMatchObject({ status: 'APPROVED', paymentStatus: 'PAYMENT_DUE', capacitySlot: 'RESERVED' });
       expect(appA.addOns.map((l) => [l.addOn.name, l.quantity, Number(l.unitPrice)])).toEqual([
         ['Booth power', 1, 125],
         ['Extra vendor badge', 2, 10],
@@ -310,15 +338,10 @@ describe('Applications with add-ons (spec 012 phase 2)', () => {
       const tierLine = Math.round((expected.total - lineSum) * 100) / 100;
       expect(tierLine).toBe(expected.itemBreakdowns[0].lineTotal);
       expect(appA.addOns.map((l) => Number(l.applicantPays))).toEqual(expected.itemBreakdowns.slice(1).map((b) => b.lineTotal));
-      // Nothing is held at submission.
-      expect((await addOnRow(power.id)).quantityReserved).toBe(0);
-      expect((await tierRow(booth.id)).quantityReserved).toBe(0);
-
-      appA = await cardOnFile(appA.id);
-      expect(appA).toMatchObject({ status: 'SUBMITTED', paymentStatus: 'CARD_ON_FILE' });
-      // The received email names the add-ons.
-      const received = sentEmails.find((m) => m.to?.includes?.(`a@${TAG}.test`) || m.to === `a@${TAG}.test`);
-      expect(received?.text || received?.html || JSON.stringify(received)).toMatch(/Booth power ×1/);
+      // The chosen lines are held with the approval slot (taken once, at approval).
+      expect(await addOnRow(power.id)).toMatchObject({ quantityReserved: 1, quantitySold: 0 });
+      expect(await addOnRow(badge.id)).toMatchObject({ quantityReserved: 2 });
+      expect((await tierRow(booth.id)).quantityReserved).toBe(boothBefore.quantityReserved + 1);
     });
 
     it('status view and admin detail expose the lines, editability and a pricing check that covers add-ons', async () => {
@@ -326,6 +349,7 @@ describe('Applications with add-ons (spec 012 phase 2)', () => {
       expect(status.status).toBe(200);
       expect(status.body.addOns.map((l) => l.name)).toEqual(['Booth power', 'Extra vendor badge', 'Table & chairs']);
       expect(status.body.addOns[0]).toMatchObject({ addOnId: power.id, quantity: 1, unitPrice: 125 });
+      expect(status.body.selection).toMatchObject({ state: 'HELD' });
 
       const detail = await request(app).get(`${adminBase()}/applications/${appA.id}`).set(...auth(organizerToken));
       expect(detail.status).toBe(200);
@@ -342,67 +366,82 @@ describe('Applications with add-ons (spec 012 phase 2)', () => {
       await request(app).patch(`${addOnBase()}/${power.id}`).set(...auth(adminToken)).send({ price: 125 });
     });
 
-    it('ABSORB pay-at-submission form: Checkout itemises the tier and each add-on line to the snapshot total', async () => {
-      const res = await submit(absorbForm.slug, gold.id, `absorb@${TAG}.test`, [{ addOnId: table.id, quantity: 2 }], 'Gold Sponsor Co');
-      expect(res.status).toBe(201);
-      const row = await appRow(res.body.applicationId);
+    it('the choose view offers the category’s add-ons with per-unit prices, and ABSORB Checkout itemises the tier and each line to the order total', async () => {
+      const id = await approved(absorbForm.slug, gold.id, `absorb@${TAG}.test`, 'Gold Sponsor Co');
+      const view = await request(app).get(`/applications/${id}/status?token=${statusToken(id)}`);
+      expect(view.body.selection.addOns.map((a) => a.name)).toEqual(['Booth power', 'Table & chairs']);
+      expect(view.body.selection.addOns.find((a) => a.id === table.id)).toMatchObject({ applicantPays: 44, remaining: null });
+
+      expect((await select(id, { addOns: [{ addOnId: table.id, quantity: 2 }] })).status).toBe(200);
+      const row = await appRow(id);
       // ABSORB + taxable form at 10%: listed 1000 + 80, tax 108 → applicant pays 1188.
       expect(Number(row.subtotal)).toBe(1080);
       expect(Number(row.tax)).toBe(108);
       expect(Number(row.applicantPays)).toBe(1188);
       expect(row.addOns).toHaveLength(1);
       expect(Number(row.addOns[0].applicantPays)).toBe(88);
+      expect((await pay(id)).status).toBe(200);
       const session = mockSessionsCreate.mock.calls.at(-1)[0];
       expect(session.mode).toBe('payment');
       expect(session.line_items).toHaveLength(2);
       expect(session.line_items.map((l) => l.price_data.product_data.name)).toEqual([`${TAG} Fair 2027 — Sponsors (Gold)`, 'Table & chairs ×2']);
       expect(session.line_items.reduce((s, l) => s + l.price_data.unit_amount * l.quantity, 0)).toBe(118800);
+
+      // The sponsor backs out and gives the space back: the tables are released and nothing is reported.
+      await request(app).post(`/applications/${id}/cancel-checkout?token=${statusToken(id)}`);
+      const released = await request(app).post(`/applications/${id}/release?token=${statusToken(id)}`);
+      expect(released.body).toMatchObject({ released: true });
+      expect((await addOnRow(table.id)).quantityReserved).toBe(1); // appA's table only
     });
   });
 
-  // ─── Approval, capacity, edits ───────────────────────────────────────────
+  // ─── Payment, capacity, edits ────────────────────────────────────────────
 
-  describe('approval and line edits', () => {
+  describe('payment and line edits', () => {
     let appA; // 1 power, 2 badges, 1 table
     let appB; // wants 2 power
     let appC; // 1 power, card declines
 
     beforeAll(async () => {
       appA = await prisma.application.findFirst({ where: { organizationId: org.id, contact: { email: `a@${TAG}.test` } } });
-      const b = await submit(form.slug, booth.id, `b@${TAG}.test`, [{ addOnId: power.id, quantity: 2 }], 'Two Plugs');
-      appB = await cardOnFile(b.body.applicationId);
-      const c = await submit(form.slug, booth.id, `c@${TAG}.test`, [{ addOnId: power.id, quantity: 1 }, { addOnId: badge.id, quantity: 1 }], 'Declined Inc');
-      appC = await cardOnFile(c.body.applicationId);
+      appB = { id: await approved(form.slug, booth.id, `b@${TAG}.test`, 'Two Plugs') };
+      appC = { id: await approved(form.slug, booth.id, `c@${TAG}.test`, 'Declined Inc') };
     });
 
-    it('approving charges the itemised snapshot and moves the add-ons to sold with the tier slot', async () => {
-      const res = await decide(appA.id, 'APPROVE');
-      expect(res.status).toBe(200);
-      expect(res.body).toMatchObject({ status: 'APPROVED', paymentStatus: 'PAID', capacitySlot: 'APPROVED' });
-      const intent = mockIntentsCreate.mock.calls.at(-1)[0];
-      expect(intent.amount).toBe(Math.round(Number(res.body.amounts.applicantPays) * 100));
-      expect(intent.description).toMatch(/Vendor Booth \(Booth\) \+ Booth power ×1, Extra vendor badge ×2, Table & chairs ×1/);
+    it('paying the held space charges the itemised order and moves the add-ons to sold with the tier slot', async () => {
+      const boothBefore = await tierRow(booth.id);
+      expect((await pay(appA.id)).status).toBe(200);
+      const session = mockSessionsCreate.mock.calls.at(-1)[0];
+      expect(session.line_items.map((l) => l.price_data.product_data.name)).toEqual([`${TAG} Fair 2027 — Vendor Booth (Booth)`, 'Booth power ×1', 'Extra vendor badge ×2', 'Table & chairs ×1']);
+      const row = await checkoutPaid(appA.id, `pi_${TAG}_a`);
+      expect(row).toMatchObject({ status: 'APPROVED', paymentStatus: 'PAID', capacitySlot: 'APPROVED' });
+      expect(session.line_items.reduce((s, l) => s + l.price_data.unit_amount * l.quantity, 0)).toBe(Math.round(Number(row.applicantPays) * 100));
       expect(await addOnRow(power.id)).toMatchObject({ quantitySold: 1, quantityReserved: 0 });
       expect(await addOnRow(badge.id)).toMatchObject({ quantitySold: 2, quantityReserved: 0 });
-      expect(await tierRow(booth.id)).toMatchObject({ quantityApproved: 1, quantityReserved: 0 });
-      expect(res.body.addOnsEditable).toMatchObject({ allowed: false, reason: expect.stringMatching(/paid/i) });
+      expect(await tierRow(booth.id)).toMatchObject({ quantityApproved: boothBefore.quantityApproved + 1, quantityReserved: boothBefore.quantityReserved - 1 });
+      const detail = await request(app).get(`${adminBase()}/applications/${appA.id}`).set(...auth(organizerToken));
+      expect(detail.body.addOnsEditable).toMatchObject({ allowed: false, reason: expect.stringMatching(/paid/i) });
     });
 
-    it('a sold-out add-on returns 409 naming it and rolls the tier slot back', async () => {
-      const res = await decide(appB.id, 'APPROVE');
+    it('a sold-out add-on at selection returns 409 naming it and holds nothing', async () => {
+      const boothBefore = await tierRow(booth.id);
+      const res = await select(appB.id, { addOns: [{ addOnId: power.id, quantity: 2 }] });
       expect(res.status).toBe(409);
+      expect(res.body.code).toBe('ADD_ON_SOLD_OUT');
       expect(res.body.message).toMatch(/Booth power is sold out: 2 requested, 1 left/);
-      expect(res.body.details).toMatchObject({ addOnId: power.id, remaining: 1, requested: 2, suggestion: 'EDIT_ADD_ONS' });
-      expect(mockIntentsCreate).not.toHaveBeenCalled();
-      expect(await tierRow(booth.id)).toMatchObject({ quantityApproved: 1, quantityReserved: 0 });
+      expect(res.body.details).toMatchObject({ addOnId: power.id, remaining: 1, requested: 2 });
+      expect(await tierRow(booth.id)).toMatchObject({ quantityReserved: boothBefore.quantityReserved });
       expect(await addOnRow(power.id)).toMatchObject({ quantitySold: 1, quantityReserved: 0 });
       const row = await appRow(appB.id);
-      expect(row).toMatchObject({ status: 'SUBMITTED', paymentStatus: 'CARD_ON_FILE', capacitySlot: 'NONE', chargeAttempts: 0 });
+      expect(row).toMatchObject({ status: 'APPROVED', paymentStatus: 'AWAITING_SELECTION', capacitySlot: 'RESERVED', selectionHeldUntil: null, orderId: null });
     });
 
-    it('ORGANIZER edits the lines before payment: snapshot recomputed, ADD_ONS_CHANGED recorded and emailed; no-ops and paid rows are refused', async () => {
+    it('ORGANIZER edits the lines of a held space before payment: order recomputed, ADD_ONS_CHANGED recorded and emailed; no-ops and paid rows are refused', async () => {
+      const notYet = await patchAddOns(appB.id, [{ addOnId: power.id, quantity: 1 }]);
+      expect(notYet.status).toBe(409); // no order until the vendor chooses
+      expect((await select(appB.id, { addOns: [{ addOnId: power.id, quantity: 1 }] })).status).toBe(200);
       const before = await appRow(appB.id);
-      const same = await patchAddOns(appB.id, [{ addOnId: power.id, quantity: 2 }]);
+      const same = await patchAddOns(appB.id, [{ addOnId: power.id, quantity: 1 }]);
       expect(same.status).toBe(400);
       expect(same.body.message).toMatch(/Nothing changed/);
 
@@ -425,62 +464,71 @@ describe('Applications with add-ons (spec 012 phase 2)', () => {
       expect(res.body.amounts.applicantPays).toBe(expected.applicantPays);
       expect(res.body.amounts.applicantPays).not.toBe(Number(before.applicantPays));
       const change = res.body.decisions.find((d) => d.action === 'ADD_ONS_CHANGED');
-      expect(change.note).toBe(`Add-ons: Booth power ×2 → Booth power ×1, Table & chairs ×1. Total $${Number(before.applicantPays).toFixed(2)} → $${expected.applicantPays.toFixed(2)}.`);
+      expect(change.note).toBe(`Add-ons: Booth power ×1 → Booth power ×1, Table & chairs ×1. Total $${Number(before.applicantPays).toFixed(2)} → $${expected.applicantPays.toFixed(2)}.`);
       expect(change.emailSubject).toMatch(/application was updated/);
       const mail = sentEmails.at(-1);
       expect(JSON.stringify(mail)).toMatch(/Booth power ×1 \(\$/);
       expect(JSON.stringify(mail)).toContain(`$${expected.applicantPays.toFixed(2)}`);
       expect(mockSessionsExpire).not.toHaveBeenCalled();
+      // The holds follow the lines.
+      expect(await addOnRow(power.id)).toMatchObject({ quantitySold: 1, quantityReserved: 1 });
+      expect(await addOnRow(table.id)).toMatchObject({ quantityReserved: 1 });
 
       // Removing every line is a valid edit.
       const none = await patchAddOns(appB.id, []);
       expect(none.status).toBe(200);
       expect(none.body.addOns).toEqual([]);
       expect(none.body.amounts.orgReceives).toBe(275);
-      // …and putting one back so the approval below sells it.
+      // …and putting one back so the payment below sells it.
       const back = await patchAddOns(appB.id, [{ addOnId: power.id, quantity: 1 }], adminToken);
       expect(back.status).toBe(200);
 
-      const approve = await decide(appB.id, 'APPROVE');
-      expect(approve.status).toBe(200);
-      expect(approve.body.paymentStatus).toBe('PAID');
+      expect((await pay(appB.id)).status).toBe(200);
+      const paidB = await checkoutPaid(appB.id, `pi_${TAG}_b`);
+      expect(paidB.paymentStatus).toBe('PAID');
       expect(await addOnRow(power.id)).toMatchObject({ quantitySold: 2, quantityReserved: 0 });
     });
 
-    it('a declined card leaves add-ons reserved; editing lines in PAYMENT_DUE moves the hold and expires the pay-now session', async () => {
+    it('a declined saved card releases the held lines; a line edit while paying is refused, after backing out it moves the holds', async () => {
       // Free a power unit for C: withdraw B (sold → released).
       const withdraw = await decide(appB.id, 'WITHDRAW');
       expect(withdraw.status).toBe(200);
       expect(await addOnRow(power.id)).toMatchObject({ quantitySold: 1, quantityReserved: 0 });
-      expect(await tierRow(booth.id)).toMatchObject({ quantityApproved: 1 });
 
+      await giveSavedCard(appC.id);
       mockIntentsCreate.mockImplementationOnce(async () => {
         throw cardDecline();
       });
-      const res = await decide(appC.id, 'APPROVE');
-      expect(res.status).toBe(200);
-      expect(res.body).toMatchObject({ status: 'APPROVED', paymentStatus: 'PAYMENT_DUE', capacitySlot: 'RESERVED' });
-      expect(res.body.addOnsEditable.allowed).toBe(true);
-      expect(await addOnRow(power.id)).toMatchObject({ quantitySold: 1, quantityReserved: 1 });
-      expect(await addOnRow(badge.id)).toMatchObject({ quantitySold: 2, quantityReserved: 1 });
-      expect(await tierRow(booth.id)).toMatchObject({ quantityApproved: 1, quantityReserved: 1 });
+      const declined = await select(appC.id, { addOns: [{ addOnId: power.id, quantity: 1 }, { addOnId: badge.id, quantity: 1 }], useSavedCard: true });
+      expect(declined.status).toBe(200);
+      expect(declined.body.paymentStatus).toBe('AWAITING_SELECTION');
+      expect(await addOnRow(power.id)).toMatchObject({ quantitySold: 1, quantityReserved: 0 });
+      expect(await addOnRow(badge.id)).toMatchObject({ quantitySold: 2, quantityReserved: 0 });
+      const detail = await request(app).get(`${adminBase()}/applications/${appC.id}`).set(...auth(organizerToken));
+      expect(detail.body).toMatchObject({ status: 'APPROVED', paymentStatus: 'AWAITING_SELECTION', capacitySlot: 'RESERVED' });
+      expect(detail.body.addOnsEditable.allowed).toBe(false);
 
-      // Applicant opens pay-now: a session is minted with the itemised lines.
-      const pay = await request(app).post(`/applications/${appC.id}/pay?token=${statusToken(appC.id)}`);
-      expect(pay.status).toBe(200);
+      // Chosen again, paid on Checkout: the session itemises the lines.
+      expect((await select(appC.id, { addOns: [{ addOnId: power.id, quantity: 1 }, { addOnId: badge.id, quantity: 1 }] })).status).toBe(200);
+      expect(await addOnRow(badge.id)).toMatchObject({ quantityReserved: 1 });
+      expect((await pay(appC.id)).status).toBe(200);
       const payParams = mockSessionsCreate.mock.calls.at(-1)[0];
       expect(payParams.line_items.map((l) => l.price_data.product_data.name)).toEqual([`${TAG} Fair 2027 — Vendor Booth (Booth)`, 'Booth power ×1', 'Extra vendor badge ×1']);
       const sessionId = (await appRow(appC.id)).stripeCheckoutSessionId;
       expect(sessionId).toBeTruthy();
+      const busy = await patchAddOns(appC.id, [{ addOnId: power.id, quantity: 1 }]);
+      expect(busy.status).toBe(409);
+      expect(busy.body.message).toMatch(/payment is in progress/);
 
-      // Organizer drops the badge and adds a table: holds follow, the stale session is expired.
+      // The vendor backs out of Checkout (the session is expired); the organizer then drops the badge and adds a table.
+      await request(app).post(`/applications/${appC.id}/cancel-checkout?token=${statusToken(appC.id)}`);
+      expect(mockSessionsExpire).toHaveBeenCalledWith(sessionId);
       const edit = await patchAddOns(appC.id, [{ addOnId: power.id, quantity: 1 }, { addOnId: table.id, quantity: 1 }]);
       expect(edit.status).toBe(200);
       expect(edit.body).toMatchObject({ status: 'APPROVED', paymentStatus: 'PAYMENT_DUE', capacitySlot: 'RESERVED' });
       expect(await addOnRow(badge.id)).toMatchObject({ quantitySold: 2, quantityReserved: 0 });
       expect(await addOnRow(table.id)).toMatchObject({ quantityReserved: 1 });
       expect(await addOnRow(power.id)).toMatchObject({ quantitySold: 1, quantityReserved: 1 });
-      expect(mockSessionsExpire).toHaveBeenCalledWith(sessionId);
       expect((await appRow(appC.id)).stripeCheckoutSessionId).toBeNull();
 
       // Asking for more power than is left is refused and leaves the holds as they were.
@@ -491,31 +539,28 @@ describe('Applications with add-ons (spec 012 phase 2)', () => {
 
       // Paying the new amount sells the held lines.
       const row = await appRow(appC.id);
-      const paidSession = await webhook(
-        checkoutCompleted({ id: 'cs_paynow_c', mode: 'payment', payment_status: 'paid', payment_intent: `pi_${TAG}_paynow_c`, metadata: { applicationId: appC.id, purpose: 'pay_now' } })
-      );
-      expect(paidSession.status).toBe(200);
-      expect(await appRow(appC.id)).toMatchObject({ paymentStatus: 'PAID', capacitySlot: 'APPROVED' });
+      expect((await pay(appC.id)).status).toBe(200);
+      expect(await checkoutPaid(appC.id, `pi_${TAG}_paynow_c`)).toMatchObject({ paymentStatus: 'PAID', capacitySlot: 'APPROVED' });
       expect(await addOnRow(power.id)).toMatchObject({ quantitySold: 2, quantityReserved: 0 });
       // appA's table plus this one
       expect(await addOnRow(table.id)).toMatchObject({ quantitySold: 2, quantityReserved: 0 });
       expect(Number(row.applicantPays)).toBe(Number((await appRow(appC.id)).applicantPays));
     });
 
-    it('the overdue sweep releases held add-ons with the tier slot', async () => {
-      const d = await submit(form.slug, corner.id, `d@${TAG}.test`, [{ addOnId: table.id, quantity: 3 }], 'Overdue LLC');
-      const appD = await cardOnFile(d.body.applicationId);
-      mockIntentsCreate.mockImplementationOnce(async () => {
-        throw cardDecline();
-      });
-      const res = await decide(appD.id, 'APPROVE');
-      expect(res.body).toMatchObject({ paymentStatus: 'PAYMENT_DUE', capacitySlot: 'RESERVED' });
+    it('a lapsed hold releases the held add-ons (the reserving form keeps the slot); the overdue sweep then withdraws and frees it', async () => {
+      const appD = await chosen(form.slug, corner.id, `d@${TAG}.test`, [{ addOnId: table.id, quantity: 3 }], 'Overdue LLC');
       expect(await addOnRow(table.id)).toMatchObject({ quantitySold: 2, quantityReserved: 3 });
       expect(await tierRow(corner.id)).toMatchObject({ quantityReserved: 1 });
 
-      const swept = await applicationPaymentService.sweepOverdue(new Date(Date.now() + 10 * 86_400_000));
+      await prisma.application.update({ where: { id: appD }, data: { selectionHeldUntil: new Date(Date.now() - 1000) } });
+      expect((await applicationPaymentService.sweepExpiredSelections()).released).toBeGreaterThanOrEqual(1);
+      expect(await addOnRow(table.id)).toMatchObject({ quantitySold: 2, quantityReserved: 0 });
+      expect(await tierRow(corner.id)).toMatchObject({ quantityReserved: 1 });
+
+      // Six days on: past this form's 5-day clock, inside the sponsors' 7.
+      const swept = await applicationPaymentService.sweepOverdue(new Date(Date.now() + 6 * 86_400_000));
       expect(swept.withdrawn).toBeGreaterThanOrEqual(1);
-      expect(await appRow(appD.id)).toMatchObject({ status: 'WITHDRAWN', capacitySlot: 'NONE', withdrawnBy: 'SYSTEM' });
+      expect(await appRow(appD)).toMatchObject({ status: 'WITHDRAWN', capacitySlot: 'NONE', withdrawnBy: 'SYSTEM' });
       expect(await addOnRow(table.id)).toMatchObject({ quantitySold: 2, quantityReserved: 0 });
       expect(await tierRow(corner.id)).toMatchObject({ quantityReserved: 0, quantityApproved: 0 });
     });
@@ -533,7 +578,7 @@ describe('Applications with add-ons (spec 012 phase 2)', () => {
       const filtered = await request(app).get(`${adminBase()}/applications?addOn=${badge.id}`).set(...auth(organizerToken));
       expect(filtered.body.data.map((r) => r.businessName).sort()).toEqual(['Hidden Block Games']);
       const byTable = await request(app).get(`${adminBase()}/applications?addOn=${table.id}`).set(...auth(organizerToken));
-      // Gold Sponsor Co never finished Checkout (DRAFT) so it is not listed.
+      // Gold Sponsor Co gave its space back: the cancelled order's tables are not listed.
       expect(byTable.body.data.map((r) => r.businessName).sort()).toEqual(['Declined Inc', 'Hidden Block Games', 'Overdue LLC']);
     });
 
@@ -565,7 +610,7 @@ describe('Applications with add-ons (spec 012 phase 2)', () => {
       const res = await request(app).get(`${addOnBase()}/sales`).set(...auth(organizerToken));
       expect(res.status).toBe(200);
       const byName = Object.fromEntries(res.body.addOns.map((r) => [r.name, r]));
-      // Tables: A (1) + C (1) paid applications, 2 on the order; the withdrawn D and the DRAFT sponsor count nowhere.
+      // Tables: A (1) + C (1) paid applications, 2 on the order; the withdrawn D and the released sponsor count nowhere.
       expect(byName['Table & chairs']).toMatchObject({ sold: 4, reserved: 0, remaining: null, revenue: 160, orders: { quantity: 2, revenue: 80, lines: 1 }, applications: { quantity: 2, revenue: 80, lines: 2, held: 0, pending: 0 } });
       expect(byName['Booth power']).toMatchObject({ sold: 2, reserved: 0, remaining: 0, quantityTotal: 2, revenue: 250, orders: { quantity: 0 }, applications: { quantity: 2, revenue: 250 } });
       expect(byName['Extra vendor badge']).toMatchObject({ sold: 2, revenue: 20, applications: { quantity: 2 } });
@@ -584,7 +629,7 @@ describe('Applications with add-ons (spec 012 phase 2)', () => {
       const hidden = parsed.filter((r) => r.businessName === 'Hidden Block Games');
       expect(hidden.map((r) => `${r.addOn} ×${r.quantity}`).sort()).toEqual(['Booth power ×1', 'Extra vendor badge ×2', 'Table & chairs ×1']);
       expect(hidden[0]).toMatchObject({ source: 'application', status: 'APPROVED/PAID', form: 'Vendor Booth', tier: 'Booth' });
-      // Withdrawn applications still appear (with their status); DRAFTs do not.
+      // Withdrawn applications still appear (with their status); a released selection does not.
       expect(parsed.some((r) => r.businessName === 'Overdue LLC' && r.status.startsWith('WITHDRAWN'))).toBe(true);
       expect(parsed.some((r) => r.businessName === 'Gold Sponsor Co')).toBe(false);
     });

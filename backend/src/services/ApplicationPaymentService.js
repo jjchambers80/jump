@@ -13,6 +13,12 @@
 // orderStatusFor(). Refunds live in RefundService for every order kind.
 // Capacity: approval reserves a slot (quantityReserved); PAID moves it to
 // quantityApproved; a failed / overdue payment releases it.
+//
+// Spec 037 phase 5 (apply-then-choose): money moves only after the vendor
+// chooses a space. A decline, an expired or cancelled Checkout and the
+// 15-minute hold lapsing all end in `releaseSelection` (back to
+// AWAITING_SELECTION); `sweepExpiredSelections` runs on the booth-hold timer
+// and `sweepOverdue` also watches approved vendors who never chose.
 
 import stripe from '../config/stripe.js';
 import { prisma } from '@jump/db';
@@ -30,6 +36,8 @@ import { orderStatusFor } from './applicationOrderStatus.js';
 import logger from '../utils/logger.js';
 
 const SESSION_TTL_SECONDS = 30 * 60;
+/** Saved-card brand / last four by payment method id (a card never changes). */
+const CARD_SUMMARY_CACHE = new Map();
 const APPLICATION_EVENT_PREFIXES = ['checkout.session.', 'setup_intent.', 'payment_intent.'];
 
 export const cents = (value) => Math.round((Number(value) + Number.EPSILON) * 100);
@@ -39,7 +47,7 @@ const PAYMENT_INCLUDE = {
   profile: { include: { images: { include: { image: { include: { file: true } } }, orderBy: { displayOrder: 'asc' } } } },
   tier: true,
   form: true,
-  event: { select: { id: true, name: true, date: true, venue: { select: { organizationId: true, timezone: true, organization: true } } } },
+  event: { select: { id: true, name: true, date: true, taxRate: true, venue: { select: { organizationId: true, timezone: true, organization: true } } } },
   answers: { include: { question: true, image: { include: { file: true } } } },
   decisions: { orderBy: { createdAt: 'asc' } },
   order: { include: ORDER_INCLUDE },
@@ -109,11 +117,38 @@ class ApplicationPaymentService {
 
   /** Replace the saved card (buyer account). Allowed while a charge can still happen. */
   async updateCardUrl(application, statusUrl) {
-    if (!['CARD_ON_FILE', 'PAYMENT_DUE'].includes(application.paymentStatus) || !['SUBMITTED', 'WAITLISTED', 'APPROVED'].includes(application.status)) {
+    const chargeable =
+      ['CARD_ON_FILE', 'PAYMENT_DUE'].includes(application.paymentStatus) ||
+      (['NOT_DUE', 'AWAITING_SELECTION'].includes(application.paymentStatus) && Boolean(application.stripePaymentMethodId));
+    if (!chargeable || !['SUBMITTED', 'WAITLISTED', 'APPROVED'].includes(application.status)) {
       throw new ConflictError('This application does not have a card to update');
     }
     const session = await this._setupSession(application, statusUrl, { purpose: 'update_card' });
     return session.url;
+  }
+
+  /**
+   * Spec 037 phase 5: "Pay with Visa ending 4242" at selection. Brand and last
+   * four of a saved card, cached per payment method; `{ brand: null, last4:
+   * null }` when Stripe cannot be asked (the card is still offered).
+   */
+  async savedCardSummary(paymentMethodId) {
+    if (!paymentMethodId) return null;
+    if (CARD_SUMMARY_CACHE.has(paymentMethodId)) return CARD_SUMMARY_CACHE.get(paymentMethodId);
+    let summary = { brand: null, last4: null };
+    try {
+      const method = await Promise.race([
+        stripe.paymentMethods.retrieve(paymentMethodId),
+        new Promise((_resolve, reject) => setTimeout(() => reject(new Error('timeout')), 3000).unref?.()),
+      ]);
+      if (method?.card?.last4) {
+        summary = { brand: method.card.brand ?? null, last4: method.card.last4 };
+        CARD_SUMMARY_CACHE.set(paymentMethodId, summary);
+      }
+    } catch (error) {
+      logger.info('Saved card summary unavailable', { paymentMethodId, error: error.message });
+    }
+    return summary;
   }
 
   async _setupSession(application, statusUrl, { purpose = 'submit' } = {}) {
@@ -369,33 +404,37 @@ class ApplicationPaymentService {
         ['PAID', 'REFUNDED', 'PARTIALLY_REFUNDED'].includes(application.paymentStatus)
       )
         return false;
-      const data = { paymentStatus: 'PAID', overdue: false };
+      const data = { paymentStatus: 'PAID', overdue: false, selectionHeldUntil: null };
       if (application.tierId && application.capacitySlot === 'RESERVED') {
         await tx.$executeRaw`UPDATE "ApplicationTier" SET "quantityReserved" = GREATEST("quantityReserved" - 1, 0), "quantityApproved" = "quantityApproved" + 1 WHERE "id" = ${application.tierId}`;
         // Add-on holds become sales with the slot (spec 012).
         const lines = await tx.orderAddOn.findMany({
-          where: { order: { applicationId } },
+          where: { order: { applicationId, status: { not: 'CANCELLED' } } },
           select: { addOnId: true, quantity: true },
         });
         if (lines.length) await addOnService.commit(tx, lines);
         data.capacitySlot = 'APPROVED';
+      } else if (application.tierId && application.capacitySlot === 'NONE' && application.status === 'APPROVED') {
+        // Spec 037 phase 5: money arrived for a space whose hold had already
+        // gone. The vendor keeps a slot (counted, even past the total); the
+        // organizer sees the overbooking on the tier.
+        await tx.$executeRaw`UPDATE "ApplicationTier" SET "quantityApproved" = "quantityApproved" + 1 WHERE "id" = ${application.tierId}`;
+        data.capacitySlot = 'APPROVED';
+        logger.warn('Application paid without a held slot', { event: 'application_paid_without_slot', applicationId });
       }
       if (application.status === 'DRAFT') {
         // Pay-at-submission: the payment is the submission.
         data.status = 'SUBMITTED';
         data.submittedAt = new Date();
       }
-      const tier = application.tierId && tx.applicationTier?.findUnique
-        ? await tx.applicationTier.findUnique({ where: { id: application.tierId }, select: { mapBound: true } })
-        : null;
       // Stripe has the money: the PAID transition never fails on booth state.
-      // A hold that vanished meanwhile is logged for the organizer to assign by hand.
+      // The booth the vendor held becomes SOLD; a hold that vanished meanwhile
+      // (a booth was chosen but the sweep got there first) is logged for the
+      // organizer to assign by hand. A category chosen from the list has no booth.
       try {
-        if (tier?.mapBound && application.status === 'APPROVED') {
-          await boothService.claimBooth(applicationId, null, { tx });
-        } else {
-          const booth = await boothService.boothForApplication(applicationId, { tx });
-          if (booth?.status === 'HELD') await boothService.claimBooth(applicationId, booth.id, { tx });
+        const booth = await boothService.boothForApplication(applicationId, { tx });
+        if (booth?.status === 'HELD' && booth.holdApplicationId === applicationId) {
+          await boothService.claimBooth(applicationId, booth.id, { tx });
         }
       } catch (error) {
         if (error?.code !== 'BOOTH_HOLD_MISSING') throw error;
@@ -446,8 +485,19 @@ class ApplicationPaymentService {
     }
   }
 
-  /** Charge failed: keep the reserved slot, start the pay-now clock. */
+  /**
+   * Charge failed. Spec 037 phase 5: a chosen space is released as a whole
+   * (booth, add-ons, the slot a non-reserving form took) and the vendor
+   * chooses again — returns 'AWAITING_SELECTION'. Legacy PAYMENT_DUE rows
+   * (approved before apply-then-choose) keep the reserved slot and start the
+   * pay-now clock as before — returns 'PAYMENT_DUE'.
+   */
   async _markPaymentDue(application, reason, paymentIntentId = null) {
+    const held = await prisma.application.findUnique({ where: { id: application.id }, select: { selectionHeldUntil: true } });
+    if (held?.selectionHeldUntil) {
+      await this.releaseSelection(application.id, { reason, force: true, failure: { reason, paymentIntentId } });
+      return 'AWAITING_SELECTION';
+    }
     const dueDays = application.form?.paymentDueDays ?? 7;
     const paymentDueAt = application.order?.dueAt || new Date(Date.now() + dueDays * 86_400_000);
     await prisma.$transaction(async (tx) => {
@@ -475,6 +525,109 @@ class ApplicationPaymentService {
     });
     logger.warn('Application payment due', { event: 'application_payment_due', applicationId: application.id, reason, paymentDueAt });
     return 'PAYMENT_DUE';
+  }
+
+  /**
+   * Spec 037 phase 5: put a chosen space back — the booth hold, the add-on
+   * reservations of the live order, and the category slot when the form does
+   * not reserve on approval (a reserving form keeps the slot its approval
+   * took) — cancel the order and return to AWAITING_SELECTION. The two
+   * statuses move in one transaction (`orderStatusFor`). Idempotent: a no-op
+   * unless the application holds a selection. `force` also releases a
+   * PROCESSING hold (Checkout expired, charge declined); `failure` records the
+   * declined attempt on the order's payment row.
+   * @returns {Promise<boolean>} true when something was released now
+   */
+  async releaseSelection(applicationId, { reason = null, force = false, failure = null, expiredBy = null } = {}) {
+    const released = await prisma.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw`SELECT * FROM "Application" WHERE "id" = ${applicationId} FOR UPDATE`;
+      const locked = rows[0];
+      if (!locked || locked.status !== 'APPROVED' || !locked.selectionHeldUntil) return false;
+      const allowed = force ? ['PAYMENT_DUE', 'PROCESSING'] : ['PAYMENT_DUE'];
+      if (!allowed.includes(locked.paymentStatus)) return false;
+      // The sweep only releases a hold that is still the expired one (a fresh
+      // selection made since it read the row is left alone).
+      if (expiredBy && new Date(locked.selectionHeldUntil) > expiredBy) return false;
+      const form = await tx.applicationForm.findUnique({ where: { id: locked.formId }, select: { reserveOnApproval: true } });
+      const lines = await tx.orderAddOn.findMany({
+        where: { order: { applicationId, status: { not: 'CANCELLED' } } },
+        select: { addOnId: true, quantity: true },
+      });
+      if (lines.length) await addOnService.release(tx, lines);
+      let capacitySlot = locked.capacitySlot;
+      if (locked.tierId && capacitySlot === 'RESERVED' && form?.reserveOnApproval === false) {
+        await tx.$executeRaw`UPDATE "ApplicationTier" SET "quantityReserved" = GREATEST("quantityReserved" - 1, 0) WHERE "id" = ${locked.tierId}`;
+        capacitySlot = 'NONE';
+      }
+      await boothService.releaseHoldOnFailure(applicationId, { tx });
+      const row = await tx.application.update({
+        where: { id: applicationId },
+        data: { paymentStatus: 'AWAITING_SELECTION', capacitySlot, selectionHeldUntil: null, stripeCheckoutSessionId: null },
+        select: { status: true, paymentStatus: true, order: { select: { id: true, totalAmount: true, currency: true } } },
+      });
+      if (row.order) {
+        await tx.order.update({ where: { id: row.order.id }, data: { status: orderStatusFor(row) } });
+        if (failure) {
+          await this._upsertPayment(tx, row.order, {
+            ...(failure.paymentIntentId && { stripePaymentIntentId: failure.paymentIntentId }),
+            status: 'FAILED',
+            failureReason: String(failure.reason || '').slice(0, 500) || null,
+          });
+        }
+      }
+      return true;
+    });
+    if (released) logger.info('Application space released', { event: 'application_space_released', applicationId, reason });
+    return released;
+  }
+
+  /**
+   * Spec 037 phase 5: holds that lapsed without a payment in flight go back
+   * (booth, category slot, add-ons, order). A PROCESSING row is left to its
+   * Checkout session: completion pays it, expiry releases it. Runs on the
+   * booth-hold timer.
+   * @returns {Promise<{ released: number }>}
+   */
+  async sweepExpiredSelections(now = new Date()) {
+    const expired = await prisma.application.findMany({
+      where: { status: 'APPROVED', paymentStatus: 'PAYMENT_DUE', selectionHeldUntil: { lte: now } },
+      select: { id: true },
+      take: 500,
+    });
+    let released = 0;
+    for (const row of expired) {
+      try {
+        if (await this.releaseSelection(row.id, { reason: 'Hold expired', expiredBy: now })) released += 1;
+      } catch (error) {
+        logger.error('Selection sweep failed for application', { applicationId: row.id, error: error.message });
+      }
+    }
+
+    // A hosted Checkout that never reported back (a lost webhook): once its
+    // session must have ended (hold + session lifetime + grace), ask Stripe.
+    // Paid → settle it like the webhook would; ended unpaid → release.
+    const settleBy = new Date(now.getTime() - (SESSION_TTL_SECONDS + 5 * 60) * 1000);
+    const stale = await prisma.application.findMany({
+      where: { status: 'APPROVED', paymentStatus: 'PROCESSING', selectionHeldUntil: { lte: settleBy }, stripeCheckoutSessionId: { not: null } },
+      select: { id: true, stripeCheckoutSessionId: true },
+      take: 100,
+    });
+    for (const row of stale) {
+      try {
+        const session = await stripe.checkout.sessions.retrieve(row.stripeCheckoutSessionId);
+        if (!session) continue;
+        if (session.payment_status === 'paid' || session.status === 'complete') {
+          await this._onCheckoutCompleted(row.id, { ...session, mode: 'payment', payment_status: 'paid', metadata: { ...(session.metadata || {}), applicationId: row.id } });
+        } else if (session.status === 'expired' || Number(session.expires_at || 0) * 1000 < now.getTime()) {
+          if (session.status === 'open') await this.expireCheckoutSession(row.stripeCheckoutSessionId);
+          if (await this.releaseSelection(row.id, { reason: 'Checkout ended without payment', force: true })) released += 1;
+        }
+      } catch (error) {
+        logger.error('Selection sweep could not reconcile a Checkout', { applicationId: row.id, error: error.message });
+      }
+    }
+    if (released) logger.info('Application selections expired', { event: 'application_selections_expired', released });
+    return { released };
   }
 
   /** Setup complete: the card is on file and the application is submitted. */
@@ -623,15 +776,33 @@ class ApplicationPaymentService {
    * @returns {Promise<{ withdrawn: number, held: number }>}
    */
   async sweepOverdue(now = new Date()) {
+    // Spec 037 phase 5: approved vendors who never chose a space are overdue
+    // `paymentDueDays` after approval (their clock has no order to live on).
+    // Prisma stores DateTime as UTC in timestamp columns: compare in UTC, not
+    // in the database session's zone.
+    const choosing = await prisma.$queryRaw`
+      SELECT a."id" FROM "Application" a
+      JOIN "ApplicationForm" f ON f."id" = a."formId"
+      WHERE a."status" = 'APPROVED' AND a."paymentStatus" = 'AWAITING_SELECTION' AND a."overdue" = false
+        AND a."decidedAt" IS NOT NULL
+        AND a."decidedAt" + make_interval(days => f."paymentDueDays") < (${now}::timestamptz AT TIME ZONE 'UTC')
+      LIMIT 500`;
     const due = await prisma.application.findMany({
       where: {
-        status: 'APPROVED',
-        paymentStatus: 'PAYMENT_DUE',
-        overdue: false,
-        order: { dueAt: { lt: now } },
+        OR: [
+          {
+            status: 'APPROVED',
+            paymentStatus: 'PAYMENT_DUE',
+            overdue: false,
+            order: { dueAt: { lt: now } },
+            // A space being held is the hold sweep's; it comes back here as AWAITING_SELECTION.
+            selectionHeldUntil: null,
+          },
+          { id: { in: choosing.map((r) => r.id) } },
+        ],
       },
-      include: { form: { select: { overduePolicy: true } }, order: { select: { id: true } } },
-      take: 500,
+      include: { form: { select: { overduePolicy: true } }, order: { select: { id: true, status: true } } },
+      take: 1000,
     });
     let withdrawn = 0;
     let held = 0;
@@ -647,7 +818,7 @@ class ApplicationPaymentService {
                 row.tierId
               );
               const lines = await tx.orderAddOn.findMany({
-                where: { order: { applicationId: row.id } },
+                where: { order: { applicationId: row.id, status: { not: 'CANCELLED' } } },
                 select: { addOnId: true, quantity: true },
               });
               if (lines.length)
@@ -748,7 +919,7 @@ class ApplicationPaymentService {
       const accountUrl = application.contact?.accountCreatedAt ? await buyerAccountUrl(application.organizationId) : null;
       // Spec 014 phase 2: name the booth this payment bought and deep-link the public map.
       let booth = null;
-      const owned = application.tier?.mapBound ? await boothService.boothForApplication(applicationId).catch(() => null) : null;
+      const owned = await boothService.boothForApplication(applicationId).catch(() => null);
       if (owned && owned.status === 'SOLD') {
         booth = {
           label: owned.label,

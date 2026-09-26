@@ -1,5 +1,6 @@
-// Contract tests for application corrections (spec 018 phase 3): an
-// application's money before it moves — tier change, manual adjustments,
+// Contract tests for application corrections (spec 018 phase 3), on the
+// spec 037 phase 5 flow (the order opens when the vendor chooses a space): an
+// application's money before it moves — category change, manual adjustments,
 // waived balance, offline payment, manual refund — and how customers and
 // analytics report them. Stripe and Resend mocked; Postgres is real.
 
@@ -37,6 +38,8 @@ const { default: paymentSettingsService } =
   await import('../../src/services/PaymentSettingsService.js');
 const { applicationAmounts, applicationLines } =
   await import('../../src/services/ApplicationFormService.js');
+const { default: applicationPaymentService } = await import('../../src/services/ApplicationPaymentService.js');
+const { statusToken } = await import('../../src/services/applicationLinks.js');
 
 const TAG = 'appcorr';
 paymentSettingsService._statusCache = {
@@ -79,48 +82,56 @@ describe('Application corrections contract (spec 018 phase 3)', () => {
   const auth = (token) => ['Authorization', `Bearer ${token}`];
   const adminBase = () => `/admin/events/${eventId}`;
 
-  const submit = (tierId, email, addOns, businessName = 'Pixel Pins') =>
+  // Spec 037 phase 5: apply without a category; the organizer assigns it on
+  // approval; the vendor chooses a space (and add-ons), which opens the order.
+  const submit = (email, businessName = 'Pixel Pins') =>
     request(app)
       .post(`/events/${eventId}/applications`)
       .send({
         formSlug: form.slug,
-        tierId,
         contact: { email, firstName: 'Vee', lastName: 'Vendor' },
         acceptances: allAcceptances(), profile: { businessName },
         answers: {},
-        ...(addOns !== undefined && { addOns }),
       });
 
   const appRow = (id) => loadRow(id, { tier: true, contact: true, decisions: true });
   const tierRow = (id) => prisma.applicationTier.findUnique({ where: { id } });
   const addOnRow = (id) => prisma.addOn.findUnique({ where: { id } });
+  const select = (id, body = {}) => request(app).post(`/applications/${id}/select?token=${statusToken(id)}`).send(body);
 
-  async function cardOnFile(applicationId) {
-    const row = await appRow(applicationId);
-    const res = await webhook(checkoutCompleted({ id: row.stripeCheckoutSessionId, mode: 'setup', setup_intent: `seti_${applicationId}`, customer: row.contact.stripeCustomerId, metadata: { applicationId, purpose: 'submit' } }));
-    expect(res.status).toBe(200);
-    return appRow(applicationId);
-  }
-
-  /** A SUBMITTED application with a card on file, optionally with add-ons. */
-  async function submitted(tierId, email, addOns, businessName) {
-    const res = await submit(tierId, email, addOns, businessName);
+  /** A SUBMITTED application: under review, no category, no order. */
+  async function submitted(email, businessName) {
+    const res = await submit(email, businessName);
     expect(res.status).toBe(201);
-    await cardOnFile(res.body.applicationId);
     return res.body.applicationId;
   }
 
-  /** Approve with a declined card → APPROVED + PAYMENT_DUE with the slot reserved. */
-  async function paymentDue(tierId, email, addOns, businessName) {
-    const id = await submitted(tierId, email, addOns, businessName);
-    mockIntentsCreate.mockRejectedValueOnce(cardDecline());
-    const res = await decide(id, 'APPROVE');
+  /** Approved into a category (the form reserves a slot on approval): AWAITING_SELECTION. */
+  async function approved(tierId, email, businessName) {
+    const id = await submitted(email, businessName);
+    const res = await decide(id, 'APPROVE', organizerToken, { tierId });
+    expect(res.status).toBe(200);
+    expect(res.body.paymentStatus).toBe('AWAITING_SELECTION');
+    return id;
+  }
+
+  /** Approved and holding a chosen space with add-ons: APPROVED + PAYMENT_DUE, order PENDING. */
+  async function held(tierId, email, addOns = [], businessName) {
+    const id = await approved(tierId, email, businessName);
+    const res = await select(id, { addOns });
     expect(res.status).toBe(200);
     expect(res.body.paymentStatus).toBe('PAYMENT_DUE');
     return id;
   }
 
-  const decide = (id, decision, token = organizerToken) => request(app).post(`${adminBase()}/applications/${id}/decision`).set(...auth(token)).send({ decision });
+  /** A card saved before apply-then-choose (a migrated row). */
+  async function giveSavedCard(id) {
+    const row = await appRow(id);
+    await prisma.contact.update({ where: { id: row.contactId }, data: { stripeCustomerId: `cus_${TAG}_${row.contactId}` } });
+    await prisma.application.update({ where: { id }, data: { stripePaymentMethodId: `pm_${TAG}_${id}` } });
+  }
+
+  const decide = (id, decision, token = organizerToken, extra = {}) => request(app).post(`${adminBase()}/applications/${id}/decision`).set(...auth(token)).send({ decision, ...extra });
   const changeTier = (id, tierId, token = organizerToken) => request(app).post(`${adminBase()}/applications/${id}/tier`).set(...auth(token)).send({ tierId });
   const adjust = (id, body, token = organizerToken) => request(app).post(`${adminBase()}/applications/${id}/adjustments`).set(...auth(token)).send(body);
   const waive = (id, body, token = adminToken) => request(app).post(`${adminBase()}/applications/${id}/waive`).set(...auth(token)).send(body);
@@ -180,45 +191,61 @@ describe('Application corrections contract (spec 018 phase 3)', () => {
     resetStripeMocks();
   });
 
-  // ─── Tier change ─────────────────────────────────────────────────────────
 
-  it('tier change on SUBMITTED recomputes the snapshot, keeps offered add-ons, drops the rest, records TIER_CHANGED and emails', async () => {
-    const id = await submitted(booth.id, `tier1@${TAG}.test`, [{ addOnId: power.id, quantity: 1 }, { addOnId: badge.id, quantity: 2 }]);
-    const before = await appRow(id);
-    expect(before.addOns).toHaveLength(2);
+  // ─── Category (tier) change ──────────────────────────────────────────────
 
-    const same = await changeTier(id, booth.id);
-    expect(same.status).toBe(400);
-    const unknown = await changeTier(id, 'nope');
-    expect(unknown.status).toBe(404);
+  it('before a space is chosen the category moves freely (with the approval slot); once chosen and paid it is locked', async () => {
+    const id = await submitted(`tier1@${TAG}.test`);
+    expect((await changeTier(id, 'nope')).status).toBe(404);
 
+    // Under review: set a category, nothing held, no email.
     sentEmails.length = 0;
-    const res = await changeTier(id, corner.id);
-    expect(res.status).toBe(200);
-    expect(res.body.tier).toMatchObject({ id: corner.id, name: 'Corner' });
-    // Badge is Booth-only → dropped; power is offered on every tier → kept.
-    expect(res.body.addOns.map((l) => l.addOnId)).toEqual([power.id]);
-    const expected = await expectedAmounts(corner.id, [{ addOn: await addOnRow(power.id), quantity: 1 }]);
-    expect(res.body.amounts.applicantPays).toBeCloseTo(expected.applicantPays, 2);
-    expect(res.body.amounts.applicantPays).toBeGreaterThan(Number(before.applicantPays));
-    const decision = res.body.decisions.at(-1);
-    expect(decision.action).toBe('TIER_CHANGED');
-    expect(decision.note).toContain('Tier: Booth → Corner');
-    expect(decision.note).toContain('Dropped add-ons: Extra vendor badge ×2');
-    expect(sentEmails).toHaveLength(1);
-    expect(sentEmails[0].subject).toContain('moved to Corner');
-    expect(decision.emailSubject).toContain('moved to Corner');
-    // Nothing is held for a SUBMITTED application.
-    expect((await tierRow(corner.id)).quantityReserved).toBe(0);
+    const set = await changeTier(id, booth.id);
+    expect(set.status).toBe(200);
+    expect(set.body.tier).toMatchObject({ id: booth.id, name: 'Booth' });
+    expect(set.body.tierEditable).toEqual({ allowed: true, reason: null });
+    expect(set.body.decisions.at(-1)).toMatchObject({ action: 'TIER_CHANGED', note: 'Category: none → Booth.' });
+    expect(sentEmails).toHaveLength(0);
+    expect((await tierRow(booth.id)).quantityReserved).toBe(0);
+    expect((await changeTier(id, booth.id)).status).toBe(400);
 
-    // Approval charges the new amount.
-    const approved = await decide(id, 'APPROVE');
-    expect(approved.status).toBe(200);
-    expect(approved.body.paymentStatus).toBe('PAID');
-    expect(mockIntentsCreate.mock.calls[0][0].amount).toBe(Math.round(expected.applicantPays * 100));
+    // Approval keeps the category and takes its slot.
+    const approvedRes = await decide(id, 'APPROVE');
+    expect(approvedRes.body).toMatchObject({ paymentStatus: 'AWAITING_SELECTION', capacitySlot: 'RESERVED', tier: { id: booth.id } });
+    expect((await tierRow(booth.id)).quantityReserved).toBe(1);
+
+    // Approved, still choosing: the slot moves with the category and the vendor is told.
+    sentEmails.length = 0;
+    const moved = await changeTier(id, corner.id);
+    expect(moved.status).toBe(200);
+    expect((await tierRow(booth.id)).quantityReserved).toBe(0);
+    expect((await tierRow(corner.id)).quantityReserved).toBe(1);
+    expect(moved.body.decisions.at(-1).note).toBe('Category: Booth → Corner.');
+    expect(sentEmails.map((e) => e.subject)).toEqual([expect.stringMatching(/choose your space/)]);
+    expect(sentEmails[0].text).toContain('as Corner');
+
+    // The vendor chooses the space with add-ons their category offers: badge is Booth-only.
+    expect((await select(id, { addOns: [{ addOnId: badge.id, quantity: 1 }] })).status).toBe(400);
+    const chosen = await select(id, { addOns: [{ addOnId: power.id, quantity: 1 }] });
+    expect(chosen.status).toBe(200);
+    const expected = await expectedAmounts(corner.id, [{ addOn: await addOnRow(power.id), quantity: 1 }]);
+    const holding = (await detail(id)).body;
+    expect(holding.amounts.applicantPays).toBeCloseTo(expected.applicantPays, 2);
+    expect(holding.addOns.map((l) => l.addOnId)).toEqual([power.id]);
+    // A space being paid for cannot change category.
+    const busy = await changeTier(id, booth.id);
+    expect(busy.status).toBe(409);
+    expect(busy.body.message).toMatch(/paying for a space/);
+
+    // Pay with the saved card: the charge is the chosen snapshot.
+    await request(app).post(`/applications/${id}/release?token=${statusToken(id)}`);
+    await giveSavedCard(id);
+    const paid = await select(id, { addOns: [{ addOnId: power.id, quantity: 1 }], useSavedCard: true });
+    expect(paid.body.paymentStatus).toBe('PAID');
+    expect(mockIntentsCreate.mock.calls.at(-1)[0].amount).toBe(Math.round(expected.applicantPays * 100));
     expect((await tierRow(corner.id)).quantityApproved).toBe(1);
 
-    // Once PAID the tier is locked.
+    // Once PAID the category is locked.
     const locked = await changeTier(id, booth.id);
     expect(locked.status).toBe(409);
     expect(locked.body.message).toMatch(/Already paid/);
@@ -227,28 +254,9 @@ describe('Application corrections contract (spec 018 phase 3)', () => {
     expect((await tierRow(corner.id)).quantityApproved).toBe(0);
   });
 
-  it('tier change on PAYMENT_DUE moves the reserved slot and add-on holds; a full tier is 409 and nothing changes', async () => {
-    const id = await paymentDue(booth.id, `tier2@${TAG}.test`, [{ addOnId: power.id, quantity: 1 }]);
-    const boothBefore = await tierRow(booth.id);
-    const powerBefore = await addOnRow(power.id);
-    expect(boothBefore.quantityReserved).toBeGreaterThanOrEqual(1);
-    expect(powerBefore.quantityReserved).toBeGreaterThanOrEqual(1);
-    const row = await appRow(id);
-    expect(row.capacitySlot).toBe('RESERVED');
-    // Mint a pay-now session so the change has something to expire.
-    await prisma.application.update({ where: { id }, data: { stripeCheckoutSessionId: `cs_${TAG}_stale` } });
-
-    const res = await changeTier(id, corner.id);
-    expect(res.status).toBe(200);
-    expect((await tierRow(booth.id)).quantityReserved).toBe(boothBefore.quantityReserved - 1);
-    expect((await tierRow(corner.id)).quantityReserved).toBe(1);
-    expect((await addOnRow(power.id)).quantityReserved).toBe(powerBefore.quantityReserved); // released and re-held
-    expect((await appRow(id)).capacitySlot).toBe('RESERVED');
-    expect(mockSessionsExpire).toHaveBeenCalledWith(`cs_${TAG}_stale`);
-    expect(res.body.payment.paymentDueAt).toBeTruthy();
-
-    // Corner is now full: a second PAYMENT_DUE application cannot move there.
-    const other = await paymentDue(booth.id, `tier3@${TAG}.test`);
+  it('moving an approved vendor into a full category is 409 and nothing changes', async () => {
+    const taker = await approved(corner.id, `corner@${TAG}.test`, 'Corner Taker');
+    const other = await approved(booth.id, `tier3@${TAG}.test`);
     const boothMid = await tierRow(booth.id);
     const full = await changeTier(other, corner.id);
     expect(full.status).toBe(409);
@@ -258,14 +266,20 @@ describe('Application corrections contract (spec 018 phase 3)', () => {
     expect((await tierRow(corner.id)).quantityReserved).toBe(1);
 
     // Clean up the holds so later tests see free capacity.
-    for (const appId of [id, other]) expect((await decide(appId, 'WITHDRAW')).status).toBe(200);
+    for (const appId of [taker, other]) expect((await decide(appId, 'WITHDRAW')).status).toBe(200);
     expect((await tierRow(corner.id)).quantityReserved).toBe(0);
   });
 
   // ─── Adjustments ─────────────────────────────────────────────────────────
 
-  it('adjustments fold into the tier line: discount recomputes, add-on shares hold within a cent, the floor is the tier price, removal restores', async () => {
-    const id = await submitted(booth.id, `adj1@${TAG}.test`, [{ addOnId: badge.id, quantity: 2 }]);
+  it('adjustments apply once a space is chosen: they fold into the tier line, survive a lapsed hold, and the charge is the adjusted snapshot', async () => {
+    const early = await approved(booth.id, `adj0@${TAG}.test`);
+    const notYet = await adjust(early, { amount: -25, reason: 'Too early' });
+    expect(notYet.status).toBe(409);
+    expect(notYet.body.message).toMatch(/when the vendor chooses a space/);
+    expect((await decide(early, 'WITHDRAW')).status).toBe(200);
+
+    const id = await held(booth.id, `adj1@${TAG}.test`, [{ addOnId: badge.id, quantity: 2 }]);
     const before = (await detail(id)).body;
     const badgeShare = before.addOns[0].applicantPays;
 
@@ -303,20 +317,25 @@ describe('Application corrections contract (spec 018 phase 3)', () => {
     expect(removed.body.decisions.at(-1).note).toBe('Removed +$10.00 Late fee');
     expect((await request(app).delete(`${adminBase()}/applications/${id}/adjustments/nope`).set(...auth(organizerToken))).status).toBe(404);
 
-    // Approve → charge equals the adjusted snapshot; then adjustments are locked.
-    const approved = await decide(id, 'APPROVE');
-    expect(approved.status).toBe(200);
-    expect(approved.body.paymentStatus).toBe('PAID');
-    expect(mockIntentsCreate.mock.calls[0][0].amount).toBe(Math.round(expected.applicantPays * 100));
+    // The hold lapses; choosing again keeps the organizer's discount on the reopened order.
+    await prisma.application.update({ where: { id }, data: { selectionHeldUntil: new Date(Date.now() - 1000) } });
+    expect((await applicationPaymentService.sweepExpiredSelections()).released).toBeGreaterThanOrEqual(1);
+    await giveSavedCard(id);
+    const paid = await select(id, { addOns: [{ addOnId: badge.id, quantity: 2 }], useSavedCard: true });
+    expect(paid.body.paymentStatus).toBe('PAID');
+    expect(mockIntentsCreate.mock.calls.at(-1)[0].amount).toBe(Math.round(expected.applicantPays * 100));
+    const after = (await detail(id)).body;
+    expect(after.adjustments).toHaveLength(1);
+    expect(after.adjustments[0]).toMatchObject({ amount: -25, reason: 'Returning vendor discount' });
     const lockedRes = await adjust(id, { amount: -5, reason: 'late' });
     expect(lockedRes.status).toBe(409);
-    expect(approved.body.amountEditable).toEqual({ allowed: false, reason: 'Already paid — refund part of the amount instead' });
+    expect(after.amountEditable).toEqual({ allowed: false, reason: 'Already paid — refund part of the amount instead' });
   });
 
   // ─── Waive ───────────────────────────────────────────────────────────────
 
-  it('ADMIN waives a PAYMENT_DUE balance: zero snapshot, NOT_REQUIRED, slot confirmed, WAIVER row', async () => {
-    const id = await paymentDue(booth.id, `waive@${TAG}.test`, [{ addOnId: power.id, quantity: 1 }], 'Waived Co');
+  it('ADMIN waives a held balance: zero snapshot, NOT_REQUIRED, slot confirmed, WAIVER row', async () => {
+    const id = await held(booth.id, `waive@${TAG}.test`, [{ addOnId: power.id, quantity: 1 }], 'Waived Co');
     const before = await appRow(id);
     const boothBefore = await tierRow(booth.id);
     const powerBefore = await addOnRow(power.id);
@@ -328,7 +347,7 @@ describe('Application corrections contract (spec 018 phase 3)', () => {
     sentEmails.length = 0;
     const res = await waive(id, { reason: 'Sponsor trade' });
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ status: 'APPROVED', paymentStatus: 'NOT_REQUIRED', paymentSource: 'offline', capacitySlot: 'APPROVED' });
+    expect(res.body).toMatchObject({ status: 'APPROVED', paymentStatus: 'NOT_REQUIRED', paymentSource: 'offline', capacitySlot: 'APPROVED', selectionHeldUntil: null });
     expect(res.body.amounts.applicantPays).toBe(0);
     expect(res.body.amounts.orgReceives).toBe(0);
     expect(res.body.adjustments).toHaveLength(1);
@@ -353,13 +372,12 @@ describe('Application corrections contract (spec 018 phase 3)', () => {
   // ─── Offline payment + manual refund ─────────────────────────────────────
 
   it('ADMIN records an offline payment: PAID / OFFLINE with no Stripe object, slot confirmed; manual refund records without Stripe', async () => {
-    const id = await paymentDue(booth.id, `cheque@${TAG}.test`, [{ addOnId: badge.id, quantity: 1 }], 'Cheque Co');
+    const id = await held(booth.id, `cheque@${TAG}.test`, [{ addOnId: badge.id, quantity: 1 }], 'Cheque Co');
     const before = await appRow(id);
     const due = Number(before.applicantPays);
     const boothBefore = await tierRow(booth.id);
     const badgeBefore = await addOnRow(badge.id);
-    const declinedIntent = before.stripePaymentIntentId;
-    resetStripeMocks(); // the declined approval attempt above is not what this test measures
+    resetStripeMocks();
 
     expect((await offline(id, { method: 'CHEQUE', amount: due }, organizerToken)).status).toBe(403);
     expect((await offline(id, { method: 'PAYPAL', amount: due })).status).toBe(400);
@@ -381,8 +399,7 @@ describe('Application corrections contract (spec 018 phase 3)', () => {
     // Spec 024 phase 2: Jump's receipt (cheque method) then the organizer's OFFLINE_PAID template.
     expect(sentEmails.map((e) => e.subject)).toEqual([expect.stringMatching(/^Receipt for/), expect.stringContaining('Payment received')]);
     expect(sentEmails[0].text).toContain('Payment method: Cheque #1042');
-    // Spec 024: the payment row is the offline record — no Stripe id (the
-    // declined attempt stays in the decision log); no new Stripe object.
+    // Spec 024: the payment row is the offline record — no Stripe id, no Stripe object.
     const row = await appRow(id);
     expect(row.stripePaymentIntentId).toBeNull();
     expect(row.orderStatus).toBe('COMPLETED');
@@ -393,7 +410,6 @@ describe('Application corrections contract (spec 018 phase 3)', () => {
       status: 'SUCCEEDED',
       stripePaymentIntentId: null,
     });
-    expect(declinedIntent).toMatch(/^pi_/);
     expect(mockIntentsCreate).not.toHaveBeenCalled();
     expect(mockSessionsCreate).not.toHaveBeenCalled();
     const boothAfter = await tierRow(booth.id);
@@ -421,16 +437,20 @@ describe('Application corrections contract (spec 018 phase 3)', () => {
     expect(customers.body.data[0]).toMatchObject({ applicationCount: 1, totalSpent: due, totalRefunded: 20 });
   });
 
-  it('organizers may change tier and adjust but not waive or settle; UNASSIGNED sees nothing', async () => {
-    const id = await submitted(booth.id, `roles@${TAG}.test`);
-    expect((await adjust(id, { amount: -5, reason: 'ok' }, organizerToken)).status).toBe(201);
-    expect((await waive(id, { reason: 'x' }, organizerToken)).status).toBe(403);
-    expect((await offline(id, { method: 'CASH', amount: 1 }, organizerToken)).status).toBe(403);
-    // SUBMITTED (not PAYMENT_DUE) cannot be settled offline even by ADMIN.
+  it('organizers may change the category and adjust a chosen space but not waive or settle; UNASSIGNED sees nothing', async () => {
+    const id = await submitted(`roles@${TAG}.test`);
+    expect((await changeTier(id, booth.id, organizerToken)).status).toBe(200);
+    // SUBMITTED (not approved) cannot be settled offline even by ADMIN, nor adjusted (no order).
     expect((await waive(id, { reason: 'x' })).status).toBe(409);
     expect((await offline(id, { method: 'CASH', amount: 1 })).status).toBe(409);
+    expect((await adjust(id, { amount: -5, reason: 'ok' }, organizerToken)).status).toBe(409);
+
+    const chosen = await held(booth.id, `roles2@${TAG}.test`);
+    expect((await adjust(chosen, { amount: -5, reason: 'ok' }, organizerToken)).status).toBe(201);
+    expect((await waive(chosen, { reason: 'x' }, organizerToken)).status).toBe(403);
+    expect((await offline(chosen, { method: 'CASH', amount: 1 }, organizerToken)).status).toBe(403);
     const nobody = await staffToken({ email: `nobody@${TAG}.test`, role: 'UNASSIGNED' });
-    expect((await adjust(id, { amount: -5, reason: 'ok' }, nobody)).status).toBe(403);
+    expect((await adjust(chosen, { amount: -5, reason: 'ok' }, nobody)).status).toBe(403);
     await cleanupStaff([`nobody@${TAG}.test`]);
   });
 });

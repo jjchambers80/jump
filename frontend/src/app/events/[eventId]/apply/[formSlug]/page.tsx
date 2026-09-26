@@ -1,21 +1,25 @@
-// Public application form (spec 011): tier choice (PAID) with optional
-// add-ons (spec 012), contact, business profile with photos, the organizer's
-// questions, submit. Submits as multipart straight to the backend (public
-// route, IP rate-limited there). On success the applicant lands on their
-// status page (token in the URL).
+// Public application form (spec 011): contact, business profile with photos,
+// the organizer's questions, submit. Submits as multipart straight to the
+// backend (public route, IP rate-limited there). On success the applicant
+// lands on their status page (token in the URL).
+//
+// Spec 037 phase 5 (apply-then-choose): nobody picks a category, a space,
+// add-ons or pays here, and there is no Stripe step. Every form submits
+// straight away; on a PAID form the organizer assigns the category when
+// approving and the vendor then chooses their space and pays from the status
+// page.
 //
 // Layout: numbered steps on the left, a sticky summary on the right (below
-// the steps on phones) that carries the running total and the submit button.
-// Tiers are ticket stubs in the event page's torn language (`.tier-stub`).
+// the steps on phones) that explains what happens next and holds the submit
+// button.
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
-import { Check, ImagePlus, Lock, ShieldCheck, X } from 'lucide-react';
+import { FormEvent, ReactNode, useEffect, useState } from 'react';
+import { ImagePlus, Lock, ShieldCheck, X } from 'lucide-react';
 import api from '@/services/api';
-import { acceptanceLine, estimatedApplicantTotal, money, SOCIAL_FIELDS, tierPriceLine, type PublicForm, type PublicTier, type Question } from '@/lib/applications';
-import { acceptancesFor, applyConsentText, cardAuthorizationText, fetchLegalVersions, LEGAL_PAGES_ENABLED, LEGAL_PATHS, type LegalVersions } from '@/lib/legal';
-import AddOnPicker from '@/components/AddOnPicker';
+import { acceptanceLine, SOCIAL_FIELDS, type PublicForm, type Question } from '@/lib/applications';
+import { acceptancesFor, applyConsentText, fetchLegalVersions, LEGAL_PAGES_ENABLED, LEGAL_PATHS, type LegalVersions } from '@/lib/legal';
 import ApplyShell from '../ApplyShell';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
@@ -44,21 +48,19 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
   const [form, setForm] = useState<PublicForm | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [tierId, setTierId] = useState('');
-  const [addOnQty, setAddOnQty] = useState<Record<string, number>>({});
   const [contact, setContact] = useState({ email: '', firstName: '', lastName: '' });
   const [profile, setProfile] = useState({ businessName: '', description: '', website: '' });
   const [socials, setSocials] = useState<Record<string, string>>({});
   const [photos, setPhotos] = useState<File[]>([]);
   const [answers, setAnswers] = useState<Answers>({});
   const [answerPhotos, setAnswerPhotos] = useState<Record<string, File>>({});
-  // Spec 024 phase 3: account (default on, like checkout), marketing, the
-  // data-collection consent, and the card authorization on forms that charge
-  // the saved card at approval. Versions are echoed so a stale one is refused.
+  // Spec 024 phase 3: account (default on, like checkout), marketing and the
+  // data-collection consent. Versions are echoed so a stale one is refused.
+  // No card is saved here any more (spec 037 phase 5), so there is no card
+  // authorization either.
   const [optInAccount, setOptInAccount] = useState(true);
   const [optInMarketing, setOptInMarketing] = useState(false);
   const [consent, setConsent] = useState(false);
-  const [cardAuthorized, setCardAuthorized] = useState(false);
   const [legalVersions, setLegalVersions] = useState<LegalVersions | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,22 +74,11 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
   useEffect(() => {
     api
       .get<PublicForm>(`/events/${params.eventId}/applications/forms/${params.formSlug}`)
-      .then((f) => {
-        setForm(f);
-        if (f.tiers.length === 1) setTierId(f.tiers[0].id);
-      })
+      .then(setForm)
       .catch((err) => setLoadError(err?.message || 'This form is not available'));
   }, [params.eventId, params.formSlug]);
 
-  const selectedTier = useMemo(() => form?.tiers.find((t) => t.id === tierId) ?? null, [form, tierId]);
   const closedLine = form ? acceptanceLine(form.acceptance) : null;
-  // Add-on lines the chosen tier offers with a quantity; another tier may not offer the same ones.
-  const tierAddOns = useMemo(() => selectedTier?.addOns ?? [], [selectedTier]);
-  const addOnLines = useMemo(
-    () => tierAddOns.filter((a) => (addOnQty[a.id] ?? 0) > 0).map((a) => ({ addOnId: a.id, quantity: addOnQty[a.id] })),
-    [tierAddOns, addOnQty]
-  );
-  const estimatedTotal = selectedTier ? estimatedApplicantTotal(selectedTier, addOnQty) : 0;
 
   const setAnswer = (id: string, value: string | string[] | boolean) => setAnswers((prev) => ({ ...prev, [id]: value }));
 
@@ -107,21 +98,11 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
     setPhotos(next);
   };
 
-  const needsCardAuthorization = form?.kind === 'PAID' && form.chargeTiming === 'APPROVAL';
-
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!form || submitting) return;
-    if (form.kind === 'PAID' && !tierId) {
-      setError('Choose an option to continue.');
-      return;
-    }
     if (!consent) {
       setError('Please agree to the collection and storage of your information to continue.');
-      return;
-    }
-    if (needsCardAuthorization && !cardAuthorized) {
-      setError('Please authorize the charge to the card you are about to save.');
       return;
     }
     setSubmitting(true);
@@ -130,14 +111,12 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
       const versions = legalVersions ?? (await fetchLegalVersions());
       const payload = {
         formSlug: form.slug,
-        ...(form.kind === 'PAID' && { tierId }),
-        ...(addOnLines.length > 0 && { addOns: addOnLines }),
         contact,
         profile: { ...profile, socials },
         answers,
         optInAccount,
         optInMarketing,
-        acceptances: acceptancesFor(versions, { cardAuthorization: needsCardAuthorization }),
+        acceptances: acceptancesFor(versions),
       };
       const body = new FormData();
       body.append('payload', JSON.stringify(payload));
@@ -150,10 +129,6 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
         if (data.code === 'LEGAL_VERSION_STALE') setLegalVersions(null);
         throw new Error(data.message || data.error || 'Could not submit your application');
       }
-      if (data.next === 'checkout' && data.checkoutUrl) {
-        window.location.assign(data.checkoutUrl);
-        return;
-      }
       router.push(new URL(data.statusUrl).pathname + new URL(data.statusUrl).search);
     } catch (err) {
       setError((err as Error).message);
@@ -161,21 +136,14 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
     }
   };
 
-  const submitLabel = submitting
-    ? 'Submitting…'
-    : form?.kind === 'PAID' && form.chargeTiming === 'APPROVAL'
-      ? 'Continue to save a card'
-      : form?.kind === 'PAID'
-        ? 'Continue to payment'
-        : 'Submit application';
-  const chargeAmount = selectedTier && form ? (addOnLines.length > 0 ? money(estimatedTotal) : tierPriceLine(selectedTier, form.feeMode)) : '';
+  const submitLabel = submitting ? 'Submitting…' : 'Submit application';
 
   return (
     <ApplyShell eventId={params.eventId} title={form?.name} kicker="Application" width={form && !closedLine && !loadError ? 'wide' : 'narrow'}>
       {() => {
         if (loadError) return <p role="alert" className="text-red-700 dark:text-red-300">{loadError}</p>;
         if (!form) return <p className="text-gray-600 dark:text-slate-400">Loading…</p>;
-        // Steps are numbered in the order they render; PAID forms open with the tier choice.
+        // Steps are numbered in the order they render.
         let step = 0;
         const next = () => ++step;
         if (closedLine) {
@@ -202,26 +170,6 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
                   </p>
                   <p className="mt-2 whitespace-pre-line leading-relaxed text-gray-700 dark:text-slate-300">{form.intro}</p>
                 </div>
-              )}
-
-              {form.kind === 'PAID' && (
-                <Step n={next()} title="Choose an option" hint={form.tiers.length > 1 ? 'Pick the spot that fits. You can add extras after.' : undefined} as="fieldset">
-                  <div className="space-y-3" role="radiogroup" aria-label="Options">
-                    {form.tiers.map((t) => (
-                      <TierOption key={t.id} tier={t} feeMode={form.feeMode} selected={tierId === t.id} onSelect={() => setTierId(t.id)} />
-                    ))}
-                  </div>
-                  {selectedTier && tierAddOns.length > 0 && (
-                    <AddOnPicker
-                      addOns={tierAddOns}
-                      quantities={addOnQty}
-                      onChange={(id, quantity) => setAddOnQty((prev) => ({ ...prev, [id]: quantity }))}
-                      unitPrice={(a) => tierAddOns.find((x) => x.id === a.id)?.applicantPays ?? a.price}
-                      title="Add-ons"
-                      hint="Optional extras for your spot. Charged with your application."
-                    />
-                  )}
-                </Step>
               )}
 
               <Step n={next()} title="Your details" hint="Where the organizer sends their decision.">
@@ -353,16 +301,10 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
                     )}
                   </span>
                 </label>
-                {needsCardAuthorization && selectedTier && (
-                  <label className={choice}>
-                    <input type="checkbox" required checked={cardAuthorized} onChange={(e) => setCardAuthorized(e.target.checked)} className={check} data-testid="apply-card-authorization" />
-                    <span>{cardAuthorizationText({ amount: estimatedTotal, paymentDueDays: form.paymentDueDays, organizationName: form.organizationName })}</span>
-                  </label>
-                )}
               </Step>
             </div>
 
-            {/* Summary: running total and the submit button; sticks beside the steps from lg up */}
+            {/* Summary: what happens next and the submit button; sticks beside the steps from lg up */}
             <aside className="mt-6 lg:sticky lg:top-6 lg:mt-0" aria-label="Application summary">
               <div className="tier-stub-shadow">
                 <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-800">
@@ -372,37 +314,28 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
                   </div>
 
                   <div className="border-t-2 border-dashed border-gray-200 px-5 py-4 dark:border-slate-700">
-                    {form.kind !== 'PAID' ? (
-                      <div className="flex items-baseline justify-between gap-3">
-                        <span className="text-sm text-gray-600 dark:text-slate-400">Cost to apply</span>
-                        <span className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-slate-50">Free</span>
-                      </div>
-                    ) : !selectedTier ? (
-                      <p className="text-sm text-gray-500 dark:text-slate-400">Choose an option to see your total.</p>
-                    ) : (
-                      <div className="space-y-3" data-testid="apply-price-note">
-                        <ul className="space-y-1.5 text-sm tabular-nums text-gray-700 dark:text-slate-300" data-testid="apply-total-line">
-                          <li className="flex justify-between gap-3">
-                            <span className="min-w-0">{selectedTier.name}</span> <span>{money(selectedTier.applicantPays)}</span>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-sm text-gray-600 dark:text-slate-400">Cost to apply</span>
+                      <span className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-slate-50">Free</span>
+                    </div>
+                    {form.kind === 'PAID' && (
+                      <ol className="mt-4 space-y-2.5 text-sm text-gray-700 dark:text-slate-300" data-testid="apply-next-steps" aria-label="What happens next">
+                        {[
+                          ['Apply', 'No payment and no card today.'],
+                          ['Get approved', 'The organizer reviews your application and picks your category.'],
+                          ['Choose your space and pay', 'From the list, or on the floor map when there is one. Your space is held while you pay.'],
+                        ].map(([title, detail], i) => (
+                          <li key={title} className="flex gap-3">
+                            <span aria-hidden className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-gray-300 text-[11px] font-bold tabular-nums text-gray-600 dark:border-slate-600 dark:text-slate-300">
+                              {i + 1}
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block font-semibold text-gray-900 dark:text-slate-100">{title}</span>
+                              <span className="block text-xs leading-relaxed text-gray-500 dark:text-slate-400">{detail}</span>
+                            </span>
                           </li>
-                          {tierAddOns
-                            .filter((a) => (addOnQty[a.id] ?? 0) > 0)
-                            .map((a) => (
-                              <li key={a.id} className="flex justify-between gap-3">
-                                <span className="min-w-0">{a.name} ×{addOnQty[a.id]}</span> <span>{money(a.applicantPays * addOnQty[a.id])}</span>
-                              </li>
-                            ))}
-                          <li className="flex items-baseline justify-between gap-3 border-t border-gray-200 pt-2.5 dark:border-slate-700">
-                            <span className="font-semibold text-gray-900 dark:text-slate-100">Total</span>{' '}
-                            <span className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-slate-50">{money(estimatedTotal)}</span>
-                          </li>
-                        </ul>
-                        <p className="rounded-lg bg-gray-50 px-3 py-2.5 text-xs leading-relaxed text-gray-600 dark:bg-slate-900/50 dark:text-slate-400">
-                          {form.chargeTiming === 'APPROVAL'
-                            ? `You will save a card now and be charged ${chargeAmount} only if your application is accepted.`
-                            : `You will pay ${chargeAmount} when you submit.`}
-                        </p>
-                      </div>
+                        ))}
+                      </ol>
                     )}
                   </div>
 
@@ -421,7 +354,7 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
                     </button>
                     <p className="flex items-center justify-center gap-1.5 text-xs text-gray-500 dark:text-slate-400">
                       <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
-                      {form.kind === 'PAID' ? 'Card details are handled by Stripe' : 'Reviewed by the organizer'}
+                      Reviewed by the organizer
                     </p>
                   </div>
                 </div>
@@ -464,50 +397,6 @@ function Step({ n, title, hint, as = 'section', children }: { n: number; title: 
       <h2>{heading}</h2>
       {body}
     </section>
-  );
-}
-
-/** One tier as a selectable ticket stub: details on the left, the price torn off on the right. */
-function TierOption({ tier: t, feeMode, selected, onSelect }: { tier: PublicTier; feeMode: PublicForm['feeMode']; selected: boolean; onSelect: () => void }) {
-  const detail = tierPriceLine(t, feeMode).replace(/^\$[\d,.]+\s*/, '');
-  return (
-    <label className="tier-stub-shadow block cursor-pointer rounded-2xl has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-link has-[:focus-visible]:ring-offset-2 dark:has-[:focus-visible]:ring-offset-slate-900" data-selected={selected}>
-      <span
-        className={`tier-stub relative grid grid-cols-1 overflow-hidden rounded-2xl border bg-white transition-colors duration-200 dark:bg-slate-800 sm:grid-cols-[minmax(0,1fr)_10rem] ${
-          selected ? 'border-brand-link' : 'border-gray-200 hover:border-gray-300 dark:border-slate-700 dark:hover:border-slate-600'
-        }`}
-      >
-        <span aria-hidden className={`absolute inset-y-0 left-0 w-1 bg-brand transition-opacity duration-200 ${selected ? 'opacity-100' : 'opacity-0'}`} />
-        <span className="flex min-w-0 items-start gap-3 py-4 pl-5 pr-4 sm:py-5">
-          <span
-            aria-hidden
-            className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-              selected ? 'border-brand bg-brand text-brand-fg' : 'border-gray-300 dark:border-slate-600'
-            }`}
-          >
-            {selected && <Check className="h-3 w-3" strokeWidth={3.5} />}
-          </span>
-          <span className="min-w-0">
-            <span className="block text-[17px] font-semibold leading-snug tracking-tight text-gray-900 dark:text-slate-100">{t.name}</span>
-            {t.description && <span className="mt-1 block text-sm leading-relaxed text-gray-600 dark:text-slate-400">{t.description}</span>}
-            {t.soldOut && (
-              <span className="mt-2 inline-block rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800 ring-1 ring-inset ring-amber-200 dark:bg-amber-400/10 dark:text-amber-300 dark:ring-amber-400/30">
-                Full — you can still apply for the waitlist
-              </span>
-            )}
-          </span>
-        </span>
-        <span className="relative flex h-16 items-center justify-between gap-3 border-t-2 border-dashed border-gray-200 pl-5 pr-4 dark:border-slate-700 sm:h-auto sm:flex-col sm:justify-center sm:gap-0.5 sm:border-l-2 sm:border-t-0 sm:px-2 sm:py-4 sm:text-center">
-          <span aria-hidden className={`pointer-events-none absolute inset-0 bg-brand transition-opacity duration-200 ${selected ? 'opacity-[0.07] dark:opacity-[0.12]' : 'opacity-0'}`} />
-          <span className="relative text-xl font-extrabold tabular-nums tracking-tight text-gray-900 dark:text-slate-50 sm:text-2xl">
-            {t.applicantPays === 0 ? 'Free' : money(t.applicantPays)}
-          </span>
-          {detail && <span className="relative text-xs text-gray-500 dark:text-slate-400">{detail}</span>}
-        </span>
-        {/* The real radio spans the card, invisible, so a click anywhere selects it */}
-        <input type="radio" name="tier" value={t.id} checked={selected} onChange={onSelect} className="absolute inset-0 z-10 m-0 h-full w-full cursor-pointer appearance-none opacity-0" />
-      </span>
-    </label>
   );
 }
 

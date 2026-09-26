@@ -58,8 +58,9 @@ export function useApplicationsApi(eventId: string) {
       list: (query: ListQuery) => api.get<ApplicationList>(`${base}/applications${qs(query)}`),
       summary: () => api.get<Record<string, number>>(`${base}/applications/summary`),
       get: (id: string) => api.get<AdminApplication>(`${base}/applications/${id}`),
-      preview: (id: string, decision: Decision) => api.post<{ subject: string; body: string }>(`${base}/applications/${id}/preview`, { decision }),
-      decide: (id: string, body: { decision: Decision; note?: string; message?: { subject: string; body: string } | null; sendEmail?: boolean }) =>
+      preview: (id: string, decision: Decision, tierId?: string) =>
+        api.post<{ subject: string; body: string }>(`${base}/applications/${id}/preview`, { decision, ...(tierId && { tierId }) }),
+      decide: (id: string, body: { decision: Decision; tierId?: string; note?: string; message?: { subject: string; body: string } | null; sendEmail?: boolean }) =>
         api.post<AdminApplication>(`${base}/applications/${id}/decision`, body),
       bulk: (body: { ids: string[]; decision: Decision; note?: string }) =>
         api.post<{ results: { id: string; ok: boolean; error?: string }[]; succeeded: number; failed: number }>(`${base}/applications/bulk`, body),

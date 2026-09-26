@@ -1,7 +1,10 @@
 // Booth Service (spec 014 phase 1)
 // Manual booth assignment operations: assign, unassign, move, setStatus.
 // Every mutation starts with SELECT … FOR UPDATE on the affected booth row(s).
-// Phase 2 will add hold / release / sold here.
+// Phase 2 added hold / release / sold. Spec 037 phase 5: a booth is chosen as
+// the vendor's space selection (ApplicationService.select), and a tier is
+// "map-bound" when the event's published map has booths bound to it — the
+// never-settable ApplicationTier.mapBound flag is no longer read.
 
 import { prisma } from '@jump/db';
 import { ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
@@ -15,16 +18,41 @@ function coded(error, code) {
 
 class BoothService {
   /**
-   * Hold one published, tier-matched booth for an approved applicant. The
-   * application row is locked first so two simultaneous requests by the same
-   * applicant cannot create separate holds; the booth row lock serializes
-   * competing applicants for the same inventory.
+   * Spec 037 phase 5: application tiers sold from the event's published floor
+   * map — the ones with at least one booth bound to them.
+   * @returns {Promise<Set<string>>}
    */
-  async chooseBooth(applicationId, boothId, { tx = null } = {}) {
+  async mapBoundTierIds(eventId, { tx = prisma } = {}) {
+    const rows = await tx.booth.findMany({
+      where: { tierId: { not: null }, map: { eventId, status: 'PUBLISHED' } },
+      select: { tierId: true },
+      distinct: ['tierId'],
+    });
+    return new Set(rows.map((r) => r.tierId));
+  }
+
+  /** Whether one tier is sold from the event's published map (spec 037 phase 5). */
+  async isMapBound(eventId, tierId, { tx = prisma } = {}) {
+    if (!eventId || !tierId) return false;
+    const booth = await tx.booth.findFirst({
+      where: { tierId, map: { eventId, status: 'PUBLISHED' } },
+      select: { id: true },
+    });
+    return Boolean(booth);
+  }
+
+  /**
+   * Hold one published, tier-matched booth as an approved vendor's space
+   * selection (spec 037 phase 5). Runs inside the selection transaction, which
+   * has already locked the application row; the booth row lock serializes
+   * competing vendors for the same booth. `holdExpiresAt` is the selection's
+   * hold, so the booth and the application lapse together.
+   */
+  async chooseBooth(applicationId, boothId, { tx = null, holdExpiresAt = null } = {}) {
     if (!boothId || typeof boothId !== 'string') {
       throw coded(new ValidationError('boothId is required'), 'INVALID_PURCHASE');
     }
-    if (!tx) return prisma.$transaction((inner) => this.chooseBooth(applicationId, boothId, { tx: inner }));
+    if (!tx) return prisma.$transaction((inner) => this.chooseBooth(applicationId, boothId, { tx: inner, holdExpiresAt }));
 
     const lockedApplication = await tx.$queryRawUnsafe(
       'SELECT "id" FROM "Application" WHERE "id" = $1 FOR UPDATE',
@@ -34,31 +62,21 @@ class BoothService {
 
     const application = await tx.application.findUnique({
       where: { id: applicationId },
-      select: {
-        id: true,
-        status: true,
-        paymentStatus: true,
-        tierId: true,
-        boothLabel: true,
-        tier: { select: { id: true, mapBound: true } },
-      },
+      select: { id: true, status: true, paymentStatus: true, tierId: true },
     });
     if (!application || application.status !== 'APPROVED') {
       throw coded(new ValidationError('Only an approved application can choose a booth'), 'APPLICATION_NOT_APPROVED');
     }
-    if (application.paymentStatus !== 'PAYMENT_DUE') {
-      throw coded(new ValidationError('This application is not awaiting payment'), 'NOT_PAYMENT_DUE');
+    if (application.paymentStatus !== 'AWAITING_SELECTION') {
+      throw coded(new ConflictError('This application is not choosing a space'), 'NOT_AWAITING_SELECTION');
     }
     if (!application.tierId) {
-      throw coded(new ValidationError('This application has no tier'), 'NO_TIER');
-    }
-    if (!application.tier?.mapBound) {
-      throw coded(new ValidationError('This application tier is not sold from a floor map'), 'FORM_NOT_MAP_BOUND');
+      throw coded(new ValidationError('This application has no category yet'), 'NO_TIER');
     }
 
     const existing = await tx.booth.findFirst({
       where: {
-        OR: [{ applicationId }, { holdApplicationId: applicationId }],
+        OR: [{ applicationId }, { holdApplicationId: applicationId, status: 'HELD' }],
       },
       select: { id: true, status: true, applicationId: true, holdApplicationId: true },
     });
@@ -78,26 +96,26 @@ class BoothService {
       throw coded(new ConflictError('This booth is no longer available'), 'BOOTH_TAKEN');
     }
     if (booth.tierId !== application.tierId) {
-      throw coded(new ValidationError('This booth belongs to a different tier'), 'BOOTH_TIER_MISMATCH');
+      throw coded(new ValidationError('This booth belongs to a different category'), 'BOOTH_TIER_MISMATCH');
     }
-    const map = await tx.floorMap.findUnique({ where: { id: booth.mapId }, select: { status: true } });
+    const map = await tx.floorMap.findUnique({ where: { id: booth.mapId }, select: { status: true, eventId: true } });
     if (!map || map.status !== 'PUBLISHED') {
       throw coded(new ValidationError('This floor map is not published'), 'MAP_NOT_PUBLISHED');
     }
 
-    const holdExpiresAt = new Date(Date.now() + BOOTH_HOLD_MS);
+    const expires = holdExpiresAt || new Date(Date.now() + BOOTH_HOLD_MS);
     await tx.booth.update({
       where: { id: boothId },
       data: {
         status: 'HELD',
         holdApplicationId: applicationId,
-        holdExpiresAt,
+        holdExpiresAt: expires,
         applicationId: null,
         assignedById: null,
       },
     });
-    logger.info('Booth held for purchase', { event: 'booth_held', boothId, applicationId, holdExpiresAt });
-    return { boothId, holdExpiresAt, status: 'HELD' };
+    logger.info('Booth held for purchase', { event: 'booth_held', boothId, applicationId, holdExpiresAt: expires });
+    return { boothId, label: booth.label, holdExpiresAt: expires, status: 'HELD' };
   }
 
   /** Guard a map-bound settlement and protect its booth while payment is in flight. */
@@ -221,8 +239,11 @@ class BoothService {
       const outcome = await prisma.$transaction(async (tx) => {
         const [booth] = await tx.$queryRawUnsafe('SELECT * FROM "Booth" WHERE "id" = $1 FOR UPDATE', candidate.id);
         if (!booth || booth.status !== 'HELD' || !booth.holdApplicationId || !booth.holdExpiresAt || booth.holdExpiresAt > now) return 'skip';
-        const application = await tx.application.findUnique({ where: { id: booth.holdApplicationId }, select: { paymentStatus: true } });
+        const application = await tx.application.findUnique({ where: { id: booth.holdApplicationId }, select: { paymentStatus: true, selectionHeldUntil: true } });
         if (application && ['PROCESSING', 'PAID'].includes(application.paymentStatus)) return 'protected';
+        // Spec 037 phase 5: a space selection lapses as a whole (booth, category
+        // slot, add-ons, order) in ApplicationPaymentService.sweepExpiredSelections.
+        if (application?.selectionHeldUntil) return 'skip';
         await tx.booth.update({
           where: { id: booth.id },
           data: { status: 'AVAILABLE', holdApplicationId: null, holdExpiresAt: null, applicationId: null, assignedById: null },
@@ -530,17 +551,24 @@ class BoothService {
       include: {
         profile: { select: { businessName: true } },
         contact: { select: { firstName: true, lastName: true, email: true } },
-        tier: { select: { id: true, name: true, price: true, mapBound: true } },
+        tier: { select: { id: true, name: true, price: true } },
       },
       orderBy: [{ tier: { displayOrder: 'asc' } }, { profile: { businessName: 'asc' } }],
     });
+    // Spec 037 phase 5: a tier is map-bound when this map has booths on it.
+    const boundRows = await prisma.booth.findMany({
+      where: { mapId, tierId: { not: null } },
+      select: { tierId: true },
+      distinct: ['tierId'],
+    });
+    const boundTierIds = new Set(boundRows.map((b) => b.tierId));
 
     return applications.map((a) => ({
       id: a.id,
       businessName: a.profile?.businessName || null,
       contactName: `${a.contact.firstName} ${a.contact.lastName}`.trim(),
       email: a.contact.email,
-      tier: a.tier ? { id: a.tier.id, name: a.tier.name, price: Number(a.tier.price), mapBound: a.tier.mapBound } : null,
+      tier: a.tier ? { id: a.tier.id, name: a.tier.name, price: Number(a.tier.price), mapBound: boundTierIds.has(a.tier.id) } : null,
       tierMatch: booth?.tierId ? a.tierId === booth.tierId : true,
       status: a.status,
     }));

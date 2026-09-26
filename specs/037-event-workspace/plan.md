@@ -1,6 +1,6 @@
 # Spec 037: Event workspace, vendor apply-then-choose, add-on library
 
-Status: **approved 2026-09-26 (decisions §0).** Phase 0 = PR #211, phase 1 = PR #212, phase 2 = navigation PR.
+Status: **approved 2026-09-26 (decisions §0).** Phase 0 = PR #211, phase 1 = PR #212, phase 2 = navigation PR. Phase 5 (apply-then-choose, per D4–D7: no `spaceSelection` column) = feat/037-phase5-apply-then-choose.
 Created 2026-09-26 from `main` @ 3240a3c.
 
 Scope, as requested:

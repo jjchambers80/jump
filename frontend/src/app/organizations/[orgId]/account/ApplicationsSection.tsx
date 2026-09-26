@@ -3,15 +3,33 @@
 // Applications section of the buyer account page (spec 011): this
 // organization's applications with status, payment state, withdraw, and
 // (phase 2) pay-now for an outstanding balance or replacing the saved card.
-// Approved vendors on a map-bound tier choose and buy their booth inline
-// (spec 014 phase 2).
+// Approved vendors on a PAID form choose their space (list or map) and pay
+// inline (spec 037 phase 5, ChooseSpace).
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { addOnSummary, formatDate, money, needsBoothPicker, PAYMENT_LABEL, STATUS_LABEL, STATUS_STYLE, type ApplicantApplication } from '@/lib/applications';
-import { mapsApi } from '@/services/api';
-import BoothPicker from '@/components/maps/BoothPicker';
+import { addOnSummary, formatDate, money, needsSpaceChoice, PAYMENT_LABEL, STATUS_LABEL, STATUS_STYLE, type AddOnLineInput, type ApplicantApplication } from '@/lib/applications';
+import type { ChooseBoothResult } from '@/services/api';
+import ChooseSpace, { type SpaceApi } from '@/components/applications/ChooseSpace';
 import { formatEventDate } from '@/lib/eventTime';
+
+/** POST through the buyer proxy; errors carry `status` / `code` like `services/api`. */
+async function buyerPost<T>(path: string, body: unknown = {}): Promise<T> {
+  const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw { status: res.status, code: data.code, message: data.message || data.error || 'Something went wrong' };
+  return data as T;
+}
+
+function spaceApiFor(id: string): SpaceApi {
+  const base = `/api/buyer/me/applications/${encodeURIComponent(id)}`;
+  return {
+    select: (body: { boothId?: string | null; addOns: AddOnLineInput[]; useSavedCard?: boolean }) =>
+      buyerPost<ChooseBoothResult & { orderRef?: string | null }>(`${base}/select`, body),
+    pay: () => buyerPost<{ url: string }>(`${base}/pay`),
+    release: () => buyerPost(`${base}/release`),
+  };
+}
 
 export default function ApplicationsSection() {
   const [apps, setApps] = useState<ApplicantApplication[] | null>(null);
@@ -30,14 +48,6 @@ export default function ApplicationsSection() {
     setApps(list);
     return list;
   }, []);
-
-  /** Pay-now for a booth the picker holds: same proxy as the Pay button, but the picker follows the URL. */
-  const payNowUrl = async (app: ApplicantApplication) => {
-    const res = await fetch(`/api/buyer/me/applications/${app.id}/pay`, { method: 'POST' });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok || !body.url) throw new Error(body.message || body.error || 'Could not open checkout');
-    return { url: body.url as string };
-  };
 
   useEffect(() => {
     load();
@@ -84,8 +94,8 @@ export default function ApplicationsSection() {
       )}
       <ul className="space-y-3">
         {apps.map((a) => {
-          const pickBooth = needsBoothPicker(a);
-          const pickerOpen = pickBooth && (pickerId === a.id || a.booth?.status === 'HELD');
+          const choosing = needsSpaceChoice(a);
+          const pickerOpen = choosing && (pickerId === a.id || a.selection?.state === 'HELD');
           return (
           <li key={a.id} className="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-4 space-y-3">
           <div className="flex items-center justify-between gap-4">
@@ -95,7 +105,7 @@ export default function ApplicationsSection() {
               </p>
               <p className="text-sm text-gray-600 dark:text-slate-400">
                 {formatEventDate(a.event.date, a.event.timezone)} · {a.profile.businessName}
-                {a.form.kind === 'PAID' ? ` · ${PAYMENT_LABEL[a.paymentStatus]}${a.amounts.applicantPays > 0 ? ` ${money(a.amounts.applicantPays)}` : ''}${a.paymentStatus === 'PAYMENT_DUE' && a.paymentDueAt ? ` by ${formatDate(a.paymentDueAt)}` : ''}` : ''}
+                {a.form.kind === 'PAID' ? ` · ${PAYMENT_LABEL[a.paymentStatus]}${a.amounts.applicantPays > 0 ? ` ${money(a.amounts.applicantPays)}` : ''}${['PAYMENT_DUE', 'AWAITING_SELECTION'].includes(a.paymentStatus) && a.paymentDueAt ? ` by ${formatDate(a.paymentDueAt)}` : ''}` : ''}
                 {a.booth && a.booth.status !== 'HELD' ? ` · Booth ${a.booth.label}` : a.boothLabel && !a.booth ? ` · ${a.boothLabel}` : ''}
                 {a.orderRef ? <span className="font-mono"> · Order {a.orderRef}</span> : null}
               </p>
@@ -104,9 +114,9 @@ export default function ApplicationsSection() {
               )}
             </div>
             <div className="flex items-center gap-3 shrink-0">
-              {pickBooth ? (
-                <button type="button" onClick={() => setPickerId((id) => (id === a.id ? null : a.id))} data-testid="account-application-choose-booth" aria-expanded={pickerOpen} className="rounded-md bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-60">
-                  {a.booth?.status === 'HELD' ? 'Finish buying booth' : pickerOpen ? 'Hide map' : 'Choose your booth'}
+              {choosing ? (
+                <button type="button" onClick={() => setPickerId((id) => (id === a.id ? null : a.id))} data-testid="account-application-choose-space" aria-expanded={pickerOpen} className="rounded-md bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-60">
+                  {a.selection?.state === 'HELD' ? 'Finish paying' : pickerOpen ? 'Hide' : 'Choose your space'}
                 </button>
               ) : a.canPay && (
                 <button type="button" onClick={() => checkout(a, 'pay')} disabled={busyId === a.id} data-testid="account-application-pay" className="rounded-md bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-60">
@@ -131,13 +141,7 @@ export default function ApplicationsSection() {
           </div>
           {pickerOpen && (
             <div className="border-t border-gray-200 pt-3 dark:border-slate-700">
-              <BoothPicker
-                eventId={a.event.id}
-                application={a}
-                chooseBooth={(boothId) => mapsApi.chooseBoothForContact(a.id, boothId)}
-                payNow={() => payNowUrl(a)}
-                refresh={async () => (await load()).find((x) => x.id === a.id) ?? null}
-              />
+              <ChooseSpace application={a} spaceApi={spaceApiFor(a.id)} refresh={async () => (await load()).find((x) => x.id === a.id) ?? null} />
             </div>
           )}
           </li>

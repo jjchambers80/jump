@@ -26,6 +26,18 @@ const ADMIN_INCLUDE = {
   _count: { select: { orderLines: true } },
 };
 
+/**
+ * Application orders whose add-on lines count in reports: not a DRAFT, and
+ * the live order (spec 037 phase 5) — a CANCELLED order on an application
+ * still in play is an expired selection whose lines were given back; a
+ * rejected / withdrawn application keeps its cancelled order as history.
+ */
+const APPLICATION_LINE_ORDER = {
+  kind: 'APPLICATION',
+  application: { status: { not: 'DRAFT' } },
+  OR: [{ status: { not: 'CANCELLED' } }, { application: { status: { in: ['REJECTED', 'WITHDRAWN'] } } }],
+};
+
 class AddOnService {
   // ---------------------------------------------------------------------------
   // CRUD (ADMIN, org-scoped through the event's venue)
@@ -548,7 +560,7 @@ class AddOnService {
                 refundedAt: null,
                 order: { kind: 'TICKET', status: { in: ['COMPLETED', 'PARTIALLY_REFUNDED'] } },
               },
-              { order: { kind: 'APPLICATION', application: { status: { not: 'DRAFT' } } } },
+              { order: APPLICATION_LINE_ORDER },
             ],
           },
           select: {
@@ -627,7 +639,7 @@ class AddOnService {
         addOn: { eventId },
         OR: [
           { order: { kind: 'TICKET', status: { not: 'PENDING' } } },
-          { order: { kind: 'APPLICATION', application: { status: { not: 'DRAFT' } } } },
+          { order: APPLICATION_LINE_ORDER },
         ],
       },
       include: {

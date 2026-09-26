@@ -1144,6 +1144,8 @@ class EventService {
         total: APPLICATION_STATES.reduce((s, k) => s + counts[k], 0),
         approvedSettled: approvedPaid,
         approvedAwaitingPayment: counts.APPROVED - approvedPaid,
+        // Spec 037 phase 5: approved, still choosing a space (a subset of awaiting payment).
+        approvedAwaitingSpace: countFor(appsByPayment, f.id, 'paymentStatus', 'AWAITING_SELECTION'),
         tiers: f.tiers.map((t) => ({
           id: t.id,
           name: t.name,

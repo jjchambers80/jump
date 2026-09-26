@@ -15,7 +15,8 @@ const primary = 'rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text
 
 const ACTION_LABEL: Record<TemplateAction, string> = {
   RECEIVED: 'Application received',
-  APPROVED: 'Approved',
+  APPROVED: 'Approved (free forms; paid forms once the space is paid)',
+  CHOOSE_SPACE: 'Approved: choose your space (paid forms)',
   REJECTED: 'Rejected',
   WAITLISTED: 'Waitlisted',
   WITHDRAWN: 'Withdrawn',
