@@ -57,7 +57,17 @@ describe('Apply-then-choose backfill (spec 037 phase 5, D6)', () => {
     firstCome = await prisma.applicationForm.create({ data: { eventId: event.id, kind: 'PAID', name: 'Trucks', slug: `${TAG}-t`, status: 'OPEN', reserveOnApproval: false } });
     tier = await prisma.applicationTier.create({ data: { formId: reserving.id, name: '10x10', price: 200, quantityTotal: 10, quantityReserved: 1, quantityApproved: 1 } });
     fcTier = await prisma.applicationTier.create({ data: { formId: firstCome.id, name: 'Truck', price: 100, quantityTotal: 5, quantityReserved: 1 } });
-    addOn = await prisma.addOn.create({ data: { eventId: event.id, name: 'Power', price: 50, scope: 'APPLICATION', quantityTotal: 5, quantityReserved: 1 } });
+    addOn = await prisma.addOn.create({
+      data: {
+        event: { connect: { id: event.id } },
+        product: { create: { organizationId: org.id, name: 'Power', defaultPrice: 50, scope: 'APPLICATION' } },
+        name: 'Power',
+        price: 50,
+        scope: 'APPLICATION',
+        quantityTotal: 5,
+        quantityReserved: 1,
+      },
+    });
     map = await prisma.floorMap.create({ data: { organizationId: org.id, eventId: event.id, name: 'Hall', status: 'PUBLISHED', width: 40, height: 40, layout: { version: 1, elements: [] }, publishedAt: new Date() } });
 
     await application('draft', reserving, tier.id, { status: 'DRAFT', paymentStatus: 'AWAITING_CARD', optInMarketing: true });

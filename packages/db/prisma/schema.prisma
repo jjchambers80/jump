@@ -664,12 +664,12 @@ model OrganizationPerson {
 }
 
 model Venue {
-  id             String  @id @default(cuid())
+  id             String              @id @default(cuid())
   organizationId String
   name           String
   // Public namespace is /venues/:slug, so venue slugs are globally unique.
-  slug           String  @unique @default(cuid())
-  slugCustomized Boolean @default(false)
+  slug           String              @unique @default(cuid())
+  slugCustomized Boolean             @default(false)
   address        String
   city           String?
   state          String?
@@ -713,7 +713,7 @@ model Contact {
   emailUnsubscribedAt   DateTime?
   accountCreatedAt      DateTime? // null = guest checkout; set = login-enabled buyer account
   phone                 String?
-  tags                  String[]              @default([])
+  tags                  String[]               @default([])
   stripeCustomerId      String?                @unique // spec 011: platform-account Customer holding the applicant's saved card
 
   createdAt DateTime @default(now())
@@ -779,18 +779,18 @@ model BuyerLoginToken {
 }
 
 model Event {
-  id             String      @id @default(cuid())
-  venueId        String
-  name           String
+  id               String        @id @default(cuid())
+  venueId          String
+  name             String
   // Public namespace is /events/:slug, so event slugs are globally unique.
-  slug           String      @unique @default(cuid())
-  slugCustomized Boolean     @default(false)
-  description    String?
-  logoUrl        String?
-  imageId        String?
-  date           DateTime
-  capacity       Int
-  category       String?
+  slug             String        @unique @default(cuid())
+  slugCustomized   Boolean       @default(false)
+  description      String?
+  logoUrl          String?
+  imageId          String?
+  date             DateTime
+  capacity         Int
+  category         String?
   status           EventStatus   @default(DRAFT)
   admissionMode    AdmissionMode @default(TICKETED)
   rsvpLimit        Int?
@@ -1235,22 +1235,22 @@ enum BoothStatus {
 }
 
 model FloorMap {
-  id              String         @id @default(cuid())
-  organizationId  String
-  eventId         String         @unique // one map per event in v1
-  name            String
-  status          FloorMapStatus @default(DRAFT)
-  unit            String         @default("ft") // display only
-  gridSize        Int            @default(10) // px per grid unit in the editor
-  width           Int // grid units
-  height          Int
-  underlayFileId  String? // StoreFile
-  underlayOpacity Int            @default(40)
-  layout          Json // { version: 1, elements: [...] }
+  id                    String         @id @default(cuid())
+  organizationId        String
+  eventId               String         @unique // one map per event in v1
+  name                  String
+  status                FloorMapStatus @default(DRAFT)
+  unit                  String         @default("ft") // display only
+  gridSize              Int            @default(10) // px per grid unit in the editor
+  width                 Int // grid units
+  height                Int
+  underlayFileId        String? // StoreFile
+  underlayOpacity       Int            @default(40)
+  layout                Json // { version: 1, elements: [...] }
   createdFromTemplateId String? // informational; templates are snapshots, not parents
-  publishedAt     DateTime?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  publishedAt           DateTime?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   event        Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
@@ -1535,7 +1535,6 @@ model ApplicationTier {
   isActive         Boolean @default(true)
   // Spec 014 flag, never settable. Spec 037 phase 5 derives map binding from the
   // event's published map (booths bound to the tier) instead; dropped in phase 6.
-  mapBound         Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1626,10 +1625,10 @@ model Application {
   optInsAppliedAt DateTime?
 
   // Card on file (spec 011 phase 2)
-  stripeCheckoutSessionId String? @unique
+  stripeCheckoutSessionId String?   @unique
   stripePaymentMethodId   String?
-  chargeAttempts          Int     @default(0)
-  overdue                 Boolean @default(false) // set by the sweep when the payment clock passes
+  chargeAttempts          Int       @default(0)
+  overdue                 Boolean   @default(false) // set by the sweep when the payment clock passes
   // Spec 037 phase 5: while set, the vendor holds a space (a booth, or a slot
   // in the category) and its order is PENDING; the selection sweep releases
   // it when this passes and no payment is in flight.
@@ -1643,15 +1642,15 @@ model Application {
   withdrawnBy     WithdrawnBy?
   withdrawReason  String?
   boothLabel      String?
-  publicProfile   Boolean      @default(true) // spec 014: organizer-controlled public vendor directory opt-in
-  tags            String[]     @default([]) // spec 019 phase 3: free-form organizer tags
+  publicProfile   Boolean        @default(true) // spec 014: organizer-controlled public vendor directory opt-in
+  tags            String[]       @default([]) // spec 019 phase 3: free-form organizer tags
   checkedInAt     DateTime? // spec 019 phase 3: on-site check-in (APPROVED only)
   checkedOutAt    DateTime?
   // Door check-in (spec 036): who recorded the arrival and how. `checkedInById`
   // is null for a stamp made by a hardware reader or an older toggle.
   checkedInById   String?
   checkedInVia    CheckInMethod?
-  statusTokenHash String       @unique // guest status-page token, sha256 of the raw token
+  statusTokenHash String         @unique // guest status-page token, sha256 of the raw token
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1779,7 +1778,7 @@ model AddOn {
   eventId          String
   // Spec 037: the saved add-on this offering sells. Nullable until the dedupe
   // backfill (db:backfill:037-add-ons) has linked every legacy row.
-  productId        String?
+  productId        String
   name             String
   description      String?
   price            Decimal    @db.Decimal(10, 2)
@@ -1797,11 +1796,12 @@ model AddOn {
   updatedAt DateTime @updatedAt
 
   event            Event                  @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  product          AddOnProduct?          @relation(fields: [productId], references: [id], onDelete: SetNull)
+  product          AddOnProduct           @relation(fields: [productId], references: [id], onDelete: Restrict)
   priceTiers       PriceTierAddOn[]
   applicationTiers ApplicationTierAddOn[]
   orderLines       OrderAddOn[]
 
+  @@unique([eventId, productId]) // spec 037 4c: one offering of a saved add-on per event
   @@index([eventId, isActive])
   @@index([productId])
 }
