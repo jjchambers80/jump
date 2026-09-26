@@ -64,7 +64,9 @@ describe('MapService', () => {
       mockPrisma.$transaction = jest.fn(async (fn) => {
         const mockTx = {
           floorMap: { update: jest.fn() },
-          booth: { findMany: jest.fn().mockResolvedValue([{ tierId: 'tier_1' }, { tierId: 'tier_1' }, { tierId: 'tier_2' }]) },
+          // Every booth tier must come back from the event-scoped lookup, or
+          // publish refuses with TIER_NOT_ON_EVENT before the oversold check.
+          booth: { findMany: jest.fn().mockResolvedValue([{ tierId: 'tier_1' }, { tierId: 'tier_1' }]) },
           applicationTier: {
             findMany: jest.fn().mockResolvedValue([
               { id: 'tier_1', name: 'Standard', quantityApproved: 3, quantityReserved: 0, form: { chargeTiming: 'APPROVAL', name: 'Vendor' } },
