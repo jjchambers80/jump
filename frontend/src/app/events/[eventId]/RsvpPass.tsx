@@ -11,6 +11,7 @@ import Link from 'next/link';
 import { CalendarPlus, Check, Minus, Plus } from 'lucide-react';
 import { rsvpApi } from '../../../services/api';
 import { formatEventDate, formatEventTime } from '@/lib/eventTime';
+import { dateTile } from '@/lib/dateTile';
 import { acceptancesFor, LEGAL_PAGES_ENABLED, LEGAL_PATHS, type LegalVersions } from '@/lib/legal';
 
 export interface RsvpPassEvent {
@@ -36,12 +37,6 @@ const inputClass =
   'block h-11 w-full rounded-lg border border-gray-300 bg-white px-3.5 text-[15px] text-gray-900 placeholder:text-gray-400 shadow-sm shadow-gray-900/[0.02] transition-colors focus:border-brand-link focus:outline-none focus:ring-1 focus:ring-brand-link dark:border-slate-600 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500';
 
 const labelClass = 'mb-1.5 block text-[13px] font-medium text-gray-700 dark:text-slate-300';
-
-/** "Sat, Dec 26, 2026" → tile parts, in the venue's zone (spec 033). */
-function dateTile(date: string, zone?: string) {
-  const match = formatEventDate(date, zone, { weekday: 'short', month: 'short' }).match(/^(\w+), (\w+) (\d+), (\d+)$/);
-  return match ? { weekday: match[1], month: match[2], day: match[3] } : null;
-}
 
 /** Scarcity only once it means something: ≤ 10 spots or the last 20 %. */
 function scarcity(limit?: number | null, remaining?: number | null) {

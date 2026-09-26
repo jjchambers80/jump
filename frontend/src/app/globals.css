@@ -67,3 +67,55 @@ body {
     radial-gradient(circle var(--notch) at right var(--notch-y), transparent 97%, #000 100%);
   mask-composite: intersect;
 }
+
+/*
+ * Storefront event stub (components/storefront/EventStub.tsx): the same
+ * torn-ticket language as the RSVP pass, turned sideways. Two notches cut at
+ * the top and bottom of the perforation between the date tile and the body.
+ * --notch-x must equal the date tile width (w-20 = 5rem, sm:w-28 = 7rem).
+ * The mask also clips box-shadow, so the shadow lives on the parent as a
+ * drop-shadow filter, which follows the notched shape.
+ */
+.event-stub {
+  --notch: 9px;
+  --notch-x: 5rem;
+  -webkit-mask:
+    radial-gradient(circle var(--notch) at var(--notch-x) top, transparent 97%, #000 100%),
+    radial-gradient(circle var(--notch) at var(--notch-x) bottom, transparent 97%, #000 100%);
+  -webkit-mask-composite: source-in;
+  mask:
+    radial-gradient(circle var(--notch) at var(--notch-x) top, transparent 97%, #000 100%),
+    radial-gradient(circle var(--notch) at var(--notch-x) bottom, transparent 97%, #000 100%);
+  mask-composite: intersect;
+}
+
+@media (min-width: 640px) {
+  .event-stub {
+    --notch-x: 7rem;
+  }
+}
+
+.event-stub-shadow {
+  filter: drop-shadow(0 1px 1px rgb(15 23 42 / 0.06)) drop-shadow(0 2px 6px rgb(15 23 42 / 0.05));
+  transition: filter 200ms ease, transform 200ms ease;
+}
+
+.event-stub-shadow:hover,
+.event-stub-shadow:focus-within {
+  filter: drop-shadow(0 2px 3px rgb(15 23 42 / 0.08)) drop-shadow(0 12px 24px rgb(15 23 42 / 0.12));
+}
+
+.dark .event-stub-shadow {
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.35));
+}
+
+.dark .event-stub-shadow:hover,
+.dark .event-stub-shadow:focus-within {
+  filter: drop-shadow(0 12px 24px rgb(0 0 0 / 0.45));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .event-stub-shadow:hover {
+    transform: translateY(-2px);
+  }
+}

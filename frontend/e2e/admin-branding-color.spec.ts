@@ -169,7 +169,7 @@ test('public organization, venue, and event cards inherit the saved brand color'
   await page.goto(`/organizations/${org.id}`);
   const card = page.getByTestId(`event-card-${publicEvent.id}`);
   await expect(card).toBeVisible();
-  const cta = card.getByText('View Details & Purchase');
+  const cta = card.getByText('Get tickets');
   await expect(cta).toHaveCSS('background-color', hexToRgb('#047857'));
   await expect(card.getByText('$25.00')).toHaveCSS('color', hexToRgb('#047857'));
 
@@ -182,7 +182,7 @@ test('falls back to the platform blue when no brand color is set', async ({ page
   await mockOrgApi(page);
 
   await page.goto(`/organizations/${org.id}`);
-  const cta = page.getByTestId(`event-card-${publicEvent.id}`).getByText('View Details & Purchase');
+  const cta = page.getByTestId(`event-card-${publicEvent.id}`).getByText('Get tickets');
   await expect(cta).toHaveCSS('background-color', hexToRgb('#2563eb'));
 });
 
