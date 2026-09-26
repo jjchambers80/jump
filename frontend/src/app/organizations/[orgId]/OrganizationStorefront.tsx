@@ -3,12 +3,17 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../../services/api';
 import { resolveAssetUrl } from '../../../lib/assets';
-import EventCard, { EventSummary } from '../../../components/EventCard';
+import Link from 'next/link';
+import { ArrowRight, CalendarDays } from 'lucide-react';
+import type { EventSummary } from '../../../components/EventCard';
+import EventStub from '../../../components/storefront/EventStub';
 import BrandScope from '../../../components/BrandScope';
 import OrganizationHeader from '../../../components/OrganizationHeader';
 import StorefrontPasswordGate from '../../../components/StorefrontPasswordGate';
 import StorefrontFooter from '../../../components/storefront/StorefrontFooter';
 import type { ThemeMode } from '@/lib/theme';
+import { formatEventDate, formatEventTime } from '@/lib/eventTime';
+import { dateTile } from '@/lib/dateTile';
 
 interface OrganizationPublic {
   id: string;
@@ -50,64 +55,31 @@ export default function OrganizationStorefront({ orgId }: { orgId: string }) {
     }
   };
 
+  // Events render after the fetch, too late for the browser's own #events jump.
+  useEffect(() => {
+    if (data && !data.locked && window.location.hash === '#events') {
+      document.getElementById('events')?.scrollIntoView();
+    }
+  }, [data]);
+
   useEffect(() => {
     void fetchOrg();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId]);
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center">
-        <div className="text-center">
-          <svg
-            className="animate-spin h-12 w-12 text-brand-link mx-auto mb-4"
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-            />
-          </svg>
-          <p className="text-gray-600 dark:text-slate-400">Loading...</p>
-        </div>
-      </div>
-    );
+    return <StorefrontSkeleton />;
   }
 
   if (error || !data) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center p-4">
-        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-8 max-w-md w-full text-center">
-          <div className="text-red-600 dark:text-red-400 mb-4">
-            <svg
-              className="w-16 h-16 mx-auto"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-slate-100 mb-2">
+        <div className="max-w-md w-full text-center">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-400 dark:text-slate-500">404</p>
+          <h2 className="mt-2 text-2xl font-bold tracking-tight text-gray-900 dark:text-slate-100">
             Organization Not Found
           </h2>
-          <p className="text-gray-600 dark:text-slate-400">
+          <p className="mt-2 text-gray-600 dark:text-slate-400">
             {error || 'This organization does not exist or is inactive.'}
           </p>
         </div>
@@ -129,44 +101,9 @@ export default function OrganizationStorefront({ orgId }: { orgId: string }) {
     );
   }
 
-  const eventList = (
-    <>
-      {/* Event cards */}
-      {events.length === 0 ? (
-        <div className="text-center py-16">
-          <svg
-            className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-slate-600"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-            />
-          </svg>
-          <h3 className="text-lg font-semibold text-gray-700 dark:text-slate-300 mb-2">
-            No upcoming events
-          </h3>
-          <p className="text-sm text-gray-500 dark:text-slate-400">
-            Check back later for new events from {organization.name}.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {events.map((event) => (
-            <EventCard key={event.id} event={event} />
-          ))}
-        </div>
-      )}
-    </>
-  );
+  const nextEvent = events[0];
+  const groups = groupByMonth(events);
 
-  // Desktop with cover: two-column, image flush right
-  // Desktop without cover: centered single column
-  // The full-width header keeps the organization identity consistent at every size.
   return (
     <BrandScope
       color={organization.brandColor}
@@ -176,46 +113,145 @@ export default function OrganizationStorefront({ orgId }: { orgId: string }) {
       <OrganizationHeader
         organization={organization}
         as="h1"
-        layout={hasCover ? 'two-column' : 'centered'}
         nav
         signIn={organization.buyerSignInLinks !== false}
       />
 
-      {/* Mobile cover image */}
       {hasCover && (
-        <div className="xl:hidden w-full">
-          <div className="w-full" style={{ aspectRatio: '16/9' }}>
+        <div className="mx-auto max-w-7xl sm:px-6 sm:pt-6 lg:px-8 lg:pt-8">
+          <div className="relative aspect-[16/9] overflow-hidden bg-gray-200 dark:bg-slate-800 sm:aspect-[21/9] sm:rounded-3xl lg:aspect-[5/2]">
             <img
               src={coverSrc!}
               alt={`${organization.name} cover`}
-              className="w-full h-full object-cover"
+              className="h-full w-full object-cover"
             />
+            {nextEvent && (
+              <>
+                <div
+                  aria-hidden
+                  className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent"
+                />
+                <Link
+                  href={eventHref(nextEvent)}
+                  className="group absolute inset-0 flex flex-wrap items-end justify-between gap-3 p-4 outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-white/80 sm:rounded-3xl sm:p-8"
+                >
+                  <div className="min-w-0 text-white">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/80">Next up</p>
+                    <p className="mt-1 max-w-2xl text-xl font-bold leading-tight tracking-tight group-hover:underline group-hover:decoration-2 group-hover:underline-offset-4 sm:text-3xl">
+                      {nextEvent.name}
+                    </p>
+                    <p className="mt-1 text-sm font-medium text-white/85">
+                      {formatEventDate(nextEvent.date, nextEvent.venue?.timezone, { weekday: 'long', month: 'long' })}
+                      {' · '}
+                      {formatEventTime(nextEvent.date, nextEvent.venue?.timezone)}
+                    </p>
+                  </div>
+                  <span className="hidden shrink-0 items-center gap-1.5 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-gray-900 shadow-sm transition group-hover:bg-gray-100 sm:inline-flex">
+                    {nextEvent.admissionMode === 'RSVP' ? 'RSVP' : 'Get tickets'}
+                    <ArrowRight className="h-4 w-4 transition-transform motion-safe:group-hover:translate-x-0.5" aria-hidden />
+                  </span>
+                </Link>
+              </>
+            )}
           </div>
         </div>
       )}
 
-      {hasCover ? (
-        /* Two-column desktop layout */
-        <div className="xl:flex min-h-screen">
-          {/* Left: event content — full width below xl, pushed right at xl+ */}
-          <div className="flex-1 xl:flex xl:justify-end">
-            <div className="w-full px-4 py-8 sm:px-6 xl:max-w-4xl xl:py-12">{eventList}</div>
-          </div>
-
-          {/* Right: cover image, flush to window edge */}
-          <div className="hidden xl:block w-[55%] max-w-3xl sticky top-0 h-screen">
-            <img
-              src={coverSrc!}
-              alt={`${organization.name} cover`}
-              className="w-full h-full object-cover"
-            />
-          </div>
+      <main
+        id="events"
+        className="mx-auto max-w-7xl scroll-mt-6 px-4 pb-16 pt-8 sm:px-6 sm:pt-12 lg:px-8"
+      >
+        <div className="mb-6 flex items-baseline justify-between gap-4 border-b border-gray-200 pb-4 dark:border-slate-700 sm:mb-8">
+          <h2 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-slate-100 sm:text-3xl">
+            Upcoming events
+          </h2>
+          {events.length > 0 && (
+            <span className="text-sm font-medium tabular-nums text-gray-500 dark:text-slate-400">
+              {events.length} {events.length === 1 ? 'event' : 'events'}
+            </span>
+          )}
         </div>
-      ) : (
-        /* Centered single column */
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 xl:py-12">{eventList}</div>
-      )}
+
+        {events.length === 0 ? (
+          <div className="rounded-2xl border-2 border-dashed border-gray-200 px-6 py-16 text-center dark:border-slate-700">
+            <CalendarDays className="mx-auto mb-4 h-10 w-10 text-gray-300 dark:text-slate-600" aria-hidden />
+            <h3 className="text-lg font-semibold text-gray-700 dark:text-slate-300">No upcoming events</h3>
+            <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
+              Check back later for new events from {organization.name}.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-10">
+            {groups.map((group) => (
+              <section
+                key={group.key}
+                aria-labelledby={`month-${group.key}`}
+                className="lg:grid lg:grid-cols-[9rem_1fr] lg:gap-8"
+              >
+                <h3
+                  id={`month-${group.key}`}
+                  className="mb-3 text-xs font-bold uppercase tracking-[0.2em] text-gray-500 dark:text-slate-400 lg:sticky lg:top-6 lg:mb-0 lg:self-start lg:pt-3 lg:text-sm"
+                >
+                  {group.label}
+                </h3>
+                <ul className="space-y-4">
+                  {group.events.map(({ event, index }) => (
+                    <li
+                      key={event.id}
+                      className="motion-safe:animate-card-in"
+                      style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}
+                    >
+                      <EventStub event={event} />
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ))}
+          </div>
+        )}
+      </main>
       <StorefrontFooter organization={organization} />
     </BrandScope>
+  );
+}
+
+function eventHref(event: EventSummary) {
+  return event.slug ? `/events/${encodeURIComponent(event.slug)}` : `/events/${event.id}`;
+}
+
+/** Events bucketed by month in each venue's own zone (spec 033), in list order. */
+function groupByMonth(events: EventSummary[]) {
+  const currentYear = new Date().getFullYear().toString();
+  const groups: { key: string; label: string; events: { event: EventSummary; index: number }[] }[] = [];
+  events.forEach((event, index) => {
+    const tile = dateTile(event.date, event.venue?.timezone);
+    const key = tile ? `${tile.year}-${tile.month}` : 'tba';
+    const month = formatEventDate(event.date, event.venue?.timezone, { month: 'long' }).match(/^\w+, (\w+) /)?.[1];
+    const label = tile && month ? (tile.year === currentYear ? month : `${month} ${tile.year}`) : 'Date TBA';
+    const last = groups[groups.length - 1];
+    if (last && last.key === key) last.events.push({ event, index });
+    else groups.push({ key, label, events: [{ event, index }] });
+  });
+  return groups;
+}
+
+/** Neutral placeholder: the brand color is not known until the organization loads. */
+function StorefrontSkeleton() {
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-900" aria-busy="true" aria-label="Loading">
+      <div className="h-24 border-b border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-800 sm:h-32" />
+      <div className="mx-auto max-w-7xl space-y-4 px-4 pt-12 sm:px-6 lg:px-8">
+        <div className="mb-8 h-8 w-56 animate-pulse rounded-lg bg-gray-200 dark:bg-slate-800" />
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="flex h-[8.5rem] overflow-hidden rounded-2xl bg-white ring-1 ring-inset ring-gray-200 dark:bg-slate-800 dark:ring-slate-700">
+            <div className="w-20 animate-pulse bg-gray-100 dark:bg-slate-700/60 sm:w-28" />
+            <div className="flex-1 space-y-3 p-5">
+              <div className="h-5 w-2/3 animate-pulse rounded bg-gray-100 dark:bg-slate-700" />
+              <div className="h-4 w-1/3 animate-pulse rounded bg-gray-100 dark:bg-slate-700" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
