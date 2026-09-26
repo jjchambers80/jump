@@ -20,7 +20,9 @@ export function EventMediaCard({
   uploading,
   onFileSelect,
   onRemove,
+  step,
 }: {
+  step?: number;
   preview: string | null;
   eventName: string;
   uploading: boolean;
@@ -68,7 +70,7 @@ export function EventMediaCard({
     : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50 dark:border-slate-600 dark:hover:border-slate-500 dark:hover:bg-slate-700/40';
 
   return (
-    <FormCard id="event-media" title="Media">
+    <FormCard id="event-media" title="Media" step={step}>
       <input
         ref={inputRef}
         type="file"

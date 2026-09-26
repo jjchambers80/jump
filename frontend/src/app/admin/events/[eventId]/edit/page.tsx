@@ -4,10 +4,10 @@
 // Loads existing event data and allows updating fields
 // Uses PATCH /organizations/:orgId/events/:eventId
 
-import React, { useEffect, useState, useCallback, Suspense } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, Suspense } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ExternalLink } from 'lucide-react';
+import { CalendarDays, ExternalLink, MapPin } from 'lucide-react';
 import api from '@/services/api';
 import { resolveAssetUrl } from '@/lib/assets';
 import { EventMediaCard } from '@/components/events/EventMediaCard';
@@ -16,13 +16,13 @@ import { TierCard, TierEditDialog, type TierFormData } from '@/components/TierEd
 import AddOnsSection from './AddOnsSection';
 import SlugField from '@/components/SlugField';
 import VenueFlyout, { NEW_VENUE_OPTION, type CreatedVenue } from '@/components/VenueFlyout';
-import { DEFAULT_ZONE, formatEventTime, instantToZonedInput, zonedInputToInstant, zonedInputToIso } from '@/lib/eventTime';
+import { EventEditSummary, EventSaveCard, EventStatusPill, tierAccent } from '@/components/events/EventEditSummary';
+import { DEFAULT_ZONE, formatEventDateTime, formatEventTime, instantToZonedInput, zonedInputToInstant, zonedInputToIso } from '@/lib/eventTime';
 import { timeZoneLabel } from '@/lib/timeZones';
 import {
   AdmissionModeField,
   EVENT_FORM_ID,
   EventFormActions,
-  EventFormActionsCard,
   EventFormHeader,
   EventFormShell,
   FormAlert,
@@ -242,6 +242,33 @@ function EditEventContent() {
       : null
   );
   const [success, setSuccess] = useState(false);
+
+  // Unsaved-changes tracking: a snapshot of every field the Save button sends,
+  // compared with the one taken right after load. Media and add-ons save on
+  // their own, so they are not part of it.
+  const snapshot = useMemo(
+    () =>
+      JSON.stringify({
+        name, slug, description, venueId, date, capacity, category,
+        admissionMode, rsvpLimit, rsvpLimitEnabled, rsvpMaxPartySize, priceTiers,
+      }),
+    [name, slug, description, venueId, date, capacity, category, admissionMode, rsvpLimit, rsvpLimitEnabled, rsvpMaxPartySize, priceTiers]
+  );
+  const [baseline, setBaseline] = useState<string | null>(null);
+  useEffect(() => {
+    if (tiersInitialized && baseline === null) setBaseline(snapshot);
+  }, [tiersInitialized, baseline, snapshot]);
+  const dirty = baseline !== null && snapshot !== baseline && !success;
+
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
 
   // Load event data
   useEffect(() => {
@@ -625,16 +652,50 @@ function EditEventContent() {
     onCancel: cancel,
   };
   const publishedNotice = isPublished && (
-    <p className="text-sm text-yellow-700 dark:text-yellow-400 mt-1">
+    <p className="mt-2 text-sm text-amber-700 dark:text-amber-400">
       <span aria-hidden>⚠ </span>This event is published. Changes will be visible to customers immediately.
     </p>
   );
+
+  const eventInstant = zonedInputToInstant(date, venueZone);
+  const selectedVenue = venues.find((v) => v.id === venueId) ?? (eventData.venue?.id === venueId ? eventData.venue : null);
+  const headerMeta = (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-gray-600 dark:text-slate-400">
+      <EventStatusPill status={eventData.status} />
+      {eventInstant && (
+        <span className="inline-flex items-center gap-1.5 tabular-nums">
+          <CalendarDays className="h-4 w-4 text-gray-400 dark:text-slate-500" aria-hidden />
+          {formatEventDateTime(eventInstant, venueZone)}
+        </span>
+      )}
+      {selectedVenue && (
+        <span className="inline-flex min-w-0 items-center gap-1.5">
+          <MapPin className="h-4 w-4 shrink-0 text-gray-400 dark:text-slate-500" aria-hidden />
+          <span className="truncate">{selectedVenue.name}</span>
+        </span>
+      )}
+    </div>
+  );
+
+  // Numbered run sheet: main column first, then the aside. Tiers only exist for ticketed events.
+  const sections = [
+    { id: 'event-details', label: 'Details' },
+    { id: 'event-media', label: 'Media' },
+    ...(admissionMode === 'TICKETED' ? [{ id: 'event-price-tiers', label: 'Tiers' }] : []),
+    { id: 'event-add-ons', label: 'Add-ons' },
+    { id: 'event-when-where', label: 'Date & venue' },
+    { id: 'event-admission', label: 'Admission' },
+    { id: 'event-listing', label: 'Listing' },
+  ];
+  const stepOf = (id: string) => sections.findIndex((section) => section.id === id) + 1;
 
   return (
     <EventFormShell
       header={
         <EventFormHeader
-          title="Edit Event"
+          eyebrow="Edit event"
+          title={name.trim() || 'Untitled event'}
+          meta={headerMeta}
           notice={publishedNotice}
           actions={
             <>
@@ -668,7 +729,7 @@ function EditEventContent() {
       main={
         <>
           <form id={EVENT_FORM_ID} onSubmit={handleSubmit} className="space-y-6">
-            <FormCard id="event-details" title="Event Details">
+            <FormCard id="event-details" title="Event Details" step={stepOf('event-details')}>
               <div className="space-y-4">
                 <div>
                   <label htmlFor="event-name" className={labelClass}>Name *</label>
@@ -707,6 +768,7 @@ function EditEventContent() {
             </FormCard>
 
             <EventMediaCard
+              step={stepOf('event-media')}
               preview={logoSrc}
               eventName={name}
               uploading={logoUploading}
@@ -719,6 +781,7 @@ function EditEventContent() {
               <FormCard
                 id="event-price-tiers"
                 title="Price Tiers"
+                step={stepOf('event-price-tiers')}
                 actions={
                   <TierHeaderActions
                     presets={presets}
@@ -755,6 +818,7 @@ function EditEventContent() {
                       onEdit={() => setEditingTierKey(tier.key)}
                       onMove={(dir) => moveTier(index, dir)}
                       onDelete={() => removeTier(tier.key)}
+                      accentClass={tierAccent(index).bar}
                     />
                   ))}
                 </div>
@@ -772,8 +836,9 @@ function EditEventContent() {
           </form>
 
           {/* Add-ons (spec 012) — saved through their own API, outside the event form */}
-          <FormPanel>
+          <FormPanel id="event-add-ons">
             <AddOnsSection
+              step={stepOf('event-add-ons')}
               orgId={orgId}
               eventId={eventId}
               priceTiers={eventData.priceTiers.map((t) => ({ id: t.id, name: t.name }))}
@@ -785,9 +850,28 @@ function EditEventContent() {
       }
       aside={
         <>
-          <EventFormActionsCard {...actionProps} />
+          <div className="hidden xl:block">
+            <EventEditSummary
+              name={name}
+              imageSrc={logoSrc}
+              status={eventData.status}
+              instant={eventInstant}
+              zone={venueZone}
+              venueName={selectedVenue?.name ?? null}
+              admissionMode={admissionMode}
+              capacity={capacityNum}
+              tiers={priceTiers.map((t) => ({
+                key: t.key,
+                name: t.name,
+                quantityTotal: parseInt(t.quantityTotal) || 0,
+                quantitySold: t.quantitySold,
+              }))}
+              rsvpLimit={rsvpLimitEnabled && rsvpLimit ? parseInt(rsvpLimit) || null : null}
+              sections={sections}
+            />
+          </div>
 
-          <FormCard id="event-when-where" title="Date & Venue">
+          <FormCard id="event-when-where" title="Date & Venue" step={stepOf('event-when-where')}>
             <div className="space-y-4">
               <div>
                 <label htmlFor="event-venue" className={labelClass}>
@@ -840,7 +924,7 @@ function EditEventContent() {
           </FormCard>
 
           {/* Admission Mode (spec 034) */}
-          <FormCard id="event-admission" title="Admission">
+          <FormCard id="event-admission" title="Admission" step={stepOf('event-admission')}>
             <AdmissionModeField
               value={admissionMode}
               onChange={(mode) => { if (!modeLocked) setAdmissionMode(mode); }}
@@ -887,7 +971,7 @@ function EditEventContent() {
             )}
           </FormCard>
 
-          <FormCard id="event-listing" title="Listing">
+          <FormCard id="event-listing" title="Listing" step={stepOf('event-listing')}>
             <label htmlFor="event-category" className={labelClass}>Category</label>
             <input
               id="event-category"
@@ -899,6 +983,10 @@ function EditEventContent() {
               className={inputClass}
             />
           </FormCard>
+
+          <EventSaveCard dirty={dirty}>
+            <EventFormActions {...actionProps} layout="stack" />
+          </EventSaveCard>
         </>
       }
       mobileActions={<EventFormActions {...actionProps} layout="row" />}
