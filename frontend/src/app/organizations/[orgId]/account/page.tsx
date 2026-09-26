@@ -134,9 +134,9 @@ export default function BuyerAccountPage({ params }: { params: { orgId: string }
       setProfile(null);
       return;
     }
-    const data: BuyerProfile = await me.json();
-    // One cookie on the shared Jump domain; a session for another org counts as signed out here.
-    if (data.organization?.id !== params.orgId) {
+    const data: BuyerProfile | null = await me.json();
+    // Signed out is `null`. One cookie on the shared Jump domain; a session for another org counts as signed out here.
+    if (!data || data.organization?.id !== params.orgId) {
       setProfile(null);
       return;
     }

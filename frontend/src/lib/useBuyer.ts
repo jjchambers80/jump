@@ -29,8 +29,8 @@ export function useBuyer(orgId: string | null | undefined) {
     fetch('/api/buyer/me', { cache: 'no-store' })
       .then(async (res) => {
         if (!res.ok) return null;
-        const data: BuyerSummary = await res.json();
-        return data.organization?.id === orgId ? data : null;
+        const data: BuyerSummary | null = await res.json();
+        return data?.organization?.id === orgId ? data : null;
       })
       .catch(() => null)
       .then((result) => {

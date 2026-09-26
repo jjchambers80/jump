@@ -18,7 +18,7 @@ async function mockAccount(page: Page, { method = 'CODE' } = {}) {
   await page.route('**/api/buyer/me', (route) =>
     signedIn
       ? route.fulfill(json({ id: 'c1', email: 'ada@example.com', firstName: 'Ada', lastName: 'Lovelace', organization: { id: ORG_ID, name: 'Code Org' } }))
-      : route.fulfill(json({ error: 'Not signed in' }, 401))
+      : route.fulfill(json(null))
   );
   await page.route('**/api/buyer/me/orders', (route) => route.fulfill(json({ data: [] })));
   await page.route('**/api/buyer/me/tickets', (route) => route.fulfill(json({ data: [] })));

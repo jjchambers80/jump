@@ -54,7 +54,7 @@ async function mockStorefront(page: Page, { links = true, buyer = false } = {}) 
           contentType: 'application/json',
           body: JSON.stringify({ id: 'c1', email: 'ada@example.com', firstName: 'Ada', lastName: 'Lovelace', organization: { id: ORG_ID, name: 'Sign-in Org' } }),
         })
-      : route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ error: 'Not signed in' }) })
+      : route.fulfill({ status: 200, contentType: 'application/json', body: 'null' })
   );
 }
 
