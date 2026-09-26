@@ -1,6 +1,6 @@
 # Spec 037: Event workspace, vendor apply-then-choose, add-on library
 
-Status: **approved 2026-09-26 (decisions §0).** Phase 0 = PR #211, phase 1 = this PR.
+Status: **approved 2026-09-26 (decisions §0).** Phase 0 = PR #211, phase 1 = PR #212, phase 2 = navigation PR.
 Created 2026-09-26 from `main` @ 3240a3c.
 
 Scope, as requested:

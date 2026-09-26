@@ -71,7 +71,8 @@ Text matching is case-insensitive and contains-based. Order terms beginning with
 - **TICKET rows** href to `/admin/orders?view=tickets&search=<q>`. The Orders page reads these URL params on mount and switches to the Tickets tab with the search term pre-filled.
 - **PAGE rows** href to the page editor at `/admin/online-store/pages/<id>`.
 - **View all tickets** goes to `/admin/orders` without a pre-filled search (the user can search from there).
-- **View all applications** goes to `/admin/participants?q=<term>` on the applications list.
+- **View all applications** goes to `/admin/customers?search=<term>` (spec 037 D3: there is no org-wide applications list; an applicant's history across events is on the customer). Application rows still open the per-event detail page.
+- **EVENT rows** open the event's Details page `/admin/events/<id>?orgId=` (spec 037).
 
 ## Performance and security
 

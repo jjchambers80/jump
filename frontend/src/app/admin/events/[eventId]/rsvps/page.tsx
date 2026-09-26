@@ -10,6 +10,7 @@ import { rsvpApi, getActiveOrganizationId, type RsvpRow, type RsvpListResponse }
 import { useOrg } from '@/components/OrgContext';
 import { useAccountFormat } from '@/lib/accountFormat';
 import { Download } from 'lucide-react';
+import EventWorkspaceHeader from '@/components/events/EventWorkspace';
 
 export default function RsvpsListPage({ params }: { params: { eventId: string } }) {
   const { data: session } = useSession();
@@ -94,25 +95,28 @@ export default function RsvpsListPage({ params }: { params: { eventId: string } 
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-      {/* Headers */}
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">RSVPs</h2>
-        <div className="flex items-center gap-2">
-          <Link
-            href={`/admin/customers?rsvp=going&eventId=${encodeURIComponent(params.eventId)}`}
-            className="inline-flex items-center rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
-          >
-            View customers
-          </Link>
-          <button
-            onClick={handleCsvExport}
-            className="inline-flex items-center gap-2 rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
-          >
-            <Download className="h-4 w-4" aria-hidden />
-            Export CSV
-          </button>
-        </div>
-      </div>
+      <EventWorkspaceHeader
+        eventId={params.eventId}
+        current="rsvps"
+        title="Guest list"
+        actions={
+          <>
+            <Link
+              href={`/admin/customers?rsvp=going&eventId=${encodeURIComponent(params.eventId)}`}
+              className="inline-flex items-center rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
+            >
+              View customers
+            </Link>
+            <button
+              onClick={handleCsvExport}
+              className="inline-flex items-center gap-2 rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
+            >
+              <Download className="h-4 w-4" aria-hidden />
+              Export CSV
+            </button>
+          </>
+        }
+      />
 
       {/* Headcount summary */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">

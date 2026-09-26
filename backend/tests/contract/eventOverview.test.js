@@ -192,4 +192,23 @@ describe('Event overview API', () => {
     expect(res.body.map).toBeNull();
     expect(res.body.applications.forms).toEqual([]);
   });
+
+  it('returns the workspace header facts', async () => {
+    const res = await request(app)
+      .get(`/organizations/${organization.id}/events/${event.id}/workspace`)
+      .set('Authorization', `Bearer ${organizerToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      id: event.id,
+      admissionMode: 'TICKETED',
+      mapId: map.id,
+      formCount: 1,
+      toReview: 2,
+      venue: { timezone: 'America/New_York' },
+    });
+    const outsider = await request(app)
+      .get(`/organizations/${organization.id}/events/${event.id}/workspace`)
+      .set('Authorization', `Bearer ${outsiderToken}`);
+    expect(outsider.status).toBe(403);
+  });
 });

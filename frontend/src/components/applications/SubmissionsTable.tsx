@@ -30,7 +30,7 @@ import { readSavedViews, viewKey, writeSavedViews, type SavedView } from '@/lib/
 import DecisionDialog from '@/app/admin/events/[eventId]/applications/DecisionDialog';
 import { describeError, patchApplicationMeta, useApplicationsApi } from '@/app/admin/events/[eventId]/applications/useApplicationsApi';
 import EditTagsDialog from './EditTagsDialog';
-import { useParticipantsApi, type ParticipantsQuery } from '@/app/admin/participants/useParticipantsApi';
+import { useParticipantsApi, type ParticipantsQuery } from '@/components/applications/useParticipantsApi';
 import BusinessCell from './BusinessCell';
 import RowActionsMenu from './RowActionsMenu';
 import { formatEventDate } from '@/lib/eventTime';

@@ -90,7 +90,6 @@ export default function CreateEventPage() {
   const [venues, setVenues] = useState<Venue[]>([]);
   const [venuesLoading, setVenuesLoading] = useState(false);
   const [presets, setPresets] = useState<TierPreset[]>([]);
-  const [showPresetMenu, setShowPresetMenu] = useState(false);
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -196,7 +195,6 @@ export default function CreateEventPage() {
         isRefundable: preset.isRefundable,
       },
     ]);
-    setShowPresetMenu(false);
     setEditingTierKey(key);
   };
 
@@ -383,8 +381,8 @@ export default function CreateEventPage() {
               actions={
                 <TierHeaderActions
                   presets={presets}
-                  open={showPresetMenu}
-                  onToggle={() => setShowPresetMenu(!showPresetMenu)}
+                  orgId={selectedOrgId}
+                  onPresetsChange={setPresets}
                   onPick={addTierFromPreset}
                   onAdd={addTier}
                 />

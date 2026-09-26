@@ -23,13 +23,29 @@ Types: `frontend/src/lib/eventOverview.ts`. Contract test: `backend/tests/contra
 ## Layout
 
 - **Hero** (`page.tsx` `EventHero`): image tile with a date badge, status, "Starts in N days", name, date in the venue zone, venue, public path; actions View page · Publish (DRAFT) · Edit event · `⋯` (`EventActionsMenu`). Below a `Perforation`, four headline numbers (ticketed: Collected, Tickets sold, Checked in, Applications; RSVP: Guests, RSVPs, Spots left, Applications).
-- **Workspace tabs**: Overview · Applications (to-review count) · Floor map (when a map exists) · Analytics (ticketed) or Guest list (RSVP) · Door check-in (when there are forms). Phase 2 moves these pages under `/admin/events/:id`.
+- **Workspace tabs** (shared, `components/events/EventWorkspace.tsx`): Overview · Applications (to-review count) · Map · Attendees (ticketed) or Guest list (RSVP) · Analytics (ticketed) · Door check-in (when there are forms).
 - **Main column**: Sales (tier table, add-ons, money footer, Orders link = `/admin/orders?eventId=`) or RSVPs; Applications (per-form pipeline bar, tiers); Event details (description through `ContentHtml`, folds when long).
 - **Aside**: Date & venue, Admission (`CapacityMeter` + issued / checked in), Floor map (booth matrix, one cell per booth, scaled above 120), Listing, Tax & payments.
 
 Sections are `OverviewSection` cards (`components/events/EventOverviewSections.tsx`) with an Edit link whose accessible name says what it edits. Edit links go to `/admin/events/:id/edit?orgId=…#event-<section>`; the edit page scrolls `<main>` to that card with `jumpTo` once loaded, and Save / Cancel / "Back to event" return here. Analytics and Applications pages link "← Back to event" here too.
 
 Admin search event results open this page (`AdminSearchService` `eventHref`).
+
+## Event workspace (spec 037 phase 2)
+
+Every page of one event mounts `EventWorkspaceHeader` — breadcrumb (Events › event › page), the page's `<h1>`, status + event name + date in the venue zone, optional actions, and the tab bar. Facts come from `GET /organizations/:orgId/events/:eventId/workspace` (`EventService.getEventWorkspace`: name, status, date, venue zone, admission mode, `mapId`, `formCount`, `toReview`). The Details page renders its own hero and reuses `WorkspaceTabs` / `workspaceTabs()`.
+
+| Tab | Route | Notes |
+|---|---|---|
+| Overview | `/admin/events/:id` | This page |
+| Applications | `/admin/events/:id/applications[/forms]` | `ApplicationsHeader` = workspace header + Queue / Forms switch |
+| Map | `/admin/events/:id/map` | With a map: `router.replace` to the builder `/admin/maps/:mapId` (its back arrow returns to the event). Without: Blank map or a saved floor plan (`mapsApi.createFromFloorPlan`) |
+| Attendees | `/admin/events/:id/attendees` | `TicketRowsView` with `eventId` (event filter locked and hidden) — Orders › Tickets stays the cross-event lookup |
+| Guest list | `/admin/events/:id/rsvps` | RSVP events |
+| Analytics | `/admin/events/:id/analytics` | Ticketed events |
+| Door check-in | `/admin/events/:id/check-in` | Phone-first page; keeps its own header with "← Back to event" |
+
+Saved items (D2) are managed where they are used: **Saved tiers** (`TierPresetMenu`, pick / edit / delete / new, in the Price Tiers header of the create and edit pages), application templates in the forms page's **Start from** picker, floor plans in Maps (see [Map templates](map-templates.md)).
 
 ## Tests
 

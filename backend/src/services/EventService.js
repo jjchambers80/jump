@@ -987,6 +987,43 @@ class EventService {
   }
 
   /**
+   * The few facts every page of an event's admin workspace needs for its
+   * shared header and tabs (spec 037 phase 2): name, status, date and zone,
+   * admission mode, whether it has a map and forms, and how many
+   * applications wait for review.
+   */
+  async getEventWorkspace(orgId, eventId) {
+    const event = await prisma.event.findFirst({
+      where: { id: eventId, venue: { organizationId: orgId } },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        status: true,
+        date: true,
+        admissionMode: true,
+        venue: { select: { name: true, timezone: true } },
+        floorMap: { select: { id: true } },
+        _count: { select: { applicationForms: true } },
+      },
+    });
+    if (!event) throw new NotFoundError('Event not found');
+    const toReview = await prisma.application.count({ where: { eventId, status: 'SUBMITTED' } });
+    return {
+      id: event.id,
+      name: event.name,
+      slug: event.slug,
+      status: event.status,
+      date: event.date,
+      admissionMode: event.admissionMode,
+      venue: event.venue,
+      mapId: event.floorMap?.id ?? null,
+      formCount: event._count.applicationForms,
+      toReview,
+    };
+  }
+
+  /**
    * Everything the admin Event Details page shows, in one request (spec 037
    * phase 1): the event itself, sales and money, add-ons, application forms
    * with counts by state, the floor map with booths by state, attendees and

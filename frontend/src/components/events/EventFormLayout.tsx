@@ -7,6 +7,7 @@
 // with the `form` attribute: native `required` checks and Enter-to-submit still work.
 
 import React from 'react';
+import TierPresetMenu, { type TierPreset } from './TierPresetMenu';
 
 export const EVENT_FORM_ID = 'event-form';
 
@@ -344,56 +345,23 @@ export function RsvpSettingsFields({
   );
 }
 
-/** "Add from Preset" menu + "+ Add Tier" button for the Price Tiers card header. */
-export function TierHeaderActions<P extends { id: string; name: string; price: number }>({
+/** "Saved tiers" menu (pick, edit, delete — spec 037 D2) + "+ Add Tier" for the Price Tiers card header. */
+export function TierHeaderActions({
+  orgId,
   presets,
-  open,
-  onToggle,
+  onPresetsChange,
   onPick,
   onAdd,
 }: {
-  presets: P[];
-  open: boolean;
-  onToggle: () => void;
-  onPick: (preset: P) => void;
+  orgId: string | null;
+  presets: TierPreset[];
+  onPresetsChange: (next: TierPreset[]) => void;
+  onPick: (preset: TierPreset) => void;
   onAdd: () => void;
 }) {
   return (
     <>
-      {presets.length > 0 && (
-        <div className="relative">
-          <button
-            type="button"
-            onClick={onToggle}
-            aria-expanded={open}
-            aria-controls="tier-preset-menu"
-            className={`min-h-9 rounded-md border border-indigo-300 dark:border-indigo-700 px-3 py-1.5 text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 ${focusRing}`}
-          >
-            Add from Preset
-          </button>
-          {open && (
-            <ul
-              id="tier-preset-menu"
-              className="absolute right-0 z-10 mt-1 w-56 rounded-md border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 shadow-lg"
-            >
-              {presets.map((preset) => (
-                <li key={preset.id}>
-                  <button
-                    type="button"
-                    onClick={() => onPick(preset)}
-                    className="block w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 focus-visible:bg-gray-100 dark:focus-visible:bg-slate-700 focus-visible:outline-none"
-                  >
-                    <span className="font-medium">{preset.name}</span>
-                    <span className="ml-2 text-gray-500 dark:text-slate-400">
-                      {preset.price === 0 ? 'Free' : `$${preset.price.toFixed(2)}`}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
+      <TierPresetMenu orgId={orgId} presets={presets} onPresetsChange={onPresetsChange} onPick={onPick} />
       <button
         type="button"
         onClick={onAdd}

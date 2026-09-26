@@ -192,35 +192,29 @@ async function mockAdmin(page: Page, baseURL: string, role: 'ADMIN' | 'ORGANIZER
   return { state, calls };
 }
 
-test('Applications tab: templates listed; New application offers upcoming events and same-kind templates; creating from a template lands in the editor', async ({ page, baseURL }) => {
+test('New form: the Start from picker offers same-kind saved templates; creating from one lands in the editor (spec 037 D2)', async ({ page, baseURL }) => {
   const { calls } = await mockAdmin(page, baseURL!);
-  await page.goto('/admin/participants/applications');
-  const templates = page.getByTestId('participants-templates');
-  await expect(templates).toContainText('Exhibitor booths');
-  await expect(page.getByTestId('participants-template-tpl-booths')).toContainText('Paid · 2 options · 2 questions');
-  await expect(page.getByTestId('participants-template-tpl-press')).toContainText('Free · 1 question');
-
-  await page.getByTestId('participants-new-application').click();
-  const dialog = page.getByRole('dialog', { name: 'New application' });
-  await expect(dialog).toBeVisible();
-  // Past and cancelled events are not offered; the draft one is.
-  await expect(dialog.getByLabel('Event').locator('option')).toHaveText(['Choose an event…', 'Gaming Geek Expo 2027 · Sep 18, 2027', 'Winter Con 2028 · Jan 10, 2028']);
+  await page.goto(`/admin/events/${DRAFT_EVENT.id}/applications/forms`);
+  await page.getByTestId('forms-new').click();
+  const panel = page.getByTestId('forms-create');
+  const picker = panel.getByTestId('forms-template-picker');
   // Free by default → only the free template.
-  await expect(dialog.getByLabel('Start from template').locator('option')).toHaveText(['Blank', 'Press pass']);
-  await dialog.getByLabel('Type').selectOption('PAID');
-  await expect(dialog.getByLabel('Start from template').locator('option')).toHaveText(['Blank', 'Exhibitor booths']);
+  await expect(picker.getByRole('radio')).toHaveCount(2);
+  await expect(picker.getByRole('radio', { name: /Press pass/ })).toBeVisible();
+  await panel.getByLabel('Type').selectOption('PAID');
+  await expect(picker.getByRole('radio', { name: /Exhibitor booths/ })).toBeVisible();
+  await expect(picker.getByRole('radio', { name: /Press pass/ })).toHaveCount(0);
+  await expect(picker.getByRole('link', { name: 'Edit template Exhibitor booths' })).toHaveAttribute('href', '/admin/events/templates/tpl-booths');
 
-  await dialog.getByLabel('Event').selectOption(DRAFT_EVENT.id);
-  await dialog.getByLabel('Name').fill('Winter vendors');
-  await dialog.getByLabel('Start from template').selectOption('tpl-booths');
-  await dialog.getByRole('button', { name: 'Create' }).click();
+  await panel.getByLabel('Name').fill('Winter vendors');
+  await picker.getByRole('radio', { name: /Exhibitor booths/ }).check();
+  await panel.getByRole('button', { name: 'Create' }).click();
 
   await page.waitForURL(/\/admin\/events\/evt-draft\/applications\/forms\/form-new-\d+/);
   const create = calls.find((c) => c.method === 'POST' && c.path === `/admin/events/${DRAFT_EVENT.id}/application-forms`);
   expect(create?.body).toEqual({ kind: 'PAID', name: 'Winter vendors', templateId: 'tpl-booths' });
   await expect(page.getByTestId('form-created-from')).toContainText('Created from the Exhibitor booths template');
   await expect(page.getByTestId('form-questions')).toContainText('Booth style');
-  await expect(page.getByTestId('form-questions')).toContainText('Table / Pipe & drape');
   await expect(page.getByTestId('form-tiers')).toContainText('Corner');
 
   const a11y = await new AxeBuilder({ page }).include('main').analyze();
@@ -252,13 +246,15 @@ test('Save as template from the form editor: new template appears in the Templat
   await expect(page.getByRole('status')).toContainText('Template "Exhibitor booths" replaced.');
   expect(state.templates.find((t) => t.id === 'tpl-booths')?.definition.tiers).toHaveLength(1);
 
-  await page.goto('/admin/participants/applications');
-  await expect(page.getByTestId('participants-templates')).toContainText('Vendor space 2028');
+  await page.goto(`/admin/events/${EXPO.id}/applications/forms`);
+  await page.getByTestId('forms-new').click();
+  await page.getByTestId('forms-create').getByLabel('Type').selectOption('PAID');
+  await expect(page.getByTestId('forms-template-picker')).toContainText('Vendor space 2028');
 });
 
 test('template editor: edit settings, add a question, reorder, save; unsaved guard; ORGANIZER sees no write controls', async ({ page, baseURL }) => {
   const { calls, state } = await mockAdmin(page, baseURL!);
-  await page.goto('/admin/participants/templates/tpl-booths');
+  await page.goto('/admin/events/templates/tpl-booths');
   await expect(page.getByTestId('template-subtitle')).toContainText('Paid template');
   await expect(page.getByTestId('template-save')).toBeDisabled();
   // Event-only settings are hidden on a template.
@@ -306,46 +302,35 @@ test('template editor: edit settings, add a question, reorder, save; unsaved gua
   await expect(page.getByTestId('template-save')).toBeEnabled();
   page.once('dialog', (d) => d.dismiss());
   await page.evaluate(() => {
-    window.location.href = '/admin/participants/applications';
+    window.location.href = '/admin/events';
   });
-  await expect(page).toHaveURL(/\/admin\/participants\/templates\/tpl-booths/);
+  await expect(page).toHaveURL(/\/admin\/events\/templates\/tpl-booths/);
   page.once('dialog', (d) => d.accept());
   await page.evaluate(() => {
-    window.location.href = '/admin/participants/applications';
+    window.location.href = '/admin/events';
   });
-  await expect(page).toHaveURL(/\/admin\/participants\/applications/);
+  await expect(page).toHaveURL(/\/admin\/events$/);
 
   // ORGANIZER: read-only.
   await page.context().clearCookies();
   await mockAdmin(page, baseURL!, 'ORGANIZER');
-  await page.goto('/admin/participants/applications');
-  await expect(page.getByTestId('participants-templates')).toContainText('Exhibitor booths');
-  await expect(page.getByTestId('participants-new-application')).toHaveCount(0);
-  await expect(page.getByTestId('participants-new-template')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Delete' })).toHaveCount(0);
-  await page.goto('/admin/participants/templates/tpl-booths');
+  await page.goto(`/admin/events/${EXPO.id}/applications/forms`);
+  await expect(page.getByTestId('forms-list')).toBeVisible();
+  await expect(page.getByTestId('forms-new')).toHaveCount(0);
+  await page.goto('/admin/events/templates/tpl-booths');
   await expect(page.getByTestId('template-save')).toHaveCount(0);
   await expect(page.getByLabel('Name')).toBeDisabled();
   await expect(page.getByTestId('question-add')).toHaveCount(0);
 });
 
-test('New template creates an empty one and opens the editor; Delete removes it after confirming', async ({ page, baseURL }) => {
+test('Delete a saved template from the New form picker after confirming', async ({ page, baseURL }) => {
   const { calls } = await mockAdmin(page, baseURL!);
-  await page.goto('/admin/participants/applications');
-  await page.getByTestId('participants-new-template').click();
-  const dialog = page.getByRole('dialog', { name: 'New template' });
-  await dialog.getByLabel('Name').fill('Panel proposals');
-  await dialog.getByRole('button', { name: 'Create' }).click();
-  await page.waitForURL(/\/admin\/participants\/templates\/tpl-new-\d+/);
-  expect(calls.find((c) => c.method === 'POST' && c.path === '/admin/application-templates')?.body).toEqual({ name: 'Panel proposals', kind: 'FREE' });
-  await expect(page.getByTestId('template-subtitle')).toContainText('Free template');
-  await expect(page.getByTestId('form-tiers')).toHaveCount(0);
-
-  await page.goto('/admin/participants/applications');
+  await page.goto(`/admin/events/${EXPO.id}/applications/forms`);
+  await page.getByTestId('forms-new').click();
+  const picker = page.getByTestId('forms-template-picker');
   page.once('dialog', (d) => d.accept());
-  await page.getByTestId('participants-template-tpl-press').getByRole('button', { name: 'Delete' }).click();
-  await expect(page.getByRole('status')).toContainText('Template "Press pass" deleted.');
-  await expect(page.getByTestId('participants-template-tpl-press')).toHaveCount(0);
+  await picker.getByRole('button', { name: 'Delete template Press pass' }).click();
+  await expect(picker.getByRole('radio', { name: /Press pass/ })).toHaveCount(0);
   expect(calls.some((c) => c.method === 'DELETE' && c.path === '/admin/application-templates/tpl-press')).toBe(true);
 });
 

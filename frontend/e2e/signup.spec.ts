@@ -96,7 +96,7 @@ async function mockSignupApi(page: Page, opts: { pending?: Pending | null } = {}
           { id: 'payments', done: false, href: '/admin/settings/payments', state: 'platform', shown: true },
           { id: 'business', done: false, href: '/admin/settings', shown: true },
           { id: 'domain', done: false, href: '/admin/settings/domains', shown: true },
-          { id: 'applications', done: false, href: '/admin/participants/applications', shown: true },
+          { id: 'applications', done: false, href: '/admin/events', shown: true },
         ],
         onboarding: { goals: ['vendor_applications'] },
       });

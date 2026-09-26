@@ -1,4 +1,5 @@
-// Admin › Participants › Template editor (spec 019 phase 2): the form editor
+// Application template editor (spec 019 phase 2; moved under Events by spec
+// 037 D2 — reached from a form's "Start from template" picker): the form editor
 // cards mounted on a local definition. Tiers and questions get synthetic ids
 // so the cards' editing state works; Save PUTs the whole definition.
 'use client';
@@ -9,8 +10,7 @@ import { useSession } from 'next-auth/react';
 import { QuestionsCard, SettingsCard, TiersCard, type EditorForm } from '@/components/applications/FormEditorCards';
 import { formatDate, type FormTemplate, type Question, type TemplateDefinition, type TemplateQuestion, type TemplateTier } from '@/lib/applications';
 import { describeError } from '@/app/admin/events/[eventId]/applications/useApplicationsApi';
-import ParticipantsHeader from '../../ParticipantsHeader';
-import { useParticipantsApi } from '../../useParticipantsApi';
+import { useParticipantsApi } from '@/components/applications/useParticipantsApi';
 
 const primary = 'rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50';
 
@@ -121,12 +121,22 @@ export default function TemplateEditorPage({ params }: { params: { templateId: s
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
-      <ParticipantsHeader />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <Link href="/admin/participants/applications" className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300">
-            ← Applications
+          <Link
+            href="/admin/events"
+            onClick={(e) => {
+              // Came from an event's forms page: go back there.
+              if (window.history.length > 1) {
+                e.preventDefault();
+                window.history.back();
+              }
+            }}
+            className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+          >
+            ← Back
           </Link>
+          <h1 className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{template?.name ?? 'Application template'}</h1>
           {template && (
             <p className="mt-1 text-sm text-gray-600 dark:text-slate-400" data-testid="template-subtitle">
               {template.kind === 'PAID' ? 'Paid' : 'Free'} template · updated {formatDate(template.updatedAt)}

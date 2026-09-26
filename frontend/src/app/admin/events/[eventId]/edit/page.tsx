@@ -204,7 +204,6 @@ function EditEventContent() {
   const [venuesLoading, setVenuesLoading] = useState(false);
   const [showVenueDialog, setShowVenueDialog] = useState(false);
   const [presets, setPresets] = useState<TierPreset[]>([]);
-  const [showPresetMenu, setShowPresetMenu] = useState(false);
   const [eventData, setEventData] = useState<EventDetail | null>(null);
   const [loadingEvent, setLoadingEvent] = useState(true);
 
@@ -420,7 +419,6 @@ function EditEventContent() {
         isActive: true,
       },
     ]);
-    setShowPresetMenu(false);
     setEditingTierKey(key);
   };
 
@@ -795,8 +793,8 @@ function EditEventContent() {
                 actions={
                   <TierHeaderActions
                     presets={presets}
-                    open={showPresetMenu}
-                    onToggle={() => setShowPresetMenu(!showPresetMenu)}
+                    orgId={orgId}
+                    onPresetsChange={setPresets}
                     onPick={addTierFromPreset}
                     onAdd={addTier}
                   />

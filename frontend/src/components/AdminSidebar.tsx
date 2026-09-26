@@ -19,7 +19,6 @@ import {
   CalendarDays,
   ChartColumn,
   ChevronRight,
-  ClipboardList,
   FileText,
   Landmark,
   LayoutDashboard,
@@ -29,7 +28,6 @@ import {
   Settings,
   ShoppingCart,
   Store,
-  Ticket,
   Users,
   type LucideIcon,
 } from 'lucide-react';
@@ -47,13 +45,13 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
-  { label: 'Venues', href: '/admin/venues', icon: MapPin },
+  // Spec 037 D1: tier presets, application templates and the org-wide
+  // submissions list live inside each event now, not in the main nav.
   { label: 'Events', href: '/admin/events', icon: CalendarDays },
-  { label: 'Tickets', href: '/admin/tickets', icon: Ticket },
+  { label: 'Venues', href: '/admin/venues', icon: MapPin },
+  { label: 'Maps', href: '/admin/maps', icon: Map },
   { label: 'Orders', href: '/admin/orders', icon: ShoppingCart },
   { label: 'Customers', href: '/admin/customers', icon: Users },
-  { label: 'Participants', href: '/admin/participants', icon: ClipboardList },
-  { label: 'Maps', href: '/admin/maps', icon: Map },
   { label: 'Check In', href: '/admin/orders/scan', icon: ScanLine },
   { label: 'Analytics', href: '/admin/analytics', icon: ChartColumn },
   {
