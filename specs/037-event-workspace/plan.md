@@ -1,6 +1,8 @@
 # Spec 037: Event workspace, vendor apply-then-choose, add-on library
 
-Status: **approved 2026-09-26 (decisions §0).** Phase 0 = PR #211, phase 1 = PR #212, phase 2 = navigation PR. Phase 5 (apply-then-choose, per D4–D7: no `spaceSelection` column) = feat/037-phase5-apply-then-choose.
+Status: **complete 2026-09-26.** Approved with decisions §0 (they override the body). Shipped as PRs #211 (phase 0 customer fixes), #212 (1 Event Details), #213 (2 navigation + workspace), #214 (3 section editors + flyouts), #215 (4 saved add-ons + picker + receipt snapshot), #216 (5 apply-then-choose, with a review fix: superseded Checkout sessions are expired and never credited) and the phase 6 cleanup PR (`AddOn.productId` NOT NULL + `@@unique([eventId, productId])`, `ApplicationTier.mapBound` dropped). Production: `db:backfill:037-add-ons` linked 1 add-on; `db:backfill:037-applications` moved the 1 in-flight Game & Geek application (SUBMITTED + card on file → NOT_DUE, pending order cancelled); an end-to-end smoke (approve → select → saved test card → paid → refund → cleanup) passed in Stripe test mode.
+
+**Deliberate deviation from §4.2:** `AddOn.name/description/scope/taxable` are **kept** as a write-through copy of the saved add-on instead of being dropped — checkout, fee math and the capacity SQL read the offering without a join, and `AddOnProductService` keeps them in step.
 Created 2026-09-26 from `main` @ 3240a3c.
 
 Scope, as requested:
