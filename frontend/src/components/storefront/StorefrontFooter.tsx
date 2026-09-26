@@ -53,7 +53,7 @@ export default function StorefrontFooter({ organization }: StorefrontFooterProps
 
   return (
     <footer
-      className="mt-16 border-t border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-800"
+      className="mt-16 border-t border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-900"
       data-testid="storefront-footer"
     >
       <nav aria-label="Footer" className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
