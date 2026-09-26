@@ -15,10 +15,22 @@ A background sweep (~hourly) sends a reminder email to GOING RSVPs when the even
 - **Sweep service**: `backend/src/services/RsvpReminderService.js`
 - **Timer**: registered in `server.js`, first tick 60 s after boot, then every `RSVP_REMINDER_SWEEP_INTERVAL_MS` (default 1 h)
 - **Idempotent**: stamps `EventRsvp.remindedAt` atomically with `updateMany` before sending; a concurrent replica claims zero rows
+- **Retry**: a send that throws releases its own stamp (`updateMany` guarded on `remindedAt` equal to the value that sweep wrote), so the next sweep re-claims the row. Retries are bounded by the window — at most ~6 hourly sweeps. The trade: a provider that accepted the send but failed to acknowledge it can produce a duplicate reminder, which is preferred over a silently missing one
 - **Window**: events whose UTC date is 20–26 hours ahead of the sweep tick are eligible (survives ~4 h sweep delays)
 - **Email**: branded shell with org logo, event name, date/time in venue timezone (spec 033), party size, Cancel RSVP button
 - **Configuration**: `RSVP_REMINDER_SWEEP_INTERVAL_MS` env var
-- **Unit tests**: `backend/tests/unit/rsvpReminder.test.js` (8 tests, all mock prisma)
+- **Unit tests**: `backend/tests/unit/rsvpReminder.test.js` (11 tests, all mock prisma)
+
+## Live headcount (admin)
+
+`/admin/events/:eventId/rsvps` is the organizer's door view: Expected Headcount (Σ `partySize` of GOING), RSVPs (count of GOING), Cancelled, and the table.
+
+- **Re-reads itself every 30 s** while the tab is in front, and immediately when the tab comes back — RSVPs arrive right up to the doors.
+- A **Refresh** button forces a read; an `Updated hh:mm:ss` stamp (viewer's account zone, spec 030) says how fresh the number is.
+- A failed background poll keeps the last good numbers on screen instead of replacing the table with an error.
+- The table scrolls horizontally on a phone rather than clipping its last columns.
+
+Guards: `frontend/e2e/admin-rsvps.spec.ts` (desktop + 375 px) and `frontend/e2e/public-rsvp.spec.ts` (the patron form at 375 px, including the double-tap case).
 
 ## Data model
 

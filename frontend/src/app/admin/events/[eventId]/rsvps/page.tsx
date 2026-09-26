@@ -3,13 +3,18 @@
 // Admin › Event › RSVPs (spec 034 phase 2): headcount summary, table,
 // CSV export. Hidden for ticketed events.
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { rsvpApi, getActiveOrganizationId, type RsvpRow, type RsvpListResponse } from '@/services/api';
 import { useOrg } from '@/components/OrgContext';
 import { useAccountFormat } from '@/lib/accountFormat';
-import { Download } from 'lucide-react';
+import { Download, RefreshCw } from 'lucide-react';
+
+// How often the headcount re-reads itself while the tab is in front. RSVPs
+// arrive right up to the door, so an organizer watching this page should not
+// have to reload to see the number move.
+const REFRESH_INTERVAL_MS = 30_000;
 
 export default function RsvpsListPage({ params }: { params: { eventId: string } }) {
   const { data: session } = useSession();
@@ -17,26 +22,60 @@ export default function RsvpsListPage({ params }: { params: { eventId: string } 
   const { formatDateTime } = useAccountFormat();
   const [data, setData] = useState<RsvpListResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const fetchRsvps = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const result = await rsvpApi.listAdmin(params.eventId);
-      setData(result);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load RSVPs');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Keeps a slow poll from stacking on top of a still-running one.
+  const inFlight = useRef(false);
+
+  const fetchRsvps = useCallback(
+    async ({ silent = false }: { silent?: boolean } = {}) => {
+      if (inFlight.current) return;
+      inFlight.current = true;
+      try {
+        if (silent) setRefreshing(true);
+        else setLoading(true);
+        setError(null);
+        const result = await rsvpApi.listAdmin(params.eventId);
+        setData(result);
+        setUpdatedAt(new Date());
+      } catch (err: any) {
+        // A failed background poll keeps the last good numbers on screen
+        // rather than replacing the table with an error page.
+        if (!silent) setError(err.message || 'Failed to load RSVPs');
+      } finally {
+        inFlight.current = false;
+        setRefreshing(false);
+        setLoading(false);
+      }
+    },
+    [params.eventId]
+  );
 
   // Wait for OrgContext: until it sets X-Jump-Org, a direct load or reload
   // resolves no organization and the backend answers 404.
   useEffect(() => {
     if (!selectedOrgId) return;
     fetchRsvps();
-  }, [params.eventId, selectedOrgId]);
+  }, [params.eventId, selectedOrgId, fetchRsvps]);
+
+  // Poll only while the tab is in front, and catch up as soon as it is again.
+  useEffect(() => {
+    if (!selectedOrgId) return;
+    const tick = () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      fetchRsvps({ silent: true });
+    };
+    const timer = window.setInterval(tick, REFRESH_INTERVAL_MS);
+    const onVisible = () => {
+      if (!document.hidden) fetchRsvps({ silent: true });
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [selectedOrgId, fetchRsvps]);
 
   const handleCsvExport = async () => {
     try {
@@ -95,9 +134,24 @@ export default function RsvpsListPage({ params }: { params: { eventId: string } 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       {/* Headers */}
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">RSVPs</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <div className="flex items-baseline gap-3">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">RSVPs</h2>
+          {updatedAt && (
+            <span className="text-xs text-gray-500 dark:text-slate-400" data-testid="rsvp-updated-at">
+              Updated {formatDateTime(updatedAt, { timeStyle: 'medium' })}
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => fetchRsvps({ silent: true })}
+            disabled={refreshing}
+            className="inline-flex items-center gap-2 rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-60"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} aria-hidden />
+            Refresh
+          </button>
           <Link
             href={`/admin/customers?rsvp=going&eventId=${encodeURIComponent(params.eventId)}`}
             className="inline-flex items-center rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
@@ -118,7 +172,7 @@ export default function RsvpsListPage({ params }: { params: { eventId: string } 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <div className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4">
           <p className="text-sm text-gray-500 dark:text-slate-400">Expected Headcount</p>
-          <p className="text-3xl font-bold text-gray-900 dark:text-white mt-1">{headcount}</p>
+          <p className="text-3xl font-bold text-gray-900 dark:text-white mt-1" data-testid="rsvp-headcount">{headcount}</p>
         </div>
         <div className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4">
           <p className="text-sm text-gray-500 dark:text-slate-400">RSVPs</p>
@@ -131,13 +185,13 @@ export default function RsvpsListPage({ params }: { params: { eventId: string } 
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+      <div className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-x-auto">
         {data.data.length === 0 ? (
           <p className="text-gray-500 dark:text-slate-400 text-center py-8">
             No RSVPs yet.
           </p>
         ) : (
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[44rem] text-sm">
             <thead>
               <tr className="bg-gray-50 dark:bg-slate-900/50 text-left text-xs text-gray-500 dark:text-slate-400 uppercase tracking-wider">
                 <th className="px-4 py-3">Name</th>
