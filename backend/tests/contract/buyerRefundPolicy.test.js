@@ -86,7 +86,7 @@ describe('Self-serve refund policy', () => {
     const res = await refund(ticket);
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ amount: 20, feeAmount: 0, status: 'SUCCEEDED' });
-    expect(refundsCreate).toHaveBeenCalledWith(expect.objectContaining({ amount: 2000 }));
+    expect(refundsCreate).toHaveBeenCalledWith(expect.objectContaining({ amount: 2000 }), expect.objectContaining({ idempotencyKey: expect.any(String) }));
   });
 
   it('refuses when the organization turned self-serve refunds off', async () => {
@@ -125,7 +125,7 @@ describe('Self-serve refund policy', () => {
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ amount: 17.5, feeAmount: 2.5 });
     expect(res.body.reason).toMatch(/2\.50 fee retained/);
-    expect(refundsCreate).toHaveBeenCalledWith(expect.objectContaining({ amount: 1750 }));
+    expect(refundsCreate).toHaveBeenCalledWith(expect.objectContaining({ amount: 1750 }), expect.objectContaining({ idempotencyKey: expect.any(String) }));
     const stored = await prisma.refund.findFirst({ where: { ticketId: ticket.id } });
     expect(Number(stored.amount)).toBe(17.5);
     expect(Number(stored.feeAmount)).toBe(2.5);

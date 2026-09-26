@@ -7,7 +7,7 @@
 // a Stripe call.
 
 import { prisma } from '@jump/db';
-import { createStripeRefund } from './stripeRefund.js';
+import { createStripeRefund, refundIdempotencyKey } from './stripeRefund.js';
 import addOnService from './AddOnService.js';
 import logger from '../utils/logger.js';
 import { NotFoundError, ConflictError, ValidationError } from '../middleware/errorHandler.js';
@@ -15,6 +15,23 @@ import { orderStatusFor } from './applicationOrderStatus.js';
 import boothService from './BoothService.js';
 
 const round = (v) => Math.round((v + Number.EPSILON) * 100) / 100;
+
+/**
+ * Stripe refund status → our RefundStatus. A refund only counts as money
+ * returned once Stripe says `succeeded`; `pending` is recorded but excluded
+ * from every refunded-total sum, and `failed`/`canceled` never count at all.
+ */
+const EXTERNAL_REFUND_STATUS = {
+  succeeded: 'SUCCEEDED',
+  pending: 'PENDING',
+  requires_action: 'PENDING',
+  failed: 'FAILED',
+  canceled: 'FAILED',
+};
+
+/** A payload with no `status` is a settled refund (older API versions omit it). */
+const externalRefundStatus = (refund) =>
+  refund?.status ? (EXTERNAL_REFUND_STATUS[refund.status] ?? 'SUCCEEDED') : 'SUCCEEDED';
 
 class RefundService {
   /**
@@ -93,19 +110,19 @@ class RefundService {
         },
       });
 
-      // Issue Stripe refund
-      let stripeRefund;
-      try {
-        stripeRefund = await this._createStripeRefund(
-          order.stripePaymentIntentId,
-          refundAmount,
-          reason,
-          { connected: Boolean(order.stripeAccountId) }
-        );
-      } catch (err) {
-        // Stripe failed — transaction rolls back, PENDING record disappears
-        throw err;
-      }
+      // Issue Stripe refund. The key is built from the order id and the two
+      // amounts read under this lock, not from refundRecord.id — a retry after
+      // a lost response rolls this transaction back and creates a *new* row, so
+      // a row-derived key would be fresh and Stripe would refund twice.
+      const stripeRefund = await this._createStripeRefund(
+        order.stripePaymentIntentId,
+        refundAmount,
+        reason,
+        {
+          connected: Boolean(order.stripeAccountId),
+          idempotencyKey: refundIdempotencyKey(`order:${orderId}`, refundAmount, alreadyRefunded),
+        }
+      );
 
       // Update refund record with Stripe ID and mark SUCCEEDED
       await tx.$executeRaw`
@@ -214,15 +231,25 @@ class RefundService {
         });
         return { refund: manual, order, done: true };
       }
-      const pending = await tx.refund.create({
-        data: { orderId, amount: value, reason, status: 'PENDING', initiatedBy },
+      // A previous attempt whose outcome was unknown left its row PENDING with
+      // no Stripe id. Reuse it rather than stacking a second row: the retry
+      // carries the same idempotency key, so it resolves to the same Stripe
+      // refund and the ledger keeps one row per Stripe object.
+      const open = await tx.refund.findFirst({
+        where: { orderId, status: 'PENDING', stripeRefundId: null, amount: value },
+        orderBy: { createdAt: 'asc' },
       });
-      return { refund: pending, order, done: false, value };
+      const pending =
+        open ??
+        (await tx.refund.create({
+          data: { orderId, amount: value, reason, status: 'PENDING', initiatedBy },
+        }));
+      return { refund: pending, order, done: false, value, alreadyRefunded: Number(alreadyRaw) };
     });
     if (prepared.done) return this._formatRefund(prepared.refund, prepared.order);
 
     // Stripe outside the lock, like ApplicationPaymentService.refund did (spec 011).
-    const { refund, order, value } = prepared;
+    const { refund, order, value, alreadyRefunded } = prepared;
     let stripeRefund;
     try {
       stripeRefund = await createStripeRefund({
@@ -231,9 +258,30 @@ class RefundService {
         reason,
         connected: Boolean(order.stripeAccountId),
         metadata: { orderId, applicationId: order.applicationId },
+        // Built from the order id and the amounts read under the lock above, so
+        // an admin retrying the attempt that just failed reuses the key and
+        // Stripe returns the first refund. A genuine second refund of the same
+        // amount has a different already-refunded total, so it gets its own key.
+        idempotencyKey: refundIdempotencyKey(`order:${orderId}`, value, alreadyRefunded),
       });
     } catch (error) {
-      await prisma.refund.update({ where: { id: refund.id }, data: { status: 'FAILED' } });
+      if (error?.outcomeUnknown) {
+        // Stripe may already hold this refund (timeout, 504, redeploy mid-call).
+        // Marking the row FAILED would hide it from the remaining-refundable
+        // guard and invite a second refund, so it stays PENDING: excluded from
+        // refunded totals, visible in the ledger, and settled by the
+        // refund.created / charge.refunded webhook when it arrives.
+        logger.error('Application refund outcome unknown; row left PENDING for reconciliation', {
+          event: 'application_refund_unknown',
+          orderId,
+          applicationId: order.applicationId,
+          refundId: refund.id,
+          amount: value,
+          error: error.message,
+        });
+      } else {
+        await prisma.refund.update({ where: { id: refund.id }, data: { status: 'FAILED' } });
+      }
       throw error;
     }
     const finished = await prisma.$transaction(async (tx) => {
@@ -376,18 +424,18 @@ class RefundService {
         },
       });
 
-      // Issue Stripe refund
-      let stripeRefund;
-      try {
-        stripeRefund = await this._createStripeRefund(
-          order.payment.stripePaymentIntentId,
-          refundAmount,
-          reason,
-          { connected: Boolean(order.payment.stripeAccountId) }
-        );
-      } catch (err) {
-        throw err;
-      }
+      // Issue Stripe refund. Keyed on the ticket, which is refunded exactly
+      // once, so a retry after a lost response returns the first refund instead
+      // of issuing a second one.
+      const stripeRefund = await this._createStripeRefund(
+        order.payment.stripePaymentIntentId,
+        refundAmount,
+        reason,
+        {
+          connected: Boolean(order.payment.stripeAccountId),
+          idempotencyKey: refundIdempotencyKey(`ticket:${ticket.id}`, refundAmount),
+        }
+      );
 
       // Update refund record with Stripe ID and mark SUCCEEDED
       await tx.$executeRaw`
@@ -492,8 +540,10 @@ class RefundService {
         data: { orderId: order.id, orderAddOnId: line.id, amount: refundAmount, reason, status: 'PENDING', initiatedBy },
       });
 
+      // Keyed on the add-on line, which is refunded exactly once.
       const stripeRefund = await this._createStripeRefund(order.payment.stripePaymentIntentId, refundAmount, reason, {
         connected: Boolean(order.payment.stripeAccountId),
+        idempotencyKey: refundIdempotencyKey(`addon:${line.id}`, refundAmount),
       });
 
       await tx.$executeRaw`
@@ -531,12 +581,38 @@ class RefundService {
    * @param {Object} stripeRefund - Stripe refund object from webhook
    */
   async handleExternalRefund(paymentIntentId, stripeRefund) {
-    // Check if we already recorded this refund
+    const status = externalRefundStatus(stripeRefund);
     const existing = await prisma.refund.findFirst({
       where: { stripeRefundId: stripeRefund.id },
     });
-    if (existing) {
+
+    // Stripe sends the same refund through several events (charge.refunded,
+    // refund.created, refund.updated, charge.refund.updated) and retries each.
+    // The Stripe refund id is the idempotency key for all of them.
+    if (existing && existing.status === status) {
       logger.info('External refund already recorded (idempotent skip)', {
+        stripeRefundId: stripeRefund.id,
+        status,
+      });
+      return;
+    }
+    if (existing && status === 'PENDING') {
+      // refund.created arriving after refund.updated: the settled state wins.
+      logger.info('External refund event is out of order; keeping recorded status', {
+        stripeRefundId: stripeRefund.id,
+        recorded: existing.status,
+      });
+      return;
+    }
+    if (!existing && status === 'FAILED') {
+      logger.info('External refund never settled; nothing to record', {
+        stripeRefundId: stripeRefund.id,
+        stripeStatus: stripeRefund.status,
+      });
+      return;
+    }
+    if (!paymentIntentId) {
+      logger.warn('External refund without a payment intent; cannot place it on an order', {
         stripeRefundId: stripeRefund.id,
       });
       return;
@@ -559,20 +635,64 @@ class RefundService {
     const order = payment.order;
     const refundAmount = stripeRefund.amount / 100; // Stripe uses cents
 
+    if (status === 'FAILED') {
+      // A recorded refund that Stripe later failed or canceled: the money came
+      // back to us. Stop counting it as returned. Tickets voided by the earlier
+      // SUCCEEDED transition are NOT re-issued automatically — re-admitting a
+      // holder is not a decision to make from a webhook.
+      await prisma.refund.update({ where: { id: existing.id }, data: { status: 'FAILED' } });
+      logger.error('External refund failed after being recorded; needs manual reconciliation', {
+        event: 'external_refund_reversed',
+        orderId: order.id,
+        orderRef: order.orderRef,
+        stripeRefundId: stripeRefund.id,
+        stripeStatus: stripeRefund.status,
+        amount: refundAmount,
+      });
+      return;
+    }
+
+    if (status === 'PENDING') {
+      // Money is on its way out but has not settled. Record it so the ledger
+      // shows the in-flight refund; no total counts it until it succeeds.
+      await prisma.refund.create({
+        data: {
+          orderId: order.id,
+          stripeRefundId: stripeRefund.id,
+          amount: refundAmount,
+          reason: stripeRefund.reason || 'external',
+          status: 'PENDING',
+          initiatedBy: null,
+        },
+      });
+      logger.info('External refund recorded as pending', {
+        orderId: order.id,
+        stripeRefundId: stripeRefund.id,
+        amount: refundAmount,
+      });
+      return;
+    }
+
+    // SUCCEEDED: a new refund, or one we recorded as PENDING that just settled.
+    const settle = (tx, reason) =>
+      existing
+        ? tx.refund.update({ where: { id: existing.id }, data: { status: 'SUCCEEDED' } })
+        : tx.refund.create({
+            data: {
+              orderId: order.id,
+              stripeRefundId: stripeRefund.id,
+              amount: refundAmount,
+              reason: stripeRefund.reason || reason,
+              status: 'SUCCEEDED',
+              initiatedBy: null,
+            },
+          });
+
     if (order.kind === 'APPLICATION') {
       // Spec 024: nothing to void; record the refund and move both statuses.
       await prisma.$transaction(async (tx) => {
         await tx.$executeRaw`SELECT 1 FROM "Order" WHERE "id" = ${order.id} FOR UPDATE`;
-        await tx.refund.create({
-          data: {
-            orderId: order.id,
-            stripeRefundId: stripeRefund.id,
-            amount: refundAmount,
-            reason: stripeRefund.reason || 'external',
-            status: 'SUCCEEDED',
-            initiatedBy: null,
-          },
-        });
+        await settle(tx, 'external');
         await this._recomputeApplicationOrderStatus(tx, order.id);
       });
       logger.info('External application refund processed', {
@@ -597,16 +717,7 @@ class RefundService {
       const totalRefundedAfter = Number(alreadyRefundedRaw) + refundAmount;
       const isFullRefund = totalRefundedAfter >= Number(order.totalAmount);
 
-      await tx.refund.create({
-        data: {
-          orderId: order.id,
-          stripeRefundId: stripeRefund.id,
-          amount: refundAmount,
-          reason: stripeRefund.reason || 'Refunded via Stripe',
-          status: 'SUCCEEDED',
-          initiatedBy: null,
-        },
-      });
+      await settle(tx, 'Refunded via Stripe');
 
       // For external refunds, we can't know which specific ticket was refunded.
       // Void tickets proportionally: void enough to cover the refund amount.
@@ -702,14 +813,20 @@ class RefundService {
   // ─── Internal ─────────────────────────────────────
 
   /**
-   * @param {{ connected?: boolean }} [options] - `connected`: the charge was a
-   *   destination charge (spec 010 phase 2). Stripe then pulls the organization's
-   *   share back (`reverse_transfer`) and returns the platform's fee
-   *   (`refund_application_fee`), both pro rata for partial amounts, so the
-   *   buyer is made whole and the platform eats only Stripe's processing cost.
+   * @param {{ connected?: boolean, idempotencyKey?: string|null }} [options] -
+   *   `connected`: the charge was a destination charge (spec 010 phase 2). Stripe
+   *   then pulls the organization's share back (`reverse_transfer`) and returns
+   *   the platform's fee (`refund_application_fee`), both pro rata for partial
+   *   amounts, so the buyer is made whole and the platform eats only Stripe's
+   *   processing cost.
+   *
+   *   The three ticket paths call this inside their transaction, so a failure
+   *   rolls the PENDING row away and leaves no local trace of a refund Stripe
+   *   may have created. `idempotencyKey` stops the retry from issuing a second
+   *   one, and the charge.refunded / refund.created webhook records the first.
    */
-  async _createStripeRefund(paymentIntentId, amount, reason, { connected = false } = {}) {
-    return createStripeRefund({ paymentIntentId, amount, reason, connected });
+  async _createStripeRefund(paymentIntentId, amount, reason, { connected = false, idempotencyKey = null } = {}) {
+    return createStripeRefund({ paymentIntentId, amount, reason, connected, idempotencyKey });
   }
 
   _formatRefund(refund, order) {
