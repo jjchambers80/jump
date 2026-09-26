@@ -9,7 +9,7 @@ The admin Events list (`/admin/events`) is the organizer's main management surfa
 | `EventsPageHeader` | `components/events/EventsPageHeader.tsx` | Icon tile, `<h1>Events</h1>`, total pill, subtitle, Create Event link |
 | `EventsSummary` | `components/events/EventsSummary.tsx` | KPI strip: 4 cards (Registered, Published, Drafts, Available inventory) in a `grid-cols-2 xl:grid-cols-4` layout |
 | `EventsToolbar` | `components/events/EventsToolbar.tsx` | Status radiogroup with counts, search (300ms debounce), category select, sort select |
-| `EventListCard` | `components/events/EventListCard.tsx` | `<article aria-labelledby>` with `<h2>` title, date tile, status pill, category chip, sold/avail, sell-through bar |
+| `EventListCard` | `components/events/EventListCard.tsx` | `<article aria-labelledby>` with `<h2>` title, date tile, square event image tile, status pill, category chip, sold/avail, sell-through bar |
 | `EventActionsMenu` | `components/events/EventActionsMenu.tsx` | `⋯` overflow menu with keyboard nav (ArrowDown/Up, Escape), focus return |
 | `EventsPagination` | `components/events/EventsPagination.tsx` | Numbered pagination `<nav aria-label="Pagination">`, `aria-current="page"`, Prev/Next buttons |
 | `CancelEventDialog` | `components/events/CancelEventDialog.tsx` | Modal confirm dialog for event cancellation (replaces `window.confirm`) |
@@ -20,7 +20,8 @@ The admin Events list (`/admin/events`) is the organizer's main management surfa
 - **Debounced search**: 300ms debounce on the search input before updating the URL and refetching.
 - **Filter persistence**: Filters survive page reload because they are in the URL.
 - **Status filter as radiogroup**: Uses `role="radiogroup"` with `role="radio"` and `aria-checked` buttons (not tab panels), with counts inside the accessible name (e.g. "Published, 7 events").
-- **Card layout**: `grid-cols-[auto_1fr] xl:grid-cols-[auto_1fr_auto]` — date tile, content, actions. Below xl the actions row moves under the content.
+- **Card layout**: `grid-cols-[auto_1fr] sm:grid-cols-[auto_auto_1fr] xl:grid-cols-[auto_auto_1fr_auto]` — date tile, event image, content, actions. Below xl the actions row moves under the content; below sm the image tile hides so a phone keeps room for the title.
+- **Event image tile**: a 64 px square after the date tile showing the event's Media image (`Event.logoUrl`, already in the list payload). It loads the backend's 128² `thumb` variant via `imageVariantUrl()` in `lib/assets.ts` (swaps `/images/:id/:hash/original` for `/thumb`; any other URL passes through unchanged), lazy-loaded, `object-cover`. No image → the event's first letter on a hatched indigo tile, matching the editor's `EventEditSummary` placeholder. Past and cancelled events render the image grayscale and faded. The tile is `aria-hidden` — the `<h2>` already names the event.
 - **Primary action per card type**: DRAFT/PUBLISHED → Edit (link); DRAFT also shows Publish; CANCELLED → Duplicate. Remaining actions in `⋯` menu.
 - **Contextual actions**: TICKETED published → Analytics; RSVP → RSVPs. Never both on the same card.
 - **Sell-through**: Sold ÷ sum of tier `quantityTotal`, labelled "Cap: N (x%)". RSVP events show "N going / M limit".

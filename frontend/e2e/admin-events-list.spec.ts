@@ -29,6 +29,7 @@ const sampleEvents = [
     id: 'evt-1',
     name: 'Summer Music Festival',
     description: 'A grand musical event',
+    logoUrl: '/images/img-1/hash-1/original',
     date: futureDate(30),
     capacity: 5000,
     category: 'Music',
@@ -293,6 +294,44 @@ test('RSVP card shows RSVPs and not Analytics', async ({ page }) => {
   // Should show RSVPs button (not Analytics)
   await expect(rsvpCard.getByRole('link', { name: /RSVPs/i })).toBeVisible();
   await expect(rsvpCard.getByRole('link', { name: /Analytics/i })).not.toBeVisible();
+});
+
+test('square event image tile sits between the date tile and the details', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockApi(page);
+  // The thumb variant, never the full-size original.
+  await page.route(`${API}/images/img-1/hash-1/thumb`, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'image/svg+xml',
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect width="128" height="128" fill="#6366f1"/></svg>',
+    })
+  );
+  await page.goto(`/admin/events?orgId=${ORG_ID}`);
+
+  const card = page.getByRole('article', { name: 'Summer Music Festival' });
+  const tile = card.getByTestId('event-image-tile');
+  await expect(tile).toBeVisible();
+  await expect(tile.locator('img')).toHaveAttribute('src', `${API}/images/img-1/hash-1/thumb`);
+
+  const box = await tile.boundingBox();
+  expect(box!.width).toBeCloseTo(box!.height, 0);
+  const title = await card.getByRole('heading', { level: 2 }).boundingBox();
+  expect(box!.x + box!.width).toBeLessThanOrEqual(title!.x);
+
+  // No image → monogram placeholder, same square.
+  const noImage = page.getByRole('article', { name: 'Comedy Night' }).getByTestId('event-image-tile');
+  await expect(noImage.locator('img')).toHaveCount(0);
+  await expect(noImage).toHaveText('C');
+});
+
+test('event image tile hides on a phone', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockApi(page);
+  await page.goto(`/admin/events?orgId=${ORG_ID}`);
+  const card = page.getByRole('article', { name: 'Summer Music Festival' });
+  await expect(card).toBeVisible();
+  await expect(card.getByTestId('event-image-tile')).toBeHidden();
 });
 
 test('Ended pill on a past event', async ({ page }) => {
