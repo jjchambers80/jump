@@ -35,4 +35,4 @@ Tax (spec 009): `TaxRegion` is unique on `(organizationId, country, region)` and
 
 `prisma/seed.ts` — Run via `npm run db:seed`. Update when adding required fields.
 
-Add-ons (spec 012): `AddOn.quantityTotal` null = unlimited; `quantitySold` / `quantityReserved` move only through `AddOnService.reserve/commit/release/unsell` (conditional raw UPDATE). `OrderAddOn` is unique on `(orderId, addOnId)`; add-on lines are never `OrderItem`s.
+Add-ons (spec 012): `AddOn.quantityTotal` null = unlimited; `quantitySold` / `quantityReserved` move only through `AddOnService.reserve/commit/release/unsell` (conditional raw UPDATE). `OrderAddOn` is unique on `(orderId, addOnId)`; add-on lines are never `OrderItem`s. Spec 037: `AddOnProduct` is the org-level saved add-on (name unique per org, case-insensitive in the service); `AddOn.productId` points an offering at it (nullable until `db:backfill:037-add-ons`); `OrderAddOn.name` is the receipt snapshot (NOT NULL, `20261010100000_saved_add_ons`).

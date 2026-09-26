@@ -311,7 +311,7 @@ class TicketService {
         priceTier: { select: { name: true } },
         contact: { select: { firstName: true, lastName: true, email: true } },
         // Add-ons bought with the order (spec 012) so staff can hand them over at the door
-        order: { select: { addOns: { where: { refundedAt: null }, include: { addOn: { select: { name: true } } } } } },
+        order: { select: { addOns: { where: { refundedAt: null }, select: { name: true, quantity: true } } } },
       },
     });
 
@@ -349,7 +349,7 @@ class TicketService {
       eventName: ticket.event.name,
       eventDate: ticket.event.date,
       redeemedAt: ticket.redeemedAt,
-      addOns: (ticket.order?.addOns || []).map((line) => ({ name: line.addOn?.name ?? 'Add-on', quantity: line.quantity })),
+      addOns: (ticket.order?.addOns || []).map((line) => ({ name: line.name ?? 'Add-on', quantity: line.quantity })),
     };
   }
 
@@ -369,7 +369,7 @@ class TicketService {
         event: { select: { id: true, name: true, date: true, venue: { select: { organizationId: true, timezone: true } } } },
         priceTier: { select: { name: true } },
         contact: { select: { firstName: true, lastName: true } },
-        order: { select: { addOns: { where: { refundedAt: null }, include: { addOn: { select: { name: true } } } } } },
+        order: { select: { addOns: { where: { refundedAt: null }, select: { name: true, quantity: true } } } },
       },
     });
 
@@ -442,7 +442,7 @@ class TicketService {
       priceTierName: ticket.priceTier.name,
       contactName: `${ticket.contact.firstName} ${ticket.contact.lastName}`,
       redeemedAt: now,
-      addOns: (ticket.order?.addOns || []).map((line) => ({ name: line.addOn?.name ?? 'Add-on', quantity: line.quantity })),
+      addOns: (ticket.order?.addOns || []).map((line) => ({ name: line.name ?? 'Add-on', quantity: line.quantity })),
     };
   }
 
@@ -798,7 +798,7 @@ class TicketService {
             id: true,
             orderRef: true,
             // Add-ons on the order (spec 012) — staff hands these over at the door
-            addOns: { where: { refundedAt: null }, include: { addOn: { select: { name: true } } } },
+            addOns: { where: { refundedAt: null }, select: { name: true, quantity: true } },
           },
         },
       },
@@ -838,7 +838,7 @@ class TicketService {
       eventDate: ticket.event.date,
       eventId: ticket.event.id,
       totalTickets: allTickets.length,
-      addOns: ticket.order.addOns.map((line) => ({ name: line.addOn?.name ?? 'Add-on', quantity: line.quantity })),
+      addOns: ticket.order.addOns.map((line) => ({ name: line.name ?? 'Add-on', quantity: line.quantity })),
       tickets: allTickets.map((t) => ({
         ticketId: t.id,
         barcode: t.barcode,

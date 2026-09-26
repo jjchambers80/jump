@@ -24,7 +24,7 @@ const LIST_INCLUDE = {
   contact: { select: { id: true, firstName: true, lastName: true, email: true } },
   payment: { select: { source: true, stripePaymentIntentId: true, stripeAccountId: true, status: true } },
   items: { select: { kind: true, quantity: true, description: true, unitPrice: true, priceTier: { select: { name: true } } }, orderBy: { createdAt: 'asc' } },
-  addOns: { select: { quantity: true, addOn: { select: { name: true } } } },
+  addOns: { select: { quantity: true, name: true } },
   refunds: { where: { status: 'SUCCEEDED' }, select: { id: true, amount: true, stripeRefundId: true, manual: true, createdAt: true } },
   application: {
     select: {
@@ -357,6 +357,7 @@ class OrderService {
               const breakdown = fees.itemBreakdowns[items.length + i];
               return {
                 addOnId: line.addOn.id,
+                name: line.addOn.name, // spec 037: receipt snapshot
                 quantity: line.quantity,
                 unitPrice: line.addOn.price,
                 platformFee: breakdown.platformFee,

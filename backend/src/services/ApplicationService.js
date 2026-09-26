@@ -1993,7 +1993,7 @@ class ApplicationService {
       applicantPays: Number(a.order?.totalAmount ?? 0),
       addOns: (a.order?.addOns || []).map((l) => ({
         addOnId: l.addOnId,
-        name: l.addOn?.name ?? null,
+        name: l.name ?? l.addOn?.name ?? null,
         quantity: l.quantity,
       })),
       submittedAt: a.submittedAt,

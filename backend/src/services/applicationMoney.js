@@ -78,7 +78,7 @@ export function moneyOf(application, { taxInclusive = false } = {}) {
       id: l.id,
       addOnId: l.addOnId,
       addOn: l.addOn,
-      name: l.addOn?.name ?? null,
+      name: l.name ?? l.addOn?.name ?? null,
       quantity: l.quantity,
       unitPrice: num(l.unitPrice),
       applicantPays: buyerLineTotal(l, order.feeMode, { taxInclusive }),

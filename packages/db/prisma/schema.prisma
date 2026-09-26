@@ -511,6 +511,7 @@ model Organization {
   urlRedirects             UrlRedirect[]
   floorMaps                FloorMap[]
   floorMapTemplates        FloorMapTemplate[]
+  addOnProducts            AddOnProduct[]
 }
 
 // Custom content pages managed under Online Store. Content is stored as the
@@ -1732,9 +1733,36 @@ enum AddOnScope {
   BOTH
 }
 
+// Spec 037 phase 4: a saved add-on — the org-level definition an event's
+// AddOn offering points at. Name / description / scope / taxable are shared
+// (edited once, copied onto the offerings during the transition); price is
+// only a default — each offering keeps its own (D9). Names are unique per
+// organization case-insensitively, enforced in AddOnProductService.
+model AddOnProduct {
+  id             String     @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+  defaultPrice   Decimal    @db.Decimal(10, 2)
+  scope          AddOnScope @default(BOTH)
+  taxable        Boolean    @default(true)
+  isArchived     Boolean    @default(false)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  offerings    AddOn[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, isArchived])
+}
+
 model AddOn {
   id               String     @id @default(cuid())
   eventId          String
+  // Spec 037: the saved add-on this offering sells. Nullable until the dedupe
+  // backfill (db:backfill:037-add-ons) has linked every legacy row.
+  productId        String?
   name             String
   description      String?
   price            Decimal    @db.Decimal(10, 2)
@@ -1752,11 +1780,13 @@ model AddOn {
   updatedAt DateTime @updatedAt
 
   event            Event                  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  product          AddOnProduct?          @relation(fields: [productId], references: [id], onDelete: SetNull)
   priceTiers       PriceTierAddOn[]
   applicationTiers ApplicationTierAddOn[]
   orderLines       OrderAddOn[]
 
   @@index([eventId, isActive])
+  @@index([productId])
 }
 
 model PriceTierAddOn {
@@ -1785,6 +1815,9 @@ model OrderAddOn {
   id            String    @id @default(cuid())
   orderId       String
   addOnId       String
+  // Spec 037: the add-on's name at purchase. Receipts, emails, CSVs and
+  // serializers read this, never the live AddOn / AddOnProduct name.
+  name          String
   quantity      Int
   unitPrice     Decimal   @db.Decimal(10, 2) // listed price at purchase, immutable
   platformFee   Decimal   @default(0) @db.Decimal(10, 2)
