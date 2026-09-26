@@ -34,6 +34,7 @@ import boothService from './BoothService.js';
 import { ORDER_INCLUDE, adjustmentItems, buyerLineTotal, tierItem } from './OrderLineService.js';
 import { orderStatusFor } from './applicationOrderStatus.js';
 import logger from '../utils/logger.js';
+import { createStripeRefund } from './stripeRefund.js';
 
 const SESSION_TTL_SECONDS = 30 * 60;
 /** Saved-card brand / last four by payment method id (a card never changes). */
@@ -476,6 +477,15 @@ class ApplicationPaymentService {
     });
   }
 
+  /** Best-effort expiry of a session the application no longer waits on (never throws). */
+  async expireSupersededSession(applicationId, sessionId) {
+    try {
+      await this.expireCheckoutSession(sessionId);
+    } catch (error) {
+      logger.warn('Superseded application checkout session not expired', { applicationId, sessionId, error: error.message });
+    }
+  }
+
   /** Expire a hosted Checkout session the vendor walked away from; already-expired sessions are fine. */
   async expireCheckoutSession(sessionId) {
     try {
@@ -539,9 +549,11 @@ class ApplicationPaymentService {
    * @returns {Promise<boolean>} true when something was released now
    */
   async releaseSelection(applicationId, { reason = null, force = false, failure = null, expiredBy = null } = {}) {
+    let supersededSessionId = null;
     const released = await prisma.$transaction(async (tx) => {
       const rows = await tx.$queryRaw`SELECT * FROM "Application" WHERE "id" = ${applicationId} FOR UPDATE`;
       const locked = rows[0];
+      supersededSessionId = locked?.stripeCheckoutSessionId ?? null;
       if (!locked || locked.status !== 'APPROVED' || !locked.selectionHeldUntil) return false;
       const allowed = force ? ['PAYMENT_DUE', 'PROCESSING'] : ['PAYMENT_DUE'];
       if (!allowed.includes(locked.paymentStatus)) return false;
@@ -577,7 +589,11 @@ class ApplicationPaymentService {
       }
       return true;
     });
-    if (released) logger.info('Application space released', { event: 'application_space_released', applicationId, reason });
+    if (released) {
+      logger.info('Application space released', { event: 'application_space_released', applicationId, reason });
+      // The released hold's Checkout session must not stay payable.
+      if (supersededSessionId) await this.expireSupersededSession(applicationId, supersededSessionId);
+    }
     return released;
   }
 
@@ -717,6 +733,7 @@ class ApplicationPaymentService {
       typeof session.payment_intent === 'string'
         ? session.payment_intent
         : session.payment_intent?.id;
+    if (await this._refundSupersededSession(applicationId, session, paymentIntentId)) return;
     const before = await prisma.application.findUnique({
       where: { id: applicationId },
       select: {
@@ -750,7 +767,64 @@ class ApplicationPaymentService {
     else await this._send(applicationId, 'APPROVED');
   }
 
+  /**
+   * Spec 037 phase 5: a vendor can abandon a Checkout session, let the hold
+   * lapse and choose again — the application then waits on a new session (or
+   * a saved-card charge) for a possibly different amount. Superseded sessions
+   * are expired on Stripe, but one completed in the gap must never credit the
+   * current order: its money is refunded in full and nothing else moves.
+   * A replay of the session that actually paid is left alone.
+   * @returns {Promise<boolean>} true when the session was superseded (handled here)
+   */
+  async _refundSupersededSession(applicationId, session, paymentIntentId) {
+    const current = await prisma.application.findUnique({
+      where: { id: applicationId },
+      select: { stripeCheckoutSessionId: true, order: { select: { payment: { select: { stripePaymentIntentId: true } } } } },
+    });
+    if (!current || current.stripeCheckoutSessionId === session.id) return false;
+    if (paymentIntentId && current.order?.payment?.stripePaymentIntentId === paymentIntentId) return true; // replay of the paid session
+    if (!paymentIntentId || !session.amount_total) {
+      logger.error('Superseded application checkout completed without a refundable payment', { applicationId, sessionId: session.id });
+      return true;
+    }
+    const intent = await stripe.paymentIntents.retrieve(paymentIntentId).catch(() => null);
+    await createStripeRefund({
+      paymentIntentId,
+      amount: session.amount_total / 100,
+      reason: 'superseded',
+      connected: Boolean(intent?.transfer_data?.destination),
+      metadata: { applicationId, reason: 'superseded_checkout_session', sessionId: session.id },
+    });
+    logger.error('Superseded application checkout session was paid; refunded in full', {
+      event: 'application_superseded_session_refunded',
+      applicationId,
+      sessionId: session.id,
+      paymentIntentId,
+      amount: session.amount_total / 100,
+    });
+    return true;
+  }
+
   async _onIntentSucceeded(applicationId, intent) {
+    // Checkout-created intents carry the same metadata; their session's
+    // completion event is the authoritative one (and checks the session is
+    // still current), so the intent event never marks them paid.
+    if (intent.metadata?.purpose !== 'approval') return;
+    // An off-session charge only pays the attempt the order recorded.
+    const recorded = await prisma.application.findUnique({
+      where: { id: applicationId },
+      select: { order: { select: { payment: { select: { stripePaymentIntentId: true } } } } },
+    });
+    const recordedIntentId = recorded?.order?.payment?.stripePaymentIntentId;
+    if (recordedIntentId && recordedIntentId !== intent.id) {
+      logger.error('Stale application charge succeeded; not applied', {
+        event: 'application_stale_intent_succeeded',
+        applicationId,
+        paymentIntentId: intent.id,
+        recordedIntentId,
+      });
+      return;
+    }
     const changed = await this._markPaid(applicationId, intent.id, { source: 'payment_intent' });
     if (changed && intent.metadata?.purpose === 'approval') await this._send(applicationId, 'APPROVED');
   }

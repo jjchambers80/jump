@@ -13,13 +13,14 @@ import { staffToken, joinOrgByToken, cleanupStaff } from '../helpers/staff.js';
 // Only the cancel-checkout path and the card-on-file decline test reach Stripe.
 const mockSessionsExpire = jest.fn().mockResolvedValue({});
 const mockPaymentIntentsCreate = jest.fn();
+const mockRefundsCreate = jest.fn().mockResolvedValue({ id: 're_test', status: 'succeeded' });
 jest.unstable_mockModule('../../src/config/stripe.js', () => ({
   default: {
     checkout: { sessions: { create: jest.fn(), retrieve: jest.fn(), expire: mockSessionsExpire } },
     customers: { create: jest.fn() },
-    paymentIntents: { create: mockPaymentIntentsCreate, retrieve: jest.fn() },
+    paymentIntents: { create: mockPaymentIntentsCreate, retrieve: jest.fn().mockResolvedValue({}) },
     setupIntents: { retrieve: jest.fn() },
-    refunds: { create: jest.fn() },
+    refunds: { create: mockRefundsCreate },
     webhooks: { constructEvent: jest.fn() },
   },
 }));
@@ -520,5 +521,72 @@ describe('Approved vendor booth purchase API', () => {
       .send({ chargeTiming: 'SUBMIT' });
     expect(res.status).toBe(200);
     await cleanupStaff([`admin-${TAG}@test.com`]);
+  });
+
+  // ─── Review findings on PR #216: superseded Checkout sessions ─────────
+
+  it('a superseded Checkout session that is paid anyway is refunded in full and never credits the current order', async () => {
+    const application = applications[2];
+    await resetToChoosing(application, booths[2]);
+    await request(app)
+      .post(`/applications/${application.id}/booth`)
+      .query({ token: statusToken(application.id) })
+      .send({ boothId: booths[2].id })
+      .expect(200);
+    // The application now waits on a newer session than the one being paid.
+    await prisma.application.update({ where: { id: application.id }, data: { paymentStatus: 'PROCESSING', stripeCheckoutSessionId: `cs_${TAG}_current` } });
+    mockRefundsCreate.mockClear();
+
+    await applicationPaymentService.handleEvent({
+      type: 'checkout.session.completed',
+      data: { object: { id: `cs_${TAG}_old`, mode: 'payment', payment_status: 'paid', payment_intent: `pi_${TAG}_old`, amount_total: 5000, metadata: { applicationId: application.id, purpose: 'pay_now' } } },
+    });
+    const row = await prisma.application.findUnique({ where: { id: application.id } });
+    expect(row.paymentStatus).toBe('PROCESSING');
+    expect((await prisma.booth.findUnique({ where: { id: booths[2].id } })).status).toBe('HELD');
+    expect(mockRefundsCreate).toHaveBeenCalledWith(expect.objectContaining({ payment_intent: `pi_${TAG}_old`, amount: 5000 }));
+
+    // Its payment_intent.succeeded twin never marks anything paid either.
+    await applicationPaymentService.handleEvent({
+      type: 'payment_intent.succeeded',
+      data: { object: { id: `pi_${TAG}_old`, status: 'succeeded', metadata: { applicationId: application.id, purpose: 'pay_now' } } },
+    });
+    expect((await prisma.application.findUnique({ where: { id: application.id } })).paymentStatus).toBe('PROCESSING');
+  });
+
+  it('re-choosing after a lapsed hold expires the earlier Checkout session on Stripe', async () => {
+    const application = applications[2];
+    await resetToChoosing(application, booths[2]);
+    // A lapsed hold whose session was never cleared (e.g. a migrated row).
+    await prisma.application.update({ where: { id: application.id }, data: { stripeCheckoutSessionId: `cs_${TAG}_lapsed` } });
+    mockSessionsExpire.mockClear();
+    await request(app)
+      .post(`/applications/${application.id}/booth`)
+      .query({ token: statusToken(application.id) })
+      .send({ boothId: booths[2].id })
+      .expect(200);
+    expect(mockSessionsExpire).toHaveBeenCalledWith(`cs_${TAG}_lapsed`);
+    expect((await prisma.application.findUnique({ where: { id: application.id } })).stripeCheckoutSessionId).toBeNull();
+  });
+
+  it('withdrawing an approved vendor with an open pay-now session expires it', async () => {
+    const application = applications[2];
+    await resetToChoosing(application, booths[2]);
+    await request(app)
+      .post(`/applications/${application.id}/booth`)
+      .query({ token: statusToken(application.id) })
+      .send({ boothId: booths[2].id })
+      .expect(200);
+    await prisma.application.update({ where: { id: application.id }, data: { stripeCheckoutSessionId: `cs_${TAG}_open` } });
+    mockSessionsExpire.mockClear();
+    const res = await request(app)
+      .post(`/admin/events/${event.id}/applications/${application.id}/decision`)
+      .set('Authorization', `Bearer ${organizerToken}`)
+      .set('X-Jump-Org', organization.id)
+      .send({ decision: 'WITHDRAW', sendEmail: false });
+    expect(res.status).toBe(200);
+    expect(mockSessionsExpire).toHaveBeenCalledWith(`cs_${TAG}_open`);
+    const row = await prisma.application.findUnique({ where: { id: application.id } });
+    expect(row).toMatchObject({ status: 'WITHDRAWN', stripeCheckoutSessionId: null });
   });
 });

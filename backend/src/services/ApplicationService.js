@@ -681,11 +681,13 @@ class ApplicationService {
       throw new ValidationError('addOns must be an array of { addOnId, quantity }');
     }
     const holdExpiresAt = new Date(Date.now() + BOOTH_HOLD_MS);
+    let supersededSessionId = null;
 
     const { booth, orderRef } = await prisma.$transaction(async (tx) => {
       const locked = await tx.$queryRaw`SELECT "id" FROM "Application" WHERE "id" = ${applicationId} FOR UPDATE`;
       if (!locked[0]) throw new NotFoundError('Application not found');
       const application = await tx.application.findUnique({ where: { id: applicationId }, include: DETAIL_INCLUDE });
+      supersededSessionId = application?.stripeCheckoutSessionId ?? null;
       if (!application || application.status === 'DRAFT') throw new NotFoundError('Application not found');
       if (application.form.kind !== 'PAID') throw new ConflictError('This form has no spaces to choose');
       if (application.status !== 'APPROVED') {
@@ -753,6 +755,9 @@ class ApplicationService {
       return { booth: held, orderRef: order.orderRef };
     });
 
+    // A session left from an earlier selection must not stay payable.
+    if (supersededSessionId) await applicationPaymentService.expireSupersededSession(applicationId, supersededSessionId);
+
     logger.info('Application space selected', {
       event: 'application_space_selected',
       applicationId,
@@ -790,7 +795,11 @@ class ApplicationService {
     if (!application || application.status !== 'APPROVED' || application.paymentStatus !== 'PAYMENT_DUE' || !application.selectionHeldUntil) {
       throw coded(new ConflictError('There is no held space to release'), 'NOTHING_HELD');
     }
-    await this.releaseSelection(applicationId, { reason: 'Released by the vendor' });
+    const released = await this.releaseSelection(applicationId, { reason: 'Released by the vendor' });
+    if (!released) {
+      // A payment started between the read above and the locked release.
+      throw coded(new ConflictError('Your payment is being processed; refresh the page'), 'PAYMENT_IN_PROGRESS');
+    }
     return { released: true, paymentStatus: 'AWAITING_SELECTION' };
   }
 
@@ -875,11 +884,15 @@ class ApplicationService {
         withdrawnBy: 'APPLICANT',
         decidedAt: new Date(),
         capacitySlot: 'NONE',
+        stripeCheckoutSessionId: null,
         decisions: {
           create: { action: 'WITHDRAWN', byUserId: null, note: 'Withdrawn by applicant' },
         },
       });
     });
+    if (application.stripeCheckoutSessionId && application.paymentStatus !== 'PAID') {
+      await applicationPaymentService.expireSupersededSession(application.id, application.stripeCheckoutSessionId);
+    }
     logger.info('Application withdrawn by applicant', { event: 'application_decided', applicationId: application.id, action: 'WITHDRAWN', by: 'applicant' });
     return this._applicantView(updated);
   }
@@ -1137,6 +1150,7 @@ class ApplicationService {
     const note = input.note ? String(input.note).slice(0, 5000) : null;
     const override = this._validateMessage(input.message);
 
+    let supersededSessionId = null;
     const { updated, emailAction } = await prisma.$transaction(async (tx) => {
       const rows = await tx.$queryRaw`SELECT * FROM "Application" WHERE "id" = ${applicationId} AND "eventId" = ${eventId} FOR UPDATE`;
       const application = rows[0];
@@ -1151,6 +1165,13 @@ class ApplicationService {
       });
 
       const data = { status: spec.to, decidedAt: new Date(), decidedById: input.byUserId };
+      // Any decision ends the pay-now session the vendor may still have open
+      // (it is expired on Stripe after commit), so it can never pay a
+      // withdrawn, rejected or re-approved application.
+      if (application.stripeCheckoutSessionId && !['PAID', 'REFUNDED', 'PARTIALLY_REFUNDED'].includes(application.paymentStatus)) {
+        supersededSessionId = application.stripeCheckoutSessionId;
+        data.stripeCheckoutSessionId = null;
+      }
       let action = spec.action;
       if (spec.to === 'APPROVED' && form.kind === 'PAID') {
         if (!paymentsEnabled()) throw new ConflictError('Application payments are not enabled');
@@ -1200,6 +1221,8 @@ class ApplicationService {
       });
       return { updated: row, emailAction: action };
     });
+
+    if (supersededSessionId) await applicationPaymentService.expireSupersededSession(applicationId, supersededSessionId);
 
     logger.info('Application decided', {
       event: 'application_decided',
