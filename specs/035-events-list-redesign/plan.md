@@ -37,7 +37,7 @@ Source design: Google Stitch export `~/Downloads/stitch_card_layout_redesign/scr
 
 **D3. Actions: one primary, two contextual, the rest in ⋯.** Seven buttons per card do not survive a 390 px screen and bury Edit. Per card:
 - Primary: **Edit** (DRAFT, PUBLISHED); **Publish** for DRAFT sits next to it (the mockup lost Publish — keep it). CANCELLED: **Duplicate** is primary.
-- Contextual, branched on `admissionMode` (gotcha 28), never on tier count: TICKETED → **Analytics** (published) + **Tiers** disclosure; RSVP → **RSVPs**. Today every card shows RSVPs, including ticketed ones.
+- Contextual, branched on `admissionMode` (gotcha 29), never on tier count: TICKETED → **Analytics** (published) + **Tiers** disclosure; RSVP → **RSVPs**. Today every card shows RSVPs, including ticketed ones.
 - **⋯ menu** (reuse the `RowActionsMenu` keyboard pattern from spec 019: arrows, Escape, focus return): Event page ↗, Applications, Duplicate, Copy link, **Cancel event…** (destructive, last, red).
 - **No ✕ icon for cancel.** An ✕ reads as "dismiss card", and cancelling an event emails buyers. It goes in ⋯ and opens a real confirm dialog (replace `window.confirm`).
 
