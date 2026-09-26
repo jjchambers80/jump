@@ -1,15 +1,31 @@
 'use client';
 
-// "Get involved" strip on the public event page (spec 011): lists open
-// application forms (vendors, sponsors, press, panels). Renders nothing when
+// "Get involved" links in the event hero (spec 011): one short pill per
+// visible application form (vendors, sponsors, press, panels), so applicants
+// find the form without scrolling past every ticket tier. Renders nothing when
 // the event has no visible forms, so ticket-only events are unchanged.
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { ArrowUpRight } from 'lucide-react';
 import api from '@/services/api';
 import { acceptanceLine, type PublicForm } from '@/lib/applications';
 
-export default function GetInvolved({ eventId }: { eventId: string }) {
+// Organizers name forms in full ("2026 Game and Geek Vendor Application");
+// the pill only needs the role. The full name stays in the accessible name.
+const ROLES: [RegExp, string][] = [
+  [/vendor|exhibit|booth|merchant|artist/i, 'Become a vendor'],
+  [/sponsor/i, 'Become a sponsor'],
+  [/press|media/i, 'Press pass'],
+  [/panel|speaker|talk/i, 'Host a panel'],
+  [/volunteer/i, 'Volunteer'],
+];
+
+function shortLabel(name: string): string {
+  return ROLES.find(([pattern]) => pattern.test(name))?.[1] ?? 'Apply';
+}
+
+export default function GetInvolved({ eventId, className = '' }: { eventId: string; className?: string }) {
   const [forms, setForms] = useState<PublicForm[]>([]);
 
   useEffect(() => {
@@ -29,31 +45,42 @@ export default function GetInvolved({ eventId }: { eventId: string }) {
 
   if (forms.length === 0) return null;
 
+  // Two forms for the same role ("Apply", "Apply") would be ambiguous: fall back to the names.
+  const labels = forms.map((form) => shortLabel(form.name));
+  const ambiguous = new Set(labels).size < labels.length;
+
   return (
-    <section className="px-6 sm:px-8 pb-6" aria-labelledby="get-involved-heading" data-testid="get-involved">
-      <h2 id="get-involved-heading" className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-3">Get involved</h2>
-      <ul className="grid gap-2 sm:grid-cols-2">
-        {forms.map((form) => {
-          const closed = acceptanceLine(form.acceptance);
-          const body = (
-            <>
-              <span className="font-semibold text-gray-900 dark:text-slate-100">{form.name}</span>
-              <span className="text-xs text-gray-600 dark:text-slate-400">{closed ?? (form.kind === 'PAID' ? 'Apply for a space' : 'Free to apply')}</span>
-            </>
-          );
-          return (
-            <li key={form.id}>
-              {closed ? (
-                <div className="flex flex-col rounded-lg border border-gray-200 dark:border-slate-700 px-4 py-3 opacity-70">{body}</div>
-              ) : (
-                <Link href={`/events/${eventId}/apply/${form.slug}`} className="flex flex-col rounded-lg border border-gray-200 dark:border-slate-700 px-4 py-3 hover:border-brand-link transition-colors">
-                  {body}
-                </Link>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </section>
+    <ul className={`flex flex-wrap gap-2 ${className}`} aria-label="Get involved" data-testid="get-involved">
+      {forms.map((form, i) => {
+        const closed = acceptanceLine(form.acceptance);
+        const label = ambiguous ? form.name : labels[i];
+        return (
+          <li key={form.id}>
+            {closed ? (
+              <span
+                title={form.name}
+                className="inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm font-medium text-white/70 ring-1 ring-inset ring-white/15"
+              >
+                {label}
+                <span className="text-xs text-white/60">· {closed}</span>
+              </span>
+            ) : (
+              <Link
+                href={`/events/${eventId}/apply/${form.slug}`}
+                aria-label={`${label}: ${form.name}`}
+                title={form.name}
+                className="group inline-flex h-9 items-center gap-1.5 rounded-full bg-white px-4 text-sm font-semibold text-gray-900 shadow-sm shadow-black/20 transition-colors hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black/60"
+              >
+                {label}
+                <ArrowUpRight
+                  className="h-4 w-4 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 motion-reduce:transition-none"
+                  aria-hidden
+                />
+              </Link>
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }

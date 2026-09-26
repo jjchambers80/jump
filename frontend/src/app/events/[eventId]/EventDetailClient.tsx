@@ -390,17 +390,22 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                   )}
                 </div>
 
-                {/* RSVP pages show the description inline under "About" */}
-                {event.description && !isRsvpMode && (
-                  <button
-                    type="button"
-                    onClick={() => setShowDescription(true)}
-                    className="mt-6 inline-flex h-9 items-center gap-2 rounded-full bg-white/10 px-4 text-sm font-semibold text-white ring-1 ring-inset ring-white/25 backdrop-blur-sm transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-                  >
-                    <Info className="h-4 w-4" aria-hidden />
-                    <span>Event Information</span>
-                  </button>
-                )}
+                {/* Actions row. The phone poster hangs over the hero's bottom-right corner: keep clear of it */}
+                <div className={`mt-6 flex flex-wrap items-center gap-2 empty:hidden ${event.logoUrl ? 'max-sm:pr-36' : ''}`}>
+                  {/* RSVP pages show the description inline under "About" */}
+                  {event.description && !isRsvpMode && (
+                    <button
+                      type="button"
+                      onClick={() => setShowDescription(true)}
+                      className="inline-flex h-9 items-center gap-2 rounded-full bg-white/10 px-4 text-sm font-semibold text-white ring-1 ring-inset ring-white/25 backdrop-blur-sm transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                    >
+                      <Info className="h-4 w-4" aria-hidden />
+                      <span>Event Information</span>
+                    </button>
+                  )}
+                  {/* Applications (spec 011): vendors, sponsors, press, panels — above the fold */}
+                  <GetInvolved eventId={event.id} />
+                </div>
               </div>
 
               {/* Foreground event image - desktop inline */}
@@ -544,9 +549,6 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
 
           {/* Line both up with the ticketed content's gutter (px-4, sm:p-10) */}
           <div className={isRsvpMode ? '' : '-mx-2 sm:mx-0 sm:px-2'}>
-            {/* Applications (spec 011): vendors, sponsors, press, panels */}
-            <GetInvolved eventId={event.id} />
-
             {/* Floor map preview (spec 014 phase 1) */}
             <FloorMapPreview eventId={event.id} />
           </div>
