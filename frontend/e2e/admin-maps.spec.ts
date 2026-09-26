@@ -459,6 +459,31 @@ test('drags a booth to move it and drags its corner to resize it', async ({ page
   expect({ x: saved.x, y: saved.y, w: saved.w, h: saved.h }).toEqual({ x: 17, y: 20, w: 16, h: 12 });
 });
 
+test('full screen hides the admin chrome and Esc brings it back', async ({ page }) => {
+  await gotoBuilder(page);
+  const builder = page.getByTestId('map-builder');
+  // Point inside the admin sidebar: covered by the builder only in full screen.
+  const sidebarHit = () =>
+    page.evaluate(() => !!document.elementFromPoint(20, 120)?.closest('[data-testid="map-builder"]'));
+  expect(await sidebarHit()).toBe(false);
+
+  await page.getByRole('button', { name: 'Full screen', exact: true }).click();
+  const exit = page.getByRole('button', { name: 'Exit full screen' });
+  await expect(exit).toHaveAttribute('aria-pressed', 'true');
+  const viewport = page.viewportSize()!;
+  await expect.poll(async () => (await builder.boundingBox())?.width).toBe(viewport.width);
+  expect(await sidebarHit()).toBe(true);
+
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: 'Full screen', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  expect(await sidebarHit()).toBe(false);
+
+  await page.keyboard.press('f');
+  await expect(exit).toBeVisible();
+  await exit.click();
+  await expect(page.getByRole('button', { name: 'Full screen', exact: true })).toBeVisible();
+});
+
 test('sidebar Maps entry navigates to maps list', async ({ page }) => {
   await mockMapsApi(page);
   await page.goto('/admin/dashboard');

@@ -13,7 +13,9 @@ import {
   Redo2,
   ZoomIn,
   ZoomOut,
-  Maximize,
+  Maximize2,
+  Minimize2,
+  ScanSearch,
   CircleHelp,
   Eye,
   EyeOff,
@@ -104,6 +106,7 @@ function BuilderContent() {
   const [blockAt, setBlockAt] = useState<{ x: number; y: number } | null | undefined>(undefined);
   const [showPublish, setShowPublish] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [flashIds, setFlashIds] = useState<Set<string>>(new Set());
@@ -115,6 +118,50 @@ function BuilderContent() {
     setAnnouncement('');
     requestAnimationFrame(() => setAnnouncement(message));
   }, []);
+
+  // Full screen: the builder covers the admin sidebar and top bar (CSS), and the
+  // browser's own full screen is requested on <html> — not on the builder — so the
+  // dialogs rendered inside the page keep working. If the browser refuses (iframe,
+  // older Safari) the CSS focus mode alone still hides the admin chrome.
+  const focusModeRef = useRef(focusMode);
+  focusModeRef.current = focusMode;
+  const toggleFocusMode = useCallback(() => {
+    const next = !focusModeRef.current;
+    if (next) {
+      document.documentElement.requestFullscreen?.().catch(() => {});
+    } else if (document.fullscreenElement) {
+      document.exitFullscreen?.().catch(() => {});
+    }
+    setFocusMode(next);
+  }, []);
+
+  // Leaving the browser's full screen (Esc, F11, the browser's own UI) leaves focus mode too.
+  useEffect(() => {
+    const onChange = () => {
+      if (!document.fullscreenElement) setFocusMode(false);
+    };
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+
+  // Refit once the canvas has its new size, and never leave the browser stuck in
+  // full screen after navigating away from the builder.
+  const focusModeMounted = useRef(false);
+  useEffect(() => {
+    if (!focusModeMounted.current) {
+      focusModeMounted.current = true;
+      return;
+    }
+    announce(focusMode ? 'Full screen. Press Esc or F to exit.' : 'Exited full screen');
+    const id = requestAnimationFrame(() => canvasRef.current?.fit());
+    return () => cancelAnimationFrame(id);
+  }, [focusMode, announce]);
+  useEffect(
+    () => () => {
+      if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+    },
+    []
+  );
 
   const flash = useCallback((ids: string[]) => {
     setFlashIds(new Set(ids));
@@ -493,7 +540,8 @@ function BuilderContent() {
       if (mod || e.altKey) return;
       if (key === 'Escape') {
         if (moveMode) setMoveMode(null);
-        else setSelectedIds(new Set());
+        else if (selectedIds.size > 0) setSelectedIds(new Set());
+        else if (focusMode) toggleFocusMode();
         return;
       }
       if ((key === 'Delete' || key === 'Backspace') && selectedIds.size > 0) {
@@ -517,13 +565,14 @@ function BuilderContent() {
       if (key === '+' || key === '=') canvasRef.current?.zoomIn();
       if (key === '-' || key === '_') canvasRef.current?.zoomOut();
       if (key === '0') canvasRef.current?.fit();
+      if (key === 'f' || key === 'F') toggleFocusMode();
       if (key === '?') setShowShortcuts(true);
       if (key === 'b' || key === 'B') addItem('BOOTH');
       if (key === 't' || key === 'T') addItem('TABLE');
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [undo, redo, duplicateSelected, deleteSelected, nudge, turnSelected, addItem, save, moveMode, selectedIds, setSelectedIds, state]);
+  }, [undo, redo, duplicateSelected, deleteSelected, nudge, turnSelected, addItem, save, moveMode, selectedIds, setSelectedIds, state, focusMode, toggleFocusMode]);
 
   // ─── Publish ─────────────────────────────────────────────────────
 
@@ -590,7 +639,14 @@ function BuilderContent() {
     : 'Drag empty space to look around · scroll to zoom · Shift-drag selects many';
 
   return (
-    <div className="flex h-full min-h-[640px] flex-col">
+    <div
+      data-testid="map-builder"
+      className={
+        focusMode
+          ? 'fixed inset-0 z-[45] flex flex-col bg-white dark:bg-slate-900'
+          : 'flex h-full min-h-[640px] flex-col'
+      }
+    >
       {/* Header */}
       <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-gray-200 bg-white px-4 py-2.5 dark:border-slate-700 dark:bg-slate-800">
         <Link
@@ -635,9 +691,21 @@ function BuilderContent() {
               <ZoomIn className="h-4 w-4" aria-hidden="true" />
             </IconButton>
             <IconButton label="Fit floor to screen" shortcut="0" onClick={() => canvasRef.current?.fit()}>
-              <Maximize className="h-4 w-4" aria-hidden="true" />
+              <ScanSearch className="h-4 w-4" aria-hidden="true" />
             </IconButton>
           </div>
+          <IconButton
+            label={focusMode ? 'Exit full screen' : 'Full screen'}
+            shortcut="F"
+            onClick={toggleFocusMode}
+            pressed={focusMode}
+          >
+            {focusMode ? (
+              <Minimize2 className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <Maximize2 className="h-4 w-4" aria-hidden="true" />
+            )}
+          </IconButton>
           <IconButton label="Mouse and keyboard tips" shortcut="?" onClick={() => setShowShortcuts(true)}>
             <CircleHelp className="h-4 w-4" aria-hidden="true" />
           </IconButton>
@@ -915,12 +983,14 @@ function IconButton({
   shortcut,
   onClick,
   disabled,
+  pressed,
   children,
 }: {
   label: string;
   shortcut?: string;
   onClick: () => void;
   disabled?: boolean;
+  pressed?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -930,6 +1000,7 @@ function IconButton({
       disabled={disabled}
       aria-label={label}
       aria-keyshortcuts={shortcut}
+      aria-pressed={pressed}
       title={shortcut ? `${label} (${shortcut})` : label}
       className="flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:text-slate-300 dark:hover:bg-slate-700"
     >
@@ -985,7 +1056,8 @@ const SHORTCUTS: { keys: string[]; action: string }[] = [
   { keys: ['B'], action: 'Add a booth' },
   { keys: ['T'], action: 'Add a table' },
   { keys: ['0'], action: 'Fit the floor to the screen' },
-  { keys: ['Esc'], action: 'Clear the selection' },
+  { keys: ['F'], action: 'Full screen on or off (Esc also exits)' },
+  { keys: ['Esc'], action: 'Clear the selection, then leave full screen' },
 ];
 
 function ShortcutsDialog({ onClose }: { onClose: () => void }) {
