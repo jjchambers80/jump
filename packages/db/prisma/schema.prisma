@@ -1290,7 +1290,7 @@ model Booth {
   tierId            String? // ApplicationTier that sells this booth
   status            BoothStatus @default(AVAILABLE)
   applicationId     String?     @unique // SOLD / RESERVED holder
-  holdApplicationId String? // HELD by (checkout in flight)
+  holdApplicationId String?     @unique // HELD by (checkout in flight)
   holdExpiresAt     DateTime?
   assignedById      String? // staff who assigned manually
 
@@ -1300,7 +1300,15 @@ model Booth {
   map         FloorMap         @relation(fields: [mapId], references: [id], onDelete: Cascade)
   tier        ApplicationTier? @relation(fields: [tierId], references: [id], onDelete: SetNull)
   application Application?     @relation(fields: [applicationId], references: [id], onDelete: SetNull)
-  // holdApplication has no explicit FK — it references the same Application table for HELD state
+  // holdApplication has no explicit FK — it references the same Application table for HELD state.
+  // Uniqueness is the point, not referential integrity: `holdApplicationId @unique` is the
+  // database backstop that stops one application holding two booths, mirroring `applicationId`
+  // for SOLD. A `Booth_hold_state_check` CHECK constraint (migration
+  // 20261009100000_booth_hold_uniqueness, not expressible in Prisma schema) pins
+  // status = 'HELD' ⇔ holdApplicationId AND holdExpiresAt are both set, so the hold slot can
+  // never be parked on a booth in another status to slip past that index. An FK would conflict:
+  // ON DELETE SET NULL would leave a HELD booth with no holder and violate the CHECK. A deleted
+  // application's dangling hold is reclaimed by BoothService.sweepExpiredHolds instead.
 
   @@unique([mapId, label])
   @@index([mapId, status])
