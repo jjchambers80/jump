@@ -2,13 +2,15 @@
 
 // Event card for the admin events list (spec 035 D4–D6, D8, D9).
 // Cards are <article aria-labelledby> with an <h2> title linking to Edit.
-// Layout: left accent bar · date tile · content · actions.
+// Layout: left accent bar · date tile · image tile · content · actions.
+// The square image tile hides below sm so a phone keeps room for the title.
 
 import React from 'react';
 import Link from 'next/link';
 import {
   formatEventDateTime,
 } from '@/lib/eventTime';
+import { imageVariantUrl } from '@/lib/assets';
 import {
   Calendar,
   ChevronDown,
@@ -42,6 +44,8 @@ export interface AdminEvent {
   id: string;
   name: string;
   description?: string;
+  /** Event image (Media section); the `original` serving URL. */
+  logoUrl?: string | null;
   date: string;
   capacity: number;
   category?: string;
@@ -128,6 +132,10 @@ export default function EventListCard({
         year: 'numeric',
       }).formatToParts(new Date(event.date))
     : [];
+  const imageSrc = imageVariantUrl(event.logoUrl, 'thumb');
+  const monogram = (event.name.trim()[0] ?? 'E').toUpperCase();
+  const dimmed = isPast || event.status === 'CANCELLED';
+
   const month = dateParts.find((p) => p.type === 'month')?.value || '';
   const day = dateParts.find((p) => p.type === 'day')?.value || '';
   const year = dateParts.find((p) => p.type === 'year')?.value || '';
@@ -153,7 +161,7 @@ export default function EventListCard({
 
       {/* Card body grid */}
       <div className="pl-4 sm:pl-5">
-        <div className="grid grid-cols-[auto_1fr] xl:grid-cols-[auto_1fr_auto] gap-x-4 gap-y-3 py-4 pr-4 sm:pr-5">
+        <div className="grid grid-cols-[auto_1fr] sm:grid-cols-[auto_auto_1fr] xl:grid-cols-[auto_auto_1fr_auto] gap-x-4 gap-y-3 py-4 pr-4 sm:pr-5">
           {/* Date tile */}
           <div
             className={`flex flex-col items-center justify-center w-14 h-16 shrink-0 rounded-lg border ${
@@ -172,6 +180,31 @@ export default function EventListCard({
             </span>
             <span className="text-lg font-bold leading-tight">{day}</span>
             <span className="text-[10px] leading-tight opacity-60">{year}</span>
+          </div>
+
+          {/* Event image — square, decorative (the title names the event) */}
+          <div
+            className="relative hidden sm:block h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-indigo-50 ring-1 ring-inset ring-black/5 dark:bg-slate-700/60 dark:ring-white/10"
+            aria-hidden="true"
+            data-testid="event-image-tile"
+          >
+            {imageSrc ? (
+              <img
+                src={imageSrc}
+                alt=""
+                width={64}
+                height={64}
+                loading="lazy"
+                decoding="async"
+                className={`h-full w-full object-cover ${dimmed ? 'grayscale opacity-60' : ''}`}
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center [background-image:repeating-linear-gradient(135deg,rgb(99_102_241/0.10)_0_1px,transparent_1px_7px)]">
+                <span className="select-none text-2xl font-black leading-none tracking-tighter text-indigo-400/60 dark:text-indigo-300/40">
+                  {monogram}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Content column */}
@@ -274,7 +307,7 @@ export default function EventListCard({
           </div>
 
           {/* Actions column */}
-          <div className="flex items-start gap-2 xl:col-span-1 col-span-2 xl:col-start-auto">
+          <div className="flex items-start gap-2 col-span-2 sm:col-span-3 xl:col-span-1 xl:col-start-auto">
             <div className="flex flex-wrap items-center gap-2">
               {/* Primary actions */}
               {event.status !== 'CANCELLED' && (
