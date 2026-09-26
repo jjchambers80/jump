@@ -14,16 +14,60 @@ import logger from '../../utils/logger.js';
 const router = express.Router();
 
 /**
+ * A webhook endpoint without signature verification is an unauthenticated write
+ * path into the ledger: a forged `checkout.session.completed` issues tickets, and
+ * a forged application event confirms a booth, for free. So an unsigned event is
+ * only ever accepted when something explicitly opts out.
+ *
+ * WHY the opt-out is its own variable and not `NODE_ENV !== 'production'`: nothing
+ * guarantees the deployed backend actually sets NODE_ENV=production, and a guard
+ * that is inert in exactly the environment it protects is not a guard. This one
+ * fails closed wherever the flag is absent, which includes every environment we
+ * have not thought about. Only `backend/tests/setup.js` and a developer's own
+ * `backend/.env` set it.
+ */
+function unsignedWebhooksAllowed() {
+  return process.env.STRIPE_WEBHOOK_ALLOW_UNSIGNED === 'true';
+}
+
+class UnverifiedWebhookError extends Error {
+  constructor(label) {
+    super(`${label} webhook rejected: no signing secret configured`);
+    this.name = 'UnverifiedWebhookError';
+  }
+}
+
+function parseUnsignedBody(body) {
+  if (Buffer.isBuffer(body)) return JSON.parse(body.toString());
+  if (typeof body === 'string') return JSON.parse(body);
+  return body;
+}
+
+/**
  * Parse and (when a secret is configured) verify a Stripe webhook body.
- * Without a secret — development and tests — the body is trusted and a warning
- * is logged. Throws on a bad signature.
+ * Throws on a bad signature, and on a missing secret unless unsigned events are
+ * explicitly allowed (development and tests).
  */
 function readStripeEvent(req, secret, label) {
   if (secret) return stripe.webhooks.constructEvent(req.body, req.headers['stripe-signature'], secret);
+  if (!unsignedWebhooksAllowed()) throw new UnverifiedWebhookError(label);
   logger.warn(`Stripe ${label} webhook signature verification skipped (no secret configured)`);
-  if (Buffer.isBuffer(req.body)) return JSON.parse(req.body.toString());
-  if (typeof req.body === 'string') return JSON.parse(req.body);
-  return req.body;
+  return parseUnsignedBody(req.body);
+}
+
+/**
+ * One refusal shape for every endpoint. 500, not 400: a missing secret is our
+ * misconfiguration, not a malformed request, and 5xx is the only answer that puts
+ * a genuine Stripe event on the retry schedule instead of discarding it — so
+ * fixing the variable within Stripe's retry window recovers the event rather than
+ * losing the order it was carrying.
+ */
+function refuseUnverified(res, label, err) {
+  logger.error(`${label} webhook refused: signature verification is not configured`, {
+    error: err.message,
+    hint: 'Set the signing secret, or STRIPE_WEBHOOK_ALLOW_UNSIGNED=true for local development only',
+  });
+  return res.status(500).json({ error: 'Webhook signature verification is not configured' });
 }
 
 /**
@@ -41,18 +85,14 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
     if (webhookSecret) {
       event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
     } else {
-      // In development/test, skip signature verification
-      // Body may already be parsed by express.json() or may be a Buffer
-      if (Buffer.isBuffer(req.body)) {
-        event = JSON.parse(req.body.toString());
-      } else if (typeof req.body === 'string') {
-        event = JSON.parse(req.body);
-      } else {
-        event = req.body;
-      }
+      if (!unsignedWebhooksAllowed()) throw new UnverifiedWebhookError('Stripe');
+      // Development and tests only, behind STRIPE_WEBHOOK_ALLOW_UNSIGNED.
+      // Body may already be parsed by express.json() or may be a Buffer.
+      event = parseUnsignedBody(req.body);
       logger.warn('Stripe webhook signature verification skipped (no STRIPE_WEBHOOK_SECRET)');
     }
   } catch (err) {
+    if (err instanceof UnverifiedWebhookError) return refuseUnverified(res, 'Stripe', err);
     logger.error('Webhook signature verification failed', {
       error: err.message,
     });
@@ -138,8 +178,13 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
       type: event?.type,
       error: error.message,
     });
-    // Still return 200 to prevent Stripe from retrying
-    res.json({ received: true, error: error.message });
+    // 500, so Stripe's retry schedule runs. A 200 here told Stripe the event was
+    // handled, so a transient database blip during checkout.session.completed
+    // permanently lost the paid-order transition — `OrderService.sweepAbandoned`
+    // happens to cover ticket orders, but application payments and
+    // charge.refunded have no equivalent sweep. Handlers are idempotent, so a
+    // retry of an event that partly succeeded is safe.
+    res.status(500).json({ error: 'Webhook processing failed' });
   }
 });
 
@@ -156,6 +201,7 @@ router.post('/stripe/connect', express.raw({ type: 'application/json' }), async 
   try {
     event = readStripeEvent(req, process.env.STRIPE_CONNECT_WEBHOOK_SECRET, 'Connect');
   } catch (err) {
+    if (err instanceof UnverifiedWebhookError) return refuseUnverified(res, 'Connect', err);
     logger.error('Connect webhook signature verification failed', { error: err.message });
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
@@ -198,8 +244,9 @@ router.post('/stripe/connect', express.raw({ type: 'application/json' }), async 
     res.json({ received: true });
   } catch (error) {
     logger.error('Error processing Connect webhook', { type: event.type, account: accountId, error: error.message });
-    // 200 so Stripe does not retry; the page's Sync button is the recovery path
-    res.json({ received: true, error: error.message });
+    // 500 so Stripe retries. The page's Sync button stays the manual recovery
+    // path, but it only helps if someone notices; a retry is unattended.
+    res.status(500).json({ error: 'Webhook processing failed' });
   }
 });
 
@@ -215,6 +262,7 @@ router.post('/stripe/billing', express.raw({ type: 'application/json' }), async 
   try {
     event = readStripeEvent(req, process.env.STRIPE_BILLING_WEBHOOK_SECRET, 'Billing');
   } catch (err) {
+    if (err instanceof UnverifiedWebhookError) return refuseUnverified(res, 'Billing', err);
     logger.error('Billing webhook signature verification failed', { error: err.message });
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }

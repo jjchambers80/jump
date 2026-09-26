@@ -1,6 +1,6 @@
 # Production Launch Checklist
 
-**Last Updated**: 2026-09-18
+**Last Updated**: 2026-09-25
 
 Things a human has to do or decide before Jump takes real money. Code and tests are done for every item here; each needs an account setting, a business decision, or a data review that no deploy can perform. Tick items off in place and date them.
 
@@ -9,7 +9,7 @@ Things a human has to do or decide before Jump takes real money. Code and tests 
 Blocking items, in the order to do them. Details in the sections below.
 
 - [ ] **Set the statement descriptor prefix on the Stripe account** (added 2026-09-14) — Stripe Dashboard › Settings › Business › Public details › Statement descriptor. Use something short like `JUMP` so organizations keep 16 characters for their own name. Until this is set, buyers see the raw account name on their card statement and Settings › Payments cannot save a statement name. See [Stripe payments](#stripe-payments).
-- [ ] Live `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` on Railway; activate the account. See [Stripe payments](#stripe-payments).
+- [ ] Live `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` on Railway; activate the account. See [Stripe payments](#stripe-payments) and the [webhook signing secret runbook](#webhook-signing-secrets-eve-25).
 - [ ] Decide NY and CA tax regions; activate Stripe Tax or keep manual rates. See [Stripe Tax](#stripe-tax-settings--tax-spec-009).
 - [ ] Stripe Connect platform setup, then `STRIPE_CONNECT_ENABLED=true` (added 2026-09-16) — only after the live key; see [Stripe Connect](#stripe-connect-spec-010-phase-2).
 - [x] **Ship spec 020 phase 1 (abuse protection) before the first public on-sale** (added 2026-09-18; shipped 2026-09-19) — `POST /orders` is unauthenticated, unlimited, and reserves tier inventory for 30 minutes before payment, so a script can hold a whole tier for free. Phase 1 adds per-IP and per-buyer limits plus an abandoned-order sweep. See [Abuse protection](#abuse-protection-and-edge-layer-spec-020).
@@ -41,6 +41,20 @@ Verified 2026-09-14 (read-only `accounts.retrieve()` with the backend's Railway 
 - [ ] Live `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` on the backend service; webhook endpoint `POST /webhooks/stripe` registered on the live account — see [Stripe Setup](stripe-setup.md).
 - [ ] **Set a statement descriptor prefix** on the live Stripe account (Dashboard › Settings › Business › Public details, "Statement descriptor" → shortened descriptor / prefix). Keep it short (e.g. `JUMP`, 4 characters): organizations get `22 − prefix − 2` characters for their own name on Settings › Payments. Until it is set, no per-organization statement name is sent and the dialog is disabled — see [Payments Settings](../features/payments-settings.md).
 - [ ] **Confirm capabilities** for the optional payment methods organizations may enable (`link_payments`, `cashapp_payments`; BNPL later per spec 010 §5.6). Methods without an active capability show as *Unavailable*.
+
+## Webhook signing secrets (EVE-25)
+
+Until 2026-09-25 a webhook endpoint with no signing secret **parsed and executed the event anyway**, in every environment. Production ran exactly that way from launch until the test-mode secret was set on 2026-09-17 (see the two entries under [Application payments](#application-payments-spec-011-phase-2)). A forged `checkout.session.completed` with no `stripe-signature` header at all reached `PaymentService.handleCheckoutCompleted`: free tickets, and with `metadata.applicationId`, a free vendor booth.
+
+The behaviour is now **fail-closed**: with no signing secret, `/webhooks/stripe`, `/webhooks/stripe/connect` and `/webhooks/stripe/billing` each answer `500 {"error":"Webhook signature verification is not configured"}` and dispatch nothing. The only opt-out is `STRIPE_WEBHOOK_ALLOW_UNSIGNED=true`, for a developer's own `backend/.env`. **It must never be set on Railway.** The guard is deliberately not keyed on `NODE_ENV` — whether Railway sets `NODE_ENV=production` on the backend service is still unconfirmed, and a guard that depends on it would be inert in exactly the place it protects.
+
+What this changes for the live-key cutover: a missed or mistyped `STRIPE_WEBHOOK_SECRET` no longer silently opens the ledger — it stops payments from being recorded, loudly. Stripe's dashboard shows the endpoint failing and retries for up to three days, so fixing the variable inside that window replays the backlog rather than losing it.
+
+- [ ] **Set `STRIPE_WEBHOOK_SECRET` in the same deploy that sets the live `STRIPE_SECRET_KEY`.** Railway › backend service › Variables. The value is the `whsec_…` shown on Developers › Webhooks › the live endpoint for `https://<backend-domain>/webhooks/stripe` › *Signing secret* › **Reveal**. Registering the live endpoint comes first — the secret does not exist until it does.
+- [ ] **Verify it took**, without spending a real card: Stripe Dashboard › Developers › Webhooks › the live endpoint › **Send test webhook** › `checkout.session.completed`. The delivery must read **200**. A **500** with `Webhook signature verification is not configured` means the variable is missing or Railway has not finished redeploying; a **400** means the value does not match that endpoint's secret (a common mix-up: the *test*-mode endpoint's secret, or the Connect endpoint's).
+- [ ] **Confirm no `STRIPE_WEBHOOK_ALLOW_UNSIGNED` variable exists** on the backend service. If one is ever added, every endpoint silently returns to accepting forged events.
+- [ ] **Same check for each extra endpoint you register**: `STRIPE_CONNECT_WEBHOOK_SECRET` before `STRIPE_CONNECT_ENABLED=true`, and `STRIPE_BILLING_WEBHOOK_SECRET` before `BILLING_ENABLED=true`. Each endpoint has its own secret; they are not interchangeable.
+- **To undo** (rollback): remove `STRIPE_WEBHOOK_SECRET` and the endpoint stops accepting events entirely — it does *not* return to the old permissive behaviour. Rolling back the refusal itself means reverting the code, not changing a variable.
 
 ## Application payments (spec 011 phase 2)
 

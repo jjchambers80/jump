@@ -35,7 +35,7 @@ Until an organization finishes onboarding (or while the flag is off) nothing cha
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `STRIPE_CONNECT_ENABLED` | No (default `false`) | Master gate. Off: Connect routes 404, checkout never routes, the page hides every payouts element, `GET /admin/settings/payments` returns `connect: { enabled: false }` |
-| `STRIPE_CONNECT_WEBHOOK_SECRET` | With Connect | Signing secret of the Stripe **Connect** webhook endpoint (listen on connected accounts). Separate from `STRIPE_WEBHOOK_SECRET`. Unset = unverified (dev/test only) |
+| `STRIPE_CONNECT_WEBHOOK_SECRET` | With Connect | Signing secret of the Stripe **Connect** webhook endpoint (listen on connected accounts). Separate from `STRIPE_WEBHOOK_SECRET`. Unset = every Connect event is refused with 500 unless `STRIPE_WEBHOOK_ALLOW_UNSIGNED=true` (local development only) |
 | `FRONTEND_URL` | Yes | First entry is the base for Account Link `return_url` / `refresh_url`. Live mode refuses to onboard unless it is `https://` |
 
 Stripe dashboard prerequisites (human steps) are in the [Production Launch Checklist](../config/production-launch-checklist.md#stripe-connect-spec-010-phase-2). Local webhook forwarding: `stripe listen --forward-to localhost:3000/webhooks/stripe --forward-connect-to localhost:3000/webhooks/stripe/connect` ([Stripe Setup](../config/stripe-setup.md)).

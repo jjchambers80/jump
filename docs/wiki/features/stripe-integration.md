@@ -1,11 +1,11 @@
 # Stripe Integration
 
 **Status:** Active
-**Last Updated:** 2026-09-14
+**Last Updated:** 2026-09-25
 
 ## Overview
 
-Jump uses Stripe SDK v17 (API version `2024-11-20.acacia`) for payment processing. Checkout Sessions handle payment collection. A webhook endpoint at `POST /webhooks/stripe` processes `checkout.session.completed`, `checkout.session.expired`, and async payment events. Signature verification is required in production. All webhook handlers are idempotent. Tax rates are computed via Stripe Tax API (see [Tax Calculation](tax-calculation.md)).
+Jump uses Stripe SDK v17 (API version `2024-11-20.acacia`) for payment processing. Checkout Sessions handle payment collection. A webhook endpoint at `POST /webhooks/stripe` processes `checkout.session.completed`, `checkout.session.expired`, and async payment events. Signature verification is required everywhere unless a local developer explicitly opts out with `STRIPE_WEBHOOK_ALLOW_UNSIGNED=true`. All webhook handlers are idempotent. Tax rates are computed via Stripe Tax API (see [Tax Calculation](tax-calculation.md)).
 
 ## Key Files
 
@@ -23,7 +23,8 @@ Jump uses Stripe SDK v17 (API version `2024-11-20.acacia`) for payment processin
 | Variable | Description |
 |----------|-------------|
 | `STRIPE_SECRET_KEY` | Required. Stripe secret API key. Throws on startup if missing. |
-| `STRIPE_WEBHOOK_SECRET` | Webhook signing secret. If unset, signature verification is skipped (dev only). |
+| `STRIPE_WEBHOOK_SECRET` | Webhook signing secret. If unset, every event on `POST /webhooks/stripe` is refused with 500 — see [Signature verification](#signature-verification-webhooksjs). |
+| `STRIPE_WEBHOOK_ALLOW_UNSIGNED` | `true` accepts an unsigned body when no signing secret is set. **Local development only** — never on a deployed service. |
 | `STRIPE_CONNECT_ENABLED` | `true` routes charges for organizations with an active Connect account as destination charges — [Connect Payouts](connect-payouts.md). |
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | Signing secret for `POST /webhooks/stripe/connect` (connected-account events). Separate endpoint and secret. |
 | `AUTH_SECRET` | Used for QR JWT signing, not Stripe-specific. |
@@ -68,9 +69,12 @@ Jump uses Stripe SDK v17 (API version `2024-11-20.acacia`) for payment processin
 
 - Uses `express.raw({ type: 'application/json' })` to receive raw body.
 - Calls `stripe.webhooks.constructEvent(req.body, sig, webhookSecret)`.
-- If `STRIPE_WEBHOOK_SECRET` is unset, verification is skipped with a warning log (development only).
-- On verification failure, returns 400.
-- On processing error, still returns 200 to prevent Stripe retries.
+- **No signing secret configured → the event is refused with 500**, on all three endpoints (`/webhooks/stripe`, `/stripe/connect`, `/stripe/billing`). An endpoint that parses an unverified body is an unauthenticated write path into the ledger: a forged `checkout.session.completed` issues tickets for free, and the same body carrying `metadata.applicationId` confirms a vendor booth for free.
+  - The only way back to the permissive parse is `STRIPE_WEBHOOK_ALLOW_UNSIGNED=true`, and it must be exactly `true`. The guard is **not** keyed on `NODE_ENV`: nothing guarantees a deployed service sets `NODE_ENV=production`, and a guard that is inert in exactly the environment it protects is not a guard. This one fails closed everywhere the flag is absent.
+  - It answers 500 rather than 400 because a missing secret is our misconfiguration, not a malformed request — and 5xx is the only reply that leaves a genuine event on Stripe's retry schedule, so fixing the variable inside the retry window recovers the event instead of losing the order it carried.
+- On verification failure (bad signature, tampered body), returns 400.
+- **On an unexpected processing error, returns 500** so Stripe retries. Handlers are idempotent, so replaying a partly-succeeded event is safe. A 200 here used to tell Stripe the event was handled, which permanently lost the transition it carried — `OrderService.sweepAbandoned` happened to cover ticket orders, but application payments and `charge.refunded` have no equivalent sweep.
+- Events deliberately ignored still return 200 (a billing event registered on the platform endpoint, a Connect event with no `account`, a non-billing event on the billing endpoint). Those are not failures, and acknowledging them stops Stripe retrying something that will never be processed there.
 
 ## API Endpoints
 
@@ -83,7 +87,7 @@ Jump uses Stripe SDK v17 (API version `2024-11-20.acacia`) for payment processin
 
 - **Never trust client-side payment status.** Always verify via webhook or direct Stripe API check (`verifyAndCompleteOrder`).
 - **Raw body required for signature verification.** The webhook route uses `express.raw()`, not `express.json()`. Ensure no global JSON parser intercepts `/webhooks/stripe`.
-- **Webhook returns 200 even on processing errors** to prevent Stripe from retrying and creating duplicate processing.
+- **Webhook returns 500 on an unexpected processing error**, so Stripe retries. It returns 200 only for events it deliberately ignores. It used to answer 200 on every error, which silently discarded the transition the event carried.
 - **Idempotent handlers.** Both completed and failed handlers check order status before processing. Safe to receive duplicate webhook events.
 - **30-minute session expiry.** Stripe fires `checkout.session.expired` after timeout, which triggers inventory release.
 - **Stripe SDK version locked to `2024-11-20.acacia`** in `backend/src/config/stripe.js`. Upgrading requires checking for breaking API changes.
