@@ -24,7 +24,7 @@ Nav and footer render on the organization page, event pages, public pages and bl
 | `frontend/src/lib/storefrontPath.ts` | `storefrontHref(href, orgId)` — shortens `/organizations/:id/…` to tenant paths on custom domains |
 | `frontend/src/app/admin/content/menus/{page,useMenusApi,MenuEditor,MenuItemRow,LinkPicker}.tsx`, `[menuId]/page.tsx` | List (name sort, Create menu dialog), editor |
 | `frontend/src/components/storefront/{useStorefrontMenus,StorefrontNav,StorefrontFooter}.tsx` | Public menus hook (module cache, 60 s), desktop dropdowns + mobile drawer, footer columns |
-| `frontend/src/components/OrganizationHeader.tsx` | New `nav` prop mounts `StorefrontNav` (mobile hamburger beside the identity, desktop row beneath) |
+| `frontend/src/components/OrganizationHeader.tsx` | New `nav` prop mounts `StorefrontNav` (mobile hamburger on the right below `md`, inline desktop row beside the identity from `md`) |
 | `frontend/src/app/organizations/[orgId]/OrganizationStorefront.tsx`, `events/[eventId]/page.tsx`, `components/storefront/StorefrontShell.tsx` | Pass `nav` and render `StorefrontFooter` |
 | `backend/tests/{unit,contract}/menus.test.js`, `frontend/e2e/{admin-menus,public-nav}.spec.ts`, `tests/unit/storefrontPath.test.ts` | Tests |
 
@@ -64,7 +64,7 @@ The frontend rewrites `/organizations/:org…` to `/`, `/pages/…`, `/blogs/…
 - **Whole-tree PUT**: there are no per-item endpoints. The editor keeps the tree locally and saves once; failed validation leaves the stored tree untouched.
 - **Public menus are not cached in Redis** (a page going hidden must disappear immediately); the route relies on `Cache-Control: max-age=60` and the frontend's 60 s module cache.
 - The venue page does not yet mount the nav (its public payload lacks the organization identity) — follow-up.
-- `StorefrontNav` mounts twice from the header (`variant="mobile"` beside the identity, `variant="desktop"` beneath); keep them in sync when changing the item rendering.
+- `StorefrontNav` mounts twice from the header (`variant="mobile"` below `md`, `variant="desktop"` inline in the same row from `md`; see [Storefront Header and Footer](storefront-header-footer.md)); keep them in sync when changing the item rendering.
 - Playwright: register the catch-all `/admin/menus**` route before the specific ones; `getByRole('button', { name: 'Add menu item' })` needs `exact: true` because of the per-parent "Add menu item to X" buttons.
 
 ## Related Features
