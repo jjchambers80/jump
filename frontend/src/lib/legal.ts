@@ -51,14 +51,35 @@ export function acceptancesFor(versions: LegalVersions, { cardAuthorization = fa
 
 const money = (n: number) => `$${Number(n || 0).toFixed(2)}`;
 
-/** Mirrors backend `config/legal.js` `cardAuthorizationText` — the backend stores its own rendering, never this one. */
-export function cardAuthorizationText({ amount, paymentDueDays, organizationName }: { amount: number; paymentDueDays?: number | null; organizationName?: string | null }): string {
+/**
+ * Mirrors backend `config/legal.js` `cardAuthorizationText` — the backend stores its own rendering, never this one.
+ *
+ * `mapBound` picks the variant: a booth tier's approval does not charge the
+ * saved card, it opens the booth picker and the vendor pays on Stripe once
+ * they hold a spot. Showing the non-map-bound sentence there would describe
+ * a charge that never happens — and that sentence is what gets stored.
+ */
+export function cardAuthorizationText({ amount, paymentDueDays, organizationName, mapBound = false }: { amount: number; paymentDueDays?: number | null; organizationName?: string | null; mapBound?: boolean }): string {
   const org = organizationName || 'the organizer';
   const days = Number(paymentDueDays || 7);
-  return `I authorize ${org} to charge ${money(amount)} to the card I save now, only if my application is approved. If the charge fails I have ${days} day${days === 1 ? '' : 's'} to pay from my application status page or update my card; my spot may be released after that.`;
+  const window = `${days} day${days === 1 ? '' : 's'}`;
+  if (mapBound)
+    return `I save my card now so ${org} can hold my place. Nothing is charged unless my application is approved — if it is, I come back to pick my booth and pay ${money(amount)} then. I have ${window} to do that; my spot may be released to someone else after that.`;
+  return `I authorize ${org} to charge ${money(amount)} to the card I save now, only if my application is approved. If the charge fails I have ${window} to pay from my application status page or update my card; my spot may be released to someone else after that.`;
 }
 
 /** Mirrors backend `applyConsentText`. */
 export function applyConsentText(organizationName?: string | null): string {
-  return `I agree to ${organizationName || 'the organizer'} and Jump collecting and storing the information in this application, as described in the Privacy Policy.`;
+  const org = organizationName || 'the organizer';
+  return `I agree to ${org} and Jump collecting and storing the information in this application, as described in the Privacy Policy. If my application is approved, my business name, description, website, socials and first photo will be shown on the event's public page.`;
+}
+
+/** Mirrors backend `applicationNotBookingText` — above the submit button, paid or free. */
+export function applicationNotBookingText(organizationName?: string | null): string {
+  return `Submitting an application is not a booking. ${organizationName || 'The organizer'} reviews applications and decides who gets a spot.`;
+}
+
+/** Mirrors backend `applicationRefundText` — under the line above, on paid forms. */
+export function applicationRefundText(organizationName?: string | null): string {
+  return `Refunds are up to ${organizationName || 'the organizer'}. Ask them about their terms before you submit.`;
 }

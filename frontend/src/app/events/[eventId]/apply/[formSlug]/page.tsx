@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import api from '@/services/api';
 import { acceptanceLine, estimatedApplicantTotal, money, SOCIAL_FIELDS, tierPriceLine, type PublicForm, type Question } from '@/lib/applications';
-import { acceptancesFor, applyConsentText, cardAuthorizationText, fetchLegalVersions, LEGAL_PAGES_ENABLED, LEGAL_PATHS, type LegalVersions } from '@/lib/legal';
+import { acceptancesFor, applicationNotBookingText, applicationRefundText, applyConsentText, cardAuthorizationText, fetchLegalVersions, LEGAL_PAGES_ENABLED, LEGAL_PATHS, type LegalVersions } from '@/lib/legal';
 import AddOnPicker from '@/components/AddOnPicker';
 import ApplyShell from '../ApplyShell';
 
@@ -220,7 +220,7 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
                     {form.chargeTiming === 'APPROVAL' && (
                       <label className="mt-3 flex items-start gap-2 text-sm text-gray-800 dark:text-slate-200">
                         <input type="checkbox" required checked={cardAuthorized} onChange={(e) => setCardAuthorized(e.target.checked)} className="mt-1" data-testid="apply-card-authorization" />
-                        <span>{cardAuthorizationText({ amount: estimatedTotal, paymentDueDays: form.paymentDueDays, organizationName: form.organizationName })}</span>
+                        <span>{cardAuthorizationText({ amount: estimatedTotal, paymentDueDays: form.paymentDueDays, organizationName: form.organizationName, mapBound: selectedTier.mapBound === true })}</span>
                       </label>
                     )}
                   </div>
@@ -346,6 +346,15 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
                 {error}
               </p>
             )}
+
+            {/* Counsel's §2.3 and §2.5(iii): capacity is taken by the APPROVE
+                transition, never by submission, and there is no automatic
+                vendor refund path. Display-only — nothing is recorded for
+                either line, so neither is in `acceptances`. */}
+            <div className="space-y-1 text-sm text-gray-700 dark:text-slate-300" data-testid="apply-submit-notice">
+              <p>{applicationNotBookingText(form.organizationName)}</p>
+              {form.kind === 'PAID' && <p data-testid="apply-refund-notice">{applicationRefundText(form.organizationName)}</p>}
+            </div>
 
             <button type="submit" disabled={submitting} className="w-full py-3 rounded-lg font-semibold bg-brand hover:bg-brand-hover text-brand-fg disabled:opacity-60 transition-colors">
               {submitting ? 'Submitting…' : form.kind === 'PAID' && form.chargeTiming === 'APPROVAL' ? 'Continue to save a card' : form.kind === 'PAID' ? 'Continue to payment' : 'Submit application'}

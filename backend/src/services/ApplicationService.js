@@ -288,6 +288,10 @@ class ApplicationService {
 
     // Spec 024 phase 3: the consent trail. Terms and privacy always; the
     // card-on-file authorization when the card saved now is charged at approval.
+    // `mapBound` picks which authorization the applicant is agreeing to: on a
+    // booth tier approval does not charge this card, it opens the picker
+    // (see the APPROVE transition below), so the booth variant is the one
+    // that describes what actually happens to their money.
     const optInAccount = body.optInAccount === true;
     const optInMarketing = body.optInMarketing === true;
     const cardAuthorization = form.kind === 'PAID' && form.chargeTiming === 'APPROVAL';
@@ -295,7 +299,7 @@ class ApplicationService {
     const organizationName = event.venue.organization?.name;
     const presentedText = {
       PRIVACY: applyConsentText({ organizationName }),
-      ...(cardAuthorization && { CARD_AUTHORIZATION: cardAuthorizationText({ amount: orderData.amounts.applicantPays, paymentDueDays: form.paymentDueDays, organizationName }) }),
+      ...(cardAuthorization && { CARD_AUTHORIZATION: cardAuthorizationText({ amount: orderData.amounts.applicantPays, paymentDueDays: form.paymentDueDays, organizationName, mapBound: tier?.mapBound === true }) }),
     };
 
     const application = await prisma.$transaction(async (tx) => {
