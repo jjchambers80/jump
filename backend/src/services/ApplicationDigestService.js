@@ -25,10 +25,15 @@ function money(value) {
 class ApplicationDigestService {
   /**
    * Send every due digest. Returns { organizations, sent } for logging/tests.
+   * `organizationId` narrows the sweep to one organization: sending a digest
+   * spends that organization's window, so a caller that only cares about its
+   * own rows must say so rather than claiming everybody else's. The contract
+   * suites run in parallel against one database and rely on this.
    */
-  async sendDue(now = new Date()) {
+  async sendDue(now = new Date(), { organizationId } = {}) {
     const orgs = await prisma.organization.findMany({
       where: {
+        ...(organizationId ? { id: organizationId } : {}),
         applicationDigestEnabled: true,
         status: 'ACTIVE',
         OR: [{ applicationDigestAt: null }, { applicationDigestAt: { lte: new Date(now.getTime() - MIN_GAP_MS) } }],
