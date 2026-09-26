@@ -32,6 +32,10 @@ describe('orderStatusFor', () => {
     ['WITHDRAWN', 'AWAITING_CARD', 'CANCELLED'],
     ['WITHDRAWN', 'PAID', 'COMPLETED'], // money moved: the review outcome does not cancel the order
     ['REJECTED', 'PARTIALLY_REFUNDED', 'PARTIALLY_REFUNDED'],
+    // Spec 037 phase 5: nothing owed yet → any order still on the row is not live.
+    ['SUBMITTED', 'NOT_DUE', 'CANCELLED'],
+    ['WAITLISTED', 'NOT_DUE', 'CANCELLED'],
+    ['APPROVED', 'AWAITING_SELECTION', 'CANCELLED'],
   ])('%s + %s → %s', (status, paymentStatus, expected) => {
     expect(orderStatusFor({ status, paymentStatus })).toBe(expected);
   });

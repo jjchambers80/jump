@@ -40,6 +40,8 @@ export interface EditorForm {
   taxable: boolean;
   paymentDueDays: number;
   overduePolicy: AdminForm['overduePolicy'];
+  /** Spec 037 D5: approval guarantees a space (takes a slot in the category). */
+  reserveOnApproval?: boolean;
   paymentsEnabled?: boolean;
   tiers: EditorTier[];
   questions: Question[];
@@ -83,6 +85,7 @@ export function SettingsCard({
     taxable: form.taxable,
     paymentDueDays: form.paymentDueDays,
     overduePolicy: form.overduePolicy,
+    reserveOnApproval: form.reserveOnApproval !== false,
   });
   const [saving, setSaving] = useState(false);
 
@@ -99,12 +102,14 @@ export function SettingsCard({
       taxable: form.taxable,
       paymentDueDays: form.paymentDueDays,
       overduePolicy: form.overduePolicy,
+      reserveOnApproval: form.reserveOnApproval !== false,
     });
   }, [form]);
 
   const paidSettings = (s: typeof state) =>
     form.kind === 'PAID'
-      ? { chargeTiming: s.chargeTiming, feeMode: s.feeMode, taxable: s.taxable, paymentDueDays: Number(s.paymentDueDays), overduePolicy: s.overduePolicy }
+      ? // chargeTiming is legacy (spec 037 phase 5): not shown, sent back unchanged.
+        { chargeTiming: s.chargeTiming, feeMode: s.feeMode, taxable: s.taxable, paymentDueDays: Number(s.paymentDueDays), overduePolicy: s.overduePolicy, reserveOnApproval: s.reserveOnApproval }
       : {};
   const update = (patch: Partial<typeof state>) => {
     const next = { ...state, ...patch };
@@ -178,12 +183,36 @@ export function SettingsCard({
         )}
         {form.kind === 'PAID' && (
           <>
-            <div>
-              <label htmlFor="f-timing" className={labelClass}>Charge the card</label>
-              <select id="f-timing" value={state.chargeTiming} disabled={!canEdit} onChange={(e) => update({ chargeTiming: e.target.value as AdminForm['chargeTiming'] })} className={field}>
-                <option value="APPROVAL">When I approve (card saved at submission)</option>
-                <option value="SUBMIT">When they submit</option>
-              </select>
+            {/* Spec 037 phase 5: vendors apply for free; after approval they choose a space and pay. */}
+            <p className="text-sm text-gray-600 dark:text-slate-400 sm:col-span-2">
+              Vendors apply without paying. When you approve one you assign their category, then they choose their space (from a list, or on the floor map when the event has one) and pay.
+            </p>
+            <div className="sm:col-span-2">
+              <span className={labelClass} id="f-reserve-label">When you approve a vendor</span>
+              <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-labelledby="f-reserve-label">
+                {(
+                  [
+                    [true, 'Reserve a space in their category', 'Approval is refused when the category is full, so an approved vendor always has a space.'],
+                    [false, 'First come, first served', 'Approval reserves nothing; approved vendors take spaces in the order they pay.'],
+                  ] as const
+                ).map(([value, title, detail]) => (
+                  <label key={String(value)} className="flex cursor-pointer items-start gap-2 rounded-md border border-gray-200 p-3 text-sm has-[:checked]:border-indigo-500 dark:border-slate-700">
+                    <input
+                      type="radio"
+                      name="f-reserve"
+                      checked={state.reserveOnApproval === value}
+                      disabled={!canEdit}
+                      onChange={() => update({ reserveOnApproval: value })}
+                      data-testid={`form-reserve-${value ? 'on' : 'off'}`}
+                      className="mt-0.5"
+                    />
+                    <span>
+                      <span className="block font-medium text-gray-900 dark:text-white">{title}</span>
+                      <span className="block text-gray-600 dark:text-slate-400">{detail}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
             </div>
             <div>
               <label htmlFor="f-fee" className={labelClass}>Fees</label>
@@ -193,7 +222,7 @@ export function SettingsCard({
               </select>
             </div>
             <div>
-              <label htmlFor="f-due" className={labelClass}>Payment due (days after a failed charge)</label>
+              <label htmlFor="f-due" className={labelClass}>Days to choose a space and pay, after approval</label>
               <input id="f-due" type="number" min={1} max={30} value={state.paymentDueDays} disabled={!canEdit} onChange={(e) => update({ paymentDueDays: Number(e.target.value) })} className={field} />
             </div>
             <div>

@@ -26,6 +26,7 @@ function toEditorForm(template: FormTemplate, name: string, definition: Template
     taxable: definition.taxable ?? false,
     paymentDueDays: definition.paymentDueDays ?? 7,
     overduePolicy: definition.overduePolicy ?? 'WITHDRAW',
+    reserveOnApproval: definition.reserveOnApproval !== false,
     tiers: definition.tiers.map((t, i) => ({ id: `t${i}`, ...t })),
     questions: definition.questions.map((q, i): Question => ({ id: `q${i}`, displayOrder: i, ...q })),
   };
@@ -179,6 +180,7 @@ export default function TemplateEditorPage({ params }: { params: { templateId: s
                       taxable: Boolean(settings.taxable),
                       paymentDueDays: Number(settings.paymentDueDays),
                       overduePolicy: settings.overduePolicy as TemplateDefinition['overduePolicy'],
+                      reserveOnApproval: settings.reserveOnApproval !== false,
                     }
                   : {}),
               }));

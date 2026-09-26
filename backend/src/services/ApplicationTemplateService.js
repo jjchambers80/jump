@@ -9,6 +9,8 @@
 
 import { prisma } from '@jump/db';
 import { moneyOf } from './applicationMoney.js';
+import { selectionDueAt } from './applicationSelection.js';
+import orderLineService from './OrderLineService.js';
 import { DEFAULT_TEMPLATES, MERGE_FIELDS, TEMPLATE_ACTIONS } from '../config/applications.js';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import emailService from './EmailService.js';
@@ -97,6 +99,12 @@ class ApplicationTemplateService {
       `${base}/events/${application.eventId}/apply/status/${application.id}`;
     const money = moneyOf(application, { taxInclusive: organization.taxInclusivePricing === true });
     const booth = await this._boothContext(application);
+    const space = await this._spaceContext(application);
+    // Spec 037 phase 5: the category's all-in price, what the vendor pays before add-ons.
+    const tierPrice =
+      application.tier && application.form?.kind === 'PAID'
+        ? orderLineService.applicationOrderData(application.tier, application.form, [], [], application.event || {}, organization).amounts.applicantPays
+        : null;
     return {
       applicant: {
         firstName: application.contact?.firstName || '',
@@ -107,7 +115,7 @@ class ApplicationTemplateService {
       event: { name: application.event?.name || '', date: formatDate(application.event?.date) },
       organization: { name: organization.name || '' },
       form: { name: application.form?.name || '' },
-      tier: application.tier ? { name: application.tier.name } : null,
+      tier: application.tier ? { name: application.tier.name, price: tierPrice == null ? '' : formatMoney(tierPrice) } : null,
       // Spec 012: null when there are no lines so {{#addOns}} sections hide.
       // Spec 024: money comes from the application's order.
       addOns: money.addOns.length
@@ -120,8 +128,10 @@ class ApplicationTemplateService {
             count: money.addOns.length,
           }
         : null,
-      amount: { applicantPays: formatMoney(money.applicantPays) },
-      payment: { dueDate: formatDate(money.paymentDueAt) },
+      // No order yet (spec 037 phase 5): the amount is the category's price.
+      amount: { applicantPays: formatMoney(money.orderId ? money.applicantPays : tierPrice ?? money.applicantPays) },
+      payment: { dueDate: formatDate(money.paymentDueAt || selectionDueAt(application)) },
+      space,
       order: { ref: money.orderRef || '' },
       // Spec 024 phase 3: `account.created` is true on the RECEIVED email that
       // carries the applicant's first sign-in link (`links.account` is then that link).
@@ -145,13 +155,13 @@ class ApplicationTemplateService {
    * shown (the hold may lapse before the email is read).
    */
   async _boothContext(application) {
-    const mapBound = application.tier?.mapBound === true;
-    const owned = mapBound || application.boothLabel ? await boothService.boothForApplication(application.id).catch(() => null) : null;
+    const owned = application.id ? await boothService.boothForApplication(application.id).catch(() => null) : null;
     const sold = owned && owned.status !== 'HELD' ? owned : null;
-    const chooseRequired = mapBound && !sold && application.status === 'APPROVED' && application.paymentStatus === 'PAYMENT_DUE';
+    // Spec 037 phase 5: approved on a PAID form and still choosing a space.
+    const chooseRequired = application.status === 'APPROVED' && application.paymentStatus === 'AWAITING_SELECTION';
     const organizationId = application.organizationId || application.event?.venue?.organizationId || application.event?.venue?.organization?.id;
     const mapUrl = sold && organizationId ? await eventUrl(application.eventId, organizationId, `/map?booth=${encodeURIComponent(sold.label)}`) : '';
-    const label = sold?.label || (!mapBound ? application.boothLabel : null) || '';
+    const label = sold?.label || (!owned ? application.boothLabel : null) || '';
     if (!label && !chooseRequired) return { booth: null, mapUrl };
     return {
       booth: {
@@ -161,6 +171,18 @@ class ApplicationTemplateService {
       },
       mapUrl,
     };
+  }
+
+  /**
+   * Spec 037 phase 5: `space` merge fields \u2014 whether the vendor still has to
+   * choose, whether the event's published map sells their category, and the
+   * date the payment clock runs out (approval + paymentDueDays).
+   */
+  async _spaceContext(application) {
+    const chooseRequired = application.status === 'APPROVED' && application.paymentStatus === 'AWAITING_SELECTION';
+    const onMap = application.tierId && application.eventId ? await boothService.isMapBound(application.eventId, application.tierId).catch(() => false) : false;
+    const due = selectionDueAt(application);
+    return { chooseRequired, onMap, dueDate: due ? formatDate(due) : '' };
   }
 
   /**

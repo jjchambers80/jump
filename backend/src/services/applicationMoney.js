@@ -4,6 +4,7 @@
 // while the ledger lives on Order / PaymentTransaction / Refund.
 
 import { adjustmentItems, buyerLineTotal } from './orderLines.js';
+import { hasLiveOrder } from './applicationOrderStatus.js';
 
 const num = (v) => Number(v || 0);
 const round = (v) => Math.round((v + Number.EPSILON) * 100) / 100;
@@ -39,7 +40,10 @@ const EMPTY = Object.freeze({
  */
 export function moneyOf(application, { taxInclusive = false } = {}) {
   const order = application?.order;
-  if (!order) return { ...EMPTY, feeMode: application?.form?.feeMode ?? 'PASS' };
+  // Spec 037 phase 5: a cancelled order on an application still in play
+  // (awaiting review or a space) owes nothing; the amount is set at selection.
+  if (!order || (application.status && !hasLiveOrder(application)))
+    return { ...EMPTY, feeMode: application?.form?.feeMode ?? 'PASS' };
   const payment = order.payment || null;
   const refunds = order.refunds || [];
   const waived = (order.items || []).some((i) => i.kind === 'WAIVER');

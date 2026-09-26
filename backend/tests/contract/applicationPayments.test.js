@@ -1,8 +1,12 @@
-// Contract tests for Applications phase 2 — the payment engine (spec 011)
-// Card on file at submission (setup-mode Checkout) → off-session charge at
-// approval (PAID / PAYMENT_DUE) → pay-now → refunds; pay-at-submission forms;
-// Connect destination routing of the application charge; concurrent
-// approvals on a 1-slot tier; webhook dispatch and idempotency; overdue sweep.
+// Contract tests for application payments — spec 011 phase 2 as reshaped by
+// spec 037 phase 5 (vendor apply-then-choose). Every PAID form:
+//   submit (no category, no card, no order) → approve (category assigned,
+//   slot taken when the form reserves on approval, CHOOSE_SPACE email,
+//   nothing charged) → choose a space (15-minute hold, order opened) → pay
+//   (hosted Checkout, or a saved card off-session) → webhook settles it.
+// Also: holds lapsing, declines, cancelled Checkout, Connect routing,
+// refunds, webhook dispatch, the overdue sweep on the approval clock, the
+// buyer account, and a legacy PAYMENT_DUE row still paying through pay-now.
 // Stripe and Resend mocked; Postgres is real.
 
 import { jest } from '@jest/globals';
@@ -16,18 +20,22 @@ jest.unstable_mockModule('../../src/config/resend.js', () => ({
 }));
 
 const mockSessionsCreate = jest.fn();
+const mockSessionsExpire = jest.fn();
+const mockSessionsRetrieve = jest.fn();
 const mockCustomersCreate = jest.fn();
 const mockIntentsCreate = jest.fn();
 const mockIntentsRetrieve = jest.fn();
 const mockSetupIntentsRetrieve = jest.fn();
+const mockPaymentMethodsRetrieve = jest.fn();
 const mockRefundsCreate = jest.fn();
 
 jest.unstable_mockModule('../../src/config/stripe.js', () => ({
   default: {
-    checkout: { sessions: { create: mockSessionsCreate, retrieve: jest.fn() } },
+    checkout: { sessions: { create: mockSessionsCreate, retrieve: mockSessionsRetrieve, expire: mockSessionsExpire } },
     customers: { create: mockCustomersCreate },
     paymentIntents: { create: mockIntentsCreate, retrieve: mockIntentsRetrieve },
     setupIntents: { retrieve: mockSetupIntentsRetrieve },
+    paymentMethods: { retrieve: mockPaymentMethodsRetrieve },
     refunds: { create: mockRefundsCreate },
     webhooks: { constructEvent: jest.fn() },
   },
@@ -38,11 +46,7 @@ const { prisma } = await import('@jump/db');
 const { default: paymentSettingsService } = await import('../../src/services/PaymentSettingsService.js');
 const { default: applicationPaymentService } = await import('../../src/services/ApplicationPaymentService.js');
 const { statusToken } = await import('../../src/services/applicationLinks.js');
-const {
-  appRow: loadRow,
-  setDueAt,
-  cleanupApplicationOrders,
-} = await import('../helpers/applicationRow.js');
+const { appRow: loadRow, attachOrder, cleanupApplicationOrders } = await import('../helpers/applicationRow.js');
 
 const TAG = 'apppay-ct';
 const ACCT = 'acct_apppay_ct';
@@ -71,6 +75,7 @@ function resetStripeMocks() {
     sessionN += 1;
     return { id: `cs_${TAG}_${sessionN}`, url: `https://checkout.stripe.com/c/pay/cs_${TAG}_${sessionN}`, mode: params.mode, metadata: params.metadata };
   });
+  mockSessionsExpire.mockReset().mockResolvedValue({ status: 'expired' });
   mockCustomersCreate.mockReset().mockImplementation(async () => {
     customerN += 1;
     return { id: `cus_${TAG}_${customerN}` };
@@ -81,6 +86,7 @@ function resetStripeMocks() {
   });
   mockIntentsRetrieve.mockReset().mockResolvedValue({ transfer_data: null, application_fee_amount: null });
   mockSetupIntentsRetrieve.mockReset().mockImplementation(async (id) => ({ id, payment_method: `pm_${TAG}_${id}` }));
+  mockPaymentMethodsRetrieve.mockReset().mockImplementation(async (id) => ({ id, card: { brand: 'visa', last4: '4242' } }));
   mockRefundsCreate.mockReset().mockImplementation(async (params) => {
     refundN += 1;
     return { id: `re_${TAG}_${refundN}`, amount: params.amount, status: 'succeeded' };
@@ -101,33 +107,55 @@ async function webhook(event) {
 
 const checkoutCompleted = (session) => ({ id: `evt_${Math.random()}`, type: 'checkout.session.completed', data: { object: session } });
 
-describe('Application payments contract (spec 011 phase 2)', () => {
+describe('Application payments contract (spec 011 phase 2, spec 037 phase 5)', () => {
   let adminToken;
   let organizerToken;
   let adminUserId;
   let org;
   let eventId;
-  let approvalForm;
-  let submitForm;
+  let vendorForm; // reserves on approval (default), two categories
+  let sponsorForm; // ABSORB, one category
+  let firstComeForm; // reserveOnApproval: false, one 1-space category
   const emails = [`admin@${TAG}.test`, `organizer@${TAG}.test`];
   const auth = (token) => ['Authorization', `Bearer ${token}`];
   const adminBase = () => `/admin/events/${eventId}`;
+  const tierOf = (form, name) => form.tiers.find((t) => t.name === name);
 
-  const submit = (formSlug, tierId, email, businessName = 'Hidden Block Games') =>
+  const submit = (formSlug, email, businessName = 'Hidden Block Games') =>
     request(app)
       .post(`/events/${eventId}/applications`)
-      .send({ formSlug, tierId, contact: { email, firstName: 'Vee', lastName: 'Vendor' }, acceptances: allAcceptances(), profile: { businessName }, answers: {} });
-
+      .send({ formSlug, contact: { email, firstName: 'Vee', lastName: 'Vendor' }, acceptances: allAcceptances(), profile: { businessName }, answers: {} });
+  const approve = (id, body = {}) => request(app).post(`${adminBase()}/applications/${id}/decision`).set(...auth(organizerToken)).send({ decision: 'APPROVE', ...body });
+  const select = (id, body = {}) => request(app).post(`/applications/${id}/select?token=${statusToken(id)}`).send(body);
+  const pay = (id) => request(app).post(`/applications/${id}/pay?token=${statusToken(id)}`);
+  const status = (id) => request(app).get(`/applications/${id}/status?token=${statusToken(id)}`);
   const appRow = (id) => loadRow(id, { tier: true, contact: true });
+  const tierRow = (id) => prisma.applicationTier.findUnique({ where: { id } });
 
-  /** Drive a DRAFT card-on-file application to SUBMITTED via the setup webhook. */
-  async function cardOnFile(applicationId) {
-    const row = await appRow(applicationId);
-    const res = await webhook(
-      checkoutCompleted({ id: row.stripeCheckoutSessionId, mode: 'setup', setup_intent: `seti_${applicationId}`, customer: row.contact.stripeCustomerId, metadata: { applicationId, purpose: 'submit' } })
-    );
+  /** Submit and approve into a category: AWAITING_SELECTION. */
+  async function approved(slug, email, business, tierId) {
+    const created = await submit(slug, email, business);
+    expect(created.status).toBe(201);
+    const res = await approve(created.body.applicationId, tierId ? { tierId } : {});
     expect(res.status).toBe(200);
-    return appRow(applicationId);
+    return created.body.applicationId;
+  }
+
+  /** A card saved before apply-then-choose (a migrated row): customer + payment method on file. */
+  async function giveSavedCard(id) {
+    const row = await appRow(id);
+    if (!row.contact.stripeCustomerId) {
+      await prisma.contact.update({ where: { id: row.contactId }, data: { stripeCustomerId: `cus_${TAG}_saved_${row.contactId}` } });
+    }
+    await prisma.application.update({ where: { id }, data: { stripePaymentMethodId: `pm_${TAG}_saved_${id}` } });
+  }
+
+  /** Settle a hosted Checkout the way Stripe's webhook does. */
+  async function checkoutPaid(id, intentId) {
+    const row = await appRow(id);
+    const res = await webhook(checkoutCompleted({ id: row.stripeCheckoutSessionId, mode: 'payment', payment_status: 'paid', payment_intent: intentId, metadata: { applicationId: id, purpose: 'pay_now' } }));
+    expect(res.status).toBe(200);
+    return appRow(id);
   }
 
   beforeAll(async () => {
@@ -145,27 +173,22 @@ describe('Application payments contract (spec 011 phase 2)', () => {
     });
     eventId = event.id;
 
-    const a = await request(app)
-      .post(`${adminBase()}/application-forms`)
-      .set(...auth(adminToken))
-      .send({
-        kind: 'PAID',
-        name: 'Vendor Space',
-        chargeTiming: 'APPROVAL',
-        paymentDueDays: 5,
-        tiers: [
-          { name: '10x10', price: 275, quantityTotal: 20 },
-          { name: 'Single slot', price: 100, quantityTotal: 1 },
-        ],
-      });
-    expect(a.status).toBe(201);
-    approvalForm = a.body;
-    const s = await request(app)
-      .post(`${adminBase()}/application-forms`)
-      .set(...auth(adminToken))
-      .send({ kind: 'PAID', name: 'Sponsors', chargeTiming: 'SUBMIT', feeMode: 'ABSORB', tiers: [{ name: 'Gold', price: 1000, quantityTotal: 2 }] });
-    expect(s.status).toBe(201);
-    submitForm = s.body;
+    const create = async (body) => {
+      const res = await request(app).post(`${adminBase()}/application-forms`).set(...auth(adminToken)).send(body);
+      expect(res.status).toBe(201);
+      return res.body;
+    };
+    vendorForm = await create({
+      kind: 'PAID',
+      name: 'Vendor Space',
+      paymentDueDays: 5,
+      tiers: [
+        { name: '10x10', price: 275, quantityTotal: 20 },
+        { name: 'Single slot', price: 100, quantityTotal: 1 },
+      ],
+    });
+    sponsorForm = await create({ kind: 'PAID', name: 'Sponsors', feeMode: 'ABSORB', tiers: [{ name: 'Gold', price: 1000, quantityTotal: 2 }] });
+    firstComeForm = await create({ kind: 'PAID', name: 'Food Trucks', reserveOnApproval: false, tiers: [{ name: 'Truck', price: 150, quantityTotal: 1 }] });
   });
 
   afterAll(async () => {
@@ -191,102 +214,225 @@ describe('Application payments contract (spec 011 phase 2)', () => {
 
   // ─── Opening + submission ────────────────────────────────────────────────
 
-  it('a PAID form opens with the flag on and exposes paymentsEnabled', async () => {
-    for (const form of [approvalForm, submitForm]) {
+  it('a PAID form opens with the flag on and exposes paymentsEnabled and reserveOnApproval', async () => {
+    for (const form of [vendorForm, sponsorForm, firstComeForm]) {
       const res = await request(app).patch(`${adminBase()}/application-forms/${form.id}`).set(...auth(adminToken)).send({ status: 'OPEN' });
       expect(res.status).toBe(200);
       expect(res.body).toMatchObject({ status: 'OPEN', paymentsEnabled: true, acceptance: { open: true } });
     }
+    expect(vendorForm.reserveOnApproval).toBe(true);
+    expect(firstComeForm.reserveOnApproval).toBe(false);
+    const bad = await request(app).patch(`${adminBase()}/application-forms/${vendorForm.id}`).set(...auth(adminToken)).send({ reserveOnApproval: 'yes' });
+    expect(bad.status).toBe(400);
   });
 
-  let cardApp; // APPROVAL timing, will be charged successfully
+  let mainApp;
 
-  it('card-on-file submission: DRAFT + setup-mode Checkout with the applicant as a Stripe customer', async () => {
-    const tier = approvalForm.tiers.find((t) => t.name === '10x10');
-    const res = await submit('vendor-space', tier.id, `vendor1@${TAG}.test`);
+  it('submission is SUBMITTED + NOT_DUE with no category, no order, no card step and the RECEIVED email', async () => {
+    const res = await submit('vendor-space', `vendor1@${TAG}.test`);
     expect(res.status).toBe(201);
-    expect(res.body).toMatchObject({ next: 'checkout' });
-    expect(res.body.checkoutUrl).toMatch(/^https:\/\/checkout\.stripe\.com\//);
-    cardApp = res.body.applicationId;
+    expect(res.body).toMatchObject({ next: 'done', orderRef: null });
+    expect(res.body.checkoutUrl).toBeUndefined();
+    mainApp = res.body.applicationId;
 
-    const params = mockSessionsCreate.mock.calls[0][0];
-    expect(params).toMatchObject({ mode: 'setup', payment_method_types: ['card'], customer: `cus_${TAG}_1`, metadata: { applicationId: cardApp, purpose: 'submit' } });
-    expect(params.setup_intent_data.metadata.applicationId).toBe(cardApp);
-    expect(params.success_url).toMatch(new RegExp(`/apply/status/${cardApp}\\?token=[a-f0-9]{64}&checkout=submitted$`));
-    expect(mockCustomersCreate).toHaveBeenCalledTimes(1);
-    expect(mockCustomersCreate.mock.calls[0][0]).toMatchObject({ email: `vendor1@${TAG}.test`, name: 'Vee Vendor' });
-
-    const row = await appRow(cardApp);
-    expect(row).toMatchObject({ status: 'DRAFT', paymentStatus: 'AWAITING_CARD', capacitySlot: 'NONE', stripeCheckoutSessionId: `cs_${TAG}_1` });
-    expect(Number(row.applicantPays)).toBeGreaterThan(275);
-    expect(Number(row.orgReceives)).toBe(275);
-    expect(row.contact.stripeCustomerId).toBe(`cus_${TAG}_1`);
-    expect(sentEmails).toHaveLength(0); // RECEIVED only once the card is saved
-
-    // Not visible to the organizer yet
-    const list = await request(app).get(`${adminBase()}/applications`).set(...auth(organizerToken));
-    expect(list.body.data.map((a) => a.id)).not.toContain(cardApp);
-  });
-
-  it('guest status page shows canResume and /resume mints a new session; resubmitting replaces the DRAFT', async () => {
-    const token = statusToken(cardApp);
-    const status = await request(app).get(`/applications/${cardApp}/status?token=${token}`);
-    expect(status.status).toBe(200);
-    expect(status.body).toMatchObject({ status: 'DRAFT', canResume: true, canPay: false, canWithdraw: false });
-
-    const resume = await request(app).post(`/applications/${cardApp}/resume?token=${token}`);
-    expect(resume.status).toBe(200);
-    expect(resume.body.url).toContain(`cs_${TAG}_2`);
-    expect(mockCustomersCreate).not.toHaveBeenCalled(); // customer reused
-
-    const bad = await request(app).post(`/applications/${cardApp}/resume?token=nope`);
-    expect(bad.status).toBe(404);
-
-    const tier = approvalForm.tiers.find((t) => t.name === '10x10');
-    const again = await submit('vendor-space', tier.id, `vendor1@${TAG}.test`);
-    expect(again.status).toBe(201);
-    expect(again.body.applicationId).not.toBe(cardApp);
-    // Spec 024: the replaced DRAFT is withdrawn, never deleted; its order is CANCELLED.
-    const replaced = await appRow(cardApp);
-    expect(replaced).toMatchObject({
-      status: 'WITHDRAWN',
-      withdrawnBy: 'SYSTEM',
-      withdrawReason: 'replaced',
-      orderStatus: 'CANCELLED',
-    });
-    expect(again.body.orderRef).toMatch(/^JMP-[A-Z2-9]{6}$/);
-    expect((await appRow(again.body.applicationId)).orderStatus).toBe('PENDING');
-    cardApp = again.body.applicationId;
-  });
-
-  it('checkout.session.completed (setup) stores the card, submits the application and sends RECEIVED', async () => {
-    const row = await cardOnFile(cardApp);
-    expect(row).toMatchObject({ status: 'SUBMITTED', paymentStatus: 'CARD_ON_FILE', stripePaymentMethodId: `pm_${TAG}_seti_${cardApp}` });
+    expect(mockSessionsCreate).not.toHaveBeenCalled();
+    expect(mockCustomersCreate).not.toHaveBeenCalled();
+    const row = await appRow(mainApp);
+    expect(row).toMatchObject({ status: 'SUBMITTED', paymentStatus: 'NOT_DUE', capacitySlot: 'NONE', tierId: null, orderId: null, stripeCheckoutSessionId: null });
     expect(row.submittedAt).toBeTruthy();
-    expect(sentEmails).toHaveLength(1);
-    expect(sentEmails[0].subject).toMatch(/received your application/);
-    expect(sentEmails[0].text).toContain(`/apply/status/${cardApp}?token=${statusToken(cardApp)}`);
+    expect(await prisma.order.count({ where: { applicationId: mainApp } })).toBe(0);
+    expect(sentEmails.map((e) => e.subject)).toEqual([expect.stringMatching(/received your application/)]);
 
-    // Replay is a no-op
-    await cardOnFile(cardApp);
-    expect(sentEmails).toHaveLength(1);
+    // Old clients may still send a category and add-ons: ignored on PAID forms.
+    const legacy = await request(app)
+      .post(`/events/${eventId}/applications`)
+      .send({ formSlug: 'vendor-space', tierId: tierOf(vendorForm, '10x10').id, addOns: [], contact: { email: `legacy@${TAG}.test`, firstName: 'Le', lastName: 'Gacy' }, acceptances: allAcceptances(), profile: { businessName: 'Legacy Tab' }, answers: {} });
+    expect(legacy.status).toBe(201);
+    expect(await appRow(legacy.body.applicationId)).toMatchObject({ status: 'SUBMITTED', paymentStatus: 'NOT_DUE', tierId: null });
 
-    const status = await request(app).get(`/applications/${cardApp}/status?token=${statusToken(cardApp)}`);
-    expect(status.body).toMatchObject({ status: 'SUBMITTED', paymentStatus: 'CARD_ON_FILE', canWithdraw: true, canUpdateCard: true, canResume: false });
+    const view = await status(mainApp);
+    expect(view.body).toMatchObject({ status: 'SUBMITTED', paymentStatus: 'NOT_DUE', selection: null, canPay: false, canResume: false, canWithdraw: true });
+    const list = await request(app).get(`${adminBase()}/applications`).set(...auth(organizerToken));
+    expect(list.body.data.map((a) => a.id)).toContain(mainApp);
   });
 
-  // ─── Approval → charge ───────────────────────────────────────────────────
+  // ─── Approval ────────────────────────────────────────────────────────────
 
-  it('approve charges the saved card off-session (platform account, descriptor suffix) and confirms the slot', async () => {
-    const res = await request(app).post(`${adminBase()}/applications/${cardApp}/decision`).set(...auth(organizerToken)).send({ decision: 'APPROVE' });
+  it('approving needs a category when the form has several; approval reserves a slot, charges nothing and sends CHOOSE_SPACE', async () => {
+    const missing = await approve(mainApp);
+    expect(missing.status).toBe(400);
+    expect(missing.body.code).toBe('CATEGORY_REQUIRED');
+
+    const tier = tierOf(vendorForm, '10x10');
+    const preview = await request(app).post(`${adminBase()}/applications/${mainApp}/preview`).set(...auth(organizerToken)).send({ decision: 'APPROVE', tierId: tier.id });
+    expect(preview.status).toBe(200);
+    expect(preview.body.subject).toMatch(/choose your space/);
+    expect(preview.body.body).toContain('10x10');
+
+    sentEmails.length = 0;
+    const res = await approve(mainApp, { tierId: tier.id });
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ status: 'APPROVED', paymentStatus: 'PAID', capacitySlot: 'APPROVED' });
-    expect(res.body.payment).toMatchObject({ stripePaymentIntentId: `pi_${TAG}_1`, stripeAccountId: null, applicationFee: null, chargeAttempts: 1, canRefund: true, canRetryCharge: false });
-    expect(res.body.payment.paidAt).toBeTruthy();
-    expect(res.body.payment.stripeDashboardUrl).toBe(`https://dashboard.stripe.com/test/payments/pi_${TAG}_1`);
+    expect(res.body).toMatchObject({ status: 'APPROVED', paymentStatus: 'AWAITING_SELECTION', capacitySlot: 'RESERVED', tier: { id: tier.id, name: '10x10' }, orderId: null, selectionHeldUntil: null });
+    expect(res.body.form.reserveOnApproval).toBe(true);
+    expect(res.body.categories.map((c) => c.name)).toEqual(['10x10', 'Single slot']);
+    const days = (new Date(res.body.payment.paymentDueAt).getTime() - Date.now()) / 86_400_000;
+    expect(days).toBeGreaterThan(4.9);
+    expect(days).toBeLessThan(5.1);
+    expect(res.body.decisions.at(-1)).toMatchObject({ action: 'APPROVED', emailSubject: expect.stringMatching(/choose your space/) });
 
-    const [params, options] = mockIntentsCreate.mock.calls[0];
+    expect(mockIntentsCreate).not.toHaveBeenCalled();
+    expect(mockSessionsCreate).not.toHaveBeenCalled();
+    expect(await tierRow(tier.id)).toMatchObject({ quantityReserved: 1, quantityApproved: 0 });
+    expect(sentEmails).toHaveLength(1);
+    expect(sentEmails[0].subject).toMatch(/choose your space/);
+    expect(sentEmails[0].text).toContain(`/apply/status/${mainApp}?token=${statusToken(mainApp)}`);
+    expect(sentEmails[0].text).toContain('10x10');
+  });
+
+  it('the status page offers the category from the list: price, spaces left, due date; no map without one', async () => {
+    const res = await status(mainApp);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ status: 'APPROVED', paymentStatus: 'AWAITING_SELECTION', canPay: false, orderRef: null });
+    const sel = res.body.selection;
+    expect(sel).toMatchObject({
+      state: 'CHOOSE',
+      heldUntil: null,
+      reserveOnApproval: true,
+      category: { name: '10x10', price: 275, guaranteed: true, spacesLeft: 19 },
+      addOns: [],
+      map: { available: false },
+      placedBooth: null,
+      savedCard: null,
+    });
+    expect(sel.category.applicantPays).toBeGreaterThan(275);
+    expect(sel.dueAt).toBeTruthy();
+  });
+
+  it('choosing from the list holds the space 15 minutes and opens the order; Checkout pays it and the webhook settles the slot', async () => {
+    const tier = tierOf(vendorForm, '10x10');
+    const chosen = await select(mainApp, {});
+    expect(chosen.status).toBe(200);
+    expect(chosen.body).toMatchObject({ boothId: null, paymentStatus: 'PAYMENT_DUE', orderRef: expect.stringMatching(/^JMP-[A-Z2-9]{6}$/) });
+    const holdMinutes = (new Date(chosen.body.holdExpiresAt).getTime() - Date.now()) / 60_000;
+    expect(holdMinutes).toBeGreaterThan(14);
+    expect(holdMinutes).toBeLessThan(15.1);
+
+    let row = await appRow(mainApp);
+    expect(row).toMatchObject({ status: 'APPROVED', paymentStatus: 'PAYMENT_DUE', capacitySlot: 'RESERVED', orderStatus: 'PENDING', orgReceives: 275 });
+    expect(row.selectionHeldUntil).toBeTruthy();
+    // The approval slot is the one used: nothing more is reserved.
+    expect(await tierRow(tier.id)).toMatchObject({ quantityReserved: 1, quantityApproved: 0 });
+    const order = await prisma.order.findUnique({ where: { id: row.orderId } });
+    const clockDays = (order.dueAt.getTime() - Date.now()) / 86_400_000;
+    expect(clockDays).toBeGreaterThan(4.9); // the approval clock, not a new one
+
+    // A second choice while holding is refused.
+    const twice = await select(mainApp, {});
+    expect(twice.status).toBe(409);
+    expect(twice.body.code).toBe('NOT_AWAITING_SELECTION');
+
+    const view = await status(mainApp);
+    expect(view.body).toMatchObject({ canPay: true, selection: { state: 'HELD' } });
+    expect(view.body.selection.heldUntil).toBeTruthy();
+
+    const checkout = await pay(mainApp);
+    expect(checkout.status).toBe(200);
+    expect(checkout.body.url).toMatch(/^https:\/\/checkout\.stripe\.com\//);
+    const params = mockSessionsCreate.mock.calls.at(-1)[0];
+    expect(params).toMatchObject({ mode: 'payment', metadata: { applicationId: mainApp, purpose: 'pay_now', orderRef: chosen.body.orderRef } });
+    expect(params.line_items[0]).toMatchObject({ quantity: 1, price_data: { unit_amount: Math.round(Number(row.applicantPays) * 100) } });
+    expect(params.payment_intent_data).toMatchObject({ statement_descriptor_suffix: 'GEEK EXPO', metadata: { applicationId: mainApp, purpose: 'pay_now' } });
+    expect(params.success_url).toMatch(/checkout=paid$/);
+    expect((await appRow(mainApp)).paymentStatus).toBe('PROCESSING');
+
+    // PROCESSING protects the hold from the sweep even past its deadline.
+    await prisma.application.update({ where: { id: mainApp }, data: { selectionHeldUntil: new Date(Date.now() - 1000) } });
+    await applicationPaymentService.sweepExpiredSelections();
+    expect(await appRow(mainApp)).toMatchObject({ paymentStatus: 'PROCESSING', orderStatus: 'PENDING' });
+
+    sentEmails.length = 0;
+    row = await checkoutPaid(mainApp, `pi_${TAG}_list`);
+    expect(row).toMatchObject({ status: 'APPROVED', paymentStatus: 'PAID', capacitySlot: 'APPROVED', orderStatus: 'COMPLETED', stripePaymentIntentId: `pi_${TAG}_list`, selectionHeldUntil: null, paymentDueAt: null });
+    expect(await tierRow(tier.id)).toMatchObject({ quantityReserved: 0, quantityApproved: 1 });
+    expect(sentEmails.map((e) => e.subject)).toEqual([expect.stringMatching(/^Receipt for .* \(JMP-[A-Z2-9]{6}\)$/), expect.stringMatching(/approved/)]);
+
+    const again = await pay(mainApp);
+    expect(again.status).toBe(409);
+  });
+
+  it('a full category refuses the approval with a Waitlist suggestion; concurrent approvals let exactly one through', async () => {
+    const tier = tierOf(vendorForm, 'Single slot');
+    const ids = [];
+    for (const n of [1, 2]) ids.push((await submit('vendor-space', `single${n}@${TAG}.test`, `Single ${n}`)).body.applicationId);
+    const results = await Promise.all(ids.map((id) => approve(id, { tierId: tier.id })));
+    expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+    const loser = results.find((r) => r.status === 409);
+    expect(loser.body.message).toMatch(/Single slot is full/);
+    expect(loser.body.details.suggestion).toBe('WAITLIST');
+    expect(await tierRow(tier.id)).toMatchObject({ quantityReserved: 1, quantityApproved: 0 });
+    const loserId = ids[results.indexOf(loser)];
+    expect(await appRow(loserId)).toMatchObject({ status: 'SUBMITTED', paymentStatus: 'NOT_DUE', capacitySlot: 'NONE' });
+    const waitlist = await request(app).post(`${adminBase()}/applications/${loserId}/decision`).set(...auth(organizerToken)).send({ decision: 'WAITLIST' });
+    expect(waitlist.status).toBe(200);
+    expect(mockIntentsCreate).not.toHaveBeenCalled();
+  });
+
+  // ─── reserveOnApproval: false ────────────────────────────────────────────
+
+  it('a first-come form approves without a slot; choosing takes it; the next vendor gets SOLD_OUT; a lapsed hold frees it', async () => {
+    const tier = firstComeForm.tiers[0];
+    const first = await approved('food-trucks', `truck1@${TAG}.test`, 'Taco Truck'); // one category: auto-assigned
+    const second = await approved('food-trucks', `truck2@${TAG}.test`, 'Waffle Wagon');
+    expect(await appRow(first)).toMatchObject({ paymentStatus: 'AWAITING_SELECTION', capacitySlot: 'NONE', tierId: tier.id });
+    expect(await tierRow(tier.id)).toMatchObject({ quantityReserved: 0, quantityApproved: 0 });
+    expect((await status(first)).body.selection).toMatchObject({ reserveOnApproval: false, category: { guaranteed: false, spacesLeft: 1 } });
+
+    const held = await select(first, {});
+    expect(held.status).toBe(200);
+    expect(await tierRow(tier.id)).toMatchObject({ quantityReserved: 1 });
+    const firstRef = held.body.orderRef;
+
+    const soldOut = await select(second, {});
+    expect(soldOut.status).toBe(409);
+    expect(soldOut.body.code).toBe('SOLD_OUT');
+    expect(await appRow(second)).toMatchObject({ paymentStatus: 'AWAITING_SELECTION', orderId: null });
+
+    // The hold lapses: slot, order and state go back.
+    await prisma.application.update({ where: { id: first }, data: { selectionHeldUntil: new Date(Date.now() - 1000) } });
+    expect((await applicationPaymentService.sweepExpiredSelections()).released).toBeGreaterThanOrEqual(1);
+    const lapsed = await prisma.application.findUnique({ where: { id: first }, include: { order: true } });
+    expect(lapsed).toMatchObject({ paymentStatus: 'AWAITING_SELECTION', capacitySlot: 'NONE', selectionHeldUntil: null });
+    expect(lapsed.order.status).toBe('CANCELLED');
+    expect(await tierRow(tier.id)).toMatchObject({ quantityReserved: 0 });
+    expect((await appRow(first)).orderId).toBeNull(); // the cancelled order is not the live amount
+
+    // Now the second vendor can take it; the first re-choosing reuses its order number.
+    expect((await select(second, {})).status).toBe(200);
+    const released = await request(app).post(`/applications/${second}/release?token=${statusToken(second)}`);
+    expect(released.body).toMatchObject({ released: true, paymentStatus: 'AWAITING_SELECTION' });
+    const again = await select(first, {});
+    expect(again.status).toBe(200);
+    expect(again.body.orderRef).toBe(firstRef);
+    expect(await prisma.order.count({ where: { applicationId: first } })).toBe(1);
+  });
+
+  // ─── Saved card (kept from before apply-then-choose) ─────────────────────
+
+  let cardApp;
+
+  it('a saved card is offered at selection and charged off-session (descriptor suffix, idempotency key)', async () => {
+    cardApp = await approved('vendor-space', `card@${TAG}.test`, 'Card Co', tierOf(vendorForm, '10x10').id);
+    await giveSavedCard(cardApp);
+    const view = await status(cardApp);
+    expect(view.body.selection.savedCard).toEqual({ brand: 'visa', last4: '4242' });
+    expect(view.body.hasCardOnFile).toBe(true);
+
+    const res = await select(cardApp, { useSavedCard: true });
+    expect(res.status).toBe(200);
+    expect(res.body.paymentStatus).toBe('PAID');
     const row = await appRow(cardApp);
+    expect(row).toMatchObject({ status: 'APPROVED', paymentStatus: 'PAID', capacitySlot: 'APPROVED', orderStatus: 'COMPLETED', chargeAttempts: 1 });
+    const [params, options] = mockIntentsCreate.mock.calls[0];
     expect(params).toMatchObject({
       amount: Math.round(Number(row.applicantPays) * 100),
       currency: 'usd',
@@ -299,202 +445,94 @@ describe('Application payments contract (spec 011 phase 2)', () => {
       metadata: { applicationId: cardApp, purpose: 'approval' },
     });
     expect(params.transfer_data).toBeUndefined();
-    expect(params.application_fee_amount).toBeUndefined();
     expect(options).toEqual({ idempotencyKey: `application:${cardApp}:charge:1` });
 
-    const tier = await prisma.applicationTier.findUnique({ where: { id: row.tierId } });
-    expect(tier).toMatchObject({ quantityApproved: 1, quantityReserved: 0 });
-    // Spec 024 phase 2: Jump's receipt precedes the organizer's approval email.
-    expect(sentEmails.map((e) => e.subject)).toEqual([expect.stringMatching(/^Receipt for .* \(JMP-[A-Z2-9]{6}\)$/), expect.stringMatching(/approved/)]);
-    expect(sentEmails[0].text).toContain(`Order number: ${res.body.orderRef}`);
-    expect(sentEmails[0].text).toContain(`Total paid: $${res.body.amounts.applicantPays.toFixed(2)}`);
-    const decision = res.body.decisions.find((d) => d.action === 'APPROVED');
-    expect(decision.emailSubject).toMatch(/approved/);
-
-    // payment_intent.succeeded after the fact is idempotent (no second email)
-    const hook = await webhook({ id: 'evt_pi_ok', type: 'payment_intent.succeeded', data: { object: { id: `pi_${TAG}_1`, status: 'succeeded', metadata: { applicationId: cardApp, purpose: 'approval' } } } });
-    expect(hook.status).toBe(200);
-    expect(sentEmails).toHaveLength(2); // receipt + approval from before; nothing new
-    expect((await appRow(cardApp)).paymentStatus).toBe('PAID');
+    // payment_intent.succeeded after the fact is idempotent
+    const before = sentEmails.length;
+    await webhook({ id: 'evt_pi_ok', type: 'payment_intent.succeeded', data: { object: { id: row.stripePaymentIntentId, status: 'succeeded', metadata: { applicationId: cardApp, purpose: 'approval' } } } });
+    expect(sentEmails).toHaveLength(before);
   });
 
-  it('approving a map-bound tier reserves capacity but waits for booth selection before charging', async () => {
-    const tier = await prisma.applicationTier.create({
-      data: { formId: approvalForm.id, name: 'Map booth', price: 325, quantityTotal: 2, mapBound: true, displayOrder: 99 },
-    });
-    const created = await submit('vendor-space', tier.id, `map-vendor@${TAG}.test`, 'Map Vendor');
-    const applicationId = created.body.applicationId;
-    await cardOnFile(applicationId);
-    const chargesBefore = mockIntentsCreate.mock.calls.length;
-
-    const response = await request(app)
-      .post(`${adminBase()}/applications/${applicationId}/decision`)
-      .set(...auth(organizerToken))
-      .send({ decision: 'APPROVE' });
-
-    expect(response.status).toBe(200);
-    expect(response.body).toMatchObject({ status: 'APPROVED', paymentStatus: 'PAYMENT_DUE', capacitySlot: 'RESERVED' });
-    expect(response.body.payment.paymentDueAt).toBeTruthy();
-    expect(mockIntentsCreate).toHaveBeenCalledTimes(chargesBefore);
-    expect(await prisma.applicationTier.findUnique({ where: { id: tier.id } })).toMatchObject({ quantityApproved: 0, quantityReserved: 1 });
-  });
-
-  let dueApp; // APPROVAL timing, declined card → PAYMENT_DUE → pay-now
-
-  it('a declined card leaves the application APPROVED + PAYMENT_DUE with the slot reserved and a PAYMENT_DUE email', async () => {
-    const tier = approvalForm.tiers.find((t) => t.name === '10x10');
-    const created = await submit('vendor-space', tier.id, `vendor2@${TAG}.test`, 'Pixel Pins');
-    dueApp = created.body.applicationId;
-    await cardOnFile(dueApp);
-    sentEmails.length = 0;
+  it('a declined saved card releases the chosen space back to the choice (slot kept on a reserving form) and records the failure', async () => {
+    const tier = tierOf(vendorForm, '10x10');
+    const id = await approved('vendor-space', `declined@${TAG}.test`, 'Declined Co', tier.id);
+    await giveSavedCard(id);
+    const reserved = (await tierRow(tier.id)).quantityReserved;
     mockIntentsCreate.mockRejectedValueOnce(cardDecline());
-
-    const res = await request(app).post(`${adminBase()}/applications/${dueApp}/decision`).set(...auth(organizerToken)).send({ decision: 'APPROVE', message: { subject: 'Custom approve', body: 'ignored on decline' } });
+    const res = await select(id, { useSavedCard: true });
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ status: 'APPROVED', paymentStatus: 'PAYMENT_DUE', capacitySlot: 'RESERVED' });
-    expect(res.body.payment.canRetryCharge).toBe(true);
-    const dueAt = new Date(res.body.payment.paymentDueAt);
-    const days = (dueAt.getTime() - Date.now()) / 86_400_000;
-    expect(days).toBeGreaterThan(4.9);
-    expect(days).toBeLessThan(5.1);
+    expect(res.body.paymentStatus).toBe('AWAITING_SELECTION');
+    const row = await prisma.application.findUnique({ where: { id }, include: { order: { include: { payment: true } } } });
+    expect(row).toMatchObject({ paymentStatus: 'AWAITING_SELECTION', capacitySlot: 'RESERVED', selectionHeldUntil: null });
+    expect(row.order).toMatchObject({ status: 'CANCELLED' });
+    expect(row.order.payment).toMatchObject({ status: 'FAILED', failureReason: 'Your card was declined.' });
+    expect((await tierRow(tier.id)).quantityReserved).toBe(reserved);
 
-    const tierRow = await prisma.applicationTier.findUnique({ where: { id: tier.id } });
-    expect(tierRow).toMatchObject({ quantityApproved: 1, quantityReserved: 1 });
-    expect(sentEmails).toHaveLength(1);
-    expect(sentEmails[0].subject).toMatch(/Payment needed/);
-    expect(sentEmails[0].text).toContain(`/apply/status/${dueApp}?token=`);
-    // The one-off organizer message applies to the APPROVED email only; the due email is the template.
-    expect(sentEmails[0].subject).not.toBe('Custom approve');
+    // Choose again and pay on Checkout instead.
+    expect((await select(id, {})).status).toBe(200);
+    expect((await pay(id)).status).toBe(200);
+    const paid = await checkoutPaid(id, `pi_${TAG}_retry`);
+    expect(paid).toMatchObject({ paymentStatus: 'PAID', orderStatus: 'COMPLETED', stripePaymentIntentId: `pi_${TAG}_retry` });
   });
 
-  it('pay-now mints a payment-mode session for the snapshot amount; the paid webhook confirms the slot', async () => {
-    const token = statusToken(dueApp);
-    const status = await request(app).get(`/applications/${dueApp}/status?token=${token}`);
-    expect(status.body).toMatchObject({ status: 'APPROVED', paymentStatus: 'PAYMENT_DUE', canPay: true, canUpdateCard: true, canWithdraw: false });
+  it('a Checkout whose webhook never arrived is reconciled with Stripe once its session must have ended', async () => {
+    const lost = await approved('vendor-space', `lost@${TAG}.test`, 'Lost Hook Co', tierOf(vendorForm, '10x10').id);
+    await select(lost, {});
+    await pay(lost);
+    const paidOne = await approved('vendor-space', `lost2@${TAG}.test`, 'Paid Hook Co', tierOf(vendorForm, '10x10').id);
+    await select(paidOne, {});
+    await pay(paidOne);
+    const longAgo = new Date(Date.now() - 60 * 60_000);
+    await prisma.application.updateMany({ where: { id: { in: [lost, paidOne] } }, data: { selectionHeldUntil: longAgo } });
+    const sessions = {
+      [(await appRow(lost)).stripeCheckoutSessionId]: { status: 'expired', payment_status: 'unpaid', expires_at: Math.floor(longAgo.getTime() / 1000) },
+      [(await appRow(paidOne)).stripeCheckoutSessionId]: { status: 'complete', payment_status: 'paid', payment_intent: `pi_${TAG}_late`, metadata: { applicationId: paidOne, purpose: 'pay_now' } },
+    };
+    mockSessionsRetrieve.mockImplementation(async (id) => (sessions[id] ? { id, ...sessions[id] } : null));
 
-    const pay = await request(app).post(`/applications/${dueApp}/pay?token=${token}`);
-    expect(pay.status).toBe(200);
-    expect(pay.body.url).toMatch(/^https:\/\/checkout\.stripe\.com\//);
-    const params = mockSessionsCreate.mock.calls.at(-1)[0];
-    const row = await appRow(dueApp);
-    expect(params).toMatchObject({ mode: 'payment', customer: row.contact.stripeCustomerId, metadata: { applicationId: dueApp, purpose: 'pay_now' } });
-    expect(params.line_items).toHaveLength(1);
-    expect(params.line_items[0]).toMatchObject({ quantity: 1, price_data: { unit_amount: Math.round(Number(row.applicantPays) * 100) } });
-    expect(params.payment_intent_data).toMatchObject({ statement_descriptor_suffix: 'GEEK EXPO', metadata: { applicationId: dueApp, purpose: 'pay_now' } });
-    expect(params.success_url).toMatch(/checkout=paid$/);
-
-    sentEmails.length = 0;
-    const hook = await webhook(checkoutCompleted({ id: params.metadata && row.stripeCheckoutSessionId, mode: 'payment', payment_status: 'paid', payment_intent: `pi_${TAG}_paynow`, metadata: { applicationId: dueApp, purpose: 'pay_now' } }));
-    expect(hook.status).toBe(200);
-    const after = await appRow(dueApp);
-    expect(after).toMatchObject({ status: 'APPROVED', paymentStatus: 'PAID', capacitySlot: 'APPROVED', stripePaymentIntentId: `pi_${TAG}_paynow`, paymentDueAt: null, overdue: false });
-    const tierRow = await prisma.applicationTier.findUnique({ where: { id: after.tierId } });
-    expect(tierRow).toMatchObject({ quantityApproved: 2, quantityReserved: 0 });
-    expect(sentEmails.map((e) => e.subject)).toEqual([expect.stringMatching(/^Receipt for/), expect.stringMatching(/approved/)]);
-
-    // Pay again → 409, nothing due
-    const again = await request(app).post(`/applications/${dueApp}/pay?token=${token}`);
-    expect(again.status).toBe(409);
+    await applicationPaymentService.sweepExpiredSelections();
+    expect(await appRow(lost)).toMatchObject({ paymentStatus: 'AWAITING_SELECTION', selectionHeldUntil: null, orderId: null });
+    expect(await appRow(paidOne)).toMatchObject({ paymentStatus: 'PAID', capacitySlot: 'APPROVED', orderStatus: 'COMPLETED', stripePaymentIntentId: `pi_${TAG}_late` });
+    mockSessionsRetrieve.mockReset();
   });
 
-  it('retry charge: organizer re-runs the saved card after a decline; a Stripe outage keeps the card on file', async () => {
-    const tier = approvalForm.tiers.find((t) => t.name === '10x10');
-    const created = await submit('vendor-space', tier.id, `vendor3@${TAG}.test`, 'Retry Co');
-    const id = created.body.applicationId;
-    await cardOnFile(id);
-    mockIntentsCreate.mockRejectedValueOnce(cardDecline('authentication_required'));
-    const declined = await request(app).post(`${adminBase()}/applications/${id}/decision`).set(...auth(organizerToken)).send({ decision: 'APPROVE' });
-    expect(declined.body).toMatchObject({ status: 'APPROVED', paymentStatus: 'PAYMENT_DUE' });
+  it('backing out of Checkout keeps the hold while it runs; an expired session releases it', async () => {
+    const id = await approved('vendor-space', `backout@${TAG}.test`, 'Back Out Co', tierOf(vendorForm, '10x10').id);
+    await select(id, {});
+    await pay(id);
+    const row = await appRow(id);
+    expect(row.paymentStatus).toBe('PROCESSING');
 
-    const retry = await request(app).post(`${adminBase()}/applications/${id}/charge`).set(...auth(organizerToken));
-    expect(retry.status).toBe(200);
-    expect(retry.body).toMatchObject({ status: 'APPROVED', paymentStatus: 'PAID', capacitySlot: 'APPROVED' });
-    expect(retry.body.payment.chargeAttempts).toBe(2);
-    expect(mockIntentsCreate.mock.calls.at(-1)[1]).toEqual({ idempotencyKey: `application:${id}:charge:2` });
+    const cancel = await request(app).post(`/applications/${id}/cancel-checkout?token=${statusToken(id)}`);
+    expect(cancel.body).toMatchObject({ cancelled: true, paymentStatus: 'PAYMENT_DUE' });
+    expect(mockSessionsExpire).toHaveBeenCalledWith(row.stripeCheckoutSessionId);
+    expect((await appRow(id)).selectionHeldUntil).toBeTruthy();
 
-    const twice = await request(app).post(`${adminBase()}/applications/${id}/charge`).set(...auth(organizerToken));
-    expect(twice.status).toBe(409);
-
-    // Outage path: not a card error → 400 to the organizer, application back to SUBMITTED-equivalent money state
-    const created2 = await submit('vendor-space', tier.id, `vendor4@${TAG}.test`, 'Outage Co');
-    const id2 = created2.body.applicationId;
-    await cardOnFile(id2);
-    mockIntentsCreate.mockRejectedValueOnce(new Error('connection reset'));
-    const outage = await request(app).post(`${adminBase()}/applications/${id2}/decision`).set(...auth(organizerToken)).send({ decision: 'APPROVE' });
-    expect(outage.status).toBe(400);
-    expect(outage.body.message).toMatch(/Could not charge the card on file/);
-    const row = await appRow(id2);
-    // PAYMENT_DUE is the one state retry charge, pay-now and offline settlement
-    // all accept; the saved card stays on the row for the retry.
-    expect(row).toMatchObject({ status: 'APPROVED', paymentStatus: 'PAYMENT_DUE', capacitySlot: 'RESERVED' });
-    expect(row.stripePaymentMethodId).toBeTruthy();
-    // Clean up the reserved slot for later tests
-    await prisma.$transaction([
-      prisma.application.update({ where: { id: id2 }, data: { status: 'WITHDRAWN', capacitySlot: 'NONE' } }),
-      prisma.applicationTier.update({ where: { id: tier.id }, data: { quantityReserved: { decrement: 1 } } }),
-    ]);
+    // Pay again, then Stripe expires that session: the space goes back.
+    await pay(id);
+    const session = (await appRow(id)).stripeCheckoutSessionId;
+    const expired = await webhook({ id: 'evt_exp', type: 'checkout.session.expired', data: { object: { id: session, mode: 'payment', metadata: { applicationId: id, purpose: 'pay_now' } } } });
+    expect(expired.status).toBe(200);
+    expect(await appRow(id)).toMatchObject({ paymentStatus: 'AWAITING_SELECTION', selectionHeldUntil: null, orderId: null });
+    expect((await prisma.order.findFirst({ where: { applicationId: id } })).status).toBe('CANCELLED');
   });
 
-  it('concurrent approvals on a 1-slot tier: one PAID, one 409 with a Waitlist suggestion, no charge for the loser', async () => {
-    const tier = approvalForm.tiers.find((t) => t.name === 'Single slot');
-    const ids = [];
-    for (const n of [1, 2]) {
-      const created = await submit('vendor-space', tier.id, `single${n}@${TAG}.test`, `Single ${n}`);
-      ids.push(created.body.applicationId);
-      await cardOnFile(created.body.applicationId);
-    }
-    mockIntentsCreate.mockClear();
-    const results = await Promise.all(ids.map((id) => request(app).post(`${adminBase()}/applications/${id}/decision`).set(...auth(organizerToken)).send({ decision: 'APPROVE' })));
-    const codes = results.map((r) => r.status).sort();
-    expect(codes).toEqual([200, 409]);
-    const loser = results.find((r) => r.status === 409);
-    expect(loser.body.message).toMatch(/tier is full/);
-    expect(loser.body.details.suggestion).toBe('WAITLIST');
-    expect(mockIntentsCreate).toHaveBeenCalledTimes(1);
-    const tierRow = await prisma.applicationTier.findUnique({ where: { id: tier.id } });
-    expect(tierRow).toMatchObject({ quantityApproved: 1, quantityReserved: 0 });
-  });
-
-  // ─── Pay at submission ───────────────────────────────────────────────────
+  // ─── Refunds (ABSORB) ────────────────────────────────────────────────────
 
   let sponsorApp;
 
-  it('SUBMIT timing: payment-mode Checkout at submission; paid webhook submits; approve takes the slot without a charge', async () => {
-    const tier = submitForm.tiers[0];
-    const created = await submit('sponsors', tier.id, `sponsor@${TAG}.test`, 'MegaCorp');
-    expect(created.status).toBe(201);
-    sponsorApp = created.body.applicationId;
-    const params = mockSessionsCreate.mock.calls[0][0];
+  it('ABSORB: the sponsor pays the listed price; refunds are ADMIN only, partial then full; charge.refunded is idempotent', async () => {
+    sponsorApp = await approved('sponsors', `sponsor@${TAG}.test`, 'MegaCorp');
+    await select(sponsorApp, {});
     const row = await appRow(sponsorApp);
-    // ABSORB: the sponsor pays the listed price; fees come out of the org's share
     expect(Number(row.applicantPays)).toBe(1000);
     expect(Number(row.orgReceives)).toBeLessThan(1000);
-    expect(params).toMatchObject({ mode: 'payment', metadata: { applicationId: sponsorApp, purpose: 'submit' } });
-    expect(params.line_items[0].price_data.unit_amount).toBe(100000);
-    expect(row).toMatchObject({ status: 'DRAFT', paymentStatus: 'NOT_REQUIRED' });
+    await pay(sponsorApp);
+    expect(mockSessionsCreate.mock.calls.at(-1)[0].line_items[0].price_data.unit_amount).toBe(100000);
+    await checkoutPaid(sponsorApp, `pi_${TAG}_sponsor`);
 
-    const hook = await webhook(checkoutCompleted({ id: row.stripeCheckoutSessionId, mode: 'payment', payment_status: 'paid', payment_intent: `pi_${TAG}_sponsor`, metadata: { applicationId: sponsorApp, purpose: 'submit' } }));
-    expect(hook.status).toBe(200);
-    const paid = await appRow(sponsorApp);
-    expect(paid).toMatchObject({ status: 'SUBMITTED', paymentStatus: 'PAID', capacitySlot: 'NONE', stripePaymentIntentId: `pi_${TAG}_sponsor` });
-    expect(paid.submittedAt).toBeTruthy();
-    expect(sentEmails.map((e) => e.subject)).toEqual([expect.stringMatching(/^Receipt for/), expect.stringMatching(/received your application/)]);
-
-    mockIntentsCreate.mockClear();
-    const res = await request(app).post(`${adminBase()}/applications/${sponsorApp}/decision`).set(...auth(organizerToken)).send({ decision: 'APPROVE' });
-    expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ status: 'APPROVED', paymentStatus: 'PAID', capacitySlot: 'APPROVED' });
-    expect(mockIntentsCreate).not.toHaveBeenCalled();
-    const tierRow = await prisma.applicationTier.findUnique({ where: { id: tier.id } });
-    expect(tierRow).toMatchObject({ quantityApproved: 1, quantityReserved: 0 });
-  });
-
-  // ─── Refunds ─────────────────────────────────────────────────────────────
-
-  it('refunds: ADMIN only; partial then full; Stripe flags; charge.refunded webhook is idempotent', async () => {
     const forbidden = await request(app).post(`${adminBase()}/applications/${sponsorApp}/refund`).set(...auth(organizerToken)).send({ amount: 100 });
     expect(forbidden.status).toBe(403);
-
     const bad = await request(app).post(`${adminBase()}/applications/${sponsorApp}/refund`).set(...auth(adminToken)).send({ amount: 5000 });
     expect(bad.status).toBe(400);
     expect(bad.body.message).toMatch(/cannot exceed/);
@@ -503,59 +541,47 @@ describe('Application payments contract (spec 011 phase 2)', () => {
     expect(partial.status).toBe(200);
     expect(partial.body).toMatchObject({ status: 'APPROVED', paymentStatus: 'PARTIALLY_REFUNDED' });
     expect(partial.body.payment).toMatchObject({ refundedTotal: 250, refundable: 750, canRefund: true });
-    expect(partial.body.refunds).toHaveLength(1);
     expect(partial.body.refunds[0]).toMatchObject({ amount: 250, status: 'SUCCEEDED', reason: 'Smaller booth', initiatedBy: adminUserId });
     expect(mockRefundsCreate.mock.calls[0][0]).toMatchObject({ payment_intent: `pi_${TAG}_sponsor`, amount: 25000, reason: 'requested_by_customer', metadata: { applicationId: sponsorApp } });
-    expect(mockRefundsCreate.mock.calls[0][0].reverse_transfer).toBeUndefined();
 
-    // Dashboard refund arrives by webhook: the first is already recorded, the second is new
     const hook = await webhook({
       id: 'evt_refund',
       type: 'charge.refunded',
       data: { object: { id: 'ch_1', payment_intent: `pi_${TAG}_sponsor`, refunds: { data: [{ id: `re_${TAG}_1`, amount: 25000, reason: null }, { id: 're_external', amount: 10000, reason: 'duplicate' }] } } },
     });
     expect(hook.status).toBe(200);
-    let row = await appRow(sponsorApp);
-    expect(row.refunds).toHaveLength(2);
-    expect(row.paymentStatus).toBe('PARTIALLY_REFUNDED');
+    expect((await appRow(sponsorApp)).refunds).toHaveLength(2);
 
     const full = await request(app).post(`${adminBase()}/applications/${sponsorApp}/refund`).set(...auth(adminToken)).send({});
     expect(full.status).toBe(200);
     expect(full.body).toMatchObject({ paymentStatus: 'REFUNDED' });
     expect(full.body.payment).toMatchObject({ refundedTotal: 1000, refundable: 0, canRefund: false });
     expect(mockRefundsCreate.mock.calls.at(-1)[0].amount).toBe(65000);
-
-    const nothingLeft = await request(app).post(`${adminBase()}/applications/${sponsorApp}/refund`).set(...auth(adminToken)).send({});
-    expect(nothingLeft.status).toBe(409);
-    row = await appRow(sponsorApp);
-    expect(row.status).toBe('APPROVED'); // refund never changes the review status
+    expect((await request(app).post(`${adminBase()}/applications/${sponsorApp}/refund`).set(...auth(adminToken)).send({})).status).toBe(409);
+    expect((await appRow(sponsorApp)).status).toBe('APPROVED');
   });
 
   // ─── Connect routing ─────────────────────────────────────────────────────
 
-  it('with an active connected account the approval charge is a destination charge with applicantPays − orgReceives as the fee; refunds reverse the transfer', async () => {
+  it('with an active connected account the saved-card charge is a destination charge; refunds reverse the transfer', async () => {
     process.env.STRIPE_CONNECT_ENABLED = 'true';
     await prisma.organizationStripeAccount.create({
       data: { organizationId: org.id, mode: 'test', stripeAccountId: ACCT, chargesEnabled: true, transfersEnabled: true, payoutsEnabled: true, detailsSubmitted: true },
     });
-    const tier = approvalForm.tiers.find((t) => t.name === '10x10');
-    const created = await submit('vendor-space', tier.id, `connected@${TAG}.test`, 'Routed Co');
-    const id = created.body.applicationId;
-    await cardOnFile(id);
-
-    const res = await request(app).post(`${adminBase()}/applications/${id}/decision`).set(...auth(organizerToken)).send({ decision: 'APPROVE' });
-    expect(res.status).toBe(200);
+    const id = await approved('vendor-space', `connected@${TAG}.test`, 'Routed Co', tierOf(vendorForm, '10x10').id);
+    await giveSavedCard(id);
+    const res = await select(id, { useSavedCard: true });
+    expect(res.body.paymentStatus).toBe('PAID');
     const row = await appRow(id);
     const expectedFee = Math.round(Number(row.applicantPays) * 100) - Math.round(Number(row.orgReceives) * 100);
     const params = mockIntentsCreate.mock.calls.at(-1)[0];
     expect(params.transfer_data).toEqual({ destination: ACCT });
     expect(params.application_fee_amount).toBe(expectedFee);
-    expect(res.body.payment).toMatchObject({ stripeAccountId: ACCT, applicationFee: expectedFee / 100 });
+    expect(row).toMatchObject({ stripeAccountId: ACCT, applicationFee: expectedFee / 100 });
 
     const refund = await request(app).post(`${adminBase()}/applications/${id}/refund`).set(...auth(adminToken)).send({ amount: 50 });
     expect(refund.status).toBe(200);
     expect(mockRefundsCreate.mock.calls.at(-1)[0]).toMatchObject({ amount: 5000, reverse_transfer: true, refund_application_fee: true });
-
     await prisma.organizationStripeAccount.deleteMany({ where: { organizationId: org.id } });
     delete process.env.STRIPE_CONNECT_ENABLED;
   });
@@ -570,116 +596,115 @@ describe('Application payments contract (spec 011 phase 2)', () => {
     expect(after).toEqual(before);
   });
 
-  it('payment_intent.payment_failed after a PROCESSING charge moves to PAYMENT_DUE once; withdraw releases the reserved slot', async () => {
-    const tier = approvalForm.tiers.find((t) => t.name === '10x10');
-    const created = await submit('vendor-space', tier.id, `slow@${TAG}.test`, 'Slow Card');
-    const id = created.body.applicationId;
-    await cardOnFile(id);
+  it('payment_intent.payment_failed after a PROCESSING saved-card charge releases the space once and emails PAYMENT_DUE; withdraw releases the slot', async () => {
+    const tier = tierOf(vendorForm, '10x10');
+    const id = await approved('vendor-space', `slow@${TAG}.test`, 'Slow Card', tier.id);
+    await giveSavedCard(id);
     sentEmails.length = 0;
     mockIntentsCreate.mockResolvedValueOnce({ id: `pi_${TAG}_slow`, status: 'processing' });
-    const res = await request(app).post(`${adminBase()}/applications/${id}/decision`).set(...auth(organizerToken)).send({ decision: 'APPROVE' });
-    expect(res.body).toMatchObject({ status: 'APPROVED', paymentStatus: 'PROCESSING', capacitySlot: 'RESERVED' });
-    expect(sentEmails).toHaveLength(0); // the webhook decides which email goes out
+    const res = await select(id, { useSavedCard: true });
+    expect(res.body.paymentStatus).toBe('PROCESSING');
+    expect(sentEmails).toHaveLength(0);
 
-    // While processing, no other decision is allowed
     const blocked = await request(app).post(`${adminBase()}/applications/${id}/decision`).set(...auth(organizerToken)).send({ decision: 'WITHDRAW' });
     expect(blocked.status).toBe(409);
 
     const failed = { id: 'evt_fail', type: 'payment_intent.payment_failed', data: { object: { id: `pi_${TAG}_slow`, status: 'requires_payment_method', last_payment_error: { message: 'Insufficient funds' }, metadata: { applicationId: id, purpose: 'approval' } } } };
     expect((await webhook(failed)).status).toBe(200);
     expect((await webhook(failed)).status).toBe(200);
-    const row = await appRow(id);
-    expect(row).toMatchObject({ paymentStatus: 'PAYMENT_DUE', capacitySlot: 'RESERVED' });
+    expect(await appRow(id)).toMatchObject({ paymentStatus: 'AWAITING_SELECTION', capacitySlot: 'RESERVED', selectionHeldUntil: null });
     expect(sentEmails.map((e) => e.subject)).toEqual([expect.stringMatching(/Payment needed/)]);
-    const dueDecisions = await prisma.applicationDecision.findMany({ where: { applicationId: id, action: 'PAYMENT_DUE' } });
-    expect(dueDecisions).toHaveLength(1);
+    expect(await prisma.applicationDecision.count({ where: { applicationId: id, action: 'PAYMENT_DUE' } })).toBe(1);
 
-    const before = await prisma.applicationTier.findUnique({ where: { id: tier.id } });
+    const before = await tierRow(tier.id);
     const withdraw = await request(app).post(`${adminBase()}/applications/${id}/decision`).set(...auth(organizerToken)).send({ decision: 'WITHDRAW', note: 'Never paid' });
-    expect(withdraw.body).toMatchObject({ status: 'WITHDRAWN', capacitySlot: 'NONE', paymentStatus: 'PAYMENT_DUE' });
-    const after = await prisma.applicationTier.findUnique({ where: { id: tier.id } });
-    expect(after.quantityReserved).toBe(before.quantityReserved - 1);
+    expect(withdraw.body).toMatchObject({ status: 'WITHDRAWN', capacitySlot: 'NONE' });
+    expect((await tierRow(tier.id)).quantityReserved).toBe(before.quantityReserved - 1);
   });
 
-  // ─── Overdue sweep ───────────────────────────────────────────────────────
+  // ─── Overdue sweep (clock starts at approval) ────────────────────────────
 
-  it('overdue sweep withdraws (WITHDRAW) or flags (HOLD) past-due applications and releases the slot', async () => {
-    const tier = approvalForm.tiers.find((t) => t.name === '10x10');
+  it('overdue sweep: vendors who never chose are withdrawn (WITHDRAW) or flagged (HOLD) paymentDueDays after approval', async () => {
+    const tier = tierOf(vendorForm, '10x10');
     const holdForm = await request(app)
       .post(`${adminBase()}/application-forms`)
       .set(...auth(adminToken))
-      .send({ kind: 'PAID', name: 'Hold Vendors', chargeTiming: 'APPROVAL', overduePolicy: 'HOLD', status: 'DRAFT', tiers: [{ name: 'Hold', price: 50, quantityTotal: 5 }] });
+      .send({ kind: 'PAID', name: 'Hold Vendors', overduePolicy: 'HOLD', paymentDueDays: 3, tiers: [{ name: 'Hold', price: 50, quantityTotal: 5 }] });
     await request(app).patch(`${adminBase()}/application-forms/${holdForm.body.id}`).set(...auth(adminToken)).send({ status: 'OPEN' });
 
-    const mk = async (slug, tierId, email) => {
-      const created = await submit(slug, tierId, email, `Overdue ${email}`);
-      await cardOnFile(created.body.applicationId);
-      mockIntentsCreate.mockRejectedValueOnce(cardDecline());
-      await request(app)
-        .post(`${adminBase()}/applications/${created.body.applicationId}/decision`)
-        .set(...auth(organizerToken))
-        .send({ decision: 'APPROVE' });
-      await setDueAt(created.body.applicationId, new Date(Date.now() - 60_000));
-      return created.body.applicationId;
-    };
-    const withdrawId = await mk('vendor-space', tier.id, `overdue1@${TAG}.test`);
-    const holdId = await mk('hold-vendors', holdForm.body.tiers[0].id, `overdue2@${TAG}.test`);
-    const notYet = await submit('vendor-space', tier.id, `overdue3@${TAG}.test`, 'Still In Time');
-    await cardOnFile(notYet.body.applicationId);
-    mockIntentsCreate.mockRejectedValueOnce(cardDecline());
-    await request(app).post(`${adminBase()}/applications/${notYet.body.applicationId}/decision`).set(...auth(organizerToken)).send({ decision: 'APPROVE' });
+    const late = (days) => new Date(Date.now() - days * 86_400_000 - 60_000);
+    const withdrawId = await approved('vendor-space', `overdue1@${TAG}.test`, 'Overdue One', tier.id);
+    await prisma.application.update({ where: { id: withdrawId }, data: { decidedAt: late(5) } });
+    const holdId = await approved('hold-vendors', `overdue2@${TAG}.test`, 'Overdue Two');
+    await prisma.application.update({ where: { id: holdId }, data: { decidedAt: late(3) } });
+    const inTime = await approved('vendor-space', `overdue3@${TAG}.test`, 'Still In Time', tier.id);
+    await prisma.application.update({ where: { id: inTime }, data: { decidedAt: late(4) } }); // 4 of 5 days
 
     sentEmails.length = 0;
-    const reservedBefore = (await prisma.applicationTier.findUnique({ where: { id: tier.id } })).quantityReserved;
-    const result = await applicationPaymentService.sweepOverdue();
-    expect(result).toEqual({ withdrawn: 1, held: 1 });
-
-    const w = await appRow(withdrawId);
-    expect(w).toMatchObject({ status: 'WITHDRAWN', paymentStatus: 'PAYMENT_DUE', overdue: true, withdrawnBy: 'SYSTEM', withdrawReason: 'payment_overdue', capacitySlot: 'NONE' });
-    const h = await appRow(holdId);
-    expect(h).toMatchObject({ status: 'APPROVED', paymentStatus: 'PAYMENT_DUE', overdue: true, capacitySlot: 'RESERVED' });
-    const n = await appRow(notYet.body.applicationId);
-    expect(n).toMatchObject({ status: 'APPROVED', overdue: false });
-    expect((await prisma.applicationTier.findUnique({ where: { id: tier.id } })).quantityReserved).toBe(reservedBefore - 1);
+    const reservedBefore = (await tierRow(tier.id)).quantityReserved;
+    expect(await applicationPaymentService.sweepOverdue()).toEqual({ withdrawn: 1, held: 1 });
+    expect(await appRow(withdrawId)).toMatchObject({ status: 'WITHDRAWN', overdue: true, withdrawnBy: 'SYSTEM', withdrawReason: 'payment_overdue', capacitySlot: 'NONE' });
+    expect(await appRow(holdId)).toMatchObject({ status: 'APPROVED', paymentStatus: 'AWAITING_SELECTION', overdue: true, capacitySlot: 'RESERVED' });
+    expect(await appRow(inTime)).toMatchObject({ status: 'APPROVED', overdue: false });
+    expect((await tierRow(tier.id)).quantityReserved).toBe(reservedBefore - 1);
     expect(sentEmails.map((e) => e.subject)).toEqual([expect.stringMatching(/withdrawn/)]);
-
-    // Second sweep: nothing left
     expect(await applicationPaymentService.sweepOverdue()).toEqual({ withdrawn: 0, held: 0 });
+
+    // A flagged vendor can still choose and pay (the organizer decided to hold).
+    expect((await select(holdId, {})).status).toBe(200);
   });
 
   // ─── Buyer account ───────────────────────────────────────────────────────
 
-  it('buyer: pay-now and update-card from the account; withdraw blocked while a charge is processing', async () => {
+  it('buyer: chooses and pays from the account; update-card works for a kept card; withdraw is only before a decision', async () => {
     const { default: buyerAuthService } = await import('../../src/services/BuyerAuthService.js');
-    const tier = approvalForm.tiers.find((t) => t.name === '10x10');
     const email = `buyer@${TAG}.test`;
-    const created = await submit('vendor-space', tier.id, email, 'Buyer Co');
-    const id = created.body.applicationId;
-    await cardOnFile(id);
+    const id = (await submit('vendor-space', email, 'Buyer Co')).body.applicationId;
+    await giveSavedCard(id);
     const contact = await prisma.contact.findUnique({ where: { organizationId_email: { organizationId: org.id, email } } });
     const token = buyerAuthService.signSession({ contactId: contact.id, organizationId: org.id, email: contact.email });
+    const bearer = ['Authorization', `Bearer ${token}`];
 
-    const update = await request(app).post(`/buyer/me/applications/${id}/update-card`).set('Authorization', `Bearer ${token}`);
+    const update = await request(app).post(`/buyer/me/applications/${id}/update-card`).set(...bearer);
     expect(update.status).toBe(200);
-    expect(update.body.url).toMatch(/^https:\/\/checkout\.stripe\.com\//);
-    const params = mockSessionsCreate.mock.calls.at(-1)[0];
-    expect(params).toMatchObject({ mode: 'setup', metadata: { applicationId: id, purpose: 'update_card' } });
-
-    // New card arrives: payment method replaced, status untouched
+    expect(mockSessionsCreate.mock.calls.at(-1)[0]).toMatchObject({ mode: 'setup', metadata: { applicationId: id, purpose: 'update_card' } });
     await webhook(checkoutCompleted({ id: 'cs_update', mode: 'setup', setup_intent: 'seti_new', customer: contact.stripeCustomerId, metadata: { applicationId: id, purpose: 'update_card' } }));
-    expect((await appRow(id)).stripePaymentMethodId).toBe(`pm_${TAG}_seti_new`);
-    expect((await appRow(id)).status).toBe('SUBMITTED');
+    expect(await appRow(id)).toMatchObject({ stripePaymentMethodId: `pm_${TAG}_seti_new`, status: 'SUBMITTED', paymentStatus: 'NOT_DUE' });
 
-    const noBalance = await request(app).post(`/buyer/me/applications/${id}/pay`).set('Authorization', `Bearer ${token}`);
-    expect(noBalance.status).toBe(409);
+    const early = await request(app).post(`/buyer/me/applications/${id}/select`).set(...bearer).send({});
+    expect(early.status).toBe(409);
 
-    mockIntentsCreate.mockRejectedValueOnce(cardDecline());
-    await request(app).post(`${adminBase()}/applications/${id}/decision`).set(...auth(organizerToken)).send({ decision: 'APPROVE' });
-    const pay = await request(app).post(`/buyer/me/applications/${id}/pay`).set('Authorization', `Bearer ${token}`);
-    expect(pay.status).toBe(200);
+    await approve(id, { tierId: tierOf(vendorForm, '10x10').id });
+    const mine = await request(app).get('/buyer/me/applications').set(...bearer);
+    expect(mine.body.data.find((a) => a.id === id)).toMatchObject({ paymentStatus: 'AWAITING_SELECTION', canWithdraw: false, selection: { state: 'CHOOSE' } });
+
+    const chosen = await request(app).post(`/buyer/me/applications/${id}/select`).set(...bearer).send({});
+    expect(chosen.status).toBe(200);
+    const payRes = await request(app).post(`/buyer/me/applications/${id}/pay`).set(...bearer);
+    expect(payRes.status).toBe(200);
     expect(mockSessionsCreate.mock.calls.at(-1)[0]).toMatchObject({ mode: 'payment', metadata: { applicationId: id, purpose: 'pay_now' } });
 
-    const mine = await request(app).get('/buyer/me/applications').set('Authorization', `Bearer ${token}`);
-    expect(mine.body.data.find((a) => a.id === id)).toMatchObject({ canPay: true, canUpdateCard: true, canWithdraw: false, paymentStatus: 'PAYMENT_DUE' });
+    // Someone else's application is not found.
+    const otherId = (await submit('vendor-space', `other@${TAG}.test`, 'Other Co')).body.applicationId;
+    expect((await request(app).post(`/buyer/me/applications/${otherId}/select`).set(...bearer).send({})).status).toBe(404);
+  });
+
+  // ─── Legacy rows (approved before apply-then-choose, before the backfill) ─
+
+  it('a legacy APPROVED + PAYMENT_DUE row without a hold still pays through pay-now', async () => {
+    const tier = tierOf(vendorForm, '10x10');
+    const contact = await prisma.contact.create({ data: { organizationId: org.id, email: `legacy-due@${TAG}.test`, firstName: 'Old', lastName: 'Row' } });
+    const profile = await prisma.applicantProfile.create({ data: { organizationId: org.id, contactId: contact.id, businessName: 'Legacy Due' } });
+    const legacy = await prisma.application.create({
+      data: { formId: vendorForm.id, eventId, organizationId: org.id, contactId: contact.id, profileId: profile.id, tierId: tier.id, status: 'APPROVED', paymentStatus: 'PAYMENT_DUE', capacitySlot: 'RESERVED', decidedAt: new Date(), submittedAt: new Date(), statusTokenHash: `legacy-${TAG}-${Date.now()}` },
+    });
+    await prisma.applicationTier.update({ where: { id: tier.id }, data: { quantityReserved: { increment: 1 } } });
+    await attachOrder(legacy.id, { dueAt: new Date(Date.now() + 86_400_000) });
+
+    expect((await status(legacy.id)).body).toMatchObject({ canPay: true, selection: null });
+    expect((await pay(legacy.id)).status).toBe(200);
+    expect((await appRow(legacy.id)).paymentStatus).toBe('PAYMENT_DUE'); // no hold, no PROCESSING guard
+    const paid = await checkoutPaid(legacy.id, `pi_${TAG}_legacy`);
+    expect(paid).toMatchObject({ paymentStatus: 'PAID', capacitySlot: 'APPROVED', orderStatus: 'COMPLETED' });
   });
 });

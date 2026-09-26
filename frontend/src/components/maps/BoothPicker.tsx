@@ -27,6 +27,13 @@ interface BoothPickerProps {
   payNow: () => Promise<{ url: string }>;
   /** Reload the application; the picker polls this while a card charge settles. */
   refresh: () => Promise<ApplicantApplication | null>;
+  /**
+   * Spec 037 phase 5: the all-in price to show before the order exists (the
+   * category plus chosen add-ons). Defaults to the application's amount.
+   */
+  price?: number;
+  /** Spec 037 phase 5: whether choosing charges the saved card (the vendor picked it). Defaults to `hasCardOnFile`. */
+  chargesSavedCard?: boolean;
 }
 
 type Phase =
@@ -100,7 +107,7 @@ function HoldCountdown({ holdExpiresAt, onExpire }: { holdExpiresAt: string | nu
   );
 }
 
-export default function BoothPicker({ eventId, application, chooseBooth, payNow, refresh }: BoothPickerProps) {
+export default function BoothPicker({ eventId, application, chooseBooth, payNow, refresh, price: priceOverride, chargesSavedCard }: BoothPickerProps) {
   const reducedMotion = useReducedMotion();
   const [map, setMap] = useState<PublicMap | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
@@ -155,7 +162,8 @@ export default function BoothPicker({ eventId, application, chooseBooth, payNow,
   const activeId = heldBooth?.id ?? selectedId;
   const activeBooth = booths.find((b) => b.id === activeId) ?? null;
   const selectedIds = useMemo(() => new Set(activeId ? [activeId] : []), [activeId]);
-  const price = formatPrice(application.amounts.applicantPays);
+  const price = formatPrice(priceOverride ?? application.amounts.applicantPays);
+  const savedCard = chargesSavedCard ?? Boolean(application.hasCardOnFile);
   const busy = phase.kind !== 'idle' && phase.kind !== 'paid';
 
   const handleBoothClick = (booth: MapBooth) => {
@@ -346,7 +354,7 @@ export default function BoothPicker({ eventId, application, chooseBooth, payNow,
                   'Opening secure checkout…'
                 ) : phase.kind === 'holding' ? (
                   'Holding your booth…'
-                ) : application.hasCardOnFile ? (
+                ) : savedCard ? (
                   'Your card on file is charged as soon as you buy.'
                 ) : (
                   'You will pay on a secure checkout page; the booth is held for you meanwhile.'

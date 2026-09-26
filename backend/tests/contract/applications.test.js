@@ -410,12 +410,15 @@ describe('Applications contract (spec 011 phase 1)', () => {
     });
 
     it('tier capacity: concurrent approvals on a 1-slot tier let exactly one through; withdraw releases it', async () => {
+      // Spec 037 phase 5: approving a PAID application reserves a slot in its
+      // category (the form reserves on approval) and needs payments enabled.
+      process.env.APPLICATIONS_PAYMENTS_ENABLED = 'true';
       const tier = await prisma.applicationTier.findFirst({ where: { formId: paidForm.id, name: '10x10' } });
       const mk = async (i) => {
         const contact = await prisma.contact.create({ data: { organizationId: org.id, email: `vendor${i}@${TAG}.test`, firstName: 'V', lastName: `${i}` } });
         const profile = await prisma.applicantProfile.create({ data: { organizationId: org.id, contactId: contact.id, businessName: `Booth ${i}` } });
         return prisma.application.create({
-          data: { formId: paidForm.id, eventId, organizationId: org.id, contactId: contact.id, profileId: profile.id, tierId: tier.id, status: 'SUBMITTED', paymentStatus: 'NOT_REQUIRED', submittedAt: new Date(), statusTokenHash: `hash-${TAG}-${i}` },
+          data: { formId: paidForm.id, eventId, organizationId: org.id, contactId: contact.id, profileId: profile.id, tierId: tier.id, status: 'SUBMITTED', paymentStatus: 'NOT_DUE', submittedAt: new Date(), statusTokenHash: `hash-${TAG}-${i}` },
         });
       };
       const [a, b, c] = await Promise.all([mk(1), mk(2), mk(3)]);
@@ -425,16 +428,17 @@ describe('Applications contract (spec 011 phase 1)', () => {
       const statuses = results.map((r) => r.status).sort();
       expect(statuses).toEqual([200, 409, 409]);
       const full = results.find((r) => r.status === 409);
-      expect(full.body.message).toMatch(/tier is full/);
+      expect(full.body.message).toMatch(/10x10 is full/);
       expect(full.body.details).toMatchObject({ suggestion: 'WAITLIST' });
       const after = await prisma.applicationTier.findUnique({ where: { id: tier.id } });
-      expect(after.quantityApproved).toBe(1);
+      expect(after).toMatchObject({ quantityReserved: 1, quantityApproved: 0 });
 
       const winner = results.find((r) => r.status === 200).body;
-      expect(winner.capacitySlot).toBe('APPROVED');
+      expect(winner).toMatchObject({ capacitySlot: 'RESERVED', paymentStatus: 'AWAITING_SELECTION' });
       const wd = await request(app).post(`/admin/events/${eventId}/applications/${winner.id}/decision`).set(...auth(adminToken)).send({ decision: 'WITHDRAW', sendEmail: false });
       expect(wd.status).toBe(200);
-      expect((await prisma.applicationTier.findUnique({ where: { id: tier.id } })).quantityApproved).toBe(0);
+      expect((await prisma.applicationTier.findUnique({ where: { id: tier.id } })).quantityReserved).toBe(0);
+      delete process.env.APPLICATIONS_PAYMENTS_ENABLED;
     });
 
     it('bulk: approve refused for PAID applications, allowed for FREE; results per id', async () => {
@@ -471,7 +475,7 @@ describe('Applications contract (spec 011 phase 1)', () => {
     it('lists defaults with merge fields; ADMIN edits and resets; unbalanced sections rejected', async () => {
       const list = await request(app).get('/admin/settings/application-templates').set(...auth(organizerToken));
       expect(list.status).toBe(200);
-      expect(list.body.data.map((t) => t.action)).toEqual(['RECEIVED', 'APPROVED', 'REJECTED', 'WAITLISTED', 'WITHDRAWN', 'PAYMENT_DUE', 'ADD_ONS_CHANGED', 'TIER_CHANGED', 'WAIVED', 'OFFLINE_PAID']);
+      expect(list.body.data.map((t) => t.action)).toEqual(['RECEIVED', 'APPROVED', 'CHOOSE_SPACE', 'REJECTED', 'WAITLISTED', 'WITHDRAWN', 'PAYMENT_DUE', 'ADD_ONS_CHANGED', 'TIER_CHANGED', 'WAIVED', 'OFFLINE_PAID']);
       expect(list.body.data.every((t) => t.isDefault)).toBe(true);
       expect(list.body.mergeFields.some((m) => m.key === 'profile.businessName')).toBe(true);
 

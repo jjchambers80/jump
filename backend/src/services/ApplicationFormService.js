@@ -232,7 +232,7 @@ class ApplicationFormService {
   _templateSettings(definition, kind) {
     const out = { intro: definition.intro ?? null };
     if (kind === 'PAID') {
-      for (const key of ['chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy']) {
+      for (const key of ['chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy', 'reserveOnApproval']) {
         if (definition[key] !== undefined && definition[key] !== null) out[key] = definition[key];
       }
     }
@@ -295,6 +295,7 @@ class ApplicationFormService {
       taxable: paid ? form.taxable : null,
       paymentDueDays: paid ? form.paymentDueDays : null,
       overduePolicy: paid ? form.overduePolicy : null,
+      reserveOnApproval: paid ? form.reserveOnApproval !== false : null,
       tiers: (form.tiers || []).map((t) => ({ name: t.name, description: t.description ?? null, price: Number(t.price), quantityTotal: t.quantityTotal, isActive: t.isActive })),
       questions: (form.questions || []).filter((q) => !q.archivedAt).map((q) => ({ label: q.label, helpText: q.helpText ?? null, type: q.type, required: q.required, options: q.options ?? [], pinned: q.pinned ?? false })),
     };
@@ -334,6 +335,7 @@ class ApplicationFormService {
           taxable: f.taxable,
           paymentDueDays: f.paymentDueDays,
           overduePolicy: f.overduePolicy,
+          reserveOnApproval: f.reserveOnApproval,
           displayOrder: f.displayOrder,
           createdFromTemplateId: f.createdFromTemplateId,
         },
@@ -358,11 +360,8 @@ class ApplicationFormService {
     const data = this._validateFormFields(body, existing.kind, existing);
     if (body.slug !== undefined) data.slug = await this._uniqueSlug(eventId, body.slug, formId);
     if (data.status === 'OPEN') this._assertCanOpen({ ...existing, ...data });
-    // A map-bound tier sells its booth after approval (spec 014 §4.2): the
-    // vendor picks a spot, then pays. Charging at submission has no spot yet.
-    if (data.chargeTiming === 'SUBMIT' && existing.tiers.some((t) => t.mapBound)) {
-      throw new ValidationError('Forms with tiers bound to a floor map must charge on approval');
-    }
+    // Spec 037 phase 5: every PAID form sells its space after approval, so
+    // `chargeTiming` is kept for legacy rows only and no longer gates anything.
     const form = await prisma.applicationForm.update({ where: { id: formId }, data, include: FORM_INCLUDE });
     return this._serializeForm(form, event, await this._addOnsForEvent(eventId));
   }
@@ -611,8 +610,13 @@ class ApplicationFormService {
         if (!OVERDUE_POLICIES.has(body.overduePolicy)) throw new ValidationError('overduePolicy must be WITHDRAW or HOLD');
         data.overduePolicy = body.overduePolicy;
       }
+      // Spec 037 D5: approval guarantees a space (takes a slot) or not (first-come).
+      if (body.reserveOnApproval !== undefined) {
+        if (typeof body.reserveOnApproval !== 'boolean') throw new ValidationError('reserveOnApproval must be a boolean');
+        data.reserveOnApproval = body.reserveOnApproval;
+      }
     } else {
-      for (const key of ['chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy']) {
+      for (const key of ['chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy', 'reserveOnApproval']) {
         if (body[key] !== undefined) throw new ValidationError(`${key} applies to PAID forms only`);
       }
     }
@@ -717,6 +721,7 @@ class ApplicationFormService {
       taxable: form.taxable,
       paymentDueDays: form.paymentDueDays,
       overduePolicy: form.overduePolicy,
+      reserveOnApproval: form.reserveOnApproval !== false,
       displayOrder: form.displayOrder,
       createdFromTemplateId: form.createdFromTemplateId ?? null,
       acceptance: this.acceptance(form),

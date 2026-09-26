@@ -3,7 +3,7 @@
 
 import { ValidationError } from '../../middleware/errorHandler.js';
 
-const FORM_FIELDS = new Set(['kind', 'name', 'slug', 'intro', 'status', 'opensAt', 'closesAt', 'chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy', 'displayOrder', 'tiers', 'questions', 'templateId']);
+const FORM_FIELDS = new Set(['kind', 'name', 'slug', 'intro', 'status', 'opensAt', 'closesAt', 'chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy', 'reserveOnApproval', 'displayOrder', 'tiers', 'questions', 'templateId']);
 const TIER_FIELDS = new Set(['name', 'description', 'price', 'quantityTotal', 'displayOrder', 'isActive']);
 const QUESTION_FIELDS = new Set(['label', 'helpText', 'type', 'required', 'options', 'displayOrder', 'pinned']);
 const DECISIONS = new Set(['APPROVE', 'REJECT', 'WAITLIST', 'WITHDRAW']);
@@ -54,11 +54,26 @@ export const validateQuestionBody = (req, res, next) => {
 export const validateDecisionBody = (req, res, next) => {
   try {
     const body = req.body || {};
-    onlyFields(body, new Set(['decision', 'note', 'message', 'sendEmail']), 'decision');
+    onlyFields(body, new Set(['decision', 'note', 'message', 'sendEmail', 'tierId']), 'decision');
+    if (body.tierId !== undefined && body.tierId !== null && (typeof body.tierId !== 'string' || !body.tierId)) throw new ValidationError('tierId must be an id');
     if (!DECISIONS.has(body.decision)) throw new ValidationError('decision must be APPROVE, REJECT, WAITLIST or WITHDRAW');
     if (body.note !== undefined && body.note !== null && typeof body.note !== 'string') throw new ValidationError('note must be a string');
     if (body.sendEmail !== undefined && typeof body.sendEmail !== 'boolean') throw new ValidationError('sendEmail must be a boolean');
     if (body.message !== undefined && body.message !== null && typeof body.message !== 'object') throw new ValidationError('message must be an object');
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
+/** Spec 037 phase 5: choosing a space. POST { boothId?, addOns?, useSavedCard? }. */
+export const validateSelectionBody = (req, res, next) => {
+  try {
+    const body = req.body || {};
+    onlyFields(body, new Set(['boothId', 'addOns', 'useSavedCard']), 'selection');
+    if (body.boothId !== undefined && body.boothId !== null && (typeof body.boothId !== 'string' || !body.boothId)) throw new ValidationError('boothId must be an id');
+    if (body.addOns !== undefined && !Array.isArray(body.addOns)) throw new ValidationError('addOns must be an array of { addOnId, quantity }');
+    if (body.useSavedCard !== undefined && typeof body.useSavedCard !== 'boolean') throw new ValidationError('useSavedCard must be a boolean');
     next();
   } catch (error) {
     next(error);

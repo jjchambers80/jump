@@ -15,7 +15,7 @@ import applicationFormService from './ApplicationFormService.js';
 import logger from '../utils/logger.js';
 
 const KINDS = new Set(['PAID', 'FREE']);
-const SETTING_KEYS = ['intro', 'chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy'];
+const SETTING_KEYS = ['intro', 'chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy', 'reserveOnApproval'];
 const TIER_KEYS = new Set(['name', 'description', 'price', 'quantityTotal', 'isActive']);
 const QUESTION_KEYS = new Set(['label', 'helpText', 'type', 'required', 'options', 'pinned']);
 
@@ -27,6 +27,7 @@ const EMPTY_DEFINITION = (kind) => ({
   taxable: kind === 'PAID' ? false : null,
   paymentDueDays: kind === 'PAID' ? 7 : null,
   overduePolicy: kind === 'PAID' ? 'WITHDRAW' : null,
+  reserveOnApproval: kind === 'PAID' ? true : null,
   tiers: [],
   questions: [],
 });

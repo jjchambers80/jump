@@ -1,6 +1,7 @@
 // Contract tests for application orders (spec 024 phase 1): a PAID-form
-// application is an Order from submission on. Covers the order at
-// submission (and its absence on FREE forms), Order.status beside every
+// application's money is its Order — since spec 037 phase 5 the order opens
+// when the vendor chooses a space. Covers the order at selection (and its
+// absence on FREE forms), Order.status beside every
 // paymentStatus transition, the PaymentTransaction written by the charge,
 // decline, pay-now and offline paths, refunds through the order route, and
 // the admin order list / detail exposing application orders. Stripe and
@@ -50,6 +51,7 @@ const { default: paymentSettingsService } =
   await import('../../src/services/PaymentSettingsService.js');
 const { orderStatusFor } = await import('../../src/services/applicationOrderStatus.js');
 const { appRow: loadRow, cleanupApplicationOrders } = await import('../helpers/applicationRow.js');
+const { statusToken } = await import('../../src/services/applicationLinks.js');
 
 const TAG = 'apporders';
 
@@ -145,19 +147,15 @@ describe('Application orders contract (spec 024 phase 1)', () => {
       include: { items: true, addOns: true, payment: true, refunds: true },
     });
 
-  async function cardOnFile(applicationId) {
-    const row = await appRow(applicationId);
-    const res = await webhook(
-      checkoutCompleted({
-        id: row.stripeCheckoutSessionId,
-        mode: 'setup',
-        setup_intent: `seti_${applicationId}`,
-        customer: row.contact.stripeCustomerId,
-        metadata: { applicationId, purpose: 'submit' },
-      })
-    );
-    expect(res.status).toBe(200);
-    return appRow(applicationId);
+  // Spec 037 phase 5: choose a space (list) and pay, through the guest status link.
+  const select = (id, body = {}) =>
+    request(app).post(`/applications/${id}/select?token=${statusToken(id)}`).send(body);
+  const pay = (id) => request(app).post(`/applications/${id}/pay?token=${statusToken(id)}`);
+  /** A card saved before apply-then-choose (a migrated row). */
+  async function giveSavedCard(id) {
+    const row = await appRow(id);
+    await prisma.contact.update({ where: { id: row.contactId }, data: { stripeCustomerId: `cus_${TAG}_${row.contactId}` } });
+    await prisma.application.update({ where: { id }, data: { stripePaymentMethodId: `pm_${TAG}_${id}` } });
   }
   const decide = (id, decision) =>
     request(app)
@@ -250,23 +248,32 @@ describe('Application orders contract (spec 024 phase 1)', () => {
     sentEmails.length = 0;
   });
 
-  // ─── Order at submission ────────────────────────────────────────────────
+  // ─── Order at selection (spec 037 phase 5) ──────────────────────────────
 
-  it('a PAID-form submission creates a PENDING order with the tier line; a FREE-form submission creates none', async () => {
+  it('a PAID-form application gets its PENDING order when the vendor chooses a space (none at submission or approval); a FREE-form one never has one', async () => {
     const tier = paidForm.tiers[0];
-    const res = await submit(paidForm.slug, tier.id, `first@${TAG}.test`);
+    const res = await submit(paidForm.slug, undefined, `first@${TAG}.test`);
     expect(res.status).toBe(201);
-    expect(res.body.orderRef).toMatch(/^JMP-[A-Z2-9]{6}$/);
-    const order = await orderRow(res.body.applicationId);
+    expect(res.body.orderRef).toBeNull();
+    const id = res.body.applicationId;
+    expect(await orderRow(id)).toBeNull();
+    expect((await decide(id, 'APPROVE')).body).toMatchObject({ paymentStatus: 'AWAITING_SELECTION', orderRef: null, tier: { id: tier.id } });
+    expect(await orderRow(id)).toBeNull();
+
+    const chosen = await select(id);
+    expect(chosen.status).toBe(200);
+    expect(chosen.body.orderRef).toMatch(/^JMP-[A-Z2-9]{6}$/);
+    const order = await orderRow(id);
     expect(order).toMatchObject({
       kind: 'APPLICATION',
       status: 'PENDING',
-      orderRef: res.body.orderRef,
+      orderRef: chosen.body.orderRef,
       quantity: 1,
       feeMode: 'PASS',
       paidAt: null,
-      dueAt: null,
     });
+    // The payment clock started at approval: paymentDueDays (5) from the decision.
+    expect((order.dueAt.getTime() - Date.now()) / 86_400_000).toBeGreaterThan(4.9);
     expect(order.eventId).toBe(eventId);
     expect(order.items).toHaveLength(1);
     expect(order.items[0]).toMatchObject({
@@ -285,8 +292,9 @@ describe('Application orders contract (spec 024 phase 1)', () => {
     expect(Number(order.items[0].tax)).toBe(Number(order.taxAmount));
     expect(order.payment).toBeNull();
     // Stripe metadata carries the order too
-    expect(mockSessionsCreate.mock.calls[0][0].metadata).toMatchObject({
-      applicationId: res.body.applicationId,
+    expect((await pay(id)).status).toBe(200);
+    expect(mockSessionsCreate.mock.calls.at(-1)[0].metadata).toMatchObject({
+      applicationId: id,
       orderId: order.id,
       orderRef: order.orderRef,
     });
@@ -305,45 +313,57 @@ describe('Application orders contract (spec 024 phase 1)', () => {
       adjustments: [],
     });
     // FREE forms: the RECEIVED email only, never a receipt (spec 024 phase 2).
-    expect(sentEmails.map((e) => e.subject)).toEqual([expect.stringMatching(/received your application/)]);
+    expect(sentEmails.filter((e) => e.to?.[0] === `press@${TAG}.test` || e.to === `press@${TAG}.test`).map((e) => e.subject)).toEqual([expect.stringMatching(/received your application/)]);
   });
 
   // ─── Status mapping across the lifecycle ────────────────────────────────
 
-  it('Order.status follows every transition: card on file, approve + charge, refund; reject before a charge cancels', async () => {
+  it('Order.status follows every transition: selection, paid Checkout, refund; a withdrawal before payment cancels it', async () => {
     const tier = paidForm.tiers[0];
-    const created = await submit(paidForm.slug, tier.id, `lifecycle@${TAG}.test`);
+    const created = await submit(paidForm.slug, undefined, `lifecycle@${TAG}.test`);
     const id = created.body.applicationId;
-    let row = await cardOnFile(id);
-    expect(row).toMatchObject({
-      status: 'SUBMITTED',
-      paymentStatus: 'CARD_ON_FILE',
-      orderStatus: 'PENDING',
-    });
+    await decide(id, 'APPROVE');
+    let row = await appRow(id);
+    expect(row).toMatchObject({ status: 'APPROVED', paymentStatus: 'AWAITING_SELECTION', orderStatus: null });
+    const chosen = await select(id);
+    row = await appRow(id);
+    expect(row).toMatchObject({ paymentStatus: 'PAYMENT_DUE', orderStatus: 'PENDING' });
 
-    const approved = await decide(id, 'APPROVE');
-    expect(approved.status).toBe(200);
+    await pay(id);
+    expect((await appRow(id)).orderStatus).toBe('PENDING'); // PROCESSING is still PENDING
+    await webhook(
+      checkoutCompleted({
+        id: (await appRow(id)).stripeCheckoutSessionId,
+        mode: 'payment',
+        payment_status: 'paid',
+        payment_intent: `pi_${TAG}_lifecycle`,
+        metadata: { applicationId: id, purpose: 'pay_now' },
+      })
+    );
+    const approved = await request(app).get(`${adminBase()}/applications/${id}`).set(...auth(adminToken));
     expect(approved.body).toMatchObject({
       status: 'APPROVED',
       paymentStatus: 'PAID',
-      orderRef: created.body.orderRef,
+      orderRef: chosen.body.orderRef,
       orderId: expect.any(String),
     });
     const order = await orderRow(id);
-    expect(order).toMatchObject({ status: 'COMPLETED' });
+    expect(order).toMatchObject({ status: 'COMPLETED', dueAt: null });
     expect(order.paidAt).toBeTruthy();
     expect(order.payment).toMatchObject({
       status: 'SUCCEEDED',
       source: 'STRIPE',
-      stripePaymentIntentId: expect.stringMatching(/^pi_/),
+      stripePaymentIntentId: `pi_${TAG}_lifecycle`,
       stripeAccountId: null,
     });
     expect(Number(order.payment.amount)).toBe(Number(order.totalAmount));
     expect(orderStatusFor({ status: 'APPROVED', paymentStatus: 'PAID' })).toBe('COMPLETED');
+    expect(orderStatusFor({ status: 'APPROVED', paymentStatus: 'AWAITING_SELECTION' })).toBe('CANCELLED');
+    expect(orderStatusFor({ status: 'SUBMITTED', paymentStatus: 'NOT_DUE' })).toBe('CANCELLED');
     // Receipt (spec 024 phase 2): once, to the applicant, with the order number and the lines.
     const receipts = sentEmails.filter((e) => /^Receipt for/.test(e.subject));
     expect(receipts).toHaveLength(1);
-    expect(receipts[0]).toMatchObject({ to: [`lifecycle@${TAG}.test`], subject: `Receipt for ${TAG} Expo (${created.body.orderRef})` });
+    expect(receipts[0]).toMatchObject({ to: [`lifecycle@${TAG}.test`], subject: `Receipt for ${TAG} Expo (${chosen.body.orderRef})` });
     expect(receipts[0].text).toContain('Vendors — 10x10: $');
     expect(receipts[0].text).toContain(`Total paid: $${Number(order.totalAmount).toFixed(2)}`);
     expect(receipts[0].text).toContain('Payment method: Card');
@@ -358,7 +378,7 @@ describe('Application orders contract (spec 024 phase 1)', () => {
       amount: 40,
       status: 'SUCCEEDED',
       manual: false,
-      orderRef: created.body.orderRef,
+      orderRef: chosen.body.orderRef,
     });
     expect(mockRefundsCreate.mock.calls[0][0]).toMatchObject({
       payment_intent: order.payment.stripePaymentIntentId,
@@ -392,43 +412,44 @@ describe('Application orders contract (spec 024 phase 1)', () => {
     expect((await orderRow(id)).status).toBe('REFUNDED');
     expect((await orderRow(id)).refunds).toHaveLength(2);
 
-    // Reject before any charge → CANCELLED
-    const rejected = await submit(paidForm.slug, tier.id, `rejected@${TAG}.test`);
-    await cardOnFile(rejected.body.applicationId);
+    // Rejected under review: no order ever existed
+    const rejected = await submit(paidForm.slug, undefined, `rejected@${TAG}.test`);
     expect((await decide(rejected.body.applicationId, 'REJECT')).status).toBe(200);
-    expect(await orderRow(rejected.body.applicationId)).toMatchObject({ status: 'CANCELLED' });
+    expect(await orderRow(rejected.body.applicationId)).toBeNull();
 
-    // Withdraw by the applicant (guest token) → CANCELLED as well
-    const withdrawn = await submit(paidForm.slug, tier.id, `withdrawn@${TAG}.test`);
-    await cardOnFile(withdrawn.body.applicationId);
+    // Withdrawn while holding a chosen space → the order is CANCELLED and the slot goes back
+    const withdrawn = await submit(paidForm.slug, undefined, `withdrawn@${TAG}.test`);
+    await decide(withdrawn.body.applicationId, 'APPROVE');
+    await select(withdrawn.body.applicationId);
+    const reserved = (await prisma.applicationTier.findUnique({ where: { id: tier.id } })).quantityReserved;
     expect((await decide(withdrawn.body.applicationId, 'WITHDRAW')).status).toBe(200);
     expect(await orderRow(withdrawn.body.applicationId)).toMatchObject({ status: 'CANCELLED' });
+    expect((await prisma.applicationTier.findUnique({ where: { id: tier.id } })).quantityReserved).toBe(reserved - 1);
   });
 
-  it('a declined charge writes the failed payment and the due date on the order; pay-now settles it; offline payment is an OFFLINE payment row', async () => {
-    const tier = paidForm.tiers[0];
-    // Decline → PENDING + dueAt + FAILED payment
-    const declined = await submit(paidForm.slug, tier.id, `declined@${TAG}.test`);
+  it('a declined saved card writes the failed payment on the order and releases the space; the next Checkout settles it; offline payment before choosing is an OFFLINE payment row', async () => {
+    // Decline → the order goes back to CANCELLED with the FAILED payment as history
+    const declined = await submit(paidForm.slug, undefined, `declined@${TAG}.test`);
     const dueId = declined.body.applicationId;
-    await cardOnFile(dueId);
+    await decide(dueId, 'APPROVE');
+    await giveSavedCard(dueId);
     mockIntentsCreate.mockRejectedValueOnce(cardDecline());
-    const res = await decide(dueId, 'APPROVE');
+    const res = await select(dueId, { useSavedCard: true });
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ status: 'APPROVED', paymentStatus: 'PAYMENT_DUE' });
+    expect(res.body.paymentStatus).toBe('AWAITING_SELECTION');
     let order = await orderRow(dueId);
-    expect(order.status).toBe('PENDING');
+    expect(order.status).toBe('CANCELLED');
     expect(order.dueAt).toBeTruthy();
     expect(order.payment).toMatchObject({
       status: 'FAILED',
       stripePaymentIntentId: expect.stringMatching(/^pi_.*declined/),
       failureReason: 'Your card was declined.',
     });
-    expect(res.body.payment.paymentDueAt).toBe(order.dueAt.toISOString());
 
-    // Pay-now session then the paid webhook: the payment row is overwritten with the settled intent
-    const { statusToken } = await import('../../src/services/applicationLinks.js');
-    const pay = await request(app).post(`/applications/${dueId}/pay?token=${statusToken(dueId)}`);
-    expect(pay.status).toBe(200);
+    // Choose again and pay on Checkout: the same order reopens; the payment row is overwritten
+    const again = await select(dueId);
+    expect(again.body.orderRef).toBe(order.orderRef);
+    expect((await pay(dueId)).status).toBe(200);
     const session = mockSessionsCreate.mock.calls.at(-1)[0];
     expect(session.metadata).toMatchObject({ orderId: order.id, purpose: 'pay_now' });
     expect(session.line_items[0].price_data.unit_amount).toBe(
@@ -452,18 +473,18 @@ describe('Application orders contract (spec 024 phase 1)', () => {
       failureReason: null,
     });
 
-    // Offline: another declined application settled by cheque
-    const cheque = await submit(paidForm.slug, tier.id, `cheque@${TAG}.test`);
+    // Offline: an approved vendor who has not chosen pays for the category by cheque
+    const cheque = await submit(paidForm.slug, undefined, `cheque@${TAG}.test`);
     const chequeId = cheque.body.applicationId;
-    await cardOnFile(chequeId);
-    mockIntentsCreate.mockRejectedValueOnce(cardDecline());
-    await decide(chequeId, 'APPROVE');
-    const due = (await appRow(chequeId)).applicantPays;
+    const approvedCheque = await decide(chequeId, 'APPROVE');
+    expect(approvedCheque.body.canSettleOffline).toBe(true);
+    const due = approvedCheque.body.pricing.currentApplicantPays;
     const offline = await request(app)
       .post(`${adminBase()}/applications/${chequeId}/offline-payment`)
       .set(...auth(adminToken))
       .send({ method: 'CHEQUE', amount: due, reference: '#77', sendEmail: false });
     expect(offline.status).toBe(200);
+    expect(offline.body).toMatchObject({ paymentStatus: 'PAID', capacitySlot: 'APPROVED' });
     order = await orderRow(chequeId);
     expect(order).toMatchObject({ status: 'COMPLETED', dueAt: null });
     expect(order.payment).toMatchObject({
@@ -485,12 +506,10 @@ describe('Application orders contract (spec 024 phase 1)', () => {
   });
 
   it('waiving a balance settles the order at 0 with a WAIVER line and no payment row', async () => {
-    const tier = paidForm.tiers[0];
-    const created = await submit(paidForm.slug, tier.id, `waived@${TAG}.test`);
+    const created = await submit(paidForm.slug, undefined, `waived@${TAG}.test`);
     const id = created.body.applicationId;
-    await cardOnFile(id);
-    mockIntentsCreate.mockRejectedValueOnce(cardDecline());
     await decide(id, 'APPROVE');
+    await select(id);
     const before = await orderRow(id);
     const res = await request(app)
       .post(`${adminBase()}/applications/${id}/waive`)
@@ -500,6 +519,7 @@ describe('Application orders contract (spec 024 phase 1)', () => {
     expect(res.body).toMatchObject({
       paymentStatus: 'NOT_REQUIRED',
       paymentSource: 'offline',
+      selectionHeldUntil: null,
       amounts: { applicantPays: 0, orgReceives: 0 },
     });
     const order = await orderRow(id);
@@ -510,8 +530,7 @@ describe('Application orders contract (spec 024 phase 1)', () => {
     expect(waiver).toMatchObject({ description: 'Trade' });
     expect(Number(waiver.unitPrice)).toBe(-Number(before.totalAmount));
     expect(order.items.find((i) => i.kind === 'APPLICATION_TIER')).toBeTruthy();
-    // The declined attempt's payment row is left as history; there is no SUCCEEDED payment.
-    expect(order.payment?.status ?? 'FAILED').toBe('FAILED');
+    expect(order.payment).toBeNull();
   });
 
   // ─── Admin order list and detail ─────────────────────────────────────────

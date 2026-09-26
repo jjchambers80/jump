@@ -1351,6 +1351,12 @@ enum ApplicationStatus {
 
 enum ApplicationPayment {
   NOT_REQUIRED
+  // Spec 037 phase 5 (apply-then-choose): a PAID-form application under
+  // review. Nothing is owed yet: no order, no card step.
+  NOT_DUE
+  // Spec 037 phase 5: approved, the vendor still has to choose a space (list
+  // or map). Any order the application has is CANCELLED until they select.
+  AWAITING_SELECTION
   AWAITING_CARD
   CARD_ON_FILE
   PROCESSING
@@ -1399,6 +1405,7 @@ enum ApplicationAction {
   WAIVED // spec 018 phase 3: balance waived (ADMIN)
   OFFLINE_PAID // spec 018 phase 3: payment recorded outside Stripe (ADMIN)
   MANUAL_REFUND // spec 018 phase 3: refund recorded on an offline-paid application
+  CHOOSE_SPACE // spec 037 phase 5: approved on a PAID form; the vendor chooses a space and pays
 }
 
 enum EmailSubscribedSource {
@@ -1496,6 +1503,10 @@ model ApplicationForm {
   taxable               Boolean               @default(false)
   paymentDueDays        Int                   @default(7)
   overduePolicy         OverduePolicy         @default(WITHDRAW)
+  // Spec 037 D5: true = approval takes a slot in the category (refused when
+  // full, so an approved vendor always has a space); false = approval takes
+  // nothing and approved vendors choose first-come.
+  reserveOnApproval     Boolean               @default(true)
   displayOrder          Int                   @default(0)
   createdFromTemplateId String? // spec 019: informational, no relation
 
@@ -1522,7 +1533,9 @@ model ApplicationTier {
   quantityReserved Int     @default(0) // slots held while a charge is in flight or payment is due
   displayOrder     Int     @default(0)
   isActive         Boolean @default(true)
-  mapBound         Boolean @default(false) // spec 014: derived quantityTotal from booths on publish
+  // Spec 014 flag, never settable. Spec 037 phase 5 derives map binding from the
+  // event's published map (booths bound to the tier) instead; dropped in phase 6.
+  mapBound         Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1616,7 +1629,11 @@ model Application {
   stripeCheckoutSessionId String? @unique
   stripePaymentMethodId   String?
   chargeAttempts          Int     @default(0)
-  overdue                 Boolean @default(false) // set by the sweep when order.dueAt passes
+  overdue                 Boolean @default(false) // set by the sweep when the payment clock passes
+  // Spec 037 phase 5: while set, the vendor holds a space (a booth, or a slot
+  // in the category) and its order is PENDING; the selection sweep releases
+  // it when this passes and no payment is in flight.
+  selectionHeldUntil      DateTime?
 
   // Review
   submittedAt     DateTime?

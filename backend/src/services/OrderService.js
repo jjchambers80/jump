@@ -45,6 +45,8 @@ const APPLICATION_PAYMENT_LABEL = {
   PROCESSING: 'Processing',
   PAYMENT_DUE: 'Payment due',
   NOT_REQUIRED: 'Waived',
+  NOT_DUE: 'Under review',
+  AWAITING_SELECTION: 'Awaiting space',
 };
 
 function csvCell(value) {

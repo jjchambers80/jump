@@ -23,6 +23,7 @@ import refundService from '../../services/RefundService.js';
 import emailService from '../../services/EmailService.js';
 import applicationService from '../../services/ApplicationService.js';
 import applicantProfileService from '../../services/ApplicantProfileService.js';
+import { validateSelectionBody } from '../validators/applicationValidators.js';
 import { requireBuyer } from '../../middleware/buyerAuth.js';
 import { ForbiddenError, NotFoundError, ValidationError } from '../../middleware/errorHandler.js';
 import { buyerVerifyUrl } from '../../utils/storefrontUrl.js';
@@ -253,6 +254,24 @@ router.post('/me/applications/:id/booth', requireBuyer, boothLimiter, async (req
       req.params.id,
       req.body?.boothId
     ));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** Spec 037 phase 5: choose a space — `{ boothId?, addOns?, useSavedCard? }` (see the guest route). */
+router.post('/me/applications/:id/select', requireBuyer, boothLimiter, validateSelectionBody, async (req, res, next) => {
+  try {
+    res.json(await applicationService.selectForContact(req.buyer.organizationId, req.buyer.contactId, req.params.id, req.body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** Spec 037 phase 5: give back a held space to choose another. */
+router.post('/me/applications/:id/release', requireBuyer, boothLimiter, async (req, res, next) => {
+  try {
+    res.json(await applicationService.releaseForContact(req.buyer.organizationId, req.buyer.contactId, req.params.id));
   } catch (error) {
     next(error);
   }

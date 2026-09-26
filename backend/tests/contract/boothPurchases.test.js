@@ -1,4 +1,8 @@
-// Contract tests for approved-vendor self-serve booth selection (spec 014 phase 2).
+// Contract tests for approved-vendor self-serve booth selection (spec 014 phase
+// 2), as a space selection since spec 037 phase 5 (apply-then-choose): an
+// approved vendor is AWAITING_SELECTION; choosing a booth holds it and the
+// category slot for 15 minutes and opens the order (PAYMENT_DUE). A tier is
+// map-bound because the published map has booths on it (derived, no flag).
 // Postgres is real; most tests stop at HELD so no Stripe call is needed — the
 // card-on-file decline test below is the one path that reaches paymentIntents.create.
 
@@ -9,13 +13,14 @@ import { staffToken, joinOrgByToken, cleanupStaff } from '../helpers/staff.js';
 // Only the cancel-checkout path and the card-on-file decline test reach Stripe.
 const mockSessionsExpire = jest.fn().mockResolvedValue({});
 const mockPaymentIntentsCreate = jest.fn();
+const mockRefundsCreate = jest.fn().mockResolvedValue({ id: 're_test', status: 'succeeded' });
 jest.unstable_mockModule('../../src/config/stripe.js', () => ({
   default: {
     checkout: { sessions: { create: jest.fn(), retrieve: jest.fn(), expire: mockSessionsExpire } },
     customers: { create: jest.fn() },
-    paymentIntents: { create: mockPaymentIntentsCreate, retrieve: jest.fn() },
+    paymentIntents: { create: mockPaymentIntentsCreate, retrieve: jest.fn().mockResolvedValue({}) },
     setupIntents: { retrieve: jest.fn() },
-    refunds: { create: jest.fn() },
+    refunds: { create: mockRefundsCreate },
     webhooks: { constructEvent: jest.fn() },
   },
 }));
@@ -42,6 +47,7 @@ describe('Approved vendor booth purchase API', () => {
   let organizerToken;
 
   beforeAll(async () => {
+    process.env.APPLICATIONS_PAYMENTS_ENABLED = 'true';
     organization = await prisma.organization.create({ data: { name: `${TAG} Org` } });
     organizerToken = await staffToken({ email: STAFF_EMAIL, role: 'ORGANIZER' });
     await joinOrgByToken(organizerToken, organization.id, 'ORGANIZER');
@@ -55,7 +61,7 @@ describe('Approved vendor booth purchase API', () => {
       data: { eventId: event.id, kind: 'PAID', name: 'Vendors', slug: `${TAG}-vendors`, chargeTiming: 'APPROVAL', feeMode: 'ABSORB' },
     });
     tier = await prisma.applicationTier.create({
-      data: { formId: form.id, name: '10x10', price: 275, quantityTotal: 5, quantityReserved: 5, mapBound: true },
+      data: { formId: form.id, name: '10x10', price: 275, quantityTotal: 5, quantityReserved: 4 },
     });
     map = await prisma.floorMap.create({
       data: { organizationId: organization.id, eventId: event.id, name: 'Vendor Hall', status: 'PUBLISHED', width: 50, height: 40, layout: { version: 1, elements: [] }, publishedAt: new Date() },
@@ -81,26 +87,14 @@ describe('Approved vendor booth purchase API', () => {
           tierId: tier.id,
           contactId: contact.id,
           profileId: profile.id,
+          // Approved (reserving form: the slot is held) and choosing a space;
+          // vendor 3 is still under review.
           status: i === 3 ? 'SUBMITTED' : 'APPROVED',
-          paymentStatus: i === 3 ? 'CARD_ON_FILE' : 'PAYMENT_DUE',
+          paymentStatus: i === 3 ? 'NOT_DUE' : 'AWAITING_SELECTION',
           capacitySlot: i === 3 ? 'NONE' : 'RESERVED',
           submittedAt: new Date(),
+          decidedAt: i === 3 ? null : new Date(),
           statusTokenHash: `${TAG}-hash-${i}`,
-          order: {
-            create: {
-              kind: 'APPLICATION',
-              eventId: event.id,
-              contactId: contact.id,
-              orderRef: `JMP-${TAG.slice(-4).toUpperCase()}${i}`,
-              totalAmount: 275,
-              subtotalAmount: 275,
-              orgReceives: 275,
-              feeMode: 'ABSORB',
-              quantity: 1,
-              status: 'PENDING',
-              items: { create: { kind: 'APPLICATION_TIER', applicationTierId: tier.id, description: '10x10', quantity: 1, unitPrice: 275 } },
-            },
-          },
         },
       });
       contacts.push(contact);
@@ -109,6 +103,7 @@ describe('Approved vendor booth purchase API', () => {
   });
 
   afterAll(async () => {
+    delete process.env.APPLICATIONS_PAYMENTS_ENABLED;
     await prisma.booth.deleteMany({ where: { mapId: map.id } });
     await prisma.floorMap.deleteMany({ where: { id: map.id } });
     await prisma.paymentTransaction.deleteMany({ where: { order: { application: { organizationId: organization.id } } } });
@@ -138,8 +133,13 @@ describe('Approved vendor booth purchase API', () => {
       .send({ boothId: booths[0].id });
 
     expect(first.status).toBe(200);
-    expect(first.body).toMatchObject({ boothId: booths[0].id, status: 'HELD', paymentStatus: 'PAYMENT_DUE' });
+    expect(first.body).toMatchObject({ boothId: booths[0].id, status: 'HELD', paymentStatus: 'PAYMENT_DUE', orderRef: expect.stringMatching(/^JMP-/) });
     expect(new Date(first.body.holdExpiresAt).getTime()).toBeGreaterThan(Date.now());
+    // The selection opened the order and holds the space as long as the booth.
+    const row = await prisma.application.findUnique({ where: { id: applications[0].id }, include: { order: true } });
+    expect(row).toMatchObject({ paymentStatus: 'PAYMENT_DUE', capacitySlot: 'RESERVED' });
+    expect(row.order.status).toBe('PENDING');
+    expect(row.selectionHeldUntil.getTime()).toBe(new Date(first.body.holdExpiresAt).getTime());
 
     const second = await request(app)
       .post(`/applications/${applications[1].id}/booth`)
@@ -162,11 +162,14 @@ describe('Approved vendor booth purchase API', () => {
     expect(response.body.booth).toMatchObject({ id: booths[0].id, label: 'A1', status: 'HELD', w: 8, h: 8 });
     expect(new Date(response.body.booth.holdExpiresAt).getTime()).toBeGreaterThan(Date.now());
 
-    // A vendor with no hold has no booth at all.
+    expect(response.body.selection).toMatchObject({ state: 'HELD', map: { available: true } });
+
+    // A vendor with no hold has no booth at all, and can choose on the map or from the list.
     const bare = await request(app)
       .get(`/applications/${applications[2].id}/status`)
       .query({ token: statusToken(applications[2].id) });
     expect(bare.body.booth).toBeNull();
+    expect(bare.body.selection).toMatchObject({ state: 'CHOOSE', category: { name: '10x10', guaranteed: true }, map: { available: true, mapId: map.id, boothsAvailable: 4 } });
   });
 
   it('lists the Booth column and the "Booth not chosen" filter for organizers', async () => {
@@ -185,19 +188,22 @@ describe('Approved vendor booth purchase API', () => {
       .set('X-Jump-Org', organization.id);
     expect(notChosen.status).toBe(200);
     const ids = notChosen.body.data.map((row) => row.id);
-    // Approved + payment due on the map-bound tier, nothing owned yet: the
-    // vendor still holding A1 counts, the SUBMITTED one does not.
+    // Approved on the map-bound tier, nothing owned yet: the vendor still
+    // holding A1 counts, the SUBMITTED one does not.
     expect(ids).toEqual(expect.arrayContaining([applications[0].id, applications[1].id, applications[2].id]));
     expect(ids).not.toContain(applications[3].id);
   });
 
-  it('renders the "Choose your booth" step in the APPROVED email until a booth is owned', async () => {
+  it('renders the choose-your-space email with the map option while the vendor has not chosen', async () => {
     const application = await prisma.application.findUnique({
       where: { id: applications[2].id },
-      include: { contact: true, profile: true, tier: true, form: true, event: { select: { id: true, name: true, date: true, venue: { select: { organizationId: true, organization: true } } } }, order: true },
+      include: { contact: true, profile: true, tier: true, form: true, event: { select: { id: true, name: true, date: true, taxRate: true, venue: { select: { organizationId: true, organization: true } } } }, order: true },
     });
-    const { body } = await applicationTemplateService.render(organization.id, 'APPROVED', application);
-    expect(body).toContain('Choose your booth');
+    const { subject, body } = await applicationTemplateService.render(organization.id, 'CHOOSE_SPACE', application);
+    expect(subject).toMatch(/choose your space/);
+    expect(body).toContain('as 10x10');
+    expect(body).toContain('pay $275.00'); // ABSORB: the listed price
+    expect(body).toContain('pick your exact spot on the floor map');
     expect(body).toContain(`/events/${event.id}/apply/status/${application.id}`);
     expect(body).not.toContain('Your booth:');
   });
@@ -224,7 +230,10 @@ describe('Approved vendor booth purchase API', () => {
   });
 
   it('allows exactly one winner when two approved vendors race for a booth', async () => {
-    await prisma.booth.update({ where: { id: booths[1].id }, data: { status: 'AVAILABLE', holdApplicationId: null, holdExpiresAt: null } });
+    // Vendor 1 gives its booth back (the release endpoint) to race for another one.
+    const released = await request(app).post(`/applications/${applications[1].id}/release`).query({ token: statusToken(applications[1].id) });
+    expect(released.body).toMatchObject({ released: true, paymentStatus: 'AWAITING_SELECTION' });
+    expect(await prisma.booth.findUnique({ where: { id: booths[1].id } })).toMatchObject({ status: 'AVAILABLE', holdApplicationId: null });
     const contenders = [applications[1], applications[2]];
     const responses = await Promise.all(contenders.map((application) => request(app)
       .post(`/applications/${application.id}/booth`)
@@ -235,11 +244,11 @@ describe('Approved vendor booth purchase API', () => {
     expect(responses.find((response) => response.status === 409).body.code).toBe('BOOTH_TAKEN');
   });
 
-  it('refuses pay-now for a map-bound application without a booth hold', async () => {
+  it('refuses pay-now before a space is chosen', async () => {
     const application = applications[3];
     await prisma.application.update({
       where: { id: application.id },
-      data: { status: 'APPROVED', paymentStatus: 'PAYMENT_DUE' },
+      data: { status: 'APPROVED', paymentStatus: 'AWAITING_SELECTION', decidedAt: new Date() },
     });
 
     const response = await request(app)
@@ -247,20 +256,20 @@ describe('Approved vendor booth purchase API', () => {
       .query({ token: statusToken(application.id) });
 
     expect(response.status).toBe(409);
-    expect(response.body.code).toBe('BOOTH_HOLD_MISSING');
+    expect(response.body.message).toMatch(/no outstanding balance/);
   });
 
-  it('rejects an application that is not approved and awaiting payment', async () => {
+  it('rejects an application that is not approved', async () => {
     await prisma.application.update({
       where: { id: applications[3].id },
-      data: { status: 'SUBMITTED', paymentStatus: 'CARD_ON_FILE' },
+      data: { status: 'SUBMITTED', paymentStatus: 'NOT_DUE' },
     });
     const response = await request(app)
       .post(`/applications/${applications[3].id}/booth`)
       .query({ token: statusToken(applications[3].id) })
       .send({ boothId: booths[3].id });
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(409);
     expect(response.body.code).toBe('APPLICATION_NOT_APPROVED');
   });
 
@@ -274,12 +283,13 @@ describe('Approved vendor booth purchase API', () => {
     expect(held.status).toBe(200);
 
     await applicationPaymentService._markPaidTx(application.id, `pi_${TAG}`, { source: 'test' });
+    expect(await prisma.applicationTier.findUnique({ where: { id: tier.id } })).toMatchObject({ quantityApproved: 1 });
 
     const [updatedApplication, soldBooth] = await Promise.all([
       prisma.application.findUnique({ where: { id: application.id } }),
       prisma.booth.findUnique({ where: { id: selectedBooth.id } }),
     ]);
-    expect(updatedApplication).toMatchObject({ paymentStatus: 'PAID', boothLabel: 'A5' });
+    expect(updatedApplication).toMatchObject({ paymentStatus: 'PAID', boothLabel: 'A5', capacitySlot: 'APPROVED', selectionHeldUntil: null });
     expect(soldBooth).toMatchObject({ status: 'SOLD', applicationId: application.id, holdApplicationId: null, holdExpiresAt: null });
 
     // The status view now names the sold booth without a hold deadline …
@@ -315,19 +325,21 @@ describe('Approved vendor booth purchase API', () => {
     expect(body).toContain('Your booth: A5 8\u00d78');
     expect(body).toContain(`/map?booth=A5`);
     expect(body).not.toContain('Choose your booth');
+    expect((await applicationTemplateService.contextFor(full)).space.chooseRequired).toBe(false);
   });
 
   // ─── Review findings on 32b3b1e: money paths must be idempotent ────────
 
-  /** Put an application back to "approved, awaiting a booth" with every hold released. */
-  async function resetToPaymentDue(application, booth) {
+  /** Put an application back to "approved, choosing a space" with every hold released. */
+  async function resetToChoosing(application, booth) {
     await prisma.booth.updateMany({
       where: { OR: [{ holdApplicationId: application.id }, { applicationId: application.id }, { id: booth.id }] },
       data: { status: 'AVAILABLE', holdApplicationId: null, holdExpiresAt: null, applicationId: null, assignedById: null },
     });
+    await prisma.order.updateMany({ where: { applicationId: application.id }, data: { status: 'CANCELLED' } });
     await prisma.application.update({
       where: { id: application.id },
-      data: { status: 'APPROVED', paymentStatus: 'PAYMENT_DUE', boothLabel: null, stripeCheckoutSessionId: null },
+      data: { status: 'APPROVED', paymentStatus: 'AWAITING_SELECTION', capacitySlot: 'RESERVED', selectionHeldUntil: null, boothLabel: null, stripeCheckoutSessionId: null },
     });
   }
 
@@ -346,7 +358,8 @@ describe('Approved vendor booth purchase API', () => {
 
   it('the PAID transition never fails on booth state: money in, no hold → paid without a booth', async () => {
     const application = applications[3];
-    // Approved + PAYMENT_DUE, never chose a booth (or the hold expired).
+    // Approved, never chose a booth (or the hold expired and was released).
+    await prisma.application.update({ where: { id: application.id }, data: { status: 'APPROVED', paymentStatus: 'AWAITING_SELECTION' } });
     await applicationPaymentService._markPaidTx(application.id, `pi_${TAG}_nohold`, { source: 'test' });
     const row = await prisma.application.findUnique({ where: { id: application.id } });
     expect(row.paymentStatus).toBe('PAID');
@@ -355,7 +368,7 @@ describe('Approved vendor booth purchase API', () => {
 
   it('a stale Checkout session expiring does not reset a newer in-flight payment', async () => {
     const application = applications[2];
-    await resetToPaymentDue(application, booths[2]);
+    await resetToChoosing(application, booths[2]);
     const held = await request(app)
       .post(`/applications/${application.id}/booth`)
       .query({ token: statusToken(application.id) })
@@ -380,18 +393,19 @@ describe('Approved vendor booth purchase API', () => {
     });
     expect((await prisma.application.findUnique({ where: { id: application.id } })).paymentStatus).toBe('PROCESSING');
 
-    // The live session expiring is what releases the hold.
+    // The live session expiring is what releases the hold: the vendor chooses again.
     await applicationPaymentService.handleEvent({
       type: 'checkout.session.expired',
       data: { object: { id: `cs_${TAG}_live`, mode: 'payment', metadata: { applicationId: application.id, purpose: 'pay_now' } } },
     });
-    expect((await prisma.application.findUnique({ where: { id: application.id } })).paymentStatus).toBe('PAYMENT_DUE');
+    expect(await prisma.application.findUnique({ where: { id: application.id } })).toMatchObject({ paymentStatus: 'AWAITING_SELECTION', selectionHeldUntil: null, capacitySlot: 'RESERVED' });
     expect((await prisma.booth.findUnique({ where: { id: booths[2].id } })).status).toBe('AVAILABLE');
+    expect((await prisma.order.findFirst({ where: { applicationId: application.id } })).status).toBe('CANCELLED');
   });
 
-  it('backing out of hosted Checkout expires the session, releases the hold and reopens the picker', async () => {
+  it('backing out of hosted Checkout expires the session and keeps the booth while the hold runs; after it lapses the booth goes back', async () => {
     const application = applications[2];
-    await resetToPaymentDue(application, booths[2]);
+    await resetToChoosing(application, booths[2]);
     await request(app)
       .post(`/applications/${application.id}/booth`)
       .query({ token: statusToken(application.id) })
@@ -407,17 +421,46 @@ describe('Approved vendor booth purchase API', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ cancelled: true, paymentStatus: 'PAYMENT_DUE' });
     expect(mockSessionsExpire).toHaveBeenCalledWith(`cs_${TAG}_walkaway`);
-    expect((await prisma.booth.findUnique({ where: { id: booths[2].id } })).status).toBe('AVAILABLE');
+    expect((await prisma.booth.findUnique({ where: { id: booths[2].id } })).status).toBe('HELD');
     // Idempotent: a second cancel is a no-op.
     const again = await request(app)
       .post(`/applications/${application.id}/cancel-checkout`)
       .query({ token: statusToken(application.id) });
     expect(again.body).toEqual({ cancelled: false, paymentStatus: 'PAYMENT_DUE' });
+
+    // Back out again once the hold has lapsed: the booth goes back and the vendor chooses again.
+    await prisma.application.update({
+      where: { id: application.id },
+      data: { paymentStatus: 'PROCESSING', stripeCheckoutSessionId: `cs_${TAG}_late`, selectionHeldUntil: new Date(Date.now() - 1000) },
+    });
+    const late = await request(app)
+      .post(`/applications/${application.id}/cancel-checkout`)
+      .query({ token: statusToken(application.id) });
+    expect(late.body).toEqual({ cancelled: true, paymentStatus: 'AWAITING_SELECTION' });
+    expect((await prisma.booth.findUnique({ where: { id: booths[2].id } })).status).toBe('AVAILABLE');
+  });
+
+  it('the hold sweep releases a lapsed booth selection as a whole; the booth sweep leaves selections to it', async () => {
+    const application = applications[2];
+    await resetToChoosing(application, booths[2]);
+    await request(app).post(`/applications/${application.id}/booth`).query({ token: statusToken(application.id) }).send({ boothId: booths[2].id }).expect(200);
+    const past = new Date(Date.now() - 1000);
+    await prisma.application.update({ where: { id: application.id }, data: { selectionHeldUntil: past } });
+    await prisma.booth.update({ where: { id: booths[2].id }, data: { holdExpiresAt: past } });
+
+    const { default: boothService } = await import('../../src/services/BoothService.js');
+    await boothService.sweepExpiredHolds();
+    expect((await prisma.booth.findUnique({ where: { id: booths[2].id } })).status).toBe('HELD');
+
+    expect((await applicationPaymentService.sweepExpiredSelections()).released).toBeGreaterThanOrEqual(1);
+    expect((await prisma.booth.findUnique({ where: { id: booths[2].id } })).status).toBe('AVAILABLE');
+    expect(await prisma.application.findUnique({ where: { id: application.id } })).toMatchObject({ paymentStatus: 'AWAITING_SELECTION', selectionHeldUntil: null, capacitySlot: 'RESERVED' });
+    expect((await prisma.order.findFirst({ where: { applicationId: application.id } })).status).toBe('CANCELLED');
   });
 
   it('staff cannot assign a second booth to an application whose hold is settling', async () => {
     const application = applications[1];
-    await resetToPaymentDue(application, booths[1]);
+    await resetToChoosing(application, booths[1]);
     await prisma.booth.update({ where: { id: booths[0].id }, data: { status: 'AVAILABLE', holdApplicationId: null, holdExpiresAt: null, applicationId: null } });
     const held = await request(app)
       .post(`/applications/${application.id}/booth`)
@@ -433,9 +476,9 @@ describe('Approved vendor booth purchase API', () => {
     expect(res.body.message).toMatch(/APPLICATION_HAS_BOOTH/);
   });
 
-  it('a declined card on the hold request releases the booth and leaves the application payable again', async () => {
-    const application = applications[1]; // APPROVED + PAYMENT_DUE, no hold from earlier tests
-    await resetToPaymentDue(application, booths[1]);
+  it('a declined card on the hold request releases the booth and lets the vendor choose again', async () => {
+    const application = applications[1];
+    await resetToChoosing(application, booths[1]);
     await prisma.contact.update({ where: { id: contacts[1].id }, data: { stripeCustomerId: `cus_${TAG}_1` } });
     await prisma.application.update({ where: { id: application.id }, data: { stripePaymentMethodId: `pm_${TAG}_1` } });
     const declineError = new Error('Your card was declined.');
@@ -450,10 +493,10 @@ describe('Approved vendor booth purchase API', () => {
       .send({ boothId: booths[1].id });
 
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ boothId: booths[1].id, status: 'AVAILABLE', paymentStatus: 'PAYMENT_DUE' });
+    expect(res.body).toMatchObject({ boothId: booths[1].id, status: 'AVAILABLE', paymentStatus: 'AWAITING_SELECTION' });
 
     const row = await prisma.application.findUnique({ where: { id: application.id } });
-    expect(row).toMatchObject({ status: 'APPROVED', paymentStatus: 'PAYMENT_DUE' });
+    expect(row).toMatchObject({ status: 'APPROVED', paymentStatus: 'AWAITING_SELECTION', selectionHeldUntil: null });
     const booth = await prisma.booth.findUnique({ where: { id: booths[1].id } });
     expect(booth).toMatchObject({ status: 'AVAILABLE', holdApplicationId: null, holdExpiresAt: null, applicationId: null });
 
@@ -468,7 +511,7 @@ describe('Approved vendor booth purchase API', () => {
     expect(retry.body).toMatchObject({ status: 'SOLD', paymentStatus: 'PAID' });
   });
 
-  it('a form with a map-bound tier cannot switch to charging at submission', async () => {
+  it('chargeTiming no longer gates a map-bound form (every PAID form sells its space after approval)', async () => {
     const adminToken = await staffToken({ email: `admin-${TAG}@test.com`, role: 'ADMIN' });
     await joinOrgByToken(adminToken, organization.id, 'ADMIN');
     const res = await request(app)
@@ -476,7 +519,74 @@ describe('Approved vendor booth purchase API', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .set('X-Jump-Org', organization.id)
       .send({ chargeTiming: 'SUBMIT' });
-    expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/charge on approval/);
+    expect(res.status).toBe(200);
+    await cleanupStaff([`admin-${TAG}@test.com`]);
+  });
+
+  // ─── Review findings on PR #216: superseded Checkout sessions ─────────
+
+  it('a superseded Checkout session that is paid anyway is refunded in full and never credits the current order', async () => {
+    const application = applications[2];
+    await resetToChoosing(application, booths[2]);
+    await request(app)
+      .post(`/applications/${application.id}/booth`)
+      .query({ token: statusToken(application.id) })
+      .send({ boothId: booths[2].id })
+      .expect(200);
+    // The application now waits on a newer session than the one being paid.
+    await prisma.application.update({ where: { id: application.id }, data: { paymentStatus: 'PROCESSING', stripeCheckoutSessionId: `cs_${TAG}_current` } });
+    mockRefundsCreate.mockClear();
+
+    await applicationPaymentService.handleEvent({
+      type: 'checkout.session.completed',
+      data: { object: { id: `cs_${TAG}_old`, mode: 'payment', payment_status: 'paid', payment_intent: `pi_${TAG}_old`, amount_total: 5000, metadata: { applicationId: application.id, purpose: 'pay_now' } } },
+    });
+    const row = await prisma.application.findUnique({ where: { id: application.id } });
+    expect(row.paymentStatus).toBe('PROCESSING');
+    expect((await prisma.booth.findUnique({ where: { id: booths[2].id } })).status).toBe('HELD');
+    expect(mockRefundsCreate).toHaveBeenCalledWith(expect.objectContaining({ payment_intent: `pi_${TAG}_old`, amount: 5000 }));
+
+    // Its payment_intent.succeeded twin never marks anything paid either.
+    await applicationPaymentService.handleEvent({
+      type: 'payment_intent.succeeded',
+      data: { object: { id: `pi_${TAG}_old`, status: 'succeeded', metadata: { applicationId: application.id, purpose: 'pay_now' } } },
+    });
+    expect((await prisma.application.findUnique({ where: { id: application.id } })).paymentStatus).toBe('PROCESSING');
+  });
+
+  it('re-choosing after a lapsed hold expires the earlier Checkout session on Stripe', async () => {
+    const application = applications[2];
+    await resetToChoosing(application, booths[2]);
+    // A lapsed hold whose session was never cleared (e.g. a migrated row).
+    await prisma.application.update({ where: { id: application.id }, data: { stripeCheckoutSessionId: `cs_${TAG}_lapsed` } });
+    mockSessionsExpire.mockClear();
+    await request(app)
+      .post(`/applications/${application.id}/booth`)
+      .query({ token: statusToken(application.id) })
+      .send({ boothId: booths[2].id })
+      .expect(200);
+    expect(mockSessionsExpire).toHaveBeenCalledWith(`cs_${TAG}_lapsed`);
+    expect((await prisma.application.findUnique({ where: { id: application.id } })).stripeCheckoutSessionId).toBeNull();
+  });
+
+  it('withdrawing an approved vendor with an open pay-now session expires it', async () => {
+    const application = applications[2];
+    await resetToChoosing(application, booths[2]);
+    await request(app)
+      .post(`/applications/${application.id}/booth`)
+      .query({ token: statusToken(application.id) })
+      .send({ boothId: booths[2].id })
+      .expect(200);
+    await prisma.application.update({ where: { id: application.id }, data: { stripeCheckoutSessionId: `cs_${TAG}_open` } });
+    mockSessionsExpire.mockClear();
+    const res = await request(app)
+      .post(`/admin/events/${event.id}/applications/${application.id}/decision`)
+      .set('Authorization', `Bearer ${organizerToken}`)
+      .set('X-Jump-Org', organization.id)
+      .send({ decision: 'WITHDRAW', sendEmail: false });
+    expect(res.status).toBe(200);
+    expect(mockSessionsExpire).toHaveBeenCalledWith(`cs_${TAG}_open`);
+    const row = await prisma.application.findUnique({ where: { id: application.id } });
+    expect(row).toMatchObject({ status: 'WITHDRAWN', stripeCheckoutSessionId: null });
   });
 });

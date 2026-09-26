@@ -14,6 +14,21 @@
 // approved application releases it. Add-on lines (spec 012) follow the same
 // slot: reserved / sold / released together with the tier, tier first so two
 // concurrent approvals lock in one order.
+//
+// Spec 037 phase 5 (apply-then-choose) — every PAID form:
+//   submit   → SUBMITTED + NOT_DUE: no category, no add-ons, no order, no card
+//   approve  → the organizer assigns the category (ApplicationTier); the form's
+//              `reserveOnApproval` takes a slot in it (409 when full) or not;
+//              AWAITING_SELECTION + the CHOOSE_SPACE email; nothing is charged
+//   select   → the vendor picks a booth (map) or the category (list) plus
+//              add-ons: a 15-minute hold (`selectionHeldUntil`), the slot and
+//              add-ons reserved, the order created (or the cancelled one
+//              reopened) PENDING + PAYMENT_DUE
+//   pay      → saved card off-session or hosted Checkout; the webhook's
+//              `_markPaid` commits the slot, add-ons and booth
+//   lapse    → `releaseSelection` (sweep, decline, cancelled Checkout) puts
+//              everything back and returns to AWAITING_SELECTION
+// The payment clock (`paymentDueDays`) starts at approval.
 
 import { prisma } from '@jump/db';
 import {
@@ -40,10 +55,12 @@ import orderService from './OrderService.js';
 import orderLineService, { ORDER_INCLUDE, adjustmentItems } from './OrderLineService.js';
 import refundService from './RefundService.js';
 import { moneyOf } from './applicationMoney.js';
-import { orderStatusFor } from './applicationOrderStatus.js';
+import { hasLiveOrder, orderStatusFor } from './applicationOrderStatus.js';
+import { selectionDueAt } from './applicationSelection.js';
 import legalAcceptanceService from './LegalAcceptanceService.js';
 import contactOptInService from './ContactOptInService.js';
-import { applyConsentText, cardAuthorizationText } from '../config/legal.js';
+import { applyConsentText } from '../config/legal.js';
+import { BOOTH_HOLD_MS } from '../config/applications.js';
 import {
   hashToken,
   statusToken,
@@ -62,7 +79,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const URL_RE = /^https?:\/\/[^\s]+$/i;
 const ACTIVE_STATUSES = ['DRAFT', 'SUBMITTED', 'WAITLISTED', 'APPROVED'];
 const STATUSES = new Set(['DRAFT', 'SUBMITTED', 'WAITLISTED', 'APPROVED', 'REJECTED', 'WITHDRAWN']);
-const PAYMENT_STATUSES = new Set(['NOT_REQUIRED', 'AWAITING_CARD', 'CARD_ON_FILE', 'PROCESSING', 'PAID', 'PAYMENT_DUE', 'REFUNDED', 'PARTIALLY_REFUNDED']);
+const PAYMENT_STATUSES = new Set(['NOT_REQUIRED', 'NOT_DUE', 'AWAITING_SELECTION', 'AWAITING_CARD', 'CARD_ON_FILE', 'PROCESSING', 'PAID', 'PAYMENT_DUE', 'REFUNDED', 'PARTIALLY_REFUNDED']);
 /** A search term that could be the tail of an application id (cuids are lowercase). */
 const ID_FRAGMENT_RE = /^[a-z0-9]{6,25}$/;
 /** Org-wide CSV cap (spec 019): beyond this the caller narrows the filter. */
@@ -71,8 +88,8 @@ const EXPORT_MAX_ROWS = 10_000;
 const LIST_INCLUDE = {
   contact: { select: { email: true, firstName: true, lastName: true } },
   profile: { select: { businessName: true, images: { take: 1, orderBy: { displayOrder: 'asc' }, include: { image: { include: { file: true } } } } } },
-  tier: { select: { id: true, name: true, mapBound: true } },
-  form: { select: { id: true, name: true, kind: true } },
+  tier: { select: { id: true, name: true } },
+  form: { select: { id: true, name: true, kind: true, paymentDueDays: true } },
   event: {
     select: {
       id: true,
@@ -130,7 +147,25 @@ const DETAIL_INCLUDE = {
   contact: { select: { id: true, organizationId: true, email: true, firstName: true, lastName: true, accountCreatedAt: true, stripeCustomerId: true } },
   profile: { include: { images: { include: { image: { include: { file: true } } }, orderBy: { displayOrder: 'asc' } } } },
   tier: true,
-  form: { select: { id: true, name: true, slug: true, kind: true, chargeTiming: true, feeMode: true, taxable: true, paymentDueDays: true, overduePolicy: true } },
+  form: {
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      kind: true,
+      chargeTiming: true,
+      feeMode: true,
+      taxable: true,
+      paymentDueDays: true,
+      overduePolicy: true,
+      reserveOnApproval: true,
+      // Spec 037 phase 5: the categories the organizer can assign on approval.
+      tiers: {
+        orderBy: { displayOrder: 'asc' },
+        select: { id: true, name: true, description: true, price: true, quantityTotal: true, quantityApproved: true, quantityReserved: true, isActive: true },
+      },
+    },
+  },
   event: {
     select: {
       id: true,
@@ -171,6 +206,34 @@ async function attachBooths(rows) {
   return rows;
 }
 
+/**
+ * Spec 037 phase 5: whether each row's category is sold from the event's
+ * published floor map (booths bound to it), attached as `row.tierMapBound`.
+ * Replaces the never-settable `ApplicationTier.mapBound` column.
+ */
+async function attachMapBound(rows) {
+  const tierIds = [...new Set(rows.map((a) => a.tierId).filter(Boolean))];
+  const bound = tierIds.length
+    ? new Set(
+        (
+          await prisma.booth.findMany({
+            where: { tierId: { in: tierIds }, map: { status: 'PUBLISHED' } },
+            select: { tierId: true },
+            distinct: ['tierId'],
+          })
+        ).map((b) => b.tierId)
+      )
+    : new Set();
+  for (const a of rows) a.tierMapBound = Boolean(a.tierId && bound.has(a.tierId));
+  return rows;
+}
+
+/** An error the API answers with a machine-readable `code` (the storefront branches on it). */
+function coded(error, code) {
+  error.code = code;
+  return error;
+}
+
 /** Booth as the applicant and organizer see it; null when none is owned or held. */
 function boothView(a) {
   const b = a.mapBooth;
@@ -187,6 +250,9 @@ function boothView(a) {
 function amountEditable(application, what = 'the amount') {
   if (application.form?.kind !== 'PAID' || !application.tierId)
     return { allowed: false, reason: 'This form has no amount to change' };
+  // Spec 037 phase 5: until the vendor chooses a space there is no order to edit.
+  if (!hasLiveOrder(application))
+    return { allowed: false, reason: 'The amount is set when the vendor chooses a space' };
   if (
     moneyOf(application).paymentSource === 'OFFLINE' ||
     application.paymentStatus === 'NOT_REQUIRED'
@@ -208,6 +274,24 @@ function amountEditable(application, what = 'the amount') {
   };
 }
 
+/**
+ * Spec 037 phase 5: whether the organizer may change the category. Before the
+ * vendor chooses a space there is no order, so the category moves freely
+ * (with the approval slot when the form reserves one); once an order exists
+ * the spec 018 amount rules apply. Never while a chosen space is being paid for.
+ */
+function tierEditable(application) {
+  if (application.form?.kind !== 'PAID') return { allowed: false, reason: 'This form has no categories' };
+  if (application.selectionHeldUntil && ['PAYMENT_DUE', 'PROCESSING'].includes(application.paymentStatus))
+    return { allowed: false, reason: 'The vendor is paying for a space; try again once the hold ends' };
+  if (!hasLiveOrder(application)) {
+    if (['SUBMITTED', 'WAITLISTED'].includes(application.status)) return { allowed: true, reason: null };
+    if (application.status === 'APPROVED' && application.paymentStatus === 'AWAITING_SELECTION') return { allowed: true, reason: null };
+    return { allowed: false, reason: `Cannot change the category on a ${application.status.toLowerCase()} application` };
+  }
+  return amountEditable(application, 'the tier');
+}
+
 /** Statuses in which the organizer may still change add-on lines (no money has moved). */
 function addOnsEditable(application) {
   if (application.form?.kind !== 'PAID' || !application.tierId) return { allowed: false, reason: 'This form has no add-ons' };
@@ -219,14 +303,15 @@ function pendingPayNowSession(application) {
   return application.status === 'APPROVED' && application.paymentStatus === 'PAYMENT_DUE' ? application.stripeCheckoutSessionId : null;
 }
 
-/** ADMIN may settle an APPROVED + PAYMENT_DUE application outside Stripe. */
+/**
+ * ADMIN may settle an APPROVED application outside Stripe: one with a payment
+ * due, or (spec 037 phase 5) one still choosing a space — the category is
+ * then what they pay for, and staff place them afterwards.
+ */
 function canSettleOffline(application) {
-  return (
-    application.form?.kind === 'PAID' &&
-    application.status === 'APPROVED' &&
-    application.paymentStatus === 'PAYMENT_DUE' &&
-    moneyOf(application).paymentSource !== 'OFFLINE'
-  );
+  if (application.form?.kind !== 'PAID' || application.status !== 'APPROVED') return false;
+  if (application.paymentStatus === 'AWAITING_SELECTION') return Boolean(application.tierId);
+  return application.paymentStatus === 'PAYMENT_DUE' && moneyOf(application).paymentSource !== 'OFFLINE';
 }
 
 class ApplicationService {
@@ -240,7 +325,7 @@ class ApplicationService {
    * @param {{ formSlug: string, tierId?: string, contact: { email, firstName, lastName }, profile: object, answers: Record<string, unknown>, optInAccount?: boolean, optInMarketing?: boolean, acceptances: Array<{ document: string, version: string }> }} body
    * @param {{ profilePhotos: File[], answerPhotos: Record<string, File> }} files
    * @param {{ requestMeta?: { ipHash: string|null, userAgent: string|null } }} [options]
-   * @returns {Promise<{ applicationId: string, orderRef: string|null, statusUrl: string, next: 'done'|'checkout', checkoutUrl?: string }>}
+   * @returns {Promise<{ applicationId: string, orderRef: null, statusUrl: string, next: 'done' }>}
    */
   async submit(eventId, body, files = { profilePhotos: [], answerPhotos: {} }, { requestMeta = { ipHash: null, userAgent: null } } = {}) {
     const event = await applicationFormService.requireEvent(eventId);
@@ -257,48 +342,27 @@ class ApplicationService {
     const contact = this._validateContact(body.contact);
     const organizationId = event.venue.organizationId;
 
-    let tier = null;
-    if (form.kind === 'PAID') {
-      if (!body.tierId) throw new ValidationError('tierId is required for this form');
-      tier = form.tiers.find((t) => t.id === body.tierId && t.isActive);
-      if (!tier) throw new NotFoundError('Tier not found');
-    } else if (body.tierId) {
-      throw new ValidationError('This form has no tiers');
+    // Spec 037 phase 5 (apply-then-choose): nobody picks a category, add-ons
+    // or a space when applying. The organizer assigns the category on approval
+    // and the vendor chooses and pays afterwards. A PAID-form submission still
+    // carrying `tierId` / `addOns` (a tab opened before the change) is accepted
+    // and those fields are ignored; on FREE forms they were always an error.
+    if (form.kind === 'FREE') {
+      if (body.tierId) throw new ValidationError('This form has no tiers');
+      if (Array.isArray(body.addOns) && body.addOns.length > 0) throw new ValidationError('This form has no add-ons');
     }
 
     const profileData = applicantProfileService.validate(body.profile || {});
     if ((files.profilePhotos || []).length > MAX_PROFILE_PHOTOS) throw new ValidationError(`At most ${MAX_PROFILE_PHOTOS} profile photos`);
     const answers = this._validateAnswers(form.questions, body.answers || {}, files.answerPhotos || {});
 
-    // Add-ons (spec 012): validated against the tier's offer; nothing is held until approval.
-    if (!tier && Array.isArray(body.addOns) && body.addOns.length > 0)
-      throw new ValidationError('This form has no add-ons');
-    const addOnLines = tier
-      ? await addOnService.validateApplicationLines(eventId, body.addOns, tier.id)
-      : [];
-    // Spec 024: the amount snapshot is the application's order (PAID forms only).
-    const orderData = tier
-      ? orderLineService.applicationOrderData(
-          tier,
-          form,
-          addOnLines,
-          [],
-          event,
-          event.venue.organization
-        )
-      : null;
-
-    // Spec 024 phase 3: the consent trail. Terms and privacy always; the
-    // card-on-file authorization when the card saved now is charged at approval.
+    // Spec 024 phase 3: the consent trail. Terms and privacy; no card is saved
+    // at submission any more, so there is no card-on-file authorization.
     const optInAccount = body.optInAccount === true;
     const optInMarketing = body.optInMarketing === true;
-    const cardAuthorization = form.kind === 'PAID' && form.chargeTiming === 'APPROVAL';
-    const acceptances = legalAcceptanceService.assertCurrent(body.acceptances, ['TERMS', 'PRIVACY', ...(cardAuthorization ? ['CARD_AUTHORIZATION'] : [])]);
+    const acceptances = legalAcceptanceService.assertCurrent(body.acceptances, ['TERMS', 'PRIVACY']);
     const organizationName = event.venue.organization?.name;
-    const presentedText = {
-      PRIVACY: applyConsentText({ organizationName }),
-      ...(cardAuthorization && { CARD_AUTHORIZATION: cardAuthorizationText({ amount: orderData.amounts.applicantPays, paymentDueDays: form.paymentDueDays, organizationName }) }),
-    };
+    const presentedText = { PRIVACY: applyConsentText({ organizationName }) };
 
     const application = await prisma.$transaction(async (tx) => {
       // Opt-ins are recorded on the application and applied by
@@ -349,7 +413,8 @@ class ApplicationService {
         }
       }
 
-      const isFree = form.kind === 'FREE';
+      // Every form is SUBMITTED on creation (spec 037 phase 5): FREE forms owe
+      // nothing ever, PAID forms owe nothing until the vendor chooses a space.
       const created = await tx.application.create({
         data: {
           formId: form.id,
@@ -357,10 +422,10 @@ class ApplicationService {
           organizationId,
           contactId: contactRecord.id,
           profileId: profile.id,
-          tierId: tier?.id ?? null,
-          status: isFree ? 'SUBMITTED' : 'DRAFT',
-          paymentStatus: isFree ? 'NOT_REQUIRED' : form.chargeTiming === 'APPROVAL' ? 'AWAITING_CARD' : 'NOT_REQUIRED',
-          submittedAt: isFree ? new Date() : null,
+          tierId: null,
+          status: 'SUBMITTED',
+          paymentStatus: form.kind === 'FREE' ? 'NOT_REQUIRED' : 'NOT_DUE',
+          submittedAt: new Date(),
           optInAccount,
           optInMarketing,
           statusTokenHash: `pending-${Date.now()}-${Math.random()}`,
@@ -368,15 +433,13 @@ class ApplicationService {
         },
         select: { id: true, eventId: true, contactId: true },
       });
-      if (orderData)
-        await orderService.createApplicationOrder(tx, { application: created, data: orderData });
       await legalAcceptanceService.record(
         tx,
         { subjectType: 'CONTACT', subjectId: contactRecord.id, email: contact.email, organizationId, source: 'APPLY', referenceType: 'Application', referenceId: created.id, ...requestMeta, presentedText },
         acceptances
       );
-      // A FREE form is SUBMITTED on creation: its opt-ins apply now.
-      const optIns = isFree ? await contactOptInService.applyForApplication(tx, created.id) : null;
+      // SUBMITTED on creation: the opt-ins apply now (spec 024 phase 3).
+      const optIns = await contactOptInService.applyForApplication(tx, created.id);
       // The status token is derived from the id (applicationLinks.js); store its hash.
       const row = await tx.application.update({ where: { id: created.id }, data: { statusTokenHash: hashToken(statusToken(created.id)) }, include: DETAIL_INCLUDE });
       row.optIns = optIns;
@@ -393,30 +456,24 @@ class ApplicationService {
       status: application.status,
     });
 
-    const orderRef = application.order?.orderRef ?? null;
-    if (application.status === 'SUBMITTED') {
-      // send() never throws; a failed email is logged and must not fail the submission.
-      // A just-created account gets its first sign-in link in the same email (spec 024 phase 3).
-      const accountUrl = application.optIns?.accountJustCreated ? await contactOptInService.welcomeUrl(application.contactId) : null;
-      await applicationTemplateService.send(organizationId, 'RECEIVED', { ...application, statusUrl }, { accountUrl, accountCreated: Boolean(accountUrl) });
-      return { applicationId: application.id, orderRef, statusUrl, next: 'done' };
-    }
-
-    // PAID: the applicant continues to Stripe Checkout (card on file, or pay
-    // now). A Stripe failure leaves the DRAFT resumable from the status page.
-    let checkoutUrl = null;
-    try {
-      checkoutUrl = await applicationPaymentService.checkoutForSubmission(application, statusUrl);
-    } catch (error) {
-      logger.error('Application checkout session failed', { applicationId: application.id, error: error.message });
-    }
-    return { applicationId: application.id, orderRef, statusUrl, next: 'checkout', checkoutUrl };
+    // send() never throws; a failed email is logged and must not fail the submission.
+    // A just-created account gets its first sign-in link in the same email (spec 024 phase 3).
+    const accountUrl = application.optIns?.accountJustCreated ? await contactOptInService.welcomeUrl(application.contactId) : null;
+    await applicationTemplateService.send(organizationId, 'RECEIVED', { ...application, statusUrl }, { accountUrl, accountCreated: Boolean(accountUrl) });
+    return { applicationId: application.id, orderRef: null, statusUrl, next: 'done' };
   }
 
   /** Guest status page: token must match; returns the applicant-facing view. */
   async statusView(applicationId, rawToken) {
     const application = await this._requireByToken(applicationId, rawToken);
+    return this._applicantView(application);
+  }
+
+  /** Applicant view with the booth, map binding and (spec 037 phase 5) the choose-your-space data. */
+  async _applicantView(application) {
     await attachBooths([application]);
+    await attachMapBound([application]);
+    application.selectionView = await this._selectionView(application);
     return this._serializeApplicant(application);
   }
 
@@ -435,10 +492,26 @@ class ApplicationService {
     return this._payNow(application);
   }
 
-  /** Guest status-link path: authenticate first, then atomically hold and pay. */
+  /**
+   * Guest status-link path for the spec 014 booth picker: choosing a booth is
+   * a space selection (spec 037 phase 5) without add-ons. A saved card is
+   * charged at once, as the picker has always done.
+   */
   async chooseBooth(applicationId, rawToken, boothId) {
     await this._requireByToken(applicationId, rawToken);
-    return this._chooseBooth(applicationId, boothId);
+    return this.select(applicationId, { boothId, useSavedCard: true });
+  }
+
+  /** Guest: choose a space (spec 037 phase 5). */
+  async selectByToken(applicationId, rawToken, input) {
+    await this._requireByToken(applicationId, rawToken);
+    return this.select(applicationId, input);
+  }
+
+  /** Guest: give back a held space to choose another. */
+  async releaseByToken(applicationId, rawToken) {
+    await this._requireByToken(applicationId, rawToken);
+    return this._releaseByVendor(applicationId);
   }
 
   async statusUrl(application) {
@@ -464,15 +537,13 @@ class ApplicationService {
       include: DETAIL_INCLUDE,
       orderBy: { createdAt: 'desc' },
     });
-    await attachBooths(rows);
-    return rows.map((a) => this._serializeApplicant(a));
+    return Promise.all(rows.map((a) => this._applicantView(a)));
   }
 
   async getForContact(organizationId, contactId, applicationId) {
     const application = await prisma.application.findFirst({ where: { id: applicationId, organizationId, contactId }, include: DETAIL_INCLUDE });
     if (!application || application.status === 'DRAFT') throw new NotFoundError('Application not found');
-    await attachBooths([application]);
-    return this._serializeApplicant(application);
+    return this._applicantView(application);
   }
 
   /** Buyer: pay-now Checkout URL for an outstanding balance. */
@@ -488,13 +559,28 @@ class ApplicationService {
     if (application.status !== 'APPROVED' || application.paymentStatus !== 'PAYMENT_DUE') {
       throw new ConflictError('There is no outstanding balance on this application');
     }
-    if (application.tier?.mapBound) await boothService.beginPayment(application.id);
+    // Spec 037 phase 5: paying for a chosen space. The hold must still run;
+    // PROCESSING protects it (booth and category slot) from the sweep while
+    // the vendor is on Stripe's page.
+    const held = Boolean(application.selectionHeldUntil);
+    if (held) {
+      if (new Date(application.selectionHeldUntil) <= new Date()) {
+        await this.releaseSelection(application.id, { reason: 'Hold expired before payment' });
+        throw coded(new ConflictError('Your hold on this space expired. Choose your space again.'), 'HOLD_EXPIRED');
+      }
+      const booth = await boothService.boothForApplication(application.id);
+      if (booth?.status === 'HELD') await boothService.beginPayment(application.id);
+      else await prisma.$transaction((tx) => this._transition(tx, application.id, { paymentStatus: 'PROCESSING' }, { include: null }));
+    }
     try {
-      return { url: await applicationPaymentService.payNowUrl(application, await statusUrlFor(application)) };
+      return { url: await applicationPaymentService.payNowUrl({ ...application, paymentStatus: 'PAYMENT_DUE' }, await statusUrlFor(application)) };
     } catch (error) {
-      // Only a failure to mint the Checkout session undoes the PROCESSING hold.
-      if (application.tier?.mapBound && !(error instanceof ConflictError)) {
-        await applicationPaymentService._markPaymentDue(application, error.message).catch(() => {});
+      // Only a failure to mint the Checkout session undoes the PROCESSING
+      // guard; the space stays held so the vendor can try again.
+      if (held && !(error instanceof ConflictError)) {
+        await prisma
+          .$transaction((tx) => this._transition(tx, application.id, { paymentStatus: 'PAYMENT_DUE' }, { include: null }))
+          .catch(() => {});
       }
       throw error;
     }
@@ -502,8 +588,9 @@ class ApplicationService {
 
   /**
    * The vendor backed out of hosted Checkout: expire the Stripe session so a
-   * late completion cannot land, release the booth hold and return to
-   * PAYMENT_DUE so the picker is usable again. A no-op unless a pay-now
+   * late completion cannot land, and hand the space back to the vendor. While
+   * the hold still runs they keep it (PAYMENT_DUE: pay again or change it);
+   * once it has lapsed the selection is released. A no-op unless a pay-now
    * session is in flight.
    */
   async cancelCheckout(applicationId, rawToken) {
@@ -525,51 +612,253 @@ class ApplicationService {
       return { cancelled: false, paymentStatus: application.paymentStatus };
     }
     await applicationPaymentService.expireCheckoutSession(application.stripeCheckoutSessionId);
-    await applicationPaymentService._markPaymentDue(application, 'Checkout cancelled by the vendor');
-    return { cancelled: true, paymentStatus: 'PAYMENT_DUE' };
+    if (application.selectionHeldUntil && new Date(application.selectionHeldUntil) > new Date()) {
+      await prisma.$transaction((tx) =>
+        this._transition(tx, application.id, { paymentStatus: 'PAYMENT_DUE', stripeCheckoutSessionId: null }, { include: null })
+      );
+      return { cancelled: true, paymentStatus: 'PAYMENT_DUE' };
+    }
+    const paymentStatus = await applicationPaymentService._markPaymentDue(application, 'Checkout cancelled by the vendor');
+    return { cancelled: true, paymentStatus: paymentStatus === 'AWAITING_SELECTION' ? 'AWAITING_SELECTION' : 'PAYMENT_DUE' };
   }
 
-  /** Buyer-session path: ownership is scoped by organization + contact. */
+  /** Buyer-session path for the spec 014 booth picker: a space selection without add-ons. */
   async chooseBoothForContact(organizationId, contactId, applicationId, boothId) {
+    await this._requireForContact(organizationId, contactId, applicationId);
+    return this.select(applicationId, { boothId, useSavedCard: true });
+  }
+
+  /** Buyer: choose a space (spec 037 phase 5). */
+  async selectForContact(organizationId, contactId, applicationId, input) {
+    await this._requireForContact(organizationId, contactId, applicationId);
+    return this.select(applicationId, input);
+  }
+
+  /** Buyer: give back a held space to choose another. */
+  async releaseForContact(organizationId, contactId, applicationId) {
+    await this._requireForContact(organizationId, contactId, applicationId);
+    return this._releaseByVendor(applicationId);
+  }
+
+  async _requireForContact(organizationId, contactId, applicationId) {
     const application = await prisma.application.findFirst({
       where: { id: applicationId, organizationId, contactId, status: { not: 'DRAFT' } },
       select: { id: true },
     });
     if (!application) throw new NotFoundError('Application not found');
-    return this._chooseBooth(applicationId, boothId);
+    return application;
   }
 
-  /**
-   * Hold the booth before money moves. A saved card is charged immediately;
-   * without one, the existing pay-now route creates the hosted Checkout.
-   */
-  async _chooseBooth(applicationId, boothId) {
-    const hold = await boothService.chooseBooth(applicationId, boothId);
-    const application = await prisma.application.findUnique({ where: { id: applicationId }, include: DETAIL_INCLUDE });
-    if (!application?.stripePaymentMethodId) {
-      return { ...hold, paymentStatus: application?.paymentStatus || 'PAYMENT_DUE' };
-    }
+  // ---------------------------------------------------------------------------
+  // Spec 037 phase 5: choose a space
+  // ---------------------------------------------------------------------------
 
-    await prisma.$transaction(async (tx) => {
-      const rows = await tx.$queryRaw`SELECT * FROM "Application" WHERE "id" = ${applicationId} FOR UPDATE`;
-      const locked = rows[0];
-      if (!locked || locked.status !== 'APPROVED' || locked.paymentStatus !== 'PAYMENT_DUE') {
-        throw new ConflictError('The application payment state changed; refresh and try again');
+  /**
+   * An approved vendor chooses their space: a booth on the published map
+   * (`boothId`, which must be bound to their category) or, from the list, the
+   * category itself (staff place them later). Add-on lines are chosen here.
+   *
+   * One transaction: lock the application → the category slot (already held
+   * when the form reserves on approval; taken now, 409 `SOLD_OUT` when full,
+   * when it does not) → the booth hold → add-on reservations (409 names the
+   * sold-out add-on) → the order, created or the cancelled one reopened with
+   * the new lines → PAYMENT_DUE with `selectionHeldUntil` = now + 15 min.
+   * The order's `dueAt` is the approval clock (`selectionDueAt`).
+   *
+   * Then, with `useSavedCard` and a card on file, the card is charged
+   * off-session (the spec 011 path); otherwise the vendor continues to
+   * hosted Checkout through `payNow`.
+   *
+   * @param {{ boothId?: string|null, addOns?: Array<{ addOnId: string, quantity: number }>, useSavedCard?: boolean }} input
+   * @returns {Promise<{ boothId: string|null, holdExpiresAt: Date, status: string, paymentStatus: string, orderRef: string|null }>}
+   */
+  async select(applicationId, { boothId = null, addOns = [], useSavedCard = false } = {}) {
+    if (!paymentsEnabled()) throw new ConflictError('Paid applications are not available yet');
+    if (boothId !== null && boothId !== undefined && (typeof boothId !== 'string' || !boothId)) {
+      throw new ValidationError('boothId must be an id');
+    }
+    if (addOns !== undefined && addOns !== null && !Array.isArray(addOns)) {
+      throw new ValidationError('addOns must be an array of { addOnId, quantity }');
+    }
+    const holdExpiresAt = new Date(Date.now() + BOOTH_HOLD_MS);
+    let supersededSessionId = null;
+
+    const { booth, orderRef } = await prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw`SELECT "id" FROM "Application" WHERE "id" = ${applicationId} FOR UPDATE`;
+      if (!locked[0]) throw new NotFoundError('Application not found');
+      const application = await tx.application.findUnique({ where: { id: applicationId }, include: DETAIL_INCLUDE });
+      supersededSessionId = application?.stripeCheckoutSessionId ?? null;
+      if (!application || application.status === 'DRAFT') throw new NotFoundError('Application not found');
+      if (application.form.kind !== 'PAID') throw new ConflictError('This form has no spaces to choose');
+      if (application.status !== 'APPROVED') {
+        throw coded(new ConflictError('Only an approved application can choose a space'), 'APPLICATION_NOT_APPROVED');
       }
+      if (application.paymentStatus !== 'AWAITING_SELECTION') {
+        throw coded(new ConflictError('This application is not choosing a space; refresh the page'), 'NOT_AWAITING_SELECTION');
+      }
+      if (!application.tierId || !application.tier) {
+        throw coded(new ConflictError('The organizer has not assigned a category yet'), 'NO_TIER');
+      }
+      const tier = application.tier;
+
+      // A booth placed by staff is the space: the vendor pays for the category only.
+      const placed = await tx.booth.findFirst({ where: { applicationId }, select: { id: true } });
+      if (boothId && placed) throw coded(new ConflictError('The organizer has already placed you; pay for your category instead'), 'ALREADY_HAS_BOOTH');
+
+      // Category slot (spec 037 D5).
+      if (application.capacitySlot === 'NONE') {
+        await this._takeTierSlot(tx, tier, 'RESERVED');
+      }
+
+      let held = null;
+      if (boothId) held = await boothService.chooseBooth(applicationId, boothId, { tx, holdExpiresAt });
+
+      // Add-on lines: validated against the category's offer, then held.
+      const lines = await addOnService.validateApplicationLines(application.eventId, addOns || [], tier.id);
+      if (lines.length) {
+        try {
+          await addOnService.reserve(tx, lines);
+        } catch (error) {
+          if (error instanceof ConflictError && error.details?.addOnId) {
+            const { name, remaining, requested } = error.details;
+            throw coded(new ConflictError(`${name} is sold out: ${requested} requested, ${remaining} left.`, error.details), 'ADD_ON_SOLD_OUT');
+          }
+          throw error;
+        }
+      }
+
+      // The order: created here, or the cancelled one (an expired selection,
+      // or one from before apply-then-choose) reopened with the new lines.
+      // Organizer adjustments on it are kept; the order number never changes.
+      const dueAt = selectionDueAt(application) ?? new Date(Date.now() + (application.form.paymentDueDays ?? 7) * 86_400_000);
+      const adjustments = application.order ? adjustmentItems(application.order).filter((i) => i.kind === 'ADJUSTMENT') : [];
+      const data = orderLineService.applicationOrderData(tier, application.form, lines, adjustments, application.event, application.event.venue.organization);
+      let order;
+      if (application.order) {
+        order = await orderLineService.rewriteApplicationOrder(tx, application.order.id, data, { status: 'PENDING', dueAt, paidAt: null });
+      } else {
+        order = await orderService.createApplicationOrder(tx, { application, data });
+        await tx.order.update({ where: { id: order.id }, data: { dueAt } });
+      }
+
       await this._transition(
         tx,
         applicationId,
-        { paymentStatus: 'PROCESSING', chargeAttempts: locked.chargeAttempts + 1 },
-        { include: null }
+        {
+          paymentStatus: 'PAYMENT_DUE',
+          capacitySlot: 'RESERVED',
+          selectionHeldUntil: holdExpiresAt,
+          stripeCheckoutSessionId: null,
+        },
+        { include: null, orderData: { dueAt } }
       );
+      return { booth: held, orderRef: order.orderRef };
     });
-    const paymentStatus = await applicationPaymentService.chargeOnApproval(applicationId);
-    const booth = await boothService.boothForApplication(applicationId);
+
+    // A session left from an earlier selection must not stay payable.
+    if (supersededSessionId) await applicationPaymentService.expireSupersededSession(applicationId, supersededSessionId);
+
+    logger.info('Application space selected', {
+      event: 'application_space_selected',
+      applicationId,
+      boothId: booth?.boothId ?? null,
+      holdExpiresAt,
+    });
+
+    const current = await prisma.application.findUnique({ where: { id: applicationId }, select: { stripePaymentMethodId: true, chargeAttempts: true } });
+    let paymentStatus = 'PAYMENT_DUE';
+    if (useSavedCard === true && current?.stripePaymentMethodId) {
+      await prisma.$transaction(async (tx) => {
+        const rows = await tx.$queryRaw`SELECT * FROM "Application" WHERE "id" = ${applicationId} FOR UPDATE`;
+        const locked = rows[0];
+        if (!locked || locked.status !== 'APPROVED' || locked.paymentStatus !== 'PAYMENT_DUE') {
+          throw new ConflictError('The application payment state changed; refresh and try again');
+        }
+        await this._transition(tx, applicationId, { paymentStatus: 'PROCESSING', chargeAttempts: locked.chargeAttempts + 1 }, { include: null });
+      });
+      // A decline releases the selection (AWAITING_SELECTION): choose again, pay on Checkout.
+      paymentStatus = await applicationPaymentService.chargeOnApproval(applicationId);
+    }
+    const owned = await boothService.boothForApplication(applicationId);
     return {
-      boothId: booth?.id || boothId,
-      holdExpiresAt: booth?.holdExpiresAt || hold.holdExpiresAt,
-      status: booth?.status || (paymentStatus === 'PAID' ? 'SOLD' : 'AVAILABLE'),
+      boothId: owned?.id ?? booth?.boothId ?? null,
+      holdExpiresAt,
+      status: owned?.status ?? (paymentStatus === 'PAID' ? 'SOLD' : 'AVAILABLE'),
       paymentStatus,
+      orderRef,
+    };
+  }
+
+  /** The vendor gives back a held space (to choose another); only while it is not being paid. */
+  async _releaseByVendor(applicationId) {
+    const application = await prisma.application.findUnique({ where: { id: applicationId }, select: { status: true, paymentStatus: true, selectionHeldUntil: true } });
+    if (!application || application.status !== 'APPROVED' || application.paymentStatus !== 'PAYMENT_DUE' || !application.selectionHeldUntil) {
+      throw coded(new ConflictError('There is no held space to release'), 'NOTHING_HELD');
+    }
+    const released = await this.releaseSelection(applicationId, { reason: 'Released by the vendor' });
+    if (!released) {
+      // A payment started between the read above and the locked release.
+      throw coded(new ConflictError('Your payment is being processed; refresh the page'), 'PAYMENT_IN_PROGRESS');
+    }
+    return { released: true, paymentStatus: 'AWAITING_SELECTION' };
+  }
+
+  /** Put a chosen space back (spec 037 phase 5); see ApplicationPaymentService.releaseSelection. */
+  async releaseSelection(applicationId, options = {}) {
+    return applicationPaymentService.releaseSelection(applicationId, options);
+  }
+
+  /**
+   * Choose-your-space data for the applicant view (spec 037 phase 5), or null
+   * when the application is not choosing / paying for a space. Prices are the
+   * applicant's all-in figures under the form's fee mode; `remaining` counts
+   * the vendor's own approval slot as theirs.
+   */
+  async _selectionView(a) {
+    if (a.form?.kind !== 'PAID' || a.status !== 'APPROVED' || !a.tier) return null;
+    const choosing = a.paymentStatus === 'AWAITING_SELECTION';
+    const holding = Boolean(a.selectionHeldUntil) && ['PAYMENT_DUE', 'PROCESSING'].includes(a.paymentStatus);
+    if (!choosing && !holding) return null;
+    const event = a.event;
+    const organization = event.venue.organization;
+    const tier = a.tier;
+    const amounts = orderLineService.applicationOrderData(tier, a.form, [], [], event, organization).amounts;
+    const [addOnRows, map, placed] = await Promise.all([
+      applicationFormService._addOnsForEvent(a.eventId, { activeOnly: true }),
+      prisma.floorMap.findUnique({ where: { eventId: a.eventId }, select: { id: true, status: true } }),
+      prisma.booth.findFirst({ where: { applicationId: a.id }, select: { id: true, label: true, w: true, h: true, status: true } }),
+    ]);
+    const attached = await prisma.applicationTierAddOn.findMany({ where: { applicationTierId: tier.id }, select: { addOnId: true } });
+    const offered = applicationFormService._offeredOnTier({ addOns: attached }, addOnRows);
+    const mapBooths = map?.status === 'PUBLISHED'
+      ? await prisma.booth.groupBy({ by: ['status'], where: { mapId: map.id, tierId: tier.id }, _count: { _all: true } })
+      : [];
+    const onMap = mapBooths.length > 0;
+    const available = mapBooths.find((g) => g.status === 'AVAILABLE')?._count._all ?? 0;
+    const free = Math.max(0, tier.quantityTotal - tier.quantityApproved - tier.quantityReserved);
+    const ownSlot = a.capacitySlot === 'RESERVED' || a.capacitySlot === 'APPROVED';
+    const card = a.stripePaymentMethodId ? await applicationPaymentService.savedCardSummary(a.stripePaymentMethodId) : null;
+    return {
+      state: holding ? 'HELD' : 'CHOOSE',
+      heldUntil: holding ? a.selectionHeldUntil : null,
+      dueAt: selectionDueAt(a),
+      reserveOnApproval: a.form.reserveOnApproval !== false,
+      category: {
+        id: tier.id,
+        name: tier.name,
+        description: tier.description ?? null,
+        price: Number(tier.price),
+        applicantPays: amounts.applicantPays,
+        feesIncluded: amounts.feeMode === 'PASS' ? Math.round((amounts.applicantPays - amounts.subtotal - amounts.tax) * 100) / 100 : 0,
+        tax: amounts.tax,
+        // Spaces the vendor can still take: their own approval slot counts.
+        spacesLeft: ownSlot ? Math.max(1, free) : free,
+        guaranteed: ownSlot,
+      },
+      addOns: offered.map((addOn) => applicationFormService._serializePublicAddOn(addOn, a.form, event, organization)),
+      map: onMap && !placed ? { available: true, mapId: map.id, boothsAvailable: available } : { available: false, mapId: null, boothsAvailable: 0 },
+      placedBooth: placed ? { id: placed.id, label: placed.label, w: placed.w, h: placed.h } : null,
+      savedCard: card,
     };
   }
 
@@ -595,14 +884,17 @@ class ApplicationService {
         withdrawnBy: 'APPLICANT',
         decidedAt: new Date(),
         capacitySlot: 'NONE',
+        stripeCheckoutSessionId: null,
         decisions: {
           create: { action: 'WITHDRAWN', byUserId: null, note: 'Withdrawn by applicant' },
         },
       });
     });
+    if (application.stripeCheckoutSessionId && application.paymentStatus !== 'PAID') {
+      await applicationPaymentService.expireSupersededSession(application.id, application.stripeCheckoutSessionId);
+    }
     logger.info('Application withdrawn by applicant', { event: 'application_decided', applicationId: application.id, action: 'WITHDRAWN', by: 'applicant' });
-    await attachBooths([updated]);
-    return this._serializeApplicant(updated);
+    return this._applicantView(updated);
   }
 
   // ---------------------------------------------------------------------------
@@ -629,19 +921,23 @@ class ApplicationService {
     const page = Math.max(1, parseInt(query.page, 10) || 1);
     const pageSize = Math.min(200, Math.max(1, parseInt(query.pageSize, 10) || LIST_PAGE_SIZE));
     const orderBy = this._listOrder(query.sort);
-    const [rows, total, summary] = await Promise.all([
+    const [rows, total, summary, awaitingSpace] = await Promise.all([
       prisma.application.findMany({ where, include: LIST_INCLUDE, orderBy, skip: (page - 1) * pageSize, take: pageSize }),
       prisma.application.count({ where }),
       this.summaryInScope(scope),
+      // Spec 037 phase 5: the "Awaiting space" chip — approved, still choosing.
+      prisma.application.count({ where: { ...this._scopeWhere(scope), status: 'APPROVED', paymentStatus: 'AWAITING_SELECTION' } }),
     ]);
     const bases = await this._storefrontBases(rows);
     await attachBooths(rows);
+    await attachMapBound(rows);
     return {
       data: rows.map((a) => this._serializeRow(a, { unscoped: !scope.organizationId && !scope.eventId, statusBase: bases.get(a.organizationId) })),
       total,
       page,
       pageSize,
       summary,
+      awaitingSpace,
     };
   }
 
@@ -680,6 +976,7 @@ class ApplicationService {
     const application = await prisma.application.findFirst({ where: { id: applicationId, eventId }, include: DETAIL_INCLUDE });
     if (!application || application.status === 'DRAFT') throw new NotFoundError('Application not found');
     await attachBooths([application]);
+    await attachMapBound([application]);
     return this._serializeAdmin(application);
   }
 
@@ -749,6 +1046,7 @@ class ApplicationService {
     }
     const application = await prisma.application.update({ where: { id: applicationId }, data, include: DETAIL_INCLUDE });
     await attachBooths([application]);
+    await attachMapBound([application]);
     return this._serializeAdmin(application);
   }
 
@@ -789,23 +1087,61 @@ class ApplicationService {
     return rows.map((r) => r.tag);
   }
 
-  async previewMessage(eventId, applicationId, organizationId, decision) {
+  /**
+   * The email a decision would send. Approving a PAID application (spec 037
+   * phase 5) previews CHOOSE_SPACE with the category it would be assigned
+   * (`tierId`, else the only active one, else the current one).
+   */
+  async previewMessage(eventId, applicationId, organizationId, decision, { tierId = null } = {}) {
     await applicationFormService.requireEvent(eventId, organizationId);
     const spec = DECISIONS[decision];
     if (!spec) throw new ValidationError('decision must be APPROVE, REJECT, WAITLIST or WITHDRAW');
     const application = await prisma.application.findFirst({ where: { id: applicationId, eventId }, include: DETAIL_INCLUDE });
     if (!application) throw new NotFoundError('Application not found');
+    if (spec.to === 'APPROVED' && application.form.kind === 'PAID') {
+      const tiers = application.form.tiers.filter((t) => t.isActive);
+      const tier =
+        (tierId && application.form.tiers.find((t) => t.id === tierId)) ||
+        (tiers.length === 1 ? tiers[0] : null) ||
+        application.tier ||
+        null;
+      const preview = { ...application, tier, tierId: tier?.id ?? null, status: 'APPROVED', paymentStatus: 'AWAITING_SELECTION', decidedAt: new Date() };
+      return applicationTemplateService.render(organizationId, 'CHOOSE_SPACE', preview);
+    }
     return applicationTemplateService.render(organizationId, spec.action, application);
   }
 
   /**
-   * Organizer decision. Approving a tiered application takes a capacity slot
-   * atomically; a full tier returns 409 with a Waitlist suggestion. Approving
-   * a card-on-file application reserves the slot, then charges the saved card
-   * off-session (phase 2): PAID confirms the slot, a decline leaves the
-   * application APPROVED + PAYMENT_DUE with a pay-now link.
+   * Spec 037 D4: the category an approval assigns — the organizer's pick
+   * (`tierId`), else the one already on the application, else the form's only
+   * active tier. Required when the form has several.
+   */
+  _resolveCategory(form, application, tierId) {
+    const active = form.tiers.filter((t) => t.isActive);
+    if (tierId) {
+      const tier = form.tiers.find((t) => t.id === tierId);
+      if (!tier) throw new NotFoundError('Category not found on this form');
+      if (!tier.isActive) throw new ValidationError(`${tier.name} is not active`);
+      return tier;
+    }
+    const current = application.tierId ? form.tiers.find((t) => t.id === application.tierId && t.isActive) : null;
+    if (current) return current;
+    if (active.length === 1) return active[0];
+    if (active.length === 0) throw new ConflictError('This form has no active category to approve into');
+    throw coded(new ValidationError('Choose a category for this vendor'), 'CATEGORY_REQUIRED');
+  }
+
+  /**
+   * Organizer decision. Approving a FREE application takes its tier slot
+   * (legacy tiered FREE rows) and is final. Approving a PAID application
+   * (spec 037 phase 5) assigns the category (`input.tierId`, see
+   * `_resolveCategory`), takes a slot in it when the form reserves on
+   * approval (409 with a Waitlist suggestion when full), and moves to
+   * AWAITING_SELECTION: nothing is charged, the vendor is emailed to choose
+   * their space (CHOOSE_SPACE template). Leaving APPROVED releases whatever
+   * the application holds, a held space included.
    *
-   * @param {{ decision: 'APPROVE'|'REJECT'|'WAITLIST'|'WITHDRAW', note?: string, message?: { subject: string, body: string }|null, sendEmail?: boolean, byUserId: string }} input
+   * @param {{ decision: 'APPROVE'|'REJECT'|'WAITLIST'|'WITHDRAW', tierId?: string|null, note?: string, message?: { subject: string, body: string }|null, sendEmail?: boolean, byUserId: string }} input
    */
   async decide(eventId, applicationId, organizationId, input) {
     await applicationFormService.requireEvent(eventId, organizationId);
@@ -814,7 +1150,8 @@ class ApplicationService {
     const note = input.note ? String(input.note).slice(0, 5000) : null;
     const override = this._validateMessage(input.message);
 
-    const { updated, charge } = await prisma.$transaction(async (tx) => {
+    let supersededSessionId = null;
+    const { updated, emailAction } = await prisma.$transaction(async (tx) => {
       const rows = await tx.$queryRaw`SELECT * FROM "Application" WHERE "id" = ${applicationId} AND "eventId" = ${eventId} FOR UPDATE`;
       const application = rows[0];
       if (!application || application.status === 'DRAFT') throw new NotFoundError('Application not found');
@@ -822,42 +1159,55 @@ class ApplicationService {
         throw new ConflictError(`Cannot ${input.decision.toLowerCase()} an application that is ${application.status.toLowerCase()}`);
       }
       if (application.paymentStatus === 'PROCESSING') throw new ConflictError('A payment is in progress for this application; try again in a moment');
+      const form = await tx.applicationForm.findUnique({
+        where: { id: application.formId },
+        select: { kind: true, reserveOnApproval: true, tiers: { orderBy: { displayOrder: 'asc' } } },
+      });
 
       const data = { status: spec.to, decidedAt: new Date(), decidedById: input.byUserId };
-      const orderData = {};
-      let chargeNow = false;
-      if (spec.to === 'APPROVED') {
-        if (application.paymentStatus === 'AWAITING_CARD') throw new ConflictError('The applicant has not saved a card yet');
-        if (application.paymentStatus === 'CARD_ON_FILE') {
-          if (!paymentsEnabled()) throw new ConflictError('Application payments are not enabled');
-          const tier = application.tierId
-            ? await tx.applicationTier.findUnique({
-                where: { id: application.tierId },
-                select: { mapBound: true, form: { select: { paymentDueDays: true } } },
-              })
-            : null;
-          // Hold the slot while the charge is in flight; PAID moves it to approved.
-          if (application.tierId) {
-            await this._takeCapacity(tx, application, 'RESERVED');
-            data.capacitySlot = 'RESERVED';
-          }
-          if (tier?.mapBound) {
-            // A map-bound approval is an invitation to select inventory. Money
-            // moves only after the applicant holds a specific booth.
-            data.paymentStatus = 'PAYMENT_DUE';
-            orderData.dueAt = new Date(Date.now() + (tier.form.paymentDueDays ?? 7) * 86_400_000);
-          } else {
-            data.paymentStatus = 'PROCESSING';
-            data.chargeAttempts = application.chargeAttempts + 1;
-            chargeNow = true;
-          }
-        } else if (application.tierId) {
+      // Any decision ends the pay-now session the vendor may still have open
+      // (it is expired on Stripe after commit), so it can never pay a
+      // withdrawn, rejected or re-approved application.
+      if (application.stripeCheckoutSessionId && !['PAID', 'REFUNDED', 'PARTIALLY_REFUNDED'].includes(application.paymentStatus)) {
+        supersededSessionId = application.stripeCheckoutSessionId;
+        data.stripeCheckoutSessionId = null;
+      }
+      let action = spec.action;
+      if (spec.to === 'APPROVED' && form.kind === 'PAID') {
+        if (!paymentsEnabled()) throw new ConflictError('Application payments are not enabled');
+        const tier = this._resolveCategory(form, application, input.tierId);
+        // A slot held for an earlier category (a migrated row) moves with it.
+        if (application.capacitySlot !== 'NONE' && application.tierId && application.tierId !== tier.id) {
+          await this._releaseCapacity(tx, application);
+          application.capacitySlot = 'NONE';
+        }
+        let capacitySlot = application.capacitySlot;
+        if (form.reserveOnApproval !== false && capacitySlot === 'NONE') {
+          await this._takeTierSlot(tx, tier, 'RESERVED', { onFull: 'WAITLIST' });
+          capacitySlot = 'RESERVED';
+        }
+        Object.assign(data, {
+          tierId: tier.id,
+          capacitySlot,
+          paymentStatus: 'AWAITING_SELECTION',
+          selectionHeldUntil: null,
+          stripeCheckoutSessionId: null,
+          overdue: false,
+        });
+        action = 'CHOOSE_SPACE';
+      } else if (spec.to === 'APPROVED') {
+        if (application.tierId) {
           await this._takeCapacity(tx, application, 'APPROVED');
           data.capacitySlot = 'APPROVED';
         }
-      } else if (application.capacitySlot !== 'NONE') {
-        await this._releaseCapacity(tx, application);
-        data.capacitySlot = 'NONE';
+      } else {
+        // Leaving APPROVED (withdraw) releases the slot and, through the live
+        // order, any held add-ons; the booth follows below.
+        if (application.capacitySlot !== 'NONE') {
+          await this._releaseCapacity(tx, application);
+          data.capacitySlot = 'NONE';
+        }
+        if (application.selectionHeldUntil) data.selectionHeldUntil = null;
       }
       if (spec.to === 'WITHDRAWN') {
         await boothService.releaseForApplication(applicationId, { tx });
@@ -868,9 +1218,11 @@ class ApplicationService {
       const row = await this._transition(tx, applicationId, {
         ...data,
         decisions: { create: { action: spec.action, byUserId: input.byUserId, note } },
-      }, { orderData });
-      return { updated: row, charge: chargeNow };
+      });
+      return { updated: row, emailAction: action };
     });
+
+    if (supersededSessionId) await applicationPaymentService.expireSupersededSession(applicationId, supersededSessionId);
 
     logger.info('Application decided', {
       event: 'application_decided',
@@ -880,23 +1232,11 @@ class ApplicationService {
       byUserId: input.byUserId,
     });
 
-    let action = spec.action;
-    let payNowUrl = null;
-    if (charge) {
-      const outcome = await applicationPaymentService.chargeOnApproval(applicationId);
-      if (outcome === 'PAYMENT_DUE') {
-        action = 'PAYMENT_DUE';
-        payNowUrl = await statusUrlFor(updated);
-      } else if (outcome === 'PROCESSING') {
-        // Card charge still settling: the webhook sends the approval email.
-        action = null;
-      }
-    }
-
+    const action = emailAction;
     if (input.sendEmail !== false && action) {
-      const current = action === spec.action ? updated : await prisma.application.findUnique({ where: { id: applicationId }, include: DETAIL_INCLUDE });
+      const current = updated;
       const statusUrl = await statusUrlFor(current);
-      const sent = await applicationTemplateService.send(organizationId, action, { ...current, statusUrl }, { override: action === spec.action ? override : null, payNowUrl: payNowUrl || statusUrl });
+      const sent = await applicationTemplateService.send(organizationId, action, { ...current, statusUrl }, { override, payNowUrl: statusUrl });
       if (sent) {
         const decision = updated.decisions[updated.decisions.length - 1];
         await prisma.applicationDecision.update({ where: { id: decision.id }, data: { emailSubject: sent.subject, emailBody: sent.body } }).catch(() => {});
@@ -921,14 +1261,10 @@ class ApplicationService {
         throw new ConflictError('Only approved applications with a payment due can be charged');
       if (!application.stripePaymentMethodId)
         throw new ConflictError('No card on file; ask the applicant to pay from their status page');
-      if (application.tierId) {
-        const tier = await tx.applicationTier.findUnique({
-          where: { id: application.tierId },
-          select: { mapBound: true },
-        });
-        if (tier?.mapBound) {
-          await boothService.beginPayment(applicationId, { tx, markProcessing: false });
-        }
+      // A held booth must still be held while the card is charged.
+      const booth = await boothService.boothForApplication(applicationId, { tx });
+      if (booth?.status === 'HELD') {
+        await boothService.beginPayment(applicationId, { tx, markProcessing: false });
       }
       await this._transition(
         tx,
@@ -1080,12 +1416,34 @@ class ApplicationService {
     await applicationFormService.requireEvent(eventId, organizationId);
     if (typeof tierId !== 'string' || !tierId) throw new ValidationError('tierId is required');
 
-    const { updated, note, sessionId } = await prisma.$transaction(async (tx) => {
-      const application = await this._lockForEdit(tx, eventId, applicationId, 'the tier');
+    const { updated, note, sessionId, orderless } = await prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw`SELECT "id" FROM "Application" WHERE "id" = ${applicationId} AND "eventId" = ${eventId} FOR UPDATE`;
+      if (!locked[0]) throw new NotFoundError('Application not found');
+      const application = await tx.application.findUnique({ where: { id: applicationId }, include: DETAIL_INCLUDE });
+      if (!application || application.status === 'DRAFT') throw new NotFoundError('Application not found');
+      const editable = tierEditable(application);
+      if (!editable.allowed) throw new ConflictError(editable.reason);
       if (application.tierId === tierId) throw new ValidationError('The application is already on that tier');
       const newTier = await tx.applicationTier.findFirst({ where: { id: tierId, formId: application.formId } });
       if (!newTier) throw new NotFoundError('Tier not found on this form');
       if (!newTier.isActive) throw new ValidationError(`${newTier.name} is not active`);
+
+      // Spec 037 phase 5: no order yet (under review, or approved and still
+      // choosing): the category moves, with the approval slot when it holds one.
+      if (!hasLiveOrder(application)) {
+        if (application.tierId && application.capacitySlot === 'RESERVED') {
+          await tx.$executeRaw`UPDATE "ApplicationTier" SET "quantityReserved" = GREATEST("quantityReserved" - 1, 0) WHERE "id" = ${application.tierId}`;
+          await this._takeTierSlot(tx, newTier, 'RESERVED', { onFull: 'WAITLIST' });
+        }
+        const noteText = `Category: ${application.tier?.name ?? 'none'} → ${newTier.name}.`;
+        const row = await tx.application.update({
+          where: { id: applicationId },
+          data: { tierId: newTier.id, decisions: { create: { action: 'TIER_CHANGED', byUserId, note: noteText } } },
+          include: DETAIL_INCLUDE,
+        });
+        return { updated: row, note: noteText, sessionId: null, orderless: true };
+      }
+      if (!amountEditable(application, 'the tier').allowed) throw new ConflictError(amountEditable(application, 'the tier').reason);
 
       // Reconcile add-on lines to the new tier's offer.
       const current = moneyOf(application);
@@ -1132,7 +1490,13 @@ class ApplicationService {
       tierId,
       applicantPays: moneyOf(updated).applicantPays,
     });
-    await this._afterAmountChange(organizationId, updated, sessionId, 'TIER_CHANGED', sendEmail);
+    if (orderless) {
+      // Nothing is priced yet; a vendor already choosing hears about their new category.
+      const action = updated.status === 'APPROVED' && updated.paymentStatus === 'AWAITING_SELECTION' ? 'CHOOSE_SPACE' : null;
+      await this._afterAmountChange(organizationId, updated, null, action, sendEmail);
+    } else {
+      await this._afterAmountChange(organizationId, updated, sessionId, 'TIER_CHANGED', sendEmail);
+    }
     return this.get(eventId, applicationId, organizationId);
   }
 
@@ -1265,6 +1629,7 @@ class ApplicationService {
           overdue: false,
           capacitySlot: application.tierId ? 'APPROVED' : application.capacitySlot,
           stripeCheckoutSessionId: null,
+          selectionHeldUntil: null,
           decisions: { create: { action: 'WAIVED', byUserId, note: `Waived ${money(waived)}: ${text}` } },
         },
         { include: null, orderData: { dueAt: null, paidAt: new Date() } }
@@ -1336,6 +1701,7 @@ class ApplicationService {
           overdue: false,
           capacitySlot: application.tierId ? 'APPROVED' : application.capacitySlot,
           stripeCheckoutSessionId: null,
+          selectionHeldUntil: null,
           decisions: { create: { action: 'OFFLINE_PAID', byUserId, note: `${OFFLINE_METHOD_LABEL[method]}${ref ? ` ${ref}` : ''}, ${money(value)}` } },
         },
         { include: null, orderData: { paidAt: when, dueAt: null } }
@@ -1399,20 +1765,34 @@ class ApplicationService {
     const application = await tx.application.findUnique({ where: { id: applicationId }, include: DETAIL_INCLUDE });
     if (!application || application.status === 'DRAFT') throw new NotFoundError('Application not found');
     if (!canSettleOffline(application)) throw new ConflictError('Only an approved application with a payment due can be settled outside Stripe');
-    return application;
+    if (application.paymentStatus !== 'AWAITING_SELECTION') return application;
+    // Spec 037 phase 5: settling before the vendor chose a space pays for the
+    // category alone (staff place them later). Take the slot when the
+    // approval did not, and open the order the settlement is recorded on.
+    if (application.capacitySlot === 'NONE') await this._takeTierSlot(tx, application.tier, 'RESERVED');
+    const adjustments = application.order ? adjustmentItems(application.order).filter((i) => i.kind === 'ADJUSTMENT') : [];
+    const data = orderLineService.applicationOrderData(application.tier, application.form, [], adjustments, application.event, application.event.venue.organization);
+    if (application.order) {
+      await orderLineService.rewriteApplicationOrder(tx, application.order.id, data, { status: 'PENDING', paidAt: null });
+    } else {
+      await orderService.createApplicationOrder(tx, { application, data });
+    }
+    await this._transition(tx, applicationId, { paymentStatus: 'PAYMENT_DUE', capacitySlot: 'RESERVED' }, { include: null });
+    return this._reload(tx, applicationId);
   }
 
   /** RESERVED → APPROVED for the tier and add-on holds, as `_markPaid` does after a Stripe payment. */
   async _confirmHeldSlot(tx, application) {
-    if (application.tier?.mapBound) {
-      await boothService.beginPayment(application.id, { tx, markProcessing: false });
-    }
     if (application.tierId && application.capacitySlot === 'RESERVED') {
       await tx.$executeRaw`UPDATE "ApplicationTier" SET "quantityReserved" = GREATEST("quantityReserved" - 1, 0), "quantityApproved" = "quantityApproved" + 1 WHERE "id" = ${application.tierId}`;
       const lines = await this._addOnLines(tx, application.id);
       if (lines.length) await addOnService.commit(tx, lines);
     }
-    if (application.tier?.mapBound) await boothService.claimBooth(application.id, null, { tx });
+    // A booth the vendor holds becomes theirs with the payment (spec 014 phase 2).
+    const booth = await boothService.boothForApplication(application.id, { tx });
+    if (booth?.status === 'HELD' && booth.holdApplicationId === application.id) {
+      await boothService.claimBooth(application.id, booth.id, { tx });
+    }
   }
 
   /**
@@ -1570,6 +1950,7 @@ class ApplicationService {
         order: {
           select: {
             orderRef: true,
+            status: true,
             totalAmount: true,
             orgReceives: true,
             payment: { select: { stripePaymentIntentId: true } },
@@ -1581,6 +1962,8 @@ class ApplicationService {
       },
       orderBy: this._listOrder(query.sort),
     });
+    // Spec 037 phase 5: a cancelled order on a row still in play owes nothing.
+    for (const a of rows) if (!hasLiveOrder(a)) a.order = null;
     const questions = new Map();
     for (const a of rows) for (const ans of a.answers) if (!questions.has(ans.question.id)) questions.set(ans.question.id, ans.question);
     const qList = [...questions.values()];
@@ -1675,10 +2058,15 @@ class ApplicationService {
   // Capacity
   // ---------------------------------------------------------------------------
 
-  /** Add-on lines of an application in lock order, shaped for AddOnService.reserve / release / commit. */
+  /**
+   * Add-on lines of an application in lock order, shaped for AddOnService
+   * reserve / release / commit. Only a live order's lines hold inventory: a
+   * CANCELLED order (spec 037 phase 5: an expired selection, or one from
+   * before apply-then-choose) has already given its lines back.
+   */
   async _addOnLines(tx, applicationId) {
     const rows = await tx.orderAddOn.findMany({
-      where: { order: { applicationId } },
+      where: { order: { applicationId, status: { not: 'CANCELLED' } } },
       include: { addOn: true },
       orderBy: { addOn: { displayOrder: 'asc' } },
     });
@@ -1714,6 +2102,27 @@ class ApplicationService {
       throw error;
     }
     if (slot === 'APPROVED') await addOnService.commit(tx, lines);
+  }
+
+  /**
+   * Spec 037 phase 5: one slot in a category, nothing else (add-ons are
+   * chosen at selection). Conditional UPDATE … RETURNING like `_takeCapacity`.
+   * A full category is 409: on approval with a Waitlist suggestion, at
+   * selection with code SOLD_OUT.
+   */
+  async _takeTierSlot(tx, tier, slot, { onFull = null } = {}) {
+    const column = slot === 'APPROVED' ? 'quantityApproved' : 'quantityReserved';
+    const rows = await tx.$queryRawUnsafe(
+      `UPDATE "ApplicationTier" SET "${column}" = "${column}" + 1
+       WHERE "id" = $1 AND ("quantityTotal" - "quantityApproved" - "quantityReserved") >= 1
+       RETURNING "id"`,
+      tier.id
+    );
+    if (rows && rows.length > 0) return;
+    if (onFull === 'WAITLIST') {
+      throw new ConflictError(`${tier.name} is full. Waitlist the application or raise the category's quantity.`, { tierId: tier.id, suggestion: 'WAITLIST' });
+    }
+    throw coded(new ConflictError(`No ${tier.name} spaces are left.`, { tierId: tier.id }), 'SOLD_OUT');
   }
 
   async _releaseCapacity(tx, application) {
@@ -1841,7 +2250,15 @@ class ApplicationService {
     const where = this._scopeWhere(scope);
     if (query.form) where.formId = String(query.form);
     if (query.tier) where.tierId = String(query.tier);
-    if (query.addOn) where.order = { addOns: { some: { addOnId: String(query.addOn) } } };
+    if (query.addOn) {
+      // Lines on the live order (spec 037 phase 5: an expired selection's
+      // cancelled order gave its lines back; rejected / withdrawn keep theirs).
+      where.order = { addOns: { some: { addOnId: String(query.addOn) } } };
+      where.AND = [
+        ...(where.AND || []),
+        { OR: [{ order: { status: { not: 'CANCELLED' } } }, { status: { in: ['REJECTED', 'WITHDRAWN'] } }] },
+      ];
+    }
     if (query.tag) where.tags = { has: String(query.tag) };
     if (query.status) {
       const list = String(query.status).split(',').filter((s) => STATUSES.has(s) && s !== 'DRAFT');
@@ -1852,12 +2269,14 @@ class ApplicationService {
       if (list.length) where.paymentStatus = { in: list };
     }
     // Spec 014 phase 2: "Booth not chosen" = approved on a map-bound tier with
-    // no booth owned yet (a HELD booth is still unpaid, so it counts as not chosen).
+    // no booth owned yet (a HELD booth is still unpaid, so it counts as not
+    // chosen). Spec 037 phase 5: map-bound = the event's published map has
+    // booths on the tier.
     if (query.booth === 'none') {
       // ANDed with any status filter the user picked: a status the filter
       // excludes just yields no rows instead of silently overriding it.
       where.AND = [...(where.AND || []), { status: 'APPROVED' }];
-      where.tier = { mapBound: true };
+      where.tier = { booths: { some: { map: { status: 'PUBLISHED' } } } };
       where.booth = null;
     } else if (query.booth === 'chosen') {
       where.booth = { isNot: null };
@@ -1948,7 +2367,12 @@ class ApplicationService {
    * or tax edit (spec 011 phase 3).
    */
   _pricing(a) {
-    if (!a.tier || a.form?.kind !== 'PAID' || !a.order) return null;
+    if (!a.tier || a.form?.kind !== 'PAID') return null;
+    if (!hasLiveOrder(a)) {
+      // Spec 037 phase 5: no order yet — what the category costs today.
+      const now = orderLineService.applicationOrderData(a.tier, a.form, [], [], a.event, a.event?.venue?.organization).amounts;
+      return { currentApplicantPays: now.applicantPays, currentOrgReceives: now.orgReceives, changed: false };
+    }
     const m = moneyOf(a);
     const lines = m.addOns.map((l) => ({ addOn: l.addOn, quantity: l.quantity }));
     const now = orderLineService.applicationOrderData(
@@ -1988,23 +2412,26 @@ class ApplicationService {
       logoUrl: firstImage?.file ? imageService.formatImageResponse(firstImage).urls.thumb : null,
       contact: a.contact,
       tier: a.tier ? { id: a.tier.id, name: a.tier.name } : null,
-      orderId: a.order?.id ?? null,
-      orderRef: a.order?.orderRef ?? null,
-      applicantPays: Number(a.order?.totalAmount ?? 0),
-      addOns: (a.order?.addOns || []).map((l) => ({
+      // Spec 037 phase 5: a cancelled order on a row still in play is not shown.
+      orderId: hasLiveOrder(a) ? a.order.id : null,
+      orderRef: hasLiveOrder(a) ? a.order.orderRef : null,
+      applicantPays: hasLiveOrder(a) ? Number(a.order.totalAmount ?? 0) : 0,
+      addOns: (hasLiveOrder(a) ? a.order.addOns || [] : []).map((l) => ({
         addOnId: l.addOnId,
         name: l.name ?? l.addOn?.name ?? null,
         quantity: l.quantity,
       })),
       submittedAt: a.submittedAt,
       decidedAt: a.decidedAt,
-      paymentDueAt: a.order?.dueAt ?? null,
+      // The payment clock: the order's due date, or approval + paymentDueDays while choosing.
+      paymentDueAt: selectionDueAt(a) ?? (hasLiveOrder(a) ? a.order.dueAt ?? null : null),
       overdue: a.overdue,
       boothLabel: a.boothLabel,
       // Spec 014 phase 2: the Booth column — owned or held; `mapBound` tells
       // "not chosen" apart from "this tier is not sold from a map".
       booth: a.mapBooth ? { id: a.mapBooth.id, label: a.mapBooth.label, status: a.mapBooth.status } : null,
-      mapBound: a.tier?.mapBound === true,
+      mapBound: a.tierMapBound === true,
+      selectionHeldUntil: a.selectionHeldUntil ?? null,
       tags: a.tags ?? [],
       checkedInAt: a.checkedInAt ?? null,
       checkedOutAt: a.checkedOutAt ?? null,
@@ -2024,18 +2451,30 @@ class ApplicationService {
   _serializeAdmin(a) {
     const m = moneyOf(a);
     const refunded = m.refundedTotal;
+    const { tiers: formTiers = [], ...form } = a.form || {};
     return {
       id: a.id,
       orderId: m.orderId,
       orderRef: m.orderRef,
-      form: a.form,
+      form: { ...form, reserveOnApproval: form.reserveOnApproval !== false },
+      // Spec 037 phase 5: the categories an approval can assign, with what is left.
+      categories: formTiers.map((t) => ({
+        id: t.id,
+        name: t.name,
+        price: Number(t.price),
+        isActive: t.isActive,
+        remaining: Math.max(0, t.quantityTotal - t.quantityApproved - t.quantityReserved),
+      })),
       event: { id: a.event.id, name: a.event.name, date: a.event.date, timezone: a.event.venue?.timezone ?? null },
       status: a.status,
       paymentStatus: a.paymentStatus,
       capacitySlot: a.capacitySlot,
+      // Spec 037 phase 5: while set, the vendor holds a chosen space and is paying for it.
+      selectionHeldUntil: a.selectionHeldUntil ?? null,
       contact: this._contact(a.contact),
       profile: applicantProfileService.serialize(a.profile),
-      tier: a.tier ? { id: a.tier.id, name: a.tier.name, price: Number(a.tier.price), mapBound: a.tier.mapBound === true } : null,
+      tier: a.tier ? { id: a.tier.id, name: a.tier.name, price: Number(a.tier.price), mapBound: a.tierMapBound === true } : null,
+      tierEditable: tierEditable(a),
       amounts: this._amounts(a),
       pricing: this._pricing(a),
       addOns: m.addOns.map(({ addOn: _addOn, ...l }) => l),
@@ -2053,7 +2492,7 @@ class ApplicationService {
         applicationFee: m.applicationFee,
         chargeAttempts: a.chargeAttempts,
         paidAt: m.paidAt,
-        paymentDueAt: m.paymentDueAt,
+        paymentDueAt: m.paymentDueAt ?? selectionDueAt(a),
         overdue: a.overdue,
         refundedTotal: refunded,
         refundable: Math.max(0, Math.round((m.applicantPays - refunded) * 100) / 100),
@@ -2115,14 +2554,16 @@ class ApplicationService {
       organization: a.event.venue?.organization ? { id: a.event.venue.organization.id, name: a.event.venue.organization.name } : null,
       status: a.status,
       paymentStatus: a.paymentStatus,
-      tier: a.tier ? { id: a.tier.id, name: a.tier.name, mapBound: a.tier.mapBound } : null,
+      tier: a.tier ? { id: a.tier.id, name: a.tier.name, mapBound: a.tierMapBound === true } : null,
       amounts: this._amounts(a),
       addOns: m.addOns.map(({ addOn: _addOn, ...l }) => l),
       adjustments: m.adjustments
         .filter((adj) => adj.kind !== 'WAIVER')
         .map((adj) => ({ id: adj.id, amount: adj.amount, reason: adj.reason })),
       paymentSource: m.paymentSource === 'OFFLINE' ? 'offline' : 'stripe',
-      paymentDueAt: m.paymentDueAt,
+      paymentDueAt: m.paymentDueAt ?? selectionDueAt(a),
+      // Spec 037 phase 5: choose your space (list / map), or finish paying for the one held.
+      selection: a.selectionView ?? null,
       profile: applicantProfileService.serialize(a.profile),
       answers: this._serializeAnswers(a).filter((ans) => !ans.archived),
       boothLabel: a.boothLabel,
@@ -2138,7 +2579,10 @@ class ApplicationService {
         ['SUBMITTED', 'WAITLISTED'].includes(a.status) && a.paymentStatus !== 'PROCESSING',
       canResume: a.status === 'DRAFT' && a.form.kind === 'PAID',
       canPay: a.status === 'APPROVED' && a.paymentStatus === 'PAYMENT_DUE',
-      canUpdateCard: ['SUBMITTED', 'WAITLISTED', 'APPROVED'].includes(a.status) && ['CARD_ON_FILE', 'PAYMENT_DUE'].includes(a.paymentStatus),
+      canUpdateCard:
+        ['SUBMITTED', 'WAITLISTED', 'APPROVED'].includes(a.status) &&
+        (['CARD_ON_FILE', 'PAYMENT_DUE'].includes(a.paymentStatus) ||
+          (['NOT_DUE', 'AWAITING_SELECTION'].includes(a.paymentStatus) && Boolean(a.stripePaymentMethodId))),
     };
   }
 }
