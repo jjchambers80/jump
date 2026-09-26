@@ -229,7 +229,7 @@ describe('Booth holds under concurrency', () => {
 
       // Exactly the write a caller that forgot to lock Application first would make.
       const code = await rejectedCode(prisma.$executeRawUnsafe(
-        `UPDATE "Booth" SET "status" = 'HELD', "holdApplicationId" = $1, "holdExpiresAt" = now() + interval '15 minutes' WHERE "id" = $2`,
+        `UPDATE "Booth" SET "status" = 'HELD', "holdApplicationId" = $1, "holdExpiresAt" = now() + interval '15 minutes', "holdKind" = 'CHECKOUT' WHERE "id" = $2`,
         applications[0].id,
         booths[1].id
       ));
