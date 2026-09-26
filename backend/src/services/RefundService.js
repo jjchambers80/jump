@@ -13,6 +13,7 @@ import logger from '../utils/logger.js';
 import { NotFoundError, ConflictError, ValidationError } from '../middleware/errorHandler.js';
 import { orderStatusFor } from './applicationOrderStatus.js';
 import boothService from './BoothService.js';
+import { ticketAmountPaid } from './ticketAmounts.js';
 
 const round = (v) => Math.round((v + Number.EPSILON) * 100) / 100;
 
@@ -300,10 +301,12 @@ class RefundService {
    * @returns {Promise<Object>} Refund record
    */
   /**
-   * Refund one ticket. Staff callers pass nothing and the full `pricePaid`
-   * goes back. A self-serve refund (spec 031) passes the policy's `feeAmount`:
-   * the buyer gets `pricePaid − feeAmount`, the organization keeps the fee,
-   * and the ticket is voided either way.
+   * Refund one ticket. Staff callers pass nothing and everything the buyer
+   * paid for that ticket goes back — the listed price plus its share of the
+   * platform fee, the processing fee and tax (`ticketAmountPaid`), not the
+   * listed price alone. A self-serve refund (spec 031) passes the policy's
+   * `feeAmount`: the buyer gets the rest, the organization keeps the fee, and
+   * the ticket is voided either way.
    */
   async refundTicket(ticketId, { reason = null, initiatedBy = null, feeAmount = 0 } = {}) {
     const fee = round(Number(feeAmount) || 0);
@@ -317,6 +320,8 @@ class RefundService {
             include: {
               payment: true,
               tickets: true,
+              // Per-line fees and tax: what this ticket actually cost the buyer.
+              items: true,
             },
           },
           priceTier: { select: { isRefundable: true, name: true } },
@@ -344,7 +349,7 @@ class RefundService {
         throw new ValidationError('No successful payment found');
       }
 
-      const pricePaid = Number(ticket.pricePaid);
+      const pricePaid = ticketAmountPaid(ticket);
       if (fee > pricePaid) throw new ValidationError('feeAmount cannot exceed the ticket price');
       const refundAmount = round(pricePaid - fee);
       if (refundAmount <= 0) {
@@ -416,15 +421,17 @@ class RefundService {
         },
       });
       const openAddOnLines = await tx.orderAddOn.count({ where: { orderId: order.id, refundedAt: null } });
-      // Spec 031: a retained fee is money still on the order, so the order stays
-      // PARTIALLY_REFUNDED and staff can return the remainder with refundOrder.
-      const [{ total: feesRetainedRaw }] = await tx.$queryRaw`
-        SELECT COALESCE(SUM("feeAmount"), 0) AS total
+      // REFUNDED must mean the buyer has their money back, not merely that no
+      // line is open. A retained fee (spec 031) or an unreturned fee/tax share
+      // leaves the order PARTIALLY_REFUNDED so refundOrder can still finish it.
+      const [{ total: refundedSoFarRaw }] = await tx.$queryRaw`
+        SELECT COALESCE(SUM("amount"), 0) AS total
         FROM "Refund"
         WHERE "orderId" = ${order.id} AND "status" = 'SUCCEEDED'::"RefundStatus"
       `;
       const allLinesClosed = activeTicketsAfter === 0 && openAddOnLines === 0;
-      const newOrderStatus = allLinesClosed && Number(feesRetainedRaw) <= 0 ? 'REFUNDED' : 'PARTIALLY_REFUNDED';
+      const fullyRepaid = Number(refundedSoFarRaw) + 0.005 >= Number(order.totalAmount);
+      const newOrderStatus = allLinesClosed && fullyRepaid ? 'REFUNDED' : 'PARTIALLY_REFUNDED';
 
       await tx.order.update({
         where: { id: order.id },
@@ -505,7 +512,19 @@ class RefundService {
 
       const activeTickets = await tx.ticket.count({ where: { orderId: order.id, status: { in: ['VALID', 'REDEEMED'] } } });
       const openAddOnLines = await tx.orderAddOn.count({ where: { orderId: order.id, refundedAt: null } });
-      const newOrderStatus = activeTickets === 0 && openAddOnLines === 0 ? 'REFUNDED' : 'PARTIALLY_REFUNDED';
+      // Same rule as refundTicket: REFUNDED means the money is back, not just
+      // that every line is closed.
+      const [{ total: refundedSoFarRaw }] = await tx.$queryRaw`
+        SELECT COALESCE(SUM("amount"), 0) AS total
+        FROM "Refund"
+        WHERE "orderId" = ${order.id} AND "status" = 'SUCCEEDED'::"RefundStatus"
+      `;
+      const newOrderStatus =
+        activeTickets === 0 &&
+        openAddOnLines === 0 &&
+        Number(refundedSoFarRaw) + 0.005 >= Number(order.totalAmount)
+          ? 'REFUNDED'
+          : 'PARTIALLY_REFUNDED';
       await tx.order.update({ where: { id: order.id }, data: { status: newOrderStatus } });
 
       return { refund: { ...refundRecord, stripeRefundId: stripeRefund.id, status: 'SUCCEEDED' }, order, refundAmount, newOrderStatus };
