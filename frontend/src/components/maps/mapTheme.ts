@@ -89,11 +89,11 @@ export const MARKER_ICONS: Record<string, string> = {
 export const MARKER_LABELS: Record<string, string> = {
   stage: 'Stage',
   entrance: 'Entrance',
-  restroom: 'Restroom',
-  food: 'Food',
-  info: 'Info',
-  firstAid: 'First Aid',
-  programming: 'Programming',
+  restroom: 'Restrooms',
+  food: 'Food & drink',
+  info: 'Info desk',
+  firstAid: 'First aid',
+  programming: 'Activity area',
 };
 
 /** Label sizes in px. */

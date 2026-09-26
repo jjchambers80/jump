@@ -169,3 +169,38 @@ body {
     transform: translateY(-2px);
   }
 }
+
+/* Floor map builder (admin/maps/[mapId]): the outside-the-floor backdrop and
+   the ring that flashes around a just-added item. */
+.map-builder-canvas {
+  background-color: #eef2f7;
+  background-image: radial-gradient(circle, rgb(148 163 184 / 0.35) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+.dark .map-builder-canvas {
+  background-color: #0b1120;
+  background-image: radial-gradient(circle, rgb(71 85 105 / 0.45) 1px, transparent 1px);
+}
+.map-builder-canvas .mb-item [role='button'] {
+  cursor: grab;
+}
+.map-builder-canvas .mb-item [role='button']:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+.mb-flash {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .mb-flash {
+    animation: mb-flash 900ms ease-out;
+  }
+}
+@keyframes mb-flash {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}

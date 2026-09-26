@@ -2,6 +2,7 @@
 
 import React from 'react';
 import type { MapBooth } from '@/services/api';
+import { bestForeground } from '@/lib/color';
 import {
   stateFill,
   stateStroke,
@@ -38,6 +39,8 @@ interface BoothProps {
   disabled?: boolean;
   /** Editor resize handles on the selected booth; the picker shows a checkmark instead. */
   handles?: boolean;
+  /** Checkmark on a selected booth without handles (default). The builder draws its own chrome. */
+  checkmark?: boolean;
 }
 
 export default function Booth({
@@ -52,6 +55,7 @@ export default function Booth({
   dimmed = false,
   disabled = false,
   handles = true,
+  checkmark = !handles,
 }: BoothProps) {
   const x = booth.x * gridSize;
   const y = booth.y * gridSize;
@@ -70,6 +74,12 @@ export default function Booth({
     : stateStroke(booth.status, dark);
   const strokeWidth = selected ? 2 : 1;
   const strokeDasharray = booth.status === 'RESERVED' && !selected ? '4 2' : undefined;
+
+  // On a solid tier swatch the label colour follows the swatch, not the theme.
+  const onSwatch = swatch && !neutral && fillOpacity === 1 ? bestForeground(swatch) : null;
+  const labelFill = onSwatch ?? (dark ? BOOTH_LABEL_DARK : BOOTH_LABEL_LIGHT);
+  const dimFill = onSwatch ?? (dark ? BOOTH_DIM_DARK : BOOTH_DIM_LIGHT);
+  const vendorFill = onSwatch ?? (dark ? BOOTH_VENDOR_DARK : BOOTH_VENDOR_LIGHT);
 
   const displayLabel = booth.label;
   const statusText = STATUS_LABELS[booth.status] || booth.status;
@@ -172,7 +182,7 @@ export default function Booth({
         </g>
       )}
 
-      {selected && !handles && (
+      {selected && !handles && checkmark && (
         <g pointerEvents="none">
           <circle cx={x + w - 7} cy={y + 7} r={5} fill={dark ? SELECTION_STROKE_DARK : SELECTION_STROKE_LIGHT} />
           <path d={`M ${x + w - 9.5} ${y + 7} l 1.8 1.8 l 3.2 -3.6`} stroke={dark ? CHECKMARK_DARK : CHECKMARK_LIGHT} strokeWidth={1.4} fill="none" strokeLinecap="round" strokeLinejoin="round" />
@@ -184,7 +194,7 @@ export default function Booth({
         y={y + h / 2 - (booth.status === 'AVAILABLE' ? 0 : 4)}
         textAnchor="middle"
         dominantBaseline="central"
-        fill={dark ? BOOTH_LABEL_DARK : BOOTH_LABEL_LIGHT}
+        fill={labelFill}
         fontSize={Math.min(12, Math.max(7, w / 3))}
         fontWeight={500}
         pointerEvents="none"
@@ -198,7 +208,8 @@ export default function Booth({
           y={y + h / 2 + 12}
           textAnchor="middle"
           dominantBaseline="central"
-          fill={dark ? BOOTH_DIM_DARK : BOOTH_DIM_LIGHT}
+          fill={dimFill}
+          fillOpacity={onSwatch ? 0.8 : 1}
           fontSize={Math.min(9, Math.max(5, w / 5))}
           pointerEvents="none"
         >
@@ -212,7 +223,7 @@ export default function Booth({
           y={y + h - 6}
           textAnchor="middle"
           dominantBaseline="central"
-          fill={dark ? BOOTH_VENDOR_DARK : BOOTH_VENDOR_LIGHT}
+          fill={vendorFill}
           fontSize={Math.min(8, Math.max(5, w / 5))}
           pointerEvents="none"
           fontStyle="italic"

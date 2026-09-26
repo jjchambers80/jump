@@ -140,7 +140,10 @@ const assignableApps = [
   },
 ];
 
+const savedLayouts: { booths: Booth[] }[] = [];
+
 async function mockMapsApi(page: Page) {
+  savedLayouts.length = 0;
   // The admin shell resolves the active org from this list; without it every
   // org-scoped page stays on its loading state.
   await page.route(`${API}/organizations`, (route) =>
@@ -191,6 +194,20 @@ async function mockMapsApi(page: Page) {
       body: JSON.stringify(mapDetail),
     })
   );
+
+  // Builder autosave: echo the layout back with server ids, like MapService.replaceLayout.
+  await page.route(`${API}/admin/maps/${MAP_ID}/layout`, async (route) => {
+    const body = route.request().postDataJSON() as { booths: Booth[] };
+    savedLayouts.push(body);
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ...mapDetail,
+        booths: body.booths.map((b) => booths.find((x) => x.label === b.label) ?? { ...b, id: `srv-${b.label}`, mapId: MAP_ID, status: 'AVAILABLE' }),
+      }),
+    });
+  });
 
   await page.route(`${API}/admin/maps/${MAP_ID}/booths/*/assignable*`, async (route) => {
     const url = new URL(route.request().url());
@@ -323,12 +340,10 @@ test('lists maps with event and booth counts', async ({ page }) => {
   await expect(rows.nth(0)).toContainText('1 / 3');
 });
 
-// Selecting a booth on the SVG canvas opens its panel under the Properties tab.
+// Selecting a booth on the canvas swaps the details panel to that booth.
 async function selectBooth(page: Page, label: string) {
   await page.getByTestId(`booth-${label}`).click();
-  const properties = page.getByRole('button', { name: 'Properties' });
-  await expect(properties).toBeEnabled();
-  await properties.click();
+  await expect(page.getByRole('heading', { name: new RegExp(`^(Booth|Table) ${label}$`) })).toBeVisible();
 }
 
 test('opens builder and selects a booth', async ({ page }) => {
@@ -379,6 +394,69 @@ test('blocks a booth and makes it available again', async ({ page }) => {
   await expect(page.getByTestId('booth-A1')).toHaveAttribute('aria-label', /Blocked/);
   await page.getByRole('button', { name: 'Make available' }).click();
   await expect(page.getByTestId('booth-A1')).toHaveAttribute('aria-label', /Available/);
+});
+
+test('clicking a palette tile adds a booth and autosaves it', async ({ page }) => {
+  await gotoBuilder(page);
+  await page.getByTestId('palette-BOOTH').click();
+  // Next number after A1–A3, selected and shown in the details panel.
+  await expect(page.getByTestId('booth-A4')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Booth A4' })).toBeVisible();
+  await expect(page.getByText('All changes saved')).toBeVisible({ timeout: 10_000 });
+  expect(savedLayouts.at(-1)?.booths.map((b) => b.label)).toContain('A4');
+});
+
+test('dragging a palette tile onto the floor drops it there', async ({ page }) => {
+  await gotoBuilder(page);
+  const canvas = page.locator('.map-builder-canvas');
+  const box = (await canvas.boundingBox())!;
+  await page.getByTestId('palette-stage').dragTo(canvas, {
+    targetPosition: { x: box.width / 2, y: box.height / 2 },
+  });
+  await expect(page.getByRole('heading', { name: 'Stage' })).toBeVisible();
+});
+
+test('adds rows of booths from the dialog', async ({ page }) => {
+  await gotoBuilder(page);
+  await page.getByTestId('palette-BLOCK').click();
+  const dialog = page.getByRole('dialog', { name: 'Add rows of booths' });
+  await dialog.getByLabel('Rows', { exact: true }).fill('1');
+  await dialog.getByLabel('Booths per row').fill('3');
+  await dialog.getByLabel('Letter in front (optional)').fill('C');
+  await dialog.getByRole('button', { name: 'Add 3 booths' }).click();
+  await expect(dialog).toHaveCount(0);
+  for (const label of ['C1', 'C2', 'C3']) await expect(page.getByTestId(`booth-${label}`)).toBeVisible();
+  await expect(page.getByRole('heading', { name: '3 selected' })).toBeVisible();
+});
+
+test('moves a selected booth with the arrow keys and undoes it', async ({ page }) => {
+  await gotoBuilder(page);
+  await selectBooth(page, 'A2');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowDown');
+  await expect(page.getByText('All changes saved')).toBeVisible({ timeout: 10_000 });
+  expect(savedLayouts.at(-1)?.booths.find((b) => b.label === 'A2')?.y).toBe(2);
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect(page.getByRole('button', { name: 'Undo' })).toBeDisabled();
+});
+
+test('drags a booth to move it and drags its corner to resize it', async ({ page }) => {
+  await gotoBuilder(page);
+  const a2 = (await page.getByTestId('booth-A2').boundingBox())!;
+  const perFoot = a2.width / 10;
+  await page.mouse.move(a2.x + a2.width / 2, a2.y + a2.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(a2.x + a2.width / 2 + perFoot * 5, a2.y + a2.height / 2 + perFoot * 20, { steps: 8 });
+  await page.mouse.up();
+  const handle = (await page.locator('[data-resize-handle] rect').boundingBox())!;
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(handle.x + handle.width / 2 + perFoot * 6, handle.y + handle.height / 2 + perFoot * 2, { steps: 6 });
+  await page.mouse.up();
+  await expect(page.getByText('All changes saved')).toBeVisible({ timeout: 10_000 });
+  const saved = savedLayouts.at(-1)!.booths.find((b) => b.label === 'A2')!;
+  expect({ x: saved.x, y: saved.y, w: saved.w, h: saved.h }).toEqual({ x: 17, y: 20, w: 16, h: 12 });
 });
 
 test('sidebar Maps entry navigates to maps list', async ({ page }) => {
