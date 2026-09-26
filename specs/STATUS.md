@@ -34,6 +34,7 @@ Last updated: 2026-09-22.
 | 023 | Legal and compliance foundation | **Phase 0 built** | Spec written 2026-09-18 (PR #82). Phase 0 on `main` 2026-09-19. No legal text yet. |
 | 033 | Venue time zones — make the venue zone authoritative for event times, then derive it from the postal code | **Implemented** | All three phases built 2026-09-22 (PRs #137 / #138 / #139, stacked; merge in order). See `docs/wiki/features/venue-time-zones.md`. |
 | 034 | RSVP events — free admission, headcount and marketing capture | **Implemented** | All three phases + §9.2 reminder email built 2026-09-22. Phases 1-3 (PR #150). Reminder sweep: backend service, migration, unit tests (this card). See `docs/wiki/features/rsvp-events.md`. |
+| 037 | Booth-first application flow — the vendor picks their booth on the apply form, held through review | **Implemented** | Build 2026-09-25 (`specs/037-booth-first-application/implementation.md`, EVE-23, stacked on the booth hold hardening in EVE-4). `Booth.holdKind` splits the checkout clock from the review clock. Numbered 037 because 036 was taken by vendor door check-in. |
 
 ## Documents archived as historical
 

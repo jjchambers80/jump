@@ -1233,6 +1233,19 @@ enum BoothStatus {
   BLOCKED
 }
 
+// What a HELD booth is waiting for, and therefore which clock `holdExpiresAt`
+// runs on (spec 037). HELD used to mean exactly one thing — a checkout in
+// flight, 15 minutes — so a booth chosen before submission had nowhere to live.
+//
+//   APPLICATION  an undecided or unpaid application owns this booth. The clock
+//                is the application's own: the review deadline while the
+//                organizer decides, then the order's payment due date.
+//   CHECKOUT     money is moving right now. The clock is BOOTH_HOLD_MS.
+enum BoothHoldKind {
+  APPLICATION
+  CHECKOUT
+}
+
 model FloorMap {
   id              String         @id @default(cuid())
   organizationId  String
@@ -1290,7 +1303,8 @@ model Booth {
   tierId            String? // ApplicationTier that sells this booth
   status            BoothStatus @default(AVAILABLE)
   applicationId     String?     @unique // SOLD / RESERVED holder
-  holdApplicationId String?     @unique // HELD by (checkout in flight)
+  holdApplicationId String?     @unique // HELD by
+  holdKind          BoothHoldKind? // why it is HELD — see the enum; null unless HELD
   holdExpiresAt     DateTime?
   assignedById      String? // staff who assigned manually
 
@@ -1303,16 +1317,19 @@ model Booth {
   // holdApplication has no explicit FK — it references the same Application table for HELD state.
   // Uniqueness is the point, not referential integrity: `holdApplicationId @unique` is the
   // database backstop that stops one application holding two booths, mirroring `applicationId`
-  // for SOLD. A `Booth_hold_state_check` CHECK constraint (migration
-  // 20261009100000_booth_hold_uniqueness, not expressible in Prisma schema) pins
-  // status = 'HELD' ⇔ holdApplicationId AND holdExpiresAt are both set, so the hold slot can
-  // never be parked on a booth in another status to slip past that index. An FK would conflict:
+  // for SOLD. A `Booth_hold_state_check` CHECK constraint (migrations
+  // 20261009100000_booth_hold_uniqueness and 20261009120000_booth_first_application, not
+  // expressible in Prisma schema) pins status = 'HELD' ⇔ holdApplicationId, holdExpiresAt
+  // AND holdKind are all set, so the hold slot can never be parked on a booth in another
+  // status to slip past that index, and no hold can exist without a stated clock to expire
+  // on. An FK would conflict:
   // ON DELETE SET NULL would leave a HELD booth with no holder and violate the CHECK. A deleted
   // application's dangling hold is reclaimed by BoothService.sweepExpiredHolds instead.
 
   @@unique([mapId, label])
   @@index([mapId, status])
   @@index([tierId])
+  @@index([holdKind, holdExpiresAt])
 }
 
 // ─── Applications (spec 011) ───────────────────────────────────────────────

@@ -480,14 +480,37 @@ class ApplicationPaymentService {
   /** Setup complete: the card is on file and the application is submitted. */
   async _markCardOnFile(applicationId, paymentMethodId, customerId, { purpose }) {
     return prisma.$transaction(async (tx) => {
-      const application = await tx.application.findUnique({ where: { id: applicationId }, select: { id: true, status: true, paymentStatus: true, contactId: true } });
+      const application = await tx.application.findUnique({
+        where: { id: applicationId },
+        select: { id: true, status: true, paymentStatus: true, contactId: true, event: { select: { date: true } } },
+      });
       if (!application) return null;
       if (customerId) await tx.contact.update({ where: { id: application.contactId }, data: { stripeCustomerId: customerId } }).catch(() => {});
       const data = { stripePaymentMethodId: paymentMethodId };
       let transition = null;
       if (application.status === 'DRAFT') {
-        Object.assign(data, { status: 'SUBMITTED', submittedAt: new Date(), paymentStatus: 'CARD_ON_FILE' });
+        const submittedAt = new Date();
+        Object.assign(data, { status: 'SUBMITTED', submittedAt, paymentStatus: 'CARD_ON_FILE' });
         transition = 'SUBMITTED';
+        // Booth-first (spec 037): the booth was held on the short checkout clock
+        // while the applicant was on Stripe. Now that the card is here and the
+        // organizer has something to review, move it to the review clock. A null
+        // result means the applicant took longer than the hold and the booth is
+        // gone — drop the label rather than name a booth somebody else can buy.
+        const held = await boothService.promoteToReview(applicationId, {
+          tx,
+          submittedAt,
+          eventStartsAt: application.event?.date ?? null,
+        });
+        if (!held) {
+          const still = await boothService.boothForApplication(applicationId, { tx });
+          if (!still) {
+            data.boothLabel = null;
+            logger.warn('Booth-first hold expired before the card landed', {
+              event: 'booth_first_hold_lost', applicationId,
+            });
+          }
+        }
       } else if (purpose === 'update_card' && application.paymentStatus === 'PAYMENT_DUE') {
         // A new card after a failed charge: leave PAYMENT_DUE, the applicant pays now or the organizer retries.
         transition = 'CARD_UPDATED';
