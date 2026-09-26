@@ -987,6 +987,185 @@ class EventService {
   }
 
   /**
+   * Everything the admin Event Details page shows, in one request (spec 037
+   * phase 1): the event itself, sales and money, add-ons, application forms
+   * with counts by state, the floor map with booths by state, attendees and
+   * RSVPs. Read-only; each section edits on its own page.
+   */
+  async getEventOverview(orgId, eventId) {
+    const event = await prisma.event.findFirst({
+      where: { id: eventId, venue: { organizationId: orgId } },
+      include: {
+        venue: {
+          include: {
+            organization: {
+              select: { id: true, slug: true, name: true, logoUrl: true, brandColor: true, themeMode: true, taxInclusivePricing: true, buyerSignInLinks: true },
+            },
+          },
+        },
+        priceTiers: { orderBy: { displayOrder: 'asc' } },
+        applicationForms: {
+          orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
+          include: {
+            tiers: {
+              orderBy: { displayOrder: 'asc' },
+              select: { id: true, name: true, price: true, quantityTotal: true, quantityApproved: true, quantityReserved: true, isActive: true },
+            },
+          },
+        },
+        floorMap: { select: { id: true, name: true, status: true, publishedAt: true, updatedAt: true } },
+      },
+    });
+    if (!event) throw new NotFoundError('Event not found');
+
+    const isRsvp = event.admissionMode === 'RSVP';
+    const round = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+    const formIds = event.applicationForms.map((f) => f.id);
+
+    const [
+      money,
+      refunds,
+      ticketsByStatus,
+      addOnSales,
+      appsByStatus,
+      appsByPayment,
+      boothsByStatus,
+      boothsByTier,
+      rsvpGoing,
+      rsvpCancelled,
+    ] = await Promise.all([
+      prisma.order.groupBy({
+        by: ['kind'],
+        where: { eventId, status: { in: PAID_ORDER_STATUSES } },
+        _sum: { totalAmount: true, orgReceives: true },
+        _count: { id: true },
+      }),
+      prisma.refund.aggregate({
+        where: { status: 'SUCCEEDED', order: { eventId } },
+        _sum: { amount: true },
+      }),
+      prisma.ticket.groupBy({ by: ['status'], where: { eventId }, _count: { id: true } }),
+      addOnService.sales(orgId, eventId),
+      formIds.length
+        ? prisma.application.groupBy({
+            by: ['formId', 'status'],
+            where: { formId: { in: formIds }, status: { not: 'DRAFT' } },
+            _count: { id: true },
+          })
+        : [],
+      formIds.length
+        ? prisma.application.groupBy({
+            by: ['formId', 'paymentStatus'],
+            where: { formId: { in: formIds }, status: 'APPROVED' },
+            _count: { id: true },
+          })
+        : [],
+      event.floorMap
+        ? prisma.booth.groupBy({ by: ['status'], where: { mapId: event.floorMap.id }, _count: { id: true } })
+        : [],
+      event.floorMap
+        ? prisma.booth.groupBy({ by: ['tierId'], where: { mapId: event.floorMap.id }, _count: { id: true } })
+        : [],
+      isRsvp
+        ? prisma.eventRsvp.aggregate({ where: { eventId, status: 'GOING' }, _sum: { partySize: true }, _count: { id: true } })
+        : null,
+      isRsvp ? prisma.eventRsvp.count({ where: { eventId, status: 'CANCELLED' } }) : 0,
+    ]);
+
+    // Money: paid orders of both kinds (spec 024 one ledger).
+    const byKind = (kind) => money.find((m) => m.kind === kind);
+    const sumOf = (row, field) => Number(row?._sum?.[field] || 0);
+    const kinds = ['TICKET', 'APPLICATION'];
+    const gross = round(kinds.reduce((s, k) => s + sumOf(byKind(k), 'totalAmount'), 0));
+    const refunded = round(Number(refunds._sum.amount || 0));
+
+    const ticketCount = (status) => ticketsByStatus.find((t) => t.status === status)?._count.id || 0;
+    const issued = ticketsByStatus
+      .filter((t) => t.status !== 'VOIDED')
+      .reduce((s, t) => s + t._count.id, 0);
+
+    const countFor = (rows, formId, key, value) =>
+      rows.find((r) => r.formId === formId && r[key] === value)?._count.id || 0;
+    const APPLICATION_STATES = ['SUBMITTED', 'WAITLISTED', 'APPROVED', 'REJECTED', 'WITHDRAWN'];
+
+    const forms = event.applicationForms.map((f) => {
+      const counts = Object.fromEntries(APPLICATION_STATES.map((s) => [s, countFor(appsByStatus, f.id, 'status', s)]));
+      const approvedPaid = ['PAID', 'PARTIALLY_REFUNDED', 'NOT_REQUIRED'].reduce(
+        (s, p) => s + countFor(appsByPayment, f.id, 'paymentStatus', p),
+        0
+      );
+      return {
+        id: f.id,
+        name: f.name,
+        slug: f.slug,
+        kind: f.kind,
+        status: f.status,
+        opensAt: f.opensAt,
+        closesAt: f.closesAt,
+        paid: f.tiers.some((t) => Number(t.price) > 0),
+        counts,
+        total: APPLICATION_STATES.reduce((s, k) => s + counts[k], 0),
+        approvedSettled: approvedPaid,
+        approvedAwaitingPayment: counts.APPROVED - approvedPaid,
+        tiers: f.tiers.map((t) => ({
+          id: t.id,
+          name: t.name,
+          price: Number(t.price),
+          quantityTotal: t.quantityTotal,
+          quantityApproved: t.quantityApproved,
+          quantityReserved: t.quantityReserved,
+          isActive: t.isActive,
+          booths: boothsByTier.find((b) => b.tierId === t.id)?._count.id || 0,
+        })),
+      };
+    });
+
+    if (isRsvp) event.rsvpHeadcount = Number(rsvpGoing._sum.partySize || 0);
+
+    const BOOTH_STATES = ['AVAILABLE', 'HELD', 'SOLD', 'RESERVED', 'BLOCKED'];
+    const map = event.floorMap
+      ? {
+          ...event.floorMap,
+          booths: Object.fromEntries(
+            BOOTH_STATES.map((s) => [s, boothsByStatus.find((b) => b.status === s)?._count.id || 0])
+          ),
+          boothTotal: boothsByStatus.reduce((s, b) => s + b._count.id, 0),
+          unassignedBooths: boothsByTier.find((b) => b.tierId === null)?._count.id || 0,
+        }
+      : null;
+
+    return {
+      event: this._formatEventDetail(event),
+      money: {
+        gross,
+        orgReceives: round(kinds.reduce((s, k) => s + sumOf(byKind(k), 'orgReceives'), 0)),
+        refunded,
+        net: round(gross - refunded),
+        tickets: { orders: byKind('TICKET')?._count.id || 0, gross: round(sumOf(byKind('TICKET'), 'totalAmount')) },
+        applications: { orders: byKind('APPLICATION')?._count.id || 0, gross: round(sumOf(byKind('APPLICATION'), 'totalAmount')) },
+      },
+      tickets: isRsvp
+        ? null
+        : {
+            issued,
+            checkedIn: ticketCount('REDEEMED'),
+            voided: ticketCount('VOIDED'),
+          },
+      rsvp: isRsvp
+        ? {
+            going: rsvpGoing._count.id,
+            headcount: Number(rsvpGoing._sum.partySize || 0),
+            cancelled: rsvpCancelled,
+            remaining: remainingFor(event.rsvpLimit, Number(rsvpGoing._sum.partySize || 0)),
+          }
+        : null,
+      addOns: addOnSales,
+      applications: { forms },
+      map,
+    };
+  }
+
+  /**
    * Revenue by source for the analytics page (spec 018 phase 2). Ticket and
    * add-on lines are listed-price sums of what is currently sold, so refunded
    * lines are already excluded; application revenue is the gross collected and

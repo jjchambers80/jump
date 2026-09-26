@@ -16,7 +16,7 @@ import { TierCard, TierEditDialog, type TierFormData } from '@/components/TierEd
 import AddOnsSection from './AddOnsSection';
 import SlugField from '@/components/SlugField';
 import VenueFlyout, { NEW_VENUE_OPTION, type CreatedVenue } from '@/components/VenueFlyout';
-import { EventEditSummary, EventSaveCard, EventStatusPill, tierAccent } from '@/components/events/EventEditSummary';
+import { EventEditSummary, EventSaveCard, EventStatusPill, jumpTo, tierAccent } from '@/components/events/EventEditSummary';
 import { DEFAULT_ZONE, formatEventDateTime, formatEventTime, instantToZonedInput, zonedInputToInstant, zonedInputToIso } from '@/lib/eventTime';
 import { timeZoneLabel } from '@/lib/timeZones';
 import {
@@ -197,6 +197,8 @@ function EditEventContent() {
   const searchParams = useSearchParams();
   const eventId = params.eventId as string;
   const orgId = searchParams.get('orgId');
+  // Spec 037: the event's read-only Details page is where editing starts and ends.
+  const detailsHref = `/admin/events/${eventId}${orgId ? `?orgId=${encodeURIComponent(orgId)}` : ''}`;
 
   const [venues, setVenues] = useState<Venue[]>([]);
   const [venuesLoading, setVenuesLoading] = useState(false);
@@ -314,6 +316,14 @@ function EditEventContent() {
     };
     fetchEvent();
   }, [orgId, eventId]);
+
+  // Deep links from the Details page (#event-admission, …) land on their card
+  // once the form has rendered.
+  useEffect(() => {
+    if (loadingEvent || !eventData) return;
+    const id = window.location.hash.slice(1);
+    if (id) requestAnimationFrame(() => jumpTo(id));
+  }, [loadingEvent, eventData]);
 
   // D11 lock: check if mode can be changed after loading
   useEffect(() => {
@@ -584,7 +594,7 @@ function EditEventContent() {
         await api.patch(`/organizations/${orgId}/events/${eventId}`, payload);
       }
       setSuccess(true);
-      setTimeout(() => router.push('/admin/events'), 1000);
+      setTimeout(() => router.push(detailsHref), 1000);
     } catch (err: any) {
       if (err?.status === 409) {
         setSlugError(err?.message || 'This slug is already taken. Please choose another.');
@@ -643,7 +653,7 @@ function EditEventContent() {
 
   const logoSrc = resolveAssetUrl(logoUrl);
 
-  const cancel = () => router.push('/admin/events');
+  const cancel = () => router.push(detailsHref);
   const actionProps = {
     submitLabel: 'Save Changes',
     savingLabel: 'Saving…',
@@ -704,7 +714,7 @@ function EditEventContent() {
                 onClick={cancel}
                 className="text-sm text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
               >
-                ← Back to Events
+                ← Back to event
               </button>
               <a
                 href={`/events/${eventId}`}

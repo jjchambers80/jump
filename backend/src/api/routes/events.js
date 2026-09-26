@@ -229,6 +229,20 @@ orgRouter.get('/:eventId/analytics', requireAuth, requireOrganizer, async (req, 
 });
 
 /**
+ * GET /organizations/:orgId/events/:eventId/overview
+ * The admin Event Details page in one request (spec 037 phase 1): event,
+ * money, tickets or RSVPs, add-on sales, application forms, floor map.
+ */
+orgRouter.get('/:eventId/overview', requireAuth, requireOrganizer, requireOrgMembership(), async (req, res, next) => {
+  try {
+    const { orgId, eventId } = req.params;
+    res.json(await eventService.getEventOverview(orgId, eventId));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * POST /organizations/:orgId/events/:eventId/logo
  * Upload event logo image
  */

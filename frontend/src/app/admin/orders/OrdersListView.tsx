@@ -41,7 +41,7 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
 }
 
-export default function OrdersListView() {
+export default function OrdersListView({ initialEventId = '' }: { initialEventId?: string } = {}) {
   const { selectedOrgId } = useOrg();
   const { data: session } = useSession();
   const accessToken = (session as { accessToken?: string } | null)?.accessToken;
@@ -52,10 +52,10 @@ export default function OrdersListView() {
   const [search, setSearch] = useState('');
   const [kind, setKind] = useState<OrderKind | ''>('');
   const [status, setStatus] = useState('');
-  const [eventFilter, setEventFilter] = useState('');
+  const [eventFilter, setEventFilter] = useState(initialEventId);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState(Boolean(initialEventId));
   const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);

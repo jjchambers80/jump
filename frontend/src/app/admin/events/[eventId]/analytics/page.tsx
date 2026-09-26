@@ -173,10 +173,10 @@ export default function EventAnalyticsPage() {
     <div className="max-w-5xl mx-auto px-4 py-8">
       {/* Back link */}
       <Link
-        href="/admin/events"
+        href={`/admin/events/${eventId}`}
         className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 mb-6 inline-block"
       >
-        ← Back to Events
+        ← Back to event
       </Link>
 
       <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Event Analytics</h1>

@@ -19,6 +19,8 @@ function AdminOrdersPage() {
   const searchParams = useSearchParams();
   const [view, setView] = useState<View>('orders');
   const [urlSearch, setUrlSearch] = useState('');
+  // ?eventId= pre-filters the orders list (spec 037: Event Details › Sales).
+  const urlEventId = searchParams.get('eventId') || '';
 
   // On first render, prefer URL params over localStorage so that
   // admin search TICKET rows (spec 029) land in the right view.
@@ -95,7 +97,7 @@ function AdminOrdersPage() {
       </div>
 
       {view === 'orders' ? (
-        <OrdersListView />
+        <OrdersListView key={urlEventId} initialEventId={urlEventId} />
       ) : (
         <TicketRowsView initialSearch={urlSearch} />
       )}

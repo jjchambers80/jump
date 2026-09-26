@@ -27,8 +27,8 @@ export default function ApplicationsHeader({ eventId, title, subtitle }: { event
 
   return (
     <div className="mb-6">
-      <Link href="/admin/events" className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300">
-        ← Back to Events
+      <Link href={`/admin/events/${eventId}`} className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300">
+        ← Back to event
       </Link>
       <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
         <div>
