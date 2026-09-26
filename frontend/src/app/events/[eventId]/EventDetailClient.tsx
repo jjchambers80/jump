@@ -17,15 +17,18 @@ import StorefrontFooter from '../../../components/storefront/StorefrontFooter';
 import GetInvolved from './GetInvolved';
 import FloorMapPreview from './FloorMapPreview';
 import RsvpPass from './RsvpPass';
+import TierStub from './TierStub';
 import CartLineItem from '../../../components/CartLineItem';
 import OrderTotals from '../../../components/OrderTotals';
 import ExpandCollapseAll from '../../../components/ExpandCollapseAll';
 import EmptyCart from '../../../components/EmptyCart';
-import { computeOrderFees, computeTierAllInPrice, formatPrice } from '../../../lib/fees';
+import { computeOrderFees, formatPrice } from '../../../lib/fees';
 import AddOnPicker from '../../../components/AddOnPicker';
 import { offeredAddOns, addOnMaxQuantity, type AddOn } from '../../../lib/addOns';
 import type { ThemeMode } from '@/lib/theme';
 import { formatEventDate, formatEventTime } from '@/lib/eventTime';
+import { dateTile } from '@/lib/dateTile';
+import { CalendarDays, ChevronRight, Clock, Info, Lock, MapPin } from 'lucide-react';
 import { fetchLegalVersions, type LegalVersions } from '@/lib/legal';
 import ContentHtml from '@/components/storefront/ContentHtml';
 
@@ -246,6 +249,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
   const zone = event.venue?.timezone;
   const formattedDate = formatEventDate(event.date, zone, { weekday: 'long', month: 'long' });
   const formattedTime = formatEventTime(event.date, zone);
+  const tile = dateTile(event.date, zone);
 
   const isPastEvent = eventDate < new Date();
   const activeTiers = event.priceTiers.filter((t) => t.isActive);
@@ -297,114 +301,103 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
           signIn={event.organizationSignInLinks !== false}
         />
       )}
-      <div className={`max-w-6xl mx-auto px-0 sm:px-6 lg:px-8 py-0 sm:py-12 ${isRsvpMode ? 'lg:block' : 'lg:flex lg:gap-6 lg:items-start'}`}>
+      <div className={`max-w-6xl mx-auto px-0 sm:px-6 lg:px-8 py-0 sm:py-12 ${isRsvpMode ? 'lg:block' : 'lg:flex lg:gap-8 lg:items-start'}`}>
         {/* RSVP mode drops overflow-hidden so the pass can stick; the hero clips its own corners */}
-        <div className={`flex-1 min-w-0 bg-transparent sm:bg-white sm:dark:bg-slate-800 rounded-none sm:rounded-lg sm:shadow-lg sm:dark:shadow-lg sm:dark:shadow-black/20 ${isRsvpMode ? '' : 'overflow-hidden'}`}>
-          {/* Hero Header */}
+        <div className={`flex-1 min-w-0 bg-transparent sm:bg-white sm:dark:bg-slate-800 rounded-none sm:rounded-2xl sm:border sm:border-gray-200 sm:dark:border-slate-700 sm:shadow-sm sm:dark:shadow-black/20 ${isRsvpMode ? '' : 'overflow-hidden'}`}>
+          {/* Hero: blurred poster behind the title block, date tile, venue */}
           <div className="relative">
             {/* Background layers - clipped */}
-            <div className="absolute inset-0 overflow-hidden sm:rounded-t-lg">
-              {/* Blurred background image */}
+            <div className="absolute inset-0 overflow-hidden bg-slate-900 sm:rounded-t-2xl">
               {event.logoUrl && (
                 <div
-                  className="absolute inset-0 bg-cover bg-center"
+                  className="absolute inset-0 bg-cover bg-center opacity-70"
                   style={{
                     backgroundImage: `url(${resolveAssetUrl(event.logoUrl)})`,
-                    filter: 'blur(20px)',
-                    transform: 'scale(1.1)',
+                    filter: 'blur(28px) saturate(1.2)',
+                    transform: 'scale(1.15)',
                   }}
                 />
               )}
-              {/* Dark gradient overlay */}
-              <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/70 to-black/50" />
+              <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/70 to-black/40" />
+              <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/40 to-transparent" />
             </div>
 
-            {/* Content */}
-            <div className="relative flex items-center justify-between p-6 sm:p-8">
-              <div className="flex-1 min-w-0 pr-4">
-                {event.category && (
-                  <span className="inline-block bg-white/15 backdrop-blur-sm text-white text-xs font-medium px-3 py-1 rounded-full mb-3">
-                    {event.category}
-                  </span>
-                )}
-                {event.organizationName && (
-                  <p className="text-sm font-medium text-gray-300 mb-1">
-                    {event.organizationId ? (
-                      <Link
-                        href={`/organizations/${event.organizationId}`}
-                        className="hover:text-white hover:underline transition-colors"
-                      >
-                        {event.organizationName}
-                      </Link>
-                    ) : (
-                      event.organizationName
-                    )}
-                  </p>
-                )}
-                <h1 className="text-2xl sm:text-4xl font-bold text-white mb-3">{event.name}</h1>
-
-                <div className="flex items-center text-gray-200 mb-2">
-                  <svg className="w-5 h-5 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                    />
-                  </svg>
-                  <span>
-                    {formattedDate} at {formattedTime}
-                  </span>
-                </div>
-
-                {event.venue && (
-                  <div className="flex items-center text-gray-200">
-                    <svg className="w-5 h-5 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                      />
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                      />
-                    </svg>
-                    <div>
-                      {event.venue.isPublic ? (
+            <div className="relative flex items-center justify-between gap-8 p-6 sm:p-10">
+              <div className="min-w-0 flex-1">
+                <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+                  {event.category && (
+                    <span className="inline-block rounded-full bg-white/15 px-3 py-1 text-xs font-medium text-white ring-1 ring-inset ring-white/20 backdrop-blur-sm">
+                      {event.category}
+                    </span>
+                  )}
+                  {event.organizationName && (
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-300">
+                      {event.organizationId ? (
                         <Link
-                          href={`/venues/${event.venue.id}`}
-                          className="text-white hover:underline"
+                          href={`/organizations/${event.organizationId}`}
+                          className="transition-colors hover:text-white hover:underline"
                         >
-                          {event.venue.name}
+                          {event.organizationName}
                         </Link>
                       ) : (
-                        <span>{event.venue.name}</span>
+                        event.organizationName
                       )}
-                      <span className="text-gray-300 text-sm block">
-                        {event.venue.address}
-                      </span>
+                    </p>
+                  )}
+                </div>
+                <h1 className="text-balance text-3xl font-extrabold leading-[1.05] tracking-tight text-white sm:text-[2.75rem]">
+                  {event.name}
+                </h1>
+
+                <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-8">
+                  <div className="flex items-center gap-3">
+                    {tile ? (
+                      <div
+                        aria-hidden
+                        className="flex w-14 shrink-0 flex-col items-center rounded-xl bg-white/10 py-1.5 text-white ring-1 ring-inset ring-white/20 backdrop-blur-sm"
+                      >
+                        <span className="text-[10px] font-bold uppercase tracking-[0.16em] opacity-80">{tile.month}</span>
+                        <span className="text-[22px] font-extrabold leading-none tabular-nums">{tile.day}</span>
+                      </div>
+                    ) : (
+                      <CalendarDays className="h-5 w-5 shrink-0 text-gray-200" aria-hidden />
+                    )}
+                    <div className="leading-snug">
+                      <p className="font-semibold text-white">{formattedDate}</p>
+                      <p className="text-sm text-gray-300">{formattedTime}</p>
                     </div>
                   </div>
-                )}
+
+                  {event.venue && (
+                    <div className="flex items-center gap-3">
+                      <div
+                        aria-hidden
+                        className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-white/10 text-white ring-1 ring-inset ring-white/20 backdrop-blur-sm"
+                      >
+                        <MapPin className="h-5 w-5" />
+                      </div>
+                      <div className="min-w-0 leading-snug">
+                        {event.venue.isPublic ? (
+                          <Link href={`/venues/${event.venue.id}`} className="font-semibold text-white hover:underline">
+                            {event.venue.name}
+                          </Link>
+                        ) : (
+                          <p className="font-semibold text-white">{event.venue.name}</p>
+                        )}
+                        <p className="text-sm text-gray-300">{event.venue.address}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 {/* RSVP pages show the description inline under "About" */}
                 {event.description && !isRsvpMode && (
                   <button
+                    type="button"
                     onClick={() => setShowDescription(true)}
-                    className="flex items-center text-indigo-300 hover:text-indigo-200 font-medium mt-4 transition-colors duration-200"
+                    className="mt-6 inline-flex h-9 items-center gap-2 rounded-full bg-white/10 px-4 text-sm font-semibold text-white ring-1 ring-inset ring-white/25 backdrop-blur-sm transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                   >
-                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
+                    <Info className="h-4 w-4" aria-hidden />
                     <span>Event Information</span>
                   </button>
                 )}
@@ -413,14 +406,16 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
               {/* Foreground event image - desktop inline */}
               {event.logoUrl && (
                 <button
+                  type="button"
                   onClick={() => setShowImagePreview(true)}
-                  className="hidden sm:block flex-shrink-0 cursor-pointer hover:opacity-90 transition-opacity"
+                  aria-label={`View ${event.name} image`}
+                  className="group hidden shrink-0 sm:block"
                 >
-                  <div className="w-40 h-40 rounded-lg overflow-hidden bg-black/40 flex items-center justify-center">
+                  <div className="flex h-40 w-40 rotate-2 items-center justify-center overflow-hidden rounded-xl bg-black/40 shadow-2xl shadow-black/50 ring-1 ring-white/15 transition-transform duration-300 ease-out group-hover:rotate-0 group-hover:scale-[1.02] motion-reduce:transition-none lg:h-44 lg:w-44">
                     <img
                       src={resolveAssetUrl(event.logoUrl) || undefined}
                       alt={`${event.name}`}
-                      className="max-w-full max-h-full object-contain"
+                      className="max-h-full max-w-full object-contain"
                     />
                   </div>
                 </button>
@@ -430,14 +425,16 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
             {/* Foreground event image - mobile floating square */}
             {event.logoUrl && (
               <button
+                type="button"
                 onClick={() => setShowImagePreview(true)}
-                className="sm:hidden absolute right-4 bottom-0 translate-y-1/2 z-10 cursor-pointer"
+                aria-label={`View ${event.name} image`}
+                className="absolute bottom-0 right-4 z-10 translate-y-1/2 cursor-pointer sm:hidden"
               >
-                <div className="w-32 h-32 rounded-lg overflow-hidden shadow-lg border-2 border-slate-800 bg-black/40 flex items-center justify-center">
+                <div className="flex h-32 w-32 items-center justify-center overflow-hidden rounded-xl border-2 border-white bg-black/40 shadow-lg dark:border-slate-800">
                   <img
                     src={resolveAssetUrl(event.logoUrl) || undefined}
                     alt={`${event.name}`}
-                    className="max-w-full max-h-full object-contain"
+                    className="max-h-full max-w-full object-contain"
                   />
                 </div>
               </button>
@@ -446,7 +443,13 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
 
           {/* Content area: Tiers (ticketed) or About + RSVP pass (RSVP mode) */}
           {/* The mobile poster hangs 4rem below the hero: the pass must clear it, a heading need not */}
-          <div className={`p-6 sm:p-8 ${event.logoUrl ? (isRsvpMode ? 'pt-24 sm:pt-8' : 'pt-[2em] sm:pt-8') : ''}`}>
+          <div
+            className={
+              isRsvpMode
+                ? `p-6 sm:p-8 ${event.logoUrl ? 'pt-24 sm:pt-8' : ''}`
+                : `px-4 pb-6 sm:p-10 ${event.logoUrl ? 'pt-[4.5rem]' : 'pt-6'}`
+            }
+          >
             {isRsvpMode ? (
               <div className={event.description ? 'grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-12' : 'mx-auto max-w-md'}>
                 {/* Pass first on mobile: it is the one thing to do here */}
@@ -473,22 +476,32 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
               </div>
             ) : (
               <>
-                {/* Ticketed mode — existing tiers */}
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-slate-100 mb-4">Tickets</h2>
+                {/* Ticketed mode — one torn ticket per tier */}
+                <div className="mb-5 flex items-end justify-between gap-4">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-slate-400">
+                      Admission
+                    </p>
+                    <h2 className="mt-0.5 text-2xl font-bold tracking-tight text-gray-900 dark:text-slate-100">Tickets</h2>
+                  </div>
+                  {!isPastEvent && !isSoldOut && activeTiers.length > 0 && (
+                    <p className="pb-1 text-right text-xs text-gray-500 dark:text-slate-400">
+                      Prices include fees{event.taxRate > 0 ? ' and tax' : ''}
+                    </p>
+                  )}
+                </div>
 
                 {isPastEvent ? (
-                  <div className="text-center py-10">
-                    <svg className="w-14 h-14 mx-auto mb-4 text-gray-300 dark:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
+                  <div className="rounded-2xl border border-dashed border-gray-300 px-6 py-10 text-center dark:border-slate-600">
+                    <Clock className="mx-auto mb-4 h-12 w-12 text-gray-300 dark:text-slate-600" strokeWidth={1.5} aria-hidden />
                     <h3 className="text-lg font-semibold text-gray-700 dark:text-slate-300 mb-2">This event has ended</h3>
                     <p className="text-sm text-gray-500 dark:text-slate-400 max-w-sm mx-auto">
                       This event took place on {formattedDate}. Tickets are no longer available for purchase.
                     </p>
                   </div>
                 ) : isSoldOut ? (
-                  <div className="text-center py-8">
-                    <span className="inline-block bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400 px-6 py-3 rounded-full text-lg font-semibold">
+                  <div className="rounded-2xl border border-dashed border-gray-300 px-6 py-10 text-center dark:border-slate-600">
+                    <span className="inline-block -rotate-3 rounded-lg border-[3px] border-double border-red-600 px-5 py-2 text-lg font-extrabold uppercase tracking-[0.2em] text-red-700 dark:border-red-400 dark:text-red-400">
                       Sold Out
                     </span>
                   </div>
@@ -498,132 +511,17 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                   </p>
                 ) : (
                   <div className="space-y-3">
-                    {activeTiers.map((tier) => {
-                      const tierSoldOut = tier.quantityAvailable === 0;
-                      // Only surface the remaining count once it's low enough to
-                      // create urgency; a large number is just noise.
-                      const availabilityText = tierSoldOut
-                        ? 'Sold out'
-                        : tier.quantityAvailable < 10
-                          ? `${tier.quantityAvailable} available`
-                          : null;
-                      const quantity = quantities[tier.id] ?? 0;
-                      const minQuantity = tier.minPerOrder ?? 1;
-                      const maxQuantity = Math.min(
-                        tier.quantityAvailable,
-                        tier.maxPerOrder ?? 10,
-                        10
-                      );
-
-                      return (
-                        <div
-                          key={tier.id}
-                          className={`w-full p-4 rounded-lg border-2 transition-all duration-200 ${
-                            quantity > 0
-                              ? 'border-brand-link bg-gray-50 dark:bg-slate-900/40'
-                              : tierSoldOut
-                                ? 'border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900/50 opacity-60 cursor-not-allowed'
-                                : 'border-gray-200 dark:border-slate-700 hover:border-brand-link bg-white dark:bg-slate-800'
-                          }`}
-                        >
-                          <div className="flex items-stretch justify-between gap-4">
-                            <div>
-                              <h3 className="font-semibold text-gray-900 dark:text-slate-100 flex items-center gap-1.5">
-                                {tier.name}
-                                {tier.description && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setShowTierDescription(tier)}
-                                    className="text-gray-400 dark:text-slate-500 hover:text-brand-link transition-colors"
-                                    aria-label={`${tier.name} details`}
-                                  >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                  </button>
-                                )}
-                              </h3>
-                              {availabilityText && (
-                                <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
-                                  {availabilityText}
-                                </p>
-                              )}
-                              {(() => {
-                                const fees = computeTierAllInPrice(tier.price, event?.taxRate ?? 0, event?.taxInclusivePricing === true);
-                                return (
-                                  <div className="mt-1">
-                                    <span className="text-lg font-bold text-brand-link">
-                                      {formatPrice(fees.total)}
-                                    </span>
-                                    <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">
-                                      {fees.taxInclusive ? (
-                                        <>
-                                          Price: {formatPrice(fees.listedPrice)}
-                                          {fees.tax > 0 && <> (incl. {formatPrice(fees.tax)} tax)</>}
-                                        </>
-                                      ) : (
-                                        <>Base: {formatPrice(fees.basePrice)}</>
-                                      )}
-                                      {fees.fees > 0 && <> + Fees: {formatPrice(fees.fees)}</>}
-                                      {!fees.taxInclusive && fees.tax > 0 && <> + Tax: {formatPrice(fees.tax)}</>}
-                                    </p>
-                                  </div>
-                                );
-                              })()}
-                            </div>
-                            <div
-                              className={`flex flex-col items-end gap-2 ${
-                                tier.isRefundable ? 'justify-center' : 'justify-between'
-                              }`}
-                            >
-                              {!tier.isRefundable && (
-                                <span className="relative inline-flex items-center text-xs text-amber-600 dark:text-amber-400 font-medium group cursor-help">
-                                  Non-refundable
-                                  <svg className="w-3.5 h-3.5 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                  </svg>
-                                  <span className="invisible group-hover:visible absolute bottom-full right-0 mb-2 w-64 bg-gray-900 dark:bg-slate-700 text-white text-xs rounded-lg p-3 shadow-lg z-20 leading-relaxed">
-                                    <span className="font-semibold block mb-1">Non-Refundable Ticket</span>
-                                    This ticket is non-refundable, non-cancellable, and non-transferable after purchase. The delivery of the service is completed upon receiving this ticket by email.
-                                    <span className="absolute top-full right-4 border-4 border-transparent border-t-gray-900 dark:border-t-slate-700" />
-                                  </span>
-                                </span>
-                              )}
-                              <div className="flex items-center gap-3">
-                                <button
-                                  type="button"
-                                  aria-label={`Decrease ${tier.name} quantity`}
-                                  onClick={() => updateQuantity(tier, -1)}
-                                  disabled={tierSoldOut || quantity === 0}
-                                  className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xl font-bold leading-none text-gray-700 dark:text-slate-200 transition-colors hover:border-gray-400 dark:hover:border-slate-500 disabled:opacity-30 disabled:hover:border-gray-300 dark:disabled:hover:border-slate-600"
-                                >
-                                  −
-                                </button>
-                                <span
-                                  className="min-w-6 text-center text-lg font-semibold text-gray-900 dark:text-slate-100"
-                                  aria-label={`${tier.name} quantity`}
-                                >
-                                  {quantity}
-                                </span>
-                                <button
-                                  type="button"
-                                  aria-label={`Increase ${tier.name} quantity`}
-                                  onClick={() => updateQuantity(tier, 1)}
-                                  disabled={
-                                    tierSoldOut ||
-                                    maxQuantity < minQuantity ||
-                                    quantity >= maxQuantity
-                                  }
-                                  className="flex h-10 w-10 items-center justify-center rounded-full bg-brand text-brand-fg text-xl font-bold leading-none transition-opacity hover:opacity-90 disabled:opacity-30 disabled:hover:opacity-30"
-                                >
-                                  +
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
+                    {activeTiers.map((tier) => (
+                      <TierStub
+                        key={tier.id}
+                        tier={tier}
+                        quantity={quantities[tier.id] ?? 0}
+                        taxRate={event.taxRate ?? 0}
+                        taxInclusive={event.taxInclusivePricing === true}
+                        onChange={(direction) => updateQuantity(tier, direction)}
+                        onShowDetails={() => setShowTierDescription(tier)}
+                      />
+                    ))}
                   </div>
                 )}
 
@@ -644,29 +542,36 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
             )}
           </div>
 
-          {/* Applications (spec 011): vendors, sponsors, press, panels */}
-          <GetInvolved eventId={event.id} />
+          {/* Line both up with the ticketed content's gutter (px-4, sm:p-10) */}
+          <div className={isRsvpMode ? '' : '-mx-2 sm:mx-0 sm:px-2'}>
+            {/* Applications (spec 011): vendors, sponsors, press, panels */}
+            <GetInvolved eventId={event.id} />
 
-          {/* Floor map preview (spec 014 phase 1) */}
-          <FloorMapPreview eventId={event.id} />
+            {/* Floor map preview (spec 014 phase 1) */}
+            <FloorMapPreview eventId={event.id} />
+          </div>
         </div>
         {/* End content card */}
 
         {/* Desktop sticky cart — hidden in RSVP mode */}
         {!isRsvpMode && !isPastEvent && !isSoldOut && (
-          <div className="hidden lg:block lg:w-80 flex-shrink-0">
+          <div className="hidden lg:block lg:w-[21rem] flex-shrink-0">
             <div className="sticky top-8">
-              <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg dark:shadow-lg dark:shadow-black/20 p-6">
+              <div className="rounded-2xl border border-gray-200 border-t-4 border-t-brand bg-white p-6 shadow-sm dark:border-slate-700 dark:border-t-brand dark:bg-slate-800 dark:shadow-black/20">
                 <div className="mb-4">
                   <div className="flex items-center justify-between gap-4">
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-slate-100">Order Summary</h3>
+                    <h3 className="text-lg font-bold tracking-tight text-gray-900 dark:text-slate-100">Order Summary</h3>
                     <ExpandCollapseAll
                       allOpen={allLinesOpen}
                       onToggle={toggleAllLines}
                       disabled={cartLines.length === 0}
                     />
                   </div>
-                  <p className="text-sm text-gray-500 dark:text-slate-400">Review your selection</p>
+                  <p className="text-sm text-gray-500 dark:text-slate-400">
+                    {totalQuantity > 0
+                      ? `${totalQuantity} ${totalQuantity === 1 ? 'ticket' : 'tickets'} selected`
+                      : 'Review your selection'}
+                  </p>
                 </div>
 
                 {cartItems.length === 0 ? (
@@ -697,10 +602,15 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
 
                     <button
                       onClick={handleProceedToCheckout}
-                      className="w-full bg-brand hover:bg-brand-hover text-brand-fg font-bold py-3 px-6 rounded-lg transition-colors duration-200 text-lg"
+                      className="group flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-6 py-3.5 text-lg font-bold text-brand-fg transition-colors duration-200 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800"
                     >
                       Proceed to Checkout
+                      <ChevronRight className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-0.5 motion-reduce:transition-none" aria-hidden />
                     </button>
+                    <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-gray-500 dark:text-slate-400">
+                      <Lock className="h-3.5 w-3.5" aria-hidden />
+                      Secure checkout · Tickets sent by email
+                    </p>
                   </>
                 )}
               </div>

@@ -50,6 +50,56 @@ body {
 }
 
 /*
+ * Ticket tier stub (app/events/[eventId]/TierStub.tsx): notches cut at both
+ * ends of the perforation between the details and the price stub. Phones tear
+ * the stub off the bottom (--stub = its h-16 height), sm+ off the right side
+ * (--stub = the 10rem column). The mask clips box-shadow too, so the shadow is
+ * a drop-shadow filter on the wrapper.
+ */
+.tier-stub {
+  --notch: 9px;
+  --stub: 4rem;
+  -webkit-mask:
+    radial-gradient(circle var(--notch) at left calc(100% - var(--stub)), transparent 97%, #000 100%),
+    radial-gradient(circle var(--notch) at right calc(100% - var(--stub)), transparent 97%, #000 100%);
+  -webkit-mask-composite: source-in;
+  mask:
+    radial-gradient(circle var(--notch) at left calc(100% - var(--stub)), transparent 97%, #000 100%),
+    radial-gradient(circle var(--notch) at right calc(100% - var(--stub)), transparent 97%, #000 100%);
+  mask-composite: intersect;
+}
+
+@media (min-width: 640px) {
+  .tier-stub {
+    --stub: 10rem;
+    -webkit-mask:
+      radial-gradient(circle var(--notch) at calc(100% - var(--stub)) top, transparent 97%, #000 100%),
+      radial-gradient(circle var(--notch) at calc(100% - var(--stub)) bottom, transparent 97%, #000 100%);
+    -webkit-mask-composite: source-in;
+    mask:
+      radial-gradient(circle var(--notch) at calc(100% - var(--stub)) top, transparent 97%, #000 100%),
+      radial-gradient(circle var(--notch) at calc(100% - var(--stub)) bottom, transparent 97%, #000 100%);
+    mask-composite: intersect;
+  }
+}
+
+.tier-stub-shadow {
+  filter: drop-shadow(0 1px 1px rgb(15 23 42 / 0.05)) drop-shadow(0 2px 6px rgb(15 23 42 / 0.04));
+  transition: filter 200ms ease;
+}
+
+.tier-stub-shadow:hover,
+.tier-stub-shadow[data-selected='true'] {
+  filter: drop-shadow(0 2px 3px rgb(15 23 42 / 0.07)) drop-shadow(0 10px 22px rgb(15 23 42 / 0.10));
+}
+
+.dark .tier-stub-shadow,
+.dark .tier-stub-shadow:hover,
+.dark .tier-stub-shadow[data-selected='true'] {
+  filter: drop-shadow(0 2px 6px rgb(0 0 0 / 0.35));
+}
+
+/*
  * RSVP admission pass (app/events/[eventId]/RsvpPass.tsx): two notches cut
  * where the stub meets the form. A mask instead of page-colored circles, so the
  * pass works on the white card (sm+) and on the bare page (mobile) alike.
