@@ -89,3 +89,37 @@ test('a tier in the cart is marked selected', async ({ page }) => {
   await expect(page.getByLabel('VIP quantity', { exact: true })).toHaveText('1');
   await expect(page.getByTestId('cart-lines-desktop')).toContainText('VIP');
 });
+
+test('application forms show as short links in the event header', async ({ page }) => {
+  await mockEvent(page);
+  const form = (id: string, name: string, slug: string, acceptance: object) => ({
+    id, name, slug, kind: 'PAID', intro: null, acceptance, chargeTiming: null, feeMode: null, tiers: [], questions: [],
+  });
+  await page.route(`${API}/events/${EVENT_ID}/applications/forms`, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: [
+          form('f-vendor', '2026 Ticket Tiers Vendor Application', 'vendors', { open: true }),
+          form('f-sponsor', 'Sponsorship Packages', 'sponsors', { open: false, reason: 'closed' }),
+        ],
+      }),
+    })
+  );
+  await page.goto(`/events/${EVENT_ID}`);
+
+  const links = page.getByTestId('get-involved');
+  const vendor = links.getByRole('link', { name: /Become a vendor/ });
+  await expect(vendor).toBeVisible({ timeout: 30000 });
+  await expect(vendor).toHaveAttribute('href', `/events/${EVENT_ID}/apply/vendors`);
+  await expect(vendor).toHaveAccessibleName('Become a vendor: 2026 Ticket Tiers Vendor Application');
+  // Closed forms stay visible with their status but are not links
+  await expect(links).toContainText('Become a sponsor');
+  await expect(links).toContainText('Closed');
+  await expect(links.getByRole('link')).toHaveCount(1);
+  // It sits in the header, above the ticket list
+  const headerBox = (await vendor.boundingBox())!;
+  const ticketsBox = (await page.getByRole('heading', { name: 'Tickets' }).boundingBox())!;
+  expect(headerBox.y).toBeLessThan(ticketsBox.y);
+});
