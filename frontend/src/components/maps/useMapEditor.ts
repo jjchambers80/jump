@@ -2,23 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { mapsApi } from '@/services/api';
-import type { AdminMapDetail, MapBooth, MapElement, MapTier, LayoutBoothInput } from '@/services/api';
-
-export type EditorTool =
-  | 'select'
-  | 'booth'
-  | 'table'
-  | 'row'
-  | 'marker'
-  | 'label'
-  | 'wall'
-  | 'stage'
-  | 'entrance'
-  | 'restroom'
-  | 'food'
-  | 'info'
-  | 'firstAid'
-  | 'programming';
+import type { MapBooth, MapElement, MapTier, LayoutBoothInput } from '@/services/api';
 
 export interface EditorState {
   elements: MapElement[];
@@ -34,40 +18,57 @@ export interface EditorState {
   eventId: string;
 }
 
-interface Snapshot {
+export interface Layout {
   elements: MapElement[];
   booths: MapBooth[];
 }
 
-const MAX_UNDO = 100;
-const AUTOSAVE_MS = 2000;
+export type SaveStatus = 'saved' | 'dirty' | 'saving' | 'error';
 
+const MAX_UNDO = 100;
+const AUTOSAVE_MS = 1200;
+
+let tempCounter = 0;
+/** Client id for an item not yet saved; the server assigns booth ids by label on save. */
+export function tempId(prefix: string): string {
+  tempCounter += 1;
+  return `${prefix}-${Date.now().toString(36)}-${tempCounter}`;
+}
+
+/**
+ * Builder state for one floor map: layout + settings, undo/redo, and a
+ * debounced autosave that always writes the *latest* state (read through a
+ * ref, so edits made while a save is in flight are saved next, never lost).
+ */
 export function useMapEditor(mapId: string) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
   const [state, setState] = useState<EditorState | null>(null);
   const [tiers, setTiers] = useState<MapTier[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [activeTool, setActiveTool] = useState<EditorTool>('select');
-  const [dirty, setDirty] = useState(false);
-  const [zoom, setZoom] = useState(1);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [historySize, setHistorySize] = useState({ undo: 0, redo: 0 });
 
-  // Undo stack
-  const undoStack = useRef<Snapshot[]>([]);
-  const redoStack = useRef<Snapshot[]>([]);
+  const stateRef = useRef<EditorState | null>(null);
+  stateRef.current = state;
+  const revision = useRef(0);
+  const savedRevision = useRef(0);
+  const saving = useRef(false);
+  const undoStack = useRef<Layout[]>([]);
+  const redoStack = useRef<Layout[]>([]);
+  const [revisionTick, setRevisionTick] = useState(0);
+  const [retryTick, setRetryTick] = useState(0);
 
-  // Autosave timer
-  const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const syncHistory = () =>
+    setHistorySize({ undo: undoStack.current.length, redo: redoStack.current.length });
 
-  const pushUndo = useCallback((elements: MapElement[], booths: MapBooth[]) => {
-    undoStack.current.push({ elements: JSON.parse(JSON.stringify(elements)), booths: JSON.parse(JSON.stringify(booths)) });
-    if (undoStack.current.length > MAX_UNDO) undoStack.current.shift();
-    redoStack.current = [];
+  const markChanged = useCallback(() => {
+    revision.current += 1;
+    setRevisionTick(revision.current);
+    setSaveStatus('dirty');
   }, []);
 
-  // Load map data
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -96,52 +97,31 @@ export function useMapEditor(mapId: string) {
         setError(err?.message || 'Failed to load map');
         setLoading(false);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [mapId]);
 
-  // Autosave
-  useEffect(() => {
-    if (!dirty || saving) return;
-    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
-    autosaveTimer.current = setTimeout(() => {
-      doSave();
-    }, AUTOSAVE_MS);
-    return () => {
-      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
-    };
-  }, [dirty, saving]);
-
-  // beforeunload guard
-  useEffect(() => {
-    const handler = (e: BeforeUnloadEvent) => {
-      if (dirty) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [dirty]);
-
-  const doSave = useCallback(async () => {
-    if (!state) return;
-    setSaving(true);
+  const save = useCallback(async (): Promise<boolean> => {
+    const current = stateRef.current;
+    if (!current || saving.current) return false;
+    const rev = revision.current;
+    saving.current = true;
+    setSaveStatus('saving');
     setSaveError(null);
     try {
-      const mapSettings = {
-        name: state.name,
-        width: state.width,
-        height: state.height,
-        unit: state.unit,
-        gridSize: state.gridSize,
-        underlayFileId: state.underlayFileId,
-        underlayOpacity: state.underlayOpacity,
-      };
-      await mapsApi.update(mapId, mapSettings);
-
-      const layoutData = {
-        elements: state.elements,
-        booths: state.booths.map((b) => ({
+      await mapsApi.update(mapId, {
+        name: current.name,
+        width: current.width,
+        height: current.height,
+        unit: current.unit,
+        gridSize: current.gridSize,
+        underlayFileId: current.underlayFileId,
+        underlayOpacity: current.underlayOpacity,
+      });
+      const full = await mapsApi.replaceLayout(mapId, {
+        elements: current.elements,
+        booths: current.booths.map((b) => ({
           label: b.label,
           kind: b.kind,
           x: b.x,
@@ -151,175 +131,202 @@ export function useMapEditor(mapId: string) {
           rotation: b.rotation,
           tierId: b.tierId,
         })) as LayoutBoothInput[],
-      };
-      await mapsApi.replaceLayout(mapId, layoutData);
-      setDirty(false);
+      });
+      // The server keys booths by label: adopt its ids and states so the
+      // assignment panel talks about real booths, keep local geometry.
+      const serverBooths: MapBooth[] = Array.isArray(full?.booths) ? full.booths : [];
+      if (serverBooths.length > 0 && stateRef.current) {
+        const byLabel = new Map(serverBooths.map((b) => [b.label, b]));
+        const idMap = new Map<string, string>();
+        for (const b of stateRef.current.booths) {
+          const srv = byLabel.get(b.label);
+          if (srv && srv.id !== b.id) idMap.set(b.id, srv.id);
+        }
+        setState((s) => {
+          if (!s) return s;
+          const booths = s.booths.map((b) => {
+            const srv = byLabel.get(b.label);
+            if (!srv) return b;
+            return { ...b, id: srv.id, mapId: srv.mapId, status: srv.status, applicationId: srv.applicationId };
+          });
+          return { ...s, booths };
+        });
+        if (idMap.size > 0) {
+          setSelectedIds((sel) => new Set([...sel].map((id) => idMap.get(id) ?? id)));
+          const remap = (layouts: Layout[]) =>
+            layouts.forEach((l) => {
+              l.booths = l.booths.map((b) => (idMap.has(b.id) ? { ...b, id: idMap.get(b.id)! } : b));
+            });
+          remap(undoStack.current);
+          remap(redoStack.current);
+        }
+      }
+      savedRevision.current = rev;
+      setSaveStatus(revision.current === rev ? 'saved' : 'dirty');
+      return true;
     } catch (err: any) {
-      if (err.code === 'BOOTH_IN_USE') {
-        // Re-fetch to get the server state back
-        setSaveError(`BOOTH_IN_USE: ${err.message}`);
+      const message: string = err?.message || 'Could not save';
+      if (/BOOTH_IN_USE/.test(message) || err?.code === 'BOOTH_IN_USE') {
+        setSaveError(
+          'A booth that is sold, held or reserved can’t be removed. It has been put back — unassign it first.'
+        );
         try {
           const fresh = await mapsApi.get(mapId);
-          setState((s) =>
-            s
-              ? {
-                  ...s,
-                  booths: fresh.booths,
-                  elements: fresh.layout?.elements || [],
-                }
-              : null
-          );
-        } catch { /* ignore */ }
+          setState((s) => (s ? { ...s, booths: fresh.booths, elements: fresh.layout?.elements || [] } : s));
+          savedRevision.current = revision.current;
+          setSaveStatus('saved');
+          return false;
+        } catch {
+          /* fall through to error */
+        }
       } else {
-        setSaveError(err?.message || 'Save failed');
+        setSaveError(message);
       }
+      setSaveStatus('error');
+      return false;
     } finally {
-      setSaving(false);
-    }
-  }, [state, mapId]);
-
-  // Derived from setBooths/setElements to update dirty state
-  const updateBooths = useCallback(
-    (booths: MapBooth[], recordUndo = true) => {
-      if (!state) return;
-      if (recordUndo) pushUndo(state.elements, state.booths);
-      setState((s) => (s ? { ...s, booths } : null));
-      setDirty(true);
-    },
-    [state, pushUndo]
-  );
-
-  const updateElements = useCallback(
-    (elements: MapElement[], recordUndo = true) => {
-      if (!state) return;
-      if (recordUndo) pushUndo(state.elements, state.booths);
-      setState((s) => (s ? { ...s, elements } : null));
-      setDirty(true);
-    },
-    [state, pushUndo]
-  );
-
-  const updateState = useCallback(
-    (patch: Partial<EditorState>) => {
-      if (!state) return;
-      setState((s) => (s ? { ...s, ...patch } : null));
-      setDirty(true);
-    },
-    [state]
-  );
-
-  const undo = useCallback(() => {
-    if (!state || undoStack.current.length === 0) return;
-    const current = { elements: state.elements, booths: state.booths };
-    redoStack.current.push(current);
-    const prev = undoStack.current.pop()!;
-    setState((s) => (s ? { ...s, elements: prev.elements, booths: prev.booths } : null));
-    setDirty(true);
-  }, [state]);
-
-  const redo = useCallback(() => {
-    if (!state || redoStack.current.length === 0) return;
-    const current = { elements: state.elements, booths: state.booths };
-    undoStack.current.push(current);
-    const next = redoStack.current.pop()!;
-    setState((s) => (s ? { ...s, elements: next.elements, booths: next.booths } : null));
-    setDirty(true);
-  }, [state]);
-
-  const publish = useCallback(async () => {
-    if (!state) return;
-    try {
-      const result = await mapsApi.publish(mapId);
-      setState((s) =>
-        s ? { ...s, status: 'PUBLISHED' as const } : null
-      );
-      setDirty(false);
-      return true;
-    } catch (err: any) {
-      throw err;
-    }
-  }, [state, mapId]);
-
-  const unpublish = useCallback(async () => {
-    try {
-      await mapsApi.unpublish(mapId);
-      setState((s) =>
-        s ? { ...s, status: 'DRAFT' as const } : null
-      );
-      return true;
-    } catch (err: any) {
-      throw err;
+      saving.current = false;
+      // Edits made while this save was in flight: go again.
+      if (revision.current !== savedRevision.current) setRetryTick((n) => n + 1);
     }
   }, [mapId]);
 
-  const addBooth = useCallback(
-    (booth: MapBooth) => {
-      if (!state) return;
-      pushUndo(state.elements, state.booths);
-      setState((s) => (s ? { ...s, booths: [...s.booths, booth] } : null));
-      setDirty(true);
+  // Debounced autosave; re-arms after a save that finished with newer edits pending.
+  useEffect(() => {
+    if (saveStatus !== 'dirty') return;
+    const t = setTimeout(() => {
+      if (revision.current !== savedRevision.current) void save();
+    }, AUTOSAVE_MS);
+    return () => clearTimeout(t);
+  }, [revisionTick, retryTick, saveStatus, save]);
+
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (revision.current !== savedRevision.current) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, []);
+
+  /** Snapshot the current layout onto the undo stack (once per user action or drag). */
+  const checkpoint = useCallback(() => {
+    const s = stateRef.current;
+    if (!s) return;
+    undoStack.current.push({ elements: s.elements, booths: s.booths });
+    if (undoStack.current.length > MAX_UNDO) undoStack.current.shift();
+    redoStack.current = [];
+    syncHistory();
+  }, []);
+
+  /**
+   * Change the layout. `history: false` is for the in-between steps of a drag
+   * (call `checkpoint()` once when the drag starts).
+   */
+  const commit = useCallback(
+    (mutate: (layout: Layout) => Layout, opts: { history?: boolean } = {}) => {
+      if (!stateRef.current) return;
+      if (opts.history !== false) checkpoint();
+      setState((s) => {
+        if (!s) return s;
+        const next = mutate({ elements: s.elements, booths: s.booths });
+        const updated = { ...s, elements: next.elements, booths: next.booths };
+        stateRef.current = updated;
+        return updated;
+      });
+      markChanged();
     },
-    [state, pushUndo]
+    [checkpoint, markChanged]
   );
 
-  const removeSelected = useCallback(() => {
-    if (!state) return;
-    pushUndo(state.elements, state.booths);
-    const newBooths = state.booths.filter((b) => !selectedIds.has(b.id));
-    const newElements = state.elements.filter((e) => !selectedIds.has(e.id));
-    setState({ ...state, booths: newBooths, elements: newElements });
-    setSelectedIds(new Set());
-    setDirty(true);
-  }, [state, selectedIds, pushUndo]);
+  const updateSettings = useCallback(
+    (patch: Partial<Pick<EditorState, 'name' | 'width' | 'height' | 'unit' | 'gridSize' | 'underlayOpacity'>>) => {
+      setState((s) => {
+        if (!s) return s;
+        const updated = { ...s, ...patch };
+        stateRef.current = updated;
+        return updated;
+      });
+      markChanged();
+    },
+    [markChanged]
+  );
 
-  const duplicateSelected = useCallback(() => {
-    if (!state || selectedIds.size === 0) return;
-    pushUndo(state.elements, state.booths);
-    const selectedBooths = state.booths.filter((b) => selectedIds.has(b.id));
-    const existingLabels = state.booths.map((b) => b.label);
-    const maxLabelNum = Math.max(
-      ...state.booths
-        .map((b) => parseInt(b.label.match(/\d+/)?.[0] || '0', 10))
-        .filter((n) => !isNaN(n)),
-      0
+  /**
+   * Pull booth sale state from the server (after assign / status / move calls).
+   * Only status and holder change; local geometry and unsaved edits stay.
+   */
+  const refreshBooths = useCallback(async () => {
+    const fresh = await mapsApi.get(mapId);
+    const byId = new Map(fresh.booths.map((b) => [b.id, b]));
+    setState((s) =>
+      s
+        ? {
+            ...s,
+            status: fresh.status,
+            booths: s.booths.map((b) => {
+              const srv = byId.get(b.id);
+              return srv
+                ? { ...b, status: srv.status, applicationId: srv.applicationId, assignedById: srv.assignedById, holder: srv.holder }
+                : b;
+            }),
+          }
+        : s
     );
-    const newBooths = selectedBooths.map((b, i) => ({
-      ...JSON.parse(JSON.stringify(b)),
-      id: `${Date.now()}_${i}`,
-      x: b.x + b.w + 2,
-      y: b.y + 2,
-      label: `${b.label.replace(/\d+/g, '')}${maxLabelNum + 1 + i}`,
-    }));
-    setState({ ...state, booths: [...state.booths, ...newBooths] });
-    setDirty(true);
-  }, [state, selectedIds, pushUndo]);
+    return fresh;
+  }, [mapId]);
+
+  const restore = (from: Layout[], to: Layout[]) => {
+    const s = stateRef.current;
+    if (!s || from.length === 0) return;
+    to.push({ elements: s.elements, booths: s.booths });
+    const layout = from.pop()!;
+    setState((prev) => (prev ? { ...prev, elements: layout.elements, booths: layout.booths } : prev));
+    const ids = new Set([...layout.booths.map((b) => b.id), ...layout.elements.map((e) => e.id)]);
+    setSelectedIds((sel) => new Set([...sel].filter((id) => ids.has(id))));
+    syncHistory();
+    markChanged();
+  };
+
+  const undo = useCallback(() => restore(undoStack.current, redoStack.current), [markChanged]); // eslint-disable-line react-hooks/exhaustive-deps
+  const redo = useCallback(() => restore(redoStack.current, undoStack.current), [markChanged]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const publish = useCallback(async () => {
+    if (revision.current !== savedRevision.current) {
+      const ok = await save();
+      if (!ok) throw new Error('Save your changes before publishing');
+    }
+    await mapsApi.publish(mapId);
+    setState((s) => (s ? { ...s, status: 'PUBLISHED' as const } : s));
+    await refreshBooths().catch(() => undefined);
+  }, [mapId, save, refreshBooths]);
+
+  const unpublish = useCallback(async () => {
+    await mapsApi.unpublish(mapId);
+    setState((s) => (s ? { ...s, status: 'DRAFT' as const } : s));
+  }, [mapId]);
 
   return {
     state,
     tiers,
     loading,
     error,
-    saving,
+    saveStatus,
     saveError,
-    dirty,
     selectedIds,
-    activeTool,
-    zoom,
     setSelectedIds,
-    setActiveTool,
-    setZoom,
-    updateState,
-    updateBooths,
-    updateElements,
-    addBooth,
-    removeSelected,
-    duplicateSelected,
+    commit,
+    checkpoint,
+    updateSettings,
+    refreshBooths,
     undo,
     redo,
-    doSave,
+    canUndo: historySize.undo > 0,
+    canRedo: historySize.redo > 0,
+    save,
     publish,
     unpublish,
-    canUndo: undoStack.current.length > 0,
-    canRedo: redoStack.current.length > 0,
   };
 }

@@ -2,6 +2,17 @@
 
 import React from 'react';
 import {
+  MicVocal,
+  DoorOpen,
+  Bath,
+  Utensils,
+  Info,
+  Cross,
+  Gamepad2,
+  MapPin,
+  type LucideIcon,
+} from 'lucide-react';
+import {
   MARKER_LABELS,
   LABEL_FONT_SIZES,
   WALL_STROKE_LIGHT,
@@ -10,16 +21,26 @@ import {
   MARKER_FILL_DARK,
   MARKER_STROKE_LIGHT,
   MARKER_STROKE_DARK,
+  MARKER_ICON_LIGHT,
+  MARKER_ICON_DARK,
   MARKER_CAPTION_LIGHT,
   MARKER_CAPTION_DARK,
   LABEL_TEXT_LIGHT,
   LABEL_TEXT_DARK,
   SELECTION_STROKE_LIGHT,
   SELECTION_STROKE_DARK,
-  SELECTION_FILL_LIGHT,
-  SELECTION_FILL_DARK,
 } from './mapTheme';
 import type { MapElement as MapElementType } from '@/services/api';
+
+const MARKER_GLYPHS: Record<string, LucideIcon> = {
+  stage: MicVocal,
+  entrance: DoorOpen,
+  restroom: Bath,
+  food: Utensils,
+  info: Info,
+  firstAid: Cross,
+  programming: Gamepad2,
+};
 
 interface MapElementProps {
   element: MapElementType;
@@ -29,6 +50,16 @@ interface MapElementProps {
   onSelect?: (id: string, e?: React.MouseEvent | React.KeyboardEvent) => void;
 }
 
+/** Accessible name for an element, shared by the renderer and the builder. */
+export function mapElementLabel(element: MapElementType): string {
+  if (element.kind === 'wall') return 'Wall';
+  if (element.kind === 'label') return `Text: ${element.text || 'Text'}`;
+  const name = MARKER_LABELS[element.kind] || element.kind;
+  return element.caption ? `${name}: ${element.caption}` : name;
+}
+
+// Every element is drawn inside its own box (x, y, w, h in floor units), so
+// what the builder selects, moves and resizes is exactly what is painted.
 export default function MapElement({
   element,
   gridSize,
@@ -38,10 +69,9 @@ export default function MapElement({
 }: MapElementProps) {
   const x = element.x * gridSize;
   const y = element.y * gridSize;
-  const w = Math.max(element.w * gridSize, 10);
-  const h = Math.max(element.h * gridSize, 10);
-  const isMarker = !['wall', 'aisle', 'label'].includes(element.kind);
-  const isWall = element.kind === 'wall';
+  const w = Math.max(element.w, 0) * gridSize;
+  const h = Math.max(element.h, 0) * gridSize;
+  const selStroke = dark ? SELECTION_STROKE_DARK : SELECTION_STROKE_LIGHT;
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -55,121 +85,114 @@ export default function MapElement({
     }
   };
 
-  if (isWall) {
-    const orientation = element.orientation || 'h';
-    const isH = orientation === 'h';
-    const length = isH ? w : h;
-    return (
-      <g
-        role="button"
-        tabIndex={0}
-        aria-label={`Wall ${element.id}`}
-        onClick={handleClick}
-        onKeyDown={handleKeyDown}
-        style={{ cursor: 'pointer' }}
-      >
-        <line
-          x1={x}
-          y1={y}
-          x2={isH ? x + length : x}
-          y2={isH ? y : y + length}
-          stroke={dark ? WALL_STROKE_DARK : WALL_STROKE_LIGHT}
-          strokeWidth={selected ? 3 : 2}
-        />
-        {selected && (
-          <circle cx={isH ? x + length / 2 : x} cy={isH ? y : y + length / 2} r={4} fill={dark ? SELECTION_FILL_DARK : SELECTION_FILL_LIGHT} />
-        )}
-      </g>
-    );
-  }
+  const interactive = Boolean(onSelect);
+  const shared = interactive
+    ? {
+        role: 'button' as const,
+        tabIndex: 0,
+        onClick: handleClick,
+        onKeyDown: handleKeyDown,
+        style: { cursor: 'pointer' },
+      }
+    : { role: 'img' as const };
 
-  if (isMarker) {
-    const label = MARKER_LABELS[element.kind] || element.kind;
+  if (element.kind === 'wall') {
+    const vertical = element.orientation === 'v';
+    const thickness = Math.max(gridSize * 0.6, 3);
+    const length = vertical ? Math.max(h, gridSize) : Math.max(w, gridSize);
     return (
-      <g
-        role="button"
-        tabIndex={0}
-        aria-label={label}
-        onClick={handleClick}
-        onKeyDown={handleKeyDown}
-        style={{ cursor: 'pointer' }}
-      >
+      <g {...shared} aria-label={mapElementLabel(element)}>
         <rect
           x={x}
           y={y}
-          width={w}
-          height={h}
-          rx={4}
-          fill={dark ? MARKER_FILL_DARK : MARKER_FILL_LIGHT}
-          stroke={selected ? (dark ? SELECTION_STROKE_DARK : SELECTION_STROKE_LIGHT) : (dark ? MARKER_STROKE_DARK : MARKER_STROKE_LIGHT)}
-          strokeWidth={selected ? 2 : 1}
+          width={vertical ? thickness : length}
+          height={vertical ? length : thickness}
+          rx={thickness / 2}
+          fill={dark ? WALL_STROKE_DARK : WALL_STROKE_LIGHT}
+          stroke={selected ? selStroke : 'none'}
+          strokeWidth={selected ? 2 : 0}
         />
-        <text
-          x={x + w / 2}
-          y={y + h / 2 - (element.caption ? 6 : 0)}
-          textAnchor="middle"
-          dominantBaseline="central"
-          fontSize={20}
-          pointerEvents="none"
-        >
-          {element.kind === 'stage' ? '\uD83C\uDF99' :
-           element.kind === 'entrance' ? '\uD83D\uDEAA' :
-           element.kind === 'restroom' ? '\uD83D\uDEBB' :
-           element.kind === 'food' ? '\uD83C\uDF74' :
-           element.kind === 'info' ? '\u2139' :
-           element.kind === 'firstAid' ? '\u271A' :
-           element.kind === 'programming' ? '\uD83C\uDFAE' : '\uD83D\uDCCD'}
-        </text>
-        {element.caption && (
-          <text
-            x={x + w / 2}
-            y={y + h / 2 + 10}
-            textAnchor="middle"
-            dominantBaseline="central"
-            fill={dark ? MARKER_CAPTION_DARK : MARKER_CAPTION_LIGHT}
-            fontSize={9}
-            pointerEvents="none"
-          >
-            {element.caption}
-          </text>
-        )}
       </g>
     );
   }
 
-  const fontSize = LABEL_FONT_SIZES[element.size || 'M'] || 14;
+  if (element.kind === 'label') {
+    const fontSize = LABEL_FONT_SIZES[element.size || 'M'] || 14;
+    return (
+      <g {...shared} aria-label={mapElementLabel(element)}>
+        <rect
+          x={x}
+          y={y}
+          width={Math.max(w, gridSize)}
+          height={Math.max(h, gridSize)}
+          rx={3}
+          fill="transparent"
+          stroke={selected ? selStroke : 'none'}
+          strokeWidth={selected ? 2 : 0}
+          strokeDasharray={selected ? '4 3' : undefined}
+        />
+        <text
+          x={x + Math.max(w, gridSize) / 2}
+          y={y + Math.max(h, gridSize) / 2}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fill={dark ? LABEL_TEXT_DARK : LABEL_TEXT_LIGHT}
+          fontSize={fontSize * Math.max(1, gridSize / 10)}
+          fontWeight={600}
+          letterSpacing="0.02em"
+          pointerEvents="none"
+        >
+          {element.text || 'Text'}
+        </text>
+      </g>
+    );
+  }
+
+  // Landmarks: a rounded tile with an icon and an optional caption.
+  const Glyph = MARKER_GLYPHS[element.kind] || MapPin;
+  const bw = Math.max(w, gridSize);
+  const bh = Math.max(h, gridSize);
+  const iconSize = Math.max(10, Math.min(bw, bh) * (element.caption ? 0.42 : 0.55), 0);
+  const captionSize = Math.max(7, Math.min(12, bw / 8));
+  const showCaption = Boolean(element.caption) && bh >= iconSize + captionSize + 4;
+  const iconY = y + bh / 2 - iconSize / 2 - (showCaption ? captionSize / 2 + 1 : 0);
 
   return (
-    <g
-      role="button"
-      tabIndex={0}
-      aria-label={`Label: ${element.text || ''}`}
-      onClick={handleClick}
-      onKeyDown={handleKeyDown}
-      style={{ cursor: 'pointer' }}
-    >
+    <g {...shared} aria-label={mapElementLabel(element)}>
       <rect
-        x={x - 2}
-        y={y - fontSize}
-        width={w + 4}
-        height={fontSize + 4}
-        rx={2}
-        fill={selected ? (dark ? SELECTION_FILL_DARK : SELECTION_FILL_LIGHT) : 'transparent'}
-        opacity={selected ? 0.3 : 0}
-        pointerEvents="none"
-      />
-      <text
         x={x}
         y={y}
-        textAnchor="start"
-        dominantBaseline="auto"
-        fill={dark ? LABEL_TEXT_DARK : LABEL_TEXT_LIGHT}
-        fontSize={fontSize}
-        fontWeight={500}
+        width={bw}
+        height={bh}
+        rx={4}
+        fill={dark ? MARKER_FILL_DARK : MARKER_FILL_LIGHT}
+        stroke={selected ? selStroke : dark ? MARKER_STROKE_DARK : MARKER_STROKE_LIGHT}
+        strokeWidth={selected ? 2 : 1}
+      />
+      <Glyph
+        x={x + bw / 2 - iconSize / 2}
+        y={iconY}
+        width={iconSize}
+        height={iconSize}
+        color={dark ? MARKER_ICON_DARK : MARKER_ICON_LIGHT}
+        strokeWidth={1.75}
+        aria-hidden="true"
         pointerEvents="none"
-      >
-        {element.text || 'Text'}
-      </text>
+      />
+      {showCaption && (
+        <text
+          x={x + bw / 2}
+          y={iconY + iconSize + captionSize / 2 + 3}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fill={dark ? MARKER_CAPTION_DARK : MARKER_CAPTION_LIGHT}
+          fontSize={captionSize}
+          fontWeight={500}
+          pointerEvents="none"
+        >
+          {element.caption}
+        </text>
+      )}
     </g>
   );
 }

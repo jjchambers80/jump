@@ -110,7 +110,7 @@ export default function BoothPanel({
       {moveMode === booth.id && (
         <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 dark:border-indigo-800 dark:bg-indigo-900/20">
           <p className="text-xs font-medium text-indigo-700 dark:text-indigo-300">
-            Move mode: click another booth on the canvas
+            Click the booth on the map to move this vendor to
           </p>
           <button
             type="button"
@@ -203,10 +203,21 @@ export default function BoothPanel({
 
       {/* Assign dialog */}
       {assignOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center pt-16" role="dialog" aria-modal="true">
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center pt-16"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={`assign-title-${booth.id}`}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.stopPropagation();
+              setAssignOpen(false);
+            }
+          }}
+        >
           <div className="fixed inset-0 bg-black/40" onClick={() => setAssignOpen(false)} />
           <div className="relative z-10 w-full max-w-md rounded-xl border border-gray-200 bg-white p-5 shadow-xl dark:border-slate-700 dark:bg-slate-800">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Assign to {booth.label}</h3>
+            <h3 id={`assign-title-${booth.id}`} className="text-sm font-semibold text-gray-900 dark:text-white">Assign to {booth.label}</h3>
 
             <div className="mt-3">
               <input
@@ -214,6 +225,7 @@ export default function BoothPanel({
                 value={search}
                 onChange={(e) => doSearch(e.target.value)}
                 placeholder="Search by business name or contact…"
+                aria-label="Search approved applications"
                 autoFocus
                 className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
               />

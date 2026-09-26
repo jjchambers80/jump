@@ -65,7 +65,7 @@ Generated and maintained by running `/doc-feature` after completing feature work
 - [Storefront Language Redirection](features/storefront-language-redirection.md) — Online store › Preferences › Automatic redirection: Language toggle ("redirect visitors to the language that matches their browser when available"); stored on `Organization.autoRedirectLanguage`, no runtime effect until the storefront is localized
 - [Venue Management](features/venue-management.md) — CRUD, logo uploads, address
 - [Venue Time Zones](features/venue-time-zones.md) — event times render in the venue's zone (spec 033); the zone is derived from the address, `timezoneSource` provenance, the `eventTime` / `usTimeZones` parity pairs, backfill + reconciliation scripts
-- [Floor Maps](features/maps.md) — Builder, booth geometry, tier binding, public read (spec 014)
+- [Floor Map Builder](features/map-builder.md) — Admin map editor: click or drag to add booths, landmarks, text and walls; rows-of-booths dialog; drag to move, corner resize, box select; contextual details panel; autosave, undo/redo, keyboard + screen-reader support
 - [Map Templates](features/map-templates.md) — Reusable vector geometry snapshots (spec 014 phase 3)
 - [Map Export](features/map-export.md) — Print-ready vector PDF export with vendor directory (spec 014 phase 3)
 - [Vendor Directory](features/vendor-directory.md) — Public vendor profiles with map booth links (spec 014 phase 3)
