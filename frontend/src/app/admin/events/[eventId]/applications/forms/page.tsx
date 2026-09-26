@@ -5,8 +5,8 @@
 import Link from 'next/link';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { acceptanceLine, type AdminForm, type FormKind, type FormTemplateSummary } from '@/lib/applications';
-import { useParticipantsApi } from '@/app/admin/participants/useParticipantsApi';
+import { acceptanceLine, formatDate, type AdminForm, type FormKind, type FormTemplateSummary } from '@/lib/applications';
+import { useParticipantsApi } from '@/components/applications/useParticipantsApi';
 import ApplicationsHeader from '../ApplicationsHeader';
 import { describeError, useApplicationsApi } from '../useApplicationsApi';
 
@@ -61,6 +61,16 @@ export default function FormsPage({ params }: { params: { eventId: string } }) {
     if (templateId && !sameKind.some((t) => t.id === templateId)) setTemplateId('');
   }, [sameKind, templateId]);
 
+  const removeTemplate = async (id: string, templateName: string) => {
+    if (!window.confirm(`Delete the "${templateName}" template? Forms already created from it are kept.`)) return;
+    try {
+      await participants.deleteTemplate(id);
+      setTemplates((prev) => prev.filter((t) => t.id !== id));
+    } catch (err) {
+      setError(describeError(err, 'Could not delete the template'));
+    }
+  };
+
   const create = async (e: FormEvent) => {
     e.preventDefault();
     if (saving) return;
@@ -94,7 +104,7 @@ export default function FormsPage({ params }: { params: { eventId: string } }) {
       </div>
 
       {creating && (
-        <form onSubmit={create} className={`${card} mb-4 grid gap-3 sm:grid-cols-[1fr_auto_auto_auto] sm:items-end`} data-testid="forms-create">
+        <form onSubmit={create} className={`${card} mb-4 grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end`} data-testid="forms-create">
           <div>
             <label htmlFor="form-name" className="block text-sm font-medium text-gray-700 dark:text-slate-300">
               Name
@@ -110,24 +120,57 @@ export default function FormsPage({ params }: { params: { eventId: string } }) {
               <option value="PAID">Paid with options (vendors, sponsors)</option>
             </select>
           </div>
-          {sameKind.length > 0 && (
-            <div>
-              <label htmlFor="form-template" className="block text-sm font-medium text-gray-700 dark:text-slate-300">
-                Start from template
-              </label>
-              <select id="form-template" value={templateId} onChange={(e) => setTemplateId(e.target.value)} className={field}>
-                <option value="">Blank</option>
-                {sameKind.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
           <button type="submit" disabled={saving || name.trim().length < 2} className={primary}>
             {saving ? 'Creating…' : 'Create'}
           </button>
+          {/* Spec 037 D2: saved templates are picked, edited and removed here — there is no template library page. */}
+          <fieldset className="sm:col-span-3" data-testid="forms-template-picker">
+            <legend className="text-sm font-medium text-gray-700 dark:text-slate-300">Start from</legend>
+            <ul className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {[{ id: '', name: 'Blank form', updatedAt: null as string | null }, ...sameKind].map((t) => {
+                const checked = templateId === t.id;
+                return (
+                  <li
+                    key={t.id || 'blank'}
+                    className={`relative flex items-start gap-3 rounded-lg border px-3 py-2.5 transition-colors ${
+                      checked
+                        ? 'border-indigo-500 bg-indigo-50/60 ring-1 ring-indigo-500 dark:border-indigo-400 dark:bg-indigo-950/40 dark:ring-indigo-400'
+                        : 'border-gray-200 hover:border-gray-300 dark:border-slate-600 dark:hover:border-slate-500'
+                    }`}
+                  >
+                    <input
+                      id={`tpl-${t.id || 'blank'}`}
+                      type="radio"
+                      name="form-template"
+                      value={t.id}
+                      checked={checked}
+                      onChange={() => setTemplateId(t.id)}
+                      className="mt-0.5 h-4 w-4 accent-indigo-600"
+                    />
+                    <label htmlFor={`tpl-${t.id || 'blank'}`} className="min-w-0 flex-1 cursor-pointer">
+                      <span className="block truncate text-sm font-medium text-gray-900 dark:text-white">{t.name}</span>
+                      <span className="block text-xs text-gray-500 dark:text-slate-400">
+                        {t.id ? `Template${t.updatedAt ? ` · updated ${formatDate(t.updatedAt)}` : ''}` : 'Start with no options or questions'}
+                      </span>
+                    </label>
+                    {t.id && (
+                      <span className="flex shrink-0 items-center gap-2 text-xs">
+                        <Link href={`/admin/events/templates/${t.id}`} className="font-medium text-indigo-600 hover:underline dark:text-indigo-300" aria-label={`Edit template ${t.name}`}>
+                          Edit
+                        </Link>
+                        <button type="button" onClick={() => removeTemplate(t.id, t.name)} className="font-medium text-red-700 hover:underline dark:text-red-300" aria-label={`Delete template ${t.name}`}>
+                          Delete
+                        </button>
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+            <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">
+              Save any form as a template from its page. Editing a template never changes forms already created from it.
+            </p>
+          </fieldset>
         </form>
       )}
 

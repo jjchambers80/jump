@@ -506,13 +506,20 @@ function TicketDetailModal({
   );
 }
 
-export default function TicketRowsView({ initialSearch = '' }: { initialSearch?: string }) {
+export default function TicketRowsView({
+  initialSearch = '',
+  eventId,
+}: {
+  initialSearch?: string;
+  /** Locks the list to one event (the event's Attendees tab, spec 037). */
+  eventId?: string;
+}) {
   const { selectedOrgId } = useOrg();
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('');
-  const [eventFilter, setEventFilter] = useState('');
+  const [eventFilter, setEventFilter] = useState(eventId ?? '');
   const [search, setSearch] = useState(initialSearch);
   const [searchInput, setSearchInput] = useState(initialSearch);
   const [page, setPage] = useState(1);
@@ -543,14 +550,14 @@ export default function TicketRowsView({ initialSearch = '' }: { initialSearch?:
     }
   };
 
-  // Load events for filter dropdown
+  // Load events for filter dropdown (not needed when locked to one event)
   useEffect(() => {
-    if (!selectedOrgId) return;
+    if (!selectedOrgId || eventId) return;
     api
       .get<{ events: EventOption[] }>(`/admin/events`)
       .then((data) => setEvents(data.events || []))
       .catch(() => {});
-  }, [selectedOrgId]);
+  }, [selectedOrgId, eventId]);
 
   const fetchTickets = useCallback(async () => {
     if (!selectedOrgId) return;
@@ -626,7 +633,7 @@ export default function TicketRowsView({ initialSearch = '' }: { initialSearch?:
         <button
           onClick={() => setShowFilters(!showFilters)}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
-            showFilters || statusFilter || eventFilter
+            showFilters || statusFilter || (eventFilter && !eventId)
               ? 'border-indigo-300 dark:border-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300'
               : 'border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700'
           }`}
@@ -676,9 +683,9 @@ export default function TicketRowsView({ initialSearch = '' }: { initialSearch?:
             </div>
           )}
 
-          {(statusFilter || eventFilter) && (
+          {(statusFilter || (eventFilter && !eventId)) && (
             <button
-              onClick={() => { setStatusFilter(''); setEventFilter(''); }}
+              onClick={() => { setStatusFilter(''); setEventFilter(eventId ?? ''); }}
               className="px-3 py-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
             >
               Clear filters
@@ -710,7 +717,7 @@ export default function TicketRowsView({ initialSearch = '' }: { initialSearch?:
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
           </svg>
           <p className="text-gray-500 dark:text-slate-400">
-            {search || statusFilter || eventFilter
+            {search || statusFilter || (eventFilter && !eventId)
               ? 'No tickets match your filters.'
               : 'No tickets yet.'}
           </p>

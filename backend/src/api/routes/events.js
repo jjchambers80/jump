@@ -229,6 +229,19 @@ orgRouter.get('/:eventId/analytics', requireAuth, requireOrganizer, async (req, 
 });
 
 /**
+ * GET /organizations/:orgId/events/:eventId/workspace
+ * Header + tab facts shared by every page of an event (spec 037 phase 2).
+ */
+orgRouter.get('/:eventId/workspace', requireAuth, requireOrganizer, requireOrgMembership(), async (req, res, next) => {
+  try {
+    const { orgId, eventId } = req.params;
+    res.json(await eventService.getEventWorkspace(orgId, eventId));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * GET /organizations/:orgId/events/:eventId/overview
  * The admin Event Details page in one request (spec 037 phase 1): event,
  * money, tickets or RSVPs, add-on sales, application forms, floor map.

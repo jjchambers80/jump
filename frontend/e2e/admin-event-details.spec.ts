@@ -154,7 +154,8 @@ test('workspace tabs link the event pages together', async ({ page }) => {
   const tabs = page.getByRole('navigation', { name: 'Event pages' });
   await expect(tabs.getByRole('link', { name: 'Overview' })).toHaveAttribute('aria-current', 'page');
   await expect(tabs.getByRole('link', { name: /Applications/ })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/applications`);
-  await expect(tabs.getByRole('link', { name: 'Floor map' })).toHaveAttribute('href', '/admin/maps/map-1');
+  await expect(tabs.getByRole('link', { name: 'Map', exact: true })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/map`);
+  await expect(tabs.getByRole('link', { name: 'Attendees' })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/attendees`);
   await expect(tabs.getByRole('link', { name: 'Analytics' })).toBeVisible();
   await expect(tabs.getByRole('link', { name: 'Door check-in' })).toBeVisible();
 });

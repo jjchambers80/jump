@@ -588,6 +588,19 @@ export const checkInApi = {
     api.delete<{ alreadyCheckedIn: boolean; vendor: DoorVendor }>(`/admin/events/${eventId}/check-in/${applicationId}`),
 };
 
+export interface FloorPlanSummary {
+  id: string;
+  name: string;
+  width: number | null;
+  height: number | null;
+  boothCount: number;
+  zoneCount: number;
+  elementCount: number;
+  sourceMapId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export const mapsApi = {
   list: () => api.get<AdminMap[]>('/admin/maps'),
   create: (data: { eventId: string; name?: string; width?: number; height?: number; unit?: string }) =>
@@ -610,6 +623,13 @@ export const mapsApi = {
     api.post<{ fromBooth: string; toBooth: string; label: string }>(`/admin/maps/${mapId}/booths/${boothId}/move`, { targetBoothId }),
   setBoothStatus: (mapId: string, boothId: string, status: 'AVAILABLE' | 'RESERVED' | 'BLOCKED') =>
     api.post<{ boothId: string; label: string; status: string }>(`/admin/maps/${mapId}/booths/${boothId}/status`, { status }),
+  // Floor plans (spec 037 D1): FloorMapTemplate snapshots, reused by copying.
+  floorPlans: () => api.get<FloorPlanSummary[]>('/admin/maps/templates'),
+  removeFloorPlan: (templateId: string) => api.delete<void>(`/admin/maps/templates/${templateId}`),
+  saveAsFloorPlan: (mapId: string, name: string) =>
+    api.post<FloorPlanSummary>(`/admin/maps/${mapId}/templates`, { name }),
+  createFromFloorPlan: (eventId: string, templateId: string, name?: string) =>
+    api.post<AdminMapDetail>('/admin/maps', { eventId, templateId, ...(name ? { name } : {}) }),
   getEventMapId: (eventId: string) =>
     api.get<{ mapId: string } | null>(`/admin/events/${eventId}/map`),
   // Public map

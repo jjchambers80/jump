@@ -18,6 +18,7 @@ import { EventStatusPill, Perforation } from '@/components/events/EventEditSumma
 import EventActionsMenu from '@/components/events/EventActionsMenu';
 import CancelEventDialog from '@/components/events/CancelEventDialog';
 import DuplicateEventDialog from '../DuplicateEventDialog';
+import { WorkspaceTabs, workspaceTabs } from '@/components/events/EventWorkspace';
 import {
   AdmissionCard,
   ApplicationsSection,
@@ -129,7 +130,6 @@ function EventDetailsContent() {
   const edit = (section: string) => `${base}/edit${q}#${section}`;
   const publicPath = `/events/${encodeURIComponent(event.slug || event.id)}`;
   const ticketed = event.admissionMode === 'TICKETED';
-  const hasForms = overview.applications.forms.length > 0;
 
   return (
     <PageFrame>
@@ -181,17 +181,20 @@ function EventDetailsContent() {
         }
       />
 
-      <WorkspaceTabs
-        items={[
-          { label: 'Overview', href: `${base}${q}`, current: true },
-          { label: 'Applications', href: `${base}/applications`, count: overview.applications.forms.reduce((s, f) => s + f.counts.SUBMITTED, 0) },
-          ...(overview.map ? [{ label: 'Floor map', href: `/admin/maps/${overview.map.id}` }] : []),
-          ticketed
-            ? { label: 'Analytics', href: `${base}/analytics` }
-            : { label: 'Guest list', href: `${base}/rsvps` },
-          ...(hasForms ? [{ label: 'Door check-in', href: `${base}/check-in` }] : []),
-        ]}
-      />
+      <div className="mt-5">
+        <WorkspaceTabs
+          current="overview"
+          tabs={workspaceTabs(
+            eventId,
+            {
+              admissionMode: event.admissionMode,
+              formCount: overview.applications.forms.length,
+              toReview: overview.applications.forms.reduce((s, f) => s + f.counts.SUBMITTED, 0),
+            },
+            orgId
+          )}
+        />
+      </div>
 
       {(notice || error) && (
         <p
@@ -404,41 +407,6 @@ function EventHero({
         ))}
       </dl>
     </section>
-  );
-}
-
-/** The event's other pages. Phase 2 moves them all under /admin/events/:id. */
-function WorkspaceTabs({
-  items,
-}: {
-  items: { label: string; href: string; current?: boolean; count?: number }[];
-}) {
-  return (
-    <nav aria-label="Event pages" className="mt-5 -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-      <ul className="flex min-w-max gap-1 border-b border-gray-200 dark:border-slate-700">
-        {items.map((item) => (
-          <li key={item.label}>
-            <Link
-              href={item.href}
-              aria-current={item.current ? 'page' : undefined}
-              className={`relative -mb-px inline-flex min-h-10 items-center gap-2 border-b-2 px-3 text-sm font-medium transition-colors motion-reduce:transition-none ${
-                item.current
-                  ? 'border-indigo-600 text-indigo-700 dark:border-indigo-400 dark:text-indigo-200'
-                  : 'border-transparent text-gray-600 hover:border-gray-300 hover:text-gray-900 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-white'
-              } rounded-t ${focusRing}`}
-            >
-              {item.label}
-              {item.count ? (
-                <span className="rounded-full bg-sky-100 px-1.5 text-[0.7rem] font-semibold tabular-nums text-sky-800 dark:bg-sky-900/50 dark:text-sky-200">
-                  {item.count}
-                  <span className="sr-only"> to review</span>
-                </span>
-              ) : null}
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </nav>
   );
 }
 

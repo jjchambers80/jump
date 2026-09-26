@@ -676,7 +676,7 @@ export function MapCard({ overview, delay }: { overview: EventOverview; delay?: 
       editLabel="Open the map builder"
     >
       {!map ? (
-        <Empty action={<Link href="/admin/maps" className={quietLink}>Create a floor map</Link>}>
+        <Empty action={<Link href={`/admin/events/${overview.event.id}/map`} className={quietLink}>Create a floor map</Link>}>
           No floor map. A map lets approved vendors pick their own booth.
         </Empty>
       ) : (

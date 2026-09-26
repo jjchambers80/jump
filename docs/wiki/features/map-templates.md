@@ -140,3 +140,8 @@ POST /admin/maps { eventId, templateId, tierBindings: { "Standard": "tier_id_1" 
 - A template exists independently of any FloorMap; no cascade or FK enforcement
 - Tier bindings are supplied at materialisation time and are validated to reference real ApplicationTier rows on the destination event
 - Unique (organizationId, name) enforced by the database with 409 on conflict
+
+## Floor plans in the UI (spec 037 D1)
+
+Organizers see templates as **floor plans**. The builder header has **Save as floor plan** (bookmark icon: prompts for a name, flushes the autosave, `POST /admin/maps/:mapId/templates`). Maps lists them under **Floor plans** with **Use on an event** (the create dialog pre-set to the plan → `POST /admin/maps { eventId, templateId }`) and Delete; an event's Map tab offers them next to Blank map. Tier bindings are not carried to another event: booths arrive unbound and are bound to the new event's vendor space tiers in the builder.
+

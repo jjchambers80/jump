@@ -141,6 +141,14 @@ async function mockAdmin(page: Page, baseURL: string, role: 'ADMIN' | 'ORGANIZER
       for (const r of state.rows) if (ids.includes(r.id)) r.status = to;
       return route.fulfill(json({ results: ids.map((id) => ({ id, ok: true })), succeeded: ids.length, failed: 0 }));
     }
+    // Per-event bulk (spec 037: the event queue is the only review list).
+    const perEventBulk = path.match(/^\/admin\/events\/([^/]+)\/applications\/bulk$/);
+    if (perEventBulk && method === 'POST') {
+      const { ids, decision } = body as { ids: string[]; decision: string };
+      const to = decision === 'WAITLIST' ? 'WAITLISTED' : decision === 'REJECT' ? 'REJECTED' : 'APPROVED';
+      for (const r of state.rows) if (ids.includes(r.id)) r.status = to;
+      return route.fulfill(json({ results: ids.map((id) => ({ id, ok: true })), succeeded: ids.length, failed: 0 }));
+    }
     // Per-event mount and per-row actions.
     const perEvent = path.match(/^\/admin\/events\/([^/]+)\/applications(?:\/([^/]+))?(?:\/(preview|decision))?$/);
     if (perEvent) {
@@ -179,17 +187,18 @@ async function mockAdmin(page: Page, baseURL: string, role: 'ADMIN' | 'ORGANIZER
   return { state, calls };
 }
 
-test('sidebar entry and the org-wide list: events, short ids, tags, status sort, search by id', async ({ page, baseURL }) => {
+test('no Participants or Tickets in the sidebar; the event queue: short ids, tags, booth, status sort, search by id', async ({ page, baseURL }) => {
   const { calls } = await mockAdmin(page, baseURL!);
-  await page.goto('/admin/participants');
-  await expect(page.getByRole('heading', { name: 'Participants' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Participants' }).first()).toHaveAttribute('href', '/admin/participants');
-  await expect(page.getByTestId('applications-summary')).toContainText('All 3');
+  await page.goto(`/admin/events/${EXPO.id}/applications`);
+  await expect(page.getByRole('heading', { level: 1, name: 'Applications' })).toBeVisible();
+  // Spec 037 D1/D3: applications are reviewed per event only.
+  const sidebar = page.getByRole('complementary').or(page.locator('aside')).first();
+  await expect(sidebar.getByRole('link', { name: 'Participants', exact: true })).toHaveCount(0);
+  await expect(sidebar.getByRole('link', { name: 'Tickets', exact: true })).toHaveCount(0);
+  await expect(page.getByTestId('applications-summary')).toContainText('All 2');
 
   const table = page.getByTestId('applications-table');
   await expect(table).toContainText('Retro Weekly');
-  await expect(table).toContainText('Pia Talks');
-  await expect(page.getByTestId('application-event-app-piatalks01')).toContainText('Winter Con');
   await expect(page.getByTestId('application-row-app-retroweekly')).toContainText('ID: ROWEEKLY');
   // Spec 014 phase 2: the placement moved from the Tags cell to its own Booth column.
   await expect(page.getByTestId('application-booth-app-retroweekly')).toContainText('Media row 3');
@@ -198,20 +207,12 @@ test('sidebar entry and the org-wide list: events, short ids, tags, status sort,
   await expect(page.getByRole('link', { name: 'Retro Weekly' })).toHaveAttribute('href', `/admin/events/${EXPO.id}/applications/app-retroweekly`);
 
   await page.getByTestId('applications-sort-status').click();
-  await expect(page).toHaveURL(/sort=status&/);
+  await expect(page).toHaveURL(/sort=status/);
   await page.getByTestId('applications-sort-status').click();
   await expect(page).toHaveURL(/sort=status_desc/);
-  await expect.poll(() => calls.some((c) => c.path === '/admin/applications' && c.search.includes('sort=status_desc'))).toBe(true);
+  await expect.poll(() => calls.some((c) => c.path === `/admin/events/${EXPO.id}/applications` && c.search.includes('sort=status_desc'))).toBe(true);
 
-  await page.getByLabel('Event').selectOption(CON.id);
-  await expect(page).toHaveURL(/event=evt-con/);
-  await expect(table).not.toContainText('Retro Weekly');
-  await expect(table).toContainText('Pia Talks');
-  // Form options narrow to the chosen event.
-  await expect(page.getByLabel('Form').locator('option')).toHaveCount(2);
-
-  await page.getByLabel('Event').selectOption('');
-  await page.getByLabel('Search').fill('xelpins1');
+  await page.getByRole('textbox', { name: 'Search', exact: true }).fill('xelpins1');
   await page.getByRole('button', { name: 'Search' }).click();
   await expect(page).toHaveURL(/q=xelpins1/);
   await expect(table).toContainText('Pixel Pins');
@@ -221,11 +222,19 @@ test('sidebar entry and the org-wide list: events, short ids, tags, status sort,
   expect(a11y.violations).toEqual([]);
 });
 
+test('the old Participants and Tickets URLs land on Events', async ({ page, baseURL }) => {
+  await mockAdmin(page, baseURL!);
+  await page.goto('/admin/participants');
+  await expect(page).toHaveURL(/\/admin\/events$/);
+  await page.goto('/admin/tickets');
+  await expect(page).toHaveURL(/\/admin\/events$/);
+});
+
 test('row actions: Waitlist through the decision dialog updates the row and the summary chips', async ({ page, baseURL }) => {
   const { calls } = await mockAdmin(page, baseURL!);
-  await page.goto('/admin/participants');
+  await page.goto(`/admin/events/${EXPO.id}/applications`);
   await expect(page.getByTestId('applications-summary')).toContainText('Submitted 2');
-  const listCalls = () => calls.filter((c) => c.path === '/admin/applications' && c.method === 'GET').length;
+  const listCalls = () => calls.filter((c) => c.path === `/admin/events/${EXPO.id}/applications` && c.method === 'GET').length;
   const loadsBefore = listCalls();
 
   await page.getByTestId('application-actions-app-retroweekly').click();
@@ -243,35 +252,36 @@ test('row actions: Waitlist through the decision dialog updates the row and the 
   await expect(page.getByTestId('applications-summary')).toContainText('Waitlisted 1');
   expect(calls.some((c) => c.path === `/admin/events/${EXPO.id}/applications/app-retroweekly/decision` && (c.body as { decision: string }).decision === 'WAITLIST')).toBe(true);
   // One summary refresh, not a full reload.
-  expect(calls.filter((c) => c.path === '/admin/applications/summary')).toHaveLength(1);
+  expect(calls.filter((c) => c.path === `/admin/events/${EXPO.id}/applications/summary`)).toHaveLength(1);
   expect(listCalls()).toBe(loadsBefore);
 
   // An approved row only offers Withdraw.
+  await page.goto(`/admin/events/${CON.id}/applications`);
   await page.getByTestId('application-actions-app-piatalks01').click();
   await expect(page.getByRole('menu', { name: 'Actions for Pia Talks' }).getByRole('menuitem')).toHaveText(['View', 'Withdraw', 'Edit tags', 'Copy status link']);
   await page.keyboard.press('Escape');
   await expect(page.getByRole('menu')).toHaveCount(0);
 });
 
-test('bulk across events posts to the org route; saved views round-trip under their own key', async ({ page, baseURL }) => {
+test('bulk posts to the event route; saved views round-trip under the event key', async ({ page, baseURL }) => {
   const { calls } = await mockAdmin(page, baseURL!);
-  await page.goto('/admin/participants');
+  await page.goto(`/admin/events/${EXPO.id}/applications`);
   await page.getByRole('checkbox', { name: 'Select Retro Weekly' }).check();
-  await page.getByRole('checkbox', { name: 'Select Pia Talks' }).check();
+  await page.getByRole('checkbox', { name: 'Select Pixel Pins' }).check();
   const bar = page.getByTestId('applications-bulk-bar');
   await expect(bar).toContainText('2 selected');
   page.once('dialog', (d) => d.accept());
   await bar.getByRole('button', { name: 'Reject' }).click();
-  await expect.poll(() => calls.find((c) => c.path === '/admin/applications/bulk')?.body).toEqual({ ids: ['app-retroweekly', 'app-piatalks01'], decision: 'REJECT' });
-  await expect(page.getByRole('status')).toContainText('2 rejected');
+  await expect.poll(() => calls.find((c) => c.path === `/admin/events/${EXPO.id}/applications/bulk`)?.body).toEqual({ ids: ['app-retroweekly', 'app-pixelpins1'], decision: 'REJECT' });
+  await expect(page.getByRole('status').filter({ hasText: '2 rejected' })).toBeVisible();
   await expect(page.getByTestId('applications-summary')).toContainText('Rejected 2');
 
-  await page.getByRole('button', { name: /^Submitted/ }).click();
-  await expect(page).toHaveURL(/status=SUBMITTED/);
-  page.once('dialog', (d) => d.accept('Needs review'));
+  await page.getByRole('button', { name: /^Rejected/ }).click();
+  await expect(page).toHaveURL(/status=REJECTED/);
+  page.once('dialog', (d) => d.accept('Declined'));
   await page.getByTestId('applications-save-view').click();
-  await expect(page.getByTestId('applications-saved-views')).toHaveValue('Needs review');
-  expect(JSON.parse(await page.evaluate(() => window.localStorage.getItem('jump.participants.views.org') || '[]'))).toEqual([{ name: 'Needs review', query: { status: 'SUBMITTED' } }]);
+  await expect(page.getByTestId('applications-saved-views')).toHaveValue('Declined');
+  expect(JSON.parse(await page.evaluate((id) => window.localStorage.getItem(`jump.applications.views.${id}`) || '[]', EXPO.id))).toEqual([{ name: 'Declined', query: { status: 'REJECTED' } }]);
 });
 
 test('per-event tab renders the same table without the Event filter or event line', async ({ page, baseURL }) => {
@@ -281,7 +291,7 @@ test('per-event tab renders the same table without the Event filter or event lin
   await expect(page.getByTestId('applications-summary')).toContainText('All 2');
   await expect(page.getByTestId('applications-table')).toContainText('Retro Weekly');
   await expect(page.getByTestId('applications-table')).not.toContainText('Pia Talks');
-  await expect(page.getByLabel('Event')).toHaveCount(0);
+  await expect(page.getByLabel('Event', { exact: true })).toHaveCount(0);
   await expect(page.getByTestId('application-event-app-retroweekly')).toHaveCount(0);
   await expect(page.getByTestId('applications-add-on-filter')).toBeVisible();
   await expect(page.getByTestId('application-actions-app-retroweekly')).toBeVisible();
@@ -290,64 +300,48 @@ test('per-event tab renders the same table without the Event filter or event lin
   expect(a11y.violations).toEqual([]);
 });
 
-test('Applications tab lists forms across events with links to the editor and filtered submissions', async ({ page, baseURL }) => {
-  await mockAdmin(page, baseURL!, 'ADMIN');
-  await page.goto('/admin/participants/applications');
-  await expect(page.getByRole('link', { name: 'Applications' }).first()).toHaveAttribute('aria-current', 'page');
-  const table = page.getByTestId('participants-forms-table');
-  await expect(table).toContainText('Vendor Space');
-  await expect(table).toContainText('Winter Con');
-  await expect(page.getByTestId('participants-form-form-panels').getByRole('link', { name: 'Edit' })).toHaveAttribute('href', `/admin/events/${CON.id}/applications/forms/form-panels`);
-  await expect(page.getByTestId('participants-form-form-press').getByRole('link', { name: '2 submissions' })).toHaveAttribute('href', `/admin/participants?event=${EXPO.id}&form=form-press`);
-});
-
 // ─── Phase 3 ─────────────────────────────────────────────────────────────────
 
-test('tags: edit with suggestions from the ⋯ menu, filter by tag, search a tag; check-in ticks only on approved rows and persist on reload', async ({ page, baseURL }) => {
+test('tags: filter and search by tag in the event queue; edit tags and check in an approved application', async ({ page, baseURL }) => {
   const { calls } = await mockAdmin(page, baseURL!);
-  await page.goto('/admin/participants');
+  await page.goto(`/admin/events/${EXPO.id}/applications`);
   const table = page.getByTestId('applications-table');
   await expect(page.getByTestId('applications-tag-filter').locator('option')).toHaveText(['Any tag', 'Tagged Returning', 'Tagged Sponsor']);
 
-  // Edit tags on Pia (no tags yet): suggestion chips add, Enter adds a typed one.
+  // Filter by tag narrows the list and lands in the URL.
+  await page.getByTestId('applications-tag-filter').selectOption('Sponsor');
+  await expect(page).toHaveURL(/tag=Sponsor/);
+  await expect(table).toContainText('Retro Weekly');
+  await expect(table).not.toContainText('Pixel Pins');
+  await page.getByTestId('applications-tag-filter').selectOption('');
+  await expect(page).not.toHaveURL(/tag=/);
+  await page.getByRole('textbox', { name: 'Search', exact: true }).fill('returning');
+  await page.getByRole('button', { name: 'Search' }).click();
+  await expect(table).toContainText('Retro Weekly');
+  await expect(table).not.toContainText('Pixel Pins');
+  // Check-in ticks only on approved rows.
+  await expect(page.getByTestId('application-checkin-app-retroweekly')).toHaveCount(0);
+
+  // Edit tags on Pia (another event, approved, no tags yet): Enter adds, case-insensitive dedupe.
+  await page.goto(`/admin/events/${CON.id}/applications`);
   await page.getByTestId('application-actions-app-piatalks01').click();
   await page.getByRole('menuitem', { name: 'Edit tags' }).click();
   const dialog = page.getByRole('dialog', { name: 'Edit tags' });
-  await expect(dialog.getByTestId('tag-suggestions')).toContainText('+ Sponsor');
-  await dialog.getByRole('button', { name: '+ Returning' }).click();
+  await dialog.getByLabel('Tags').fill('Returning');
+  await dialog.getByLabel('Tags').press('Enter');
   await dialog.getByLabel('Tags').fill('  Panelist  ');
   await dialog.getByLabel('Tags').press('Enter');
   await dialog.getByLabel('Tags').fill('returning');
   await dialog.getByLabel('Tags').press('Enter');
-  await expect(dialog.getByTestId('tag-chips')).toContainText('Returning');
-  await expect(dialog.getByTestId('tag-chips')).toContainText('Panelist');
   await expect(dialog.getByTestId('tag-chips').locator('span')).toHaveCount(2);
   await dialog.getByRole('button', { name: 'Save tags' }).click();
   await expect(dialog).toHaveCount(0);
   const patch = calls.find((c) => c.method === 'PATCH' && c.path.endsWith('/applications/app-piatalks01'));
   expect(patch?.body).toEqual({ tags: ['Returning', 'Panelist'] });
   await expect(page.getByTestId('application-tags-app-piatalks01')).toContainText('Panelist');
-  await expect(page.getByTestId('applications-tag-filter').locator('option')).toHaveText(['Any tag', 'Tagged Panelist', 'Tagged Returning', 'Tagged Sponsor']);
 
-  // Filter by tag narrows the list and lands in the URL.
-  await page.getByTestId('applications-tag-filter').selectOption('Sponsor');
-  await expect(page).toHaveURL(/tag=Sponsor/);
-  await expect(table).toContainText('Retro Weekly');
-  await expect(table).not.toContainText('Pia Talks');
-  await page.getByTestId('applications-tag-filter').selectOption('');
-  await expect(page).not.toHaveURL(/tag=/);
-  await page.getByLabel('Search').fill('panelist');
-  await page.getByRole('button', { name: 'Search' }).click();
-  await expect(table).toContainText('Pia Talks');
-  await expect(table).not.toContainText('Retro Weekly');
-  await page.getByLabel('Search').fill('');
-  await page.getByRole('button', { name: 'Search' }).click();
-  await expect(page).not.toHaveURL(/q=/);
-
-  // Check-in: only the approved row shows ticks; optimistic tick persists on reload.
-  await expect(page.getByTestId('application-checkin-app-retroweekly')).toHaveCount(0);
-  const checks = page.getByTestId('application-checkin-app-piatalks01');
-  await expect(checks).toBeVisible();
+  // Check-in: optimistic tick persists on reload.
+  await expect(page.getByTestId('application-checkin-app-piatalks01')).toBeVisible();
   await page.getByRole('checkbox', { name: 'Checked in Pia Talks' }).check();
   await expect.poll(() => calls.filter((c) => c.method === 'PATCH' && c.path.endsWith('/app-piatalks01')).map((c) => c.body)).toContainEqual({ checkedIn: true });
   await page.reload();
@@ -380,14 +374,14 @@ test('detail page: tags block with Edit tags, check-in on an approved applicatio
 
 // ─── Pinned answer columns ───────────────────────────────────────────────────
 
-test('pinned answers: an Answers column without a form filter, one column per pinned question with it — on both mounts', async ({ page, baseURL }) => {
+test('pinned answers: an Answers column without a form filter, one column per pinned question with it', async ({ page, baseURL }) => {
   await mockAdmin(page, baseURL!);
-  await page.goto('/admin/participants');
+  await page.goto(`/admin/events/${EXPO.id}/applications`);
   const table = page.getByTestId('applications-table');
   await expect(table.getByRole('columnheader', { name: 'Answers' })).toBeVisible();
   await expect(page.getByTestId('application-answers-app-retroweekly')).toContainText('Outlet: Retro Weekly Magazine');
   await expect(page.getByTestId('application-answers-app-retroweekly')).toContainText('Proof of insurance: true');
-  await expect(page.getByTestId('application-answers-app-piatalks01')).toContainText('—');
+  await expect(page.getByTestId('application-answers-app-pixelpins1')).toContainText('—');
 
   await page.getByLabel('Form').selectOption('form-press');
   await expect(page).toHaveURL(/form=form-press/);
@@ -397,10 +391,6 @@ test('pinned answers: an Answers column without a form filter, one column per pi
   await expect(page.getByTestId('pinned-answer-app-retroweekly-q-outlet')).toHaveText('Retro Weekly Magazine');
   await expect(page.getByTestId('pinned-answer-app-retroweekly-q-insurance')).toHaveText('true');
 
-  // Per-event mount reads pinned questions from the event's forms.
-  await page.goto(`/admin/events/${EXPO.id}/applications?form=form-press`);
-  await expect(page.getByTestId('pinned-column-q-outlet')).toHaveText('Outlet');
-  await expect(page.getByTestId('pinned-answer-app-retroweekly-q-outlet')).toHaveText('Retro Weekly Magazine');
   // A form with nothing pinned and no pinned answers shows neither.
   await page.goto(`/admin/events/${EXPO.id}/applications?form=form-vendor`);
   await expect(page.getByTestId('applications-table')).toContainText('Pixel Pins');

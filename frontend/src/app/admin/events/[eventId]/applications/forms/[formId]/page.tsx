@@ -11,7 +11,7 @@ import { useSession } from 'next-auth/react';
 import { type AdminForm, type FormTemplateSummary } from '@/lib/applications';
 import { QuestionsCard, SettingsCard, TiersCard } from '@/components/applications/FormEditorCards';
 import { SaveAsTemplateDialog } from '@/components/applications/TemplateDialogs';
-import { useParticipantsApi } from '@/app/admin/participants/useParticipantsApi';
+import { useParticipantsApi } from '@/components/applications/useParticipantsApi';
 import ApplicationsHeader from '../../ApplicationsHeader';
 import { describeError, useApplicationsApi } from '../../useApplicationsApi';
 
@@ -87,7 +87,7 @@ export default function FormEditorPage({ params }: { params: { eventId: string; 
       {createdFrom && (
         <p className="mt-2 text-sm text-gray-600 dark:text-slate-400" data-testid="form-created-from">
           Created from the{' '}
-          <Link href={`/admin/participants/templates/${createdFrom.id}`} className="text-indigo-600 underline dark:text-indigo-300">
+          <Link href={`/admin/events/templates/${createdFrom.id}`} className="text-indigo-600 underline dark:text-indigo-300">
             {createdFrom.name}
           </Link>{' '}
           template.
