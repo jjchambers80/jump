@@ -181,7 +181,7 @@ function DrawerItem({
           item={item}
           orgId={orgId}
           onNavigate={onNavigate}
-          className={`block ${padding} py-2 pr-4 text-base text-gray-800 aria-[current=page]:font-semibold aria-[current=page]:text-brand-link dark:text-slate-100`}
+          className={`block ${padding} py-3 pr-4 text-base text-gray-800 aria-[current=page]:font-semibold aria-[current=page]:text-brand-link dark:text-slate-100`}
         />
       </li>
     );
@@ -193,14 +193,14 @@ function DrawerItem({
           item={item}
           orgId={orgId}
           onNavigate={onNavigate}
-          className={`flex-1 ${padding} py-2 text-base text-gray-800 aria-[current=page]:font-semibold aria-[current=page]:text-brand-link dark:text-slate-100`}
+          className={`flex-1 ${padding} py-3 text-base text-gray-800 aria-[current=page]:font-semibold aria-[current=page]:text-brand-link dark:text-slate-100`}
         />
         <button
           type="button"
           aria-expanded={open}
           aria-label={open ? `Collapse ${item.label}` : `Expand ${item.label}`}
           onClick={() => setOpen((v) => !v)}
-          className="mr-2 inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-700"
+          className="mr-2 inline-flex h-11 w-11 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-700"
         >
           <ChevronDown
             className={`h-5 w-5 transition-transform duration-150 motion-reduce:transition-none ${open ? 'rotate-180' : ''}`}
@@ -284,7 +284,7 @@ export default function StorefrontNav({
         aria-expanded={drawerOpen}
         aria-controls="storefront-drawer"
         onClick={() => setDrawerOpen(true)}
-        className="inline-flex h-10 w-10 items-center justify-center rounded-md text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-brand dark:text-slate-200 dark:hover:bg-slate-700"
+        className="inline-flex h-11 w-11 items-center justify-center rounded-md text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-brand dark:text-slate-200 dark:hover:bg-slate-700"
       >
         <MenuIcon className="h-6 w-6" aria-hidden />
       </button>

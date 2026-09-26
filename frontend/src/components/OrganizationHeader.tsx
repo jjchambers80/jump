@@ -17,13 +17,6 @@ export interface OrganizationHeaderProps {
    */
   as?: 'h1' | 'link';
   /**
-   * `centered` (default): identity sits in a centered max-w-7xl container.
-   * `two-column`: at xl the container is right-aligned and capped at the
-   * organization page's event column (max-w-4xl) plus cover column
-   * (max-w-3xl) so the logo lines up with the event cards below it.
-   */
-  layout?: 'centered' | 'two-column';
-  /**
    * Render the organization's main menu (spec 027): a nav row under the
    * identity on desktop, a hamburger drawer on mobile. Off on focused flows
    * (checkout, confirmation, apply, account).
@@ -46,7 +39,6 @@ export default function OrganizationHeader({
   organization,
   organizationSlug,
   as = 'link',
-  layout = 'centered',
   nav = false,
   signIn = false,
 }: OrganizationHeaderProps) {
@@ -59,12 +51,11 @@ export default function OrganizationHeader({
     : null;
   const logoSrc = organization.logoUrl ? resolveAssetUrl(organization.logoUrl) : null;
   const href = organization.id ? `/organizations/${encodeURIComponent(orgSlug)}` : null;
+  // text-2xl wrapped a normal-length org name onto three lines next to the 80px
+  // logo on a 390px screen; step up with the viewport instead.
   const nameClass =
-    'min-w-0 break-words text-2xl font-bold text-gray-900 dark:text-slate-100 sm:text-3xl';
-  const containerClass =
-    layout === 'two-column'
-      ? 'mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-6 lg:px-8 xl:mr-0 xl:max-w-[104rem] xl:px-6'
-      : 'mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-6 lg:px-8';
+    'min-w-0 break-words text-xl font-bold text-gray-900 dark:text-slate-100 sm:text-2xl lg:text-3xl';
+  const containerClass = 'mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-6 lg:px-8';
 
   const logo = logoSrc && (
     <LogoBox
@@ -107,7 +98,7 @@ export default function OrganizationHeader({
               <Link
                 href={accountHref}
                 data-testid="buyer-sign-in-link"
-                className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-semibold text-brand-link hover:opacity-80 transition-opacity"
+                className="inline-flex min-h-[2.75rem] items-center gap-1.5 rounded-md px-3 text-sm font-semibold text-brand-link transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               >
                 <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
                   <circle cx="10" cy="6.5" r="3" />

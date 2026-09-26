@@ -56,30 +56,30 @@ export default function OrganizationStorefront({ orgId }: { orgId: string }) {
   }, [orgId]);
 
   if (loading) {
+    // A skeleton in the shape of the real page, so the first paint does not jump
+    // from a centred spinner to a full storefront.
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center">
-        <div className="text-center">
-          <svg
-            className="animate-spin h-12 w-12 text-brand-link mx-auto mb-4"
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-            />
-          </svg>
-          <p className="text-gray-600 dark:text-slate-400">Loading...</p>
+      <div className="min-h-screen bg-gray-50 dark:bg-slate-900" aria-busy="true">
+        <p className="sr-only" role="status">
+          Loading organization
+        </p>
+        <div className="w-full border-b border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-800">
+          <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-4 sm:gap-6 sm:px-6 sm:py-6 lg:px-8">
+            <div className="h-20 w-20 shrink-0 animate-pulse rounded-lg bg-gray-200 sm:h-24 sm:w-24 dark:bg-slate-700" />
+            <div className="h-8 w-56 animate-pulse rounded bg-gray-200 dark:bg-slate-700" />
+          </div>
+        </div>
+        <div className="h-56 w-full animate-pulse bg-gray-200 sm:h-64 md:h-72 lg:h-80 xl:h-96 dark:bg-slate-800" />
+        <div className="mx-auto w-full max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+          <div className="h-7 w-48 animate-pulse rounded bg-gray-200 dark:bg-slate-700" />
+          <div className="mt-6 grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="h-64 animate-pulse rounded-xl border border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-800"
+              />
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -129,92 +129,89 @@ export default function OrganizationStorefront({ orgId }: { orgId: string }) {
     );
   }
 
-  const eventList = (
-    <>
-      {/* Event cards */}
-      {events.length === 0 ? (
-        <div className="text-center py-16">
-          <svg
-            className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-slate-600"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-            />
-          </svg>
-          <h3 className="text-lg font-semibold text-gray-700 dark:text-slate-300 mb-2">
-            No upcoming events
-          </h3>
-          <p className="text-sm text-gray-500 dark:text-slate-400">
-            Check back later for new events from {organization.name}.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {events.map((event) => (
-            <EventCard key={event.id} event={event} />
-          ))}
-        </div>
-      )}
-    </>
-  );
+  const eventCount = events.length;
 
-  // Desktop with cover: two-column, image flush right
-  // Desktop without cover: centered single column
-  // The full-width header keeps the organization identity consistent at every size.
+  // Header, then a full-bleed cover band, then the events grid.
+  //
+  // The cover used to be a sticky 55%-wide column at xl+ with a duplicate <img>
+  // for narrow screens. That halved the width available to the events — the one
+  // thing a visitor came for — at every desktop size, hard-cropped the artwork,
+  // and left a tall dead zone once the sticky column ran out. A bounded
+  // full-bleed band keeps the brand impact, downloads the cover once, and hands
+  // the full container width back to the grid, matching /events and
+  // /venues/[venueId], which already render EventCard three-up.
   return (
     <BrandScope
       color={organization.brandColor}
       themeMode={organization.themeMode}
-      className="min-h-screen bg-gray-50 dark:bg-slate-900"
+      className="flex min-h-screen flex-col bg-gray-50 dark:bg-slate-900"
     >
       <OrganizationHeader
         organization={organization}
         as="h1"
-        layout={hasCover ? 'two-column' : 'centered'}
         nav
         signIn={organization.buyerSignInLinks !== false}
       />
 
-      {/* Mobile cover image */}
       {hasCover && (
-        <div className="xl:hidden w-full">
-          <div className="w-full" style={{ aspectRatio: '16/9' }}>
-            <img
-              src={coverSrc!}
-              alt={`${organization.name} cover`}
-              className="w-full h-full object-cover"
-            />
-          </div>
+        <div className="h-56 w-full overflow-hidden bg-gray-200 sm:h-64 md:h-72 lg:h-80 xl:h-96 dark:bg-slate-800">
+          <img
+            src={coverSrc!}
+            alt={`${organization.name} cover`}
+            className="h-full w-full object-cover object-center"
+          />
         </div>
       )}
 
-      {hasCover ? (
-        /* Two-column desktop layout */
-        <div className="xl:flex min-h-screen">
-          {/* Left: event content — full width below xl, pushed right at xl+ */}
-          <div className="flex-1 xl:flex xl:justify-end">
-            <div className="w-full px-4 py-8 sm:px-6 xl:max-w-4xl xl:py-12">{eventList}</div>
+      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-10 sm:px-6 lg:px-8 lg:py-12">
+        <section aria-labelledby="upcoming-events">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h2
+              id="upcoming-events"
+              className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-slate-100"
+            >
+              Upcoming events
+            </h2>
+            {eventCount > 0 && (
+              <p className="text-sm text-gray-500 dark:text-slate-400">
+                {eventCount} {eventCount === 1 ? 'event' : 'events'}
+              </p>
+            )}
           </div>
 
-          {/* Right: cover image, flush to window edge */}
-          <div className="hidden xl:block w-[55%] max-w-3xl sticky top-0 h-screen">
-            <img
-              src={coverSrc!}
-              alt={`${organization.name} cover`}
-              className="w-full h-full object-cover"
-            />
-          </div>
-        </div>
-      ) : (
-        /* Centered single column */
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 xl:py-12">{eventList}</div>
-      )}
+          {eventCount === 0 ? (
+            <div className="mt-6 rounded-xl border border-dashed border-gray-300 bg-white px-6 py-16 text-center dark:border-slate-700 dark:bg-slate-800">
+              <svg
+                className="mx-auto mb-4 h-14 w-14 text-gray-300 dark:text-slate-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                />
+              </svg>
+              <h3 className="text-lg font-semibold text-gray-700 dark:text-slate-300">
+                No upcoming events
+              </h3>
+              <p className="mt-2 text-sm text-gray-500 dark:text-slate-400">
+                Check back later for new events from {organization.name}.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-6 grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+              {events.map((event) => (
+                <EventCard key={event.id} event={event} />
+              ))}
+            </div>
+          )}
+        </section>
+      </main>
+
       <StorefrontFooter organization={organization} />
     </BrandScope>
   );
