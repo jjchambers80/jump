@@ -282,7 +282,7 @@ export default function CreateEventPage() {
           await api.upload(`/organizations/${selectedOrgId}/events/${created.id}/logo`, formData);
         } catch {
           // The event exists; send the organizer to its edit page to retry the image.
-          router.push(`/admin/events/${created.id}/edit?orgId=${selectedOrgId}&imageUpload=failed`);
+          router.push(`/admin/events/${created.id}/edit/details?orgId=${selectedOrgId}&imageUpload=failed`);
           return;
         }
       }

@@ -27,7 +27,20 @@ Types: `frontend/src/lib/eventOverview.ts`. Contract test: `backend/tests/contra
 - **Main column**: Sales (tier table, add-ons, money footer, Orders link = `/admin/orders?eventId=`) or RSVPs; Applications (per-form pipeline bar, tiers); Event details (description through `ContentHtml`, folds when long).
 - **Aside**: Date & venue, Admission (`CapacityMeter` + issued / checked in), Floor map (booth matrix, one cell per booth, scaled above 120), Listing, Tax & payments.
 
-Sections are `OverviewSection` cards (`components/events/EventOverviewSections.tsx`) with an Edit link whose accessible name says what it edits. Edit links go to `/admin/events/:id/edit?orgId=…#event-<section>`; the edit page scrolls `<main>` to that card with `jumpTo` once loaded, and Save / Cancel / "Back to event" return here. Analytics and Applications pages link "← Back to event" here too.
+Sections are `OverviewSection` cards (`components/events/EventOverviewSections.tsx`) with an Edit control whose accessible name says what it edits.
+
+**Where each section is edited (spec 037 phase 3, D10):**
+
+| Section | Editor |
+|---|---|
+| Event details, Date & venue | Full page `/admin/events/:id/edit/details#event-…` (name, URL, description, media, date & venue, listing) |
+| Sales (whole table, add-ons) | Full page `/admin/events/:id/edit/sales#event-price-tiers` (admission, tiers, add-ons) |
+| One tier (click its name) / **Add tier** | `TierFlyout` — PATCH / POST `…/price-tiers[/:id]`, sale window in the venue zone, quantity never below sold |
+| Admission | `AdmissionFlyout` — capacity (never below the tiers' total) or RSVP limit / party size; the mode is locked once orders or RSVPs exist |
+| Listing | `ListingFlyout` — category + URL slug (409 → slug error) |
+| An application form's **Settings** | `FormSettingsFlyout` — name, status, opens / closes (venue zone); options and questions stay on the form page |
+
+Flyouts are `components/Flyout.tsx`: right-hand panel on desktop, bottom sheet on phones, one `<form role="dialog">` with a sticky Cancel / Save footer, focus trap and return, Escape and backdrop ask before discarding unsaved changes. They PATCH only their own fields and the page reloads the overview. The full-page editors scroll `<main>` to the hash's card with `jumpTo`; Save / Cancel / "Back to event" return here, and the header's **Details | Sales** switch moves between them (confirming when dirty). The old `/edit` URL redirects to the editor that owns its hash (`edit/page.tsx`). Analytics and Applications pages link "← Back to event" here too.
 
 Admin search event results open this page (`AdminSearchService` `eventHref`).
 
@@ -49,4 +62,4 @@ Saved items (D2) are managed where they are used: **Saved tiers** (`TierPresetMe
 
 ## Tests
 
-`frontend/e2e/admin-event-details.spec.ts` (sections, Edit hrefs, tabs, RSVP variant, not-found, 390 px), `admin-events-list.spec.ts` (card link, whole-card click).
+`frontend/e2e/admin-event-details.spec.ts` (sections, Edit hrefs, tabs, flyouts: admission, tier edit / add, listing, form settings, Escape guard, RSVP variant, not-found, 390 px), `admin-events-list.spec.ts` (card link, whole-card click).
