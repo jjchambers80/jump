@@ -11,7 +11,7 @@ Admin › Maps › *map* is where an organizer draws an event's floor: booths an
 
 | File | Purpose |
 |------|---------|
-| `frontend/src/app/admin/maps/[mapId]/page.tsx` | Builder page: header (save state, undo/redo, zoom, help, publish), add/turn/copy/delete/nudge operations, keyboard shortcuts, publish + shortcuts dialogs, screen-reader announcements |
+| `frontend/src/app/admin/maps/[mapId]/page.tsx` | Builder page: header (save state, undo/redo, zoom, fit, full screen, help, publish), add/turn/copy/delete/nudge operations, keyboard shortcuts, publish + shortcuts dialogs, screen-reader announcements |
 | `frontend/src/components/maps/useMapEditor.ts` | Layout + settings state, `commit` / `checkpoint` undo model, debounced autosave, server-id adoption after save, `refreshBooths` |
 | `frontend/src/components/maps/builder/EditorCanvas.tsx` | Canvas with its own viewport (fit, zoom at cursor, pan), drag-to-move, corner resize, Shift-drag box select, palette drop target with ghost preview, floating Turn / Copy / Delete bar |
 | `frontend/src/components/maps/builder/AddPalette.tsx` | "Add to map" tiles: click adds in the middle of the view, drag drops at the pointer |
@@ -36,7 +36,8 @@ None. The builder uses the existing `/admin/maps/*` API.
 3. **Editing in the panel.** Nothing selected: map name, floor width/depth (cannot shrink past what is on it), feet/meters, a four-step getting-started list, and the tier colours. One booth: number (unique, validated inline), booth/table, size, price tier, Turn/Copy/Delete, then the vendor panel (assign, move, reserve, block). Several selected: set the price tier or type for all booths at once. Text and number fields commit on blur or Enter so one edit is one undo step.
 4. **Turn** swaps width and depth around the centre (walls switch horizontal/vertical). Legacy `rotation: 90` booths are turned back to `rotation: 0`; the builder never creates new rotated booths.
 5. **Saving.** Every change bumps a revision; 1.2 s later `save()` PATCHes the settings and PUTs the whole layout, reading the *latest* state through a ref. Edits made during a save trigger another save when it finishes. The header shows "All changes saved" / "Saving…" / "Unsaved changes" / "Not saved — try again" in a live region; `beforeunload` warns while a revision is unsaved. After a save, booths adopt the server ids and states by label (the backend upserts by label), including ids inside the undo/redo stacks.
-6. **Publishing** saves first, then shows each tier's booth count and warns about booths with no tier.
+6. **Full screen.** The header's Full screen button (or F) turns on focus mode: the builder root becomes `fixed inset-0` above the admin sidebar and top bar, and the browser's own full screen is requested on `<html>`. It is requested on the document, not on the builder, because the builder's dialogs render inline and would be hidden outside a full-screen element. If the browser refuses (iframe, old Safari), the CSS focus mode alone still hides the admin chrome. Esc exits: in browser full screen the browser handles it and `fullscreenchange` turns focus mode off; otherwise Esc cancels Move-to, then clears the selection, then leaves focus mode. Leaving the page also exits browser full screen. The magnifier-in-corners button next to the zoom level is *Fit floor to screen* (0), a view reset, not full screen.
+7. **Publishing** saves first, then shows each tier's booth count and warns about booths with no tier.
 
 ## API Endpoints
 
@@ -57,7 +58,7 @@ Unchanged; see [floor-maps.md](floor-maps.md).
 ## Accessibility
 
 - Every palette tile, header control and floating-bar button is a labelled button with a visible focus ring; icon-only buttons have `aria-label`, a tooltip and `aria-keyshortcuts`.
-- The canvas is `role="application"` with instructions in `aria-describedby`. Items are focusable (Tab), Enter / Space select, Shift + Enter adds to the selection, arrow keys nudge by 1 (Shift: 5), R turns, Delete removes, Ctrl/⌘ + D copies, Ctrl/⌘ + Z / Shift + Z undo and redo, Ctrl/⌘ + A selects all, B / T add a booth / table, 0 fits, ? opens the tips dialog.
+- The canvas is `role="application"` with instructions in `aria-describedby`. Items are focusable (Tab), Enter / Space select, Shift + Enter adds to the selection, arrow keys nudge by 1 (Shift: 5), R turns, Delete removes, Ctrl/⌘ + D copies, Ctrl/⌘ + Z / Shift + Z undo and redo, Ctrl/⌘ + A selects all, B / T add a booth / table, 0 fits, F toggles full screen (pressed state via `aria-pressed`, entering and leaving are announced), ? opens the tips dialog.
 - A polite live region announces adds, moves, resizes, deletes, tier changes and vendor moves.
 - Dialogs trap focus, close on Escape and return focus to the opener. The flash on new items is disabled under `prefers-reduced-motion`.
 - Booth labels switch between white and near-black to keep contrast on tier swatches (also on the public map).
@@ -66,6 +67,8 @@ Unchanged; see [floor-maps.md](floor-maps.md).
 
 - Mouse clicks on items are handled in the canvas `pointerdown`; `Booth` / `MapElement` `onSelect` only acts on keyboard events in the builder. Do not route clicks through both.
 - `commit(fn)` records an undo step; drags call `checkpoint()` once and then `commit(fn, { history: false })` per pointer move.
+- The canvas refits whenever its container resizes (full screen, window) until the organizer pans or zooms (`autoFit` ref in `EditorCanvas`); after that a resize keeps their view. The page also calls `fit()` after toggling full screen.
+- The full-screen builder is `z-[45]`: above the admin sidebar (`z-40`), below `BuilderDialog` (`z-50`).
 - Items with a temporary id (`new-booth-…`) have no vendor panel until the autosave returns server ids.
 - Deleting a SOLD / HELD / RESERVED booth is refused in the UI (the backend would 409 `BOOTH_IN_USE`); the others in the selection are still deleted.
 - `MapElement` draws text labels and walls inside their `x, y, w, h` box (walls as a bar along the box, text centred). Before this change a label's text sat above `y`; no layouts had elements then because the old toolbar never placed anything.

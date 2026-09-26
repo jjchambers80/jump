@@ -117,6 +117,8 @@ const EditorCanvas = forwardRef<EditorCanvasHandle, EditorCanvasProps>(function 
   const [size, setSize] = useState({ w: 0, h: 0 });
   const fitted = useRef(false);
   const fitScale = useRef(1);
+  // True while the view is the fitted one; any pan or zoom clears it.
+  const autoFit = useRef(true);
   const gesture = useRef<Gesture | null>(null);
   const [marquee, setMarquee] = useState<Box | null>(null);
   const [busy, setBusy] = useState(false);
@@ -128,6 +130,7 @@ const EditorCanvas = forwardRef<EditorCanvasHandle, EditorCanvasProps>(function 
 
   const applyView = useCallback(
     (next: { scale: number; tx: number; ty: number }) => {
+      autoFit.current = false;
       setView(next);
       onZoomChange(next.scale / fitScale.current);
     },
@@ -143,6 +146,7 @@ const EditorCanvas = forwardRef<EditorCanvasHandle, EditorCanvasProps>(function 
     const scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, Math.min((cw - PAD * 2) / floorW, (ch - PAD * 2) / floorH)));
     fitScale.current = scale;
     applyView({ scale, tx: (cw - floorW * scale) / 2, ty: (ch - floorH * scale) / 2 });
+    autoFit.current = true;
   }, [floorW, floorH, applyView]);
 
   const zoomAt = useCallback(
@@ -168,13 +172,15 @@ const EditorCanvas = forwardRef<EditorCanvasHandle, EditorCanvasProps>(function 
   }, []);
 
   // Fit once the container has a size, and again when the floor is resized.
+  // A container resize (full screen, window) refits too, unless the organizer
+  // has panned or zoomed since.
   useEffect(() => {
     if (size.w === 0) return;
-    if (!fitted.current) {
+    if (!fitted.current || autoFit.current) {
       fitted.current = true;
       fit();
     }
-  }, [size.w, fit]);
+  }, [size.w, size.h, fit]);
   useEffect(() => {
     if (fitted.current) fit();
   }, [width, height, gridSize]); // eslint-disable-line react-hooks/exhaustive-deps
