@@ -354,6 +354,68 @@ class TicketService {
   }
 
   /**
+   * Claim a ticket for redemption. The write is conditional on the row still
+   * being VALID, so two scanners reading the same barcode in the same moment
+   * cannot both succeed: Postgres serialises the two UPDATEs and the loser
+   * matches zero rows. Same shape as `VendorCheckInService.checkIn`.
+   *
+   * @param {string} ticketId
+   * @param {Date} at - Redemption timestamp
+   * @returns {Promise<boolean>} true when this caller is the one that redeemed it
+   */
+  async _claimForRedemption(ticketId, at) {
+    const { count } = await prisma.ticket.updateMany({
+      where: { id: ticketId, status: 'VALID' },
+      data: { status: 'REDEEMED', redeemedAt: at },
+    });
+    return count === 1;
+  }
+
+  /**
+   * Build the rejection for a ticket whose status changed between the checks
+   * above and the conditional write. Re-reads the row so the door is told what
+   * actually happened — nearly always a second scanner a moment earlier.
+   *
+   * @param {string} ticketId
+   * @returns {Promise<Error>} The error to throw
+   */
+  async _redemptionRaceError(ticketId) {
+    const fresh = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      select: { status: true, redeemedAt: true },
+    });
+
+    if (!fresh) {
+      const error = new ValidationError('Ticket not found');
+      error.redemptionStatus = 'INVALID';
+      error.ticketId = ticketId;
+      error.statusCode = 400;
+      return error;
+    }
+
+    if (fresh.status === 'REDEEMED') {
+      const error = new ConflictError('Ticket has already been redeemed');
+      error.redemptionStatus = 'ALREADY_REDEEMED';
+      error.ticketId = ticketId;
+      error.originalRedemptionTime = fresh.redeemedAt;
+      return error;
+    }
+
+    if (fresh.status === 'VOIDED') {
+      const error = new ConflictError('Ticket has been voided');
+      error.redemptionStatus = 'VOIDED';
+      error.ticketId = ticketId;
+      return error;
+    }
+
+    const error = new ConflictError('Ticket has expired');
+    error.redemptionStatus = 'EXPIRED';
+    error.ticketId = ticketId;
+    error.statusCode = 410;
+    return error;
+  }
+
+  /**
    * Redeem a ticket by barcode (new format — no JWT verification needed).
    * Runs the same validation chain as redeemTicket minus JWT step.
    *
@@ -424,10 +486,9 @@ class TicketService {
     }
 
     const now = new Date();
-    await prisma.ticket.update({
-      where: { id: ticket.id },
-      data: { status: 'REDEEMED', redeemedAt: now },
-    });
+    if (!(await this._claimForRedemption(ticket.id, now))) {
+      throw await this._redemptionRaceError(ticket.id);
+    }
 
     logger.info('Ticket redeemed by barcode', {
       ticketId: ticket.id,
@@ -544,15 +605,11 @@ class TicketService {
       throw voidedError;
     }
 
-    // 6. Redeem
+    // 6. Redeem — conditional on the row still being VALID (see _claimForRedemption)
     const now = new Date();
-    await prisma.ticket.update({
-      where: { id: ticketId },
-      data: {
-        status: 'REDEEMED',
-        redeemedAt: now,
-      },
-    });
+    if (!(await this._claimForRedemption(ticketId, now))) {
+      throw await this._redemptionRaceError(ticketId);
+    }
 
     logger.info('Ticket redeemed', {
       ticketId,
@@ -743,13 +800,14 @@ class TicketService {
     if (ticket.status === 'EXPIRED') throw new ConflictError('Cannot check in an expired ticket');
 
     const now = new Date();
-    const updated = await prisma.ticket.update({
-      where: { id: ticketId },
-      data: { status: 'REDEEMED', redeemedAt: now },
-    });
+    // Conditional write: two staff tapping the same row at once must not both
+    // report a clean check-in (see _claimForRedemption).
+    if (!(await this._claimForRedemption(ticketId, now))) {
+      throw new ConflictError('Ticket already checked in');
+    }
 
     logger.info('Admin check-in', { ticketId });
-    return { status: updated.status, redeemedAt: updated.redeemedAt };
+    return { status: 'REDEEMED', redeemedAt: now };
   }
 
   /**
