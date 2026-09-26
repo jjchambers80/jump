@@ -27,10 +27,17 @@ module.exports = {
           '0%': { transform: 'translateX(100%)' },
           '100%': { transform: 'translateX(0)' },
         },
+        // Section cards settle in on first paint. `backwards` fill only: a
+        // lingering transform would trap the fixed-position dialogs inside.
+        cardIn: {
+          '0%': { opacity: '0', transform: 'translateY(6px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
       },
       animation: {
         'slide-up': 'slideUp 0.3s ease-out',
         'slide-in-right': 'slideInRight 0.2s ease-out',
+        'card-in': 'cardIn 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) backwards',
       },
     },
   },

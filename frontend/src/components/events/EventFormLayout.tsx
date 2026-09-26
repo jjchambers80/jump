@@ -42,7 +42,7 @@ export function EventFormShell({
       {alerts}
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
         <div className="min-w-0 space-y-6 xl:col-span-8">{main}</div>
-        <aside aria-label="Event settings" className="min-w-0 space-y-6 xl:col-span-4">
+        <aside aria-label="Event settings" className="flex min-w-0 flex-col gap-6 xl:col-span-4">
           {aside}
         </aside>
       </div>
@@ -56,17 +56,31 @@ export function EventFormShell({
 
 export function EventFormHeader({
   title,
+  eyebrow,
+  meta,
   notice,
   actions,
 }: {
   title: string;
+  /** Small label above the title, read as part of the heading ("Edit event"). */
+  eyebrow?: string;
+  /** One line under the title: status, date, venue. */
+  meta?: React.ReactNode;
   notice?: React.ReactNode;
   actions?: React.ReactNode;
 }) {
   return (
-    <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+    <div className="mb-6 flex flex-wrap items-start justify-between gap-4 sm:mb-8">
       <div className="min-w-0">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{title}</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+          {eyebrow && (
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-indigo-600 dark:text-indigo-400">
+              {eyebrow}
+            </span>
+          )}
+          <span className="block break-words text-balance">{title}</span>
+        </h1>
+        {meta && <div className="mt-2">{meta}</div>}
         {notice}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-3">{actions}</div>}
@@ -86,16 +100,25 @@ export function FormAlert({ tone, children }: { tone: 'error' | 'success'; child
   );
 }
 
-/** A titled card; the heading labels the region for screen readers. */
+const cardClass =
+  'scroll-mt-6 rounded-xl outline-none border border-gray-200 bg-white p-4 shadow-sm shadow-gray-900/[0.03] dark:border-slate-700/80 dark:bg-slate-800 dark:shadow-none sm:p-6 motion-safe:animate-card-in';
+
+/**
+ * A titled card; the heading labels the region for screen readers.
+ * `step` numbers the sections down the page like a run sheet and staggers
+ * their entrance; the number is decorative and stays out of the heading name.
+ */
 export function FormCard({
   id,
   title,
+  step,
   description,
   actions,
   children,
 }: {
   id: string;
   title: string;
+  step?: number;
   description?: React.ReactNode;
   actions?: React.ReactNode;
   children: React.ReactNode;
@@ -103,15 +126,27 @@ export function FormCard({
   const headingId = `${id}-heading`;
   return (
     <section
+      id={id}
       aria-labelledby={headingId}
-      className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 sm:p-6"
+      className={cardClass}
+      style={step ? { animationDelay: `${Math.min(step, 8) * 40}ms` } : undefined}
     >
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 id={headingId} className="text-lg font-semibold text-gray-900 dark:text-white">
-            {title}
-          </h2>
-          {description && <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">{description}</p>}
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3 sm:mb-5">
+        <div className="flex min-w-0 items-baseline gap-3">
+          {step != null && (
+            <span
+              aria-hidden
+              className="font-mono text-xs font-medium tabular-nums text-gray-400 dark:text-slate-500"
+            >
+              {String(step).padStart(2, '0')}
+            </span>
+          )}
+          <div className="min-w-0">
+            <h2 id={headingId} className="text-lg font-semibold tracking-tight text-gray-900 dark:text-white">
+              {title}
+            </h2>
+            {description && <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">{description}</p>}
+          </div>
         </div>
         {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
       </div>
@@ -121,9 +156,9 @@ export function FormCard({
 }
 
 /** Plain card for sections that render their own heading (Add-ons). */
-export function FormPanel({ children }: { children: React.ReactNode }) {
+export function FormPanel({ id, children }: { id?: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 sm:p-6">
+    <div id={id} className={cardClass}>
       {children}
     </div>
   );
@@ -178,7 +213,7 @@ export function EventFormActionsCard(props: Omit<React.ComponentProps<typeof Eve
 }) {
   const { children, ...actions } = props;
   return (
-    <div className="hidden xl:block xl:sticky xl:top-6 xl:z-10 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 sm:p-6">
+    <div className="hidden xl:block xl:sticky xl:top-6 xl:z-10 rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700/80 dark:bg-slate-800 sm:p-6">
       {children}
       <EventFormActions {...actions} layout="stack" />
     </div>
@@ -207,7 +242,7 @@ export function AdmissionModeField({
   return (
     <fieldset aria-describedby={describedBy}>
       <legend className="sr-only">Admission mode</legend>
-      <div className="grid grid-cols-2 rounded-lg border border-gray-300 dark:border-slate-600 overflow-hidden">
+      <div className="grid grid-cols-2 gap-1 rounded-lg bg-gray-100 p-1 dark:bg-slate-900/60">
         {ADMISSION_OPTIONS.map((option) => {
           const disabled = isDisabled?.(option.value) ?? false;
           return (
@@ -221,7 +256,7 @@ export function AdmissionModeField({
                 onChange={() => onChange(option.value)}
                 className="peer sr-only"
               />
-              <span className="flex min-h-11 items-center justify-center px-4 py-2.5 text-sm font-medium transition-colors bg-white text-gray-700 hover:bg-gray-50 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 peer-checked:bg-indigo-600 peer-checked:text-white peer-checked:hover:bg-indigo-600 peer-disabled:opacity-50 peer-focus-visible:ring-2 peer-focus-visible:ring-inset peer-focus-visible:ring-indigo-300">
+              <span className="flex min-h-10 items-center justify-center rounded-md px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:text-gray-900 dark:text-slate-400 dark:hover:text-slate-100 peer-checked:bg-white peer-checked:text-gray-900 peer-checked:shadow-sm peer-checked:ring-1 peer-checked:ring-gray-900/5 dark:peer-checked:bg-slate-700 dark:peer-checked:text-white dark:peer-checked:ring-white/10 peer-disabled:opacity-50 peer-focus-visible:ring-2 peer-focus-visible:ring-indigo-500 motion-reduce:transition-none">
                 {option.label}
               </span>
             </label>

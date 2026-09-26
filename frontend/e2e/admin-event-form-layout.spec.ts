@@ -206,3 +206,28 @@ test('create: a failed image upload lands on the edit page with a notice', async
   await expect(page.getByRole('alert').filter({ hasText: 'its image failed to upload' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Media' }).getByRole('button', { name: 'Upload new' })).toBeVisible();
 });
+
+test('edit: summary stub shows capacity, tracks unsaved changes and jumps within the page', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockApi(page);
+  await page.goto(`/admin/events/${EVENT_ID}/edit?orgId=${ORG_ID}`);
+
+  // The page is titled by the event itself; "Edit event" stays part of the heading.
+  await expect(page.getByRole('heading', { level: 1, name: /Edit event\s*Layout Test Event/ })).toBeVisible();
+
+  const summary = page.getByRole('region', { name: 'Event summary' });
+  await expect(summary.getByRole('img', { name: '150 of 200 capacity assigned to tiers, 0 sold' })).toBeVisible();
+  await expect(summary.getByText('50 unassigned')).toBeVisible();
+
+  const aside = page.getByRole('complementary', { name: 'Event settings' });
+  await expect(aside.getByRole('status').filter({ hasText: 'No unsaved changes' })).toBeVisible();
+  await page.getByLabel('Name *').fill('Layout Test Event, renamed');
+  await expect(aside.getByRole('status').filter({ hasText: 'Unsaved changes' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: /Layout Test Event, renamed/ })).toBeVisible();
+
+  // Section links scroll the admin <main>, never the app frame around it.
+  await summary.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: 'Listing' }).click();
+  await expect(page.getByRole('region', { name: 'Listing' })).toBeInViewport();
+  await expect(page.getByRole('region', { name: 'Listing' })).toBeFocused();
+  expect(await page.evaluate(() => document.scrollingElement!.scrollTop)).toBe(0);
+});

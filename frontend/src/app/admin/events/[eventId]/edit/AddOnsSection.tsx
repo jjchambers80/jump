@@ -33,6 +33,8 @@ interface AddOnsSectionProps {
   priceTiers: TierOption[];
   taxRate: number;
   taxInclusive: boolean;
+  /** Section number on the edit page's run sheet (decorative). */
+  step?: number;
 }
 
 interface DraftAddOn {
@@ -68,7 +70,7 @@ function describeError(err: unknown, fallback: string) {
   return err instanceof Error && err.message ? err.message : fallback;
 }
 
-export default function AddOnsSection({ orgId, eventId, priceTiers, taxRate, taxInclusive }: AddOnsSectionProps) {
+export default function AddOnsSection({ orgId, eventId, priceTiers, taxRate, taxInclusive, step }: AddOnsSectionProps) {
   const { data: session } = useSession();
   const role = (session?.user as { role?: string } | undefined)?.role;
   const canEdit = role === 'ADMIN' || role === 'SYSTEM_ADMIN';
@@ -172,15 +174,22 @@ export default function AddOnsSection({ orgId, eventId, priceTiers, taxRate, tax
 
   return (
     <div data-testid="add-ons-section">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Add-ons</h2>
-          <p className="text-xs text-gray-500 dark:text-slate-400">
-            Extras sold with tickets or applications — parking, power, badges. Saved immediately.
-          </p>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-1 basis-64 items-baseline gap-3">
+          {step != null && (
+            <span aria-hidden className="font-mono text-xs font-medium tabular-nums text-gray-400 dark:text-slate-500">
+              {String(step).padStart(2, '0')}
+            </span>
+          )}
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Add-ons</h2>
+            <p className="text-xs text-gray-500 dark:text-slate-400">
+              Extras sold with tickets or applications — parking, power, badges. Saved immediately.
+            </p>
+          </div>
         </div>
         {canEdit && (
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
             {presets.length > 0 && (
               <div className="relative">
                 <button

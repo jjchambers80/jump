@@ -29,6 +29,8 @@ interface TierCardProps {
   onEdit: () => void;
   onMove: (direction: 'up' | 'down') => void;
   onDelete: () => void;
+  /** Background class for the left edge strip and sold bar (matches the capacity meter). */
+  accentClass?: string;
 }
 
 export function TierCard({
@@ -40,7 +42,10 @@ export function TierCard({
   onEdit,
   onMove,
   onDelete,
+  accentClass,
 }: TierCardProps) {
+  const qty = Number(tier.quantityTotal) || 0;
+  const sold = tier.quantitySold ?? 0;
   const priceDisplay = tier.price
     ? Number(tier.price) === 0
       ? 'Free'
@@ -49,9 +54,10 @@ export function TierCard({
 
   return (
     <div
-      className="rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 p-4 flex items-center gap-4 cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-600 transition-colors"
+      className="relative overflow-hidden rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 p-4 flex items-center gap-4 cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-600 transition-colors"
       onClick={onEdit}
     >
+      {accentClass && <span aria-hidden className={`absolute inset-y-0 left-0 w-1 ${accentClass}`} />}
       {/* Reorder buttons */}
       <div className="flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
         <button
@@ -111,6 +117,11 @@ export function TierCard({
             </span>
           )}
         </div>
+        {accentClass && !tier.isNew && qty > 0 && (
+          <div aria-hidden className="mt-2 h-1 w-full max-w-48 overflow-hidden rounded-full bg-gray-100 dark:bg-slate-700">
+            <div className={`h-full ${accentClass}`} style={{ width: `${Math.min(sold / qty, 1) * 100}%` }} />
+          </div>
+        )}
       </div>
 
       {/* Actions */}
