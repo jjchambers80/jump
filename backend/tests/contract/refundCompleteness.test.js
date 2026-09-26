@@ -149,25 +149,34 @@ describe('Refund completeness against the amount actually charged', () => {
 
   // ── Finding #1 ────────────────────────────────────────────────────────────
 
-  it('does not mark an order REFUNDED while fees and tax are still held', async () => {
+  it('refunds a ticket at what the buyer paid, not the listed price', async () => {
     const { order, tickets } = await makeOrder();
 
     await refundService.refundTicket(tickets[0].id, { initiatedBy: 'staff' });
 
-    const refunded = await refundedTotal(order.id);
-    expect(refunded).toBeLessThan(TOTAL);
-    // The order still holds $15. It must not claim to be fully refunded.
+    // Before the fix this returned the $100 listed price and kept $15 while
+    // marking the order REFUNDED.
+    expect(await refundedTotal(order.id)).toBeCloseTo(TOTAL, 2);
+    expect(await statusOf(order.id)).toBe('REFUNDED');
+  });
+
+  it('does not mark an order REFUNDED while money is still held', async () => {
+    const { order, tickets } = await makeOrder({ tickets: 2 });
+
+    await refundService.refundTicket(tickets[0].id, { initiatedBy: 'staff' });
+
+    expect(await refundedTotal(order.id)).toBeCloseTo(TOTAL, 2);
     expect(await statusOf(order.id)).toBe('PARTIALLY_REFUNDED');
   });
 
-  it('leaves the remaining fees and tax recoverable through refundOrder', async () => {
-    const { order, tickets } = await makeOrder();
+  it('leaves the rest of a partly refunded order recoverable through refundOrder', async () => {
+    const { order, tickets } = await makeOrder({ tickets: 2 });
 
     await refundService.refundTicket(tickets[0].id, { initiatedBy: 'staff' });
-    // Staff notice the shortfall and return the rest. This must not 409.
+    // Staff return the rest. This must not 409.
     await refundService.refundOrder(order.id, { initiatedBy: 'staff' });
 
-    expect(await refundedTotal(order.id)).toBeCloseTo(TOTAL, 2);
+    expect(await refundedTotal(order.id)).toBeCloseTo(TOTAL * 2, 2);
     expect(await statusOf(order.id)).toBe('REFUNDED');
   });
 
