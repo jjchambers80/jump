@@ -13,7 +13,7 @@ Every public storefront page opens with a full-width organization header: the or
 |------|---------|
 | `frontend/src/components/OrganizationHeader.tsx` | Shared header: `LogoBox` + name; `as="h1"` (org page) or `as="link"` (default, links to `/organizations/:id`) |
 | `frontend/src/components/LogoBox.tsx` | Square container with `object-contain` logo |
-| `frontend/src/app/organizations/[orgId]/OrganizationStorefront.tsx` | Org page: header followed by the cover and event layouts |
+| `frontend/src/app/organizations/[orgId]/OrganizationStorefront.tsx` | Org page: header, then the cover band and the event stubs (see [Organization Storefront Page](organization-storefront.md)) |
 | `frontend/src/app/events/[eventId]/page.tsx` | Event page: header above the hero card |
 | `frontend/src/app/events/[eventId]/apply/ApplyShell.tsx` | Apply index / form / status pages |
 | `frontend/src/app/checkout/[eventId]/page.tsx`, `frontend/src/app/confirmation/page.tsx` | Checkout and confirmation |
