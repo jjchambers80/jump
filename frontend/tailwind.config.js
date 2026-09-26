@@ -33,11 +33,18 @@ module.exports = {
           '0%': { opacity: '0', transform: 'translateY(6px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
+        // RSVP confirmation stamp (RsvpPass): lands once, settles at its tilt.
+        stampIn: {
+          '0%': { opacity: '0', transform: 'scale(1.6) rotate(-14deg)' },
+          '60%': { opacity: '1', transform: 'scale(0.94) rotate(-5deg)' },
+          '100%': { opacity: '1', transform: 'scale(1) rotate(-6deg)' },
+        },
       },
       animation: {
         'slide-up': 'slideUp 0.3s ease-out',
         'slide-in-right': 'slideInRight 0.2s ease-out',
         'card-in': 'cardIn 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) backwards',
+        'stamp-in': 'stampIn 0.36s cubic-bezier(0.2, 0.8, 0.2, 1) backwards',
       },
     },
   },

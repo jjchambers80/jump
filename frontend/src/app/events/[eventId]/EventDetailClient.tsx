@@ -10,13 +10,13 @@ import { storefrontLockFrom, type StorefrontLock } from '../../../lib/storefront
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '../../../services/api';
-import { rsvpApi } from '../../../services/api';
 import { resolveAssetUrl } from '../../../lib/assets';
 import BrandScope from '../../../components/BrandScope';
 import OrganizationHeader from '../../../components/OrganizationHeader';
 import StorefrontFooter from '../../../components/storefront/StorefrontFooter';
 import GetInvolved from './GetInvolved';
 import FloorMapPreview from './FloorMapPreview';
+import RsvpPass from './RsvpPass';
 import CartLineItem from '../../../components/CartLineItem';
 import OrderTotals from '../../../components/OrderTotals';
 import ExpandCollapseAll from '../../../components/ExpandCollapseAll';
@@ -26,7 +26,7 @@ import AddOnPicker from '../../../components/AddOnPicker';
 import { offeredAddOns, addOnMaxQuantity, type AddOn } from '../../../lib/addOns';
 import type { ThemeMode } from '@/lib/theme';
 import { formatEventDate, formatEventTime } from '@/lib/eventTime';
-import { fetchLegalVersions, acceptancesFor, LEGAL_PAGES_ENABLED, LEGAL_PATHS, type LegalVersions, type LegalAcceptanceInput } from '@/lib/legal';
+import { fetchLegalVersions, type LegalVersions } from '@/lib/legal';
 import ContentHtml from '@/components/storefront/ContentHtml';
 
 interface EventVenue {
@@ -100,21 +100,25 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
   // summary and the mobile drawer so both views always agree.
   const [openLines, setOpenLines] = useState<Record<string, boolean>>({});
 
-  // RSVP form state (spec 034)
+  // RSVP mode (spec 034): the form lives in RsvpPass; the page only needs to
+  // know when it is done and whether it is on screen (for the mobile bar).
   const [legalVersions, setLegalVersions] = useState<LegalVersions | null>(null);
-  const [rsvpFirstName, setRsvpFirstName] = useState('');
-  const [rsvpLastName, setRsvpLastName] = useState('');
-  const [rsvpEmail, setRsvpEmail] = useState('');
-  const [rsvpPartySize, setRsvpPartySize] = useState(1);
-  const [rsvpMarketing, setRsvpMarketing] = useState(false);
   const [rsvpSubmitted, setRsvpSubmitted] = useState(false);
-  const [rsvpSubmitting, setRsvpSubmitting] = useState(false);
-  const [rsvpError, setRsvpError] = useState<string | null>(null);
+  const [rsvpPassInView, setRsvpPassInView] = useState(false);
 
   useEffect(() => {
     fetchEventDetails();
     fetchLegalVersions().then(setLegalVersions).catch(() => {});
   }, [params.eventId]);
+
+  const isRsvpEvent = event?.admissionMode === 'RSVP';
+  useEffect(() => {
+    const pass = isRsvpEvent ? document.getElementById('rsvp-pass') : null;
+    if (!pass || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(([entry]) => setRsvpPassInView(entry.isIntersecting), { threshold: 0.25 });
+    observer.observe(pass);
+    return () => observer.disconnect();
+  }, [isRsvpEvent]);
 
   const fetchEventDetails = async () => {
     try {
@@ -170,39 +174,6 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
       const search = new URLSearchParams({ items: JSON.stringify(cartItems) });
       if (addOnLines.length > 0) search.set('addOns', JSON.stringify(addOnLines));
       router.push(`/checkout/${params.eventId}?${search.toString()}`);
-    }
-  };
-
-  // RSVP submit handler
-  const handleRsvpSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!event || !legalVersions) return;
-
-    try {
-      setRsvpSubmitting(true);
-      setRsvpError(null);
-
-      await rsvpApi.create(event.id, {
-        firstName: rsvpFirstName,
-        lastName: rsvpLastName,
-        email: rsvpEmail,
-        partySize: (event.rsvpMaxPartySize ?? 1) > 1 ? rsvpPartySize : undefined,
-        marketing: rsvpMarketing,
-        acceptances: acceptancesFor(legalVersions),
-      });
-
-      setRsvpSubmitted(true);
-    } catch (err: any) {
-      if (err?.code === 'RSVP_FULL') {
-        setRsvpError('RSVPs are full for this event.');
-      } else if (err?.code === 'LEGAL_VERSION_STALE') {
-        setRsvpError('The terms have been updated. Please refresh and try again.');
-        fetchLegalVersions().then(setLegalVersions).catch(() => {});
-      } else {
-        setRsvpError(err.message || 'Failed to submit RSVP. Please try again.');
-      }
-    } finally {
-      setRsvpSubmitting(false);
     }
   };
 
@@ -316,7 +287,6 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
   };
 
   const rsvpFull = isRsvpMode && !isPastEvent && event.rsvpRemaining != null && event.rsvpRemaining <= 0;
-  const rsvpMaxPartySize = event.rsvpMaxPartySize ?? 1;
 
   return (
     <BrandScope color={event.organizationBrandColor} themeMode={event.organizationThemeMode} className="min-h-screen bg-gray-50 dark:bg-slate-900 pb-20 sm:pb-0">
@@ -328,11 +298,12 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
         />
       )}
       <div className={`max-w-6xl mx-auto px-0 sm:px-6 lg:px-8 py-0 sm:py-12 ${isRsvpMode ? 'lg:block' : 'lg:flex lg:gap-6 lg:items-start'}`}>
-        <div className={`flex-1 min-w-0 bg-transparent sm:bg-white sm:dark:bg-slate-800 rounded-none sm:rounded-lg sm:shadow-lg sm:dark:shadow-lg sm:dark:shadow-black/20 overflow-hidden ${isRsvpMode ? '' : ''}`}>
+        {/* RSVP mode drops overflow-hidden so the pass can stick; the hero clips its own corners */}
+        <div className={`flex-1 min-w-0 bg-transparent sm:bg-white sm:dark:bg-slate-800 rounded-none sm:rounded-lg sm:shadow-lg sm:dark:shadow-lg sm:dark:shadow-black/20 ${isRsvpMode ? '' : 'overflow-hidden'}`}>
           {/* Hero Header */}
           <div className="relative">
             {/* Background layers - clipped */}
-            <div className="absolute inset-0 overflow-hidden">
+            <div className="absolute inset-0 overflow-hidden sm:rounded-t-lg">
               {/* Blurred background image */}
               {event.logoUrl && (
                 <div
@@ -420,7 +391,8 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                   </div>
                 )}
 
-                {event.description && (
+                {/* RSVP pages show the description inline under "About" */}
+                {event.description && !isRsvpMode && (
                   <button
                     onClick={() => setShowDescription(true)}
                     className="flex items-center text-indigo-300 hover:text-indigo-200 font-medium mt-4 transition-colors duration-200"
@@ -472,167 +444,33 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
             )}
           </div>
 
-          {/* Content area: Tiers (ticketed) or RSVP form (RSVP mode) */}
-          <div className={`p-6 sm:p-8 ${event.logoUrl ? 'pt-[2em] sm:pt-8' : ''}`}>
+          {/* Content area: Tiers (ticketed) or About + RSVP pass (RSVP mode) */}
+          {/* The mobile poster hangs 4rem below the hero: the pass must clear it, a heading need not */}
+          <div className={`p-6 sm:p-8 ${event.logoUrl ? (isRsvpMode ? 'pt-24 sm:pt-8' : 'pt-[2em] sm:pt-8') : ''}`}>
             {isRsvpMode ? (
-              <>
-                {/* RSVP section heading */}
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-slate-100 mb-4">RSVP</h2>
-
-                {/* RSVP states */}
-                {isPastEvent ? (
-                  <div className="text-center py-10">
-                    <svg className="w-14 h-14 mx-auto mb-4 text-gray-300 dark:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <h3 className="text-lg font-semibold text-gray-700 dark:text-slate-300 mb-2">This event has ended</h3>
-                    <p className="text-sm text-gray-500 dark:text-slate-400 max-w-sm mx-auto">
-                      This event took place on {formattedDate}. RSVPs are no longer being accepted.
-                    </p>
+              <div className={event.description ? 'grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-12' : 'mx-auto max-w-md'}>
+                {/* Pass first on mobile: it is the one thing to do here */}
+                <div id="rsvp-pass" className="scroll-mt-6 lg:order-2">
+                  <div className="lg:sticky lg:top-6">
+                    <RsvpPass
+                      event={event}
+                      isPastEvent={isPastEvent}
+                      legalVersions={legalVersions}
+                      onLegalStale={() => fetchLegalVersions().then(setLegalVersions).catch(() => {})}
+                      onSubmitted={() => setRsvpSubmitted(true)}
+                    />
                   </div>
-                ) : rsvpFull ? (
-                  <div className="text-center py-8">
-                    <span className="inline-block bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400 px-6 py-3 rounded-full text-lg font-semibold">
-                      RSVPs are full
-                    </span>
-                    <p className="text-sm text-gray-500 dark:text-slate-400 mt-3 max-w-sm mx-auto">
-                      All spots for this event have been reserved.
-                    </p>
-                  </div>
-                ) : rsvpSubmitted ? (
-                  <div className="text-center py-10">
-                    <svg className="w-16 h-16 mx-auto mb-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <h3 className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-2">You&apos;re on the list!</h3>
-                    <p className="text-sm text-gray-500 dark:text-slate-400">
-                      We sent a confirmation to {rsvpEmail}.
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    {/* Spots remaining */}
-                    {event.rsvpLimit != null && event.rsvpRemaining != null && (
-                      <p className="text-sm text-gray-500 dark:text-slate-400 mb-4">
-                        {event.rsvpRemaining === 1
-                          ? '1 spot left'
-                          : `${event.rsvpRemaining} spots left`}
-                      </p>
-                    )}
+                </div>
 
-                    {/* Inline RSVP form */}
-                    <form onSubmit={handleRsvpSubmit} className="max-w-md space-y-4" id="rsvp-form">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                          <label htmlFor="rsvp-first-name" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-                            First name *
-                          </label>
-                          <input
-                            id="rsvp-first-name"
-                            type="text"
-                            value={rsvpFirstName}
-                            onChange={(e) => setRsvpFirstName(e.target.value)}
-                            required
-                            className="block w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                            placeholder="Jane"
-                          />
-                        </div>
-                        <div>
-                          <label htmlFor="rsvp-last-name" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-                            Last name *
-                          </label>
-                          <input
-                            id="rsvp-last-name"
-                            type="text"
-                            value={rsvpLastName}
-                            onChange={(e) => setRsvpLastName(e.target.value)}
-                            required
-                            className="block w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                            placeholder="Doe"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label htmlFor="rsvp-email" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-                          Email *
-                        </label>
-                        <input
-                          id="rsvp-email"
-                          type="email"
-                          value={rsvpEmail}
-                          onChange={(e) => setRsvpEmail(e.target.value)}
-                          required
-                          className="block w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                          placeholder="jane@example.com"
-                        />
-                      </div>
-
-                      {rsvpMaxPartySize > 1 && (
-                        <div>
-                          <label htmlFor="rsvp-party-size" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-                            Party size
-                          </label>
-                          <select
-                            id="rsvp-party-size"
-                            value={rsvpPartySize}
-                            onChange={(e) => setRsvpPartySize(parseInt(e.target.value))}
-                            className="block w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                          >
-                            {Array.from({ length: rsvpMaxPartySize }, (_, i) => i + 1).map((n) => (
-                              <option key={n} value={n}>
-                                {n} {n === 1 ? 'guest' : 'guests'}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
-
-                      {/* Marketing opt-in (D4) */}
-                      <label className="flex items-start gap-3 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={rsvpMarketing}
-                          onChange={(e) => setRsvpMarketing(e.target.checked)}
-                          className="mt-1 h-4 w-4 rounded border-gray-300 dark:border-slate-600 text-indigo-600 focus:ring-indigo-500"
-                        />
-                        <span className="text-sm text-gray-600 dark:text-slate-400">
-                          Email me news and updates from {event.organizationName || 'the organizer'}
-                        </span>
-                      </label>
-
-                      {/* Legal consent (D13) */}
-                      <p className="text-xs text-gray-500 dark:text-slate-400">
-                        By RSVPing, you agree to{' '}
-                        {LEGAL_PAGES_ENABLED ? (
-                          <>
-                            <Link href={LEGAL_PATHS.terms} target="_blank" className="underline hover:text-gray-700 dark:hover:text-slate-300">Terms of Service</Link>
-                            {' and '}
-                            <Link href={LEGAL_PATHS.privacy} target="_blank" className="underline hover:text-gray-700 dark:hover:text-slate-300">Privacy Policy</Link>
-                          </>
-                        ) : (
-                          'the Terms of Service and Privacy Policy'
-                        )}
-                        . I agree to {event.organizationName || 'the organizer'} and Jump collecting and storing this information as described.
-                      </p>
-
-                      {rsvpError && (
-                        <div className="rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3">
-                          <p className="text-sm text-red-800 dark:text-red-300">{rsvpError}</p>
-                        </div>
-                      )}
-
-                      <button
-                        type="submit"
-                        disabled={rsvpSubmitting}
-                        className="w-full bg-brand hover:bg-brand-hover text-brand-fg font-bold py-3 px-6 rounded-lg transition-colors duration-200 text-lg disabled:opacity-50"
-                      >
-                        {rsvpSubmitting ? 'Sending…' : 'RSVP'}
-                      </button>
-                    </form>
-                  </>
+                {event.description && (
+                  <section aria-labelledby="about-heading" className="min-w-0 lg:order-1 lg:pt-1">
+                    <h2 id="about-heading" className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-slate-400">
+                      About this event
+                    </h2>
+                    <ContentHtml html={event.description} className="text-base" />
+                  </section>
                 )}
-              </>
+              </div>
             ) : (
               <>
                 {/* Ticketed mode — existing tiers */}
@@ -876,7 +714,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
         <div
           className={`lg:hidden fixed bottom-0 left-0 right-0 z-40 transition-transform duration-300 ease-out ${
             isRsvpMode
-              ? !rsvpSubmitted ? 'translate-y-0' : 'translate-y-full'
+              ? !rsvpSubmitted && !rsvpPassInView ? 'translate-y-0' : 'translate-y-full'
               : totalQuantity > 0 ? 'translate-y-0' : 'translate-y-full'
           }`}
         >
@@ -885,10 +723,10 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
             <div className="bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 shadow-[0_-4px_12px_rgba(0,0,0,0.1)] dark:shadow-[0_-4px_12px_rgba(0,0,0,0.3)] px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
               <button
                 type="button"
-                onClick={() => document.getElementById('rsvp-form')?.scrollIntoView({ behavior: 'smooth' })}
+                onClick={() => document.getElementById('rsvp-pass')?.scrollIntoView({ behavior: 'smooth' })}
                 className="w-full bg-brand hover:bg-brand-hover text-brand-fg font-bold py-3 px-4 rounded-lg transition-colors duration-200 text-base"
               >
-                RSVP Now
+                Reserve my spot · Free
               </button>
             </div>
           ) : (
