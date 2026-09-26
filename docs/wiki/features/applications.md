@@ -1,7 +1,7 @@
 # Applications
 
 **Status**: Implemented — phase 1 (FREE forms end to end), phase 2 (card on file at submission, off-session charge at approval, pay-now, refunds, overdue sweep) and phase 3 (CSV photo URLs, saved views, bulk waitlist/reject on PAID, applicant profile self-service, price-changed notice, organizer daily digest, event duplication) 2026-09-17. Paid forms run behind `APPLICATIONS_PAYMENTS_ENABLED`. Spec: `specs/011-applications/`.
-**Last Updated**: 2026-09-17
+**Last Updated**: 2026-09-26
 
 ## Overview
 
@@ -92,6 +92,18 @@ Per organization per action (`RECEIVED`, `APPROVED`, `REJECTED`, `WAITLISTED`, `
 
 Guest: `GET /applications/:id/status?token=` (+ `POST …/resume`, `POST …/pay`). The status page reads `?checkout=submitted|paid|card_updated|cancelled` on return from Stripe and polls briefly until the webhook lands. Signed in (buyer magic link, spec 007): `GET /buyer/me/applications[/:id]`, `POST …/withdraw` (SUBMITTED/WAITLISTED only), `POST …/pay`, `POST …/update-card`, `GET/PATCH /buyer/me/applicant-profile`, `DELETE …/photos/:imageId`. Applicant payloads carry `canWithdraw`, `canResume`, `canPay`, `canUpdateCard`, `refundedTotal`.
 
+### Public apply pages (layout)
+
+Redesigned 2026-09-26 to match the event page's language (hero from PR #202, ticket stubs from `TierStub`):
+
+- **`ApplyShell`** frames the index, form and status pages. Below the `OrganizationHeader` sits a dark hero: the event poster (`logoUrl`) blurred behind a black gradient, a kicker pill (`Get involved` / `Application`, the `kicker` prop), the title, a date tile from `lib/dateTile.ts` with date and time in the venue zone, and a venue block. A 4px `bg-brand` rule separates it from the page. `width="wide"` (`max-w-6xl`) is used only by the open form; everything else stays `max-w-3xl`.
+- **Index**: each form is a torn stub (`.tier-stub` mask, `.tier-stub-shadow`): kind and name on the left; on the stub, the lowest price ("from $X" when the options differ) and an Apply pill, or the closed status. Only open forms are links.
+- **Form**: numbered step cards (`Step`: Choose an option → Your details → Your business → A few questions → Before you submit). A step is numbered only when it renders, so FREE forms start at "Your details". The organizer intro sits above the steps as a note with a brand edge. From `lg` up a sticky **Application summary** (`<aside aria-label="Application summary">`) holds the receipt (`apply-total-line`: the tier, each add-on × qty, **Total**), the charge-timing note (`apply-price-note`), the error and the submit button. On phones it follows the last step.
+- **Tiers** are selectable ticket stubs (`TierOption`) with the same geometry as `TierStub` (10rem stub column from `sm`, 4rem bottom stub on phones). The real radio is an invisible input stretched over the whole card, so both a click and Playwright's `check()` land on it. Do not make it `sr-only`: the brand edge then covers it.
+- **Consents** (account opt-in, marketing, data consent, card authorization) are all in the last step as bordered `has-[:checked]` choice rows. The card authorization appears only for `chargeTiming: APPROVAL` once a tier is chosen, as before.
+- **Photos** preview as square thumbnails (`PhotoThumb`, local object URLs revoked on unmount) next to an "Add more" tile. The file input is visually hidden inside the dropzone label.
+- The logic is unchanged: payload, validation order, legal versions, redirects and every `data-testid` stay the same. Only the receipt text changed: the last row reads `Total $X` instead of `= $X`.
+
 ### Phase 3 — scale and polish
 
 - **CSV export** adds a `profilePhotos` column (`; `-joined absolute URLs, original variant) and makes PHOTO answers absolute via `absoluteAssetUrl` — a spreadsheet link works without the app.
@@ -135,6 +147,7 @@ ORGANIZER+ views forms/applications and decides; ADMIN/SYSTEM_ADMIN configures f
 - `backend/tests/contract/applicationsPhase3.test.js` — 11 cases: CSV profile/answer photo URLs absolute under `BACKEND_URL`, `pricing.changed` after a tier price edit (snapshot untouched) and null for FREE, bulk WAITLIST/REJECT on PAID + APPROVE still refused, buyer profile PATCH/validation, photo upload/type rejection/removal/401, digest once per window + grouped body + quiet re-run + window advance, digest settings RBAC/validation/disabled skip, duplicate copies tiers + forms + questions into a DRAFT, duplicate validation/name/403/404.
 - `backend/tests/unit/applicationFormService.test.js`, `applicationTemplates.test.js`, `applicationPayments.test.js` — fee modes, slug, acceptance, template rendering, derived token, `applicationFeeCents` identity per fee mode, webhook dispatch predicate.
 - `frontend/e2e/applications.spec.ts` — event page strip, apply index, full press application → status page, bad token, admin list filters/search/bulk bar, detail + notes + waitlist with edited email + history, forms create/edit/add question, ORGANIZER read-only, templates save; axe clean. Phase 3: saved views round-trip through `localStorage` + Approve disabled with a PAID row selected, price-changed note, daily digest toggle, Duplicate dialog on the events list.
+- `frontend/e2e/applications-add-ons.spec.ts` — tier-scoped add-on picker, the summary's receipt (`Total $461.47`) and charge note, the "Choose an option to see your total." state before a tier is picked, and the submitted lines.
 - `frontend/e2e/applications-payments.spec.ts` — status page pay-now → `checkout=paid` notice, resume an abandoned checkout, ADMIN partial + full refund from the payment card, ORGANIZER retry charge and no refund button.
 
 ## Gotchas

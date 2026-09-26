@@ -193,6 +193,10 @@ test('apply form: picker appears with the chosen tier, total line updates, submi
   await page.goto(`/events/${EVENT_ID}/apply/vendor-booth`);
   await expect(page.getByTestId('apply-form')).toBeVisible();
   await expect(page.getByTestId('add-on-picker')).toHaveCount(0);
+  // The summary waits for a tier before it shows a total
+  const summary = page.getByRole('complementary', { name: 'Application summary' });
+  await expect(summary).toContainText('Choose an option to see your total.');
+  await expect(summary.getByRole('button', { name: 'Continue to save a card' })).toBeVisible();
 
   // Corner offers power and table only.
   await page.getByRole('radio', { name: /Corner/ }).check();
@@ -211,7 +215,7 @@ test('apply form: picker appears with the chosen tier, total line updates, submi
   await expect(total).toContainText('Booth $303.30');
   await expect(total).toContainText('Booth power ×1 $135.95');
   await expect(total).toContainText('Extra vendor badge ×2 $22.22');
-  await expect(total).toContainText('= $461.47');
+  await expect(total).toContainText('Total $461.47');
   await expect(page.getByTestId('apply-price-note')).toContainText('charged $461.47 only if your application is accepted');
 
   await page.getByLabel('First name').fill('Vee');
