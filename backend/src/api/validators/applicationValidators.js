@@ -101,6 +101,31 @@ export const validateMetaBody = (req, res, next) => {
   }
 };
 
+/** Spec 036: door check-in. POST { via? } — the arrival itself carries no other input. */
+export const validateCheckInBody = (req, res, next) => {
+  try {
+    const body = req.body || {};
+    onlyFields(body, new Set(['via']), 'check-in');
+    if (body.via !== undefined && typeof body.via !== 'string') throw new ValidationError('via must be a string');
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
+/** Spec 036: door scan. POST { payload } — whatever the camera or keyboard read. */
+export const validateScanBody = (req, res, next) => {
+  try {
+    const body = req.body || {};
+    onlyFields(body, new Set(['payload']), 'scan');
+    if (typeof body.payload !== 'string' || !body.payload.trim()) throw new ValidationError('payload is required');
+    if (body.payload.length > 2048) throw new ValidationError('payload is too long to be a vendor pass');
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
 /** Spec 019: form templates. POST { name, kind, definition? }; PUT { name?, definition? }. Values are validated in the service. */
 export const validateFormTemplateBody = (req, res, next) => {
   try {

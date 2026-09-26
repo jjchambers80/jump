@@ -42,6 +42,12 @@ export default function ApplicationsHeader({ eventId, title, subtitle }: { event
           <Link href={`${base}/forms`} aria-current={onForms ? 'page' : undefined} className={`${tab} ${onForms ? activeTab : idleTab}`}>
             Forms
           </Link>
+          {/* Spec 036: the event-day door surface. Not a tab of this page — it
+              is its own phone-first screen, linked from here because this is
+              where an organizer is standing the morning of the event. */}
+          <Link href={`/admin/events/${eventId}/check-in`} className={`${tab} ${idleTab}`}>
+            Door check-in
+          </Link>
         </nav>
       </div>
     </div>

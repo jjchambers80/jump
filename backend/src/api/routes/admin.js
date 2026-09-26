@@ -14,7 +14,7 @@ import {
 import { validateUpdateBusinessDetails } from '../validators/organizationValidators.js';
 import { validateCreateOrganizationPerson } from '../validators/organizationPersonValidators.js';
 import { validateTaxRegionParams, validateUpsertTaxRegion, validateUpdateTaxSettings, validateTaxReportQuery } from '../validators/taxValidators.js';
-import { validateFormBody, validateTierBody, validateQuestionBody, validateDecisionBody, validateBulkBody, validateTemplateBody, validateRefundBody, validateAddOnLinesBody, validateTierAddOnsBody, validateTierChangeBody, validateAdjustmentBody, validateWaiveBody, validateOfflinePaymentBody, validateFormTemplateBody, validateSaveAsTemplateBody, validateMetaBody } from '../validators/applicationValidators.js';
+import { validateFormBody, validateTierBody, validateQuestionBody, validateDecisionBody, validateBulkBody, validateTemplateBody, validateRefundBody, validateAddOnLinesBody, validateTierAddOnsBody, validateTierChangeBody, validateAdjustmentBody, validateWaiveBody, validateOfflinePaymentBody, validateFormTemplateBody, validateSaveAsTemplateBody, validateMetaBody, validateCheckInBody, validateScanBody } from '../validators/applicationValidators.js';
 import { validateUpdatePaymentSettings, validateUpdatePayoutSettings } from '../validators/paymentValidators.js';
 import { validateCreatePage, validateUpdatePage } from '../validators/pageValidators.js';
 import { validateUpdateStorefrontPreferences } from '../validators/storefrontPreferencesValidators.js';
@@ -43,6 +43,7 @@ import applicationService from '../../services/ApplicationService.js';
 import applicationTemplateService from '../../services/ApplicationTemplateService.js';
 import applicationFormTemplateService from '../../services/ApplicationFormTemplateService.js';
 import applicationDigestService from '../../services/ApplicationDigestService.js';
+import vendorCheckInService from '../../services/VendorCheckInService.js';
 import setupGuideService from '../../services/SetupGuideService.js';
 import customerAccountSettingsService from '../../services/CustomerAccountSettingsService.js';
 import billingService from '../../services/BillingService.js';
@@ -685,7 +686,7 @@ router.get('/events/:eventId/applications/:applicationId', wrap(async (req, res)
   res.json(await applicationService.get(req.params.eventId, req.params.applicationId, await scopedOrgFor(req)));
 }));
 router.patch('/events/:eventId/applications/:applicationId', validateMetaBody, wrap(async (req, res) => {
-  res.json(await applicationService.updateMeta(req.params.eventId, req.params.applicationId, await scopedOrgFor(req), req.body));
+  res.json(await applicationService.updateMeta(req.params.eventId, req.params.applicationId, await scopedOrgFor(req), req.body, { byUserId: req.user.id }));
 }));
 router.post('/events/:eventId/applications/:applicationId/preview', wrap(async (req, res) => {
   res.json(await applicationService.previewMessage(req.params.eventId, req.params.applicationId, await scopedOrgFor(req), req.body?.decision));
@@ -725,6 +726,26 @@ router.post('/events/:eventId/applications/:applicationId/waive', requireAdmin, 
 router.post('/events/:eventId/applications/:applicationId/offline-payment', requireAdmin, validateOfflinePaymentBody, wrap(async (req, res) => {
   const { eventId, applicationId } = req.params;
   res.json(await applicationService.recordOfflinePayment(eventId, applicationId, await scopedOrgFor(req), req.body, { byUserId: req.user.id, sendEmail: req.body.sendEmail }));
+}));
+
+// ─── Door check-in (spec 036) ─────────────────────────────────────────────
+// Event-day surface for staff on a phone. Every route is scoped by the active
+// organization *and* the event id, so staff working one door can never see or
+// stamp another event's vendors. Check-in is idempotent (see
+// VendorCheckInService) — these endpoints are safe to retry.
+router.get('/events/:eventId/check-in', wrap(async (req, res) => {
+  res.json(await vendorCheckInService.roster(req.params.eventId, await scopedOrgFor(req), req.query));
+}));
+router.post('/events/:eventId/check-in/scan', validateScanBody, wrap(async (req, res) => {
+  res.json(await vendorCheckInService.resolveScan(req.params.eventId, await scopedOrgFor(req), req.body.payload));
+}));
+router.post('/events/:eventId/check-in/:applicationId', validateCheckInBody, wrap(async (req, res) => {
+  const { eventId, applicationId } = req.params;
+  res.json(await vendorCheckInService.checkIn(eventId, applicationId, await scopedOrgFor(req), { byUserId: req.user.id, via: req.body?.via || 'SEARCH' }));
+}));
+router.delete('/events/:eventId/check-in/:applicationId', wrap(async (req, res) => {
+  const { eventId, applicationId } = req.params;
+  res.json(await vendorCheckInService.undoCheckIn(eventId, applicationId, await scopedOrgFor(req)));
 }));
 
 // Templates (Settings › Applications)
