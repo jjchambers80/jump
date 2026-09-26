@@ -25,7 +25,7 @@ Events have a strict lifecycle: DRAFT -> PUBLISHED -> CANCELLED (terminal). Even
 6. **Public detail** (`GET /events/:eventId`): Returns single event only if status is PUBLISHED.
 7. **Org listing** (`GET /organizations/:orgId/events`): Returns all statuses for the org with optional status filter.
 8. **Analytics** (`GET .../events/:eventId/analytics`): Per-tier breakdown of sold, redeemed, remaining, and revenue. Event-level aggregates.
-9. **Logo upload/delete**: `POST/DELETE .../events/:eventId/logo`.
+9. **Logo upload/delete**: `POST/DELETE .../events/:eventId/logo`. Admin UI: the Media card, see [Event Media Card](event-media.md).
 
 ## API Endpoints
 
