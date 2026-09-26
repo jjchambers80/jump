@@ -13,7 +13,7 @@ Derived from the 2026-09-15 Eventeny organizer interview pain point #6 (add-ons 
 
 | File | Purpose |
 |------|---------|
-| `packages/db/prisma/schema.prisma` | `AddOn`, `PriceTierAddOn`, `ApplicationTierAddOn`, `OrderAddOn`, `ApplicationAddOn`, `Refund.orderAddOnId`, `ApplicationAction.ADD_ONS_CHANGED` |
+| `packages/db/prisma/schema.prisma` | `AddOn`, `PriceTierAddOn`, `ApplicationTierAddOn`, `OrderAddOn`, `Refund.orderAddOnId`, `ApplicationAction.ADD_ONS_CHANGED` |
 | `backend/src/services/AddOnService.js` | CRUD + attachments, presets, `validateOrderLines` / `validateApplicationLines`, capacity (`reserve` / `commit` / `release` / `unsell`), `copyForEvent`, `sales`, `purchasersCsv`, serializers |
 | `backend/src/api/routes/addOns.js` | `/organizations/:orgId/events/:eventId/add-ons` — list, presets, create / update / activate / deactivate / delete / reorder, `sales`, `purchasers.csv` |
 | `backend/src/services/FeeService.js`, `frontend/src/lib/fees.ts` | `computeOrderFees` items take `taxable` (tax only on taxable listed value, fees on the whole subtotal; drift lands on the largest taxable line) |
@@ -58,7 +58,7 @@ No new environment variables. Application add-ons run inside the spec 011 flag:
 
 ### Applications
 1. Public form tiers carry `addOns` with a per-unit `applicantPays` under the form's fee mode; the apply form renders the picker for the chosen tier, shows an estimated total, and sends `addOns` in the submission.
-2. `applicationAmounts(lines, form, event, org)` prices tier + add-on lines together (tier line taxable when the form is; each add-on its own flag). `Application.subtotal … orgReceives` stay the totals; each `ApplicationAddOn` keeps `unitPrice` and `applicantPays` (its allocated share), so Checkout / pay-now line items and the status page itemise exactly: the tier line is `applicantPays − Σ lines`.
+2. `applicationAmounts(lines, form, event, org)` prices tier + add-on lines together (tier line taxable when the form is; each add-on its own flag). The totals live on the application's `Order` (spec 024); each add-on is an `OrderAddOn` line with its allocated fee / tax share, and `buyerLineTotal(line, feeMode)` (`services/orderLines.js`) is what the applicant pays for it, so Checkout / pay-now line items and the status page itemise exactly: the tier line is `Order.totalAmount − Σ lines`.
 3. **Nothing is held at submission.** Approval takes the tier slot, then reserves add-ons in display order inside the same transaction; a sold-out add-on returns 409 `{ addOnId, name, remaining, requested, suggestion: 'EDIT_ADD_ONS' }` and the tier reservation rolls back. `capacitySlot` covers both: RESERVED (charge in flight / PAYMENT_DUE) holds them, APPROVED means sold; `_markPaid` commits, withdraw / applicant withdraw / overdue sweep release or unsell.
 4. **Line edits before money moves**: `PATCH /admin/events/:eventId/applications/:id/add-ons` (ORGANIZER+) with the full desired set, allowed in SUBMITTED, WAITLISTED and APPROVED + PAYMENT_DUE (`addOnsEditable` in the admin payload carries the reason otherwise). Recomputes the snapshot at today's prices (so the price-changed note clears), moves held reservations, expires a pending pay-now session, writes an `ADD_ONS_CHANGED` decision (before → after and totals in `note`) and emails the `ADD_ONS_CHANGED` template. After PAID: refund an amount, never edit lines.
 5. Organizer views: detail lines table + "Edit add-ons", list column + "Has <add-on>" filter (`?addOn=`, saved views carry it), CSV `addon:<name>` column per active-or-sold add-on, daily digest "Add-ons requested" totals per form.
@@ -85,7 +85,7 @@ No new environment variables. Application add-ons run inside the spec 011 flag:
 
 ## Database
 
-`AddOn` (event-scoped: scope, allTiers, price, quantityTotal / quantitySold / quantityReserved, maxPerOrder, taxable, isActive, displayOrder) → `PriceTierAddOn` / `ApplicationTierAddOn` (attachment rows) → `OrderAddOn` (unique on order + add-on; immutable `unitPrice` plus allocated `platformFee` / `processingFee` / `tax`, `refundedAt`) and `ApplicationAddOn` (unique on application + add-on; `unitPrice`, `applicantPays`). `Refund.orderAddOnId` alongside `ticketId`. Migrations `20260918000000_add_ons`, `20260919000000_add_ons_applications`. See [Database Architecture](database-architecture.md).
+`AddOn` (event-scoped: scope, allTiers, price, quantityTotal / quantitySold / quantityReserved, maxPerOrder, taxable, isActive, displayOrder) → `PriceTierAddOn` / `ApplicationTierAddOn` (attachment rows) → `OrderAddOn` (unique on order + add-on; immutable `unitPrice` plus allocated `platformFee` / `processingFee` / `tax`, `refundedAt`), used by ticket and application orders alike. `Refund.orderAddOnId` alongside `ticketId`. Migrations `20260918000000_add_ons`, `20260919000000_add_ons_applications`. See [Database Architecture](database-architecture.md).
 
 ## Gotchas
 
@@ -93,7 +93,7 @@ No new environment variables. Application add-ons run inside the spec 011 flag:
 - Every path that releases tier reservations must also release add-on reservations (`AddOnService.release`); for applications `_releaseCapacity` and the overdue sweep do both.
 - Lock order is fixed — tier, then add-ons by `displayOrder` — so concurrent approvals cannot deadlock. Keep it when adding paths.
 - `quantityReserved` is counted for unlimited add-ons too (the conditional update only gates when `quantityTotal` is set), so sales reports see in-flight checkouts.
-- Stripe ticket line items keep per-unit cent rounding (a ×2 line can drift a cent from the order total, as tiers already do); the order ledger is exact. Application line items use the allocated `applicantPays` per line with quantity 1, so they sum exactly.
+- Stripe ticket line items keep per-unit cent rounding (a ×2 line can drift a cent from the order total, as tiers already do); the order ledger is exact. Application line items use `buyerLineTotal` per line with quantity 1, so they sum exactly.
 - The apply form's total is an estimate from per-unit figures; the server allocates fees across the real lines and can differ by cents.
 - The ticket-tier attachment picker in the add-on dialog only lists **saved** tiers (unsaved tiers have no id yet); the form editor sets application-tier attachments because that page has no `orgId` in its URL.
 - Fee mode is inherited from the parent (tickets PASS, applications the form's mode). Per-add-on fee mode, per-ticket add-ons, required add-ons and post-payment additions are out of scope (see `specs/012-add-ons/plan.md` §7).

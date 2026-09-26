@@ -72,8 +72,6 @@ Review the feature's impact and determine if any agent instruction files need up
 - Adds a new gotcha other agents should know about
 - Changes the tech stack (new dependency, new service)
 - Alters commit conventions or common task workflows
-
-**Root `AGENTS.md`** — Update if the feature:
 - Adds new npm scripts or commands
 - Introduces new required environment variables
 - Changes deployment configuration

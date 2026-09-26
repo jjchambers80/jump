@@ -114,7 +114,7 @@ Service layering: `RsvpService` (create, cancel, list, headcount) in `backend/sr
 
 - Schema + migration (§5), `npm run db:generate`.
 - `RsvpService`, validator, public + admin routes, cancel token (reuse the buyer-token signing helper pattern; purpose-scoped, no expiry before the event date).
-- `EmailService.sendRsvpConfirmation`: org branding, event date via `formatEventDateTime` + venue zone (gotcha 27), party size, `.ics` attachment, cancel link.
+- `EmailService.sendRsvpConfirmation`: org branding, event date via `formatEventDateTime` + venue zone (gotcha 28), party size, `.ics` attachment, cancel link.
 - `EventService`: create/update accept the mode fields; publish skips the tier requirement in RSVP mode; D11 lock; public serializer changes.
 - `OrderService` / orders route: D12 guard.
 - Event cancellation notifies `GOING` RSVP guests and sets their RSVPs `CANCELLED` (§9.3).
