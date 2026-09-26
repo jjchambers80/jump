@@ -314,6 +314,18 @@ class MapService {
       validatedBooths.push({ label: b.label, kind, x, y, w, h, rotation, tierId });
     }
 
+    // A booth may only be priced from a tier on this event's own paid forms.
+    const boundTierIds = [...new Set(validatedBooths.map((b) => b.tierId).filter(Boolean))];
+    if (boundTierIds.length > 0) {
+      const eventTiers = await prisma.applicationTier.findMany({
+        where: { id: { in: boundTierIds }, form: { eventId: map.eventId, kind: 'PAID' } },
+        select: { id: true },
+      });
+      if (eventTiers.length !== boundTierIds.length) {
+        throw new ValidationError('booth tierId must reference an application tier on one of this event\'s paid application forms');
+      }
+    }
+
     // Run the upsert transaction
     return prisma.$transaction(async (tx) => {
       const existing = await tx.booth.findMany({ where: { mapId } });
@@ -379,10 +391,17 @@ class MapService {
 
   // ─── Publish / Unpublish ────────────────────────────────────────────
 
-  /** Publish: set PUBLISHED, sync mapBound tier quantities, check oversold. */
+  /**
+   * Publish: set PUBLISHED, bind the map's tiers, sync their quantities from
+   * booth counts, check oversold.
+   *
+   * Re-publishing an already-published map re-runs the binding instead of
+   * no-opping. That keeps publish idempotent and is the in-product repair for a
+   * map published before publish bound anything: the organizer presses Publish
+   * again. `publishedAt` is only stamped on the first publish.
+   */
   async publish(orgId, mapId) {
     const map = await this._requireInOrg(orgId, mapId);
-    if (map.status === 'PUBLISHED') return this.get(orgId, mapId);
 
     const boothCount = await prisma.booth.count({ where: { mapId, status: { not: 'BLOCKED' } } });
     if (boothCount < 1) throw new ValidationError('Map must have at least one booth to publish');
@@ -390,7 +409,10 @@ class MapService {
     await prisma.$transaction(async (tx) => {
       await tx.floorMap.update({
         where: { id: mapId },
-        data: { status: 'PUBLISHED', publishedAt: new Date() },
+        data: {
+          status: 'PUBLISHED',
+          ...(map.publishedAt ? {} : { publishedAt: new Date() }),
+        },
       });
 
       // Derive tier quantities from booth counts
@@ -405,12 +427,18 @@ class MapService {
       }
 
       const tierIds = Object.keys(tierCounts);
+      // Scoped to this event's own PAID forms: a stray tierId must never flip a
+      // flag or rewrite capacity on another organizer's tier.
       const tiers = tierIds.length > 0
         ? await tx.applicationTier.findMany({
-            where: { id: { in: tierIds } },
+            where: { id: { in: tierIds }, form: { eventId: map.eventId, kind: 'PAID' } },
             select: { id: true, name: true, quantityApproved: true, quantityReserved: true, form: { select: { chargeTiming: true, name: true } } },
           })
         : [];
+
+      if (tiers.length !== tierIds.length) {
+        throw new ValidationError('TIER_NOT_ON_EVENT — a booth is bound to a tier that is not on one of this event\'s paid application forms');
+      }
 
       for (const tier of tiers) {
         // Booths are bought after approval; a charge-at-submission form has no spot to sell.
@@ -424,14 +452,32 @@ class MapService {
         }
       }
 
+      // Bind every tier the map sells: publishing is what makes a tier map-bound,
+      // and capacity is the booth count, not whatever was typed on the tier.
       for (const tierId of tierIds) {
         await tx.applicationTier.updateMany({
-          where: { id: tierId, mapBound: true },
-          data: { quantityTotal: tierCounts[tierId] },
+          where: { id: tierId, form: { eventId: map.eventId, kind: 'PAID' } },
+          data: { mapBound: true, quantityTotal: tierCounts[tierId] },
         });
       }
 
-      logger.info('Floor map published', { event: 'floor_map_published', mapId, organizationId: orgId });
+      // Unbind tiers this map no longer sells, so they go back to being bought
+      // at approval. Quantity is left as is — see spec 014 plan-phase-1 §3.3.
+      await tx.applicationTier.updateMany({
+        where: {
+          form: { eventId: map.eventId, kind: 'PAID' },
+          mapBound: true,
+          id: { notIn: tierIds },
+        },
+        data: { mapBound: false },
+      });
+
+      logger.info('Floor map published', {
+        event: 'floor_map_published',
+        mapId,
+        organizationId: orgId,
+        boundTierIds: tierIds,
+      });
     });
     const result = await this.get(orgId, mapId);
     logger.info('Publish get result', { status: result.status });

@@ -472,7 +472,7 @@ function BuilderContent() {
                             : 'text-gray-500'
                         }`}
                       >
-                        {tier.mapBound ? 'Map-bound' : 'Set as map-bound'}
+                        {tier.mapBound ? 'Map-bound' : 'Binds on publish'}
                       </span>
                     </div>
                   );

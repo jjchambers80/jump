@@ -501,4 +501,186 @@ describe('Maps contract', () => {
       .set(...auth(organizerToken));
     expect(res.status).toBe(404);
   });
+
+  // ─── Tier binding on publish (spec 014 plan-phase-1 §3.3) ───────
+  //
+  // These go through the HTTP product path end to end and never seed
+  // `mapBound`. Seeding it is what let publish stay a no-op unnoticed: a
+  // tier that is never bound makes booths unbuyable and makes approval
+  // charge the vendor's card with no booth reserved.
+
+  describe('publish binds the map\'s tiers', () => {
+    let boundMapId;
+    let tierA;
+    let tierB;
+
+    const booth = (label, x, y, tierId) => ({
+      label,
+      kind: 'BOOTH',
+      x,
+      y,
+      w: 10,
+      h: 10,
+      rotation: 0,
+      tierId,
+    });
+
+    beforeAll(async () => {
+      const boundForm = await prisma.applicationForm.create({
+        data: {
+          eventId: otherEvent.id,
+          name: `${TAG} Booth Form`,
+          slug: `${TAG}-booth`,
+          kind: 'PAID',
+          chargeTiming: 'APPROVAL',
+          feeMode: 'ABSORB',
+        },
+      });
+      tierA = await prisma.applicationTier.create({
+        data: { formId: boundForm.id, name: '10x10', price: 275, quantityTotal: 99 },
+      });
+      tierB = await prisma.applicationTier.create({
+        data: { formId: boundForm.id, name: '10x20', price: 500, quantityTotal: 99 },
+      });
+
+      const created = await request(app)
+        .post('/admin/maps')
+        .set(...auth(organizerToken))
+        .send({ eventId: otherEvent.id, width: 50, height: 40, unit: 'ft' });
+      expect(created.status).toBe(201);
+      boundMapId = created.body.id;
+    });
+
+    it('rejects a booth bound to a tier from another event', async () => {
+      const res = await request(app)
+        .put(`/admin/maps/${boundMapId}/layout`)
+        .set(...auth(organizerToken))
+        // `tier` belongs to `event`, not `otherEvent`.
+        .send({ elements: [], booths: [booth('X1', 0, 0, tier.id)] });
+      expect(res.status).toBe(400);
+    });
+
+    it('sets mapBound and derives quantityTotal from booth count on publish', async () => {
+      const layout = await request(app)
+        .put(`/admin/maps/${boundMapId}/layout`)
+        .set(...auth(organizerToken))
+        .send({
+          elements: [],
+          booths: [
+            booth('A1', 0, 0, tierA.id),
+            booth('A2', 12, 0, tierA.id),
+            booth('A3', 24, 0, tierA.id),
+            booth('B1', 0, 12, tierB.id),
+            booth('B2', 12, 12, tierB.id),
+          ],
+        });
+      expect(layout.status).toBe(200);
+
+      // Nothing has bound the tiers yet — publish is the only writer.
+      const before = await prisma.applicationTier.findMany({
+        where: { id: { in: [tierA.id, tierB.id] } },
+        select: { mapBound: true },
+      });
+      expect(before.every((t) => t.mapBound === false)).toBe(true);
+
+      const res = await request(app)
+        .post(`/admin/maps/${boundMapId}/publish`)
+        .set(...auth(organizerToken));
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('PUBLISHED');
+
+      const a = await prisma.applicationTier.findUnique({ where: { id: tierA.id } });
+      const b = await prisma.applicationTier.findUnique({ where: { id: tierB.id } });
+      expect(a.mapBound).toBe(true);
+      expect(a.quantityTotal).toBe(3);
+      expect(b.mapBound).toBe(true);
+      expect(b.quantityTotal).toBe(2);
+    });
+
+    it('re-publishing repairs a map that was published before publish bound tiers', async () => {
+      // Exactly the production state this bug left behind: PUBLISHED map,
+      // unbound tiers, so booths are unbuyable and approval charges the card.
+      await prisma.applicationTier.updateMany({
+        where: { id: { in: [tierA.id, tierB.id] } },
+        data: { mapBound: false, quantityTotal: 99 },
+      });
+
+      const res = await request(app)
+        .post(`/admin/maps/${boundMapId}/publish`)
+        .set(...auth(organizerToken));
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('PUBLISHED');
+
+      const a = await prisma.applicationTier.findUnique({ where: { id: tierA.id } });
+      const b = await prisma.applicationTier.findUnique({ where: { id: tierB.id } });
+      expect(a.mapBound).toBe(true);
+      expect(a.quantityTotal).toBe(3);
+      expect(b.mapBound).toBe(true);
+      expect(b.quantityTotal).toBe(2);
+    });
+
+    it('leaves tiers on other events untouched', async () => {
+      const untouched = await prisma.applicationTier.findUnique({ where: { id: tier.id } });
+      expect(untouched.mapBound).toBe(false);
+    });
+
+    it('unbinds a tier that no longer has booths, keeping its quantity', async () => {
+      await request(app)
+        .post(`/admin/maps/${boundMapId}/unpublish`)
+        .set(...auth(organizerToken))
+        .expect(200);
+
+      // Move every booth onto tier A, leaving tier B booth-less.
+      await request(app)
+        .put(`/admin/maps/${boundMapId}/layout`)
+        .set(...auth(organizerToken))
+        .send({
+          elements: [],
+          booths: [
+            booth('A1', 0, 0, tierA.id),
+            booth('A2', 12, 0, tierA.id),
+            booth('A3', 24, 0, tierA.id),
+            booth('B1', 0, 12, tierA.id),
+            booth('B2', 12, 12, tierA.id),
+          ],
+        })
+        .expect(200);
+
+      await request(app)
+        .post(`/admin/maps/${boundMapId}/publish`)
+        .set(...auth(organizerToken))
+        .expect(200);
+
+      const a = await prisma.applicationTier.findUnique({ where: { id: tierA.id } });
+      const b = await prisma.applicationTier.findUnique({ where: { id: tierB.id } });
+      expect(a.mapBound).toBe(true);
+      expect(a.quantityTotal).toBe(5);
+      expect(b.mapBound).toBe(false);
+      // Quantity is deliberately left as is so hiding a tier never reopens capacity.
+      expect(b.quantityTotal).toBe(2);
+    });
+
+    it('unbinds every tier when no booth carries one', async () => {
+      await request(app)
+        .post(`/admin/maps/${boundMapId}/unpublish`)
+        .set(...auth(organizerToken))
+        .expect(200);
+
+      await request(app)
+        .put(`/admin/maps/${boundMapId}/layout`)
+        .set(...auth(organizerToken))
+        .send({ elements: [], booths: [booth('A1', 0, 0, null)] })
+        .expect(200);
+
+      await request(app)
+        .post(`/admin/maps/${boundMapId}/publish`)
+        .set(...auth(organizerToken))
+        .expect(200);
+
+      const a = await prisma.applicationTier.findUnique({ where: { id: tierA.id } });
+      const b = await prisma.applicationTier.findUnique({ where: { id: tierB.id } });
+      expect(a.mapBound).toBe(false);
+      expect(b.mapBound).toBe(false);
+    });
+  });
 });
