@@ -30,7 +30,8 @@ import {
   SalesSection,
   WhenWhereCard,
 } from '@/components/events/EventOverviewSections';
-import { formatCount as n, formatMoney, relativeDays, type EventOverview } from '@/lib/eventOverview';
+import { formatCount as n, formatMoney, relativeDays, type EventOverview, type OverviewForm, type OverviewTier } from '@/lib/eventOverview';
+import { AdmissionFlyout, FormSettingsFlyout, ListingFlyout, TierFlyout } from '@/components/events/EventFlyouts';
 
 const focusRing =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900';
@@ -51,6 +52,13 @@ function EventDetailsContent() {
   const [duplicating, setDuplicating] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelBusy, setCancelBusy] = useState(false);
+  const [flyout, setFlyout] = useState<
+    | { kind: 'admission' }
+    | { kind: 'listing' }
+    | { kind: 'tier'; tier: OverviewTier | null }
+    | { kind: 'form'; form: OverviewForm }
+    | null
+  >(null);
 
   const load = useCallback(async () => {
     if (orgLoading || !orgId || !eventId) return;
@@ -127,7 +135,15 @@ function EventDetailsContent() {
   const { event } = overview;
   const q = `?orgId=${encodeURIComponent(orgId)}`;
   const base = `/admin/events/${eventId}`;
-  const edit = (section: string) => `${base}/edit${q}#${section}`;
+  // Spec 037 phase 3: two section editors; small edits open a flyout here.
+  const edit = (section: string) =>
+    `${base}/edit/${['event-price-tiers', 'event-add-ons', 'event-admission'].includes(section) ? 'sales' : 'details'}${q}#${section}`;
+  const hasSales = (overview.tickets?.issued ?? 0) > 0 || overview.money.tickets.orders > 0 || (overview.rsvp?.going ?? 0) > 0;
+  const reload = () => {
+    setFlyout(null);
+    setNotice('Saved.');
+    load();
+  };
   const publicPath = `/events/${encodeURIComponent(event.slug || event.id)}`;
   const ticketed = event.admissionMode === 'TICKETED';
 
@@ -162,7 +178,7 @@ function EventDetailsContent() {
             )}
             {event.status !== 'CANCELLED' && (
               <Link
-                href={`${base}/edit${q}`}
+                href={`${base}/edit/details${q}`}
                 className={`inline-flex min-h-9 items-center gap-1.5 rounded-md bg-indigo-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 ${focusRing}`}
               >
                 <Pencil className="h-3.5 w-3.5" aria-hidden />
@@ -212,21 +228,38 @@ function EventDetailsContent() {
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] xl:grid-cols-[minmax(0,1fr)_24rem]">
         <div className="min-w-0 space-y-6">
           {ticketed ? (
-            <SalesSection overview={overview} editHref={edit('event-price-tiers')} ordersHref={`/admin/orders?eventId=${eventId}`} delay={40} />
+            <SalesSection
+              overview={overview}
+              editHref={edit('event-price-tiers')}
+              ordersHref={`/admin/orders?eventId=${eventId}`}
+              onEditTier={event.status === 'CANCELLED' ? undefined : (tier) => setFlyout({ kind: 'tier', tier })}
+              delay={40}
+            />
           ) : (
             <RsvpSection overview={overview} editHref={edit('event-admission')} rsvpsHref={`${base}/rsvps`} delay={40} />
           )}
-          <ApplicationsSection overview={overview} base={`${base}/applications`} delay={80} />
+          <ApplicationsSection overview={overview} base={`${base}/applications`} onFormSettings={(form) => setFlyout({ kind: 'form', form })} delay={80} />
           <DescriptionSection overview={overview} editHref={edit('event-details')} delay={120} />
         </div>
         <aside className="min-w-0 space-y-6" aria-label="Event settings">
           <WhenWhereCard overview={overview} editHref={edit('event-when-where')} delay={60} />
-          <AdmissionCard overview={overview} editHref={edit('event-admission')} delay={100} />
+          <AdmissionCard overview={overview} editHref={edit('event-admission')} onEdit={() => setFlyout({ kind: 'admission' })} delay={100} />
           <MapCard overview={overview} delay={140} />
-          <ListingCard overview={overview} editHref={edit('event-listing')} publicHref={publicPath} delay={180} />
+          <ListingCard overview={overview} editHref={edit('event-listing')} onEdit={() => setFlyout({ kind: 'listing' })} publicHref={publicPath} delay={180} />
           <PaymentsCard overview={overview} delay={220} />
         </aside>
       </div>
+
+      {flyout?.kind === 'admission' && (
+        <AdmissionFlyout orgId={orgId} event={event} hasSales={hasSales} onClose={() => setFlyout(null)} onSaved={reload} />
+      )}
+      {flyout?.kind === 'listing' && <ListingFlyout orgId={orgId} event={event} onClose={() => setFlyout(null)} onSaved={reload} />}
+      {flyout?.kind === 'tier' && (
+        <TierFlyout orgId={orgId} event={event} tier={flyout.tier} onClose={() => setFlyout(null)} onSaved={reload} />
+      )}
+      {flyout?.kind === 'form' && (
+        <FormSettingsFlyout event={event} form={flyout.form} onClose={() => setFlyout(null)} onSaved={reload} />
+      )}
 
       {duplicating && (
         <DuplicateEventDialog

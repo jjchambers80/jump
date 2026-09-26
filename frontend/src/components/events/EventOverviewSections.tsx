@@ -7,7 +7,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { ArrowUpRight, Pencil } from 'lucide-react';
+import { ArrowUpRight, Pencil, Plus, Settings2 } from 'lucide-react';
 import ContentHtml from '@/components/storefront/ContentHtml';
 import { CapacityMeter, tierAccent } from '@/components/events/EventEditSummary';
 import { formatEventDate, formatEventDateTime, formatEventTime } from '@/lib/eventTime';
@@ -25,6 +25,7 @@ import {
 
 const eyebrow = 'text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-slate-400';
 const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-800';
+const editButton = `inline-flex min-h-8 items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 text-xs font-semibold text-gray-700 hover:border-indigo-300 hover:text-indigo-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-indigo-400/60 dark:hover:text-indigo-200 ${focusRing}`;
 const quietLink = `inline-flex items-center gap-1 rounded text-sm font-medium text-indigo-600 hover:text-indigo-500 hover:underline dark:text-indigo-300 dark:hover:text-indigo-200 ${focusRing}`;
 
 /** One card on the page: a numbered-free eyebrow title and its Edit link. */
@@ -32,6 +33,7 @@ export function OverviewSection({
   id,
   title,
   editHref,
+  onEdit,
   editLabel,
   aside,
   children,
@@ -42,6 +44,8 @@ export function OverviewSection({
   title: string;
   /** Where this section is edited; omitted for sections that are not edited here. */
   editHref?: string;
+  /** Opens a flyout editor in place (spec 037 D10); wins over `editHref`. */
+  onEdit?: () => void;
   /** Accessible name of the Edit link, e.g. "Edit sales". */
   editLabel?: string;
   /** Extra header content next to Edit (links, badges). */
@@ -66,16 +70,17 @@ export function OverviewSection({
         </h2>
         <div className="flex flex-wrap items-center gap-3">
           {aside}
-          {editHref && (
-            <Link
-              href={editHref}
-              aria-label={editLabel ?? `Edit ${title.toLowerCase()}`}
-              className={`inline-flex min-h-8 items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 text-xs font-semibold text-gray-700 hover:border-indigo-300 hover:text-indigo-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-indigo-400/60 dark:hover:text-indigo-200 ${focusRing}`}
-            >
+          {onEdit ? (
+            <button type="button" onClick={onEdit} aria-label={editLabel ?? `Edit ${title.toLowerCase()}`} aria-haspopup="dialog" className={editButton}>
+              <Pencil className="h-3.5 w-3.5" aria-hidden />
+              Edit
+            </button>
+          ) : editHref ? (
+            <Link href={editHref} aria-label={editLabel ?? `Edit ${title.toLowerCase()}`} className={editButton}>
               <Pencil className="h-3.5 w-3.5" aria-hidden />
               Edit
             </Link>
-          )}
+          ) : null}
         </div>
       </header>
       <div className={flush ? '' : 'px-5 py-4'}>{children}</div>
@@ -126,11 +131,14 @@ export function SalesSection({
   overview,
   editHref,
   ordersHref,
+  onEditTier,
   delay,
 }: {
   overview: EventOverview;
   editHref: string;
   ordersHref: string;
+  /** Opens the one-tier flyout; `null` adds a tier. */
+  onEditTier?: (tier: OverviewTier | null) => void;
   delay?: number;
 }) {
   const { event, money, addOns } = overview;
@@ -147,15 +155,33 @@ export function SalesSection({
       delay={delay}
       flush
       aside={
-        <Link href={ordersHref} className={quietLink}>
-          Orders
-          <ArrowUpRight className="h-3.5 w-3.5" aria-hidden />
-        </Link>
+        <>
+          <Link href={ordersHref} className={quietLink}>
+            Orders
+            <ArrowUpRight className="h-3.5 w-3.5" aria-hidden />
+          </Link>
+          {onEditTier && (
+            <button type="button" onClick={() => onEditTier(null)} aria-haspopup="dialog" className={quietLink}>
+              <Plus className="h-3.5 w-3.5" aria-hidden />
+              Add tier
+            </button>
+          )}
+        </>
       }
     >
       {tiers.length === 0 ? (
         <div className="p-5">
-          <Empty action={<Link href={editHref} className={quietLink}>Add a ticket tier</Link>}>
+          <Empty
+            action={
+              onEditTier ? (
+                <button type="button" onClick={() => onEditTier(null)} className={quietLink}>
+                  Add a ticket tier
+                </button>
+              ) : (
+                <Link href={editHref} className={quietLink}>Add a ticket tier</Link>
+              )
+            }
+          >
             No ticket tiers yet. Buyers cannot check out until the event has one.
           </Empty>
         </div>
@@ -181,7 +207,19 @@ export function SalesSection({
                     <td className="py-3 pl-5 pr-3">
                       <div className="flex items-center gap-2">
                         <span aria-hidden className={`h-2.5 w-2.5 shrink-0 rounded-sm ${tierAccent(i).dot}`} />
-                        <span className="font-medium text-gray-900 dark:text-white">{tier.name}</span>
+                        {onEditTier ? (
+                          <button
+                            type="button"
+                            onClick={() => onEditTier(tier)}
+                            aria-haspopup="dialog"
+                            aria-label={`Edit tier ${tier.name}`}
+                            className={`rounded text-left font-medium text-gray-900 underline decoration-gray-300 decoration-dotted underline-offset-4 hover:text-indigo-700 hover:decoration-indigo-400 dark:text-white dark:decoration-slate-500 dark:hover:text-indigo-200 ${focusRing}`}
+                          >
+                            {tier.name}
+                          </button>
+                        ) : (
+                          <span className="font-medium text-gray-900 dark:text-white">{tier.name}</span>
+                        )}
                       </div>
                       <p className="mt-0.5 pl-[18px] text-xs">
                         {tier.isActive ? (
@@ -372,11 +410,14 @@ function FormPipeline({ form }: { form: OverviewForm }) {
 export function ApplicationsSection({
   overview,
   base,
+  onFormSettings,
   delay,
 }: {
   overview: EventOverview;
   /** /admin/events/:eventId/applications */
   base: string;
+  /** Opens the form settings flyout (name, status, window). */
+  onFormSettings?: (form: OverviewForm) => void;
   delay?: number;
 }) {
   const { forms } = overview.applications;
@@ -431,14 +472,28 @@ export function ApplicationsSection({
                       : 'No open or close date'}
                   </p>
                 </div>
-                <Link
-                  href={`${base}/forms/${form.id}`}
-                  aria-label={`Edit form ${form.name}`}
-                  className={`inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white ${focusRing}`}
-                >
-                  <Pencil className="h-3.5 w-3.5" aria-hidden />
-                  Edit form
-                </Link>
+                <div className="flex items-center gap-1">
+                  {onFormSettings && (
+                    <button
+                      type="button"
+                      onClick={() => onFormSettings(form)}
+                      aria-haspopup="dialog"
+                      aria-label={`Settings for ${form.name}`}
+                      className={`inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white ${focusRing}`}
+                    >
+                      <Settings2 className="h-3.5 w-3.5" aria-hidden />
+                      Settings
+                    </button>
+                  )}
+                  <Link
+                    href={`${base}/forms/${form.id}`}
+                    aria-label={`Edit form ${form.name}`}
+                    className={`inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white ${focusRing}`}
+                  >
+                    <Pencil className="h-3.5 w-3.5" aria-hidden />
+                    Edit form
+                  </Link>
+                </div>
               </div>
 
               <div className="mt-3">
@@ -571,16 +626,18 @@ export function WhenWhereCard({
 export function AdmissionCard({
   overview,
   editHref,
+  onEdit,
   delay,
 }: {
   overview: EventOverview;
   editHref: string;
+  onEdit?: () => void;
   delay?: number;
 }) {
   const { event, tickets } = overview;
   const ticketed = event.admissionMode === 'TICKETED';
   return (
-    <OverviewSection id="admission" title="Admission" editHref={editHref} editLabel="Edit admission" delay={delay}>
+    <OverviewSection id="admission" title="Admission" editHref={editHref} onEdit={onEdit} editLabel="Edit admission" delay={delay}>
       {ticketed ? (
         <>
           <CapacityMeter
@@ -711,17 +768,19 @@ export function MapCard({ overview, delay }: { overview: EventOverview; delay?: 
 export function ListingCard({
   overview,
   editHref,
+  onEdit,
   publicHref,
   delay,
 }: {
   overview: EventOverview;
   editHref: string;
+  onEdit?: () => void;
   publicHref: string;
   delay?: number;
 }) {
   const { event } = overview;
   return (
-    <OverviewSection id="listing" title="Listing" editHref={editHref} editLabel="Edit listing" delay={delay}>
+    <OverviewSection id="listing" title="Listing" editHref={editHref} onEdit={onEdit} editLabel="Edit listing" delay={delay}>
       <Facts
         rows={[
           ['Category', event.category || <span className="font-normal text-gray-400 dark:text-slate-500">None</span>],

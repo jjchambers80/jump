@@ -258,7 +258,7 @@ test.describe('admin add-ons section', () => {
       return route.fulfill(json({ addOns }));
     });
 
-    await page.goto(`/admin/events/${EVENT_ID}/edit?orgId=${ORG_ID}`);
+    await page.goto(`/admin/events/${EVENT_ID}/edit/sales?orgId=${ORG_ID}`);
     const section = page.getByTestId('add-ons-section');
     await expect(section).toBeVisible();
     await expect(section.getByTestId('admin-add-on-addon-parking')).toContainText('Sold 3');
@@ -292,7 +292,7 @@ test.describe('admin add-ons section', () => {
     await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/add-ons/presets`, (route) => route.fulfill(json({ presets: [] })));
     await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/add-ons`, (route) => route.fulfill(json({ addOns: [adminAddOn()] })));
 
-    await page.goto(`/admin/events/${EVENT_ID}/edit?orgId=${ORG_ID}`);
+    await page.goto(`/admin/events/${EVENT_ID}/edit/sales?orgId=${ORG_ID}`);
     const section = page.getByTestId('add-ons-section');
     await expect(section.getByTestId('admin-add-on-addon-parking')).toBeVisible();
     await expect(section.getByRole('button', { name: '+ Add Add-on' })).toHaveCount(0);

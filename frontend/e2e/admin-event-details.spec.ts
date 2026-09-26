@@ -108,18 +108,19 @@ test('shows the event read-only, with an Edit link per section', async ({ page }
   await expect(page.getByRole('textbox')).toHaveCount(0);
 
   const edits: [string, string][] = [
-    ['Edit tiers and add-ons', 'event-price-tiers'],
-    ['Edit event details', 'event-details'],
-    ['Edit date and venue', 'event-when-where'],
-    ['Edit admission', 'event-admission'],
-    ['Edit listing', 'event-listing'],
+    ['Edit tiers and add-ons', 'sales#event-price-tiers'],
+    ['Edit event details', 'details#event-details'],
+    ['Edit date and venue', 'details#event-when-where'],
   ];
-  for (const [name, anchor] of edits) {
+  for (const [name, target] of edits) {
     await expect(page.getByRole('link', { name, exact: true })).toHaveAttribute(
       'href',
-      `/admin/events/${EVENT_ID}/edit?orgId=${ORG_ID}#${anchor}`
+      `/admin/events/${EVENT_ID}/edit/${target.replace('#', `?orgId=${ORG_ID}#`)}`
     );
   }
+  // Small sections edit in a flyout (spec 037 D10).
+  await expect(page.getByRole('button', { name: 'Edit admission' })).toHaveAttribute('aria-haspopup', 'dialog');
+  await expect(page.getByRole('button', { name: 'Edit listing' })).toHaveAttribute('aria-haspopup', 'dialog');
   await expect(page.getByRole('link', { name: 'Open the map builder' })).toHaveAttribute('href', '/admin/maps/map-1');
   await expect(page.getByRole('link', { name: 'Edit form Vendors' })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/applications/forms/form-1`);
 });
@@ -182,3 +183,92 @@ test('no horizontal scroll at 390px', async ({ page }) => {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
 });
+
+// ── Flyouts (spec 037 phase 3) ─────────────────────────────────────────────
+
+async function capturePatches(page: Page) {
+  const calls: { method: string; path: string; body: unknown }[] = [];
+  await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}`, async (route) => {
+    calls.push({ method: route.request().method(), path: new URL(route.request().url()).pathname, body: route.request().postDataJSON() });
+    return route.fulfill(json({ ...baseEvent }));
+  });
+  await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/price-tiers**`, async (route) => {
+    calls.push({ method: route.request().method(), path: new URL(route.request().url()).pathname, body: route.request().postDataJSON() });
+    return route.fulfill(json({ id: 't-new' }, route.request().method() === 'POST' ? 201 : 200));
+  });
+  await page.route(`${API}/admin/events/${EVENT_ID}/application-forms/form-1`, async (route) => {
+    calls.push({ method: route.request().method(), path: new URL(route.request().url()).pathname, body: route.request().postDataJSON() });
+    return route.fulfill(json({ id: 'form-1' }));
+  });
+  return calls;
+}
+
+test('Admission edits capacity in a flyout and refuses one below the tiers', async ({ page }) => {
+  const calls = await capturePatches(page);
+  await page.goto(`/admin/events/${EVENT_ID}?orgId=${ORG_ID}`);
+  await page.getByRole('button', { name: 'Edit admission' }).click();
+  const flyout = page.getByRole('dialog', { name: 'Admission' });
+  await expect(flyout).toBeVisible();
+  // Orders exist, so the mode is locked.
+  await expect(flyout.getByRole('radio', { name: 'RSVP' })).toBeDisabled();
+  await flyout.getByLabel('Capacity').fill('400');
+  await expect(flyout.getByText(/Tiers already hold 450 tickets/)).toBeVisible();
+  await expect(flyout.getByRole('button', { name: 'Save' })).toBeDisabled();
+  await flyout.getByLabel('Capacity').fill('600');
+  await flyout.getByRole('button', { name: 'Save' }).click();
+  await expect(flyout).toHaveCount(0);
+  expect(calls.find((c) => c.method === 'PATCH')?.body).toEqual({ capacity: 600 });
+});
+
+test('a tier edits in a flyout: sale window in the venue zone, PATCH only that tier', async ({ page }) => {
+  const calls = await capturePatches(page);
+  await page.goto(`/admin/events/${EVENT_ID}?orgId=${ORG_ID}`);
+  await page.getByRole('button', { name: 'Edit tier VIP' }).click();
+  const flyout = page.getByRole('dialog', { name: 'Edit VIP' });
+  await expect(flyout.getByLabel('Name')).toHaveValue('VIP');
+  // 50 sold: quantity cannot go below it.
+  await flyout.getByLabel('Quantity').fill('40');
+  await expect(flyout.getByRole('button', { name: 'Save tier' })).toBeDisabled();
+  await flyout.getByLabel('Quantity').fill('60');
+  await flyout.getByLabel('Price ($)').fill('90');
+  await flyout.getByRole('button', { name: 'Save tier' }).click();
+  await expect(flyout).toHaveCount(0);
+  const patch = calls.find((c) => c.method === 'PATCH' && c.path.endsWith('/price-tiers/t-vip'));
+  expect(patch?.body).toMatchObject({ name: 'VIP', price: 90, quantityTotal: 60, isRefundable: true });
+});
+
+test('Add tier opens an empty flyout and POSTs', async ({ page }) => {
+  const calls = await capturePatches(page);
+  await page.goto(`/admin/events/${EVENT_ID}?orgId=${ORG_ID}`);
+  await page.getByRole('region', { name: 'Sales' }).getByRole('button', { name: 'Add tier' }).click();
+  const flyout = page.getByRole('dialog', { name: 'New ticket tier' });
+  await flyout.getByLabel('Name').fill('Early bird');
+  await flyout.getByLabel('Price ($)').fill('15');
+  await flyout.getByLabel('Quantity').fill('50');
+  await flyout.getByRole('button', { name: 'Add tier' }).click();
+  await expect(flyout).toHaveCount(0);
+  expect(calls.find((c) => c.method === 'POST')?.body).toMatchObject({ name: 'Early bird', price: 15, quantityTotal: 50 });
+});
+
+test('Listing and form settings save through flyouts; Escape asks before discarding', async ({ page }) => {
+  const calls = await capturePatches(page);
+  await page.goto(`/admin/events/${EVENT_ID}?orgId=${ORG_ID}`);
+
+  await page.getByRole('button', { name: 'Edit listing' }).click();
+  const listing = page.getByRole('dialog', { name: 'Listing' });
+  await listing.getByLabel('Category').fill('Convention');
+  page.once('dialog', (d) => d.dismiss());
+  await page.keyboard.press('Escape');
+  await expect(listing).toBeVisible();
+  await listing.getByRole('button', { name: 'Save' }).click();
+  await expect(listing).toHaveCount(0);
+  expect(calls.find((c) => c.method === 'PATCH' && c.path.endsWith(`/events/${EVENT_ID}`))?.body).toEqual({ category: 'Convention' });
+
+  await page.getByRole('button', { name: 'Settings for Vendors' }).click();
+  const form = page.getByRole('dialog', { name: 'Vendors settings' });
+  await form.getByText('Closed', { exact: true }).click();
+  await form.getByRole('button', { name: 'Save' }).click();
+  await expect(form).toHaveCount(0);
+  expect(calls.find((c) => c.path.endsWith('/application-forms/form-1'))?.body).toEqual({ status: 'CLOSED' });
+});
+
