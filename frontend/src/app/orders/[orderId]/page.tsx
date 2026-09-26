@@ -153,7 +153,10 @@ export default function OrderDetailPage() {
   useEffect(() => {
     let cancelled = false;
     fetch('/api/buyer/me', { cache: 'no-store' })
-      .then((r) => { if (!cancelled) setBuyer(r.ok ? 'yes' : 'no'); })
+      .then(async (r) => {
+        const me = r.ok ? await r.json() : null; // `null` when signed out
+        if (!cancelled) setBuyer(me ? 'yes' : 'no');
+      })
       .catch(() => { if (!cancelled) setBuyer('no'); });
     return () => { cancelled = true; };
   }, []);
