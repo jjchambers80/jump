@@ -431,35 +431,37 @@ test('cancelled event shows Duplicate as primary action', async ({ page }) => {
 
   const cancelledCard = page.getByRole('article', { name: 'Cancelled Event' });
   await expect(cancelledCard.getByRole('button', { name: 'Duplicate' })).toBeVisible();
-  // Edit should not be shown for cancelled event
-  await expect(cancelledCard.getByRole('link', { name: 'Edit' })).not.toBeVisible();
 });
 
-test('Edit is primary-styled on DRAFT and PUBLISHED cards', async ({ page }) => {
+test('card title opens the Details page and there is no Edit button (spec 037)', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockApi(page);
   await page.goto(`/admin/events?orgId=${ORG_ID}`);
 
-  // DRAFT card — Edit link should be primary (indigo filled)
-  const draftCard = page.getByRole('article', { name: 'Comedy Night' });
-  const draftEdit = draftCard.getByRole('link', { name: 'Edit' });
-  await expect(draftEdit).toBeVisible();
-  const draftHref = await draftEdit.getAttribute('href');
-  expect(draftHref).toContain('/edit');
-  // Primary style: should NOT have border class
-  const draftClasses = await draftEdit.getAttribute('class');
-  expect(draftClasses).toContain('bg-indigo-600');
+  for (const name of ['Comedy Night', 'Summer Music Festival', 'Cancelled Event']) {
+    const card = page.getByRole('article', { name });
+    const title = card.getByRole('link', { name, exact: true });
+    await expect(title).toBeVisible();
+    const href = await title.getAttribute('href');
+    expect(href).toMatch(new RegExp(`^/admin/events/[^/?]+\\?orgId=${ORG_ID}$`));
+    await expect(card.getByRole('link', { name: 'Edit', exact: true })).toHaveCount(0);
+  }
+});
 
-  // PUBLISHED card — Edit link should also be primary
-  const pubCard = page.getByRole('article', { name: 'Summer Music Festival' });
-  const pubEdit = pubCard.getByRole('link', { name: 'Edit' });
-  await expect(pubEdit).toBeVisible();
-  const pubClasses = await pubEdit.getAttribute('class');
-  expect(pubClasses).toContain('bg-indigo-600');
+test('clicking anywhere on the card opens the Details page', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockApi(page);
+  await page.route(`${API}/organizations/${ORG_ID}/events/evt-2/overview`, (route) =>
+    route.fulfill(json({ event: { ...sampleEvents[1], tax: { rate: 0, source: null, region: null } }, money: { gross: 0, orgReceives: 0, refunded: 0, net: 0, tickets: { orders: 0, gross: 0 }, applications: { orders: 0, gross: 0 } }, tickets: { issued: 0, checkedIn: 0, voided: 0 }, rsvp: null, addOns: { addOns: [], totals: { sold: 0, reserved: 0, revenue: 0 } }, applications: { forms: [] }, map: null }))
+  );
+  await page.goto(`/admin/events?orgId=${ORG_ID}`);
 
-  // CANCELLED card — no Edit link
-  const cancelledCard = page.getByRole('article', { name: 'Cancelled Event' });
-  await expect(cancelledCard.getByRole('link', { name: 'Edit' })).not.toBeVisible();
+  const card = page.getByRole('article', { name: 'Comedy Night' });
+  // The venue line is plain text inside the card; the stretched title link
+  // sits over it, so a real click at its position lands on the link.
+  await card.getByText('Theater').first().click({ force: true });
+  await expect(page).toHaveURL(new RegExp(`/admin/events/evt-2\\?orgId=${ORG_ID}$`));
+  await expect(page.getByRole('heading', { level: 1, name: 'Comedy Night' })).toBeVisible();
 });
 
 test('RSVP card has no tier chip', async ({ page }) => {
@@ -518,13 +520,12 @@ test('Export CSV passes current search query in params', async ({ page }) => {
   expect(exportUrl).toContain('q=Retro');
 });
 
-test('draft event shows Publish and Edit buttons', async ({ page }) => {
+test('draft event shows Publish', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockApi(page);
   await page.goto(`/admin/events?orgId=${ORG_ID}`);
 
   const draftCard = page.getByRole('article', { name: 'Comedy Night' });
-  await expect(draftCard.getByRole('link', { name: 'Edit' })).toBeVisible();
   await expect(draftCard.getByRole('button', { name: 'Publish' })).toBeVisible();
 });
 
@@ -636,10 +637,10 @@ test('h1 and article+h2 structure on every card', async ({ page }) => {
     expect(headingId).toBeTruthy();
     expect(headingId).toBe(labelledBy);
 
-    // The h2 contains a link to edit (the event name)
+    // The h2 contains the link to the event's Details page (spec 037)
     const link = h2.getByRole('link');
     await expect(link).toHaveCount(1);
-    expect(await link.getAttribute('href')).toContain('/edit');
+    expect(await link.getAttribute('href')).toMatch(/^\/admin\/events\/[^/?]+\?orgId=/);
   }
 });
 

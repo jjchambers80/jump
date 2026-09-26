@@ -97,7 +97,7 @@ describe('AdminSearchService', () => {
         expect.objectContaining({
           type: 'EVENT',
           id: 'event-1',
-          href: '/admin/events/event-1/edit?orgId=org-1',
+          href: '/admin/events/event-1?orgId=org-1',
           meta: { date: '2027-06-21T18:00:00.000Z', status: 'PUBLISHED' },
         }),
         expect.objectContaining({

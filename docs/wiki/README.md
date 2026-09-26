@@ -45,6 +45,7 @@ Generated and maintained by running `/doc-feature` after completing feature work
 ### Admin & Organizer
 - [Admin Dashboard](features/admin-dashboard.md) — Stats, event management, analytics
 - [Events List](features/events-list.md) — Full-width admin events list: KPI strip, filter toolbar, URL-driven search/sort/filter, responsive cards with sell-through bars, pagination (spec 035)
+- [Event Details](features/event-details.md) — Read-only event home the list card opens: ticket-stub hero with headline numbers, workspace tabs, Sales / RSVPs, Applications pipeline, booth matrix, one Edit link per section; one `overview` request (spec 037 phase 1)
 - [Event Editor](features/event-editor.md) — Create / edit event pages: shared two-column shell, run-sheet header titled by the event, numbered sections, ticket-stub summary with a per-tier capacity meter, bottom-pinned save card with unsaved-changes guard, section links that scroll only `<main>` (PR #196)
 - [Administration Search](features/admin-search.md) — Authenticated, organization-scoped launcher across events, venues, customers, orders, tickets, applications and content (spec 029; all three cards complete)
 - [Organization Settings](features/organization-settings.md) — Settings › General: read-only summary cards with edit dialogs (store contact, address, business details), people (OrganizationPerson)
