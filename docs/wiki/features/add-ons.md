@@ -86,6 +86,16 @@ An organization's add-ons are **saved add-ons** (`AddOnProduct`); an event's `Ad
 ### Reporting
 `GET …/add-ons/sales` returns per add-on `sold`, `reserved`, `remaining`, `revenue` (listed price × quantity of sold lines) split into `orders` (completed, unrefunded lines) and `applications` (paid, slot sold; plus `held` and `pending` counts). `…/add-ons/purchasers.csv` is one row per line across both sources. Both appear on **Admin › Event › Analytics**.
 
+### Admin picker (spec 037 D2)
+
+The event's Sales editor (`/admin/events/:id/edit/sales` › Add-ons) has one combobox, `SavedAddOnPicker` (`frontend/src/components/events/SavedAddOnPicker.tsx`), in place of the old preset menu and "+ Add Add-on":
+
+- Empty query: the organization's saved add-ons (those already on the event are listed but disabled, "on this event") and the five suggestions.
+- Typing searches `GET /organizations/:orgId/saved-add-ons?q=&eventId=`; **Create "<name>"** appears only when no saved add-on has that name (case-insensitive). It opens the add-on dialog, whose Create posts to the event's add-ons endpoint, which finds or creates the saved add-on.
+- Picking a saved add-on or a suggestion calls `POST …/events/:eventId/add-ons/attach` at the saved default price; price, stock, per-order max and tiers are then edited per event.
+- Each saved option has **Edit** (`SavedAddOnFlyout`: name, description, default price, scope, taxable — shared fields reach every event that offers it, price never does) and **Archive** (leaves the picker; events keep their offering). There is no saved add-ons page.
+- Keyboard: ↑/↓ move, Enter picks, Escape closes (`role="combobox"` + `listbox`, `aria-activedescendant`).
+
 ## API Endpoints
 
 | Method | Path | Auth | Description |
