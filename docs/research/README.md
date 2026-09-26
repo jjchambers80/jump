@@ -7,6 +7,7 @@ Each entry has an analysis document (summary, user stories, pain points, feature
 | Date | Document | Subject | Feeds |
 |---|---|---|---|
 | 2026-09-15 | [Organizer interview — Eventeny pain points](./2026-09-15-eventeny-organizer-interview.md) | Gaming Geek Expo organizer on Eventeny: pricing, fees, applications, messaging, map, permissions | Roadmap candidates 011–015 |
+| 2026-09-26 | [Social SDK — integrated marketing](./2026-09-26-social-sdk-integrated-marketing.md) | `opencoredev/social-sdk`: one TypeScript API for publishing to Bluesky, Instagram, LinkedIn, Threads, TikTok, X, YouTube | Possible integrated marketing feature (no spec yet) |
 
 ## Conventions
 
