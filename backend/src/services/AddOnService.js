@@ -9,15 +9,13 @@ import { prisma } from '@jump/db';
 import { ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import logger from '../utils/logger.js';
 import { buyerLineTotal } from './orderLines.js';
+import addOnProductService, { ADD_ON_PRESETS, sharedFields } from './AddOnProductService.js';
 
-/** Common add-ons an organizer can create in one click. Prices are starting points. */
-export const ADD_ON_PRESETS = [
-  { key: 'power', name: 'Booth power', description: 'One 110V drop to your booth', price: 125, scope: 'APPLICATION', taxable: false },
-  { key: 'badge', name: 'Extra vendor badge', description: 'Additional staff badge for your booth', price: 10, scope: 'APPLICATION', maxPerOrder: 4, taxable: false },
-  { key: 'table', name: 'Table & chairs', description: 'One 6 ft table and two chairs', price: 40, scope: 'APPLICATION', taxable: false },
-  { key: 'parking', name: 'Parking pass', description: 'One vehicle for the day', price: 15, scope: 'TICKET' },
-  { key: 'vip', name: 'VIP lounge', description: 'Lounge access for one attendee', price: 50, scope: 'TICKET' },
-];
+// Spec 037: the presets are seed suggestions for saved add-ons (AddOnProductService).
+export { ADD_ON_PRESETS };
+
+/** Fields owned by the saved add-on (spec 037); everything else is per offering. */
+const SHARED_KEYS = ['name', 'description', 'scope', 'taxable'];
 
 const SCOPES = new Set(['TICKET', 'APPLICATION', 'BOTH']);
 
@@ -36,7 +34,7 @@ class AddOnService {
   async _requireEvent(orgId, eventId) {
     const event = await prisma.event.findFirst({
       where: { id: eventId, venue: { organizationId: orgId } },
-      select: { id: true },
+      select: { id: true, venue: { select: { organizationId: true } } },
     });
     if (!event) throw new NotFoundError('Event not found');
     return event;
@@ -65,17 +63,111 @@ class AddOnService {
     return { presets: ADD_ON_PRESETS };
   }
 
+  /**
+   * Create an offering from typed fields (spec 012 endpoint). Spec 037: the
+   * name is found-or-created as a saved add-on (case-insensitive), so every
+   * new offering has a `productId`; a matched saved add-on's shared fields win.
+   */
   async create(orgId, eventId, data) {
-    await this._requireEvent(orgId, eventId);
+    const event = await this._requireEvent(orgId, eventId);
+    const organizationId = event.venue.organizationId;
     const fields = this._fields(data, { creating: true });
     const attachments = await this._attachments(eventId, data);
 
-    const maxOrder = await prisma.addOn.aggregate({ where: { eventId }, _max: { displayOrder: true } });
-    const addOn = await prisma.addOn.create({
+    const addOn = await prisma.$transaction(async (tx) => {
+      await addOnProductService.lockOrg(tx, organizationId);
+      const { product } = await addOnProductService.findOrCreateInTx(
+        tx,
+        organizationId,
+        {
+          name: fields.name,
+          description: fields.description ?? null,
+          defaultPrice: fields.price,
+          scope: fields.scope ?? 'BOTH',
+          taxable: fields.taxable ?? true,
+        },
+        { explicit: { scope: fields.scope, taxable: fields.taxable } }
+      );
+      await this._refuseDuplicateOffering(tx, eventId, product);
+      return this._createOffering(tx, eventId, product, { ...fields, ...sharedFields(product) }, attachments, data.displayOrder);
+    });
+    logger.info('Add-on created', { event: 'add_on_created', orgId, eventId, addOnId: addOn.id, productId: addOn.productId });
+    return this.serializeAdmin(addOn);
+  }
+
+  /**
+   * Put a saved add-on on an event (spec 037 D2 / D9). Either `productId` (an
+   * existing saved add-on) or `savedAddOn: { name, description?, defaultPrice,
+   * scope?, taxable? }` — "Create '<typed name>'", refused with 409
+   * SAVED_ADD_ON_EXISTS when the name already has a case-insensitive match.
+   * Offering fields (price, defaulting to the saved price; allTiers, tier ids,
+   * quantityTotal, maxPerOrder, isActive) come from the body. One offering per
+   * saved add-on per event: 409 ADD_ON_ALREADY_ON_EVENT.
+   * @returns {{ addOn, savedAddOn, createdSavedAddOn: boolean }}
+   */
+  async attach(orgId, eventId, data) {
+    const event = await this._requireEvent(orgId, eventId);
+    const organizationId = event.venue.organizationId;
+    const hasId = typeof data.productId === 'string' && data.productId.length > 0;
+    const hasNew = !!data.savedAddOn && typeof data.savedAddOn === 'object';
+    if (hasId === hasNew) throw new ValidationError('Send either productId or savedAddOn');
+    const newFields = hasNew ? addOnProductService.fields(data.savedAddOn, { creating: true }) : null;
+    // Offering-only fields: shared ones always come from the saved add-on.
+    const offeringData = { ...data };
+    for (const key of SHARED_KEYS) delete offeringData[key];
+    const fields = this._fields(offeringData, { creating: false });
+    const attachments = await this._attachments(eventId, data);
+
+    const result = await prisma.$transaction(async (tx) => {
+      await addOnProductService.lockOrg(tx, organizationId);
+      let product;
+      if (hasId) {
+        product = await tx.addOnProduct.findFirst({ where: { id: data.productId, organizationId } });
+        if (!product) throw new NotFoundError('Saved add-on not found');
+        if (product.isArchived) product = await tx.addOnProduct.update({ where: { id: product.id }, data: { isArchived: false } });
+      } else {
+        product = await addOnProductService.createInTx(tx, organizationId, newFields);
+      }
+      await this._refuseDuplicateOffering(tx, eventId, product);
+      const addOn = await this._createOffering(
+        tx,
+        eventId,
+        product,
+        { ...fields, ...sharedFields(product), price: fields.price ?? Number(product.defaultPrice) },
+        attachments,
+        data.displayOrder
+      );
+      return { addOn, product };
+    });
+    logger.info('Saved add-on attached', { event: 'saved_add_on_attached', orgId, eventId, addOnId: result.addOn.id, productId: result.product.id });
+    return {
+      addOn: this.serializeAdmin(result.addOn),
+      savedAddOn: addOnProductService.serialize(result.product),
+      createdSavedAddOn: !hasId,
+    };
+  }
+
+  async _refuseDuplicateOffering(tx, eventId, product) {
+    const dup = await tx.addOn.findFirst({ where: { eventId, productId: product.id }, select: { id: true } });
+    if (dup) {
+      const error = new ConflictError(`${product.name} is already on this event`, {
+        code: 'ADD_ON_ALREADY_ON_EVENT',
+        addOnId: dup.id,
+        savedAddOnId: product.id,
+      });
+      error.code = 'ADD_ON_ALREADY_ON_EVENT';
+      throw error;
+    }
+  }
+
+  async _createOffering(tx, eventId, product, fields, attachments, displayOrder) {
+    const maxOrder = await tx.addOn.aggregate({ where: { eventId }, _max: { displayOrder: true } });
+    return tx.addOn.create({
       data: {
         eventId,
         ...fields,
-        displayOrder: data.displayOrder ?? (maxOrder._max.displayOrder ?? -1) + 1,
+        productId: product.id,
+        displayOrder: displayOrder ?? (maxOrder._max.displayOrder ?? -1) + 1,
         ...(attachments.priceTierIds && { priceTiers: { create: attachments.priceTierIds.map((priceTierId) => ({ priceTierId })) } }),
         ...(attachments.applicationTierIds && {
           applicationTiers: { create: attachments.applicationTierIds.map((applicationTierId) => ({ applicationTierId })) },
@@ -83,16 +175,34 @@ class AddOnService {
       },
       include: ADMIN_INCLUDE,
     });
-    logger.info('Add-on created', { event: 'add_on_created', orgId, eventId, addOnId: addOn.id, name: addOn.name });
-    return this.serializeAdmin(addOn);
   }
 
+  /**
+   * Update an offering. Spec 037: on an offering linked to a saved add-on,
+   * shared fields (name, description, scope, taxable) are edited once on the
+   * saved add-on and copied to every event that offers it; price, inventory,
+   * attachments and activity stay on this offering.
+   */
   async update(orgId, eventId, addOnId, data) {
     const existing = await this._requireAddOn(orgId, eventId, addOnId);
     const fields = this._fields(data, { creating: false, existing });
     const attachments = await this._attachments(eventId, data);
+    const shared = {};
+    if (existing.productId) {
+      for (const key of SHARED_KEYS) {
+        if (fields[key] !== undefined) {
+          shared[key] = fields[key];
+          delete fields[key];
+        }
+      }
+    }
 
     const addOn = await prisma.$transaction(async (tx) => {
+      if (Object.keys(shared).length) {
+        const product = await tx.addOnProduct.findUnique({ where: { id: existing.productId }, select: { organizationId: true } });
+        await addOnProductService.lockOrg(tx, product.organizationId);
+        await addOnProductService.updateInTx(tx, product.organizationId, existing.productId, shared);
+      }
       if (attachments.priceTierIds) {
         await tx.priceTierAddOn.deleteMany({ where: { addOnId } });
         await tx.priceTierAddOn.createMany({ data: attachments.priceTierIds.map((priceTierId) => ({ addOnId, priceTierId })) });
@@ -236,6 +346,8 @@ class AddOnService {
       await tx.addOn.create({
         data: {
           eventId: targetEventId,
+          // Spec 037: the copy offers the same saved add-on — no new product.
+          productId: a.productId,
           name: a.name,
           description: a.description,
           price: a.price,
@@ -321,7 +433,7 @@ class AddOnService {
 
   /** Compact "Power ×1, Badge ×2" for list rows, CSV cells and emails. */
   summarizeLines(lines) {
-    return (lines || []).map((l) => `${l.addOn?.name ?? l.name} ×${l.quantity}`).join(', ');
+    return (lines || []).map((l) => `${l.name ?? l.addOn?.name} ×${l.quantity}`).join(', ');
   }
 
   // ---------------------------------------------------------------------------
@@ -556,12 +668,12 @@ class AddOnService {
     const rows = [
       ...orderLines.map((l) => ({
         sort: [l.addOn.displayOrder, l.order.createdAt],
-        cells: [l.addOn.name, l.quantity, Number(l.unitPrice).toFixed(2), 'order', l.order.id, l.order.status, l.order.contact?.firstName, l.order.contact?.lastName, l.order.contact?.email, '', '', '', '', l.refundedAt ? 'yes' : '', l.order.createdAt.toISOString()],
+        cells: [l.name ?? l.addOn.name, l.quantity, Number(l.unitPrice).toFixed(2), 'order', l.order.id, l.order.status, l.order.contact?.firstName, l.order.contact?.lastName, l.order.contact?.email, '', '', '', '', l.refundedAt ? 'yes' : '', l.order.createdAt.toISOString()],
       })),
       ...applicationLines.map((l) => ({
         sort: [l.addOn.displayOrder, l.application.submittedAt ?? new Date(0)],
         cells: [
-          l.addOn.name, l.quantity, Number(l.unitPrice).toFixed(2), 'application', l.application.id, `${l.application.status}/${l.application.paymentStatus}`,
+          l.name ?? l.addOn.name, l.quantity, Number(l.unitPrice).toFixed(2), 'application', l.application.id, `${l.application.status}/${l.application.paymentStatus}`,
           l.application.contact?.firstName, l.application.contact?.lastName, l.application.contact?.email, l.application.profile?.businessName ?? '',
           l.application.form?.name ?? '', l.application.tier?.name ?? '', l.application.boothLabel ?? '', '', l.application.submittedAt?.toISOString() ?? '',
         ],
@@ -577,6 +689,7 @@ class AddOnService {
   serializeAdmin(a) {
     return {
       ...this.serializePublic(a),
+      productId: a.productId ?? null,
       scope: a.scope,
       allTiers: a.allTiers,
       priceTierIds: (a.priceTiers || []).map((p) => p.priceTierId),
@@ -622,7 +735,7 @@ class AddOnService {
     return {
       id: line.id,
       addOnId: line.addOnId,
-      name: line.addOn?.name ?? null,
+      name: line.name ?? line.addOn?.name ?? null,
       quantity: line.quantity,
       unitPrice,
       platformFee,

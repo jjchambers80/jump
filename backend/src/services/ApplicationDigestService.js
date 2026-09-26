@@ -73,7 +73,7 @@ class ApplicationDigestService {
           select: {
             totalAmount: true,
             addOns: {
-              select: { quantity: true, addOn: { select: { name: true, displayOrder: true } } },
+              select: { quantity: true, name: true, addOn: { select: { name: true, displayOrder: true } } },
               orderBy: { addOn: { displayOrder: 'asc' } },
             },
           },
@@ -141,9 +141,10 @@ class ApplicationDigestService {
         const addOnTotals = new Map();
         for (const a of list) {
           for (const l of a.order?.addOns || []) {
-            const t = addOnTotals.get(l.addOn.name) ?? { quantity: 0, order: l.addOn.displayOrder };
+            const name = l.name ?? l.addOn.name; // spec 037: the line's snapshot
+            const t = addOnTotals.get(name) ?? { quantity: 0, order: l.addOn.displayOrder };
             t.quantity += l.quantity;
-            addOnTotals.set(l.addOn.name, t);
+            addOnTotals.set(name, t);
           }
         }
         if (addOnTotals.size) {
@@ -153,7 +154,7 @@ class ApplicationDigestService {
         for (const a of list.slice(0, MAX_ROWS_PER_FORM)) {
           const who = `${a.contact.firstName} ${a.contact.lastName}`.trim();
           const addOns = (a.order?.addOns || [])
-            .map((l) => `${l.addOn.name} ×${l.quantity}`)
+            .map((l) => `${l.name ?? l.addOn.name} ×${l.quantity}`)
             .join(', ');
           const extra = [
             a.tier?.name,

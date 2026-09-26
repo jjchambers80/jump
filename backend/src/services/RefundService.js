@@ -692,7 +692,7 @@ class RefundService {
             ticketNumber: r.ticket.ticketNumber,
           }
         : null,
-      addOn: r.orderAddOn ? { id: r.orderAddOn.id, name: r.orderAddOn.addOn?.name ?? null, quantity: r.orderAddOn.quantity } : null,
+      addOn: r.orderAddOn ? { id: r.orderAddOn.id, name: r.orderAddOn.name ?? r.orderAddOn.addOn?.name ?? null, quantity: r.orderAddOn.quantity } : null,
       initiatedBy: r.initiatedBy,
       manual: r.manual === true,
       createdAt: r.createdAt,

@@ -58,6 +58,7 @@ class OrderLineService {
     ];
     const addOns = addOnLines.map((l, i) => ({
       addOnId: l.addOn.id,
+      name: l.addOn.name, // spec 037: receipt snapshot, never the live name
       quantity: l.quantity,
       unitPrice: Number(l.addOn.price),
       platformFee: addOnShares[i].platformFee,
@@ -113,7 +114,7 @@ class OrderLineService {
     }
     const tier = tierItem(order);
     const addOns = (order.addOns || [])
-      .map((l) => `${l.addOn?.name ?? 'Add-on'} ×${l.quantity}`)
+      .map((l) => `${l.name ?? l.addOn?.name ?? 'Add-on'} ×${l.quantity}`)
       .join(', ');
     const adjusted = adjustmentItems(order).length > 0;
     return (

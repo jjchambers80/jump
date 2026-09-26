@@ -41,6 +41,17 @@ router.post('/', ...admin, wrap(async (req, res) => {
   res.status(201).json(await addOnService.create(req.params.orgId, req.params.eventId, req.body || {}));
 }));
 
+/**
+ * POST /attach — put a saved add-on on this event (spec 037). Body: `productId`
+ * or `savedAddOn: { name, description?, defaultPrice, scope?, taxable? }`
+ * ("Create '<typed name>'"), plus offering fields (price defaults to the saved
+ * price). 201 `{ addOn, savedAddOn, createdSavedAddOn }`; 409
+ * ADD_ON_ALREADY_ON_EVENT / SAVED_ADD_ON_EXISTS.
+ */
+router.post('/attach', ...admin, wrap(async (req, res) => {
+  res.status(201).json(await addOnService.attach(req.params.orgId, req.params.eventId, req.body || {}));
+}));
+
 router.post('/reorder', ...admin, wrap(async (req, res) => {
   res.json(await addOnService.reorder(req.params.orgId, req.params.eventId, req.body?.addOnIds));
 }));

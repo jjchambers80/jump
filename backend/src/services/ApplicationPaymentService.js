@@ -220,7 +220,7 @@ class ApplicationPaymentService {
       ),
       ...addOns.map((l) =>
         line(
-          `${l.addOn?.name ?? 'Add-on'} ×${l.quantity}`,
+          `${l.name ?? l.addOn?.name ?? 'Add-on'} ×${l.quantity}`,
           buyerLineTotal(l, order.feeMode, { taxInclusive })
         )
       ),
@@ -730,7 +730,7 @@ class ApplicationPaymentService {
       if (!order || order.status !== 'COMPLETED' || Number(order.totalAmount) <= 0) return false;
       const organization = application.event?.venue?.organization || {};
       const taxInclusive = organization.taxInclusivePricing === true;
-      const addOns = (order.addOns || []).map((l) => ({ label: `${l.addOn?.name ?? 'Add-on'} ×${l.quantity}`, amount: buyerLineTotal(l, order.feeMode, { taxInclusive }) }));
+      const addOns = (order.addOns || []).map((l) => ({ label: `${l.name ?? l.addOn?.name ?? 'Add-on'} ×${l.quantity}`, amount: buyerLineTotal(l, order.feeMode, { taxInclusive }) }));
       const addOnTotal = addOns.reduce((sum, l) => sum + l.amount, 0);
       const tier = tierItem(order);
       const adjusted = adjustmentItems(order).some((i) => i.kind === 'ADJUSTMENT');
