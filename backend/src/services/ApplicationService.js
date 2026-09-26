@@ -55,6 +55,8 @@ import imageService from './ImageService.js';
 import { absoluteAssetUrl } from '../utils/publicUrl.js';
 import { storefrontFor } from '../utils/storefrontUrl.js';
 import logger from '../utils/logger.js';
+import { normalizeEmail } from '../utils/normalizeEmail.js';
+import { upsertContactFillBlanks } from './contactRecord.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const URL_RE = /^https?:\/\/[^\s]+$/i;
@@ -301,10 +303,12 @@ class ApplicationService {
     const application = await prisma.$transaction(async (tx) => {
       // Opt-ins are recorded on the application and applied by
       // ContactOptInService once it reaches SUBMITTED, never here (spec 024 phase 3).
-      const contactRecord = await tx.contact.upsert({
-        where: { organizationId_email: { organizationId, email: contact.email } },
-        update: { firstName: contact.firstName, lastName: contact.lastName },
-        create: { organizationId, email: contact.email, firstName: contact.firstName, lastName: contact.lastName },
+      // Fill in a missing name only; never overwrite one (spec 037 D12).
+      const contactRecord = await upsertContactFillBlanks(tx, {
+        organizationId,
+        email: contact.email,
+        firstName: contact.firstName,
+        lastName: contact.lastName,
       });
 
       const dup = await tx.application.findFirst({
@@ -1728,7 +1732,7 @@ class ApplicationService {
 
   _validateContact(contact) {
     if (!contact || typeof contact !== 'object') throw new ValidationError('contact is required');
-    const email = String(contact.email || '').trim().toLowerCase();
+    const email = normalizeEmail(contact.email);
     if (!EMAIL_RE.test(email) || email.length > 254) throw new ValidationError('contact.email must be a valid email');
     const firstName = String(contact.firstName || '').trim();
     const lastName = String(contact.lastName || '').trim();

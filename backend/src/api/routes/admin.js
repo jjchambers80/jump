@@ -1112,11 +1112,10 @@ router.patch('/tickets/:ticketId/attendee', validateUpdateAttendee, async (req, 
       }
     }
 
-    const { firstName, lastName, email } = req.body;
+    const { firstName, lastName } = req.body;
     const updated = await ticketService.updateTicketAttendee(req.params.ticketId, {
       firstName,
       lastName,
-      email,
     });
 
     res.json(updated);

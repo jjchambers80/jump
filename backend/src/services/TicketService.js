@@ -684,42 +684,47 @@ class TicketService {
   }
 
   /**
-   * Update attendee (contact) info on a ticket.
+   * Update the name on a ticket (spec 037 D13 / C1).
+   *
+   * There are no attendee fields on `Ticket` yet (named tickets are deferred),
+   * so the name lives on the buyer's Contact. The edit is therefore allowed
+   * only when the ticket's order holds exactly one ticket, where the ticket
+   * holder and the buyer are the same person. The email is never changed here:
+   * it is the Contact's identity at the organization (spec 007) and changes
+   * only through the customer page.
    *
    * @param {string} ticketId
-   * @param {{ firstName?: string, lastName?: string, email?: string }} updates
+   * @param {{ firstName?: string, lastName?: string }} updates
    * @returns {Promise<Object>} Updated contact
    */
-  async updateTicketAttendee(ticketId, { firstName, lastName, email }) {
+  async updateTicketAttendee(ticketId, { firstName, lastName } = {}) {
     const ticket = await prisma.ticket.findUnique({
       where: { id: ticketId },
-      select: { contactId: true },
+      select: { contactId: true, orderId: true },
     });
 
     if (!ticket) {
       throw new NotFoundError('Ticket not found');
     }
 
+    const ticketsInOrder = await prisma.ticket.count({ where: { orderId: ticket.orderId } });
+    if (ticketsInOrder !== 1) {
+      const error = new ValidationError(
+        'This order has several tickets. Changing the name would rename the buyer on all of them; edit the buyer on the customer page instead.'
+      );
+      error.code = 'ATTENDEE_EDIT_MULTI_TICKET_ORDER';
+      throw error;
+    }
+
     const data = {};
     if (firstName !== undefined) data.firstName = firstName;
     if (lastName !== undefined) data.lastName = lastName;
-    // Contact email is the buyer's sign-in identity at this org (spec 007):
-    // normalize like checkout does, and surface a per-org collision as 409.
-    if (email !== undefined) data.email = String(email).trim().toLowerCase();
 
-    let updated;
-    try {
-      updated = await prisma.contact.update({
-        where: { id: ticket.contactId },
-        data,
-        select: { id: true, firstName: true, lastName: true, email: true },
-      });
-    } catch (error) {
-      if (error.code === 'P2002') {
-        throw new ConflictError('Another customer at this organization already uses that email');
-      }
-      throw error;
-    }
+    const updated = await prisma.contact.update({
+      where: { id: ticket.contactId },
+      data,
+      select: { id: true, firstName: true, lastName: true, email: true },
+    });
 
     logger.info('Ticket attendee updated', { ticketId, contactId: updated.id });
     return updated;

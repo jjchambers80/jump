@@ -30,6 +30,7 @@ import { evaluateRefundPolicy, REFUND_POLICY_MESSAGES, REFUND_POLICY_SELECT } fr
 import { prisma } from '@jump/db';
 import { MAX_PHOTO_MB, MAX_PROFILE_PHOTOS } from '../../config/applications.js';
 import logger from '../../utils/logger.js';
+import { normalizeEmail } from '../../utils/normalizeEmail.js';
 
 const router = express.Router();
 
@@ -46,7 +47,8 @@ const boothLimiter = makeLimiter('BOOTH_CHOOSE', LIMITS.BOOTH_CHOOSE);
 /** POST /buyer/auth/request — email a sign-in link. Never reveals account existence. */
 router.post('/auth/request', requestLimiter, async (req, res, next) => {
   try {
-    const { organizationId, email } = req.body || {};
+    const { organizationId } = req.body || {};
+    const email = normalizeEmail(req.body?.email);
     if (!organizationId || typeof organizationId !== 'string') {
       throw new ValidationError('organizationId is required');
     }

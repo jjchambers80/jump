@@ -298,7 +298,7 @@ describe('Orders API Contract Tests', () => {
       expect(res.body).toHaveProperty('error');
     });
 
-    it('should upsert contact when same email orders again', async () => {
+    it('should reuse the contact when same email orders again, keeping its name', async () => {
       const res = await request(app)
         .post('/orders')
         .send({
@@ -319,7 +319,8 @@ describe('Orders API Contract Tests', () => {
         where: { email: 'guest@orders-test.com' },
       });
       expect(contacts).toHaveLength(1);
-      expect(contacts[0].lastName).toBe('Updated');
+      // Spec 037 D12: checkout fills in a missing name only, never overwrites one.
+      expect(contacts[0].lastName).not.toBe('Updated');
     });
   });
 
