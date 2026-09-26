@@ -1801,3 +1801,43 @@ model OrderAddOn {
   @@unique([orderId, addOnId])
   @@index([addOnId])
 }
+
+// Every Stripe webhook delivery, on every endpoint (spec 035 / EVE-3).
+//
+// WHY a table and not just a log line: Stripe delivers the same event more than
+// once and does not guarantee order. Handlers are individually idempotent, but
+// nothing recorded *that* a delivery happened, so a missed or mis-ordered event
+// was undebuggable after the fact. This row is the receipt.
+//
+// `(endpoint, stripeEventId)` is the dedup key — the insert itself is the lock,
+// so two concurrent deliveries of the same event cannot both reach a handler.
+// Append-mostly: a row is written on receipt and updated once with the outcome.
+model StripeWebhookEvent {
+  id              String    @id @default(cuid())
+  // PLATFORM | CONNECT | BILLING — which registered endpoint received it.
+  // Part of the dedup key: the same event id may legitimately arrive on two
+  // endpoints, and each has its own handler.
+  endpoint        String
+  stripeEventId   String
+  type            String
+  // event.account on Connect deliveries, null on the platform account.
+  accountId       String?
+  // event.data.object.id — the Stripe object this delivery is about. Used to
+  // detect out-of-order delivery against the same object.
+  objectId        String?
+  apiVersion      String?
+  // RECEIVED | PROCESSED | IGNORED | FAILED
+  status          String    @default("RECEIVED")
+  // Deliveries seen for this event id, including the first.
+  deliveries      Int       @default(1)
+  error           String?
+  // event.created, Stripe's own ordering clock — not our receipt time.
+  stripeCreatedAt DateTime?
+  receivedAt      DateTime  @default(now())
+  processedAt     DateTime?
+
+  @@unique([endpoint, stripeEventId])
+  @@index([type, receivedAt])
+  @@index([status, receivedAt])
+  @@index([objectId])
+}

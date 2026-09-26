@@ -7,7 +7,7 @@
 // a Stripe call.
 
 import { prisma } from '@jump/db';
-import { createStripeRefund } from './stripeRefund.js';
+import { createStripeRefund, refundIdempotencyKey } from './stripeRefund.js';
 import addOnService from './AddOnService.js';
 import logger from '../utils/logger.js';
 import { NotFoundError, ConflictError, ValidationError } from '../middleware/errorHandler.js';
@@ -100,7 +100,14 @@ class RefundService {
           order.stripePaymentIntentId,
           refundAmount,
           reason,
-          { connected: Boolean(order.stripeAccountId) }
+          {
+            connected: Boolean(order.stripeAccountId),
+            // Scoped to the order, not to the PENDING Refund row above: if this
+            // transaction rolls back after Stripe succeeded, that row is gone
+            // and a retry would mint a fresh id. "Refund the rest of this
+            // order" happens at most once, so the order id is the operation.
+            idempotencyKey: refundIdempotencyKey(`order:${orderId}:full`),
+          }
         );
       } catch (err) {
         // Stripe failed — transaction rolls back, PENDING record disappears
@@ -231,6 +238,13 @@ class RefundService {
         reason,
         connected: Boolean(order.stripeAccountId),
         metadata: { orderId, applicationId: order.applicationId },
+        // Unlike the ticket scopes above, an application refund takes a
+        // caller-chosen amount and the same amount may legitimately be
+        // refunded twice (two $50 partials on a $200 booth). So the operation
+        // really is this Refund row — and here that is safe, because the row
+        // was committed by the transaction above *before* Stripe is called and
+        // is marked FAILED rather than deleted if this throws.
+        idempotencyKey: refundIdempotencyKey(`application-order:${orderId}:${refund.id}`),
       });
     } catch (error) {
       await prisma.refund.update({ where: { id: refund.id }, data: { status: 'FAILED' } });
@@ -383,7 +397,12 @@ class RefundService {
           order.payment.stripePaymentIntentId,
           refundAmount,
           reason,
-          { connected: Boolean(order.payment.stripeAccountId) }
+          {
+            connected: Boolean(order.payment.stripeAccountId),
+            // A ticket is refunded at most once (it is VOIDED below), so the
+            // ticket is the operation and survives a rolled-back retry.
+            idempotencyKey: refundIdempotencyKey(`ticket:${ticket.id}`),
+          }
         );
       } catch (err) {
         throw err;
@@ -494,6 +513,8 @@ class RefundService {
 
       const stripeRefund = await this._createStripeRefund(order.payment.stripePaymentIntentId, refundAmount, reason, {
         connected: Boolean(order.payment.stripeAccountId),
+        // An add-on line is refunded at most once (refundedAt is stamped below).
+        idempotencyKey: refundIdempotencyKey(`order-add-on:${line.id}`),
       });
 
       await tx.$executeRaw`
@@ -708,8 +729,8 @@ class RefundService {
    *   (`refund_application_fee`), both pro rata for partial amounts, so the
    *   buyer is made whole and the platform eats only Stripe's processing cost.
    */
-  async _createStripeRefund(paymentIntentId, amount, reason, { connected = false } = {}) {
-    return createStripeRefund({ paymentIntentId, amount, reason, connected });
+  async _createStripeRefund(paymentIntentId, amount, reason, { connected = false, idempotencyKey } = {}) {
+    return createStripeRefund({ paymentIntentId, amount, reason, connected, idempotencyKey });
   }
 
   _formatRefund(refund, order) {
