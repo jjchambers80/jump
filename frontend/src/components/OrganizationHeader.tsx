@@ -77,7 +77,7 @@ export default function OrganizationHeader({
   return (
     <header
       data-testid="organization-header"
-      className="w-full border-b border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-800"
+      className="w-full border-b border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-900"
     >
       <div className={containerClass}>
         <div className="flex items-center justify-between gap-4">
