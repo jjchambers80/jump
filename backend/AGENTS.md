@@ -102,6 +102,47 @@ See `docs/wiki/features/application-orders.md` (and `application-payments-report
 
 See `docs/wiki/features/venue-time-zones.md`.
 
+## Disputes / chargebacks (spec 037)
+
+`DisputeService` is the only writer. Every `charge.dispute.*` event
+(`created`, `updated`, `funds_withdrawn`, `funds_reinstated`, `closed`) goes to
+`applyFromEvent` from the signature-verified `POST /webhooks/stripe` — never add
+a second entry point into it.
+
+1. **Full state, never a delta.** Each event carries the whole dispute object, so
+   `_derive(dispute)` reads everything from the payload: `state` from
+   `dispute.status`, `inquiry` from a `warning_*` status, and `fundsWithdrawn`
+   from the status plus the sign of Σ `dispute.balance_transactions` — **not**
+   from the event type. Replaying an event is therefore a no-op. Do not add a
+   handler that branches on `event.type`.
+2. **`Dispute.lastEventAt` is monotonic.** A strictly older `event.created` is
+   logged (`dispute_event_stale`) and ignored, because `.closed` can arrive
+   before `.funds_withdrawn` and a late withdrawal must not take money back out
+   of a dispute Jump won.
+3. **The money is a `Refund` row**, `disputeId` unique (one per dispute, enforced
+   by the DB) and `stripeRefundId` null (a chargeback has no Stripe Refund
+   object). That is why `refunded` / `net`, `PAID_ORDER_STATUSES` consumers,
+   analytics and `TaxService.collectedReport` need no changes. A won dispute
+   marks the row `FAILED` — the ledger's way of saying "this money-out did not
+   stand" — so the SUCCEEDED aggregates stop counting it.
+4. **No `DISPUTED` OrderStatus.** `_recomputeOrderStatus` derives
+   `COMPLETED` / `PARTIALLY_REFUNDED` / `REFUNDED` from fresh ledger state and
+   never resurrects a PENDING / FAILED / CANCELLED order. Application orders
+   reuse `RefundService._recomputeApplicationOrderStatus` (booth release
+   included) so `Application.paymentStatus` and `Order.status` still move
+   together.
+5. **Restore only what this dispute closed.** `Dispute.voidedTickets`
+   (`[{ id, status }]`) and `closedAddOnIds` are written by `_withdraw` and
+   consumed by `_reinstate` — a redeemed ticket comes back `REDEEMED`, and a
+   ticket staff refunded separately is never resurrected. `AddOnService.resell`
+   exists only for this.
+6. **Notify on a transition, not per delivery**: a new dispute, or one that just
+   closed. The email goes to the organization's members outside the transaction.
+7. `npm run report:disputes` / `DisputeService.reconcile()` counts both
+   directions; `tests/contract/disputes.test.js` replays every fixture twice.
+
+See `docs/wiki/features/disputes-chargebacks.md`.
+
 ## Capacity Enforcement (WHY: prevents overselling under concurrent load)
 
 ```sql

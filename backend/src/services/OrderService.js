@@ -23,7 +23,10 @@ const LIST_INCLUDE = {
   payment: { select: { source: true, stripePaymentIntentId: true, stripeAccountId: true, status: true } },
   items: { select: { kind: true, quantity: true, description: true, unitPrice: true, priceTier: { select: { name: true } } }, orderBy: { createdAt: 'asc' } },
   addOns: { select: { quantity: true, addOn: { select: { name: true } } } },
-  refunds: { where: { status: 'SUCCEEDED' }, select: { id: true, amount: true, stripeRefundId: true, manual: true, createdAt: true } },
+  refunds: { where: { status: 'SUCCEEDED' }, select: { id: true, amount: true, stripeRefundId: true, manual: true, disputeId: true, createdAt: true } },
+  // Spec 037: a chargeback's money-out is a Refund row, so `refunded` / `net`
+  // are already right — this is what tells the row apart from a refund.
+  disputes: { select: { id: true, state: true, amount: true, reason: true, fundsWithdrawn: true, inquiry: true, openedAt: true }, orderBy: { openedAt: 'desc' } },
   application: {
     select: {
       id: true,
@@ -1230,6 +1233,14 @@ class OrderService {
       paymentSource: order.payment?.source === 'OFFLINE' || waived ? 'offline' : 'stripe',
       refunded: Math.round(refunded * 100) / 100,
       net: Math.round((total - refunded) * 100) / 100,
+      // Spec 037: null unless the order has a dispute. The money already shows
+      // in `refunded` / `net`; this says a chargeback took it, not a refund.
+      dispute: (order.disputes || []).length
+        ? (() => {
+            const d = order.disputes[0];
+            return { id: d.id, state: d.state, amount: Number(d.amount), reason: d.reason, fundsWithdrawn: d.fundsWithdrawn, inquiry: d.inquiry, openedAt: d.openedAt };
+          })()
+        : null,
       application: application ? { id: application.id, status: application.status, paymentStatus: application.paymentStatus, formName: application.form?.name ?? null, tierName: application.tier?.name ?? null } : null,
       ...(unscoped && order.event?.venue?.organization ? { organization: order.event.venue.organization } : {}),
     };

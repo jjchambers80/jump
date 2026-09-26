@@ -404,6 +404,17 @@ class AddOnService {
     }
   }
 
+  /**
+   * Released → sold again, with no reservation in between: the inverse of
+   * `unsell`. Only for a won dispute (spec 037), which reopens exactly the
+   * lines its chargeback closed.
+   */
+  async resell(tx, lines) {
+    for (const { addOnId, quantity } of lines) {
+      await tx.$executeRawUnsafe(`UPDATE "AddOn" SET "quantitySold" = "quantitySold" + $1 WHERE "id" = $2`, quantity, addOnId);
+    }
+  }
+
   /** Sold → released (refund of a line). */
   async unsell(tx, lines) {
     for (const { addOnId, quantity } of lines) {

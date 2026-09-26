@@ -962,6 +962,7 @@ model Order {
   addOns      OrderAddOn[]
   payment     PaymentTransaction?
   refunds     Refund[]
+  disputes    Dispute[]
 
   @@index([eventId])
   @@index([contactId])
@@ -1072,6 +1073,11 @@ model Refund {
   initiatedBy    String? // userId of admin who initiated, null for customer self-service
   manual         Boolean      @default(false) // recorded refund on an offline-paid order, no Stripe call (spec 024)
   feeAmount      Decimal      @default(0) @db.Decimal(10, 2) // kept by the organization on a self-serve refund (spec 031)
+  // Spec 037: the money Stripe pulled back for a chargeback, not a refund we
+  // issued — there is no Stripe Refund object, so `stripeRefundId` stays null.
+  // At most one per dispute (unique), and `status` FAILED once a won dispute
+  // reinstated the funds, so the SUCCEEDED aggregates stop counting it.
+  disputeId      String?      @unique
 
   createdAt DateTime @default(now())
   // NO updatedAt — append-only ledger
@@ -1079,11 +1085,66 @@ model Refund {
   order      Order       @relation(fields: [orderId], references: [id])
   ticket     Ticket?     @relation(fields: [ticketId], references: [id])
   orderAddOn OrderAddOn? @relation(fields: [orderAddOnId], references: [id])
+  dispute    Dispute?    @relation(fields: [disputeId], references: [id])
 
   @@index([orderId])
   @@index([ticketId])
   @@index([orderAddOnId])
   @@index([stripeRefundId])
+}
+
+// ──────────────────────────────────────────────
+// Disputes / chargebacks (spec 037)
+// ──────────────────────────────────────────────
+
+// Projection of a Stripe Dispute. Stripe is the source of truth and every
+// `charge.dispute.*` event carries the whole dispute object, so handlers apply
+// the full derived state rather than a delta — that plus `lastEventAt` (only a
+// strictly newer event may move state) is what makes replays and out-of-order
+// delivery safe. Exactly one row per Stripe dispute, exactly one order per row.
+model Dispute {
+  id                    String       @id @default(cuid())
+  orderId               String
+  stripeDisputeId       String       @unique
+  stripeChargeId        String?
+  stripePaymentIntentId String?
+  amount                Decimal      @db.Decimal(10, 2) // disputed amount, major units
+  currency              String       @default("usd")
+  reason                String? // Stripe dispute.reason, e.g. fraudulent
+  stripeStatus          String // raw Stripe dispute.status
+  state                 DisputeState @default(OPEN)
+  // A `warning_*` status is an inquiry: no funds have moved and the buyer's
+  // tickets are left alone until it becomes a real chargeback.
+  inquiry               Boolean      @default(false)
+  // Net of dispute.balance_transactions: true while Stripe is holding the money.
+  fundsWithdrawn        Boolean      @default(false)
+  evidenceDueBy         DateTime?
+  openedAt              DateTime
+  closedAt              DateTime?
+  // What this dispute voided / closed, so a won dispute restores exactly those
+  // — and their prior status — never a ticket or line that staff refunded for
+  // another reason. `voidedTickets` is [{ id, status }].
+  voidedTickets         Json?
+  closedAddOnIds        String[]
+  // Monotonic guard: `created` of the newest charge.dispute.* event applied.
+  lastEventAt           DateTime
+  lastEventType         String
+  lastEventId           String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order   Order    @relation(fields: [orderId], references: [id])
+  refunds Refund[]
+
+  @@index([orderId])
+  @@index([state])
+}
+
+enum DisputeState {
+  OPEN // needs_response / under_review, or an open inquiry
+  WON
+  LOST
 }
 
 // ──────────────────────────────────────────────

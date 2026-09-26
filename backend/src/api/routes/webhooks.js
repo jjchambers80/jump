@@ -9,6 +9,7 @@ import RefundService from '../../services/RefundService.js';
 import ConnectService from '../../services/ConnectService.js';
 import ApplicationPaymentService from '../../services/ApplicationPaymentService.js';
 import BillingService from '../../services/BillingService.js';
+import DisputeService from '../../services/DisputeService.js';
 import logger from '../../utils/logger.js';
 
 const router = express.Router();
@@ -125,6 +126,19 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
             await RefundService.handleExternalRefund(charge.payment_intent, refund);
           }
         }
+        break;
+      }
+
+      // Chargebacks (spec 037). Every event in the family carries the whole
+      // dispute object, so they all land on one handler that derives the full
+      // state — safe to redeliver and safe out of order, which matters because
+      // `.closed` can arrive before `.funds_withdrawn`.
+      case 'charge.dispute.created':
+      case 'charge.dispute.updated':
+      case 'charge.dispute.funds_withdrawn':
+      case 'charge.dispute.funds_reinstated':
+      case 'charge.dispute.closed': {
+        await DisputeService.applyFromEvent(event);
         break;
       }
 
