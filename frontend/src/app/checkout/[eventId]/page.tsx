@@ -320,7 +320,8 @@ function CheckoutContent({ params }: { params: { eventId: string } }) {
       const items = selectedItems.map(({ priceTierId, quantity }) => ({ priceTierId, quantity }));
       const addOns = selectedAddOns.map(({ addOnId, quantity }) => ({ addOnId, quantity }));
       const response = await api.post<CreateOrderResponse>('/orders', {
-        eventId: params.eventId,
+        // The URL segment may be the event slug; POST /orders takes the id.
+        eventId: event.id,
         items,
         ...(addOns.length > 0 && { addOns }),
         contact: {

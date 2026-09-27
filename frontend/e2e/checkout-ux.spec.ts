@@ -188,3 +188,25 @@ test.describe('returning from Stripe', () => {
     await expect(bar).not.toBeInViewport();
   });
 });
+
+test.describe('slug checkout URL', () => {
+  test('POST /orders sends the event id, not the slug from the URL', async ({ page }) => {
+    const SLUG = 'game-and-geek-expo';
+    await mockStorefront(page);
+    await page.route(`${API}/events/${SLUG}`, (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(eventResponse()) })
+    );
+    let posted: { eventId?: string } | null = null;
+    await page.route(`${API}/orders`, (route) => {
+      posted = route.request().postDataJSON();
+      return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'Conflict', message: 'Insufficient inventory for VIP' }) });
+    });
+    await page.goto(`/checkout/${SLUG}?items=${encodeURIComponent(JSON.stringify([{ priceTierId: TIER.id, quantity: 2 }]))}`);
+    await page.getByLabel('First name').fill('Ada');
+    await page.getByLabel('Last name').fill('Lovelace');
+    await page.getByLabel('Email address').fill('ada@example.com');
+    await page.getByRole('button', { name: /Continue to payment/ }).click();
+
+    await expect.poll(() => posted?.eventId).toBe(EVENT_ID);
+  });
+});
