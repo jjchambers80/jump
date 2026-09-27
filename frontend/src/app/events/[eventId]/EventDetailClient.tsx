@@ -301,7 +301,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
           signIn={event.organizationSignInLinks !== false}
         />
       )}
-      <div className={`max-w-6xl mx-auto px-0 sm:px-6 lg:px-8 py-0 sm:py-12 ${isRsvpMode ? 'lg:block' : 'lg:flex lg:gap-8 lg:items-start'}`}>
+      <div className={`max-w-7xl mx-auto px-0 sm:px-6 lg:px-8 py-0 sm:py-12 ${isRsvpMode ? 'lg:block' : 'lg:flex lg:gap-8 lg:items-start'}`}>
         {/* RSVP mode drops overflow-hidden so the pass can stick; the hero clips its own corners */}
         <div className={`flex-1 min-w-0 bg-transparent sm:bg-white sm:dark:bg-slate-800 rounded-none sm:rounded-2xl sm:border sm:border-gray-200 sm:dark:border-slate-700 sm:shadow-sm sm:dark:shadow-black/20 ${isRsvpMode ? '' : 'overflow-hidden'}`}>
           {/* Hero: blurred poster behind the title block, date tile, venue */}
