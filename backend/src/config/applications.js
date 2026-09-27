@@ -47,7 +47,9 @@ export const MERGE_FIELDS = [
   ['event.name', 'Event name'],
   ['event.date', 'Event date'],
   ['organization.name', 'Your organization name'],
+  ['organization.email', 'Your organization contact email (empty when not set)'],
   ['form.name', 'Application form name'],
+  ['form.paid', 'Section flag: true on a paid form (the vendor chooses a space and pays after approval)'],
   ['tier.name', 'Category (tier): assigned on approval for paid forms'],
   ['tier.price', 'What the category costs the applicant, fees and tax included (paid forms)'],
   ['addOns.summary', 'Add-ons chosen, e.g. "Booth power ×1 ($125.00), Extra badge ×2 ($20.00)" (empty when none)'],
@@ -75,19 +77,22 @@ export const DEFAULT_TEMPLATES = {
     subject: 'We received your application for {{event.name}}',
     body: `Hi {{applicant.firstName}},
 
-Thanks for applying to {{event.name}} as {{form.name}}{{#tier}} ({{tier.name}}){{/tier}}. We have your application and will review it soon.
-{{#addOns}}
-Add-ons: {{addOns.summary}}
-{{/addOns}}
-{{#order.ref}}
-Order number: {{order.ref}}
-{{/order.ref}}
-You can check its status any time: {{links.status}}
-{{#account.created}}
+Thanks for applying to {{event.name}}{{#event.date}} on {{event.date}}{{/event.date}}. We received your application ({{form.name}}) and will review it soon.{{#tier}}
 
-Your account with {{organization.name}} is ready — no password needed. Sign in any time from this link (it works once and expires in 7 days): {{links.account}}
-{{/account.created}}
+Category: {{tier.name}}{{/tier}}{{#addOns}}
+Add-ons: {{addOns.summary}}{{/addOns}}{{#order.ref}}
+Order number: {{order.ref}}{{/order.ref}}
 
+What happens next:
+- We review every application and email you as soon as we decide.{{#form.paid}}
+- Nothing to pay today. If you are approved, you will choose your space and pay then to confirm it.{{/form.paid}}{{#organization.email}}
+- Questions or changes? Reply to this email or write to {{organization.email}}.{{/organization.email}}
+
+Check your application any time: {{links.status}}{{#account.created}}
+
+Your account with {{organization.name}} is ready, no password needed. Sign in from this link (it works once and expires in 7 days): {{links.account}}{{/account.created}}
+
+Thanks,
 {{organization.name}}`,
   },
   APPROVED: {

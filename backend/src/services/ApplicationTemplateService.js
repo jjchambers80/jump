@@ -113,8 +113,9 @@ class ApplicationTemplateService {
       },
       profile: { businessName: application.profile?.businessName || '' },
       event: { name: application.event?.name || '', date: formatDate(application.event?.date) },
-      organization: { name: organization.name || '' },
-      form: { name: application.form?.name || '' },
+      organization: { name: organization.name || '', email: organization.email || '' },
+      // `paid` is a section flag: a PAID form charges on approval, never at submission.
+      form: { name: application.form?.name || '', paid: application.form?.kind === 'PAID' },
       tier: application.tier ? { name: application.tier.name, price: tierPrice == null ? '' : formatMoney(tierPrice) } : null,
       // Spec 012: null when there are no lines so {{#addOns}} sections hide.
       // Spec 024: money comes from the application's order.

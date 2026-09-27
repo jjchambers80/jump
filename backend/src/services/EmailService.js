@@ -26,6 +26,20 @@ function orgLogoHtml(logoUrl, orgName) {
   return `<img src="${src}" alt="${escapeHtml(orgName || 'Organizer')}" style="display: block; margin: 0 auto 16px; max-height: 60px; max-width: 240px; width: auto; height: auto;" />`;
 }
 
+/**
+ * Send through Resend. The SDK resolves `{ data, error }` instead of throwing
+ * when Resend refuses a message (unverified sender domain, sandbox sender to
+ * a foreign address, bad key), so a refusal is turned into a throw here;
+ * otherwise every caller would log "sent" for an email that never left.
+ */
+async function deliver(msg) {
+  const result = await resend.emails.send(msg);
+  if (result?.error) {
+    throw new Error(`Resend refused the email (${result.error.name || 'error'}): ${result.error.message}`);
+  }
+  return result?.data ?? null;
+}
+
 function icsText(value) {
   return String(value || '').replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;');
 }
@@ -116,7 +130,7 @@ ${manageTicketsHtml}
           `,
         };
 
-        await resend.emails.send(msg);
+        await deliver(msg);
 
         logger.info('Order confirmation email sent', {
           orderId: order.id,
@@ -191,7 +205,7 @@ ${manageTicketsHtml}
       `,
     };
 
-    await resend.emails.send(msg);
+    await deliver(msg);
     logger.info('Buyer login email sent', {
       event: 'buyer_login_email_sent',
       contactId: contact.id,
@@ -227,7 +241,7 @@ ${manageTicketsHtml}
       `,
     };
 
-    await resend.emails.send(msg);
+    await deliver(msg);
     logger.info('Email change confirmation sent', { event: 'account_email_change_sent' });
   }
 
@@ -255,7 +269,7 @@ ${manageTicketsHtml}
       `,
     };
 
-    await resend.emails.send(msg);
+    await deliver(msg);
     logger.info('Email changed notice sent', { event: 'account_email_changed_notice_sent' });
   }
 
@@ -285,7 +299,7 @@ ${manageTicketsHtml}
         </html>
       `,
     };
-    await resend.emails.send(msg);
+    await deliver(msg);
     logger.info('Security notice sent', { event: 'security_notice_sent', title });
   }
 
@@ -310,7 +324,7 @@ ${manageTicketsHtml}
         </html>
       `,
     };
-    await resend.emails.send(msg);
+    await deliver(msg);
     logger.info('Reauth code sent', { event: 'reauth_code_sent' });
   }
 
@@ -337,7 +351,7 @@ ${manageTicketsHtml}
         </html>
       `,
     };
-    await resend.emails.send(msg);
+    await deliver(msg);
     logger.info('Secondary email verification sent', { event: 'secondary_email_verification_sent' });
   }
 
@@ -364,7 +378,7 @@ ${manageTicketsHtml}
         </html>
       `,
     };
-    await resend.emails.send(msg);
+    await deliver(msg);
     logger.info('Recovery link sent', { event: 'recovery_link_sent' });
   }
 
@@ -374,7 +388,8 @@ ${manageTicketsHtml}
    * split on blank lines and every line is escaped, so organizer text can
    * never inject markup. URLs on their own line become buttons.
    *
-   * @param {{ to: string, subject: string, body: string, organization?: { name?: string, logoUrl?: string } }} params
+   * @param {{ to: string, subject: string, body: string, organization?: { name?: string, logoUrl?: string, email?: string } }} params
+   *   Replies go to `organization.email` when the organization has one.
    */
   async sendApplicationMessage({ to, subject, body, organization = {} }) {
     const orgName = organization.name || 'the organizer';
@@ -399,6 +414,7 @@ ${manageTicketsHtml}
       from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
       subject,
       text: body,
+      ...(organization.email && { reply_to: organization.email }),
       html: `
         <html>
           <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
@@ -413,7 +429,7 @@ ${manageTicketsHtml}
         </html>
       `,
     };
-    await resend.emails.send(msg);
+    await deliver(msg);
   }
 
   /**
@@ -462,7 +478,7 @@ ${manageTicketsHtml}
           `,
         };
 
-        await resend.emails.send(msg);
+        await deliver(msg);
 
         logger.info('Cancellation notification sent', {
           eventId: event.id,
@@ -549,7 +565,7 @@ ${manageTicketsHtml}
           ...(organization.email && { reply_to: organization.email }),
         };
 
-        await resend.emails.send(msg);
+        await deliver(msg);
 
         logger.info('RSVP reminder sent', {
           event: 'rsvp_reminder_sent',
@@ -632,7 +648,7 @@ ${manageTicketsHtml}
       ...(organization.email && { reply_to: organization.email }),
     };
     try {
-      await resend.emails.send(msg);
+      await deliver(msg);
       logger.info('RSVP confirmation sent', { event: 'rsvp_confirmation_sent', rsvpId: rsvp.id });
       return true;
     } catch (error) {
@@ -722,7 +738,7 @@ ${manageTicketsHtml}
       ...(organization.email && { reply_to: organization.email }),
     };
     try {
-      await resend.emails.send(msg);
+      await deliver(msg);
       logger.info('Application receipt sent', { event: 'application_receipt_sent', orderId: order.id, orderRef: order.orderRef, applicationId: application.id });
       return true;
     } catch (error) {
