@@ -7,6 +7,7 @@
 
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
+import { resolveAssetUrl } from '@/lib/assets';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ACTION_LABEL,
@@ -289,8 +290,8 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
                 <ul className="mt-4 flex flex-wrap gap-2" data-testid="application-photos">
                   {app.profile.photos.map((p) => (
                     <li key={p.imageId}>
-                      <a href={p.urls?.original} target="_blank" rel="noreferrer">
-                        <img src={p.urls?.thumb ?? p.urls?.original} alt="" className="h-24 w-24 rounded-md object-cover" />
+                      <a href={resolveAssetUrl(p.urls?.original) ?? undefined} target="_blank" rel="noreferrer">
+                        <img src={resolveAssetUrl(p.urls?.thumb ?? p.urls?.original) ?? undefined} alt="" className="h-24 w-24 rounded-md object-cover" />
                       </a>
                     </li>
                   ))}
@@ -311,8 +312,8 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
                       </dt>
                       <dd className="text-sm text-gray-800 dark:text-slate-200">
                         {a.image ? (
-                          <a href={a.image.urls.original} target="_blank" rel="noreferrer">
-                            <img src={a.image.urls.thumb} alt={a.label} className="mt-1 h-24 w-24 rounded-md object-cover" />
+                          <a href={resolveAssetUrl(a.image.urls.original) ?? undefined} target="_blank" rel="noreferrer">
+                            <img src={resolveAssetUrl(a.image.urls.thumb) ?? undefined} alt={a.label} className="mt-1 h-24 w-24 rounded-md object-cover" />
                           </a>
                         ) : a.type === 'URL' && a.value ? (
                           <a href={String(a.value)} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline dark:text-indigo-300">

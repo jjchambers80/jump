@@ -11,6 +11,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import api, { type ChooseBoothResult } from '@/services/api';
+import { resolveAssetUrl } from '@/lib/assets';
 import { formatDate, money, PAYMENT_LABEL, STATUS_LABEL, STATUS_STYLE, needsSpaceChoice, type AddOnLineInput, type ApplicantApplication } from '@/lib/applications';
 import ChooseSpace from '@/components/applications/ChooseSpace';
 import ApplyShell from '../../ApplyShell';
@@ -221,7 +222,7 @@ function StatusContent({ params }: { params: { eventId: string; applicationId: s
                     <div key={a.questionId}>
                       <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">{a.label}</dt>
                       <dd className="text-sm text-gray-800 dark:text-slate-200">
-                        {a.image ? <img src={a.image.urls.thumb} alt={a.label} className="mt-1 h-24 w-24 rounded object-cover" /> : Array.isArray(a.value) ? a.value.join(', ') : a.value === 'true' ? 'Yes' : a.value === 'false' ? 'No' : a.value}
+                        {a.image ? <img src={resolveAssetUrl(a.image.urls.thumb) ?? undefined} alt={a.label} className="mt-1 h-24 w-24 rounded object-cover" /> : Array.isArray(a.value) ? a.value.join(', ') : a.value === 'true' ? 'Yes' : a.value === 'false' ? 'No' : a.value}
                       </dd>
                     </div>
                   ))}
