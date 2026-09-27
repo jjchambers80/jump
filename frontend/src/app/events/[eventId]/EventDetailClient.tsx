@@ -22,13 +22,15 @@ import CartLineItem from '../../../components/CartLineItem';
 import OrderTotals from '../../../components/OrderTotals';
 import ExpandCollapseAll from '../../../components/ExpandCollapseAll';
 import EmptyCart from '../../../components/EmptyCart';
-import { computeOrderFees, formatPrice } from '../../../lib/fees';
+import { computeOrderFees, computeTierAllInPrice, formatPrice } from '../../../lib/fees';
+import { loadCheckoutDraft } from '../../../lib/checkoutDraft';
+import { useDialog } from '../../../lib/useDialog';
 import AddOnPicker from '../../../components/AddOnPicker';
 import { offeredAddOns, addOnMaxQuantity, type AddOn } from '../../../lib/addOns';
 import type { ThemeMode } from '@/lib/theme';
 import { formatEventDate, formatEventTime } from '@/lib/eventTime';
 import { dateTile } from '@/lib/dateTile';
-import { CalendarDays, ChevronRight, Clock, Info, Lock, MapPin } from 'lucide-react';
+import { CalendarDays, ChevronRight, Clock, Info, Lock, MapPin, ShoppingCart, X } from 'lucide-react';
 import { fetchLegalVersions, type LegalVersions } from '@/lib/legal';
 import ContentHtml from '@/components/storefront/ContentHtml';
 
@@ -108,6 +110,13 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
   const [legalVersions, setLegalVersions] = useState<LegalVersions | null>(null);
   const [rsvpSubmitted, setRsvpSubmitted] = useState(false);
   const [rsvpPassInView, setRsvpPassInView] = useState(false);
+  // Back from Stripe's cancel_url (?status=cancelled): the cart comes back.
+  const [checkoutCancelled, setCheckoutCancelled] = useState(false);
+  const [ticketsInView, setTicketsInView] = useState(false);
+  const cartDialogRef = useDialog(showMobileCart, () => setShowMobileCart(false));
+  const tierDialogRef = useDialog(!!showTierDescription, () => setShowTierDescription(null));
+  const imageDialogRef = useDialog(showImagePreview, () => setShowImagePreview(false));
+  const descriptionDialogRef = useDialog(showDescription, () => setShowDescription(false));
 
   useEffect(() => {
     fetchEventDetails();
@@ -123,6 +132,16 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
     return () => observer.disconnect();
   }, [isRsvpEvent]);
 
+  // Mobile "Get tickets" bar hides while the ticket list itself is on screen.
+  const hasEvent = !!event;
+  useEffect(() => {
+    const tickets = hasEvent && !isRsvpEvent ? document.getElementById('tickets') : null;
+    if (!tickets || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(([entry]) => setTicketsInView(entry.isIntersecting), { threshold: 0.1 });
+    observer.observe(tickets);
+    return () => observer.disconnect();
+  }, [hasEvent, isRsvpEvent]);
+
   const fetchEventDetails = async () => {
     try {
       setLoading(true);
@@ -131,6 +150,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
       const data = await api.get<Event>(`/events/${params.eventId}`);
       setEvent(data);
       setLock(null);
+      restoreCancelledCheckout(data);
     } catch (err: any) {
       const locked = storefrontLockFrom(err);
       if (locked) {
@@ -167,6 +187,27 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
 
       return { ...current, [tier.id]: nextQuantity };
     });
+  };
+
+  // Stripe's cancel_url brings the buyer back here; put their cart back so the
+  // checkout button is one tap away instead of starting over.
+  const restoreCancelledCheckout = (data: Event) => {
+    if (typeof window === 'undefined') return;
+    if (new URLSearchParams(window.location.search).get('status') !== 'cancelled') return;
+    setCheckoutCancelled(true);
+    const draft = loadCheckoutDraft(data.id);
+    if (!draft) return;
+    // Same bounds as the steppers (updateQuantity): availability may have dropped while away.
+    const restored: Record<string, number> = {};
+    for (const line of draft.items) {
+      const tier = data.priceTiers.find((candidate) => candidate.id === line.priceTierId && candidate.isActive);
+      if (!tier) continue;
+      const maximum = Math.min(tier.quantityAvailable, tier.maxPerOrder ?? 10, 10);
+      const quantity = Math.min(line.quantity, maximum);
+      if (quantity >= (tier.minPerOrder ?? 1)) restored[tier.id] = quantity;
+    }
+    setQuantities(restored);
+    setAddOnQuantities(Object.fromEntries(draft.addOns.map((line) => [line.addOnId, line.quantity])));
   };
 
   const setAddOnQuantity = (addOnId: string, quantity: number) =>
@@ -291,9 +332,17 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
   };
 
   const rsvpFull = isRsvpMode && !isPastEvent && event.rsvpRemaining != null && event.rsvpRemaining <= 0;
+  const canBuy = !isRsvpMode && !isPastEvent && !isSoldOut && activeTiers.some((tier) => tier.quantityAvailable > 0);
+  const fromPrice = canBuy
+    ? Math.min(
+        ...activeTiers
+          .filter((tier) => tier.quantityAvailable > 0)
+          .map((tier) => computeTierAllInPrice(tier.price, event.taxRate ?? 0, event.taxInclusivePricing === true).total)
+      )
+    : null;
 
   return (
-    <BrandScope color={event.organizationBrandColor} themeMode={event.organizationThemeMode} className="min-h-screen bg-gray-50 dark:bg-slate-900 pb-20 sm:pb-0">
+    <BrandScope color={event.organizationBrandColor} themeMode={event.organizationThemeMode} className="min-h-screen bg-gray-50 dark:bg-slate-900 pb-24 lg:pb-0">
       {event.organizationName && (
         <OrganizationHeader
           organization={{ id: event.organizationId, name: event.organizationName, logoUrl: event.organizationLogoUrl }}
@@ -482,7 +531,21 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
             ) : (
               <>
                 {/* Ticketed mode — one torn ticket per tier */}
-                <div className="mb-5 flex items-end justify-between gap-4">
+                {checkoutCancelled && !isPastEvent && (
+                  <div
+                    role="status"
+                    data-testid="checkout-cancelled"
+                    className="mb-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-100"
+                  >
+                    <p className="font-semibold">Payment not completed — you haven&apos;t been charged.</p>
+                    <p className="mt-0.5">
+                      {totalQuantity > 0
+                        ? 'Your tickets are still in your cart. Check out again whenever you’re ready.'
+                        : 'Choose your tickets below to try again.'}
+                    </p>
+                  </div>
+                )}
+                <div id="tickets" className="mb-5 flex scroll-mt-6 items-end justify-between gap-4">
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-slate-400">
                       Admission
@@ -627,7 +690,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
           className={`lg:hidden fixed bottom-0 left-0 right-0 z-40 transition-transform duration-300 ease-out ${
             isRsvpMode
               ? !rsvpSubmitted && !rsvpPassInView ? 'translate-y-0' : 'translate-y-full'
-              : totalQuantity > 0 ? 'translate-y-0' : 'translate-y-full'
+              : totalQuantity > 0 || (canBuy && !ticketsInView) ? 'translate-y-0' : 'translate-y-full'
           }`}
         >
           {isRsvpMode ? (
@@ -641,6 +704,24 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                 Reserve my spot · Free
               </button>
             </div>
+          ) : totalQuantity === 0 ? (
+            /* Mobile "Get tickets" bar — nothing chosen yet: jump to the ticket list */
+            <div className="bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 shadow-[0_-4px_12px_rgba(0,0,0,0.1)] dark:shadow-[0_-4px_12px_rgba(0,0,0,0.3)] px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+              <button
+                type="button"
+                onClick={() => {
+                  const tickets = document.getElementById('tickets');
+                  tickets?.scrollIntoView({ behavior: 'smooth' });
+                  // First "+" stepper under the Tickets heading, for keyboard and screen reader users
+                  tickets?.parentElement?.querySelector<HTMLElement>('button[aria-label^="Increase"]')?.focus({ preventScroll: true });
+                }}
+                tabIndex={ticketsInView ? -1 : undefined}
+                data-testid="mobile-get-tickets"
+                className="w-full bg-brand hover:bg-brand-hover text-brand-fg font-bold py-3 px-4 rounded-lg transition-colors duration-200 text-base"
+              >
+                Get tickets{fromPrice != null ? ` · from ${formatPrice(fromPrice)}` : ''}
+              </button>
+            </div>
           ) : (
             /* Mobile checkout bar */
             <div className="bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 shadow-[0_-4px_12px_rgba(0,0,0,0.1)] dark:shadow-[0_-4px_12px_rgba(0,0,0,0.3)] px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
@@ -649,13 +730,12 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                   type="button"
                   onClick={() => setShowMobileCart(true)}
                   className="relative flex items-center justify-center w-12 h-12 rounded-lg bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-200"
-                  aria-label="View cart"
+                  aria-label={`View cart, ${totalQuantity} ${totalQuantity === 1 ? 'ticket' : 'tickets'}`}
+                  aria-haspopup="dialog"
                 >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z" />
-                  </svg>
+                  <ShoppingCart className="w-6 h-6" aria-hidden />
                   {totalQuantity > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-brand text-brand-fg text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                    <span aria-hidden="true" className="absolute -top-1 -right-1 bg-brand text-brand-fg text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
                       {totalQuantity}
                     </span>
                   )}
@@ -667,9 +747,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                   className="flex-1 bg-brand hover:bg-brand-hover disabled:bg-gray-400 disabled:cursor-not-allowed text-brand-fg disabled:text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200 text-base flex items-center justify-center gap-2"
                 >
                   <span>Checkout {formatPrice(totalAmount)}</span>
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
+                  <ChevronRight className="w-5 h-5" aria-hidden />
                 </button>
               </div>
             </div>
@@ -684,14 +762,19 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
           onClick={() => setShowMobileCart(false)}
         >
           <div
-            className="w-full bg-white dark:bg-slate-800 rounded-t-2xl max-h-[70vh] overflow-hidden animate-slide-up"
+            ref={cartDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="mobile-cart-heading"
+            tabIndex={-1}
+            className="w-full bg-white dark:bg-slate-800 rounded-t-2xl max-h-[85vh] flex flex-col overflow-hidden animate-slide-up motion-reduce:animate-none focus:outline-none"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-center pt-3 pb-2">
               <div className="w-10 h-1 bg-gray-300 dark:bg-slate-600 rounded-full" />
             </div>
             <div className="px-4 pb-2 flex items-center justify-between gap-3">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Your Cart</h3>
+              <h2 id="mobile-cart-heading" className="text-lg font-semibold text-gray-900 dark:text-slate-100">Your Cart</h2>
               <ExpandCollapseAll
                 allOpen={allLinesOpen}
                 onToggle={toggleAllLines}
@@ -702,12 +785,10 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                 className="text-gray-400 hover:text-gray-600 dark:hover:text-slate-300 p-1 shrink-0"
                 aria-label="Close cart"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <X className="w-6 h-6" aria-hidden />
               </button>
             </div>
-            <div className="px-4 pb-6 overflow-y-auto">
+            <div className="px-4 pb-4 overflow-y-auto">
               {cartItems.length === 0 ? (
                 <EmptyCart />
               ) : (
@@ -731,6 +812,18 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                 </div>
               )}
             </div>
+            {cartItems.length > 0 && (
+              <div className="border-t border-gray-200 dark:border-slate-700 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+                <button
+                  type="button"
+                  onClick={handleProceedToCheckout}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand px-4 py-3 text-base font-bold text-brand-fg transition-colors duration-200 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2"
+                >
+                  Checkout {formatPrice(totalAmount)}
+                  <ChevronRight className="h-5 w-5" aria-hidden />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -742,15 +835,21 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
           onClick={() => setShowTierDescription(null)}
         >
           <div
-            className="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-lg w-full max-h-[80vh] overflow-y-auto"
+            ref={tierDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="tier-description-heading"
+            tabIndex={-1}
+            className="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-lg w-full max-h-[80vh] overflow-y-auto focus:outline-none"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-slate-100">
+              <h2 id="tier-description-heading" className="text-xl font-bold text-gray-900 dark:text-slate-100">
                 {showTierDescription.name}
               </h2>
               <button
                 onClick={() => setShowTierDescription(null)}
+                aria-label="Close"
                 className="text-gray-400 hover:text-gray-600 dark:hover:text-slate-300 transition-colors"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -771,6 +870,10 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
       {/* Image Preview - drawer on mobile, dialog on desktop */}
       {showImagePreview && event?.logoUrl && (
         <div
+          ref={imageDialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${event.name} image`}
           className="fixed inset-0 z-50 flex items-end sm:items-center sm:justify-center bg-black/60"
           onClick={() => setShowImagePreview(false)}
         >
@@ -786,6 +889,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
               <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">{event.name}</h3>
               <button
                 onClick={() => setShowImagePreview(false)}
+                aria-label="Close"
                 className="text-gray-400 hover:text-gray-600 dark:hover:text-slate-300 p-1"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -810,6 +914,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
               <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">{event.name}</h3>
               <button
                 onClick={() => setShowImagePreview(false)}
+                aria-label="Close"
                 className="text-gray-400 hover:text-gray-600 dark:hover:text-slate-300 transition-colors"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -830,6 +935,10 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
 
       {showDescription && event?.description && (
         <div
+          ref={descriptionDialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Event Information"
           className="fixed inset-0 z-50 flex items-end sm:items-center sm:justify-center bg-black/60"
           onClick={() => setShowDescription(false)}
         >
@@ -845,6 +954,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
               <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Event Information</h3>
               <button
                 onClick={() => setShowDescription(false)}
+                aria-label="Close"
                 className="text-gray-400 hover:text-gray-600 dark:hover:text-slate-300 p-1"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -867,6 +977,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
               </h2>
               <button
                 onClick={() => setShowDescription(false)}
+                aria-label="Close"
                 className="text-gray-400 hover:text-gray-600 dark:hover:text-slate-300 transition-colors"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
