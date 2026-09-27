@@ -100,7 +100,7 @@ export default function ApplyShell({ eventId, title, kicker = 'Get involved', wi
   const zone = event.venue?.timezone;
   const tile = dateTile(event.date, zone);
   const poster = resolveAssetUrl(event.logoUrl);
-  const container = width === 'wide' ? 'max-w-6xl' : 'max-w-3xl';
+  const container = width === 'wide' ? 'max-w-7xl' : 'max-w-3xl';
   const place = event.venue ? [event.venue.city, event.venue.state].filter(Boolean).join(', ') : '';
 
   return (
@@ -124,7 +124,7 @@ export default function ApplyShell({ eventId, title, kicker = 'Get involved', wi
         {/* A thin brand rule where the hero meets the page */}
         <div aria-hidden className="absolute inset-x-0 bottom-0 h-1 bg-brand" />
 
-        <div className={`relative mx-auto ${container} px-4 pb-9 pt-6 sm:px-6 sm:pb-12 sm:pt-8`}>
+        <div className={`relative mx-auto ${container} px-4 pb-9 pt-6 sm:px-6 lg:px-8 sm:pb-12 sm:pt-8`}>
           <Link
             href={`/events/${event.id}`}
             className="inline-flex items-center gap-1.5 rounded-full py-1 pr-2 text-sm font-semibold text-gray-300 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
@@ -184,7 +184,7 @@ export default function ApplyShell({ eventId, title, kicker = 'Get involved', wi
         </div>
       </div>
 
-      <main className={`mx-auto ${container} px-4 py-8 sm:px-6 sm:py-10`}>{children(event)}</main>
+      <main className={`mx-auto ${container} px-4 py-8 sm:px-6 lg:px-8 sm:py-10`}>{children(event)}</main>
     </BrandScope>
   );
 }
