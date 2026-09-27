@@ -1,7 +1,7 @@
 # Guest Checkout
 
 **Status:** Active
-**Last Updated:** 2026-09-07
+**Last Updated:** 2026-09-27
 
 ## Overview
 
@@ -32,7 +32,7 @@ Guests can purchase tickets without creating an account. `POST /orders` creates 
    - Creates Stripe Checkout Session (30-minute expiry) with all-in unit pricing.
    - Returns `{ orderId, orderRef, stripeCheckoutUrl, totalAmount }`.
 
-2. **Stripe redirect**: Frontend sends user to `stripeCheckoutUrl`. Success redirects to `/confirmation?orderId=...`. Cancel redirects to `/events/:eventId?status=cancelled`.
+2. **Stripe redirect**: Frontend sends user to `stripeCheckoutUrl`. Success redirects to `/confirmation?orderId=...`. Cancel redirects to `/events/:eventId?status=cancelled`. The event page restores the cart from `sessionStorage` on that URL — see [Checkout Conversion & Accessibility](checkout-conversion-ux.md).
 
 3. **Payment completion** (webhook path): See [Stripe Integration](stripe-integration.md). `PaymentService.handleCheckoutCompleted` marks payment SUCCEEDED, creates tickets, completes order, sends confirmation email.
 

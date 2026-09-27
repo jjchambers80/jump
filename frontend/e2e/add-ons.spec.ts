@@ -156,7 +156,7 @@ test.describe('storefront add-ons', () => {
     await expect(lines).toHaveCount(3);
     await expect(page.getByTestId('cart-lines-checkout')).toContainText('VIP lounge');
     // 100 + 80 + 15 = 195 listed; tax on 115 = 11.50; platform 9.75; processing (204.75 × 2.9% + 0.30) = 6.24; total 222.49
-    await expect(page.getByRole('button', { name: 'Proceed to Payment — $222.49' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Continue to payment — $222.49' })).toBeVisible();
 
     // The legal pages are dark: the sentence names them without linking to a 404 (spec 024 phase 3)
     await expect(page.getByTestId('checkout-terms')).toContainText('Terms of Service');
@@ -165,7 +165,7 @@ test.describe('storefront add-ons', () => {
     await page.getByLabel('First Name').fill('Ada');
     await page.getByLabel('Last Name').fill('Buyer');
     await page.getByLabel('Email Address').fill('ada@example.com');
-    await page.getByRole('button', { name: /Proceed to Payment/ }).click();
+    await page.getByRole('button', { name: /Continue to payment/ }).click();
 
     await expect.poll(() => orderBody).not.toBeNull();
     expect(orderBody).toMatchObject({
