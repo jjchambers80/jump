@@ -172,7 +172,7 @@ const DETAIL_INCLUDE = {
       name: true,
       date: true,
       taxRate: true,
-      venue: { select: { organizationId: true, timezone: true, organization: { select: { id: true, name: true, logoUrl: true, taxInclusivePricing: true, statementDescriptorSuffix: true, enabledPaymentMethods: true } } } },
+      venue: { select: { organizationId: true, timezone: true, organization: { select: { id: true, name: true, email: true, logoUrl: true, taxInclusivePricing: true, statementDescriptorSuffix: true, enabledPaymentMethods: true } } } },
     },
   },
   answers: { include: { question: true, image: { include: { file: true } } } },
