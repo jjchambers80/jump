@@ -23,8 +23,10 @@ These are the rules every 038 implementation card builds on. A card that needs t
 - Test 14 calls the route **as registered in `server.js`** for a private org with no token and expects the gate.
 - Response shapes:
   - `{ renderer: 'legacy' }`: the org is not in the rollout (C10). No theme data.
-  - `{ locked: true, organization: { id, slug, name, logoUrl, brandColor, themeMode }, message }`: private store and no valid token. Sent with `Cache-Control: private, no-store`. The status is 200 so the Next server renders the gate without error handling; `/public` already answers `locked: true` the same way.
-  - `{ renderer: 'theme', organization, settings, content, documents: { header, template, footer }, resolved, preview? }`: hidden items and out-of-window announcements already removed.
+  - **403 `StorefrontLockedError`** with `details: { locked: true, organization: { id, name, logoUrl, brandColor, themeMode }, message }`: private store and no valid token. This is exactly what `gateByOrgParam` throws on every other gated public route, so the gate is the real middleware, not a copy. **(038A)** The plan's 200 `{ locked: true }` shape was dropped for this reason; the Next server treats a 403 with `details.locked` as "render the gate".
+  - The route sets `Cache-Control: private, no-store` before the gate runs, so the 403 carries it too.
+  - `{ renderer: 'legacy' }` is decided **before** the gate: an organization outside the rollout keeps today's client-rendered storefront, which handles its own gate.
+  - `{ renderer: 'theme', page, fallback, theme: { id, name }, organization, settings, content, documents: { header, template, footer }, resolved: { events, menus, files }, preview? }`: `settings` and `content` are fully resolved (preset + overrides); hidden items, announcements outside their window and an empty announcement bar are already removed; `page`/`fallback` say whether `/` fell back to the Events page (D5). `theme.id` is null when the organization has no Theme row yet (the preset renders from code).
 - The org behind `:id` may be addressed by slug. The response always carries `organization.id`; the frontend uses it for cookie names and unlock calls.
 
 ## C2. Private store access on the server
@@ -117,6 +119,7 @@ These are the rules every 038 implementation card builds on. A card that needs t
 - **(spike) Theme settings live in `root.props.themeSettings` while editing**, written with `dispatch({ type: 'setData', recordHistory: true })`. Puck's own undo/redo then covers them, so no second history is needed; Save moves them to `Theme.settings`, and the editor's root render applies them as CSS variables on the canvas.
 - **(spike) Puck always injects its default `blocks` and `outline` plugins.** A plugin with the same `name` replaces one, so Jump's Sections tree is registered as `name: 'outline'`.
 - **(spike) The plugin rail items are not buttons** in 0.23 (no role, no tabindex): the rail is mouse-only. 038D renders its own labelled rail buttons that call `dispatch({ type: 'setUi', ui: { plugin: { current } } })` and hides Puck's rail.
+- **(038A) Field specs, not zod.** `@jump/theme` describes settings with declarative field specs (`fields.js`: text, textarea, richtext, select, radio, range, toggle, colorScheme, image, link, reference, datetime, hex, httpsUrl). One spec drives the server validator and, in 038D, the Puck field config, so they cannot disagree; zod would need introspection to derive Puck fields. Presets are JS modules (`presets/eventimus-default.js`), not JSON files, so Node, Jest (native ESM) and Next import them without JSON import attributes.
 - **(spike) `ui` on `<Puck>` is initial state only.** Toggles (inspector/interactive mode, viewport) go through `setUi`.
 - **(spike) Slots render their own wrapper element.** Layout classes go on the slot (`<Blocks className="flex gap-3" />`), not on a parent.
 - **(spike) Tailwind must scan `src/theme/**`** (`tailwind.config.js` `content`), or section classes are missing in both the storefront and the iframe.

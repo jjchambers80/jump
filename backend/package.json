@@ -40,6 +40,7 @@
     "@aws-sdk/client-s3": "^3.1128.0",
     "@aws-sdk/s3-request-presigner": "^3.1128.0",
     "@jump/db": "*",
+    "@jump/theme": "*",
     "@simplewebauthn/server": "^13.3.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",

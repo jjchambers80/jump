@@ -388,6 +388,7 @@ model UrlRedirect {
 enum ContentRefKind {
   PAGE
   BLOG_POST
+  THEME // targetId = Theme.id; field = settings | content | a document key (spec 038)
 }
 
 // Which content records use a file (featured image, or an <img>/<a> inside
@@ -471,6 +472,9 @@ model Organization {
   seoTitle                   String?
   seoDescription             String?
   autoRedirectLanguage       Boolean                @default(false)
+  // Spec 038 per-org rollout of themes (server-rendered storefront + editor).
+  // Changed by SYSTEM_ADMIN only; THEME_EDITOR_ENABLED is the master switch.
+  themesEnabled              Boolean                @default(false)
   // Spec 031 phase 1: Settings › Customer accounts. Show the buyer sign-in
   // link in the storefront header and at checkout.
   buyerSignInLinks           Boolean                @default(true)
@@ -512,6 +516,7 @@ model Organization {
   floorMaps                FloorMap[]
   floorMapTemplates        FloorMapTemplate[]
   addOnProducts            AddOnProduct[]
+  themes                   Theme[]
 }
 
 // Custom content pages managed under Online Store. Content is stored as the
@@ -1863,4 +1868,83 @@ model OrderAddOn {
 
   @@unique([orderId, addOnId])
   @@index([addOnId])
+}
+
+// ──────────────────────────────────────────────
+// Online store themes (spec 038)
+// ──────────────────────────────────────────────
+
+enum ThemeRole {
+  MAIN
+  UNPUBLISHED
+}
+
+enum ThemeDocumentKind {
+  HEADER_GROUP
+  FOOTER_GROUP
+  TEMPLATE
+  PAGE
+}
+
+// One MAIN theme per organization (partial unique index "Theme_one_main_per_org"
+// in the migration); the rest are draft themes. Sections, settings and
+// documents are validated by @jump/theme; the preset itself is code.
+model Theme {
+  id                 String    @id @default(cuid())
+  organizationId     String
+  name               String // 1-50 chars
+  presetKey          String // "eventimus-default"
+  presetVersion      String // "1.0"
+  role               ThemeRole @default(UNPUBLISHED)
+  settings           Json      @default("{}") // overrides of the preset settings (§6.3)
+  content            Json      @default("{}") // default-content overrides (§6.5)
+  version            Int       @default(1) // optimistic lock: settings, content or name changed
+  publishedAt        DateTime?
+  lastSavedAt        DateTime  @default(now())
+  lastSavedById      String? // plain id, no FK: a deleted user shows as "a former member"
+  importedFrom       String?
+  scheduledPublishAt DateTime? // at most one per org (partial unique index)
+  scheduledById      String?
+  scheduleError      String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  documents    ThemeDocument[]
+  revisions    ThemeRevision[]
+
+  @@index([organizationId, role])
+}
+
+// A stored document; a missing key falls back to the preset default.
+model ThemeDocument {
+  id            String            @id @default(cuid())
+  themeId       String
+  kind          ThemeDocumentKind
+  key           String // header | footer | home | events | …
+  data          Json
+  version       Int               @default(1) // optimistic lock per document
+  schemaVersion Int               @default(1)
+  updatedById   String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  theme Theme @relation(fields: [themeId], references: [id], onDelete: Cascade)
+
+  @@unique([themeId, key])
+}
+
+// One row per committed save on the MAIN theme, holding the FULL theme state
+// after that save (contracts C5). The last 50 per theme are kept.
+model ThemeRevision {
+  id          String   @id @default(cuid())
+  themeId     String
+  snapshot    Json // { settings, content, documents: { key: data } }
+  changedKeys String[]
+  savedById   String?
+  createdAt   DateTime @default(now())
+
+  theme Theme @relation(fields: [themeId], references: [id], onDelete: Cascade)
+
+  @@index([themeId, createdAt])
 }

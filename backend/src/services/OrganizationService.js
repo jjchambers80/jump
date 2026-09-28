@@ -27,6 +27,37 @@ const withUserCount = ({ _count, ...org }) => ({
   _count: { venues: _count.venues, users: _count.members },
 });
 
+/** Published events of an organization, as the storefront lists them. */
+export const PUBLIC_EVENTS_QUERY = {
+  where: { status: 'PUBLISHED' },
+  orderBy: { date: 'asc' },
+  select: {
+    id: true,
+    slug: true,
+    name: true,
+    date: true,
+    category: true,
+    status: true,
+    admissionMode: true,
+    rsvpLimit: true,
+    rsvpMaxPartySize: true,
+    venue: { select: { id: true, slug: true, name: true, address: true, timezone: true } },
+    priceTiers: {
+      where: { isActive: true },
+      select: { price: true, quantityTotal: true, quantitySold: true, quantityReserved: true },
+    },
+  },
+};
+
+/** Storefront event summaries of an organization, soonest first. */
+export async function publicEventSummaries(organizationId) {
+  const events = await prisma.event.findMany({
+    ...PUBLIC_EVENTS_QUERY,
+    where: { ...PUBLIC_EVENTS_QUERY.where, venue: { organizationId } },
+  });
+  return events.map(formatEventSummary);
+}
+
 class OrganizationService {
   /**
    * First free slug derived from `raw` ("acme", then "acme-2", "acme-3", ...).
@@ -258,36 +289,7 @@ class OrganizationService {
         storefrontMessage: true,
         buyerSignInLinks: true,
         buyerSignInMethod: true,
-        venues: {
-          select: {
-            events: {
-              where: { status: 'PUBLISHED' },
-              orderBy: { date: 'asc' },
-              select: {
-                id: true,
-                slug: true,
-                name: true,
-                slug: true,
-                date: true,
-                category: true,
-                status: true,
-                admissionMode: true,
-                rsvpLimit: true,
-                rsvpMaxPartySize: true,
-venue: { select: { id: true, slug: true, name: true, address: true, timezone: true } },
-                priceTiers: {
-                  where: { isActive: true },
-                  select: {
-                    price: true,
-                    quantityTotal: true,
-                    quantitySold: true,
-                    quantityReserved: true,
-                  },
-                },
-              },
-            },
-          },
-        },
+        venues: { select: { events: PUBLIC_EVENTS_QUERY } },
       },
     });
 

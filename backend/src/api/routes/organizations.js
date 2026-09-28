@@ -25,6 +25,7 @@ import pageService from '../../services/PageService.js';
 import menuService from '../../services/MenuService.js';
 import urlRedirectService from '../../services/UrlRedirectService.js';
 import { findByPublicIdentifier } from '../../utils/publicIdentifier.js';
+import themeService, { themesEnabledFor } from '../../services/ThemeService.js';
 
 const router = Router();
 
@@ -235,6 +236,44 @@ router.get('/:id/public/redirect', async (req, res, next) => {
     next(error);
   }
 });
+
+/**
+ * GET /organizations/:id/public/storefront/render?page=home|events (spec 038,
+ * contracts C1). Everything a server-rendered themed page needs, in one call.
+ * Organizations outside the rollout get `{ renderer: 'legacy' }` and nothing
+ * else. The parameter MUST be `:id`: gateByOrgParam reads req.params.id, and
+ * under any other name the private-store gate would silently pass.
+ */
+router.get(
+  '/:id/public/storefront/render',
+  (req, res, next) => {
+    // Per-visitor answer (access token, gate): never shared by a cache.
+    res.set('Cache-Control', 'private, no-store');
+    next();
+  },
+  async (req, res, next) => {
+    try {
+      const organization = await findByPublicIdentifier(prisma.organization, req.params.id, {
+        where: { status: 'ACTIVE' },
+        select: { id: true, themesEnabled: true },
+      });
+      if (!organization) throw new NotFoundError('Organization not found');
+      if (!themesEnabledFor(organization)) return res.json({ renderer: 'legacy' });
+      req.themeOrganizationId = organization.id;
+      next();
+    } catch (error) {
+      next(error);
+    }
+  },
+  gateByOrgParam,
+  async (req, res, next) => {
+    try {
+      res.json(await themeService.renderPublic(req.themeOrganizationId, String(req.query.page || 'home')));
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 /** GET /organizations/:id/public/menus — main + footer navigation (spec 027). */
 router.get('/:id/public/menus', gateByOrgParam, async (req, res, next) => {
