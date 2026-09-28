@@ -30,6 +30,8 @@ export interface OrganizationHeaderProps {
    * flows. Pages pass the organization's `buyerSignInLinks` flag.
    */
   signIn?: boolean;
+  /** Spike 038-0: server-resolved menus; skips the client fetch when given. */
+  menus?: import('@/lib/menus').PublicMenus;
 }
 
 // Skip link: moves focus to whatever the page renders right after the header,
@@ -54,8 +56,10 @@ export default function OrganizationHeader({
   as = 'link',
   nav = false,
   signIn = false,
+  menus: resolvedMenus,
 }: OrganizationHeaderProps) {
-  const menus = useStorefrontMenus(nav ? organization.id : null);
+  const fetchedMenus = useStorefrontMenus(nav && !resolvedMenus ? organization.id : null);
+  const menus = resolvedMenus ?? fetchedMenus;
   const navItems = nav && organization.id ? (menus?.main ?? []) : [];
   const { buyer, loading: buyerLoading } = useBuyer(signIn ? organization.id : null);
   const orgSlug = organizationSlug ?? organization.id ?? '';

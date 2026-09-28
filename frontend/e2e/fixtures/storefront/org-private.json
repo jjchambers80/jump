@@ -1,0 +1,426 @@
+{
+ "renderer": "theme",
+ "organization": {
+  "id": "org-private",
+  "slug": "org-private",
+  "name": "Riverside Presents",
+  "logoUrl": null,
+  "brandColor": "#0f766e",
+  "themeMode": "LIGHT"
+ },
+ "settings": {
+  "pageWidth": 1200,
+  "radius": 16,
+  "buttonRadius": 9999,
+  "sectionGap": 0,
+  "headingFont": "inherit"
+ },
+ "document": {
+  "root": {
+   "props": {
+    "title": "Home",
+    "header": [
+     {
+      "type": "AnnouncementBar",
+      "props": {
+       "id": "AnnouncementBar-1",
+       "text": "Early-bird pricing ends Friday",
+       "hidden": false
+      }
+     },
+     {
+      "type": "Header",
+      "props": {
+       "id": "Header-1",
+       "sticky": "off",
+       "hidden": false
+      }
+     }
+    ],
+    "template": [
+     {
+      "type": "Hero",
+      "props": {
+       "id": "Hero-0",
+       "heading": "Summer Series 2027",
+       "subheading": "Live music by the river, every Friday in June and July. Food trucks, local beer, and no bad seats.",
+       "paddingTop": 32,
+       "paddingBottom": 32,
+       "hidden": false,
+       "blocks": [
+        {
+         "type": "Button",
+         "props": {
+          "id": "Button-0-a",
+          "label": "Get tickets",
+          "href": "/events"
+         }
+        },
+        {
+         "type": "Button",
+         "props": {
+          "id": "Button-0-b",
+          "label": "Learn more",
+          "href": "/pages/about"
+         }
+        }
+       ]
+      }
+     },
+     {
+      "type": "RichText",
+      "props": {
+       "id": "RichText-1",
+       "heading": "About the series (1)",
+       "body": "Riverside Presents has run the summer series since 2009. Riverside Presents has run the summer series since 2009. Riverside Presents has run the summer series since 2009. Riverside Presents has run the summer series since 2009. Riverside Presents has run the summer series since 2009. Riverside Presents has run the summer series since 2009. ",
+       "paddingTop": 32,
+       "paddingBottom": 32,
+       "hidden": false
+      }
+     },
+     {
+      "type": "EventList",
+      "props": {
+       "id": "EventList-2",
+       "limit": 6,
+       "paddingTop": 32,
+       "paddingBottom": 32,
+       "hidden": false
+      }
+     },
+     {
+      "type": "Hero",
+      "props": {
+       "id": "Hero-3",
+       "heading": "Summer Series 2030",
+       "subheading": "Live music by the river, every Friday in June and July. Food trucks, local beer, and no bad seats.",
+       "paddingTop": 32,
+       "paddingBottom": 32,
+       "hidden": false,
+       "blocks": [
+        {
+         "type": "Button",
+         "props": {
+          "id": "Button-3-a",
+          "label": "Get tickets",
+          "href": "/events"
+         }
+        },
+        {
+         "type": "Button",
+         "props": {
+          "id": "Button-3-b",
+          "label": "Learn more",
+          "href": "/pages/about"
+         }
+        }
+       ]
+      }
+     }
+    ],
+    "footer": [
+     {
+      "type": "Footer",
+      "props": {
+       "id": "Footer-1",
+       "copyright": "",
+       "hidden": false
+      }
+     }
+    ]
+   }
+  },
+  "content": [],
+  "zones": {}
+ },
+ "resolved": {
+  "organization": {
+   "id": "org-private",
+   "slug": "org-private",
+   "name": "Riverside Presents",
+   "logoUrl": null
+  },
+  "menus": {
+   "main": [
+    {
+     "id": "m1",
+     "label": "Home",
+     "href": "/organizations/org-private",
+     "children": []
+    },
+    {
+     "id": "m2",
+     "label": "Events",
+     "href": "/organizations/org-private/events",
+     "children": []
+    }
+   ],
+   "footer": [
+    {
+     "id": "f1",
+     "label": "Contact",
+     "href": "/organizations/org-private/pages/contact",
+     "children": []
+    }
+   ]
+  },
+  "events": [
+   {
+    "id": "e0",
+    "slug": "show-0",
+    "name": "Show number 1",
+    "date": "2027-06-01T23:00:00.000Z",
+    "venue": {
+     "id": "v1",
+     "name": "Riverside Hall",
+     "city": "Durham",
+     "state": "NC",
+     "timezone": "America/New_York"
+    },
+    "category": "Music",
+    "status": "PUBLISHED",
+    "admissionMode": "TICKETED",
+    "priceRange": {
+     "min": 20,
+     "max": 45
+    },
+    "availableTickets": 40
+   },
+   {
+    "id": "e1",
+    "slug": "show-1",
+    "name": "Show number 2",
+    "date": "2027-06-04T23:00:00.000Z",
+    "venue": {
+     "id": "v1",
+     "name": "Riverside Hall",
+     "city": "Durham",
+     "state": "NC",
+     "timezone": "America/New_York"
+    },
+    "category": "Music",
+    "status": "PUBLISHED",
+    "admissionMode": "TICKETED",
+    "priceRange": {
+     "min": 20,
+     "max": 45
+    },
+    "availableTickets": 39
+   },
+   {
+    "id": "e2",
+    "slug": "show-2",
+    "name": "Show number 3",
+    "date": "2027-06-07T23:00:00.000Z",
+    "venue": {
+     "id": "v1",
+     "name": "Riverside Hall",
+     "city": "Durham",
+     "state": "NC",
+     "timezone": "America/New_York"
+    },
+    "category": "Music",
+    "status": "PUBLISHED",
+    "admissionMode": "TICKETED",
+    "priceRange": {
+     "min": 20,
+     "max": 45
+    },
+    "availableTickets": 38
+   },
+   {
+    "id": "e3",
+    "slug": "show-3",
+    "name": "Show number 4",
+    "date": "2027-06-10T23:00:00.000Z",
+    "venue": {
+     "id": "v1",
+     "name": "Riverside Hall",
+     "city": "Durham",
+     "state": "NC",
+     "timezone": "America/New_York"
+    },
+    "category": "Music",
+    "status": "PUBLISHED",
+    "admissionMode": "TICKETED",
+    "priceRange": {
+     "min": 20,
+     "max": 45
+    },
+    "availableTickets": 37
+   },
+   {
+    "id": "e4",
+    "slug": "show-4",
+    "name": "Show number 5",
+    "date": "2027-06-13T23:00:00.000Z",
+    "venue": {
+     "id": "v1",
+     "name": "Riverside Hall",
+     "city": "Durham",
+     "state": "NC",
+     "timezone": "America/New_York"
+    },
+    "category": "Music",
+    "status": "PUBLISHED",
+    "admissionMode": "TICKETED",
+    "priceRange": {
+     "min": 20,
+     "max": 45
+    },
+    "availableTickets": 36
+   },
+   {
+    "id": "e5",
+    "slug": "show-5",
+    "name": "Show number 6",
+    "date": "2027-06-16T23:00:00.000Z",
+    "venue": {
+     "id": "v1",
+     "name": "Riverside Hall",
+     "city": "Durham",
+     "state": "NC",
+     "timezone": "America/New_York"
+    },
+    "category": "Music",
+    "status": "PUBLISHED",
+    "admissionMode": "TICKETED",
+    "priceRange": {
+     "min": 20,
+     "max": 45
+    },
+    "availableTickets": 35
+   },
+   {
+    "id": "e6",
+    "slug": "show-6",
+    "name": "Show number 7",
+    "date": "2027-06-19T23:00:00.000Z",
+    "venue": {
+     "id": "v1",
+     "name": "Riverside Hall",
+     "city": "Durham",
+     "state": "NC",
+     "timezone": "America/New_York"
+    },
+    "category": "Music",
+    "status": "PUBLISHED",
+    "admissionMode": "TICKETED",
+    "priceRange": {
+     "min": 20,
+     "max": 45
+    },
+    "availableTickets": 34
+   },
+   {
+    "id": "e7",
+    "slug": "show-7",
+    "name": "Show number 8",
+    "date": "2027-06-22T23:00:00.000Z",
+    "venue": {
+     "id": "v1",
+     "name": "Riverside Hall",
+     "city": "Durham",
+     "state": "NC",
+     "timezone": "America/New_York"
+    },
+    "category": "Music",
+    "status": "PUBLISHED",
+    "admissionMode": "TICKETED",
+    "priceRange": {
+     "min": 20,
+     "max": 45
+    },
+    "availableTickets": 33
+   },
+   {
+    "id": "e8",
+    "slug": "show-8",
+    "name": "Show number 9",
+    "date": "2027-06-25T23:00:00.000Z",
+    "venue": {
+     "id": "v1",
+     "name": "Riverside Hall",
+     "city": "Durham",
+     "state": "NC",
+     "timezone": "America/New_York"
+    },
+    "category": "Music",
+    "status": "PUBLISHED",
+    "admissionMode": "TICKETED",
+    "priceRange": {
+     "min": 20,
+     "max": 45
+    },
+    "availableTickets": 32
+   },
+   {
+    "id": "e9",
+    "slug": "show-9",
+    "name": "Show number 10",
+    "date": "2027-06-28T23:00:00.000Z",
+    "venue": {
+     "id": "v1",
+     "name": "Riverside Hall",
+     "city": "Durham",
+     "state": "NC",
+     "timezone": "America/New_York"
+    },
+    "category": "Music",
+    "status": "PUBLISHED",
+    "admissionMode": "TICKETED",
+    "priceRange": {
+     "min": 20,
+     "max": 45
+    },
+    "availableTickets": 31
+   },
+   {
+    "id": "e10",
+    "slug": "show-10",
+    "name": "Show number 11",
+    "date": "2027-07-01T23:00:00.000Z",
+    "venue": {
+     "id": "v1",
+     "name": "Riverside Hall",
+     "city": "Durham",
+     "state": "NC",
+     "timezone": "America/New_York"
+    },
+    "category": "Music",
+    "status": "PUBLISHED",
+    "admissionMode": "TICKETED",
+    "priceRange": {
+     "min": 20,
+     "max": 45
+    },
+    "availableTickets": 30
+   },
+   {
+    "id": "e11",
+    "slug": "show-11",
+    "name": "Show number 12",
+    "date": "2027-07-04T23:00:00.000Z",
+    "venue": {
+     "id": "v1",
+     "name": "Riverside Hall",
+     "city": "Durham",
+     "state": "NC",
+     "timezone": "America/New_York"
+    },
+    "category": "Music",
+    "status": "PUBLISHED",
+    "admissionMode": "TICKETED",
+    "priceRange": {
+     "min": 20,
+     "max": 45
+    },
+    "availableTickets": 29
+   }
+  ]
+ },
+ "gate": {
+  "token": "good-token",
+  "message": "Members only"
+ }
+}
