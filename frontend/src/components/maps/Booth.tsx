@@ -32,6 +32,8 @@ interface BoothProps {
   tierSwatchIndex?: number;
   onSelect?: (id: string, e?: React.MouseEvent | React.KeyboardEvent) => void;
   onClick?: (booth: MapBooth) => void;
+  /** A click on a `disabled` booth (the picker explains why it cannot be chosen). */
+  onDisabledClick?: (booth: MapBooth, e: React.MouseEvent) => void;
   highlight?: boolean;
   /** Faded out: another tier than the viewer's (spec 014 phase 2 picker). */
   dimmed?: boolean;
@@ -53,6 +55,7 @@ export default function Booth({
   tierSwatchIndex,
   onSelect,
   onClick,
+  onDisabledClick,
   highlight,
   dimmed = false,
   disabled = false,
@@ -91,7 +94,10 @@ export default function Booth({
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (disabled) return;
+    if (disabled) {
+      onDisabledClick?.(booth, e);
+      return;
+    }
     if (onSelect) onSelect(booth.id, e);
     if (onClick) onClick(booth);
   };
