@@ -101,12 +101,16 @@ class ApplicationTemplateService {
     const booth = await this._boothContext(application);
     const space = await this._spaceContext(application);
     // Spec 037 phase 5: the category's all-in price, what the vendor pays before add-ons.
-    // Spec 039: a booth the vendor owns or was placed on is priced on its own.
+    // Spec 039: a booth the vendor owns or was placed on is priced on its own;
+    // on a MAP form still choosing, spots carry their own prices, so the
+    // category's price would mislead and is left out.
     const placed = application.id && application.tier ? await boothService.boothForApplication(application.id).catch(() => null) : null;
+    const owned = placed && placed.status !== 'HELD' ? placed : null;
+    const spotsPriced = application.form?.spaceSelection === 'MAP' && !owned;
     const tierPrice =
-      application.tier && application.form?.kind === 'PAID'
+      application.tier && application.form?.kind === 'PAID' && !spotsPriced
         ? orderLineService.applicationOrderData(application.tier, application.form, [], [], application.event || {}, organization, {
-            booth: placed && placed.status !== 'HELD' ? placed : null,
+            booth: owned,
           }).amounts.applicantPays
         : null;
     return {
@@ -185,9 +189,11 @@ class ApplicationTemplateService {
    */
   async _spaceContext(application) {
     const chooseRequired = application.status === 'APPROVED' && application.paymentStatus === 'AWAITING_SELECTION';
-    const onMap = application.tierId && application.eventId ? await boothService.isMapBound(application.eventId, application.tierId).catch(() => false) : false;
+    // Spec 039: the form decides — MAP forms sell spots, TIERS forms never show the map.
+    const onMap = application.form?.spaceSelection === 'MAP' && Boolean(application.tierId);
+    const pickTier = chooseRequired && application.form?.kind === 'PAID' && !application.tierId;
     const due = selectionDueAt(application);
-    return { chooseRequired, onMap, dueDate: due ? formatDate(due) : '' };
+    return { chooseRequired, onMap, pickTier, dueDate: due ? formatDate(due) : '' };
   }
 
   /**

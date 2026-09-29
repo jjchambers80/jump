@@ -26,6 +26,7 @@ const { default: app } = await import('../../src/api/server.js');
 const { prisma } = await import('@jump/db');
 const { statusToken } = await import('../../src/services/applicationLinks.js');
 const { default: applicationFormService } = await import('../../src/services/ApplicationFormService.js');
+const { default: applicationTemplateService } = await import('../../src/services/ApplicationTemplateService.js');
 
 const TAG = `space-sel-${Date.now()}`;
 const STAFF_EMAIL = `${TAG}-admin@test.local`;
@@ -255,6 +256,17 @@ describe('Vendor space selection modes (spec 039)', () => {
       expect((await release(app2.id)).status).toBe(200);
       expect(await row(app2.id)).toMatchObject({ paymentStatus: 'AWAITING_SELECTION', tierId: null, tierChosenByVendor: false, capacitySlot: 'NONE' });
       expect((await tierRow(corner.id)).quantityReserved).toBe(0);
+    });
+
+    it('emails "pick the space type" with no single price and no map', async () => {
+      const application = await prisma.application.findUnique({
+        where: { id: app2.id },
+        include: { contact: true, profile: true, tier: true, form: true, event: { select: { id: true, name: true, date: true, taxRate: true, venue: { select: { organizationId: true, organization: true } } } }, order: true },
+      });
+      const { body } = await applicationTemplateService.render(organization.id, 'CHOOSE_SPACE', application);
+      expect(body).toContain('Pick the space type that fits you');
+      expect(body).toContain('choose your space and pay to confirm it');
+      expect(body).not.toContain('floor map');
     });
 
     it('is first come: a full tier is refused', async () => {

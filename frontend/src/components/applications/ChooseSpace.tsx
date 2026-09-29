@@ -1,9 +1,14 @@
 'use client';
 
-// Choose your space (spec 037 phase 5, apply-then-choose). An approved vendor
-// on a PAID form picks extras, how to pay, then where: from the list (any open
-// space in their category — the organizer places them) or on the floor map
-// (a specific booth of their category, spec 014's BoothPicker). Choosing holds
+// Choose your space (spec 037 phase 5, apply-then-choose; spec 039 modes). An
+// approved vendor on a PAID form picks extras, how to pay, then what the form
+// sells (`selection.mode`):
+//   TIERS — a space type: the one the organizer approved them as, or, when
+//           approved without one, their own pick from the form's tiers. The
+//           organizer places them on the floor later.
+//   MAP   — a spot of their category on the floor map (BoothPicker), or the
+//           same spots as an accessible sortable list (SpotList). Spots can
+//           carry their own price; other categories are faded and locked. Choosing holds
 // the space for 15 minutes and opens the order; paying goes through the saved
 // card (off-session) or Stripe's hosted Checkout. The server is the only
 // source of truth: nothing here treats a hold as a sale, and a 409 simply
@@ -16,15 +21,16 @@
 
 import { KeyboardEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { CalendarClock, CreditCard, LayoutList, Map as MapIcon, MapPin, ShieldCheck } from 'lucide-react';
+import SpotList from './SpotList';
 import AddOnPicker from '@/components/AddOnPicker';
 import BoothPicker from '@/components/maps/BoothPicker';
 import { formatCountdown, holdRemaining } from '@/components/maps/boothSelection';
 import type { ChooseBoothResult } from '@/services/api';
-import { formatDate, money, type AddOnLineInput, type ApplicantApplication, type SpaceSelection } from '@/lib/applications';
+import { formatDate, money, type AddOnLineInput, type ApplicantApplication, type SpaceCategory, type SpaceSelection } from '@/lib/applications';
 
 export interface SpaceApi {
   /** `POST …/select` — a booth (map) or the category (list), with add-ons; optionally charge the saved card. */
-  select: (body: { boothId?: string | null; addOns: AddOnLineInput[]; useSavedCard?: boolean }) => Promise<ChooseBoothResult & { orderRef?: string | null }>;
+  select: (body: { boothId?: string | null; tierId?: string | null; addOns: AddOnLineInput[]; useSavedCard?: boolean }) => Promise<ChooseBoothResult & { orderRef?: string | null }>;
   /** `POST …/pay` — the hosted Checkout URL for the held space. */
   pay: () => Promise<{ url: string }>;
   /** `POST …/release` — give the held space back to choose another. */
@@ -38,7 +44,7 @@ interface ChooseSpaceProps {
   refresh: () => Promise<ApplicantApplication | null>;
 }
 
-type Mode = 'list' | 'map';
+type Mode = 'map' | 'spots';
 type Notice = { tone: 'error' | 'info' | 'success'; text: string };
 
 const POLL_MS = 2000;
@@ -97,31 +103,45 @@ function NoticeBox({ notice }: { notice: Notice }) {
 
 export default function ChooseSpace({ application, spaceApi, refresh }: ChooseSpaceProps) {
   const sel = application.selection as SpaceSelection;
-  const category = sel.category;
-  const mapAvailable = sel.map.available && !sel.placedBooth;
-  const [mode, setMode] = useState<Mode>(mapAvailable ? 'map' : 'list');
+  const spotMode = sel.mode === 'MAP';
+  // TIERS form approved without a category: the vendor picks one (spec 039 D6).
+  const tierChoices = sel.categories ?? null;
+  const [pickedTierId, setPickedTierId] = useState<string | null>(null);
+  const picked = tierChoices?.find((c) => c.id === pickedTierId) ?? null;
+  const category: SpaceCategory | null = tierChoices ? picked : sel.category;
+  const offeredAddOns = tierChoices ? picked?.addOns ?? [] : sel.addOns;
+  const choosingSpot = spotMode && !sel.placedBooth;
+  const [mode, setMode] = useState<Mode>('map');
   const [qty, setQty] = useState<Record<string, number>>({});
   const [payWith, setPayWith] = useState<'card' | 'checkout'>(sel.savedCard ? 'card' : 'checkout');
   const [busy, setBusy] = useState<null | 'holding' | 'charging' | 'redirecting' | 'releasing'>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const baseId = useId();
-  const listTab = `${baseId}-list-tab`;
   const mapTab = `${baseId}-map-tab`;
-  const tabRefs = { list: useRef<HTMLButtonElement>(null), map: useRef<HTMLButtonElement>(null) };
+  const spotsTab = `${baseId}-spots-tab`;
+  const tabRefs = { map: useRef<HTMLButtonElement>(null), spots: useRef<HTMLButtonElement>(null) };
 
   useEffect(() => () => {
     if (pollRef.current) clearTimeout(pollRef.current);
   }, []);
 
   const addOnLines: AddOnLineInput[] = useMemo(
-    () => sel.addOns.filter((a) => (qty[a.id] ?? 0) > 0).map((a) => ({ addOnId: a.id, quantity: qty[a.id] })),
-    [sel.addOns, qty]
+    () => offeredAddOns.filter((a) => (qty[a.id] ?? 0) > 0).map((a) => ({ addOnId: a.id, quantity: qty[a.id] })),
+    [offeredAddOns, qty]
   );
-  // An estimate from per-unit figures: the order allocates fees across its lines to the cent.
-  const total = Math.round((category.applicantPays + sel.addOns.reduce((s, a) => s + a.applicantPays * (qty[a.id] ?? 0), 0)) * 100) / 100;
+  // Estimates from per-unit figures: the order allocates fees across its lines to the cent.
+  const extrasTotal = Math.round(offeredAddOns.reduce((s, a) => s + a.applicantPays * (qty[a.id] ?? 0), 0) * 100) / 100;
+  const total = Math.round(((category?.applicantPays ?? 0) + extrasTotal) * 100) / 100;
   const useSavedCard = payWith === 'card' && Boolean(sel.savedCard);
-  const soldOut = !category.guaranteed && category.spacesLeft <= 0;
+  const soldOut = category ? !category.guaranteed && category.spacesLeft <= 0 : false;
+
+  const pickTier = (tierId: string) => {
+    if (tierId === pickedTierId) return;
+    setPickedTierId(tierId);
+    // Extras are offered per space type; start the new type's from zero.
+    setQty({});
+  };
 
   const pollUntilSettled = useCallback(
     (attempt: number) => {
@@ -180,17 +200,26 @@ export default function ChooseSpace({ application, spaceApi, refresh }: ChooseSp
     await goToCheckout();
   };
 
-  const holdFromList = async () => {
+  /** Hold a space: the category (TIERS / a placed booth), a picked tier, or a spot from the list. */
+  const hold = async (choice: { boothId?: string; tierId?: string } = {}) => {
     if (busy) return;
     setNotice(null);
     setBusy('holding');
     try {
-      const result = await spaceApi.select({ addOns: addOnLines, useSavedCard });
+      const result = await spaceApi.select({ ...choice, addOns: addOnLines, useSavedCard });
       await afterHold(result);
     } catch (err) {
       setBusy(null);
       const e = err as { code?: string; message?: string };
-      setNotice({ tone: 'error', text: e.code === 'SOLD_OUT' ? `No ${category.name} spaces are left right now.` : e.message || 'Could not hold your space' });
+      const text =
+        e.code === 'SOLD_OUT'
+          ? category
+            ? `No ${category.name} spaces are left right now.`
+            : 'That space type just sold out. Choose another.'
+          : e.code === 'BOOTH_TAKEN'
+            ? 'That spot was just taken. Pick another one.'
+            : e.message || 'Could not hold your space';
+      setNotice({ tone: 'error', text });
       await refresh().catch(() => null);
     }
   };
@@ -216,7 +245,7 @@ export default function ChooseSpace({ application, spaceApi, refresh }: ChooseSp
   const onTabKey = (e: KeyboardEvent<HTMLButtonElement>) => {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
     e.preventDefault();
-    const next: Mode = e.key === 'Home' ? 'list' : e.key === 'End' ? 'map' : mode === 'list' ? 'map' : 'list';
+    const next: Mode = e.key === 'Home' ? 'map' : e.key === 'End' ? 'spots' : mode === 'map' ? 'spots' : 'map';
     setMode(next);
     tabRefs[next].current?.focus();
   };
@@ -229,7 +258,9 @@ export default function ChooseSpace({ application, spaceApi, refresh }: ChooseSp
       ? `Booth ${heldBooth.label}${heldBooth.w && heldBooth.h ? ` · ${heldBooth.w}×${heldBooth.h}` : ''}`
       : sel.placedBooth
         ? `Booth ${sel.placedBooth.label} (placed by the organizer)`
-        : `A ${category.name} space — the organizer places you`;
+        : sel.category
+          ? `A ${sel.category.name} space — the organizer places you`
+          : 'Your space — the organizer places you';
     const addOnTotal = (application.addOns ?? []).reduce((s, l) => s + l.applicantPays, 0);
     return (
       <section aria-labelledby={`${baseId}-held`} data-testid="choose-space" data-state="HELD" className="space-y-4">
@@ -248,7 +279,7 @@ export default function ChooseSpace({ application, spaceApi, refresh }: ChooseSp
             </p>
             <ul className="mt-3 space-y-1.5 text-sm tabular-nums text-gray-700 dark:text-slate-300" data-testid="space-held-lines">
               <li className="flex justify-between gap-3">
-                <span>{category.name}</span>
+                <span>{heldBooth ? `${sel.category?.name ?? 'Spot'} · ${heldBooth.label}` : sel.category?.name ?? 'Space'}</span>
                 <span>{money(application.amounts.applicantPays - addOnTotal)}</span>
               </li>
               {(application.addOns ?? []).map((l) => (
@@ -289,18 +320,53 @@ export default function ChooseSpace({ application, spaceApi, refresh }: ChooseSp
     );
   }
 
-  // ─── Choose: extras, payment method, then where ──────────────────────────
-  const payLabel = useSavedCard ? `Pay ${money(total)} with ${cardName(sel.savedCard)}` : `Hold this space and pay ${money(total)}`;
+  // ─── Choose: what, extras, how to pay, then where ─────────────────────────
+  const payLabel = (amount: number) => (useSavedCard ? `Pay ${money(amount)} with ${cardName(sel.savedCard)}` : `Hold this space and pay ${money(amount)}`);
+  const due = sel.dueAt ? ` by ${formatDate(sel.dueAt)}` : '';
+  const holdBusyLabel =
+    busy === 'holding' ? 'Holding your space…' : busy === 'charging' ? 'Charging your card…' : busy === 'redirecting' ? 'Opening secure checkout…' : null;
+  const holdButton = (onClick: () => void, disabled: boolean, idleLabel: string) => (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={Boolean(busy) || disabled}
+      data-testid="space-hold"
+      className="rounded-xl bg-brand px-5 py-2.5 font-semibold text-brand-fg transition-colors hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2 disabled:opacity-60 motion-reduce:transition-none dark:focus-visible:ring-offset-slate-800"
+    >
+      {holdBusyLabel ?? idleLabel}
+    </button>
+  );
+  const totalLine = (
+    <p className="text-sm text-gray-600 dark:text-slate-400" data-testid="space-total">
+      Total <strong className="ml-1 text-lg font-extrabold tabular-nums text-gray-900 dark:text-slate-50">{money(total)}</strong>
+      {addOnLines.length > 0 && <span className="ml-1 text-xs">(extras included)</span>}
+    </p>
+  );
+
   return (
-    <section aria-labelledby={`${baseId}-title`} data-testid="choose-space" data-state="CHOOSE" className="space-y-6">
+    <section aria-labelledby={`${baseId}-title`} data-testid="choose-space" data-state="CHOOSE" data-mode={spotMode ? 'MAP' : 'TIERS'} className="space-y-6">
       <header className="space-y-1.5">
         <h3 id={`${baseId}-title`} className="text-xl font-bold tracking-tight text-gray-900 dark:text-slate-100">
-          Choose your space
+          {choosingSpot ? 'Choose your spot' : 'Choose your space'}
         </h3>
-        <p className="text-sm leading-relaxed text-gray-600 dark:text-slate-400">
-          You are approved as <strong className="text-gray-900 dark:text-slate-100">{category.name}</strong>.
-          {sel.dueAt ? ` Choose and pay by ${formatDate(sel.dueAt)} to confirm your spot.` : ' Choose and pay to confirm your spot.'}
-          {category.guaranteed ? ' Your place in this category is reserved; specific spots go to whoever pays first.' : ' Spaces go to whoever pays first.'}
+        <p className="text-sm leading-relaxed text-gray-600 dark:text-slate-400" data-testid="space-intro">
+          {tierChoices ? (
+            <>
+              You are approved. Pick the space type that fits you and pay{due} to confirm it. Spaces go to whoever pays first; the organizer places you on the floor.
+            </>
+          ) : (
+            <>
+              You are approved as <strong className="text-gray-900 dark:text-slate-100">{category?.name}</strong>.
+              {choosingSpot
+                ? ` Pick your spot on the floor map and pay${due} to confirm it. Each spot shows its price.`
+                : ` Choose and pay${due} to confirm your spot.`}
+              {category?.guaranteed
+                ? choosingSpot
+                  ? ' A space in your category is reserved for you; specific spots go to whoever pays first.'
+                  : ' Your place in this category is reserved; specific spots go to whoever pays first.'
+                : ' Spaces go to whoever pays first.'}
+            </>
+          )}
         </p>
       </header>
 
@@ -311,17 +377,60 @@ export default function ChooseSpace({ application, spaceApi, refresh }: ChooseSp
           <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-brand-link" aria-hidden />
           <span>
             The organizer has placed you at <strong>booth {sel.placedBooth.label}</strong>
-            {sel.placedBooth.w && sel.placedBooth.h ? ` (${sel.placedBooth.w}×${sel.placedBooth.h})` : ''}. Pay for your {category.name} space to confirm it.
+            {sel.placedBooth.w && sel.placedBooth.h ? ` (${sel.placedBooth.w}×${sel.placedBooth.h})` : ''}. Pay for it to confirm it.
           </span>
         </p>
       )}
 
-      {sel.addOns.length > 0 && (
+      {tierChoices && (
+        <fieldset className="space-y-2" data-testid="space-tier-choice">
+          <legend className="mb-1 text-sm font-semibold text-gray-900 dark:text-slate-100">Space type</legend>
+          {tierChoices.map((tier) => {
+            const tierSoldOut = tier.spacesLeft <= 0;
+            return (
+              <label
+                key={tier.id}
+                data-testid="space-tier-option"
+                className={`flex items-start gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3.5 text-sm transition-colors has-[:checked]:border-brand-link has-[:checked]:ring-1 has-[:checked]:ring-brand-link motion-reduce:transition-none dark:border-slate-700 dark:bg-slate-800 ${
+                  tierSoldOut ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-gray-300 dark:hover:border-slate-600'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name={`${baseId}-tier`}
+                  value={tier.id}
+                  checked={pickedTierId === tier.id}
+                  onChange={() => pickTier(tier.id)}
+                  disabled={tierSoldOut || Boolean(busy)}
+                  className="mt-1 h-4 w-4 accent-brand"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[15px] font-semibold text-gray-900 dark:text-slate-100">{tier.name}</span>
+                  {tier.description && <span className="mt-0.5 block text-gray-600 dark:text-slate-400">{tier.description}</span>}
+                  <span className={`mt-1 block text-xs font-semibold ${tierSoldOut ? 'text-red-700 dark:text-red-400' : 'text-gray-600 dark:text-slate-400'}`}>
+                    {tierSoldOut ? 'Sold out' : `${tier.spacesLeft} space${tier.spacesLeft === 1 ? '' : 's'} left`}
+                  </span>
+                </span>
+                <span className="text-right">
+                  <span className="block text-lg font-extrabold tabular-nums tracking-tight text-gray-900 dark:text-slate-50">{money(tier.applicantPays)}</span>
+                  {tier.feesIncluded > 0 ? (
+                    <span className="block text-xs text-gray-500 dark:text-slate-400">incl. {money(tier.feesIncluded)} fees</span>
+                  ) : tier.tax > 0 ? (
+                    <span className="block text-xs text-gray-500 dark:text-slate-400">incl. tax</span>
+                  ) : null}
+                </span>
+              </label>
+            );
+          })}
+        </fieldset>
+      )}
+
+      {offeredAddOns.length > 0 && (
         <AddOnPicker
-          addOns={sel.addOns}
+          addOns={offeredAddOns}
           quantities={qty}
           onChange={(id, quantity) => setQty((prev) => ({ ...prev, [id]: quantity }))}
-          unitPrice={(a) => sel.addOns.find((x) => x.id === a.id)?.applicantPays ?? a.price}
+          unitPrice={(a) => offeredAddOns.find((x) => x.id === a.id)?.applicantPays ?? a.price}
           title="Extras"
           hint="Optional. Charged with your space."
         />
@@ -353,118 +462,133 @@ export default function ChooseSpace({ application, spaceApi, refresh }: ChooseSp
         </fieldset>
       )}
 
-      <div className="space-y-3">
-        {mapAvailable && (
-          <div role="tablist" aria-label="How to choose your space" className="inline-flex rounded-xl border border-gray-200 bg-gray-100 p-1 dark:border-slate-700 dark:bg-slate-900/60">
-            {(
-              [
-                ['list', 'List', LayoutList, listTab],
-                ['map', 'Map', MapIcon, mapTab],
-              ] as const
-            ).map(([value, text, Icon, id]) => (
-              <button
-                key={value}
-                ref={tabRefs[value]}
-                id={id}
-                type="button"
-                role="tab"
-                aria-selected={mode === value}
-                aria-controls={`${id}-panel`}
-                tabIndex={mode === value ? 0 : -1}
-                onClick={() => setMode(value)}
-                onKeyDown={onTabKey}
-                data-testid={`space-mode-${value}`}
-                className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link motion-reduce:transition-none ${
-                  mode === value ? 'bg-white text-gray-900 shadow-sm dark:bg-slate-700 dark:text-slate-50' : 'text-gray-600 hover:text-gray-900 dark:text-slate-400 dark:hover:text-slate-100'
-                }`}
-              >
-                <Icon className="h-4 w-4" aria-hidden />
-                {text}
-              </button>
-            ))}
+      {tierChoices ? (
+        // TIERS, vendor picks: the radio cards above are the choice.
+        <div className="space-y-2" data-testid="space-list">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {picked ? totalLine : <p className="text-sm text-gray-600 dark:text-slate-400">Pick a space type to see your total.</p>}
+            {holdButton(() => picked && hold({ tierId: picked.id }), !picked || soldOut, picked ? payLabel(total) : 'Pick a space type')}
           </div>
-        )}
-
-        {(!mapAvailable || mode === 'list') && (
-          <div role={mapAvailable ? 'tabpanel' : undefined} id={`${listTab}-panel`} aria-labelledby={mapAvailable ? listTab : undefined} data-testid="space-list">
-            <div className="tier-stub-shadow">
-              <div className="tier-stub relative grid grid-cols-1 overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-800 sm:grid-cols-[minmax(0,1fr)_10rem]">
-                <span aria-hidden className="absolute inset-y-0 left-0 w-1 bg-brand" />
-                <div className="min-w-0 py-4 pl-5 pr-4 sm:py-5">
-                  <p className="text-[17px] font-semibold leading-snug tracking-tight text-gray-900 dark:text-slate-100">{category.name}</p>
-                  {category.description && <p className="mt-1 text-sm leading-relaxed text-gray-600 dark:text-slate-400">{category.description}</p>}
-                  <p className="mt-2 text-sm text-gray-600 dark:text-slate-400">
-                    {sel.placedBooth
-                      ? `Booth ${sel.placedBooth.label}, placed by the organizer.`
-                      : mapAvailable
-                        ? 'Any open space in this category. The organizer assigns your exact spot.'
-                        : 'The organizer assigns your exact spot.'}
-                  </p>
-                  <p className="mt-2 text-xs font-semibold" data-testid="space-left">
-                    {category.guaranteed ? (
-                      <span className="inline-flex items-center gap-1 text-green-700 dark:text-green-400">
-                        <ShieldCheck className="h-3.5 w-3.5" aria-hidden /> Your space is reserved
-                      </span>
-                    ) : soldOut ? (
-                      <span className="text-red-700 dark:text-red-400">Sold out</span>
-                    ) : (
-                      <span className="text-gray-700 dark:text-slate-300">
-                        {category.spacesLeft} space{category.spacesLeft === 1 ? '' : 's'} left
-                      </span>
-                    )}
-                  </p>
-                </div>
-                <div className="relative flex h-16 items-center justify-between gap-3 border-t-2 border-dashed border-gray-200 pl-5 pr-4 dark:border-slate-700 sm:h-auto sm:flex-col sm:justify-center sm:gap-0.5 sm:border-l-2 sm:border-t-0 sm:px-2 sm:py-4 sm:text-center">
-                  <span className="text-xl font-extrabold tabular-nums tracking-tight text-gray-900 dark:text-slate-50 sm:text-2xl">{money(category.applicantPays)}</span>
-                  {category.feesIncluded > 0 ? (
-                    <span className="text-xs text-gray-500 dark:text-slate-400">incl. {money(category.feesIncluded)} fees</span>
-                  ) : category.tax > 0 ? (
-                    <span className="text-xs text-gray-500 dark:text-slate-400">incl. tax</span>
-                  ) : null}
-                </div>
+          <p className="text-xs text-gray-500 dark:text-slate-400">Your space is held for 15 minutes while you pay.</p>
+        </div>
+      ) : choosingSpot ? (
+        sel.map.pending ? (
+          <p className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300" role="status" data-testid="space-map-pending">
+            The floor plan is being updated. Check back soon to pick your spot{due}.
+          </p>
+        ) : !sel.map.available || !category ? (
+          <p className="text-sm text-gray-600 dark:text-slate-400" data-testid="space-map-empty">
+            No spots are open in your category right now. The organizer can still place you — reply to your approval email.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div role="tablist" aria-label="How to choose your spot" className="inline-flex rounded-xl border border-gray-200 bg-gray-100 p-1 dark:border-slate-700 dark:bg-slate-900/60">
+                {(
+                  [
+                    ['map', 'Map', MapIcon, mapTab],
+                    ['spots', 'Spots', LayoutList, spotsTab],
+                  ] as const
+                ).map(([value, text, Icon, id]) => (
+                  <button
+                    key={value}
+                    ref={tabRefs[value]}
+                    id={id}
+                    type="button"
+                    role="tab"
+                    aria-selected={mode === value}
+                    aria-controls={`${id}-panel`}
+                    tabIndex={mode === value ? 0 : -1}
+                    onClick={() => setMode(value)}
+                    onKeyDown={onTabKey}
+                    data-testid={`space-mode-${value}`}
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link motion-reduce:transition-none ${
+                      mode === value ? 'bg-white text-gray-900 shadow-sm dark:bg-slate-700 dark:text-slate-50' : 'text-gray-600 hover:text-gray-900 dark:text-slate-400 dark:hover:text-slate-100'
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" aria-hidden />
+                    {text}
+                  </button>
+                ))}
+              </div>
+              {typeof sel.map.priceFrom === 'number' && typeof sel.map.priceTo === 'number' && (
+                <p className="text-sm text-gray-600 dark:text-slate-400" data-testid="space-price-range">
+                  {sel.map.boothsAvailable} spot{sel.map.boothsAvailable === 1 ? '' : 's'} open ·{' '}
+                  {sel.map.priceFrom === sel.map.priceTo ? money(sel.map.priceFrom) : `${money(sel.map.priceFrom)}–${money(sel.map.priceTo)}`}
+                </p>
+              )}
+            </div>
+            {mode === 'map' ? (
+              <div role="tabpanel" id={`${mapTab}-panel`} aria-labelledby={mapTab} data-testid="space-map">
+                <BoothPicker
+                  eventId={application.event.id}
+                  application={application}
+                  price={total}
+                  extrasTotal={extrasTotal}
+                  chargesSavedCard={useSavedCard}
+                  chooseBooth={(boothId) => spaceApi.select({ boothId, addOns: addOnLines, useSavedCard })}
+                  payNow={spaceApi.pay}
+                  refresh={refresh}
+                />
+              </div>
+            ) : (
+              <div role="tabpanel" id={`${spotsTab}-panel`} aria-labelledby={spotsTab} data-testid="space-spots">
+                <SpotList
+                  eventId={application.event.id}
+                  tierId={category.id}
+                  fallbackPrice={category.applicantPays}
+                  extrasTotal={extrasTotal}
+                  busy={Boolean(busy)}
+                  actionLabel={payLabel}
+                  onHold={(boothId) => hold({ boothId })}
+                />
+              </div>
+            )}
+          </div>
+        )
+      ) : category ? (
+        // TIERS with the organizer's category, or a booth staff placed the vendor on.
+        <div data-testid="space-list">
+          <div className="tier-stub-shadow">
+            <div className="tier-stub relative grid grid-cols-1 overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-800 sm:grid-cols-[minmax(0,1fr)_10rem]">
+              <span aria-hidden className="absolute inset-y-0 left-0 w-1 bg-brand" />
+              <div className="min-w-0 py-4 pl-5 pr-4 sm:py-5">
+                <p className="text-[17px] font-semibold leading-snug tracking-tight text-gray-900 dark:text-slate-100">{category.name}</p>
+                {category.description && <p className="mt-1 text-sm leading-relaxed text-gray-600 dark:text-slate-400">{category.description}</p>}
+                <p className="mt-2 text-sm text-gray-600 dark:text-slate-400">
+                  {sel.placedBooth ? `Booth ${sel.placedBooth.label}, placed by the organizer.` : 'The organizer assigns your exact spot.'}
+                </p>
+                <p className="mt-2 text-xs font-semibold" data-testid="space-left">
+                  {category.guaranteed ? (
+                    <span className="inline-flex items-center gap-1 text-green-700 dark:text-green-400">
+                      <ShieldCheck className="h-3.5 w-3.5" aria-hidden /> Your space is reserved
+                    </span>
+                  ) : soldOut ? (
+                    <span className="text-red-700 dark:text-red-400">Sold out</span>
+                  ) : (
+                    <span className="text-gray-700 dark:text-slate-300">
+                      {category.spacesLeft} space{category.spacesLeft === 1 ? '' : 's'} left
+                    </span>
+                  )}
+                </p>
+              </div>
+              <div className="relative flex h-16 items-center justify-between gap-3 border-t-2 border-dashed border-gray-200 pl-5 pr-4 dark:border-slate-700 sm:h-auto sm:flex-col sm:justify-center sm:gap-0.5 sm:border-l-2 sm:border-t-0 sm:px-2 sm:py-4 sm:text-center">
+                <span className="text-xl font-extrabold tabular-nums tracking-tight text-gray-900 dark:text-slate-50 sm:text-2xl">{money(category.applicantPays)}</span>
+                {category.feesIncluded > 0 ? (
+                  <span className="text-xs text-gray-500 dark:text-slate-400">incl. {money(category.feesIncluded)} fees</span>
+                ) : category.tax > 0 ? (
+                  <span className="text-xs text-gray-500 dark:text-slate-400">incl. tax</span>
+                ) : null}
               </div>
             </div>
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-gray-600 dark:text-slate-400" data-testid="space-total">
-                Total <strong className="ml-1 text-lg font-extrabold tabular-nums text-gray-900 dark:text-slate-50">{money(total)}</strong>
-                {addOnLines.length > 0 && <span className="ml-1 text-xs">(extras included)</span>}
-              </p>
-              <button
-                type="button"
-                onClick={holdFromList}
-                disabled={Boolean(busy) || soldOut}
-                data-testid="space-hold"
-                className="rounded-xl bg-brand px-5 py-2.5 font-semibold text-brand-fg transition-colors hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2 disabled:opacity-60 motion-reduce:transition-none dark:focus-visible:ring-offset-slate-800"
-              >
-                {busy === 'holding'
-                  ? 'Holding your space…'
-                  : busy === 'charging'
-                    ? 'Charging your card…'
-                    : busy === 'redirecting'
-                      ? 'Opening secure checkout…'
-                      : soldOut
-                        ? 'Sold out'
-                        : payLabel}
-              </button>
-            </div>
-            <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">Your space is held for 15 minutes while you pay.</p>
           </div>
-        )}
-
-        {mapAvailable && mode === 'map' && (
-          <div role="tabpanel" id={`${mapTab}-panel`} aria-labelledby={mapTab} data-testid="space-map">
-            <BoothPicker
-              eventId={application.event.id}
-              application={application}
-              price={total}
-              chargesSavedCard={useSavedCard}
-              chooseBooth={(boothId) => spaceApi.select({ boothId, addOns: addOnLines, useSavedCard })}
-              payNow={spaceApi.pay}
-              refresh={refresh}
-            />
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            {totalLine}
+            {holdButton(() => hold(), soldOut, soldOut ? 'Sold out' : payLabel(total))}
           </div>
-        )}
-      </div>
+          <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">Your space is held for 15 minutes while you pay.</p>
+        </div>
+      ) : null}
     </section>
   );
 }

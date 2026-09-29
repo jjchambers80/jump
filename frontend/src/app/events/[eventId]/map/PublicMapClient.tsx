@@ -39,7 +39,8 @@ function BoothDetail({ booth, legend, event, vendor, boothHref, onClose }: Booth
   const dark = resolvedTheme === 'dark';
   const tier = legend.find((t) => t.id === booth.tier?.id);
   const tierName = booth.tier?.name || 'No tier';
-  const allInPrice = tier ? formatPrice(tier.price) : '—';
+  // Spec 039: a spot's own all-in price wins over its tier's.
+  const allInPrice = typeof booth.price === 'number' ? formatPrice(booth.price) : tier ? formatPrice(tier.price) : '—';
   const dimensions = `${booth.w}×${booth.h}`;
 
   let statusLabel = '';
@@ -463,6 +464,8 @@ export default function PublicMapClient({ params }: PublicMapClientProps) {
     id: l.tierId,
     name: l.name,
     price: l.price,
+    priceFrom: l.priceFrom,
+    priceTo: l.priceTo,
     swatch: l.swatch,
   }));
 

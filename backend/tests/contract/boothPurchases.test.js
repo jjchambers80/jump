@@ -202,8 +202,10 @@ describe('Approved vendor booth purchase API', () => {
     const { subject, body } = await applicationTemplateService.render(organization.id, 'CHOOSE_SPACE', application);
     expect(subject).toMatch(/choose your space/);
     expect(body).toContain('as 10x10');
-    expect(body).toContain('pay $275.00'); // ABSORB: the listed price
-    expect(body).toContain('pick your exact spot on the floor map');
+    // Spec 039: a MAP form's spots carry their own prices, so no single price is quoted.
+    expect(body).toContain('choose your space and pay to confirm it');
+    expect(body).toContain('Pick your spot on the floor map; each spot shows its price.');
+    expect(body).not.toContain('Pick the space type');
     expect(body).toContain(`/events/${event.id}/apply/status/${application.id}`);
     expect(body).not.toContain('Your booth:');
   });

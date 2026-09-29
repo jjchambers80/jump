@@ -77,3 +77,23 @@ export function formatCountdown(ms: number): string {
   const seconds = total % 60;
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
+
+// ─── Spec 039: per-spot prices ───────────────────────────────────────────
+
+/** What a spot costs the vendor, all in: its own price when the organizer set one, else `fallback` (the category's). */
+export function spotPrice(booth: { price?: number | null }, fallback: number): number {
+  return typeof booth.price === 'number' ? booth.price : fallback;
+}
+
+/** "$250.00" or "$250.00–$400.00"; `formatted` turns dollars into text. */
+export function priceRangeLabel(from: number, to: number, formatted: (dollars: number) => string): string {
+  return from === to ? formatted(from) : `${formatted(from)}–${formatted(to)}`;
+}
+
+export type SpotSort = 'label' | 'price';
+
+/** Spots in label order (natural: A2 before A10) or cheapest first, label breaking ties. */
+export function sortSpots<T extends { label: string; price?: number | null }>(spots: T[], by: SpotSort, fallback: number): T[] {
+  const byLabel = (a: T, b: T) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' });
+  return [...spots].sort((a, b) => (by === 'price' ? spotPrice(a, fallback) - spotPrice(b, fallback) || byLabel(a, b) : byLabel(a, b)));
+}
