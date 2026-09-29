@@ -10,6 +10,8 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { useOrg } from '@/components/OrgContext';
 import api, { type StorefrontPreferences, type StorefrontPreferencesInput } from '@/services/api';
 import { SEO_TITLE_MAX, SEO_DESCRIPTION_MAX } from '../pages/PageForm';
+import OnlineStoreSettings from '@/components/OnlineStoreSettings';
+import { themesApi } from '@/lib/themes';
 
 // Mirrored from backend/src/utils/pageLimits.js.
 const MESSAGE_MAX = 500;
@@ -85,7 +87,11 @@ function errorMessage(err: any, fallback: string) {
 }
 
 export default function PreferencesPage() {
-  const { selectedOrgId, selectedOrg, loading: orgLoading, error: orgError } = useOrg();
+  const { selectedOrgId, selectedOrg, loading: orgLoading, error: orgError, refresh: refreshOrg } = useOrg();
+  // Spec 038 D16: with themes on, the branding form moves here from the
+  // Online Store page (which becomes the themes overview).
+  const [themesOn, setThemesOn] = useState(false);
+  const [brandError, setBrandError] = useState<string | null>(null);
   const [prefs, setPrefs] = useState<StorefrontPreferences | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -133,6 +139,10 @@ export default function PreferencesPage() {
     setAccessSaved(false);
     setSeoSaved(false);
     setRedirectSaved(false);
+    themesApi
+      .status()
+      .then((status) => setThemesOn(status.enabled))
+      .catch(() => setThemesOn(false));
     try {
       applyPrefs(await api.get<StorefrontPreferences>('/admin/online-store/preferences'));
     } catch (err: any) {
@@ -270,8 +280,27 @@ export default function PreferencesPage() {
       {header}
 
       <div className="space-y-6">
+        {themesOn && selectedOrg && (
+          <section aria-labelledby="brand-heading" data-testid="brand-card" className={card}>
+            <div>
+              <h2 id="brand-heading" className="text-base font-semibold text-gray-900 dark:text-white">
+                Brand
+              </h2>
+              <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
+                Your logo, cover and brand color. Emails use them, and your theme starts from them.
+              </p>
+            </div>
+            {brandError && (
+              <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+                {brandError}
+              </p>
+            )}
+            <OnlineStoreSettings org={selectedOrg} onSaved={refreshOrg} onError={setBrandError} />
+          </section>
+        )}
+
         {/* Store access */}
-        <form onSubmit={saveAccess} aria-labelledby="store-access-heading" data-testid="store-access" className={card}>
+        <form id="store-access" onSubmit={saveAccess} aria-labelledby="store-access-heading" data-testid="store-access" className={card}>
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 id="store-access-heading" className="text-base font-semibold text-gray-900 dark:text-white">

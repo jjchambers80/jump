@@ -1,105 +1,66 @@
 'use client';
 
-// Online store — /admin/online-store
-// Public storefront settings (store name, handle, theme, branding) for the
-// organization currently picked in the header org switcher.
+// Online store — /admin/online-store (spec 038 D16). Organizations in the
+// themes rollout get the themes overview; every other organization keeps
+// today's branding page, where a SYSTEM_ADMIN can switch themes on.
 
-import React, { useState } from 'react';
-import { ExternalLink } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { useSession } from 'next-auth/react';
 import { useOrg } from '@/components/OrgContext';
-import OnlineStoreSettings from '@/components/OnlineStoreSettings';
-import { resolveAssetUrl } from '@/lib/assets';
+import { themesApi, type ThemeStatus } from '@/lib/themes';
+import LegacyOnlineStore from './LegacyOnlineStore';
+import ThemesOverview from './ThemesOverview';
 
 export default function OnlineStorePage() {
-  const { selectedOrg: org, loading, error: orgError, refresh } = useOrg();
-  const [error, setError] = useState<string | null>(null);
+  const { selectedOrg, loading } = useOrg();
+  const { data: session } = useSession();
+  const isSystemAdmin = (session?.user as { role?: string } | undefined)?.role === 'SYSTEM_ADMIN';
+  const [status, setStatus] = useState<ThemeStatus | null>(null);
+  const [checked, setChecked] = useState(false);
 
-  if (loading && !org) {
+  const load = useCallback(async () => {
+    try {
+      setStatus(await themesApi.status());
+    } catch {
+      setStatus(null);
+    } finally {
+      setChecked(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (loading || !selectedOrg) return;
+    setChecked(false);
+    void load();
+  }, [selectedOrg?.id, loading, load]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!checked && selectedOrg) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-8 space-y-3">
+      <div className="mx-auto max-w-5xl space-y-3 px-4 py-8" aria-busy="true" aria-label="Loading">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="animate-pulse h-16 bg-gray-200 dark:bg-slate-700 rounded-lg" />
+          <div key={i} className="h-16 animate-pulse rounded-lg bg-gray-200 dark:bg-slate-700" />
         ))}
       </div>
     );
   }
+  if (status?.enabled) return <ThemesOverview />;
 
-  if (!org) {
-    return (
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Online store</h1>
-        <p className="text-sm text-gray-500 dark:text-slate-400">
-          {orgError ?? 'Pick an organization from the menu in the top right.'}
+  const rollout =
+    isSystemAdmin && status?.masterSwitch ? (
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-gray-300 p-4 text-sm dark:border-slate-600" data-testid="themes-rollout">
+        <p className="text-gray-700 dark:text-slate-300">
+          <span className="font-semibold">Themes (pilot).</span> Server-rendered storefront and theme editor for this organization.
         </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <div className="flex items-center justify-between gap-4 mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Online store</h1>
-        <a
-          href={`/organizations/${org.id}`}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+        <button
+          type="button"
+          onClick={async () => {
+            setStatus(await themesApi.setRollout(true));
+          }}
+          className="rounded-md bg-indigo-600 px-3 py-1.5 font-semibold text-white hover:bg-indigo-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
         >
-          View store
-          <ExternalLink className="h-4 w-4" aria-hidden />
-        </a>
+          Turn on themes
+        </button>
       </div>
-
-      {/* Store header */}
-      <div className="flex items-center gap-3 mb-6">
-        {org.logoUrl ? (
-          <img
-            src={resolveAssetUrl(org.logoUrl) || undefined}
-            alt={`${org.name} logo`}
-            className="w-12 h-12 rounded-md object-contain bg-gray-100 dark:bg-slate-700 flex-shrink-0"
-          />
-        ) : (
-          <div className="w-12 h-12 rounded-md bg-gray-100 dark:bg-slate-700 flex items-center justify-center flex-shrink-0">
-            <span className="text-gray-400 dark:text-slate-500 text-xl font-bold">
-              {org.name.charAt(0).toUpperCase()}
-            </span>
-          </div>
-        )}
-        <div className="min-w-0">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white truncate">{org.name}</h2>
-          <div className="flex items-center gap-4 mt-0.5 text-sm text-gray-500 dark:text-slate-400">
-            <span
-              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                org.status === 'ACTIVE'
-                  ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                  : 'bg-gray-100 text-gray-600 dark:bg-slate-700 dark:text-slate-400'
-              }`}
-            >
-              {org.status}
-            </span>
-            {org._count && (
-              <>
-                <span>
-                  {org._count.venues} venue{org._count.venues !== 1 ? 's' : ''}
-                </span>
-                <span>
-                  {org._count.users} user{org._count.users !== 1 ? 's' : ''}
-                </span>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {error && (
-        <div className="mb-4 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4">
-          <p className="text-sm text-red-800 dark:text-red-300">{error}</p>
-        </div>
-      )}
-
-      <div className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4">
-        <OnlineStoreSettings org={org} onSaved={refresh} onError={setError} />
-      </div>
-    </div>
-  );
+    ) : null;
+  return <LegacyOnlineStore rollout={rollout} />;
 }
