@@ -32,6 +32,7 @@ export default async function BlogListingPage({
   return (
     <ThemedContentPage<BlogListing>
       frame={frame}
+      pagePath={`/organizations/${params.orgId}/blogs/${params.blogHandle}`}
       path={`/organizations/${encodeURIComponent(params.orgId)}/public/blogs/${encodeURIComponent(params.blogHandle)}${page > 1 ? `?page=${page}` : ''}`}
       notFoundTitle="Blog not found"
     >

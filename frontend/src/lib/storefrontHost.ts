@@ -80,6 +80,11 @@ export function routeForTenantHost(pathname: string, orgId: string): StorefrontR
   const path = pathname || '/';
   if (path === '/' || path === '') return { kind: 'rewrite', pathname: `/organizations/${orgId}` };
 
+  // Spec 038: exactly /events is the organization's Events page; /events/:id
+  // stays the event detail page (PUBLIC_PASS below).
+  if (path === '/events' || path === '/events/')
+    return { kind: 'rewrite', pathname: `/organizations/${orgId}/events` };
+
   const account = path.match(/^\/account(\/.*)?$/);
   if (account)
     return { kind: 'rewrite', pathname: `/organizations/${orgId}/account${account[1] || ''}` };

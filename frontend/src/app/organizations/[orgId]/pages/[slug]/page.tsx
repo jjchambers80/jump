@@ -35,6 +35,7 @@ export default async function StorefrontPage({ params }: { params: Params }) {
   return (
     <ThemedContentPage<{ page: PublicPage }>
       frame={frame}
+      pagePath={`/organizations/${params.orgId}/pages/${params.slug}`}
       path={`/organizations/${encodeURIComponent(params.orgId)}/public/pages/${encodeURIComponent(params.slug)}`}
       notFoundTitle="Page not found"
     >

@@ -12,6 +12,9 @@ export interface SectionContext {
   host: string | null;
   /** The organization name is this page's h1 (org home / events page). */
   nameIsHeading: boolean;
+  /** Current page path and query, for filter and pagination links (EventList). */
+  path: string;
+  query: Record<string, string | undefined>;
 }
 
 export function sectionContext(metadata: Record<string, unknown> | undefined): SectionContext {
@@ -24,8 +27,14 @@ export function t(ctx: SectionContext, key: string, vars: Record<string, string>
   return template.replace(/\{([a-z][a-zA-Z0-9]*)\}/g, (whole, name) => vars[name] ?? whole);
 }
 
-/** Section padding from the common settings (0-80 px, validated server-side). */
+/**
+ * Section padding from the common settings (0-80 px, validated server-side).
+ * Only values the organizer set: a preset section without them keeps its
+ * own spacing, so the default theme matches today's pages.
+ */
 export function sectionPadding(props: { paddingTop?: unknown; paddingBottom?: unknown }) {
-  const px = (v: unknown, d: number) => `${typeof v === 'number' ? v : d}px`;
-  return { paddingTop: px(props.paddingTop, 0), paddingBottom: px(props.paddingBottom, 0) };
+  const style: { paddingTop?: string; paddingBottom?: string } = {};
+  if (typeof props.paddingTop === 'number') style.paddingTop = `${props.paddingTop}px`;
+  if (typeof props.paddingBottom === 'number') style.paddingBottom = `${props.paddingBottom}px`;
+  return style;
 }

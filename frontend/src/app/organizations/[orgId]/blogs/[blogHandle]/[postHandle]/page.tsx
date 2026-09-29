@@ -41,6 +41,7 @@ export default async function BlogPostPage({ params }: { params: Params }) {
   return (
     <ThemedContentPage<{ post: PublicBlogPost }>
       frame={frame}
+      pagePath={`/organizations/${params.orgId}/blogs/${params.blogHandle}/${params.postHandle}`}
       path={`/organizations/${encodeURIComponent(params.orgId)}/public/blogs/${encodeURIComponent(params.blogHandle)}/${encodeURIComponent(params.postHandle)}`}
       notFoundTitle="Post not found"
     >

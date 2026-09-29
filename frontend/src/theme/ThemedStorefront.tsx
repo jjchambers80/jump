@@ -12,11 +12,16 @@ import { tenantHost } from './server/storefront';
 export default function ThemedStorefront({
   frame,
   nameIsHeading,
+  path,
+  query,
   children,
 }: {
   frame: Exclude<StorefrontFrame, { kind: 'legacy' }>;
   nameIsHeading?: boolean;
-  children: ReactNode;
+  path: string;
+  query?: Record<string, string | undefined>;
+  /** A fixed body (Content pages, blog). Omitted: the theme's template renders. */
+  children?: ReactNode;
 }) {
   if (frame.kind === 'locked') {
     // The gate has the org's mode at first paint too (blocking script).
@@ -27,10 +32,12 @@ export default function ThemedStorefront({
     );
   }
   return (
-    <ThemeFrame data={frame.data} host={tenantHost()} nameIsHeading={nameIsHeading}>
-      <div id="storefront-main" tabIndex={-1} className="outline-none">
-        {children}
-      </div>
+    <ThemeFrame data={frame.data} host={tenantHost()} nameIsHeading={nameIsHeading} path={path} query={query}>
+      {children === undefined ? undefined : (
+        <div id="storefront-main" tabIndex={-1} className="outline-none">
+          {children}
+        </div>
+      )}
     </ThemeFrame>
   );
 }
