@@ -1,6 +1,8 @@
-// Choose your space (spec 037 phase 5, apply-then-choose) on the approved
-// vendor's status page: a List | Map toggle over the category and the public
-// floor map (spec 014's booth picker), backend mocked at the network layer
+// Choose your space (spec 037 phase 5, apply-then-choose; spec 039 modes) on
+// the approved vendor's status page. MAP forms: a Map | Spots toggle over the
+// public floor map (spec 014's booth picker) and the same spots as a sortable
+// list, each spot at its own price. TIERS forms: the approved category, or a
+// radio group of space types when the vendor picks. Backend mocked at the network layer
 // like public-map.spec.ts. Nothing here marks anything sold itself: "paid"
 // appears only once the status poll returns PAID.
 
@@ -40,7 +42,7 @@ const json = (body: unknown, status = 200, headers: Record<string, string> = {})
 type BoothState = 'AVAILABLE' | 'HELD' | 'SOLD' | 'RESERVED' | 'BLOCKED';
 
 function mapPayload(states: Record<string, BoothState>, version: number) {
-  const booth = (id: string, label: string, x: number, tier: typeof TIER | null, vendorName: string | null = null) => ({
+  const booth = (id: string, label: string, x: number, tier: typeof TIER | null, vendorName: string | null = null, price: number | null = null) => ({
     id,
     label,
     kind: 'BOOTH',
@@ -52,12 +54,13 @@ function mapPayload(states: Record<string, BoothState>, version: number) {
     status: states[id] ?? 'AVAILABLE',
     tier,
     vendorName,
+    price,
   });
   return {
     id: 'map-1',
     eventId: EVENT_ID,
     name: 'Main hall',
-    width: 60,
+    width: 72,
     height: 20,
     unit: 'ft',
     gridSize: 10,
@@ -66,7 +69,7 @@ function mapPayload(states: Record<string, BoothState>, version: number) {
     underlayUrl: null,
     underlayOpacity: 40,
     legend: [
-      { tierId: TIER.id, name: TIER.name, price: TIER.price, swatch: 0 },
+      { tierId: TIER.id, name: TIER.name, price: TIER.price, priceFrom: 303.3, priceTo: 404.04, swatch: 0 },
       { tierId: OTHER_TIER.id, name: OTHER_TIER.name, price: OTHER_TIER.price, swatch: 1 },
     ],
     booths: [
@@ -75,6 +78,8 @@ function mapPayload(states: Record<string, BoothState>, version: number) {
       booth('b-3', 'A3', 24, null),
       booth('b-4', 'A4', 36, TIER),
       booth('b-5', 'T1', 48, OTHER_TIER),
+      // Spec 039: a corner spot with its own (all-in) price.
+      booth('b-6', 'A5', 60, TIER, null, 404.04),
     ],
     brandColor: '#b91c1c',
     themeMode: 'SYSTEM',
@@ -85,13 +90,16 @@ function mapPayload(states: Record<string, BoothState>, version: number) {
 
 function selection(over: Record<string, unknown> = {}) {
   return {
+    mode: 'MAP',
+    tierLocked: true,
+    categories: null,
     state: 'CHOOSE',
     heldUntil: null,
     dueAt: '2026-10-02T00:00:00.000Z',
     reserveOnApproval: true,
     category: { id: TIER.id, name: TIER.name, description: 'Corner-friendly 10×10 floor space', price: 275, applicantPays: 303.3, feesIncluded: 28.3, tax: 0, spacesLeft: 3, guaranteed: true },
     addOns: [],
-    map: { available: true, mapId: 'map-1', boothsAvailable: 1 },
+    map: { available: true, pending: false, mapId: 'map-1', boothsAvailable: 2, priceFrom: 303.3, priceTo: 404.04 },
     placedBooth: null,
     savedCard: { brand: 'visa', last4: '4242' },
     ...over,
@@ -160,7 +168,7 @@ async function mockVendor(page: Page, scenario: Scenario) {
     if (url.searchParams.get('token') !== TOKEN) return route.fulfill(json({ error: 'NotFoundError', message: 'Application not found' }, 404));
     if (url.pathname.endsWith('/status')) return route.fulfill(json(base.app));
     if (url.pathname.endsWith('/select')) {
-      const body = route.request().postDataJSON() as { boothId?: string; addOns: unknown[]; useSavedCard?: boolean };
+      const body = route.request().postDataJSON() as { boothId?: string; tierId?: string; addOns: unknown[]; useSavedCard?: boolean };
       bodies.push(body);
       const holdExpiresAt = new Date(Date.now() + 15 * 60_000).toISOString();
       const boothId = body.boothId ?? null;
@@ -186,7 +194,7 @@ async function mockVendor(page: Page, scenario: Scenario) {
           amounts,
           orderRef: 'JMP-BOOTH1',
           selection: selection({ state: 'HELD', heldUntil: holdExpiresAt, savedCard: null }),
-          booth: boothId ? { id: boothId, mapId: 'map-1', label: 'A2', status: 'HELD', w: 10, h: 10, holdExpiresAt } : null,
+          booth: boothId ? { id: boothId, mapId: 'map-1', label: boothId === 'b-6' ? 'A5' : 'A2', status: 'HELD', w: 10, h: 10, holdExpiresAt } : null,
         });
         return route.fulfill(json({ boothId, holdExpiresAt, status: boothId ? 'HELD' : 'AVAILABLE', paymentStatus: 'PAYMENT_DUE', orderRef: 'JMP-BOOTH1' }));
       }
@@ -221,10 +229,18 @@ test.describe('choose your space', () => {
     const choose = page.getByTestId('choose-space');
     await expect(choose).toBeVisible();
     await expect(choose).toContainText('You are approved as 10×10 booth');
-    // Map is the default when the event's map sells the category; the pay-now button is not offered.
+    await expect(choose).toContainText('Pick your spot on the floor map');
+    await expect(page.getByTestId('space-price-range')).toHaveText('2 spots open · $303.30–$404.04');
+    // A MAP form opens on the map; the pay-now button is not offered.
     await expect(page.getByTestId('space-mode-map')).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByTestId('apply-pay-now')).toHaveCount(0);
-    await expect(page.getByTestId('booth-picker-hint')).toContainText('1 booth available in your tier');
+    await expect(page.getByTestId('booth-picker-hint')).toContainText('2 booths available in your tier');
+    await expect(page.getByTestId('booth-picker-dim-note')).toContainText('other categories');
+
+    // A spot with its own price is priced on its own.
+    await page.getByTestId('booth-A5').click();
+    await expect(page.getByTestId('booth-buy-summary')).toHaveText('Booth A5 · 10×10 · $404.04 all-in');
+    await page.getByTestId('booth-A5').click();
 
     // Sold, held and blocked booths, and the other category, are not selectable.
     for (const label of ['A1', 'A3', 'A4', 'T1']) {
@@ -274,7 +290,7 @@ test.describe('choose your space', () => {
     await expect(page.getByTestId('booth-A2')).toHaveAttribute('aria-label', /Sold/);
     await expect(page.getByTestId('booth-A2')).toHaveAttribute('aria-disabled', 'true');
     expect(mapFetches()).toBeGreaterThan(before);
-    await expect(page.getByTestId('booth-picker-hint')).toContainText('No booths are left');
+    await expect(page.getByTestId('booth-picker-hint')).toContainText('1 booth available in your tier');
   });
 
   test('map: a declined saved card releases the booth and lets the vendor pick again', async ({ page }) => {
@@ -288,34 +304,116 @@ test.describe('choose your space', () => {
     await expect(page.getByTestId('booth-A2')).not.toHaveAttribute('aria-disabled', 'true');
   });
 
-  test('list: the tabs switch by keyboard; holding any open space opens Checkout; a held space counts down and can be given back', async ({ page }) => {
+  test('spots: the tabs switch by keyboard; the sortable list holds a priced spot; a held spot counts down and can be given back', async ({ page }) => {
     const { calls, bodies } = await mockVendor(page, { app: applicantApp({ selection: selection({ savedCard: null }), hasCardOnFile: false }), states: {}, version: 1, choose: 'no-card' });
     // Stay on the page: the pay step here is triggered from the held view below.
     await page.goto(statusUrl);
     await page.getByTestId('space-mode-map').focus();
-    await page.keyboard.press('ArrowLeft');
-    await expect(page.getByTestId('space-mode-list')).toHaveAttribute('aria-selected', 'true');
-    await expect(page.getByTestId('space-mode-list')).toBeFocused();
-    const list = page.getByRole('tabpanel');
-    await expect(list).toContainText('Any open space in this category');
-    await expect(page.getByTestId('space-left')).toContainText('Your space is reserved');
-    await expect(page.getByTestId('space-total')).toContainText('$303.30');
+    await page.keyboard.press('ArrowRight');
+    await expect(page.getByTestId('space-mode-spots')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByTestId('space-mode-spots')).toBeFocused();
 
-    // Hold from the list; the checkout redirect is intercepted by making /pay fail once.
+    // Only open spots of the vendor's category, each at its own price.
+    const options = page.getByTestId('spot-option');
+    await expect(options).toHaveCount(2);
+    await expect(options.nth(0)).toContainText('Spot A2');
+    await expect(options.nth(0)).toContainText('$303.30');
+    await expect(options.nth(1)).toContainText('Spot A5');
+    await expect(options.nth(1)).toContainText('$404.04');
+    await page.getByTestId('spot-sort').selectOption('price');
+    await expect(options.nth(0)).toContainText('Spot A2');
+    await expect(page.getByTestId('spot-hold')).toBeDisabled();
+
+    await page.getByLabel(/Spot A5/).check();
+    await expect(page.getByTestId('spot-total')).toContainText('$404.04');
+    await expect(page.getByTestId('spot-hold')).toHaveText('Hold this space and pay $404.04');
+
+    // Hold the spot; the checkout redirect is intercepted by making /pay fail once.
     await page.route(`${API}/applications/${APP_ID}/pay**`, (route) => route.fulfill(json({ error: 'ServiceUnavailable', message: 'Checkout is down for a moment' }, 503)), { times: 1 });
-    await page.getByTestId('space-hold').click();
+    await page.getByTestId('spot-hold').click();
     await expect(page.getByTestId('space-notice')).toContainText('Checkout is down for a moment');
-    expect(bodies[0]).toEqual({ addOns: [], useSavedCard: false });
+    expect(bodies[0]).toEqual({ boothId: 'b-6', addOns: [], useSavedCard: false });
 
-    // The refreshed page shows the held space with its countdown and lines.
+    // The refreshed page shows the held spot with its countdown and lines.
     const held = page.locator('[data-testid="choose-space"][data-state="HELD"]');
     await expect(held).toBeVisible();
+    await expect(page.getByTestId('space-held-where')).toContainText('Booth A5');
     await expect(page.getByTestId('space-hold-countdown')).toContainText(/Held for 1[45]:\d\d/);
-    await expect(page.getByTestId('space-held-lines')).toContainText('$303.30');
 
     await page.getByTestId('space-release').click();
     await expect(page.locator('[data-testid="choose-space"][data-state="CHOOSE"]')).toBeVisible();
     expect(calls).toContain(`POST /applications/${APP_ID}/release`);
+  });
+
+  test('map form: while the floor plan is unpublished the vendor waits', async ({ page }) => {
+    await mockVendor(page, {
+      app: applicantApp({ selection: selection({ map: { available: false, pending: true, mapId: null, boothsAvailable: 0, priceFrom: null, priceTo: null } }) }),
+      states: {},
+      version: 1,
+      choose: 'card',
+    });
+    await page.goto(statusUrl);
+    await expect(page.getByTestId('space-map-pending')).toContainText('The floor plan is being updated');
+    await expect(page.getByTestId('space-mode-map')).toHaveCount(0);
+    await expect(page.getByTestId('space-hold')).toHaveCount(0);
+  });
+
+  test('tiers form, category locked: no map, the organizer places the vendor', async ({ page }) => {
+    const { bodies } = await mockVendor(page, {
+      app: applicantApp({ selection: selection({ mode: 'TIERS', map: { available: false, pending: false, mapId: null, boothsAvailable: 0, priceFrom: null, priceTo: null }, savedCard: null }), hasCardOnFile: false }),
+      states: {},
+      version: 1,
+      choose: 'no-card',
+    });
+    await page.goto(statusUrl);
+    await expect(page.getByTestId('choose-space')).toHaveAttribute('data-mode', 'TIERS');
+    await expect(page.getByTestId('space-mode-map')).toHaveCount(0);
+    await expect(page.getByTestId('space-list')).toContainText('The organizer assigns your exact spot');
+    await expect(page.getByTestId('space-left')).toContainText('Your space is reserved');
+    await page.route(`${API}/applications/${APP_ID}/pay**`, (route) => route.fulfill(json({ error: 'ServiceUnavailable', message: 'Checkout is down for a moment' }, 503)), { times: 1 });
+    await page.getByTestId('space-hold').click();
+    await expect(page.getByTestId('space-notice')).toContainText('Checkout is down for a moment');
+    expect(bodies[0]).toEqual({ addOns: [], useSavedCard: false });
+  });
+
+  test('tiers form, vendor picks: a radio group of space types, sold out disabled, extras follow the pick', async ({ page }) => {
+    const power = { id: 'ao-power', name: 'Power', description: null, price: 25, applicantPays: 27.5, taxable: false, maxPerOrder: 2, remaining: null, soldOut: false };
+    const tiers = [
+      { id: TIER.id, name: TIER.name, description: 'Indoor floor space', price: 275, applicantPays: 303.3, feesIncluded: 28.3, tax: 0, spacesLeft: 3, guaranteed: false, addOns: [power] },
+      { id: 't-3', name: 'Corner', description: null, price: 350, applicantPays: 385.5, feesIncluded: 35.5, tax: 0, spacesLeft: 0, guaranteed: false, addOns: [] },
+      { id: OTHER_TIER.id, name: OTHER_TIER.name, description: null, price: 95, applicantPays: 104.6, feesIncluded: 9.6, tax: 0, spacesLeft: 4, guaranteed: false, addOns: [] },
+    ];
+    const { bodies } = await mockVendor(page, {
+      app: applicantApp({
+        tier: null,
+        selection: selection({ mode: 'TIERS', tierLocked: false, category: null, categories: tiers, addOns: [], map: { available: false, pending: false, mapId: null, boothsAvailable: 0, priceFrom: null, priceTo: null }, savedCard: null }),
+        hasCardOnFile: false,
+      }),
+      states: {},
+      version: 1,
+      choose: 'no-card',
+    });
+    await page.goto(statusUrl);
+    const choose = page.getByTestId('choose-space');
+    await expect(choose).toContainText('Pick the space type that fits you');
+    const options = page.getByTestId('space-tier-option');
+    await expect(options).toHaveCount(3);
+    await expect(options.nth(1)).toContainText('Sold out');
+    await expect(page.getByRole('radio', { name: /Corner/ })).toBeDisabled();
+    await expect(page.getByTestId('space-hold')).toBeDisabled();
+    await expect(page.getByTestId('space-hold')).toHaveText('Pick a space type');
+
+    await page.getByRole('radio', { name: /10×10 booth/ }).check();
+    await expect(page.getByTestId('space-total')).toContainText('$303.30');
+    await expect(choose).toContainText('Power');
+    await page.getByRole('radio', { name: /Table/ }).check();
+    await expect(page.getByTestId('space-total')).toContainText('$104.60');
+    await expect(choose).not.toContainText('Power');
+
+    await page.route(`${API}/applications/${APP_ID}/pay**`, (route) => route.fulfill(json({ error: 'ServiceUnavailable', message: 'Checkout is down for a moment' }, 503)), { times: 1 });
+    await page.getByTestId('space-hold').click();
+    await expect(page.getByTestId('space-notice')).toContainText('Checkout is down for a moment');
+    expect(bodies[0]).toEqual({ tierId: OTHER_TIER.id, addOns: [], useSavedCard: false });
   });
 
   test('a booth already placed by staff: no map, the vendor pays for the category from the list', async ({ page }) => {
@@ -323,7 +421,7 @@ test.describe('choose your space', () => {
       app: applicantApp({
         boothLabel: 'A4',
         booth: { id: 'b-4', mapId: 'map-1', label: 'A4', status: 'SOLD', w: 10, h: 10, holdExpiresAt: null },
-        selection: selection({ map: { available: false, mapId: null, boothsAvailable: 0 }, placedBooth: { id: 'b-4', label: 'A4', w: 10, h: 10 }, savedCard: null }),
+        selection: selection({ map: { available: false, pending: false, mapId: null, boothsAvailable: 0, priceFrom: null, priceTo: null }, placedBooth: { id: 'b-4', label: 'A4', w: 10, h: 10 }, savedCard: null }),
         hasCardOnFile: false,
       }),
       states: { 'b-4': 'SOLD' },

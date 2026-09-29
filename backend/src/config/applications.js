@@ -64,7 +64,8 @@ export const MERGE_FIELDS = [
   ['booth.size', 'Booth size in grid units, e.g. "10×10" (empty without a map booth)'],
   ['booth.chooseRequired', 'Section flag: same as space.chooseRequired (kept for templates written before spec 037)'],
   ['space.chooseRequired', 'Section flag: true on an approved paid application until the vendor chooses a space and pays'],
-  ['space.onMap', 'Section flag: true when the vendor can pick a booth on the event\'s published floor map'],
+  ['space.onMap', 'Section flag: true when the vendor picks their spot on the event\'s floor map (the form sells spots, spec 039)'],
+  ['space.pickTier', 'Section flag: true when the vendor picks the space type themselves (approved without a category, spec 039)'],
   ['space.dueDate', 'Date the vendor must choose and pay by (the payment clock starts at approval)'],
   ['links.map', 'Link to the public floor map centred on the applicant\'s booth (empty until one is owned)'],
 ];
@@ -125,7 +126,7 @@ See you there,
 
 Good news: {{profile.businessName}} is approved for {{event.name}}{{#tier}} as {{tier.name}}{{/tier}}.
 
-Next step: choose your space and pay{{#tier.price}} {{tier.price}}{{/tier.price}} to confirm it{{#space.dueDate}} by {{space.dueDate}}{{/space.dueDate}}.{{#space.onMap}} You can pick your exact spot on the floor map, or take any open space in your category and we will place you.{{/space.onMap}} Your space is held for 15 minutes while you pay.
+Next step: choose your space and pay{{#tier.price}} {{tier.price}}{{/tier.price}} to confirm it{{#space.dueDate}} by {{space.dueDate}}{{/space.dueDate}}.{{#space.onMap}} Pick your spot on the floor map; each spot shows its price.{{/space.onMap}}{{#space.pickTier}} Pick the space type that fits you; spaces go to whoever pays first.{{/space.pickTier}} Your space is held for 15 minutes while you pay.
 
 Choose your space: {{links.status}}
 

@@ -195,31 +195,35 @@ export interface AnswerView {
  * application, from the status view. `CHOOSE` until the vendor picks, `HELD`
  * while the chosen space (booth or category slot) is held for payment.
  */
+/** A space type as the vendor sees it: all-in price and what is left. */
+export interface SpaceCategory {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number;
+  applicantPays: number;
+  feesIncluded: number;
+  tax: number;
+  /** Spaces the vendor can still take (their own approval slot counts). */
+  spacesLeft: number;
+  /** The approval took a slot for this vendor. */
+  guaranteed: boolean;
+}
+
 export interface SpaceSelection {
   /** Spec 039: the form's `spaceSelection` — pick a tier, or a spot on the floor map. */
   mode?: 'TIERS' | 'MAP';
   /** Spec 039: false while the vendor picks (or holds a tier they picked) on a TIERS form. */
   tierLocked?: boolean;
-  /** Spec 039: TIERS form approved without a category — the tiers to pick from, each with its add-ons; `category` is then null (typed non-null until 039D). */
-  categories?: Array<SpaceSelection['category'] & { addOns: PublicTierAddOn[] }> | null;
+  /** Spec 039: TIERS form approved without a category — the tiers to pick from, each with its add-ons; `category` is then null. */
+  categories?: Array<SpaceCategory & { addOns: PublicTierAddOn[] }> | null;
   state: 'CHOOSE' | 'HELD';
   heldUntil: string | null;
   /** Choose and pay by (the clock started at approval). */
   dueAt: string | null;
   reserveOnApproval: boolean;
-  category: {
-    id: string;
-    name: string;
-    description: string | null;
-    price: number;
-    applicantPays: number;
-    feesIncluded: number;
-    tax: number;
-    /** Spaces the vendor can still take (their own approval slot counts). */
-    spacesLeft: number;
-    /** The approval took a slot for this vendor. */
-    guaranteed: boolean;
-  };
+  /** The locked (or vendor-picked) category; null while a TIERS vendor still picks (spec 039). */
+  category: SpaceCategory | null;
   addOns: PublicTierAddOn[];
   /** The event's published map sells this category (and staff have not placed the vendor yet). */
   map: {

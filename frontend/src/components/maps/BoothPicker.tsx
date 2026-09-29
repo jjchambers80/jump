@@ -30,8 +30,12 @@ interface BoothPickerProps {
   /**
    * Spec 037 phase 5: the all-in price to show before the order exists (the
    * category plus chosen add-ons). Defaults to the application's amount.
+   * Spec 039: the price of a spot without its own price; a spot with one is
+   * priced on its own, plus `extrasTotal`.
    */
   price?: number;
+  /** Spec 039: all-in total of the chosen extras, added to the spot's price. */
+  extrasTotal?: number;
   /** Spec 037 phase 5: whether choosing charges the saved card (the vendor picked it). Defaults to `hasCardOnFile`. */
   chargesSavedCard?: boolean;
 }
@@ -107,7 +111,7 @@ function HoldCountdown({ holdExpiresAt, onExpire }: { holdExpiresAt: string | nu
   );
 }
 
-export default function BoothPicker({ eventId, application, chooseBooth, payNow, refresh, price: priceOverride, chargesSavedCard }: BoothPickerProps) {
+export default function BoothPicker({ eventId, application, chooseBooth, payNow, refresh, price: priceOverride, extrasTotal = 0, chargesSavedCard }: BoothPickerProps) {
   const reducedMotion = useReducedMotion();
   const [map, setMap] = useState<PublicMap | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
@@ -148,7 +152,7 @@ export default function BoothPicker({ eventId, application, chooseBooth, payNow,
   const booths = useMemo(() => map?.booths ?? [], [map]);
   const sets = useMemo(() => selectability(booths, tierId), [booths, tierId]);
   const legendTiers: LegendTier[] = useMemo(
-    () => (map?.legend ?? []).map((l) => ({ id: l.tierId, name: l.name, price: l.price, swatch: l.swatch })),
+    () => (map?.legend ?? []).map((l) => ({ id: l.tierId, name: l.name, price: l.price, priceFrom: l.priceFrom, priceTo: l.priceTo, swatch: l.swatch })),
     [map]
   );
   const tierSwatches = useMemo(() => Object.fromEntries((map?.legend ?? []).map((l) => [l.tierId, l.swatch])), [map]);
@@ -162,7 +166,13 @@ export default function BoothPicker({ eventId, application, chooseBooth, payNow,
   const activeId = heldBooth?.id ?? selectedId;
   const activeBooth = booths.find((b) => b.id === activeId) ?? null;
   const selectedIds = useMemo(() => new Set(activeId ? [activeId] : []), [activeId]);
-  const price = formatPrice(priceOverride ?? application.amounts.applicantPays);
+  // A held booth is paid at its order's amount; before that, the spot's own
+  // all-in price (spec 039) or the category's, plus the chosen extras.
+  const price = formatPrice(
+    heldBooth || !activeBooth || typeof activeBooth.price !== 'number'
+      ? priceOverride ?? application.amounts.applicantPays
+      : Math.round((activeBooth.price + extrasTotal) * 100) / 100
+  );
   const savedCard = chargesSavedCard ?? Boolean(application.hasCardOnFile);
   const busy = phase.kind !== 'idle' && phase.kind !== 'paid';
 
@@ -334,6 +344,9 @@ export default function BoothPicker({ eventId, application, chooseBooth, payNow,
         </div>
         <div className="lg:col-span-1 rounded-lg border border-gray-200 dark:border-slate-700 p-3 bg-white dark:bg-slate-900/40">
           <MapLegend tiers={legendTiers} showStates selectedTierId={tierId} />
+          <p className="mt-3 text-xs text-gray-500 dark:text-slate-400" data-testid="booth-picker-dim-note">
+            Faded spots belong to other categories and cannot be chosen.
+          </p>
         </div>
       </div>
 

@@ -16,6 +16,9 @@ export interface LegendTier {
   id: string;
   name: string;
   price: number;
+  /** Spec 039: all-in range across the tier's spots (spots can carry their own price). */
+  priceFrom?: number;
+  priceTo?: number;
   swatch: number;
 }
 
@@ -66,7 +69,9 @@ export default function MapLegend({
                     {tier.name}
                   </span>
                   <span className="text-xs text-gray-500 dark:text-slate-400">
-                    {formatPrice(tier.price)}
+                    {tier.priceFrom !== undefined && tier.priceTo !== undefined && tier.priceFrom !== tier.priceTo
+                      ? `${formatPrice(tier.priceFrom)}–${formatPrice(tier.priceTo)}`
+                      : formatPrice(tier.priceFrom ?? tier.price)}
                   </span>
                 </button>
               );

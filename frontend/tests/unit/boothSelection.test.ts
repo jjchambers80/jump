@@ -7,7 +7,10 @@ import {
   isDimmed,
   isSelectable,
   nextStepAfterChoose,
+  priceRangeLabel,
   selectability,
+  sortSpots,
+  spotPrice,
   type PickerBooth,
 } from '@/components/maps/boothSelection';
 
@@ -86,5 +89,32 @@ describe('holdRemaining / formatCountdown', () => {
     expect(formatCountdown(5_000)).toBe('0:05');
     expect(formatCountdown(0)).toBe('0:00');
     expect(formatCountdown(-1)).toBe('0:00');
+  });
+});
+
+describe('spec 039 per-spot prices', () => {
+  const fmt = (n: number) => `$${n.toFixed(2)}`;
+
+  it("uses the spot's own price, else the category's", () => {
+    expect(spotPrice({ price: 325 }, 200)).toBe(325);
+    expect(spotPrice({ price: 0 }, 200)).toBe(0);
+    expect(spotPrice({ price: null }, 200)).toBe(200);
+    expect(spotPrice({}, 200)).toBe(200);
+  });
+
+  it('labels one price or a range', () => {
+    expect(priceRangeLabel(200, 200, fmt)).toBe('$200.00');
+    expect(priceRangeLabel(200, 350, fmt)).toBe('$200.00–$350.00');
+  });
+
+  it('sorts spots by label (natural) or cheapest first', () => {
+    const spots = [
+      { label: 'A10', price: 200 },
+      { label: 'A2', price: 350 },
+      { label: 'A1', price: null },
+    ];
+    expect(sortSpots(spots, 'label', 250).map((s) => s.label)).toEqual(['A1', 'A2', 'A10']);
+    expect(sortSpots(spots, 'price', 250).map((s) => s.label)).toEqual(['A10', 'A1', 'A2']);
+    expect(spots.map((s) => s.label)).toEqual(['A10', 'A2', 'A1']);
   });
 });
