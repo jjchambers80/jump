@@ -101,7 +101,7 @@ export const SECTIONS = {
     locked: true,
     settings: {
       showLegalLinks: toggle('Show legal links', true),
-      poweredBy: toggle('Show "Powered by Eventimus"', true),
+      poweredBy: toggle('Show "Powered by Eventimus"', false),
       copyright: text('Copyright text', { max: 120, default: '' }),
     },
     blocks: {

@@ -47,12 +47,7 @@ export async function backendBuyerFetch(
   // for all buyers. Forward the client address signed with the shared
   // AUTH_SECRET; X-Forwarded-For is not used because the hop count through
   // Railway's edge would make it spoofable.
-  if (init.clientIp && process.env.AUTH_SECRET) {
-    headers['X-Jump-Client-Ip'] = init.clientIp;
-    headers['X-Jump-Client-Ip-Sig'] = createHmac('sha256', process.env.AUTH_SECRET)
-      .update(init.clientIp)
-      .digest('hex');
-  }
+  Object.assign(headers, signedClientIpHeaders(init.clientIp));
 
   const res = await fetch(`${API_URL}${path}`, {
     method: init.method || 'GET',
@@ -68,6 +63,19 @@ export async function backendBuyerFetch(
     body = null;
   }
   return { status: res.status, body };
+}
+
+/**
+ * X-Jump-Client-Ip + signature for a server-to-server call, so the backend's
+ * per-IP limiters see the visitor, not this server (spec 020). Empty when
+ * there is no IP or no AUTH_SECRET.
+ */
+export function signedClientIpHeaders(clientIp: string | null | undefined): Record<string, string> {
+  if (!clientIp || !process.env.AUTH_SECRET) return {};
+  return {
+    'X-Jump-Client-Ip': clientIp,
+    'X-Jump-Client-Ip-Sig': createHmac('sha256', process.env.AUTH_SECRET).update(clientIp).digest('hex'),
+  };
 }
 
 /** Best-effort client IP for a route handler request (first X-Forwarded-For hop, else X-Real-IP). */

@@ -6,5 +6,6 @@ export * from './documents.js';
 export * from './settings.js';
 export * from './content.js';
 export * from './files.js';
+export * from './links.js';
 export * from './migrate.js';
 export * from './presets/index.js';

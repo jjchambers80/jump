@@ -448,6 +448,46 @@ describe('Online store themes contract', () => {
       expect(open.body.page).toBe('events');
     });
 
+    it('page=frame returns header and footer only, and resolves theme links', async () => {
+      const unlock = await request(app).post(`/organizations/${organization.id}/storefront-access`).send({ password: 'themes-1985' });
+      const page = await prisma.page.create({ data: { organizationId: organization.id, title: 'About', slug: 'about-themes-ct', content: '<p>x</p>' } });
+      const hidden = await prisma.page.create({ data: { organizationId: organization.id, title: 'Draft', slug: 'draft-themes-ct', content: '<p>x</p>', isVisible: false } });
+      await save({
+        themeVersion: (await current()).version,
+        documents: {
+          header: {
+            version: await docVersion('header'),
+            data: {
+              root: { props: {} },
+              content: [
+                {
+                  type: 'AnnouncementBar',
+                  props: {
+                    id: 'AB',
+                    blocks: [
+                      { type: 'Announcement', props: { id: 'L1', text: 'About', link: { type: 'PAGE', targetId: page.id } } },
+                      { type: 'Announcement', props: { id: 'L2', text: 'Hidden', link: { type: 'PAGE', targetId: hidden.id } } },
+                      { type: 'Announcement', props: { id: 'L3', text: 'Out', link: { type: 'EXTERNAL', url: 'https://example.com/x' } } },
+                    ],
+                  },
+                },
+                { type: 'Header', props: { id: 'Hd' } },
+              ],
+            },
+          },
+        },
+      });
+      const res = await render(organization.slug, 'frame', { 'X-Storefront-Access': unlock.body.token });
+      expect(res.status).toBe(200);
+      expect(res.body.page).toBe('frame');
+      expect(res.body.documents.template).toBeNull();
+      expect(res.body.resolved.events).toEqual([]);
+      expect(res.body.resolved.links).toEqual({
+        [`PAGE:${page.id}`]: `/organizations/${organization.slug}/pages/about-themes-ct`,
+        'EXTERNAL:https://example.com/x': 'https://example.com/x',
+      });
+    });
+
     it('unknown organizations and pages are 404', async () => {
       expect((await render('no-such-org-themes-ct')).status).toBe(404);
       const unlock = await request(app).post(`/organizations/${organization.id}/storefront-access`).send({ password: 'themes-1985' });

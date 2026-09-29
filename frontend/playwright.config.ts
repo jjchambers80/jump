@@ -12,6 +12,11 @@ const quarantined = process.env.E2E_QUARANTINE
 
 const testPort = process.env.PLAYWRIGHT_PORT || '3001';
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || `http://localhost:${testPort}`;
+// The fixture API listens where the specs already point the API (NEXT_PUBLIC_API_URL, 3002).
+// Locally, when a dev backend holds that port, set FIXTURE_API_PORT: the
+// fixture moves there and only the Next server's own fetches follow it
+// (INTERNAL_API_URL), so browser mocks on :3002 keep matching.
+const fixturePort = process.env.FIXTURE_API_PORT || new URL(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002').port || '3002';
 
 export default defineConfig({
   testDir: './',
@@ -38,9 +43,23 @@ export default defineConfig({
     },
   ],
 
-  webServer: {
-    command: `npx next dev -p ${testPort}`,
-    url: baseURL,
-    reuseExistingServer: !process.env.CI,
-  },
+  webServer: [
+    // Spec 038: canned API for the Next server's own fetches (server-rendered
+    // themed pages). Browser calls are still mocked with page.route.
+    {
+      command: 'node e2e/fixtures/server.mjs',
+      url: `http://localhost:${fixturePort}/__fixtures/health`,
+      reuseExistingServer: !process.env.CI,
+      env: { FIXTURE_API_PORT: fixturePort },
+    },
+    {
+      command: `npx next dev -p ${testPort}`,
+      url: baseURL,
+      reuseExistingServer: !process.env.CI,
+      env: {
+        NEXT_PUBLIC_THEME_EDITOR_ENABLED: 'true',
+        ...(process.env.FIXTURE_API_PORT ? { INTERNAL_API_URL: `http://localhost:${fixturePort}` } : {}),
+      },
+    },
+  ],
 });

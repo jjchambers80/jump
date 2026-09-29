@@ -16,6 +16,8 @@ import {
   THEME_NAME_MAX,
   documentDef,
   fileIdsInThemeJson,
+  linkKey,
+  linksInThemeJson,
   getPreset,
   migrateDocument,
   presetDocument,
@@ -419,11 +421,12 @@ class ThemeService {
   }
 
   /** Data sections reference by id, resolved and filtered to the organization (D8). */
-  async _resolve(organizationId, values) {
+  async _resolve(organizationId, values, { events: withEvents = true } = {}) {
     const fileIds = fileIdsInThemeJson(values);
-    const [events, menus, files] = await Promise.all([
-      publicEventSummaries(organizationId),
+    const [events, menus, links, files] = await Promise.all([
+      withEvents ? publicEventSummaries(organizationId) : [],
       menuService.publicMenus(organizationId),
+      menuService.resolveLinks(organizationId, linksInThemeJson(values), linkKey),
       fileIds.length
         ? prisma.storeFile.findMany({ where: { id: { in: fileIds }, organizationId }, include: { file: true, image: true } })
         : [],
@@ -431,6 +434,7 @@ class ThemeService {
     return {
       events,
       menus,
+      links,
       files: Object.fromEntries(
         files.map((row) => [
           row.id,
@@ -446,7 +450,9 @@ class ThemeService {
    * Events page (D5). With no Theme row the preset renders from code.
    */
   async renderPublic(organizationId, page = 'home', { now = Date.now() } = {}) {
-    if (!PAGE_KEYS.includes(page)) throw new NotFoundError('Page not found');
+    // `frame`: header and footer only, for pages whose body the theme does not
+    // own yet (Content pages, blog; 038G turns them into templates).
+    if (page !== 'frame' && !PAGE_KEYS.includes(page)) throw new NotFoundError('Page not found');
     const organization = await prisma.organization.findUnique({ where: { id: organizationId }, select: ORGANIZATION_IDENTITY });
     if (!organization) throw new NotFoundError('Organization not found');
     const theme =
@@ -461,7 +467,11 @@ class ThemeService {
     const byKey = new Map(rows.map((r) => [r.key, r]));
     const templateKey = page === 'home' && !byKey.has('home') ? 'events' : page;
     const read = (key) => this._visible(this._readDocument(theme, key, byKey.get(key)).data, now);
-    const documents = { header: read('header'), template: read(templateKey), footer: read('footer') };
+    const documents = {
+      header: read('header'),
+      template: page === 'frame' ? null : read(templateKey),
+      footer: read('footer'),
+    };
     const settings = resolveSettings(theme.settings, getPreset(theme.presetKey)?.settings);
     return {
       renderer: 'theme',
@@ -472,7 +482,7 @@ class ThemeService {
       settings,
       content: resolveContent(theme.content),
       documents,
-      resolved: await this._resolve(organizationId, { settings, documents }),
+      resolved: await this._resolve(organizationId, { settings, documents }, { events: page !== 'frame' }),
     };
   }
 

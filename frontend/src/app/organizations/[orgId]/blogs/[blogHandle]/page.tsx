@@ -5,6 +5,9 @@
 import type { Metadata } from 'next';
 import BlogListingView from '@/components/storefront/BlogListingView';
 import { fetchPublicJson } from '@/lib/storefrontMeta';
+import BlogListingBody, { type BlogListing } from '@/components/storefront/BlogListingBody';
+import ThemedContentPage from '@/theme/ThemedContentPage';
+import { loadStorefrontFrame } from '@/theme/server/storefront';
 
 type Params = { orgId: string; blogHandle: string };
 
@@ -16,7 +19,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   return { title: `${data.blog.title} · ${data.organization.name}` };
 }
 
-export default function BlogListingPage({
+export default async function BlogListingPage({
   params,
   searchParams,
 }: {
@@ -24,5 +27,15 @@ export default function BlogListingPage({
   searchParams?: { page?: string };
 }) {
   const page = Math.max(1, Number(searchParams?.page) || 1);
-  return <BlogListingView orgId={params.orgId} blogHandle={params.blogHandle} page={page} />;
+  const frame = await loadStorefrontFrame(params.orgId, 'frame');
+  if (frame.kind === 'legacy') return <BlogListingView orgId={params.orgId} blogHandle={params.blogHandle} page={page} />;
+  return (
+    <ThemedContentPage<BlogListing>
+      frame={frame}
+      path={`/organizations/${encodeURIComponent(params.orgId)}/public/blogs/${encodeURIComponent(params.blogHandle)}${page > 1 ? `?page=${page}` : ''}`}
+      notFoundTitle="Blog not found"
+    >
+      {(data) => <BlogListingBody data={data} base={`/organizations/${params.orgId}/blogs/${params.blogHandle}`} />}
+    </ThemedContentPage>
+  );
 }

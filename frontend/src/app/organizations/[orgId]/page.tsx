@@ -4,6 +4,9 @@ import { permanentRedirect } from 'next/navigation';
 import { API_URL, resolveAssetUrl } from '../../../lib/assets';
 import { organizationPath } from '@/lib/publicPaths';
 import OrganizationStorefront from './OrganizationStorefront';
+import OrganizationEventsBody from '@/components/storefront/OrganizationEventsBody';
+import ThemedStorefront from '@/theme/ThemedStorefront';
+import { loadStorefrontFrame } from '@/theme/server/storefront';
 
 interface StorefrontMeta {
   id: string;
@@ -47,5 +50,16 @@ export default async function OrganizationPage({ params }: { params: { orgId: st
   if (meta?.slug && meta.slug !== params.orgId && !headers().get('x-jump-tenant-host')) {
     permanentRedirect(organizationPath(meta.slug));
   }
-  return <OrganizationStorefront orgId={params.orgId} />;
+  // Spec 038: organizations in the themes rollout render on the server; every
+  // other organization (and any failure) keeps the client storefront.
+  const frame = await loadStorefrontFrame(params.orgId, 'home');
+  if (frame.kind === 'legacy') return <OrganizationStorefront orgId={params.orgId} />;
+  return (
+    <ThemedStorefront frame={frame} nameIsHeading>
+      {frame.kind === 'theme' && (
+        // Today's events body until 038C makes it the EventsHero + EventList sections.
+        <OrganizationEventsBody organization={frame.data.organization} events={frame.data.resolved.events} />
+      )}
+    </ThemedStorefront>
+  );
 }
