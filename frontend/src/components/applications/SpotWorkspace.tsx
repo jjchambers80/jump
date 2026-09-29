@@ -23,7 +23,7 @@ import { mapsApi, type MapBooth, type MapElement, type PublicMap } from '@/servi
 import { formatPrice } from '@/lib/fees';
 import type { SpaceCategory } from '@/lib/applications';
 import MapCanvas from '@/components/maps/MapCanvas';
-import { LEGEND_STATE_DARK, LEGEND_STATE_LIGHT, LEGEND_STATE_STROKE_DARK, LEGEND_STATE_STROKE_LIGHT, TIER_SWATCHES } from '@/components/maps/mapTheme';
+import { LEGEND_STATE_DARK, LEGEND_STATE_LIGHT, LEGEND_STATE_STROKE_DARK, LEGEND_STATE_STROKE_LIGHT, STATUS_LABELS, TIER_SWATCHES } from '@/components/maps/mapTheme';
 import { selectability, sortSpots, type SpotSort } from '@/components/maps/boothSelection';
 
 export type Spot = PublicMap['booths'][number];
@@ -203,6 +203,15 @@ export default function SpotWorkspace({
   const booths = useMemo(() => map?.booths ?? [], [map]);
   const sets = useMemo(() => selectability(booths, category.id), [booths, category.id]);
   const spots = useMemo(() => sortSpots(booths.filter((b) => sets.selectable.has(b.id)), sort, category.applicantPays), [booths, sets, sort, category.applicantPays]);
+  // Other categories' spots, greyed out under the vendor's own: what else is on
+  // the floor, never choosable. Grouped in legend order, spots in label order.
+  const otherGroups = useMemo(() => {
+    const legend = map?.legend ?? [];
+    return legend
+      .filter((l) => l.tierId !== category.id)
+      .map((l) => ({ tier: l, spots: sortSpots(booths.filter((b) => b.tier?.id === l.tierId), 'label', l.price) }))
+      .filter((g) => g.spots.length > 0);
+  }, [map, booths, category.id]);
   const selected = spots.find((s) => s.id === selectedId) ?? null;
   const swatchFor = useMemo(() => Object.fromEntries((map?.legend ?? []).map((l) => [l.tierId, l.swatch])), [map]);
   const mySwatchPair = TIER_SWATCHES[(swatchFor[category.id] ?? 0) % TIER_SWATCHES.length];
@@ -497,6 +506,46 @@ export default function SpotWorkspace({
             })}
           </ul>
         </fieldset>
+      )}
+
+      {otherGroups.length > 0 && (
+        <div className="space-y-3 pt-2" data-testid="spot-other-categories">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Other categories</h3>
+            <p className="text-xs text-gray-600 dark:text-slate-400">For reference only — you are approved as {category.name}, so these spots cannot be chosen.</p>
+          </div>
+          {otherGroups.map(({ tier, spots: group }) => {
+            const pair = TIER_SWATCHES[tier.swatch % TIER_SWATCHES.length];
+            return (
+              <section key={tier.tierId} aria-label={`${tier.name} spots, not available to you`}>
+                <h4 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">
+                  <span aria-hidden className="h-2.5 w-2.5 rounded-[3px] opacity-50" style={{ backgroundColor: dark ? pair.dark : pair.light }} />
+                  {tier.name}
+                </h4>
+                <ul className="space-y-1.5">
+                  {group.map((spot) => (
+                    <li
+                      key={spot.id}
+                      data-testid="spot-other"
+                      aria-disabled="true"
+                      className="flex min-h-[3rem] items-center gap-3 rounded-xl border border-dashed border-gray-200 bg-gray-50 py-2 pl-3 pr-3.5 text-gray-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-500"
+                    >
+                      <span aria-hidden className="h-7 w-1.5 shrink-0 rounded-full opacity-40" style={{ backgroundColor: dark ? pair.dark : pair.light }} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold text-gray-600 dark:text-slate-400">Spot {spot.label}</span>
+                        <span className="block text-xs">
+                          {size(spot)}
+                          {spot.status !== 'AVAILABLE' ? ` · ${spot.status === 'SOLD' ? 'Taken' : STATUS_LABELS[spot.status] ?? spot.status}` : ''}
+                        </span>
+                      </span>
+                      <span className="text-sm tabular-nums">{formatPrice(typeof spot.price === 'number' ? spot.price : tier.price)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            );
+          })}
+        </div>
       )}
     </section>
   );

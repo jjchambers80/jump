@@ -251,6 +251,14 @@ test.describe('choose your space', () => {
     await expect(options.nth(0)).toContainText('$303.30');
     await expect(options.nth(1)).toContainText('Spot A5');
     await expect(options.nth(1)).toContainText('$404.04');
+    // Other categories' spots are listed greyed out, for reference, and cannot be chosen.
+    const others = page.getByTestId('spot-other-categories');
+    await expect(others).toContainText('Other categories');
+    await expect(others).toContainText('Table');
+    await expect(page.getByTestId('spot-other')).toHaveCount(1);
+    await expect(page.getByTestId('spot-other')).toContainText('Spot T1');
+    await expect(page.getByTestId('spot-other')).toHaveAttribute('aria-disabled', 'true');
+    await expect(others.getByRole('radio')).toHaveCount(0);
 
     // Map → list: tapping a spot selects its row.
     await expect(page.getByTestId('space-continue')).toBeDisabled();
