@@ -17,6 +17,8 @@ interface SpotListProps {
   fallbackPrice: number;
   /** All-in total of the chosen extras. */
   extrasTotal: number;
+  /** The exact total for a spot with the chosen extras (one fee calculation); defaults to spot + extras. */
+  totalFor?: (spot: PublicMap['booths'][number]) => number;
   /** True while a hold or payment is in flight. */
   busy: boolean;
   /** Label of the hold button for the chosen spot's total. */
@@ -26,7 +28,7 @@ interface SpotListProps {
 
 type Spot = PublicMap['booths'][number];
 
-export default function SpotList({ eventId, tierId, fallbackPrice, extrasTotal, busy, actionLabel, onHold }: SpotListProps) {
+export default function SpotList({ eventId, tierId, fallbackPrice, extrasTotal, totalFor, busy, actionLabel, onHold }: SpotListProps) {
   const baseId = useId();
   const [map, setMap] = useState<PublicMap | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +65,7 @@ export default function SpotList({ eventId, tierId, fallbackPrice, extrasTotal, 
   }, [spots, chosen]);
 
   const chosenSpot = spots.find((s) => s.id === chosen) ?? null;
-  const total = chosenSpot ? Math.round((spotPrice(chosenSpot, fallbackPrice) + extrasTotal) * 100) / 100 : null;
+  const total = chosenSpot ? (totalFor ? totalFor(chosenSpot) : Math.round((spotPrice(chosenSpot, fallbackPrice) + extrasTotal) * 100) / 100) : null;
 
   const hold = async () => {
     if (!chosenSpot || busy) return;

@@ -1,6 +1,8 @@
 // Applications (spec 011) — shapes returned by the backend and small display
 // helpers shared by the storefront apply pages, the buyer account and admin.
 
+import { computeOrderFees, roundCurrency } from './fees';
+
 export type FormKind = 'PAID' | 'FREE';
 export type FormStatus = 'DRAFT' | 'OPEN' | 'CLOSED';
 export type QuestionType = 'SHORT_TEXT' | 'LONG_TEXT' | 'SINGLE_CHOICE' | 'MULTI_CHOICE' | 'CHECKBOX' | 'URL' | 'EMAIL' | 'PHONE' | 'NUMBER' | 'PHOTO';
@@ -201,6 +203,8 @@ export interface SpaceCategory {
   name: string;
   description: string | null;
   price: number;
+  /** Before fees and tax: the tier price, or a staff-placed booth's own price (spec 039). */
+  listedPrice?: number;
   applicantPays: number;
   feesIncluded: number;
   tax: number;
@@ -240,6 +244,36 @@ export interface SpaceSelection {
   placedBooth: { id: string; label: string; w: number; h: number } | null;
   /** A card saved before apply-then-choose, offered as "Pay with … ending 4242". */
   savedCard: { brand: string | null; last4: string | null } | null;
+  /** Fee settings to total a choice exactly like the order will (`estimateSpaceTotal`). */
+  pricing?: SpacePricing;
+}
+
+/** How an application order is priced: the form's fee mode and taxability, the event's tax. */
+export interface SpacePricing {
+  feeMode: 'PASS' | 'ABSORB';
+  taxable: boolean;
+  taxRate: number;
+  taxInclusive: boolean;
+}
+
+/**
+ * What the vendor pays for a space at `listed` (before fees and tax) plus the
+ * chosen extras, computed like the backend's `applicationAmounts`: one fee
+ * calculation over all lines. Summing per-line all-in prices instead counts
+ * Stripe's fixed fee once per line (spec 039 smoke test: $83.08 shown, $82.78 charged).
+ */
+export function estimateSpaceTotal(
+  listed: number,
+  extras: Array<{ price: number; taxable: boolean; quantity: number }>,
+  pricing: SpacePricing
+): number {
+  const items = [
+    { price: listed, quantity: 1, taxable: pricing.taxable },
+    ...extras.filter((e) => e.quantity > 0).map((e) => ({ price: e.price, quantity: e.quantity, taxable: e.taxable })),
+  ];
+  const fees = computeOrderFees(items, pricing.taxRate, pricing.taxInclusive);
+  if (pricing.feeMode === 'ABSORB') return roundCurrency(fees.subtotal + fees.tax);
+  return fees.total;
 }
 
 /** A floor-map booth as an application sees it (spec 014). */

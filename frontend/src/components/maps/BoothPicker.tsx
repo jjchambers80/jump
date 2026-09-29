@@ -36,6 +36,8 @@ interface BoothPickerProps {
   price?: number;
   /** Spec 039: all-in total of the chosen extras, added to the spot's price. */
   extrasTotal?: number;
+  /** The exact total for a spot with the chosen extras (one fee calculation); wins over `extrasTotal`. */
+  totalFor?: (booth: PublicMap['booths'][number]) => number;
   /** Spec 037 phase 5: whether choosing charges the saved card (the vendor picked it). Defaults to `hasCardOnFile`. */
   chargesSavedCard?: boolean;
 }
@@ -111,7 +113,7 @@ function HoldCountdown({ holdExpiresAt, onExpire }: { holdExpiresAt: string | nu
   );
 }
 
-export default function BoothPicker({ eventId, application, chooseBooth, payNow, refresh, price: priceOverride, extrasTotal = 0, chargesSavedCard }: BoothPickerProps) {
+export default function BoothPicker({ eventId, application, chooseBooth, payNow, refresh, price: priceOverride, extrasTotal = 0, totalFor, chargesSavedCard }: BoothPickerProps) {
   const reducedMotion = useReducedMotion();
   const [map, setMap] = useState<PublicMap | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
@@ -169,9 +171,13 @@ export default function BoothPicker({ eventId, application, chooseBooth, payNow,
   // A held booth is paid at its order's amount; before that, the spot's own
   // all-in price (spec 039) or the category's, plus the chosen extras.
   const price = formatPrice(
-    heldBooth || !activeBooth || typeof activeBooth.price !== 'number'
+    heldBooth || !activeBooth
       ? priceOverride ?? application.amounts.applicantPays
-      : Math.round((activeBooth.price + extrasTotal) * 100) / 100
+      : totalFor
+        ? totalFor(activeBooth)
+        : typeof activeBooth.price !== 'number'
+          ? priceOverride ?? application.amounts.applicantPays
+          : Math.round((activeBooth.price + extrasTotal) * 100) / 100
   );
   const savedCard = chargesSavedCard ?? Boolean(application.hasCardOnFile);
   const busy = phase.kind !== 'idle' && phase.kind !== 'paid';
