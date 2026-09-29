@@ -37,12 +37,18 @@ interface ApplyShellProps {
   title?: string;
   /** Small label over the title ("Application", "Get involved"). */
   kicker?: string;
-  /** `wide` makes room for the form's sticky summary column. */
-  width?: 'narrow' | 'wide';
+  /** `wide` makes room for the form's sticky summary column; `full` hands the page edge to edge to the children. */
+  width?: 'narrow' | 'wide' | 'full';
+  /**
+   * `compact`: one slim bar (back button, date tile, title, event, date and
+   * venue) instead of the tall hero, for pages whose content needs the screen
+   * (the spot chooser).
+   */
+  hero?: 'full' | 'compact';
   children: (event: ApplyEvent) => ReactNode;
 }
 
-export default function ApplyShell({ eventId, title, kicker = 'Get involved', width = 'narrow', children }: ApplyShellProps) {
+export default function ApplyShell({ eventId, title, kicker = 'Get involved', width = 'narrow', hero = 'full', children }: ApplyShellProps) {
   const [event, setEvent] = useState<ApplyEvent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lock, setLock] = useState<StorefrontLock | null>(null);
@@ -101,6 +107,7 @@ export default function ApplyShell({ eventId, title, kicker = 'Get involved', wi
   const tile = dateTile(event.date, zone);
   const poster = resolveAssetUrl(event.logoUrl);
   const container = width === 'wide' ? 'max-w-7xl' : 'max-w-3xl';
+  const when = `${formatEventDate(event.date, zone)} · ${formatEventTime(event.date, zone)}`;
   const place = event.venue ? [event.venue.city, event.venue.state].filter(Boolean).join(', ') : '';
 
   return (
@@ -111,6 +118,59 @@ export default function ApplyShell({ eventId, title, kicker = 'Get involved', wi
         />
       )}
 
+      {hero === 'compact' ? (
+        // Compact hero: everything the tall one says, on one bar. Mobile first:
+        // the title and event name stack beside the date tile and wrap into at
+        // most two lines each; the date and venue share a line and truncate
+        // (the full text stays in the DOM for screen readers and in `title`).
+        <div className="relative overflow-hidden bg-slate-900" data-testid="apply-hero" data-variant="compact">
+          {poster && (
+            <div
+              aria-hidden
+              className="absolute inset-0 bg-cover bg-center opacity-50"
+              style={{ backgroundImage: `url(${poster})`, filter: 'blur(32px) saturate(1.2)', transform: 'scale(1.2)' }}
+            />
+          )}
+          <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/75 to-black/55" />
+          <div aria-hidden className="absolute inset-x-0 bottom-0 h-0.5 bg-brand" />
+          <div className={`relative flex items-center gap-3 px-3 py-3 sm:gap-4 sm:px-6 ${width === 'full' ? '' : `mx-auto ${container} lg:px-8`}`}>
+            <Link
+              href={`/events/${event.id}`}
+              aria-label={`Back to ${event.name}`}
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white/10 text-white ring-1 ring-inset ring-white/20 transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white motion-reduce:transition-none"
+            >
+              <ArrowLeft className="h-5 w-5" aria-hidden />
+            </Link>
+            {tile && (
+              <div aria-hidden className="hidden w-11 shrink-0 flex-col items-center rounded-lg bg-white/10 py-1 text-white ring-1 ring-inset ring-white/20 min-[380px]:flex">
+                <span className="text-[9px] font-bold uppercase tracking-[0.16em] opacity-80">{tile.month}</span>
+                <span className="text-base font-extrabold leading-none tabular-nums">{tile.day}</span>
+              </div>
+            )}
+            <div className="min-w-0 flex-1 leading-snug">
+              <h1 className="text-base font-extrabold tracking-tight text-white sm:text-lg">
+                {title ?? `Get involved with ${event.name}`}
+                <span className="sr-only"> for {event.name}</span>
+              </h1>
+              <p aria-hidden className="line-clamp-1 text-[13px] font-semibold text-gray-200" title={event.name}>
+                {event.name}
+              </p>
+              {/* Date and venue share a line when there is room (sm+); on a phone each gets its own. */}
+              <p className="text-xs text-gray-300 sm:truncate" title={event.venue ? `${when} · ${event.venue.name}` : when}>
+                <span className="block truncate sm:inline">{when}</span>
+                {event.venue && (
+                  <>
+                    <span aria-hidden className="hidden sm:inline"> · </span>
+                    <span className="sr-only">, at </span>
+                    <span className="block truncate sm:inline">{event.venue.name}</span>
+                  </>
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : (
+      <>
       {/* Hero: the event this application belongs to */}
       <div className="relative overflow-hidden bg-slate-900" data-testid="apply-hero">
         {poster && (
@@ -184,7 +244,10 @@ export default function ApplyShell({ eventId, title, kicker = 'Get involved', wi
         </div>
       </div>
 
-      <main className={`mx-auto ${container} px-4 py-8 sm:px-6 lg:px-8 sm:py-10`}>{children(event)}</main>
+      </>
+      )}
+
+      {width === 'full' ? <main>{children(event)}</main> : <main className={`mx-auto ${container} px-4 py-8 sm:px-6 lg:px-8 sm:py-10`}>{children(event)}</main>}
     </BrandScope>
   );
 }
