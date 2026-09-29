@@ -101,9 +101,13 @@ class ApplicationTemplateService {
     const booth = await this._boothContext(application);
     const space = await this._spaceContext(application);
     // Spec 037 phase 5: the category's all-in price, what the vendor pays before add-ons.
+    // Spec 039: a booth the vendor owns or was placed on is priced on its own.
+    const placed = application.id && application.tier ? await boothService.boothForApplication(application.id).catch(() => null) : null;
     const tierPrice =
       application.tier && application.form?.kind === 'PAID'
-        ? orderLineService.applicationOrderData(application.tier, application.form, [], [], application.event || {}, organization).amounts.applicantPays
+        ? orderLineService.applicationOrderData(application.tier, application.form, [], [], application.event || {}, organization, {
+            booth: placed && placed.status !== 'HELD' ? placed : null,
+          }).amounts.applicantPays
         : null;
     return {
       applicant: {

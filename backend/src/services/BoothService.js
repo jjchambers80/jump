@@ -115,7 +115,8 @@ class BoothService {
       },
     });
     logger.info('Booth held for purchase', { event: 'booth_held', boothId, applicationId, holdExpiresAt: expires });
-    return { boothId, label: booth.label, holdExpiresAt: expires, status: 'HELD' };
+    // Spec 039: the price read under the row lock is the one the order charges.
+    return { boothId, label: booth.label, price: booth.price ?? null, holdExpiresAt: expires, status: 'HELD' };
   }
 
   /** Guard a map-bound settlement and protect its booth while payment is in flight. */
@@ -222,7 +223,7 @@ class BoothService {
   async boothForApplication(applicationId, { tx = prisma } = {}) {
     return tx.booth.findFirst({
       where: { OR: [{ applicationId }, { holdApplicationId: applicationId }] },
-      select: { id: true, mapId: true, label: true, status: true, w: true, h: true, holdExpiresAt: true, applicationId: true, holdApplicationId: true },
+      select: { id: true, mapId: true, label: true, status: true, w: true, h: true, price: true, holdExpiresAt: true, applicationId: true, holdApplicationId: true },
     });
   }
 

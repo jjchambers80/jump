@@ -19,6 +19,7 @@
     "db:backfill:024": "node src/scripts/backfill-application-orders.js",
     "db:backfill:event-descriptions": "node src/scripts/backfill-event-descriptions.js",
     "db:backfill:037-applications": "node src/scripts/backfill-037-applications.js",
+    "db:backfill:039-space-selection": "node src/scripts/backfill-039-space-selection.js",
     "db:backfill:033": "node src/scripts/backfill-venue-time-zones.js",
     "report:033": "node src/scripts/reconcile-venue-time-zones.js",
     "lint": "eslint src tests --ext .js",
