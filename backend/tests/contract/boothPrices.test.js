@@ -77,7 +77,7 @@ describe('Per-booth prices (spec 039)', () => {
     // ABSORB with no tax: the all-in price is the listed price, so the
     // assertions read as plain dollars.
     form = await prisma.applicationForm.create({
-      data: { eventId: event.id, kind: 'PAID', name: 'Vendors', slug: `${TAG}-vendors`, feeMode: 'ABSORB' },
+      data: { eventId: event.id, kind: 'PAID', name: 'Vendors', slug: `${TAG}-vendors`, feeMode: 'ABSORB', spaceSelection: 'MAP' },
     });
     tier = await prisma.applicationTier.create({ data: { formId: form.id, name: 'Booth', price: 200, quantityTotal: 2, quantityReserved: 2 } });
     map = await prisma.floorMap.create({

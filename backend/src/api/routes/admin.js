@@ -689,7 +689,7 @@ router.patch('/events/:eventId/applications/:applicationId', validateMetaBody, w
   res.json(await applicationService.updateMeta(req.params.eventId, req.params.applicationId, await scopedOrgFor(req), req.body, { byUserId: req.user.id }));
 }));
 router.post('/events/:eventId/applications/:applicationId/preview', wrap(async (req, res) => {
-  res.json(await applicationService.previewMessage(req.params.eventId, req.params.applicationId, await scopedOrgFor(req), req.body?.decision, { tierId: typeof req.body?.tierId === 'string' ? req.body.tierId : null }));
+  res.json(await applicationService.previewMessage(req.params.eventId, req.params.applicationId, await scopedOrgFor(req), req.body?.decision, { tierId: req.body?.tierId === null || typeof req.body?.tierId === 'string' ? req.body.tierId : undefined }));
 }));
 router.post('/events/:eventId/applications/:applicationId/decision', validateDecisionBody, wrap(async (req, res) => {
   res.json(await applicationService.decide(req.params.eventId, req.params.applicationId, await scopedOrgFor(req), { ...req.body, byUserId: req.user.id }));

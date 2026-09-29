@@ -159,6 +159,7 @@ const DETAIL_INCLUDE = {
       paymentDueDays: true,
       overduePolicy: true,
       reserveOnApproval: true,
+      spaceSelection: true, // spec 039
       // Spec 037 phase 5: the categories the organizer can assign on approval.
       tiers: {
         orderBy: { displayOrder: 'asc' },
@@ -672,10 +673,13 @@ class ApplicationService {
    * @param {{ boothId?: string|null, addOns?: Array<{ addOnId: string, quantity: number }>, useSavedCard?: boolean }} input
    * @returns {Promise<{ boothId: string|null, holdExpiresAt: Date, status: string, paymentStatus: string, orderRef: string|null }>}
    */
-  async select(applicationId, { boothId = null, addOns = [], useSavedCard = false } = {}) {
+  async select(applicationId, { boothId = null, tierId = null, addOns = [], useSavedCard = false } = {}) {
     if (!paymentsEnabled()) throw new ConflictError('Paid applications are not available yet');
     if (boothId !== null && boothId !== undefined && (typeof boothId !== 'string' || !boothId)) {
       throw new ValidationError('boothId must be an id');
+    }
+    if (tierId !== null && tierId !== undefined && (typeof tierId !== 'string' || !tierId)) {
+      throw new ValidationError('tierId must be an id');
     }
     if (addOns !== undefined && addOns !== null && !Array.isArray(addOns)) {
       throw new ValidationError('addOns must be an array of { addOnId, quantity }');
@@ -696,19 +700,44 @@ class ApplicationService {
       if (application.paymentStatus !== 'AWAITING_SELECTION') {
         throw coded(new ConflictError('This application is not choosing a space; refresh the page'), 'NOT_AWAITING_SELECTION');
       }
-      if (!application.tierId || !application.tier) {
-        throw coded(new ConflictError('The organizer has not assigned a category yet'), 'NO_TIER');
-      }
-      const tier = application.tier;
-
       // A booth placed by staff is the space: the vendor pays for it (its own
       // price when set, spec 039 D10) and cannot pick another.
       const placed = await tx.booth.findFirst({ where: { applicationId }, select: { id: true, label: true, price: true } });
       if (boothId && placed) throw coded(new ConflictError('The organizer has already placed you; pay for your category instead'), 'ALREADY_HAS_BOOTH');
 
-      // Category slot (spec 037 D5).
+      // Spec 039: what the form lets the vendor choose.
+      //   MAP   — a spot of their category on the floor map (D2, D7); no
+      //           category-only purchase unless staff already placed them.
+      //   TIERS — no map; one of the form's tiers, or the one the organizer
+      //           locked at approval (D4, D6).
+      const mode = application.form.spaceSelection === 'MAP' ? 'MAP' : 'TIERS';
+      if (mode === 'MAP' && !boothId && !placed) {
+        throw coded(new ValidationError('Choose your spot on the floor map'), 'BOOTH_REQUIRED');
+      }
+      if (mode === 'TIERS' && boothId) {
+        throw coded(new ValidationError('This form sells spaces by tier; the organizer places you on the floor'), 'BOOTH_NOT_OFFERED');
+      }
+      let tier = application.tier;
+      let vendorPicked = false;
+      if (!application.tierId || !tier) {
+        if (mode === 'MAP') throw coded(new ConflictError('The organizer has not assigned a category yet'), 'NO_TIER');
+        if (!tierId) throw coded(new ValidationError('Choose a tier'), 'TIER_REQUIRED');
+        tier = application.form.tiers.find((t) => t.id === tierId && t.isActive) ?? null;
+        if (!tier) throw coded(new ValidationError('That tier is not offered on this form'), 'TIER_NOT_OFFERED');
+        vendorPicked = true;
+      } else if (tierId && tierId !== application.tierId) {
+        throw coded(new ConflictError(`The organizer approved you as ${tier.name}`), 'TIER_LOCKED');
+      }
+
+      // Category slot (spec 037 D5). A vendor-picked tier always takes its
+      // slot here: the approval took none (spec 039 D6).
       if (application.capacitySlot === 'NONE') {
         await this._takeTierSlot(tx, tier, 'RESERVED');
+      }
+      if (vendorPicked) {
+        await tx.application.update({ where: { id: applicationId }, data: { tierId: tier.id, tierChosenByVendor: true } });
+        application.tierId = tier.id;
+        application.tier = tier;
       }
 
       let held = null;
@@ -814,39 +843,40 @@ class ApplicationService {
   /**
    * Choose-your-space data for the applicant view (spec 037 phase 5), or null
    * when the application is not choosing / paying for a space. Prices are the
-   * applicant's all-in figures under the form's fee mode; `remaining` counts
+   * applicant's all-in figures under the form's fee mode; `spacesLeft` counts
    * the vendor's own approval slot as theirs.
+   *
+   * Spec 039: `mode` is the form's `spaceSelection`.
+   *   TIERS — `category` is the locked (or vendor-picked) tier; with none yet,
+   *           `categories` lists every active tier to pick from. No map.
+   *   MAP   — `category` is the approved category and `map` its spots on the
+   *           published floor map with their all-in price range; `map.pending`
+   *           while the map is not published (the vendor waits).
    */
   async _selectionView(a) {
-    if (a.form?.kind !== 'PAID' || a.status !== 'APPROVED' || !a.tier) return null;
+    if (a.form?.kind !== 'PAID' || a.status !== 'APPROVED') return null;
     const choosing = a.paymentStatus === 'AWAITING_SELECTION';
     const holding = Boolean(a.selectionHeldUntil) && ['PAYMENT_DUE', 'PROCESSING'].includes(a.paymentStatus);
     if (!choosing && !holding) return null;
+    const mode = a.form.spaceSelection === 'MAP' ? 'MAP' : 'TIERS';
+    if (!a.tier && (mode === 'MAP' || !choosing)) return null;
     const event = a.event;
     const organization = event.venue.organization;
-    const tier = a.tier;
-    const amounts = orderLineService.applicationOrderData(tier, a.form, [], [], event, organization).amounts;
     const [addOnRows, map, placed] = await Promise.all([
       applicationFormService._addOnsForEvent(a.eventId, { activeOnly: true }),
       prisma.floorMap.findUnique({ where: { eventId: a.eventId }, select: { id: true, status: true } }),
-      prisma.booth.findFirst({ where: { applicationId: a.id }, select: { id: true, label: true, w: true, h: true, status: true } }),
+      prisma.booth.findFirst({ where: { applicationId: a.id }, select: { id: true, label: true, w: true, h: true, status: true, price: true } }),
     ]);
-    const attached = await prisma.applicationTierAddOn.findMany({ where: { applicationTierId: tier.id }, select: { addOnId: true } });
-    const offered = applicationFormService._offeredOnTier({ addOns: attached }, addOnRows);
-    const mapBooths = map?.status === 'PUBLISHED'
-      ? await prisma.booth.groupBy({ by: ['status'], where: { mapId: map.id, tierId: tier.id }, _count: { _all: true } })
-      : [];
-    const onMap = mapBooths.length > 0;
-    const available = mapBooths.find((g) => g.status === 'AVAILABLE')?._count._all ?? 0;
-    const free = Math.max(0, tier.quantityTotal - tier.quantityApproved - tier.quantityReserved);
+    const tiers = a.tier ? [a.tier] : (a.form.tiers || []).filter((t) => t.isActive);
+    const attached = await prisma.applicationTierAddOn.findMany({ where: { applicationTierId: { in: tiers.map((t) => t.id) } }, select: { addOnId: true, applicationTierId: true } });
     const ownSlot = a.capacitySlot === 'RESERVED' || a.capacitySlot === 'APPROVED';
-    const card = a.stripePaymentMethodId ? await applicationPaymentService.savedCardSummary(a.stripePaymentMethodId) : null;
-    return {
-      state: holding ? 'HELD' : 'CHOOSE',
-      heldUntil: holding ? a.selectionHeldUntil : null,
-      dueAt: selectionDueAt(a),
-      reserveOnApproval: a.form.reserveOnApproval !== false,
-      category: {
+    const describe = (tier) => {
+      // A booth staff placed the vendor on is priced on its own (spec 039 D10).
+      const amounts = orderLineService.applicationOrderData(tier, a.form, [], [], event, organization, { booth: a.tier ? placed : null }).amounts;
+      const free = Math.max(0, tier.quantityTotal - tier.quantityApproved - tier.quantityReserved);
+      const mine = ownSlot && tier.id === a.tierId;
+      const offered = applicationFormService._offeredOnTier({ addOns: attached.filter((row) => row.applicationTierId === tier.id) }, addOnRows);
+      return {
         id: tier.id,
         name: tier.name,
         description: tier.description ?? null,
@@ -855,13 +885,55 @@ class ApplicationService {
         feesIncluded: amounts.feeMode === 'PASS' ? Math.round((amounts.applicantPays - amounts.subtotal - amounts.tax) * 100) / 100 : 0,
         tax: amounts.tax,
         // Spaces the vendor can still take: their own approval slot counts.
-        spacesLeft: ownSlot ? Math.max(1, free) : free,
-        guaranteed: ownSlot,
-      },
-      addOns: offered.map((addOn) => applicationFormService._serializePublicAddOn(addOn, a.form, event, organization)),
-      map: onMap && !placed ? { available: true, mapId: map.id, boothsAvailable: available } : { available: false, mapId: null, boothsAvailable: 0 },
+        spacesLeft: mine ? Math.max(1, free) : free,
+        guaranteed: mine,
+        addOns: offered.map((addOn) => applicationFormService._serializePublicAddOn(addOn, a.form, event, organization)),
+      };
+    };
+    const card = a.stripePaymentMethodId ? await applicationPaymentService.savedCardSummary(a.stripePaymentMethodId) : null;
+    const base = {
+      mode,
+      state: holding ? 'HELD' : 'CHOOSE',
+      heldUntil: holding ? a.selectionHeldUntil : null,
+      dueAt: selectionDueAt(a),
+      reserveOnApproval: a.form.reserveOnApproval !== false,
       placedBooth: placed ? { id: placed.id, label: placed.label, w: placed.w, h: placed.h } : null,
       savedCard: card,
+    };
+    const noMap = { available: false, pending: false, mapId: null, boothsAvailable: 0, priceFrom: null, priceTo: null };
+
+    if (!a.tier) {
+      // TIERS, approved without a category: the vendor picks one.
+      return { ...base, tierLocked: false, category: null, categories: tiers.map(describe), addOns: [], map: noMap };
+    }
+    const category = describe(a.tier);
+    let mapView = noMap;
+    if (mode === 'MAP' && !placed) {
+      if (map?.status !== 'PUBLISHED') {
+        mapView = { ...noMap, pending: true };
+      } else {
+        const booths = await prisma.booth.findMany({ where: { mapId: map.id, tierId: a.tier.id }, select: { status: true, price: true } });
+        const allIn = (b) => orderLineService.applicationOrderData(a.tier, a.form, [], [], event, organization, { booth: b }).amounts.applicantPays;
+        const prices = booths.map(allIn);
+        mapView = {
+          available: booths.length > 0,
+          pending: false,
+          mapId: map.id,
+          boothsAvailable: booths.filter((b) => b.status === 'AVAILABLE').length,
+          priceFrom: prices.length ? Math.min(...prices) : null,
+          priceTo: prices.length ? Math.max(...prices) : null,
+        };
+      }
+    }
+    const { addOns, ...categoryOut } = category;
+    return {
+      ...base,
+      // Locked by the organizer; a vendor-picked tier is theirs until released.
+      tierLocked: a.tierChosenByVendor !== true,
+      category: categoryOut,
+      categories: null,
+      addOns,
+      map: mapView,
     };
   }
 
@@ -1093,9 +1165,10 @@ class ApplicationService {
   /**
    * The email a decision would send. Approving a PAID application (spec 037
    * phase 5) previews CHOOSE_SPACE with the category it would be assigned
-   * (`tierId`, else the only active one, else the current one).
+   * (`tierId`, else the only active one, else the current one). Spec 039: an
+   * explicit `tierId: null` on a TIERS form previews "the vendor chooses".
    */
-  async previewMessage(eventId, applicationId, organizationId, decision, { tierId = null } = {}) {
+  async previewMessage(eventId, applicationId, organizationId, decision, { tierId = undefined } = {}) {
     await applicationFormService.requireEvent(eventId, organizationId);
     const spec = DECISIONS[decision];
     if (!spec) throw new ValidationError('decision must be APPROVE, REJECT, WAITLIST or WITHDRAW');
@@ -1103,7 +1176,8 @@ class ApplicationService {
     if (!application) throw new NotFoundError('Application not found');
     if (spec.to === 'APPROVED' && application.form.kind === 'PAID') {
       const tiers = application.form.tiers.filter((t) => t.isActive);
-      const tier =
+      const vendorChooses = tierId === null && application.form.spaceSelection !== 'MAP';
+      const tier = vendorChooses ? null :
         (tierId && application.form.tiers.find((t) => t.id === tierId)) ||
         (tiers.length === 1 ? tiers[0] : null) ||
         application.tier ||
@@ -1132,6 +1206,18 @@ class ApplicationService {
     if (active.length === 1) return active[0];
     if (active.length === 0) throw new ConflictError('This form has no active category to approve into');
     throw coded(new ValidationError('Choose a category for this vendor'), 'CATEGORY_REQUIRED');
+  }
+
+  /**
+   * Spec 039 D2 / D9: a MAP form approves into a category only while the
+   * event's published map has spots in it — otherwise the vendor would be
+   * asked to choose from nothing.
+   */
+  async _assertSpotsInCategory(tx, eventId, tier) {
+    const spots = await tx.booth.count({ where: { tierId: tier.id, map: { eventId, status: 'PUBLISHED' } } });
+    if (spots === 0) {
+      throw coded(new ConflictError(`${tier.name} has no spots on the published floor map`), 'NO_SPOTS_IN_CATEGORY');
+    }
   }
 
   /**
@@ -1164,7 +1250,7 @@ class ApplicationService {
       if (application.paymentStatus === 'PROCESSING') throw new ConflictError('A payment is in progress for this application; try again in a moment');
       const form = await tx.applicationForm.findUnique({
         where: { id: application.formId },
-        select: { kind: true, reserveOnApproval: true, tiers: { orderBy: { displayOrder: 'asc' } } },
+        select: { kind: true, eventId: true, reserveOnApproval: true, spaceSelection: true, tiers: { orderBy: { displayOrder: 'asc' } } },
       });
 
       const data = { status: spec.to, decidedAt: new Date(), decidedById: input.byUserId };
@@ -1178,19 +1264,28 @@ class ApplicationService {
       let action = spec.action;
       if (spec.to === 'APPROVED' && form.kind === 'PAID') {
         if (!paymentsEnabled()) throw new ConflictError('Application payments are not enabled');
-        const tier = this._resolveCategory(form, application, input.tierId);
+        // Spec 039 D6: on a TIERS form an explicit `tierId: null` approves
+        // without a category — the vendor picks one when choosing, and no
+        // slot is taken until then. A MAP form always locks the category (D2).
+        const vendorChooses = input.tierId === null && form.spaceSelection !== 'MAP';
+        if (input.tierId === null && !vendorChooses) {
+          throw coded(new ValidationError('Choose the category whose spots this vendor may pick'), 'CATEGORY_REQUIRED');
+        }
+        const tier = vendorChooses ? null : this._resolveCategory(form, application, input.tierId);
+        if (tier && form.spaceSelection === 'MAP') await this._assertSpotsInCategory(tx, form.eventId, tier);
         // A slot held for an earlier category (a migrated row) moves with it.
-        if (application.capacitySlot !== 'NONE' && application.tierId && application.tierId !== tier.id) {
+        if (application.capacitySlot !== 'NONE' && application.tierId && application.tierId !== tier?.id) {
           await this._releaseCapacity(tx, application);
           application.capacitySlot = 'NONE';
         }
         let capacitySlot = application.capacitySlot;
-        if (form.reserveOnApproval !== false && capacitySlot === 'NONE') {
+        if (tier && form.reserveOnApproval !== false && capacitySlot === 'NONE') {
           await this._takeTierSlot(tx, tier, 'RESERVED', { onFull: 'WAITLIST' });
           capacitySlot = 'RESERVED';
         }
         Object.assign(data, {
-          tierId: tier.id,
+          tierId: tier?.id ?? null,
+          tierChosenByVendor: false,
           capacitySlot,
           paymentStatus: 'AWAITING_SELECTION',
           selectionHeldUntil: null,
@@ -1439,10 +1534,20 @@ class ApplicationService {
           await tx.$executeRaw`UPDATE "ApplicationTier" SET "quantityReserved" = GREATEST("quantityReserved" - 1, 0) WHERE "id" = ${application.tierId}`;
           await this._takeTierSlot(tx, newTier, 'RESERVED', { onFull: 'WAITLIST' });
         }
+        // Spec 039 D6: the organizer locking a tier on a vendor who was left
+        // to choose takes the slot a reserving approval would have taken.
+        let capacitySlot = application.capacitySlot;
+        if (
+          !application.tierId && application.status === 'APPROVED' && application.paymentStatus === 'AWAITING_SELECTION' &&
+          capacitySlot === 'NONE' && application.form.reserveOnApproval !== false
+        ) {
+          await this._takeTierSlot(tx, newTier, 'RESERVED', { onFull: 'WAITLIST' });
+          capacitySlot = 'RESERVED';
+        }
         const noteText = `Category: ${application.tier?.name ?? 'none'} → ${newTier.name}.`;
         const row = await tx.application.update({
           where: { id: applicationId },
-          data: { tierId: newTier.id, decisions: { create: { action: 'TIER_CHANGED', byUserId, note: noteText } } },
+          data: { tierId: newTier.id, tierChosenByVendor: false, capacitySlot, decisions: { create: { action: 'TIER_CHANGED', byUserId, note: noteText } } },
           include: DETAIL_INCLUDE,
         });
         return { updated: row, note: noteText, sessionId: null, orderless: true };

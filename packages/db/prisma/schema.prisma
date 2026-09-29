@@ -1623,6 +1623,9 @@ model Application {
   // (spec 024), written in the same transaction through orderStatusFor().
   paymentStatus  ApplicationPayment @default(NOT_REQUIRED)
   capacitySlot   CapacitySlot       @default(NONE)
+  // Spec 039 D6: the vendor picked `tierId` at selection (TIERS form, approved
+  // without a category). A release gives it back; an organizer's pick locks it.
+  tierChosenByVendor Boolean @default(false)
 
   // Money lives on `order` (spec 024): amount snapshot as order lines,
   // PaymentTransaction, Refund. PAID forms only; FREE forms have no order.
