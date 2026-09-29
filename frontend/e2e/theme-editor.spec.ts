@@ -206,6 +206,29 @@ test.describe('theme editor (038D)', () => {
     await expect(page).toHaveURL(/\/editor$/);
   });
 
+  test('an admin in dark mode gets a light editor with readable text, and dark mode back on exit', async ({ page }) => {
+    await mockThemeEditorApi(page);
+    await page.addInitScript(() => window.localStorage.setItem('theme', 'dark'));
+    await page.goto('/admin/online-store');
+    await expect(page.locator('html')).toHaveClass(/\bdark\b/);
+    await openEditor(page);
+    await expect(page.locator('html')).not.toHaveClass(/\bdark\b/);
+    const color = await outline(page).getByRole('button', { name: 'Upcoming events', exact: true }).evaluate((el) => getComputedStyle(el).color);
+    // gray-900 text, not the dark theme's near-white foreground.
+    expect(color).toBe('rgb(17, 24, 39)');
+    await page.getByRole('link', { name: 'Exit' }).click();
+    await expect(page).toHaveURL(/\/admin\/online-store$/);
+    await expect(page.locator('html')).toHaveClass(/\bdark\b/);
+    expect(await page.evaluate(() => window.localStorage.getItem('theme'))).toBe('dark');
+  });
+
+  test('fields show the storefront default when a document leaves a value unset', async ({ page }) => {
+    await mockThemeEditorApi(page);
+    await openEditor(page);
+    await outline(page).getByRole('button', { name: 'Hero', exact: true }).click();
+    await expect(page.getByRole('spinbutton', { name: 'Overlay opacity (%)' })).toHaveAttribute('placeholder', 'Default: 40');
+  });
+
   test('our editor chrome passes axe (test 11)', async ({ page }) => {
     await mockThemeEditorApi(page);
     await openEditor(page);

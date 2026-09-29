@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { getPreset } from '@jump/theme';
 import ActionsMenu from '@/components/ActionsMenu';
+import { useThemeMode } from '@/components/ThemeProvider';
 import { useMenusApi } from '@/app/admin/content/menus/useMenusApi';
 import type { StoreFile } from '@/lib/content';
 import { themesApi, type ThemeDetail, type ThemeDocumentData } from '@/lib/themes';
@@ -99,6 +100,15 @@ const sectionsPlugin: Plugin = {
 
 export default function ThemeEditor({ themeId }: { themeId: string }) {
   const menusApi = useMenusApi();
+  // Puck's panels are light-only: an admin in dark mode got near-white text
+  // on white panels. Force light while the editor is open and hand the
+  // visitor's own choice back on exit (gotcha 7: setForced, never setTheme).
+  // The canvas keeps the organization's mode through its own wrapper.
+  const { setForced } = useThemeMode();
+  useEffect(() => {
+    setForced('light');
+    return () => setForced(null);
+  }, [setForced]);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [docs, setDocs] = useState<Docs | null>(null);
@@ -295,7 +305,7 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
 
   return (
     <EditorServicesContext.Provider value={services}>
-      <div className="flex h-screen flex-col">
+      <div className="flex h-screen flex-col bg-white text-gray-900">
         {(liveNote || backup || saveError || status) && (
           <div className="space-y-1 border-b border-gray-200 bg-white px-4 py-2 text-sm">
             {liveNote && (
