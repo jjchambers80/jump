@@ -3,7 +3,6 @@
 // server), 12 (no theme-mode flash) and 17 (rollback to the legacy renderer).
 
 import { expect as baseExpect, test, type Page } from '@playwright/test';
-// @ts-expect-error plain ESM fixture module
 import { PARITY_COVER, parityMenus, parityPublic } from './fixtures/storefront.mjs';
 
 // Server-rendered routes compile on first hit under `next dev`; give the
