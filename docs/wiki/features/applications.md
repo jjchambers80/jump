@@ -24,7 +24,7 @@ Derived from the 2026-09-15 Eventeny organizer interview (`docs/research/`).
 | `backend/src/services/ApplicationPaymentService.js` | Stripe: customer per contact, setup / payment / update-card Checkout sessions, off-session charge at approval (Connect routing via `checkoutOptionsFor`), webhook handlers, refunds, overdue sweep |
 | `backend/src/services/applicationSelection.js`, `applicationOrderStatus.js` (`hasLiveOrder`) | Spec 037 phase 5: the approval payment clock (`selectionDueAt`) and the live-order rule every money read uses |
 | `backend/src/scripts/backfill-037-applications.js` (`npm run db:backfill:037-applications`) | Spec 037 phase 5 (D6): moves in-flight PAID applications onto apply-then-choose; dry run unless `DRY_RUN=false` |
-| `frontend/src/components/applications/ChooseSpace.tsx` | Spec 037 phase 5: choose your space (extras, how to pay, List \| Map, held state) on the status page and in the buyer account |
+| `frontend/src/components/applications/ChooseSpace.tsx` | Spec 037 phase 5: choose your space (TIERS category or tier pick, MAP spot via `SpotWorkspace`, extras, how to pay, held state) on the status page and in the buyer account |
 | `backend/src/services/applicationLinks.js` | Derived guest status token (HMAC of the id under `AUTH_SECRET`) + `statusUrlFor` |
 | `backend/src/services/ApplicationDigestService.js` | Organizer daily digest: once-a-day window per organization (`Organization.applicationDigestAt`), members emailed through `sendApplicationMessage`; settings `GET/PATCH /admin/settings/application-digest` |
 | `backend/src/services/EventService.js` `duplicateEvent` + `ApplicationFormService.copyForms` | `POST /organizations/:orgId/events/:eventId/duplicate` — DRAFT copy with tiers and forms |
