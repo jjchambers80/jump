@@ -5,6 +5,7 @@
 // (phase 3) Checked in / out ticks on APPROVED rows.
 
 import Link from 'next/link';
+import { resolveAssetUrl } from '@/lib/assets';
 import { shortId, type ApplicationRow } from '@/lib/applications';
 
 interface BusinessCellProps {
@@ -22,7 +23,7 @@ export default function BusinessCell({ row, eventId, onCheck, checkBusy = false 
     <div className="flex items-start gap-3">
       {row.logoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={row.logoUrl} alt="" className="h-10 w-10 flex-none rounded-md object-cover" />
+        <img src={resolveAssetUrl(row.logoUrl) ?? undefined} alt="" className="h-10 w-10 flex-none rounded-md object-cover" />
       ) : (
         <span aria-hidden="true" className="flex h-10 w-10 flex-none items-center justify-center rounded-md bg-gray-100 text-sm font-semibold text-gray-600 dark:bg-slate-700 dark:text-slate-300">
           {initial}
