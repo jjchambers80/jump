@@ -6,11 +6,17 @@
 // the email. Spec 037 phase 5: approving a PAID application assigns its
 // category (required when the form has several) and charges nothing — the
 // vendor is emailed to choose their space and pay (CHOOSE_SPACE template).
+// Spec 039: on a TIERS form the organizer may instead let the vendor choose
+// the tier (sent as `tierId: null`; nothing is reserved until they pay); a
+// MAP form always names the category whose spots the vendor may pick.
 
 import { FormEvent, RefObject, useEffect, useRef, useState } from 'react';
 import SettingsDialog from '@/app/admin/settings/SettingsDialog';
 import { errorClass, fieldClass, formAlertClass, hintClass, labelClass } from '@/app/admin/settings/formShared';
 import { DECISION_LABEL, money, type AdminApplication, type Decision } from '@/lib/applications';
+
+/** Select value for "Let the vendor choose" (spec 039 D6). */
+const VENDOR_CHOOSES = '__vendor';
 import { describeError, useApplicationsApi } from './useApplicationsApi';
 
 interface DecisionDialogProps {
@@ -43,10 +49,15 @@ export default function DecisionDialog({ eventId, application, decision, returnF
   // one active category, or the one already on the application.
   const categories = (application.categories ?? []).filter((c) => c.isActive);
   const assignsCategory = decision === 'APPROVE' && application.form.kind === 'PAID';
+  const spotMode = application.form.spaceSelection === 'MAP';
   const [tierId, setTierId] = useState<string>(() => {
     if (application.tier && categories.some((c) => c.id === application.tier?.id)) return application.tier.id;
+    if (!spotMode) return VENDOR_CHOOSES;
     return categories.length === 1 ? categories[0].id : '';
   });
+  const vendorChooses = assignsCategory && tierId === VENDOR_CHOOSES;
+  // What the API gets: an id, or null for "the vendor chooses".
+  const tierIdToSend = vendorChooses ? null : tierId;
   const reserves = application.form.reserveOnApproval !== false;
   const chosen = categories.find((c) => c.id === tierId) ?? null;
   const full = assignsCategory && reserves && chosen !== null && chosen.remaining <= 0 && application.capacitySlot === 'NONE';
@@ -54,13 +65,15 @@ export default function DecisionDialog({ eventId, application, decision, returnF
   useEffect(() => {
     if (assignsCategory && !tierId) return;
     api
-      .preview(application.id, decision, assignsCategory ? tierId : undefined)
+      .preview(application.id, decision, assignsCategory ? tierIdToSend : undefined)
       .then((t) => {
         setTemplate(t);
         setSubject(t.subject);
         setBody(t.body);
       })
       .catch((err) => setError(describeError(err, 'Could not load the email template')));
+    // tierIdToSend follows tierId.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, application.id, decision, assignsCategory, tierId]);
 
   const edited = template !== null && (subject !== template.subject || body !== template.body);
@@ -82,15 +95,21 @@ export default function DecisionDialog({ eventId, application, decision, returnF
     try {
       const next = await api.decide(application.id, {
         decision,
-        ...(assignsCategory && { tierId }),
+        ...(assignsCategory && { tierId: tierIdToSend }),
         note: note.trim() || undefined,
         sendEmail,
         message: sendEmail && edited ? { subject: subject.trim(), body: body.trim() } : null,
       });
       onDecided(next);
     } catch (err) {
-      const e = err as { message?: string; details?: { suggestion?: string } };
-      setError(e.details?.suggestion === 'WAITLIST' ? `${e.message} Use Waitlist instead.` : describeError(err, 'Could not save the decision'));
+      const e = err as { code?: string; message?: string; details?: { suggestion?: string } };
+      setError(
+        e.details?.suggestion === 'WAITLIST'
+          ? `${e.message} Use Waitlist instead.`
+          : e.code === 'NO_SPOTS_IN_CATEGORY'
+            ? `${e.message}. Add spots for it on the floor map, publish the map, or pick another category.`
+            : describeError(err, 'Could not save the decision')
+      );
       setSaving(false);
     }
   };
@@ -123,20 +142,27 @@ export default function DecisionDialog({ eventId, application, decision, returnF
         {assignsCategory && (
           <div data-testid="decision-category">
             <label htmlFor="decision-category" className={labelClass}>
-              Category
+              {spotMode ? 'Category (the spots this vendor may pick)' : 'Space type'}
             </label>
             <select id="decision-category" value={tierId} onChange={(e) => setTierId(e.target.value)} className={fieldClass} required>
-              {categories.length !== 1 && <option value="">Choose a category…</option>}
+              {spotMode && categories.length !== 1 && <option value="">Choose a category…</option>}
+              {!spotMode && <option value={VENDOR_CHOOSES}>Let the vendor choose</option>}
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name} · {money(c.price)} · {c.remaining} left
                 </option>
               ))}
             </select>
-            <p className={hintClass}>
-              {reserves
-                ? 'Approving reserves a space in this category. Nothing is charged: the vendor chooses their exact space and pays.'
-                : 'Approving reserves nothing (first come, first served). Nothing is charged: the vendor chooses a space and pays.'}
+            <p className={hintClass} data-testid="decision-category-hint">
+              {vendorChooses
+                ? 'The vendor picks from your active tiers and pays. Nothing is reserved until they pay, so a tier can sell out first.'
+                : spotMode
+                  ? reserves
+                    ? 'Approving reserves a space in this category. Nothing is charged: the vendor picks a spot of this category on the floor map and pays.'
+                    : 'Approving reserves nothing (first come, first served). Nothing is charged: the vendor picks a spot of this category on the floor map and pays.'
+                  : reserves
+                    ? 'Approving reserves a space in this tier. Nothing is charged: the vendor pays, and you place them on the floor.'
+                    : 'Approving reserves nothing (first come, first served). Nothing is charged: the vendor pays, and you place them on the floor.'}
             </p>
             {full && (
               <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300" data-testid="decision-category-full">

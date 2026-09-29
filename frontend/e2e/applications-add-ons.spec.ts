@@ -151,6 +151,14 @@ async function mockAdmin(page: Page, baseURL: string, role: 'ADMIN' | 'ORGANIZER
     }
     if (path === `/admin/events/${EVENT_ID}/application-forms` && method === 'GET') return route.fulfill(json({ data: [state.form] }));
     if (path === `/admin/events/${EVENT_ID}/application-forms/${FORM_ID}` && method === 'GET') return route.fulfill(json(state.form));
+    if (path === `/admin/events/${EVENT_ID}/application-forms/${FORM_ID}` && method === 'PATCH') {
+      // Spec 039 D9: an open form cannot sell spots before the map is ready.
+      if (body.spaceSelection === 'MAP') {
+        return route.fulfill(json({ error: 'ValidationError', code: 'MAP_NOT_READY', message: 'Add spots on the floor map for: Corner', details: { tiers: [{ id: cornerTier.id, name: 'Corner' }] } }, 400));
+      }
+      state.form = { ...state.form, ...body };
+      return route.fulfill(json(state.form));
+    }
     if (path === `/admin/events/${EVENT_ID}/application-forms/${FORM_ID}/tiers/${cornerTier.id}` && method === 'PATCH') return route.fulfill(json(state.form.tiers[1]));
     if (path === `/admin/events/${EVENT_ID}/application-forms/${FORM_ID}/tiers/${cornerTier.id}/add-ons` && method === 'PUT') {
       const attached = state.form.addOns.filter((a) => !a.allTiers && body.addOnIds.includes(a.id));
@@ -401,4 +409,24 @@ test('form editor: tier rows show offered add-ons; ADMIN attaches a restricted o
   const put = calls.find((c) => c.method === 'PUT' && c.path.endsWith(`/tiers/${cornerTier.id}/add-ons`));
   expect(put?.body).toEqual({ addOnIds: [BADGE.id] });
   await expect(page.getByTestId(`tier-add-ons-summary-${cornerTier.id}`)).toContainText('Extra vendor badge');
+});
+
+test('form editor: how vendors choose their space (spec 039); an open form cannot switch to the map before it is ready', async ({ page, baseURL }) => {
+  const { calls } = await mockAdmin(page, baseURL!, 'ADMIN');
+  await page.goto(`/admin/events/${EVENT_ID}/applications/forms/${FORM_ID}`);
+  const settings = page.getByTestId('form-settings');
+  await expect(settings.getByText('How vendors choose their space')).toBeVisible();
+  await expect(page.getByTestId('form-space-tiers')).toBeChecked();
+
+  await page.getByTestId('form-space-map').check();
+  await expect(page.getByTestId('form-space-map-hint')).toContainText('publish the event');
+  await expect(page.getByTestId('form-space-map-hint').getByRole('link', { name: 'Open the floor map' })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/map`);
+  await settings.getByRole('button', { name: 'Save settings' }).click();
+  await expect(page.getByText('Add spots on the floor map for: Corner')).toBeVisible();
+  expect(calls.filter((c) => c.method === 'PATCH').at(-1)?.body).toMatchObject({ spaceSelection: 'MAP' });
+
+  await page.getByTestId('form-space-tiers').check();
+  await settings.getByRole('button', { name: 'Save settings' }).click();
+  await expect(page.getByRole('status')).toContainText('Form settings saved.');
+  expect(calls.filter((c) => c.method === 'PATCH').at(-1)?.body).toMatchObject({ spaceSelection: 'TIERS' });
 });

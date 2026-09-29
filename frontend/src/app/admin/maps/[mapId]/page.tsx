@@ -442,7 +442,7 @@ function BuilderContent() {
   );
 
   const changeBooths = useCallback(
-    (ids: string[], patch: Partial<Pick<MapBooth, 'label' | 'kind' | 'w' | 'h' | 'tierId'>>) => {
+    (ids: string[], patch: Partial<Pick<MapBooth, 'label' | 'kind' | 'w' | 'h' | 'tierId' | 'price'>>) => {
       if (!state) return;
       const set = new Set(ids);
       commit((l) => ({
@@ -460,6 +460,10 @@ function BuilderContent() {
       if (patch.tierId !== undefined) {
         const tier = tiers.find((t) => t.id === patch.tierId);
         announce(`${ids.length === 1 ? 'Booth' : `${ids.length} booths`} set to ${tier ? tier.name : 'no tier'}`);
+      }
+      if (patch.price !== undefined) {
+        const who = ids.length === 1 ? 'Booth' : `${ids.length} booths`;
+        announce(patch.price === null ? `${who} now use${ids.length === 1 ? 's' : ''} the tier price` : `${who} priced at $${patch.price.toFixed(2)}`);
       }
     },
     [state, tiers, commit, announce]

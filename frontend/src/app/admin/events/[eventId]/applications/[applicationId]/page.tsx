@@ -356,7 +356,11 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
                     <div className="flex items-center justify-between gap-2">
                       <dt className="text-gray-600 dark:text-slate-400">Category</dt>
                       <dd className="flex items-center gap-2 text-gray-900 dark:text-white" data-testid="application-category">
-                        {app.tier?.name ?? <span className="text-gray-500 dark:text-slate-400">Assigned on approval</span>}
+                        {app.tier?.name ?? (
+                          <span className="text-gray-500 dark:text-slate-400">
+                            {app.status === 'APPROVED' && app.paymentStatus === 'AWAITING_SELECTION' ? 'Vendor choosing' : 'Assigned on approval'}
+                          </span>
+                        )}
                         {(app.tierEditable?.allowed ?? app.amountEditable.allowed) ? (
                           <button
                             type="button"

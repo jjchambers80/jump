@@ -457,7 +457,7 @@ export interface AdminApplication {
   /** The application's order (spec 024); null on FREE forms. */
   orderId: string | null;
   orderRef: string | null;
-  form: { id: string; name: string; slug: string; kind: FormKind; chargeTiming: 'SUBMIT' | 'APPROVAL'; feeMode: string; paymentDueDays: number; overduePolicy: 'WITHDRAW' | 'HOLD'; reserveOnApproval?: boolean };
+  form: { id: string; name: string; slug: string; kind: FormKind; chargeTiming: 'SUBMIT' | 'APPROVAL'; feeMode: string; paymentDueDays: number; overduePolicy: 'WITHDRAW' | 'HOLD'; reserveOnApproval?: boolean; spaceSelection?: 'TIERS' | 'MAP' | null };
   /** Spec 037 phase 5: the categories an approval can assign, with what is left. */
   categories?: { id: string; name: string; price: number; isActive: boolean; remaining: number }[];
   /** Spec 037 phase 5: while set, the vendor holds a chosen space and is paying. */

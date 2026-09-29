@@ -440,6 +440,8 @@ export interface LayoutBoothInput {
   h: number;
   rotation: number;
   tierId: string | null;
+  /** Spec 039: the booth's own price in dollars; null uses the tier's. Omitted keeps what is stored. */
+  price?: number | null;
 }
 
 export interface LayoutInput {
