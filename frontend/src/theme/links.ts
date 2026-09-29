@@ -13,6 +13,7 @@ export interface ThemeLink {
 }
 
 export interface LinkContext {
+  editing?: boolean;
   resolved: ResolvedData;
   organization: { id: string; slug: string };
   host: string | null;
@@ -29,5 +30,8 @@ export function linkHref(link: ThemeLink | null | undefined, ctx: LinkContext): 
   if (!link) return null;
   if (link.type === 'EXTERNAL') return link.url && /^https:\/\//.test(link.url) ? link.url : null;
   const href = ctx.resolved.links?.[linkKey(link) ?? ''];
-  return href ? shortenHref(href, ctx) : null;
+  if (href) return shortenHref(href, ctx);
+  // In the editor a link picked a moment ago has not been resolved by the
+  // server yet; show the button anyway (the canvas never navigates).
+  return (ctx as { editing?: boolean }).editing ? '#' : null;
 }

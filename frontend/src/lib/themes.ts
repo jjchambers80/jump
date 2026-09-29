@@ -86,6 +86,7 @@ export const themesApi = {
   list: () => api.get<{ themes: ThemeSummary[] }>('/admin/themes'),
   get: (id: string) => api.get<ThemeDetail>(`/admin/themes/${id}`),
   document: (id: string, key: string) => api.get<ThemeDocumentResponse>(`/admin/themes/${id}/documents/${encodeURIComponent(key)}`),
+  content: (id: string) => api.get<{ overrides: Record<string, string>; resolved: Record<string, string> }>(`/admin/themes/${id}/content`),
   previewData: (id: string, page: string) => api.get<{ organization: any; resolved: any }>(`/admin/themes/${id}/preview-data?page=${encodeURIComponent(page)}`),
   save: (id: string, body: ThemeSaveBody) => api.put<ThemeSaveResult>(`/admin/themes/${id}/save`, body),
   revisions: (id: string) => api.get<{ revisions: ThemeRevision[] }>(`/admin/themes/${id}/revisions`),
