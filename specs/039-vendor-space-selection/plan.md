@@ -1,6 +1,6 @@
 # Spec 039 — Vendor space selection: floor map or tiers
 
-Status: plan approved, not started (decisions final 2026-09-28)
+Status: implemented 2026-09-29 (PRs #227, #229, #230, #234; docs #236). Decisions final 2026-09-28
 Builds on: spec 011 (applications), spec 014 (floor map), spec 037 phase 5 (apply-then-choose, PR #216)
 Supersedes: spec 037 **D6** ("one vendor flow, no per-form switch") for the *choose* step only. Apply-then-choose itself stays.
 

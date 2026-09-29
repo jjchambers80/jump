@@ -74,6 +74,10 @@ Unchanged; see [floor-maps.md](floor-maps.md).
 - `MapElement` draws text labels and walls inside their `x, y, w, h` box (walls as a bar along the box, text centred). Before this change a label's text sat above `y`; no layouts had elements then because the old toolbar never placed anything.
 - The global key handler ignores keys while a field is focused or any `aria-modal` dialog is open.
 
+## Spot prices (spec 039)
+
+The details panel has a **Spot price** field for one booth or a multi-selection. Empty means the tier's price. It is saved with the layout and marked with a `$` badge on the canvas. It is locked on held, sold or placed spots. See [Vendor Space Selection](vendor-space-selection.md).
+
 ## Related Features
 
 - [Floor Maps and Vendor Booth Purchases](floor-maps.md)
