@@ -15,6 +15,8 @@ export interface SectionContext {
   /** Current page path and query, for filter and pagination links (EventList). */
   path: string;
   query: Record<string, string | undefined>;
+  /** Inside the theme editor's canvas (038D): unresolved links still render. */
+  editing?: boolean;
 }
 
 export function sectionContext(metadata: Record<string, unknown> | undefined): SectionContext {
