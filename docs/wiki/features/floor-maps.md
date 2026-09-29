@@ -9,6 +9,8 @@ An event can have one SVG floor map. Organizers draw and number booths, bind eac
 
 Since spec 037 phase 5 (apply-then-choose) choosing a booth is one of the two ways an approved PAID vendor **chooses their space** — the other is the list (any open space in their category, placed by staff later). A tier is **map-bound** when the event's published map has booths bound to it: derived at read time (`BoothService.mapBoundTierIds` / `isMapBound`), the `ApplicationTier.mapBound` column is no longer read (dropped in spec 037 phase 6). Approval never charges: it assigns the category and moves the application to `AWAITING_SELECTION`. The booth is held under a database row lock, then either charged off-session with a saved card or carried into Stripe Checkout. Only a successful payment transition changes the booth from `HELD` to `SOLD`. See [Applications › Apply-then-choose](applications.md#apply-then-choose-spec-037-phase-5).
 
+**Spec 039**: the form's `spaceSelection` now decides whether vendors pick on the map at all. On a MAP form they must pick a spot of their approved category; there is no list option. Spots can carry their own `Booth.price`. See [Vendor Space Selection](vendor-space-selection.md).
+
 ## Vendor Purchase Flow
 
 1. The application must be `APPROVED` + `AWAITING_SELECTION` with a category, and own no booth (a booth staff placed means the vendor pays for the category from the list instead).

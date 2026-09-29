@@ -58,6 +58,8 @@ Photos use the existing image storage (bucket or local `uploads/`), max 6 profil
 
 ### Apply-then-choose (spec 037 phase 5)
 
+> **Spec 039**: what the vendor chooses is now set per form. `spaceSelection` is TIERS (a tier: the organizer's, or the vendor's own pick when approved with `tierId: null`) or MAP (a spot of the approved category, priced per spot). See [Vendor Space Selection](vendor-space-selection.md).
+
 One flow for every PAID form (decision D6 — there is no per-form switch; `chargeTiming` stays in the schema for legacy rows and the form editor no longer shows it).
 
 | Step | What happens | States |
