@@ -169,6 +169,53 @@ test.describe('public floor map', () => {
     await expect(page.getByText('Vendor directory coming soon')).toBeVisible();
   });
 
+  test('phones: header, full-width fitted map, then the directory', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await mockEvent(page);
+    await page.goto('/events/ev-map/map');
+    const heading = page.getByRole('heading', { level: 1, name: 'Map Expo' });
+    const map = page.getByTestId('public-map');
+    const directory = page.getByTestId('vendor-directory');
+    await expect(heading).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Back to Map Expo' })).toHaveAttribute('href', '/events/ev-map');
+    await expect(page.getByTestId('booth-A1')).toBeVisible();
+
+    const [h, m, d] = await Promise.all([heading.boundingBox(), map.boundingBox(), directory.boundingBox()]);
+    expect(h!.y).toBeLessThan(m!.y);
+    expect(m!.y).toBeLessThan(d!.y);
+    // Edge to edge on a phone, and no sideways scroll.
+    expect(Math.round(m!.x)).toBe(0);
+    expect(Math.round(m!.width)).toBe(375);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+    // Fitted to the floor: the 40-unit-wide map spans most of the viewport, not a thumbnail.
+    await expect.poll(async () => (await page.getByTestId('booth-A1').boundingBox())!.width).toBeGreaterThan(60);
+  });
+
+  test('desktop: the map stays inside the content column', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await mockEvent(page);
+    await page.goto('/events/ev-map/map');
+    await expect(page.getByTestId('booth-A1')).toBeVisible();
+    const m = (await page.getByTestId('public-map').boundingBox())!;
+    expect(m.x).toBeGreaterThan(0);
+    expect(m.x + m.width).toBeLessThan(1440);
+    await expect.poll(async () => (await page.getByTestId('booth-A1').boundingBox())!.width).toBeGreaterThan(150);
+  });
+
+  test('the booth dialog takes focus and gives it back', async ({ page }) => {
+    await mockEvent(page);
+    await page.goto('/events/ev-map/map');
+    await page.getByTestId('booth-A2').focus();
+    await page.keyboard.press('Enter');
+    const dialog = page.getByRole('dialog', { name: 'Booth A2' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Close' })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByTestId('booth-A2')).toBeFocused();
+    await expect(page).toHaveURL(/\/events\/ev-map\/map$/);
+  });
+
   test('an unpublished map is not available', async ({ page }) => {
     await mockEvent(page, { published: false });
     await page.goto('/events/ev-map/map');

@@ -50,6 +50,12 @@ interface MapCanvasProps {
   selectionHandles?: boolean;
   /** Accessible name of the map; defaults to the editor's. */
   ariaLabel?: string;
+  /**
+   * Let the zoom library fit the content on init (default). Pages that fit the
+   * floor themselves (with a margin) turn it off: the library re-applies its own
+   * fit on every size change for its first seconds and would undo theirs.
+   */
+  fitOnInit?: boolean;
 }
 
 export default function MapCanvas({
@@ -80,6 +86,7 @@ export default function MapCanvas({
   disabledIds,
   selectionHandles = true,
   ariaLabel,
+  fitOnInit = true,
 }: MapCanvasProps) {
   const { resolvedTheme } = useTheme();
   const dark = resolvedTheme === 'dark';
@@ -204,7 +211,7 @@ export default function MapCanvas({
       maxScale={5}
       limitToBounds={false}
       centerOnInit={false}
-      fitOnInit
+      fitOnInit={fitOnInit}
       panning={{ disabled: false }}
       pinch={{ disabled: false }}
       wheel={{ disabled: false, step: 0.1 }}

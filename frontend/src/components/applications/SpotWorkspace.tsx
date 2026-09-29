@@ -419,6 +419,7 @@ export default function SpotWorkspace({
               onDisabledBoothClick={explainDisabled}
               reducedMotion={reducedMotion}
               transformRef={transformRef}
+              fitOnInit={false}
               ariaLabel={`Floor map. Open ${category.name} spots can be chosen; the list of spots offers the same choice.`}
             />
           ) : (
