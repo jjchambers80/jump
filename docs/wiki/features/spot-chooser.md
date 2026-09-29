@@ -75,6 +75,16 @@ In step 2 the map is hidden so the review sits at the top.
 - **Open spots**: only open spots of the vendor's category, in a radio group. Sort by spot (natural order) or by lowest price. The header shows how many are open and the price range.
 - **Other categories**: below, under **Other categories**, every other category's spots, grouped in legend order. They are greyed and dashed, with size, state (Taken / Reserved / Blocked / Held) and price. They are plain `<li aria-disabled>` rows, never radios and never tab stops. Spots with no category are omitted.
 
+### Why a spot cannot be chosen (PR #242)
+
+Tapping a locked booth on the map shows a tip at the tap point (`spot-disabled-tip`, `role="status"`). `Booth` passes the click through `onDisabledClick`, `MapCanvas` passes it on as `onDisabledBoothClick`, and `SpotWorkspace.reasonFor` picks the text:
+
+- another category ("Spot B1 is for Smoke Test Booth. You are approved as Food truck, so it cannot be chosen.")
+- taken, on hold, reserved, or not for sale (no category)
+- "Go back to step 1 to change your spot." during step 2
+
+The tip is clamped inside the map, with its arrow on the tapped point. It closes on its close button, Escape, the next tap on the map, a step change, a map refetch, or after 6 s. Locked booths are not tab stops, so keyboard and screen-reader users get the same facts from the list's **Other categories** section.
+
 ### Steps
 
 - **Step 2 exists only when** the category offers extras or the vendor has a saved card (`review` is non-null).
