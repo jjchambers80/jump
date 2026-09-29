@@ -386,6 +386,8 @@ export interface MapBooth {
   rotation: number;
   tierId: string | null;
   status: BoothStatus;
+  /** Spec 039: the booth's own price in dollars; null uses the tier's. */
+  price?: number | null;
   applicationId: string | null;
   assignedById: string | null;
   createdAt: string;
@@ -460,6 +462,9 @@ export interface PublicMapLegendTier {
   tierId: string;
   name: string;
   price: number; // all-in price in dollars (FeeService units)
+  /** Spec 039: all-in range across the tier's booths (booth prices override the tier's). */
+  priceFrom?: number;
+  priceTo?: number;
   swatch: number; // 0-5
 }
 
@@ -473,6 +478,8 @@ export interface PublicMapBooth {
   h: number;
   rotation: number;
   status: BoothStatus;
+  /** Spec 039: what this booth costs the vendor, all in; null when it has no tier. */
+  price?: number | null;
   tier: { id: string; name: string; price: number } | null;
   vendorName: string | null;
 }

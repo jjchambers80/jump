@@ -1294,6 +1294,7 @@ model Booth {
   holdApplicationId String? // HELD by (checkout in flight)
   holdExpiresAt     DateTime?
   assignedById      String? // staff who assigned manually
+  price             Decimal?    @db.Decimal(10, 2) // spec 039: overrides the tier's price when set
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1317,6 +1318,14 @@ model Booth {
 enum ApplicationFormKind {
   PAID
   FREE
+}
+
+// Spec 039: how an approved vendor on a PAID form chooses their space.
+// TIERS: pick one of the form's tiers (or the one the organizer locked);
+// MAP: pick a spot on the event's floor map within the approved category.
+enum SpaceSelectionMode {
+  TIERS
+  MAP
 }
 
 enum ApplicationFormStatus {
@@ -1509,6 +1518,7 @@ model ApplicationForm {
   reserveOnApproval     Boolean               @default(true)
   displayOrder          Int                   @default(0)
   createdFromTemplateId String? // spec 019: informational, no relation
+  spaceSelection        SpaceSelectionMode    @default(TIERS) // spec 039; PAID forms only
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

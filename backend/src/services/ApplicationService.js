@@ -52,7 +52,7 @@ import applicationTemplateService from './ApplicationTemplateService.js';
 import applicationPaymentService from './ApplicationPaymentService.js';
 import boothService from './BoothService.js';
 import orderService from './OrderService.js';
-import orderLineService, { ORDER_INCLUDE, adjustmentItems } from './OrderLineService.js';
+import orderLineService, { ORDER_INCLUDE, adjustmentItems, spacePriceFor } from './OrderLineService.js';
 import refundService from './RefundService.js';
 import { moneyOf } from './applicationMoney.js';
 import { hasLiveOrder, orderStatusFor } from './applicationOrderStatus.js';
@@ -198,7 +198,7 @@ async function attachBooths(rows) {
   if (ids.length === 0) return rows;
   const booths = await prisma.booth.findMany({
     where: { OR: [{ applicationId: { in: ids } }, { holdApplicationId: { in: ids } }] },
-    select: { id: true, mapId: true, label: true, status: true, w: true, h: true, holdExpiresAt: true, applicationId: true, holdApplicationId: true },
+    select: { id: true, mapId: true, label: true, status: true, w: true, h: true, price: true, holdExpiresAt: true, applicationId: true, holdApplicationId: true },
   });
   const owned = new Map(booths.filter((b) => b.applicationId).map((b) => [b.applicationId, b]));
   const held = new Map(booths.filter((b) => b.status === 'HELD' && b.holdApplicationId).map((b) => [b.holdApplicationId, b]));
@@ -701,8 +701,9 @@ class ApplicationService {
       }
       const tier = application.tier;
 
-      // A booth placed by staff is the space: the vendor pays for the category only.
-      const placed = await tx.booth.findFirst({ where: { applicationId }, select: { id: true } });
+      // A booth placed by staff is the space: the vendor pays for it (its own
+      // price when set, spec 039 D10) and cannot pick another.
+      const placed = await tx.booth.findFirst({ where: { applicationId }, select: { id: true, label: true, price: true } });
       if (boothId && placed) throw coded(new ConflictError('The organizer has already placed you; pay for your category instead'), 'ALREADY_HAS_BOOTH');
 
       // Category slot (spec 037 D5).
@@ -732,7 +733,9 @@ class ApplicationService {
       // Organizer adjustments on it are kept; the order number never changes.
       const dueAt = selectionDueAt(application) ?? new Date(Date.now() + (application.form.paymentDueDays ?? 7) * 86_400_000);
       const adjustments = application.order ? adjustmentItems(application.order).filter((i) => i.kind === 'ADJUSTMENT') : [];
-      const data = orderLineService.applicationOrderData(tier, application.form, lines, adjustments, application.event, application.event.venue.organization);
+      const data = orderLineService.applicationOrderData(tier, application.form, lines, adjustments, application.event, application.event.venue.organization, {
+        booth: held ?? placed,
+      });
       let order;
       if (application.order) {
         order = await orderLineService.rewriteApplicationOrder(tx, application.order.id, data, { status: 'PENDING', dueAt, paidAt: null });
@@ -1361,7 +1364,8 @@ class ApplicationService {
         if (validated.length) await addOnService.reserve(tx, validated);
       }
 
-      const data = this._orderData(application, { addOnLines: validated });
+      const booth = await boothService.boothForApplication(application.id, { tx });
+      const data = this._orderData(application, { booth, addOnLines: validated });
       const beforeText = addOnService.summarizeLines(money.addOns) || 'none';
       const afterText =
         addOnService.summarizeLines(
@@ -1466,6 +1470,7 @@ class ApplicationService {
       if (held) await this._releaseCapacity(tx, application);
       await boothService.releaseForApplication(applicationId, { tx });
 
+      // The booth went back above, so the new tier's own price applies.
       const data = this._orderData(application, { tier: newTier, addOnLines: kept });
       const droppedText = dropped.length
         ? ` Dropped add-ons: ${addOnService.summarizeLines(dropped)}.`
@@ -1521,13 +1526,15 @@ class ApplicationService {
       const total = adjustments
         .filter((a) => a.kind === 'ADJUSTMENT')
         .reduce((sum, a) => sum + Number(a.unitPrice), 0);
-      if (Number(application.tier.price) + total < -1e-9) {
-        throw new ValidationError(`Adjustment exceeds the tier price (${money(application.tier.price)}); edit add-ons or waive the balance instead`);
+      const booth = await boothService.boothForApplication(application.id, { tx });
+      const spacePrice = spacePriceFor({ tier: application.tier, booth });
+      if (spacePrice + total < -1e-9) {
+        throw new ValidationError(`Adjustment exceeds the space price (${money(spacePrice)}); edit add-ons or waive the balance instead`);
       }
       const row = await this._rewriteOrder(
         tx,
         application,
-        this._orderData(application, { adjustments }),
+        this._orderData(application, { booth, adjustments }),
         {
           decisions: {
             create: {
@@ -1562,10 +1569,11 @@ class ApplicationService {
       const adjustment = items.find((a) => a.id === adjustmentId);
       if (!adjustment) throw new NotFoundError('Adjustment not found');
       if (adjustment.kind === 'WAIVER') throw new ConflictError('A waiver cannot be removed');
+      const booth = await boothService.boothForApplication(application.id, { tx });
       const row = await this._rewriteOrder(
         tx,
         application,
-        this._orderData(application, { adjustments: items.filter((a) => a.id !== adjustmentId) }),
+        this._orderData(application, { booth, adjustments: items.filter((a) => a.id !== adjustmentId) }),
         {
           decisions: {
             create: {
@@ -1771,7 +1779,8 @@ class ApplicationService {
     // approval did not, and open the order the settlement is recorded on.
     if (application.capacitySlot === 'NONE') await this._takeTierSlot(tx, application.tier, 'RESERVED');
     const adjustments = application.order ? adjustmentItems(application.order).filter((i) => i.kind === 'ADJUSTMENT') : [];
-    const data = orderLineService.applicationOrderData(application.tier, application.form, [], adjustments, application.event, application.event.venue.organization);
+    const booth = await boothService.boothForApplication(applicationId, { tx });
+    const data = orderLineService.applicationOrderData(application.tier, application.form, [], adjustments, application.event, application.event.venue.organization, { booth });
     if (application.order) {
       await orderLineService.rewriteApplicationOrder(tx, application.order.id, data, { status: 'PENDING', paidAt: null });
     } else {
@@ -1797,9 +1806,11 @@ class ApplicationService {
 
   /**
    * Spec 024: order lines and totals for the application's current tier,
-   * add-on lines and adjustments, with any of the three replaced.
+   * add-on lines and adjustments, with any of the three replaced. `booth` is
+   * the space it holds or was placed on (spec 039: its price wins); callers
+   * load it with `boothService.boothForApplication` inside their transaction.
    */
-  _orderData(application, { tier = application.tier, addOnLines = null, adjustments = null } = {}) {
+  _orderData(application, { tier = application.tier, booth = null, addOnLines = null, adjustments = null } = {}) {
     const current = moneyOf(application);
     const lines =
       addOnLines ??
@@ -1811,7 +1822,8 @@ class ApplicationService {
       lines,
       adj,
       application.event,
-      application.event.venue.organization
+      application.event.venue.organization,
+      { booth }
     );
   }
 
@@ -2370,7 +2382,7 @@ class ApplicationService {
     if (!a.tier || a.form?.kind !== 'PAID') return null;
     if (!hasLiveOrder(a)) {
       // Spec 037 phase 5: no order yet — what the category costs today.
-      const now = orderLineService.applicationOrderData(a.tier, a.form, [], [], a.event, a.event?.venue?.organization).amounts;
+      const now = orderLineService.applicationOrderData(a.tier, a.form, [], [], a.event, a.event?.venue?.organization, { booth: a.mapBooth ?? null }).amounts;
       return { currentApplicantPays: now.applicantPays, currentOrgReceives: now.orgReceives, changed: false };
     }
     const m = moneyOf(a);
@@ -2381,7 +2393,9 @@ class ApplicationService {
       lines,
       adjustmentItems(a.order),
       a.event,
-      a.event?.venue?.organization
+      a.event?.venue?.organization,
+      // Spec 039: the booth's own price, when the rows went through attachBooths.
+      { booth: a.mapBooth ?? null }
     ).amounts;
     const snapshot = m.applicantPays;
     return {
