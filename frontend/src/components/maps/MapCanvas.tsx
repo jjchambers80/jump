@@ -46,6 +46,8 @@ interface MapCanvasProps {
   disabledIds?: Set<string>;
   /** Editor resize handles on selected booths (default); the picker shows a checkmark instead. */
   selectionHandles?: boolean;
+  /** Accessible name of the map; defaults to the editor's. */
+  ariaLabel?: string;
 }
 
 export default function MapCanvas({
@@ -74,6 +76,7 @@ export default function MapCanvas({
   dimmedIds,
   disabledIds,
   selectionHandles = true,
+  ariaLabel,
 }: MapCanvasProps) {
   const { resolvedTheme } = useTheme();
   const dark = resolvedTheme === 'dark';
@@ -107,7 +110,7 @@ export default function MapCanvas({
       height={svgHeight}
       style={{ minWidth: svgWidth, minHeight: svgHeight }}
       role={interactive ? 'application' : 'img'}
-      aria-label={interactive ? 'Floor map editor' : 'Floor map'}
+      aria-label={ariaLabel ?? (interactive ? 'Floor map editor' : 'Floor map')}
     >
       {underlayUrl && (
         <image

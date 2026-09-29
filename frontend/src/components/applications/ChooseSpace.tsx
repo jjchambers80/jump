@@ -6,9 +6,10 @@
 //   TIERS — a space type: the one the organizer approved them as, or, when
 //           approved without one, their own pick from the form's tiers. The
 //           organizer places them on the floor later.
-//   MAP   — a spot of their category on the floor map (BoothPicker), or the
-//           same spots as an accessible sortable list (SpotList). Spots can
-//           carry their own price; other categories are faded and locked. Choosing holds
+//   MAP   — a spot of their category, on the floor map and in the list beside
+//           it (SpotWorkspace): pick the spot first, then extras and how to
+//           pay. Spots can carry their own price; other categories are faded
+//           and locked. Choosing holds
 // the space for 15 minutes and opens the order; paying goes through the saved
 // card (off-session) or Stripe's hosted Checkout. The server is the only
 // source of truth: nothing here treats a hold as a sale, and a 409 simply
@@ -19,11 +20,10 @@
 // Storefront colours come from the org's brand tokens (BrandScope); motion is
 // limited to a reduced-motion-safe spinner so nothing masks payment state.
 
-import { KeyboardEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { CalendarClock, CreditCard, LayoutList, Map as MapIcon, MapPin, ShieldCheck } from 'lucide-react';
-import SpotList from './SpotList';
+import { ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { CalendarClock, CreditCard, MapPin, ShieldCheck } from 'lucide-react';
+import SpotWorkspace, { type HoldOutcome } from './SpotWorkspace';
 import AddOnPicker from '@/components/AddOnPicker';
-import BoothPicker from '@/components/maps/BoothPicker';
 import { formatCountdown, holdRemaining } from '@/components/maps/boothSelection';
 import type { ChooseBoothResult } from '@/services/api';
 import { estimateSpaceTotal, formatDate, money, type AddOnLineInput, type ApplicantApplication, type SpaceCategory, type SpaceSelection } from '@/lib/applications';
@@ -42,9 +42,23 @@ interface ChooseSpaceProps {
   spaceApi: SpaceApi;
   /** Reload the application (after a hold, a decline, an expiry, or while a charge settles). */
   refresh: () => Promise<ApplicantApplication | null>;
+  /**
+   * `page`: the status page gives a MAP form's spot choice the full width
+   * (`usesSpotWorkspace`), with `summary` and `footer` in its side column.
+   * `inline` (default): everything stacks, as in the buyer account.
+   */
+  layout?: 'page' | 'inline';
+  summary?: ReactNode;
+  footer?: ReactNode;
 }
 
-type Mode = 'map' | 'spots';
+/** A MAP form's vendor still picking a spot on a published map: the full-width workspace. */
+export function usesSpotWorkspace(app: Pick<ApplicantApplication, 'status' | 'selection'>): boolean {
+  const sel = app.selection;
+  if (app.status !== 'APPROVED' || !sel) return false;
+  return sel.mode === 'MAP' && sel.state === 'CHOOSE' && !sel.placedBooth && !sel.categories && Boolean(sel.category) && sel.map.available && !sel.map.pending;
+}
+
 type Notice = { tone: 'error' | 'info' | 'success'; text: string };
 
 const POLL_MS = 2000;
@@ -101,7 +115,7 @@ function NoticeBox({ notice }: { notice: Notice }) {
   );
 }
 
-export default function ChooseSpace({ application, spaceApi, refresh }: ChooseSpaceProps) {
+export default function ChooseSpace({ application, spaceApi, refresh, layout = 'inline', summary, footer }: ChooseSpaceProps) {
   const sel = application.selection as SpaceSelection;
   const spotMode = sel.mode === 'MAP';
   // TIERS form approved without a category: the vendor picks one (spec 039 D6).
@@ -111,16 +125,12 @@ export default function ChooseSpace({ application, spaceApi, refresh }: ChooseSp
   const category: SpaceCategory | null = tierChoices ? picked : sel.category;
   const offeredAddOns = tierChoices ? picked?.addOns ?? [] : sel.addOns;
   const choosingSpot = spotMode && !sel.placedBooth;
-  const [mode, setMode] = useState<Mode>('map');
   const [qty, setQty] = useState<Record<string, number>>({});
   const [payWith, setPayWith] = useState<'card' | 'checkout'>(sel.savedCard ? 'card' : 'checkout');
   const [busy, setBusy] = useState<null | 'holding' | 'charging' | 'redirecting' | 'releasing'>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const baseId = useId();
-  const mapTab = `${baseId}-map-tab`;
-  const spotsTab = `${baseId}-spots-tab`;
-  const tabRefs = { map: useRef<HTMLButtonElement>(null), spots: useRef<HTMLButtonElement>(null) };
 
   useEffect(() => () => {
     if (pollRef.current) clearTimeout(pollRef.current);
@@ -132,11 +142,14 @@ export default function ChooseSpace({ application, spaceApi, refresh }: ChooseSp
   );
   const extrasTotal = Math.round(offeredAddOns.reduce((s, a) => s + a.applicantPays * (qty[a.id] ?? 0), 0) * 100) / 100;
   const extraLines = offeredAddOns.map((a) => ({ price: a.price, taxable: a.taxable, quantity: qty[a.id] ?? 0 }));
+  const noExtras: typeof extraLines = [];
   // The total for a space listed at `listed` plus the extras, computed like the
   // order will be (one fee calculation). Older payloads without `pricing` fall
   // back to summing all-in figures, which can be a few cents high.
-  const totalAt = (listed: number | null | undefined, allIn: number) =>
-    sel.pricing && typeof listed === 'number' ? estimateSpaceTotal(listed, extraLines, sel.pricing) : Math.round((allIn + extrasTotal) * 100) / 100;
+  const totalAt = (listed: number | null | undefined, allIn: number, lines = extraLines) =>
+    sel.pricing && typeof listed === 'number'
+      ? estimateSpaceTotal(listed, lines, sel.pricing)
+      : Math.round((allIn + (lines === extraLines ? extrasTotal : 0)) * 100) / 100;
   const total = totalAt(category?.listedPrice ?? category?.price, category?.applicantPays ?? 0);
   const useSavedCard = payWith === 'card' && Boolean(sel.savedCard);
   const soldOut = category ? !category.guaranteed && category.spacesLeft <= 0 : false;
@@ -206,13 +219,14 @@ export default function ChooseSpace({ application, spaceApi, refresh }: ChooseSp
   };
 
   /** Hold a space: the category (TIERS / a placed booth), a picked tier, or a spot from the list. */
-  const hold = async (choice: { boothId?: string; tierId?: string } = {}) => {
-    if (busy) return;
+  const hold = async (choice: { boothId?: string; tierId?: string } = {}): Promise<HoldOutcome> => {
+    if (busy) return 'failed';
     setNotice(null);
     setBusy('holding');
     try {
       const result = await spaceApi.select({ ...choice, addOns: addOnLines, useSavedCard });
       await afterHold(result);
+      return 'done';
     } catch (err) {
       setBusy(null);
       const e = err as { code?: string; message?: string };
@@ -229,10 +243,11 @@ export default function ChooseSpace({ application, spaceApi, refresh }: ChooseSp
       if (e.code === 'NOT_AWAITING_SELECTION') {
         setNotice({ tone: 'info', text: 'Your space is already held. Finish paying below, or change your choice.' });
         await refresh().catch(() => null);
-        return;
+        return 'failed';
       }
       setNotice({ tone: 'error', text });
       await refresh().catch(() => null);
+      return e.code === 'BOOTH_TAKEN' ? 'taken' : 'failed';
     }
   };
 
@@ -253,14 +268,6 @@ export default function ChooseSpace({ application, spaceApi, refresh }: ChooseSp
     setNotice({ tone: 'info', text: 'Your hold expired and the space went back. Choose again to continue.' });
     await refresh().catch(() => null);
   }, [refresh]);
-
-  const onTabKey = (e: KeyboardEvent<HTMLButtonElement>) => {
-    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
-    e.preventDefault();
-    const next: Mode = e.key === 'Home' ? 'map' : e.key === 'End' ? 'spots' : mode === 'map' ? 'spots' : 'map';
-    setMode(next);
-    tabRefs[next].current?.focus();
-  };
 
   // ─── Held: finish paying, or give it back ────────────────────────────────
   if (sel.state === 'HELD') {
@@ -348,12 +355,78 @@ export default function ChooseSpace({ application, spaceApi, refresh }: ChooseSp
       {holdBusyLabel ?? idleLabel}
     </button>
   );
+  const payWithField = sel.savedCard ? (
+    <fieldset className="space-y-2" data-testid="space-pay-with">
+      <legend className="mb-1 text-sm font-semibold text-gray-900 dark:text-slate-100">How you pay</legend>
+      {(
+        [
+          ['card', `Pay with ${cardName(sel.savedCard)}`, 'Charged as soon as you choose.'],
+          ['checkout', 'Pay on a secure checkout page', 'Card, and other methods your organizer accepts.'],
+        ] as const
+      ).map(([value, title, detail]) => (
+        <label
+          key={value}
+          className="flex cursor-pointer items-start gap-3 rounded-xl border border-gray-200 px-3.5 py-3 text-sm transition-colors hover:border-gray-300 has-[:checked]:border-brand-link has-[:checked]:bg-gray-50 motion-reduce:transition-none dark:border-slate-700 dark:hover:border-slate-600 dark:has-[:checked]:bg-slate-900/50"
+        >
+          <input type="radio" name={`${baseId}-pay`} value={value} checked={payWith === value} onChange={() => setPayWith(value)} className="mt-0.5 h-4 w-4 accent-brand" />
+          <span>
+            <span className="flex items-center gap-1.5 font-semibold text-gray-900 dark:text-slate-100">
+              {value === 'card' && <CreditCard className="h-4 w-4" aria-hidden />}
+              {title}
+            </span>
+            <span className="block text-gray-500 dark:text-slate-400">{detail}</span>
+          </span>
+        </label>
+      ))}
+    </fieldset>
+  ) : null;
   const totalLine = (
     <p className="text-sm text-gray-600 dark:text-slate-400" data-testid="space-total">
       Total <strong className="ml-1 text-lg font-extrabold tabular-nums text-gray-900 dark:text-slate-50">{money(total)}</strong>
       {addOnLines.length > 0 && <span className="ml-1 text-xs">(extras included)</span>}
     </p>
   );
+
+  if (usesSpotWorkspace(application) && category) {
+    const extras =
+      offeredAddOns.length > 0 ? (
+        <AddOnPicker
+          addOns={offeredAddOns}
+          quantities={qty}
+          onChange={(id, quantity) => setQty((prev) => ({ ...prev, [id]: quantity }))}
+          unitPrice={(a) => offeredAddOns.find((x) => x.id === a.id)?.applicantPays ?? a.price}
+          title="Extras"
+          hint="Optional. Charged with your spot."
+        />
+      ) : null;
+    const allInOf = (spot: { price?: number | null }) => (typeof spot.price === 'number' ? spot.price : category.applicantPays);
+    return (
+      <SpotWorkspace
+        layout={layout}
+        eventId={application.event.id}
+        category={category}
+        summary={layout === 'page' ? summary : null}
+        footer={layout === 'page' ? footer : null}
+        intro={
+          <p>
+            You are approved as <strong className="text-gray-900 dark:text-slate-100">{category.name}</strong>. Pick a spot on the map or from the list, then pay{due} to confirm it.
+            {category.guaranteed ? ` A ${category.name} space is reserved for you; specific spots go to whoever pays first.` : ' Spots go to whoever pays first.'}
+          </p>
+        }
+        notice={notice ? <NoticeBox notice={notice} /> : null}
+        busy={Boolean(busy)}
+        busyLabel={holdBusyLabel}
+        review={extras || payWithField ? { extras, payWith: payWithField } : null}
+        extraLines={offeredAddOns
+          .filter((a) => (qty[a.id] ?? 0) > 0)
+          .map((a) => ({ id: a.id, label: `${a.name} ×${qty[a.id]}`, amount: Math.round(a.applicantPays * qty[a.id] * 100) / 100 }))}
+        spotPrice={(spot) => totalAt(spot.listedPrice, allInOf(spot), noExtras)}
+        totalFor={(spot) => totalAt(spot.listedPrice, allInOf(spot))}
+        actionLabel={payLabel}
+        onHold={(boothId) => hold({ boothId })}
+      />
+    );
+  }
 
   return (
     <section aria-labelledby={`${baseId}-title`} data-testid="choose-space" data-state="CHOOSE" data-mode={spotMode ? 'MAP' : 'TIERS'} className="space-y-6">
@@ -448,31 +521,7 @@ export default function ChooseSpace({ application, spaceApi, refresh }: ChooseSp
         />
       )}
 
-      {sel.savedCard && (
-        <fieldset className="space-y-2" data-testid="space-pay-with">
-          <legend className="mb-1 text-sm font-semibold text-gray-900 dark:text-slate-100">How you pay</legend>
-          {(
-            [
-              ['card', `Pay with ${cardName(sel.savedCard)}`, 'Charged as soon as you choose.'],
-              ['checkout', 'Pay on a secure checkout page', 'Card, and other methods your organizer accepts.'],
-            ] as const
-          ).map(([value, title, detail]) => (
-            <label
-              key={value}
-              className="flex cursor-pointer items-start gap-3 rounded-xl border border-gray-200 px-3.5 py-3 text-sm transition-colors hover:border-gray-300 has-[:checked]:border-brand-link has-[:checked]:bg-gray-50 motion-reduce:transition-none dark:border-slate-700 dark:hover:border-slate-600 dark:has-[:checked]:bg-slate-900/50"
-            >
-              <input type="radio" name={`${baseId}-pay`} value={value} checked={payWith === value} onChange={() => setPayWith(value)} className="mt-0.5 h-4 w-4 accent-brand" />
-              <span>
-                <span className="flex items-center gap-1.5 font-semibold text-gray-900 dark:text-slate-100">
-                  {value === 'card' && <CreditCard className="h-4 w-4" aria-hidden />}
-                  {title}
-                </span>
-                <span className="block text-gray-500 dark:text-slate-400">{detail}</span>
-              </span>
-            </label>
-          ))}
-        </fieldset>
-      )}
+      {payWithField}
 
       {tierChoices ? (
         // TIERS, vendor picks: the radio cards above are the choice.
@@ -493,72 +542,8 @@ export default function ChooseSpace({ application, spaceApi, refresh }: ChooseSp
             No spots are open in your category right now. The organizer can still place you — reply to your approval email.
           </p>
         ) : (
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div role="tablist" aria-label="How to choose your spot" className="inline-flex rounded-xl border border-gray-200 bg-gray-100 p-1 dark:border-slate-700 dark:bg-slate-900/60">
-                {(
-                  [
-                    ['map', 'Map', MapIcon, mapTab],
-                    ['spots', 'Spots', LayoutList, spotsTab],
-                  ] as const
-                ).map(([value, text, Icon, id]) => (
-                  <button
-                    key={value}
-                    ref={tabRefs[value]}
-                    id={id}
-                    type="button"
-                    role="tab"
-                    aria-selected={mode === value}
-                    aria-controls={`${id}-panel`}
-                    tabIndex={mode === value ? 0 : -1}
-                    onClick={() => setMode(value)}
-                    onKeyDown={onTabKey}
-                    data-testid={`space-mode-${value}`}
-                    className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link motion-reduce:transition-none ${
-                      mode === value ? 'bg-white text-gray-900 shadow-sm dark:bg-slate-700 dark:text-slate-50' : 'text-gray-600 hover:text-gray-900 dark:text-slate-400 dark:hover:text-slate-100'
-                    }`}
-                  >
-                    <Icon className="h-4 w-4" aria-hidden />
-                    {text}
-                  </button>
-                ))}
-              </div>
-              {typeof sel.map.priceFrom === 'number' && typeof sel.map.priceTo === 'number' && (
-                <p className="text-sm text-gray-600 dark:text-slate-400" data-testid="space-price-range">
-                  {sel.map.boothsAvailable} spot{sel.map.boothsAvailable === 1 ? '' : 's'} open ·{' '}
-                  {sel.map.priceFrom === sel.map.priceTo ? money(sel.map.priceFrom) : `${money(sel.map.priceFrom)}–${money(sel.map.priceTo)}`}
-                </p>
-              )}
-            </div>
-            {mode === 'map' ? (
-              <div role="tabpanel" id={`${mapTab}-panel`} aria-labelledby={mapTab} data-testid="space-map">
-                <BoothPicker
-                  eventId={application.event.id}
-                  application={application}
-                  price={total}
-                  extrasTotal={extrasTotal}
-                  totalFor={(booth) => totalAt(booth.listedPrice, typeof booth.price === 'number' ? booth.price : category.applicantPays)}
-                  chargesSavedCard={useSavedCard}
-                  chooseBooth={(boothId) => spaceApi.select({ boothId, addOns: addOnLines, useSavedCard })}
-                  payNow={spaceApi.pay}
-                  refresh={refresh}
-                />
-              </div>
-            ) : (
-              <div role="tabpanel" id={`${spotsTab}-panel`} aria-labelledby={spotsTab} data-testid="space-spots">
-                <SpotList
-                  eventId={application.event.id}
-                  tierId={category.id}
-                  fallbackPrice={category.applicantPays}
-                  extrasTotal={extrasTotal}
-                  totalFor={(spot) => totalAt(spot.listedPrice, typeof spot.price === 'number' ? spot.price : category.applicantPays)}
-                  busy={Boolean(busy)}
-                  actionLabel={payLabel}
-                  onHold={(boothId) => hold({ boothId })}
-                />
-              </div>
-            )}
-          </div>
+          // Published map: rendered by SpotWorkspace above, never here.
+          null
         )
       ) : category ? (
         // TIERS with the organizer's category, or a booth staff placed the vendor on.

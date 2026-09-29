@@ -1,7 +1,7 @@
 // Choose your space (spec 037 phase 5, apply-then-choose; spec 039 modes) on
-// the approved vendor's status page. MAP forms: a Map | Spots toggle over the
-// public floor map (spec 014's booth picker) and the same spots as a sortable
-// list, each spot at its own price. TIERS forms: the approved category, or a
+// the approved vendor's status page. MAP forms: a full-width workspace — the
+// floor map beside (desktop) or above (mobile) the list of open spots, kept in
+// sync, each spot at its own price; extras and how to pay are step 2. TIERS forms: the approved category, or a
 // radio group of space types when the vendor picks. Backend mocked at the network layer
 // like public-map.spec.ts. Nothing here marks anything sold itself: "paid"
 // appears only once the status poll returns PAID.
@@ -222,120 +222,183 @@ const statusUrl = `/events/${EVENT_ID}/apply/status/${APP_ID}?token=${TOKEN}`;
 test.describe('choose your space', () => {
   test.describe.configure({ mode: 'serial' });
 
-  test('map: a vendor with a saved card picks an available booth of their category and reaches the paid state', async ({ page }) => {
+  test('map: the list beside the map stays in sync; step 2 pays for the spot with the saved card', async ({ page }) => {
     const { calls, bodies } = await mockVendor(page, { app: applicantApp(), states: {}, version: 1, choose: 'card' });
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(statusUrl);
     await expect(page.getByTestId('apply-status-pill')).toHaveText('Approved');
+    await expect(page.getByTestId('apply-hero')).toHaveAttribute('data-variant', 'compact');
     const choose = page.getByTestId('choose-space');
-    await expect(choose).toBeVisible();
-    await expect(choose).toContainText('You are approved as 10×10 booth');
-    await expect(choose).toContainText('Pick your spot on the floor map');
-    await expect(page.getByTestId('space-price-range')).toHaveText('2 spots open · $303.30–$404.04');
-    // A MAP form opens on the map; the pay-now button is not offered.
-    await expect(page.getByTestId('space-mode-map')).toHaveAttribute('aria-selected', 'true');
+    await expect(choose).toHaveAttribute('data-step', 'spot');
+    await expect(page.getByTestId('space-intro')).toContainText('You are approved as 10×10 booth');
+    await expect(page.getByTestId('apply-payment')).toContainText('Choose and pay by');
+    await expect(page.getByTestId('space-price-range')).toHaveText('2 open · $303.30–$404.04');
+    // One legend floats on the map (lg), one sits under it (stacked); only one is shown.
+    await expect(page.getByTestId('legend-price-t-1').locator('visible=true')).toHaveText('$303.30–$404.04');
+    // No Map | Spots toggle: the list is always there, and no pay-now button.
+    await expect(page.getByRole('tablist')).toHaveCount(0);
     await expect(page.getByTestId('apply-pay-now')).toHaveCount(0);
-    await expect(page.getByTestId('booth-picker-hint')).toContainText('2 booths available in your tier');
-    await expect(page.getByTestId('booth-picker-dim-note')).toContainText('other categories');
-    // The legend's price range sits under the category name instead of squeezing it.
-    await expect(page.getByTestId('legend-price-t-1')).toHaveText('$303.30–$404.04');
-    const legendName = page.getByTestId('booth-picker').getByTitle('10×10 booth');
-    await expect(legendName).toBeVisible();
-    expect(await legendName.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
 
-    // A spot with its own price is priced on its own.
-    await page.getByTestId('booth-A5').click();
-    await expect(page.getByTestId('booth-buy-summary')).toHaveText('Booth A5 · 10×10 · $404.04 all-in');
-    await page.getByTestId('booth-A5').click();
+    // Desktop: map on the left, the list column on the right.
+    const mapBox = await page.getByTestId('space-map').boundingBox();
+    const listBox = await page.getByTestId('space-spots').boundingBox();
+    expect(mapBox && listBox && mapBox.x < listBox.x && mapBox.width > listBox.width * 1.8).toBe(true);
 
-    // Sold, held and blocked booths, and the other category, are not selectable.
-    for (const label of ['A1', 'A3', 'A4', 'T1']) {
-      const booth = page.getByTestId(`booth-${label}`);
-      await expect(booth).toHaveAttribute('aria-disabled', 'true');
-      await booth.click({ force: true });
-      await expect(page.getByTestId('booth-buy-sheet')).toHaveCount(0);
-    }
-
-    await page.getByTestId('booth-A2').click();
-    const sheet = page.getByTestId('booth-buy-sheet');
-    await expect(page.getByTestId('booth-buy-summary')).toHaveText('Booth A2 · 10×10 · $303.30 all-in');
-    await expect(sheet).toContainText('card on file is charged');
-
-    await page.getByTestId('booth-buy').click();
-    // The status poll returns PAID: the page re-renders as paid with the booth and the chooser goes away.
-    await expect(page.getByTestId('apply-payment')).toContainText('Paid', { timeout: 10_000 });
-    await expect(page.getByTestId('apply-placement')).toContainText('Booth: A2 · 10×10');
-    await expect(page.getByTestId('choose-space')).toHaveCount(0);
-    expect(bodies[0]).toEqual({ boothId: 'b-2', addOns: [], useSavedCard: true });
-    // Success came from the status poll, never from the hold response.
-    expect(calls.filter((c) => c === `GET /applications/${APP_ID}/status`).length).toBeGreaterThanOrEqual(2);
-  });
-
-  test('map: paying on Checkout instead holds the booth and follows the pay-now checkout', async ({ page }) => {
-    const { calls, bodies } = await mockVendor(page, { app: applicantApp(), states: {}, version: 1, choose: 'no-card' });
-    await page.goto(statusUrl);
-    await page.getByTestId('space-pay-with').getByLabel(/secure checkout page/).check();
-    await page.getByTestId('booth-A2').click();
-    await expect(page.getByTestId('booth-buy-sheet')).toContainText('secure checkout page');
-    await page.getByTestId('booth-buy').click();
-    await expect(page).toHaveURL(/checkout=paid/);
-    await expect(page.getByTestId('apply-checkout-notice')).toContainText('Payment received');
-    expect(bodies[0]).toEqual({ boothId: 'b-2', addOns: [], useSavedCard: false });
-    expect(calls.indexOf(`POST /applications/${APP_ID}/pay`)).toBeGreaterThan(calls.indexOf(`POST /applications/${APP_ID}/select`));
-  });
-
-  test('map: a booth that was just taken shows the message and refetches the map', async ({ page }) => {
-    const { calls } = await mockVendor(page, { app: applicantApp(), states: {}, version: 1, choose: 'taken' });
-    await page.goto(statusUrl);
-    await page.getByTestId('booth-A2').click();
-    const mapFetches = () => calls.filter((c) => c.startsWith('GET map')).length;
-    const before = mapFetches();
-    await page.getByTestId('booth-buy').click();
-    await expect(page.getByTestId('booth-picker-notice')).toContainText('That booth was just taken');
-    await expect(page.getByTestId('booth-buy-sheet')).toHaveCount(0);
-    await expect(page.getByTestId('booth-A2')).toHaveAttribute('aria-label', /Sold/);
-    await expect(page.getByTestId('booth-A2')).toHaveAttribute('aria-disabled', 'true');
-    expect(mapFetches()).toBeGreaterThan(before);
-    await expect(page.getByTestId('booth-picker-hint')).toContainText('1 booth available in your tier');
-  });
-
-  test('map: a declined saved card releases the booth and lets the vendor pick again', async ({ page }) => {
-    await mockVendor(page, { app: applicantApp(), states: {}, version: 1, choose: 'declined' });
-    await page.goto(statusUrl);
-    await page.getByTestId('booth-A2').click();
-    await page.getByTestId('booth-buy').click();
-    await expect(page.getByTestId('booth-picker-notice')).toContainText('We could not charge your card');
-    await expect(page.getByTestId('booth-buy-sheet')).toHaveCount(0);
-    await expect(page.getByTestId('apply-payment')).not.toContainText('Paid');
-    await expect(page.getByTestId('booth-A2')).not.toHaveAttribute('aria-disabled', 'true');
-  });
-
-  test('spots: the tabs switch by keyboard; the sortable list holds a priced spot; a held spot counts down and can be given back', async ({ page }) => {
-    const { calls, bodies } = await mockVendor(page, { app: applicantApp({ selection: selection({ savedCard: null }), hasCardOnFile: false }), states: {}, version: 1, choose: 'no-card' });
-    // Stay on the page: the pay step here is triggered from the held view below.
-    await page.goto(statusUrl);
-    await page.getByTestId('space-mode-map').focus();
-    await page.keyboard.press('ArrowRight');
-    await expect(page.getByTestId('space-mode-spots')).toHaveAttribute('aria-selected', 'true');
-    await expect(page.getByTestId('space-mode-spots')).toBeFocused();
-
-    // Only open spots of the vendor's category, each at its own price.
+    // Only open spots of the vendor's category are listed, each at its own price.
     const options = page.getByTestId('spot-option');
     await expect(options).toHaveCount(2);
     await expect(options.nth(0)).toContainText('Spot A2');
     await expect(options.nth(0)).toContainText('$303.30');
     await expect(options.nth(1)).toContainText('Spot A5');
     await expect(options.nth(1)).toContainText('$404.04');
+    // Other categories' spots are listed greyed out, for reference, and cannot be chosen.
+    const others = page.getByTestId('spot-other-categories');
+    await expect(others).toContainText('Other categories');
+    await expect(others).toContainText('Table');
+    await expect(page.getByTestId('spot-other')).toHaveCount(1);
+    await expect(page.getByTestId('spot-other')).toContainText('Spot T1');
+    await expect(page.getByTestId('spot-other')).toHaveAttribute('aria-disabled', 'true');
+    await expect(others.getByRole('radio')).toHaveCount(0);
+
+    // Map → list: tapping a spot selects its row.
+    await expect(page.getByTestId('space-continue')).toBeDisabled();
+    await page.getByTestId('booth-A5').click();
+    await expect(page.getByRole('radio', { name: /Spot A5/ })).toBeChecked();
+    await expect(options.nth(1)).toHaveAttribute('data-selected', 'true');
+    await expect(page.getByTestId('space-selection-summary')).toContainText('Spot A5');
+    await expect(page.getByTestId('space-total')).toContainText('$404.04');
+
+    // Sold, held and blocked booths, and the other category, are not selectable (nor tab stops).
+    for (const label of ['A1', 'A3', 'A4', 'T1']) {
+      const booth = page.getByTestId(`booth-${label}`);
+      await expect(booth).toHaveAttribute('aria-disabled', 'true');
+      await expect(booth).toHaveAttribute('tabindex', '-1');
+      await booth.click({ force: true });
+      await expect(page.getByTestId('space-selection-summary')).toContainText('Spot A5');
+    }
+
+    // List → map: choosing a row marks the booth.
+    await page.getByText('Spot A2').click();
+    await expect(page.getByTestId('booth-A2')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByTestId('booth-A5')).not.toHaveAttribute('aria-pressed', 'true');
+
+    // Step 2: how to pay (the saved card), then pay.
+    await page.getByTestId('space-continue').click();
+    await expect(choose).toHaveAttribute('data-step', 'review');
+    await expect(page.getByRole('heading', { name: /How you pay/ })).toBeFocused();
+    await expect(page.getByTestId('space-review-spot')).toContainText('Spot A2');
+    await expect(page.getByTestId('space-pay-with')).toBeVisible();
+    await expect(page.getByTestId('space-hold')).toHaveText('Pay $303.30 with Visa ending 4242');
+    // The map stays in view but cannot change the choice here.
+    await expect(page.getByTestId('booth-A5')).toHaveAttribute('aria-disabled', 'true');
+
+    await page.getByTestId('space-hold').click();
+    // The status poll returns PAID: the page re-renders as paid with the booth and the chooser goes away.
+    await expect(page.getByTestId('apply-payment')).toContainText('Paid', { timeout: 10_000 });
+    await expect(page.getByTestId('apply-placement')).toContainText('Booth: A2 · 10×10');
+    await expect(page.getByTestId('choose-space')).toHaveCount(0);
+    await expect(page.getByTestId('apply-hero')).not.toHaveAttribute('data-variant', 'compact');
+    expect(bodies[0]).toEqual({ boothId: 'b-2', addOns: [], useSavedCard: true });
+    // Success came from the status poll, never from the hold response.
+    expect(calls.filter((c) => c === `GET /applications/${APP_ID}/status`).length).toBeGreaterThanOrEqual(2);
+  });
+
+  test('map, mobile: compact header, a square map, then the list; the action bar appears once a spot is chosen', async ({ page }) => {
+    await mockVendor(page, { app: applicantApp(), states: {}, version: 1, choose: 'card' });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(statusUrl);
+    const hero = page.getByTestId('apply-hero');
+    await expect(hero).toContainText('Your application');
+    await expect(hero).toContainText('Map Expo');
+    await expect(hero).toContainText('Hall');
+    await expect(hero.getByRole('link', { name: 'Back to Map Expo' })).toBeVisible();
+    const heroBox = await hero.boundingBox();
+    expect(heroBox && heroBox.height < 110).toBe(true);
+
+    const mapBox = await page.getByTestId('space-map').locator('> div').first().boundingBox();
+    expect(mapBox && Math.abs(mapBox.width - mapBox.height) < 2 && mapBox.width >= 389).toBe(true);
+    const listBox = await page.getByTestId('space-spots').boundingBox();
+    expect(mapBox && listBox && listBox.y > mapBox.y + mapBox.height).toBe(true);
+    // No horizontal scroll at phone width.
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+    await expect(page.getByTestId('space-action-bar')).toBeHidden();
+    await page.getByTestId('booth-A2').click();
+    const bar = page.getByTestId('space-action-bar');
+    await expect(bar).toBeVisible();
+    await expect(bar).toContainText('Spot A2');
+    await bar.getByTestId('space-continue').click();
+    await expect(page.getByTestId('choose-space')).toHaveAttribute('data-step', 'review');
+    // Step 2 on a phone hides the map so the review is on screen.
+    await expect(page.getByTestId('space-map')).toBeHidden();
+    await page.getByTestId('space-change-spot').click();
+    await expect(page.getByTestId('choose-space')).toHaveAttribute('data-step', 'spot');
+    await expect(page.getByRole('radio', { name: /Spot A2/ })).toBeChecked();
+  });
+
+  test('map: paying on Checkout instead holds the booth and follows the pay-now checkout', async ({ page }) => {
+    const { calls, bodies } = await mockVendor(page, { app: applicantApp(), states: {}, version: 1, choose: 'no-card' });
+    await page.goto(statusUrl);
+    await page.getByTestId('booth-A2').click();
+    await page.getByTestId('space-continue').click();
+    await page.getByTestId('space-pay-with').getByLabel(/secure checkout page/).check();
+    await expect(page.getByTestId('space-hold')).toHaveText('Hold this space and pay $303.30');
+    await page.getByTestId('space-hold').click();
+    await expect(page).toHaveURL(/checkout=paid/);
+    await expect(page.getByTestId('apply-checkout-notice')).toContainText('Payment received');
+    expect(bodies[0]).toEqual({ boothId: 'b-2', addOns: [], useSavedCard: false });
+    expect(calls.indexOf(`POST /applications/${APP_ID}/pay`)).toBeGreaterThan(calls.indexOf(`POST /applications/${APP_ID}/select`));
+  });
+
+  test('map: a spot that was just taken shows the message, goes back to step 1 and refetches the map', async ({ page }) => {
+    const { calls } = await mockVendor(page, { app: applicantApp(), states: {}, version: 1, choose: 'taken' });
+    await page.goto(statusUrl);
+    await page.getByTestId('booth-A2').click();
+    await page.getByTestId('space-continue').click();
+    const mapFetches = () => calls.filter((c) => c.startsWith('GET map')).length;
+    const before = mapFetches();
+    await page.getByTestId('space-hold').click();
+    await expect(page.getByTestId('space-notice')).toContainText('That spot was just taken');
+    await expect(page.getByTestId('choose-space')).toHaveAttribute('data-step', 'spot');
+    await expect(page.getByTestId('booth-A2')).toHaveAttribute('aria-label', /Sold/);
+    await expect(page.getByTestId('booth-A2')).toHaveAttribute('aria-disabled', 'true');
+    expect(mapFetches()).toBeGreaterThan(before);
+    await expect(page.getByTestId('spot-option')).toHaveCount(1);
+    await expect(page.getByTestId('space-price-range')).toHaveText('1 open · $404.04');
+  });
+
+  test('map: a declined saved card keeps the spot open and switches to the checkout page', async ({ page }) => {
+    await mockVendor(page, { app: applicantApp(), states: {}, version: 1, choose: 'declined' });
+    await page.goto(statusUrl);
+    await page.getByTestId('booth-A2').click();
+    await page.getByTestId('space-continue').click();
+    await page.getByTestId('space-hold').click();
+    await expect(page.getByTestId('space-notice')).toContainText('We could not charge Visa ending 4242');
+    await expect(page.getByTestId('space-pay-with').getByLabel(/secure checkout page/)).toBeChecked();
+    await expect(page.getByTestId('space-hold')).toHaveText('Hold this space and pay $303.30');
+    await expect(page.getByTestId('apply-payment')).not.toContainText('Paid');
+    await expect(page.getByTestId('booth-A2')).not.toHaveAttribute('aria-label', /Sold/);
+  });
+
+  test('map, nothing to review: step 1 holds directly; sorted list; a held spot counts down and can be given back', async ({ page }) => {
+    const { calls, bodies } = await mockVendor(page, { app: applicantApp({ selection: selection({ savedCard: null }), hasCardOnFile: false }), states: {}, version: 1, choose: 'no-card' });
+    await page.goto(statusUrl);
+    // No extras and no saved card: a single step.
+    await expect(page.getByTestId('choose-space')).not.toContainText('Step 1 of 2');
+    await expect(page.getByTestId('space-hold')).toBeDisabled();
+    await expect(page.getByTestId('space-hold')).toHaveText('Choose a spot');
+
+    const options = page.getByTestId('spot-option');
     await page.getByTestId('spot-sort').selectOption('price');
     await expect(options.nth(0)).toContainText('Spot A2');
-    await expect(page.getByTestId('spot-hold')).toBeDisabled();
-
-    await page.getByLabel(/Spot A5/).check();
-    await expect(page.getByTestId('spot-total')).toContainText('$404.04');
-    await expect(page.getByTestId('spot-hold')).toHaveText('Hold this space and pay $404.04');
+    await options.filter({ hasText: 'Spot A5' }).click();
+    await expect(page.getByRole('radio', { name: /Spot A5/ })).toBeChecked();
+    await expect(page.getByTestId('space-total')).toContainText('$404.04');
+    await expect(page.getByTestId('space-hold')).toHaveText('Hold this space and pay $404.04');
 
     // Hold the spot; the checkout redirect is intercepted by making /pay fail once.
     await page.route(`${API}/applications/${APP_ID}/pay**`, (route) => route.fulfill(json({ error: 'ServiceUnavailable', message: 'Checkout is down for a moment' }, 503)), { times: 1 });
-    await page.getByTestId('spot-hold').click();
+    await page.getByTestId('space-hold').click();
     await expect(page.getByTestId('space-notice')).toContainText('Checkout is down for a moment');
     expect(bodies[0]).toEqual({ boothId: 'b-6', addOns: [], useSavedCard: false });
 
@@ -359,7 +422,7 @@ test.describe('choose your space', () => {
     });
     await page.goto(statusUrl);
     await expect(page.getByTestId('space-map-pending')).toContainText('The floor plan is being updated');
-    await expect(page.getByTestId('space-mode-map')).toHaveCount(0);
+    await expect(page.getByTestId('space-map')).toHaveCount(0);
     await expect(page.getByTestId('space-hold')).toHaveCount(0);
   });
 
@@ -372,7 +435,7 @@ test.describe('choose your space', () => {
     });
     await page.goto(statusUrl);
     await expect(page.getByTestId('choose-space')).toHaveAttribute('data-mode', 'TIERS');
-    await expect(page.getByTestId('space-mode-map')).toHaveCount(0);
+    await expect(page.getByTestId('space-map')).toHaveCount(0);
     await expect(page.getByTestId('space-list')).toContainText('The organizer assigns your exact spot');
     await expect(page.getByTestId('space-left')).toContainText('Your space is reserved');
     await page.route(`${API}/applications/${APP_ID}/pay**`, (route) => route.fulfill(json({ error: 'ServiceUnavailable', message: 'Checkout is down for a moment' }, 503)), { times: 1 });
@@ -435,7 +498,7 @@ test.describe('choose your space', () => {
     });
     await page.goto(statusUrl);
     await expect(page.getByTestId('space-placed-booth')).toContainText('booth A4');
-    await expect(page.getByTestId('space-mode-map')).toHaveCount(0);
+    await expect(page.getByTestId('space-map')).toHaveCount(0);
     await expect(page.getByTestId('space-hold')).toHaveText('Hold this space and pay $303.30');
   });
 
@@ -445,7 +508,7 @@ test.describe('choose your space', () => {
     await expect(page.getByTestId('apply-status-pill')).toHaveText('Submitted');
     await expect(page.getByTestId('apply-payment')).toContainText('Nothing to pay now');
     await expect(page.getByTestId('choose-space')).toHaveCount(0);
-    await expect(page.getByTestId('booth-buy')).toHaveCount(0);
+    await expect(page.getByTestId('space-hold')).toHaveCount(0);
     await expect(page.getByTestId('booth-A2')).toHaveCount(0);
   });
 });

@@ -2,7 +2,9 @@
 // email, right after submitting, or back from Stripe Checkout, with a signed
 // token in the URL. Spec 037 phase 5 (apply-then-choose): an approved vendor
 // on a PAID form chooses their space here — from the list or on the floor
-// map — and pays (ChooseSpace). Add-on lines (spec 012) are itemised under the
+// map — and pays (ChooseSpace). A MAP form's spot choice takes the whole
+// screen (compact hero, map beside the list from lg; `usesSpotWorkspace`),
+// with this application's summary in the list column. Add-on lines (spec 012) are itemised under the
 // amount once a space is chosen. Rows from before the change can still resume
 // an abandoned Checkout or pay an outstanding balance.
 'use client';
@@ -10,9 +12,10 @@
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { CalendarClock } from 'lucide-react';
 import api, { type ChooseBoothResult } from '@/services/api';
 import { formatDate, money, PAYMENT_LABEL, STATUS_LABEL, STATUS_STYLE, needsSpaceChoice, type AddOnLineInput, type ApplicantApplication } from '@/lib/applications';
-import ChooseSpace from '@/components/applications/ChooseSpace';
+import ChooseSpace, { usesSpotWorkspace } from '@/components/applications/ChooseSpace';
 import ApplyShell from '../../ApplyShell';
 
 const STATUS_COPY: Record<ApplicantApplication['status'], string> = {
@@ -105,8 +108,11 @@ function StatusContent({ params }: { params: { eventId: string; applicationId: s
     }
   };
 
+  // The spot chooser gets the full width and a compact hero.
+  const workspace = Boolean(app && token && usesSpotWorkspace(app));
+
   return (
-    <ApplyShell eventId={params.eventId} title="Your application">
+    <ApplyShell eventId={params.eventId} title="Your application" width={workspace ? 'full' : 'narrow'} hero={workspace ? 'compact' : 'full'}>
       {(event) => {
         if (error) return <p role="alert" data-testid="apply-status-error" className="text-red-700 dark:text-red-300">{error}</p>;
         if (!app) return <p className="text-gray-600 dark:text-slate-400">Loading…</p>;
@@ -120,121 +126,175 @@ function StatusContent({ params }: { params: { eventId: string; applicationId: s
           pay: () => api.post<{ url: string }>(`/applications/${app.id}/pay?token=${guest}`, {}),
           release: () => api.post(`/applications/${app.id}/release?token=${guest}`, {}),
         };
-        return (
-          <div className="space-y-6" data-testid="apply-status">
-            {checkout && CHECKOUT_NOTICE[checkout] && (
-              <p role="status" data-testid="apply-checkout-notice" className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-800 dark:bg-green-900/20 dark:text-green-300">
-                {CHECKOUT_NOTICE[checkout]}
+        const checkoutNotice = checkout && CHECKOUT_NOTICE[checkout] && (
+          <p role="status" data-testid="apply-checkout-notice" className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-800 dark:bg-green-900/20 dark:text-green-300">
+            {CHECKOUT_NOTICE[checkout]}
+          </p>
+        );
+        const answerRows = (
+          <dl className="space-y-3">
+            {app.answers.map((a) => (
+              <div key={a.questionId}>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">{a.label}</dt>
+                <dd className="text-sm text-gray-800 dark:text-slate-200">
+                  {a.image ? <img src={a.image.urls.thumb} alt={a.label} className="mt-1 h-24 w-24 rounded object-cover" /> : Array.isArray(a.value) ? a.value.join(', ') : a.value === 'true' ? 'Yes' : a.value === 'false' ? 'No' : a.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        );
+        const accountLink = accountHref && (
+          <p className="text-sm text-gray-600 dark:text-slate-400">
+            Want to see all your applications, withdraw, or update your card?{' '}
+            <Link href={accountHref} className="text-brand-link font-semibold hover:underline">Sign in to your account</Link> with {app.profile ? 'the email you applied with' : 'your email'}.
+          </p>
+        );
+        const dates = (
+          <p className="text-xs text-gray-500 dark:text-slate-400">
+            Submitted {formatDate(app.submittedAt, true)}{app.decidedAt ? ` · decided ${formatDate(app.decidedAt, true)}` : ''}
+          </p>
+        );
+
+        // Workspace: one compact card instead of three repeats of "choose your space and pay".
+        const summary = (
+          <div className="space-y-3" data-testid="apply-status">
+            {checkoutNotice}
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs text-gray-600 dark:text-slate-400">
+                  {app.form.name}
+                  {app.tier ? ` · ${app.tier.name}` : ''}
+                </p>
+                <p className="truncate text-lg font-semibold leading-snug text-gray-900 dark:text-slate-100" title={app.profile.businessName}>
+                  {app.profile.businessName}
+                </p>
+              </div>
+              <span data-testid="apply-status-pill" className={`shrink-0 rounded-full px-3 py-1 text-sm font-semibold ${STATUS_STYLE[app.status]}`}>{STATUS_LABEL[app.status]}</span>
+            </div>
+            {app.paymentDueAt && (
+              <p className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900 ring-1 ring-inset ring-amber-200 dark:bg-amber-900/20 dark:text-amber-200 dark:ring-amber-800" data-testid="apply-payment">
+                <CalendarClock className="h-3.5 w-3.5" aria-hidden />
+                Choose and pay by {formatDate(app.paymentDueAt)}
               </p>
             )}
-            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-5 sm:p-6">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-slate-400">
-                    {app.form.name}{app.tier ? ` · ${app.tier.name}` : ''}
-                    {app.orderRef ? <span className="font-mono" data-testid="apply-order-ref"> · Order {app.orderRef}</span> : null}
-                  </p>
-                  <h2 className="text-xl font-semibold text-gray-900 dark:text-slate-100">{app.profile.businessName}</h2>
-                </div>
-                <span data-testid="apply-status-pill" className={`rounded-full px-3 py-1 text-sm font-semibold ${STATUS_STYLE[app.status]}`}>{STATUS_LABEL[app.status]}</span>
-              </div>
-              <p className="mt-4 text-gray-800 dark:text-slate-200" data-testid="apply-status-copy">
-                {choosing ? 'You are approved! Choose your space below and pay to confirm your spot.' : STATUS_COPY[app.status]}
-              </p>
-              {app.status === 'APPROVED' && (app.booth?.status === 'SOLD' || app.booth?.status === 'RESERVED' || (!app.booth && app.boothLabel)) && (
-                <p className="mt-2 text-sm text-gray-700 dark:text-slate-300" data-testid="apply-placement">
-                  {app.booth ? 'Booth' : 'Placement'}: <strong>{app.booth?.label ?? app.boothLabel}</strong>
-                  {app.booth?.w && app.booth?.h ? ` · ${app.booth.w}×${app.booth.h}` : ''}
-                  {app.booth && (
-                    <>
-                      {' · '}
-                      <Link href={`/events/${app.event.id}/map?booth=${encodeURIComponent(app.booth.label)}`} className="text-brand-link font-semibold hover:underline">
-                        See it on the map
-                      </Link>
-                    </>
-                  )}
-                </p>
-              )}
-              {app.form.kind === 'PAID' && (
-                <div className="mt-3 rounded-lg bg-gray-50 dark:bg-slate-900/40 p-3 text-sm text-gray-700 dark:text-slate-300" data-testid="apply-payment">
-                  <p>
-                    <span className="font-semibold">Payment:</span> {PAYMENT_LABEL[app.paymentStatus]}
-                    {app.amounts.applicantPays > 0 ? ` · ${money(app.amounts.applicantPays)}` : ''}
-                    {['PAYMENT_DUE', 'AWAITING_SELECTION'].includes(app.paymentStatus) && app.paymentDueAt ? ` · due ${formatDate(app.paymentDueAt)}` : ''}
-                    {app.refundedTotal > 0 ? ` · ${money(app.refundedTotal)} refunded` : ''}
-                  </p>
-                  {(app.addOns?.length > 0 || (app.adjustments?.length ?? 0) > 0) && (
-                    <ul className="mt-2 space-y-0.5 text-xs text-gray-600 dark:text-slate-400" data-testid="apply-add-ons">
-                      <li className="flex justify-between gap-3">
-                        <span>{app.tier?.name ?? app.form.name}</span>
-                        <span>{money(app.amounts.applicantPays - (app.addOns ?? []).reduce((s, l) => s + l.applicantPays, 0))}</span>
-                      </li>
-                      {(app.adjustments?.length ?? 0) > 0 && (
-                        <li className="pl-3 italic text-gray-500 dark:text-slate-500" data-testid="apply-adjustment">
-                          Includes {(app.adjustments ?? []).map((adj) => `${adj.reason} (${adj.amount < 0 ? `−${money(-adj.amount)}` : `+${money(adj.amount)}`})`).join(', ')}
-                        </li>
-                      )}
-                      {(app.addOns ?? []).map((l) => (
-                        <li key={l.id} className="flex justify-between gap-3">
-                          <span>{l.name} ×{l.quantity}</span>
-                          <span>{money(l.applicantPays)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {app.status !== 'DRAFT' && (choosing || PAYMENT_COPY[app.paymentStatus]) && (
-                    <p className="mt-1 text-gray-600 dark:text-slate-400">
-                      {choosing ? 'Choose your space below and pay to confirm your spot.' : PAYMENT_COPY[app.paymentStatus]}
-                    </p>
-                  )}
-                  {(app.canResume || app.canPay) && !choosing && (
-                    <div className="mt-3 flex flex-wrap items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => goToCheckout(app.canResume ? 'resume' : 'pay')}
-                        disabled={busy}
-                        data-testid={app.canResume ? 'apply-resume' : 'apply-pay-now'}
-                        className="rounded-lg bg-brand px-4 py-2 font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-60 transition-colors"
-                      >
-                        {busy ? 'Opening…' : app.canResume ? 'Finish submitting' : `Pay ${money(app.amounts.applicantPays)} now`}
-                      </button>
-                      {actionError && <span role="alert" className="text-red-700 dark:text-red-300">{actionError}</span>}
-                    </div>
-                  )}
-                </div>
-              )}
-              {choosing && token && (
-                <div className="mt-5 border-t border-gray-200 pt-5 dark:border-slate-700">
-                  <ChooseSpace application={app} spaceApi={spaceApi} refresh={load} />
-                </div>
-              )}
-              <p className="mt-4 text-xs text-gray-500 dark:text-slate-400">
-                Submitted {formatDate(app.submittedAt, true)}{app.decidedAt ? ` · decided ${formatDate(app.decidedAt, true)}` : ''}
-              </p>
-            </div>
-
+          </div>
+        );
+        const footer = (
+          <div className="space-y-4 border-t border-gray-200 pt-5 dark:border-slate-700">
             {app.answers.length > 0 && (
+              <details className="group rounded-xl border border-gray-200 dark:border-slate-700">
+                <summary className="cursor-pointer select-none rounded-xl px-4 py-3 text-sm font-semibold text-gray-900 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link dark:text-slate-100 dark:hover:bg-slate-800">
+                  What you told us
+                </summary>
+                <div className="px-4 pb-4">{answerRows}</div>
+              </details>
+            )}
+            {accountLink}
+            {dates}
+          </div>
+        );
+
+        // ChooseSpace keeps one place in the tree in both layouts (only class
+        // names change), so a hold that turns the workspace into the held view
+        // never remounts it mid-charge and loses its poll or notice.
+        return (
+          <div className={workspace ? undefined : 'space-y-6'} data-testid={workspace ? undefined : 'apply-status'}>
+            {!workspace && checkoutNotice}
+            {!workspace && (
+              <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-5 sm:p-6">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm text-gray-600 dark:text-slate-400">
+                      {app.form.name}{app.tier ? ` · ${app.tier.name}` : ''}
+                      {app.orderRef ? <span className="font-mono" data-testid="apply-order-ref"> · Order {app.orderRef}</span> : null}
+                    </p>
+                    <h2 className="text-xl font-semibold text-gray-900 dark:text-slate-100">{app.profile.businessName}</h2>
+                  </div>
+                  <span data-testid="apply-status-pill" className={`rounded-full px-3 py-1 text-sm font-semibold ${STATUS_STYLE[app.status]}`}>{STATUS_LABEL[app.status]}</span>
+                </div>
+                <p className="mt-4 text-gray-800 dark:text-slate-200" data-testid="apply-status-copy">
+                  {choosing ? 'You are approved! Choose your space below and pay to confirm your spot.' : STATUS_COPY[app.status]}
+                </p>
+                {app.status === 'APPROVED' && (app.booth?.status === 'SOLD' || app.booth?.status === 'RESERVED' || (!app.booth && app.boothLabel)) && (
+                  <p className="mt-2 text-sm text-gray-700 dark:text-slate-300" data-testid="apply-placement">
+                    {app.booth ? 'Booth' : 'Placement'}: <strong>{app.booth?.label ?? app.boothLabel}</strong>
+                    {app.booth?.w && app.booth?.h ? ` · ${app.booth.w}×${app.booth.h}` : ''}
+                    {app.booth && (
+                      <>
+                        {' · '}
+                        <Link href={`/events/${app.event.id}/map?booth=${encodeURIComponent(app.booth.label)}`} className="text-brand-link font-semibold hover:underline">
+                          See it on the map
+                        </Link>
+                      </>
+                    )}
+                  </p>
+                )}
+                {app.form.kind === 'PAID' && (
+                  <div className="mt-3 rounded-lg bg-gray-50 dark:bg-slate-900/40 p-3 text-sm text-gray-700 dark:text-slate-300" data-testid="apply-payment">
+                    <p>
+                      <span className="font-semibold">Payment:</span> {PAYMENT_LABEL[app.paymentStatus]}
+                      {app.amounts.applicantPays > 0 ? ` · ${money(app.amounts.applicantPays)}` : ''}
+                      {['PAYMENT_DUE', 'AWAITING_SELECTION'].includes(app.paymentStatus) && app.paymentDueAt ? ` · due ${formatDate(app.paymentDueAt)}` : ''}
+                      {app.refundedTotal > 0 ? ` · ${money(app.refundedTotal)} refunded` : ''}
+                    </p>
+                    {(app.addOns?.length > 0 || (app.adjustments?.length ?? 0) > 0) && (
+                      <ul className="mt-2 space-y-0.5 text-xs text-gray-600 dark:text-slate-400" data-testid="apply-add-ons">
+                        <li className="flex justify-between gap-3">
+                          <span>{app.tier?.name ?? app.form.name}</span>
+                          <span>{money(app.amounts.applicantPays - (app.addOns ?? []).reduce((s, l) => s + l.applicantPays, 0))}</span>
+                        </li>
+                        {(app.adjustments?.length ?? 0) > 0 && (
+                          <li className="pl-3 italic text-gray-500 dark:text-slate-500" data-testid="apply-adjustment">
+                            Includes {(app.adjustments ?? []).map((adj) => `${adj.reason} (${adj.amount < 0 ? `−${money(-adj.amount)}` : `+${money(adj.amount)}`})`).join(', ')}
+                          </li>
+                        )}
+                        {(app.addOns ?? []).map((l) => (
+                          <li key={l.id} className="flex justify-between gap-3">
+                            <span>{l.name} ×{l.quantity}</span>
+                            <span>{money(l.applicantPays)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {app.status !== 'DRAFT' && (choosing || PAYMENT_COPY[app.paymentStatus]) && (
+                      <p className="mt-1 text-gray-600 dark:text-slate-400">
+                        {choosing ? 'Choose your space below and pay to confirm your spot.' : PAYMENT_COPY[app.paymentStatus]}
+                      </p>
+                    )}
+                    {(app.canResume || app.canPay) && !choosing && (
+                      <div className="mt-3 flex flex-wrap items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => goToCheckout(app.canResume ? 'resume' : 'pay')}
+                          disabled={busy}
+                          data-testid={app.canResume ? 'apply-resume' : 'apply-pay-now'}
+                          className="rounded-lg bg-brand px-4 py-2 font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-60 transition-colors"
+                        >
+                          {busy ? 'Opening…' : app.canResume ? 'Finish submitting' : `Pay ${money(app.amounts.applicantPays)} now`}
+                        </button>
+                        {actionError && <span role="alert" className="text-red-700 dark:text-red-300">{actionError}</span>}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <div className="mt-4">{dates}</div>
+              </div>
+            )}
+
+            {choosing && token && (
+              <div className={workspace ? undefined : 'bg-white dark:bg-slate-800 rounded-lg shadow-sm p-5 sm:p-6'}>
+                <ChooseSpace application={app} spaceApi={spaceApi} refresh={load} layout={workspace ? 'page' : 'inline'} summary={summary} footer={footer} />
+              </div>
+            )}
+
+            {!workspace && app.answers.length > 0 && (
               <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-5 sm:p-6">
                 <h3 className="text-base font-semibold text-gray-900 dark:text-slate-100 mb-3">What you told us</h3>
-                <dl className="space-y-3">
-                  {app.answers.map((a) => (
-                    <div key={a.questionId}>
-                      <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">{a.label}</dt>
-                      <dd className="text-sm text-gray-800 dark:text-slate-200">
-                        {a.image ? <img src={a.image.urls.thumb} alt={a.label} className="mt-1 h-24 w-24 rounded object-cover" /> : Array.isArray(a.value) ? a.value.join(', ') : a.value === 'true' ? 'Yes' : a.value === 'false' ? 'No' : a.value}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
+                {answerRows}
               </div>
             )}
 
-            {accountHref && (
-              <p className="text-sm text-gray-600 dark:text-slate-400">
-                Want to see all your applications, withdraw, or update your card?{' '}
-                <Link href={accountHref} className="text-brand-link font-semibold hover:underline">Sign in to your account</Link> with {app.profile ? 'the email you applied with' : 'your email'}.
-              </p>
-            )}
+            {!workspace && accountLink}
           </div>
         );
       }}

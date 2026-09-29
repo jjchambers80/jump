@@ -108,7 +108,9 @@ export default function Booth({
   return (
     <g
       role="button"
-      tabIndex={0}
+      // A spot that cannot be chosen is announced but skipped by Tab, so the
+      // picker's keyboard path only visits spots the viewer can take.
+      tabIndex={disabled ? -1 : 0}
       data-testid={`booth-${booth.label}`}
       aria-label={`Booth ${booth.label}, ${booth.w} by ${booth.h}, ${
         booth.tierId ? 'tier assigned' : 'no tier'
