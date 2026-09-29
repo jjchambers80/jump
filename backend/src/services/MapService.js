@@ -14,6 +14,7 @@ import {
   ELEMENT_KINDS, EMPTY_LAYOUT, MIN_MAP_NAME_LENGTH, MAX_MAP_NAME_LENGTH,
 } from '../config/maps.js';
 import logger from '../utils/logger.js';
+import { findByPublicIdentifier } from '../utils/publicIdentifier.js';
 import feeService from './FeeService.js';
 import storeFileService from './StoreFileService.js';
 import imageService from './ImageService.js';
@@ -491,8 +492,15 @@ class MapService {
 
   // ─── Public read ─────────────────────────────────────────────────────
 
-  /** GET /events/:eventId/map — published map only, no-cache. */
-  async publicMap(eventId) {
+  /**
+   * GET /events/:eventId/map — published map only, no-cache. `identifier` is
+   * the event's id or its public slug: the storefront map page lives at the
+   * slug URL (resource slugs) and asks for the map with it.
+   */
+  async publicMap(identifier) {
+    const resolved = await findByPublicIdentifier(prisma.event, identifier, { select: { id: true } });
+    if (!resolved) throw new NotFoundError('Map not published for this event');
+    const eventId = resolved.id;
     const map = await prisma.floorMap.findUnique({
       where: { eventId },
       include: {

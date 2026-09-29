@@ -55,23 +55,27 @@ export default function MapLegend({
                   key={tier.id}
                   type="button"
                   onClick={() => onTierSelect?.(isSelected ? null : tier.id)}
-                  className={`flex items-center gap-2 w-full text-left px-2 py-1 rounded text-sm transition-colors ${
+                  className={`flex items-start gap-2 w-full text-left px-2 py-1 rounded text-sm transition-colors ${
                     isSelected
                       ? 'bg-indigo-50 dark:bg-indigo-900/30 ring-1 ring-indigo-500'
                       : 'hover:bg-gray-50 dark:hover:bg-slate-700'
                   }`}
                 >
                   <span
-                    className="w-3 h-3 rounded-sm shrink-0"
+                    className="mt-1 w-3 h-3 rounded-sm shrink-0"
                     style={{ backgroundColor: dark ? swatch.dark : swatch.light }}
                   />
-                  <span className="flex-1 min-w-0 truncate text-gray-700 dark:text-slate-300">
-                    {tier.name}
-                  </span>
-                  <span className="text-xs text-gray-500 dark:text-slate-400">
-                    {tier.priceFrom !== undefined && tier.priceTo !== undefined && tier.priceFrom !== tier.priceTo
-                      ? `${formatPrice(tier.priceFrom)}–${formatPrice(tier.priceTo)}`
-                      : formatPrice(tier.priceFrom ?? tier.price)}
+                  {/* Name and price stack so a price range never squeezes the name
+                      (the legend column is narrow beside the map). */}
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate text-gray-700 dark:text-slate-300" title={tier.name}>
+                      {tier.name}
+                    </span>
+                    <span className="text-xs tabular-nums text-gray-500 dark:text-slate-400" data-testid={`legend-price-${tier.id}`}>
+                      {tier.priceFrom !== undefined && tier.priceTo !== undefined && tier.priceFrom !== tier.priceTo
+                        ? `${formatPrice(tier.priceFrom)}–${formatPrice(tier.priceTo)}`
+                        : formatPrice(tier.priceFrom ?? tier.price)}
+                    </span>
                   </span>
                 </button>
               );

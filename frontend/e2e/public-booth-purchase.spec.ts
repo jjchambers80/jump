@@ -236,6 +236,11 @@ test.describe('choose your space', () => {
     await expect(page.getByTestId('apply-pay-now')).toHaveCount(0);
     await expect(page.getByTestId('booth-picker-hint')).toContainText('2 booths available in your tier');
     await expect(page.getByTestId('booth-picker-dim-note')).toContainText('other categories');
+    // The legend's price range sits under the category name instead of squeezing it.
+    await expect(page.getByTestId('legend-price-t-1')).toHaveText('$303.30–$404.04');
+    const legendName = page.getByTestId('booth-picker').getByTitle('10×10 booth');
+    await expect(legendName).toBeVisible();
+    expect(await legendName.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
 
     // A spot with its own price is priced on its own.
     await page.getByTestId('booth-A5').click();
