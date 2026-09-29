@@ -27,9 +27,8 @@ Plan and decisions D1–D11: `specs/039-vendor-space-selection/plan.md`. PRs: #2
 | `backend/src/services/MapService.js` | Saves `price` per booth under a row lock and refuses changes on in-use booths; public payload booth `price` and legend `priceFrom` / `priceTo`; duplication copies prices |
 | `backend/src/services/ApplicationTemplateService.js` | CHOOSE_SPACE merge fields `space.onMap`, `space.pickTier`; hides the single price on MAP forms |
 | `backend/src/scripts/backfill-039-space-selection.js` | Sets forms that already sold from a published map to MAP |
-| `frontend/src/components/applications/ChooseSpace.tsx` | Vendor screen: tier radio group, or **Map \| Spots** tabs, waiting state, held state |
-| `frontend/src/components/applications/SpotList.tsx` | Accessible, sortable list of the vendor's open spots with their prices |
-| `frontend/src/components/maps/BoothPicker.tsx` | Floor-map picker: other categories faded and locked, per-spot price |
+| `frontend/src/components/applications/ChooseSpace.tsx` | Vendor screen: tier radio group, waiting state, held state; mounts `SpotWorkspace` on MAP forms |
+| `frontend/src/components/applications/SpotWorkspace.tsx` | MAP forms: the floor map and a synced list of open spots, other categories greyed, extras / payment as step 2 ([Spot Chooser](spot-chooser.md)) |
 | `frontend/src/components/maps/boothSelection.ts` | `spotPrice`, `priceRangeLabel`, `sortSpots` (Vitest) |
 | `frontend/src/components/applications/FormEditorCards.tsx` | Form setting "How vendors choose their space" |
 | `frontend/src/app/admin/events/[eventId]/applications/DecisionDialog.tsx` | Approve dialog: "Let the vendor choose" (TIERS) or a required category (MAP) |
@@ -64,7 +63,7 @@ cd backend && DRY_RUN=false npm run db:backfill:039-space-selection
    - 400 `CATEGORY_REQUIRED` for `tierId: null`.
    - 409 `NO_SPOTS_IN_CATEGORY` when the published map has no spot in that category.
 2. **The vendor sees the whole map.** Only available spots of their category can be selected; other categories are faded and `aria-disabled`.
-3. **The Spots tab lists the same spots** with size and all-in price, sortable by spot or price.
+3. **The list beside the map shows the same spots** with size and all-in price, sortable by spot or price, kept in sync with the map; other categories' spots follow greyed out. See [Spot Chooser](spot-chooser.md).
 4. **`select` requires a `boothId` of that category** (400 `BOOTH_REQUIRED`). There is no category-only purchase, except when staff already placed the vendor.
 5. **While the map is unpublished,** the applicant view returns `map.pending: true` and the screen shows "The floor plan is being updated".
 6. **Opening a MAP form, or switching an open form to MAP,** needs a published map with at least one spot on every active tier (400 `MAP_NOT_READY` with `details.tiers`). A draft form may be set to MAP earlier, which is how a duplicated event (whose map copy is a draft) works.
@@ -132,6 +131,7 @@ See [Database Architecture](database-architecture.md).
 
 ## Related Features
 
+- [Spot Chooser](spot-chooser.md): the vendor's MAP-form screen
 - [Applications](applications.md): apply-then-choose, approval, payment
 - [Floor Maps and Vendor Booth Purchases](floor-maps.md): holds, sold state, public map
 - [Floor Map Builder](map-builder.md): where spots and their prices are edited
