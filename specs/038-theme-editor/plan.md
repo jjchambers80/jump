@@ -58,7 +58,7 @@ Shopify's model is the one organizers already know:
 - The phase 0 spike (038-0) is a go/no-go gate. The fallback is our own editor on the dnd-kit and `dnd-kit-sortable-tree` packages already used by the Menus editor.
 - Puck is imported only through `frontend/src/theme/editor/puck.ts`.
 
-**D2. No template language.** Sections are React components, their settings are described by zod schemas, and structure is JSON.
+**D2. No template language.** Sections are React components, their settings are described by declarative field specs in `@jump/theme` (one spec drives validation and the Puck fields; contracts C12), and structure is JSON.
 
 **D3. Page model.**
 
