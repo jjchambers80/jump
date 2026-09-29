@@ -180,10 +180,12 @@ const custom = <V,>(label: string, render: CustomField<V>['render']): CustomFiel
 /** One @jump/theme field spec → one Puck field. */
 export function puckField(spec: FieldSpec, ctx: FieldContext): Field {
   switch (spec.kind) {
+    // Stored documents only carry what the organizer set; show the default
+    // the storefront will use as a placeholder instead of an empty box.
     case 'text':
-      return { type: 'text', label: spec.label };
+      return { type: 'text', label: spec.label, placeholder: spec.default ? String(spec.default) : undefined };
     case 'textarea':
-      return { type: 'textarea', label: spec.label };
+      return { type: 'textarea', label: spec.label, placeholder: spec.default ? String(spec.default) : undefined };
     case 'richtext':
       return custom<string>(spec.label, ({ value, onChange, id }) => (
         <div className="space-y-1">
@@ -201,7 +203,14 @@ export function puckField(spec: FieldSpec, ctx: FieldContext): Field {
         options: (spec.options ?? []).map((value) => ({ label: optionLabel(value), value: value as string })),
       };
     case 'range':
-      return { type: 'number', label: spec.unit ? `${spec.label} (${spec.unit})` : spec.label, min: spec.min, max: spec.max, step: spec.step };
+      return {
+        type: 'number',
+        label: spec.unit ? `${spec.label} (${spec.unit})` : spec.label,
+        min: spec.min,
+        max: spec.max,
+        step: spec.step,
+        placeholder: spec.default !== undefined && spec.default !== null ? `Default: ${spec.default}` : undefined,
+      };
     case 'toggle':
       return { type: 'radio', label: spec.label, options: [{ label: 'On', value: true }, { label: 'Off', value: false }] } as Field;
     case 'colorScheme':

@@ -140,7 +140,7 @@ export default function SectionsOutline() {
   const { appState } = usePuck();
   const root = appState.data.root.props as Record<string, Item[]>;
   return (
-    <nav aria-label="Sections" className="p-2" data-testid="sections-outline">
+    <nav aria-label="Sections" className="p-2 text-gray-900" data-testid="sections-outline">
       {GROUPS.map((group) => {
         const items = root[group.slot] ?? [];
         return (
