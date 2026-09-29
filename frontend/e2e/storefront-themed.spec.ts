@@ -3,6 +3,7 @@
 // server), 12 (no theme-mode flash) and 17 (rollback to the legacy renderer).
 
 import { expect as baseExpect, test, type Page } from '@playwright/test';
+import { PARITY_COVER, parityMenus, parityPublic } from './fixtures/storefront.mjs';
 
 // Server-rendered routes compile on first hit under `next dev`; give the
 // first assertions room so the suite stays deterministic across shards.
@@ -176,4 +177,102 @@ test.describe('theme mode without a flash (test 12)', () => {
     await page.goto('/');
     await expect(page.locator('html')).not.toHaveClass(/\bdark\b/);
   });
+});
+
+test.describe('Events page (038C)', () => {
+  test('the org home falls back to the Events template and /events renders it too (D5)', async ({ page }) => {
+    await page.goto('/organizations/theme-light');
+    await expect(page.locator('[data-section="EventList"]')).toHaveCount(1);
+    await expect(page.getByRole('main').getByRole('heading', { name: 'Upcoming events' })).toBeVisible();
+    await page.goto('/organizations/theme-light/events');
+    await expect(page.locator('[data-section="EventList"]')).toHaveCount(1);
+    await expect(page.getByText('Summer Show 3')).toBeVisible();
+  });
+
+  test('an organization outside the rollout gets today\'s storefront on /events too', async ({ page }) => {
+    await page.route('**/organizations/legacy-events/public', (route) => route.fulfill({ json: parityPublic('legacy-events') }));
+    await page.route('**/organizations/legacy-events/public/menus', (route) => route.fulfill({ json: parityMenus() }));
+    await page.route(`**${PARITY_COVER}`, (route) => route.fulfill({ contentType: 'image/png', body: COVER_PNG }));
+    await page.goto('/organizations/legacy-events/events');
+    await expect(page.getByText('Summer Show 1').first()).toBeVisible();
+    await expect(page.locator('[data-theme-frame]')).toHaveCount(0);
+  });
+});
+
+// 1×1 teal PNG, stretched by object-cover: the same pixels on both pages.
+const COVER_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNgqP/PAAAC/gF6+CQL1QAAAABJRU5ErkJggg==',
+  'base64',
+);
+
+/** Share of pixels that differ by more than a small per-channel tolerance, computed in the browser. */
+async function pixelDiff(page: Page, a: Buffer, b: Buffer) {
+  return page.evaluate(
+    async ([a64, b64]) => {
+      const load = (src: string) =>
+        new Promise<HTMLImageElement>((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = reject;
+          img.src = `data:image/png;base64,${src}`;
+        });
+      const [ia, ib] = await Promise.all([load(a64), load(b64)]);
+      if (ia.width !== ib.width || ia.height !== ib.height) return { ratio: 1, size: [ia.width, ia.height, ib.width, ib.height] };
+      const read = (img: HTMLImageElement) => {
+        const c = document.createElement('canvas');
+        c.width = img.width;
+        c.height = img.height;
+        const ctx = c.getContext('2d')!;
+        ctx.drawImage(img, 0, 0);
+        return ctx.getImageData(0, 0, img.width, img.height).data;
+      };
+      const da = read(ia);
+      const db = read(ib);
+      let differing = 0;
+      for (let i = 0; i < da.length; i += 4) {
+        if (Math.abs(da[i] - db[i]) > 16 || Math.abs(da[i + 1] - db[i + 1]) > 16 || Math.abs(da[i + 2] - db[i + 2]) > 16) differing += 1;
+      }
+      return { ratio: differing / (da.length / 4), size: [ia.width, ia.height] };
+    },
+    [a.toString('base64'), b.toString('base64')] as const,
+  );
+}
+
+test.describe('screenshot parity with today\'s org home (test 10)', () => {
+  for (const width of [1440, 390]) {
+    for (const mode of ['LIGHT', 'DARK'] as const) {
+      test(`${width}px ${mode.toLowerCase()}`, async ({ page, browser }) => {
+        const themedOrg = mode === 'DARK' ? 'theme-parity-dark' : 'theme-parity';
+        const legacyOrg = mode === 'DARK' ? 'parity-legacy-dark' : 'parity-legacy';
+        const shoot = async (p: Page, url: string) => {
+          await p.setViewportSize({ width, height: 900 });
+          await p.route(`**${PARITY_COVER}`, (route) => route.fulfill({ contentType: 'image/png', body: COVER_PNG }));
+          await p.goto(url);
+          await expect(p.getByText('Summer Show 3').first()).toBeVisible();
+          // The legacy page fetches its menus after the events: wait for the footer and nav too.
+          await expect(p.getByTestId('storefront-footer')).toBeVisible();
+          await expect(p.locator('img[alt$="cover"]')).toHaveJSProperty('complete', true);
+          await p.waitForLoadState('networkidle');
+          // Settle: the list's entrance animation and the org's forced mode.
+          await p.waitForTimeout(600);
+          return p.screenshot({ fullPage: true, animations: 'disabled' });
+        };
+
+        const legacy = await browser.newPage();
+        await legacy.route(`**/organizations/${legacyOrg}/public`, (route) => route.fulfill({ json: parityPublic(legacyOrg, mode) }));
+        await legacy.route(`**/organizations/${legacyOrg}/public/menus`, (route) => route.fulfill({ json: parityMenus() }));
+        const before = await shoot(legacy, `/organizations/${legacyOrg}`);
+        await legacy.close();
+
+        const after = await shoot(page, `/organizations/${themedOrg}/events`);
+        if (process.env.PARITY_SHOTS_DIR) {
+          const { writeFileSync } = await import('node:fs');
+          writeFileSync(`${process.env.PARITY_SHOTS_DIR}/${width}-${mode}-legacy.png`, before);
+          writeFileSync(`${process.env.PARITY_SHOTS_DIR}/${width}-${mode}-themed.png`, after);
+        }
+        const diff = await pixelDiff(page, before, after);
+        expect(diff.ratio, JSON.stringify(diff)).toBeLessThan(0.001);
+      });
+    }
+  }
 });

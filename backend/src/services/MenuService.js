@@ -59,7 +59,8 @@ export function hrefFor(organizationSlug, item, target) {
     case 'HOME':
       return `/organizations/${organizationSlug}`;
     case 'EVENTS':
-      return `/organizations/${organizationSlug}#events`;
+      // Spec 038: the Events page has its own path (it was the #events anchor of the home).
+      return `/organizations/${organizationSlug}/events`;
     case 'EVENT':
       return target ? `/events/${target.slug}` : null;
     case 'VENUE':

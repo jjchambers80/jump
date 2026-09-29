@@ -62,7 +62,7 @@ function render(orgId, { organization = {}, header, footer } = {}) {
     settings: resolveSettings({}, preset.settings),
     content: resolveContent({}),
     documents,
-    resolved: { events: events(orgId), menus: menus(orgId), links: { 'EVENTS:': `/organizations/${orgId}#events` }, files: {} },
+    resolved: { events: events(orgId), menus: menus(orgId), links: { 'EVENTS:': `/organizations/${orgId}/events` }, files: {} },
   };
 }
 
@@ -127,8 +127,26 @@ const contentRoutes = (orgId) => ({
   },
 });
 
+// Screenshot parity (spec 038 test 10): the same organization, events and
+// menus served to the themed renderer ("theme-parity") and, through browser
+// mocks, to today's client page (any id without a fixture).
+export const PARITY_COVER = '/uploads/parity-cover.png';
+export function parityPublic(orgId, themeMode = 'LIGHT') {
+  return {
+    organization: { ...org(orgId, { coverUrl: PARITY_COVER, themeMode }), id: orgId },
+    events: events('theme-parity'),
+    locked: false,
+  };
+}
+export const parityMenus = () => menus('theme-parity');
+
 /** orgId → { render, routes, gate? } */
 export const FIXTURES = {
+  'theme-parity': { render: render('theme-parity', { organization: { coverUrl: PARITY_COVER } }), routes: {} },
+  'theme-parity-dark': {
+    render: { ...render('theme-parity', { organization: { coverUrl: PARITY_COVER, themeMode: 'DARK' } }), organization: org('theme-parity-dark', { coverUrl: PARITY_COVER, themeMode: 'DARK' }) },
+    routes: {},
+  },
   'theme-light': { render: render('theme-light', { header: announcementHeader }), routes: contentRoutes('theme-light') },
   'theme-dark': { render: render('theme-dark', { organization: { themeMode: 'DARK', brandColor: '#be185d' } }), routes: {} },
   'theme-system': { render: render('theme-system', { organization: { themeMode: 'SYSTEM' } }), routes: {} },

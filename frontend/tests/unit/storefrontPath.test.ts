@@ -24,6 +24,9 @@ describe('storefrontHref', () => {
       '/account'
     );
     expect(storefrontHref('/events/e1', org, 'tickets.example.com')).toBe('/events/e1');
+    // Spec 038 (test 9): the Events page short path.
+    expect(storefrontHref('/organizations/org_1/events', org, 'tickets.example.com')).toBe('/events');
+    expect(storefrontHref('/organizations/org_1/events', org, 'localhost:3001')).toBe('/organizations/org_1/events');
     expect(storefrontHref('https://x.test', org, 'tickets.example.com')).toBe('https://x.test');
   });
 });

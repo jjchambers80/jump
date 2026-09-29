@@ -54,3 +54,11 @@ describe('normalizeToPath', () => {
     expect(normalizeToPath('/has space')).toBeNull();
   });
 });
+
+describe('spec 038 storefront paths stay reserved', () => {
+  it('reserves the Events page and organization paths', () => {
+    for (const path of ['/events', '/events/', '/events/abc', '/organizations/org/events']) {
+      expect(isReservedPath(path)).toBe(true);
+    }
+  });
+});

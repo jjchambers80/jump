@@ -14,22 +14,25 @@ type ThemedFrame = Exclude<StorefrontFrame, { kind: 'legacy' }>;
 export default async function ThemedContentPage<T>({
   frame,
   path,
+  pagePath,
   notFoundTitle,
   children,
 }: {
   frame: ThemedFrame;
   path: string;
+  /** This page's own path (for the frame's links). */
+  pagePath: string;
   notFoundTitle: string;
   children: (data: T) => ReactNode;
 }) {
-  if (frame.kind === 'locked') return <ThemedStorefront frame={frame}>{null}</ThemedStorefront>;
+  if (frame.kind === 'locked') return <ThemedStorefront frame={frame} path={pagePath}>{null}</ThemedStorefront>;
   const response = await storefrontGet<T>(path);
   // The frame answered, so a lock here means access changed between the two calls.
   const lock = lockFrom(response);
-  if (lock) return <ThemedStorefront frame={{ kind: 'locked', lock, hadAccessCookie: false }}>{null}</ThemedStorefront>;
+  if (lock) return <ThemedStorefront frame={{ kind: 'locked', lock, hadAccessCookie: false }} path={pagePath}>{null}</ThemedStorefront>;
   const slug = frame.data.organization.slug;
   return (
-    <ThemedStorefront frame={frame}>
+    <ThemedStorefront frame={frame} path={pagePath}>
       {response.status === 200 && response.body ? (
         children(response.body)
       ) : (

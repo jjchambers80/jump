@@ -22,7 +22,7 @@ describe('hrefFor', () => {
   it('maps every link type to a platform path', () => {
     const org = 'org_1';
     expect(hrefFor(org, { linkType: 'HOME' })).toBe('/organizations/org_1');
-    expect(hrefFor(org, { linkType: 'EVENTS' })).toBe('/organizations/org_1#events');
+    expect(hrefFor(org, { linkType: 'EVENTS' })).toBe('/organizations/org_1/events');
     expect(hrefFor(org, { linkType: 'EVENT', targetId: 'e1' }, { slug: 'expo' })).toBe('/events/expo');
     expect(hrefFor(org, { linkType: 'VENUE', targetId: 'v1' }, { slug: 'hall' })).toBe('/venues/hall');
     expect(hrefFor(org, { linkType: 'EVENT', targetId: 'e1' }, null)).toBeNull();

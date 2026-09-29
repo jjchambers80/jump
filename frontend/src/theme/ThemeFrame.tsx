@@ -5,7 +5,7 @@
 
 import type { ReactNode } from 'react';
 import { Render } from '@puckeditor/core/rsc';
-import { renderConfig } from './render/config';
+import { renderConfig, renderable } from './render/config';
 import ThemeScope from './ThemeScope';
 import { schemeCss, settingsVars } from './settingsCss';
 import type { SectionContext } from './sections/context';
@@ -13,20 +13,27 @@ import type { ThemeDocument, ThemeRender } from './types';
 
 function renderDocument(doc: ThemeDocument, ctx: SectionContext) {
   // Puck's Data shape; documents never carry drop zones (validated server-side).
-  return <Render config={renderConfig} data={{ root: doc.root, content: doc.content, zones: {} } as any} metadata={{ ctx }} />;
+  const data = renderable(doc);
+  return <Render config={renderConfig} data={{ root: data.root, content: data.content, zones: {} } as any} metadata={{ ctx }} />;
 }
 
 export default function ThemeFrame({
   data,
   host,
   nameIsHeading = false,
+  path,
+  query = {},
   children,
 }: {
   data: ThemeRender;
   host: string | null;
   /** The organization name is the page's h1 (org home). */
   nameIsHeading?: boolean;
-  children: ReactNode;
+  /** Current path and query (EventList filter and page links). */
+  path: string;
+  query?: Record<string, string | undefined>;
+  /** The page body. Omitted: the template document renders as the page's main. */
+  children?: ReactNode;
 }) {
   const ctx: SectionContext = {
     organization: data.organization,
@@ -35,6 +42,8 @@ export default function ThemeFrame({
     content: data.content,
     host,
     nameIsHeading,
+    path,
+    query,
   };
   return (
     <ThemeScope
@@ -46,7 +55,12 @@ export default function ThemeFrame({
     >
       <div data-theme-frame={data.theme.id ?? 'preset'}>
         {renderDocument(data.documents.header, ctx)}
-        {children}
+        {children ??
+          (data.documents.template && (
+            <main id="storefront-main" tabIndex={-1} className="outline-none">
+              {renderDocument(data.documents.template, ctx)}
+            </main>
+          ))}
         {renderDocument(data.documents.footer, ctx)}
       </div>
     </ThemeScope>
