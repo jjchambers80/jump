@@ -686,6 +686,7 @@ const EditorCanvas = forwardRef<EditorCanvasHandle, EditorCanvasProps>(function 
                 onSelect={onItemKey}
                 handles={false}
                 checkmark={false}
+                priceBadge
               />
             </g>
           ))}

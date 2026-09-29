@@ -27,6 +27,7 @@ function toEditorForm(template: FormTemplate, name: string, definition: Template
     paymentDueDays: definition.paymentDueDays ?? 7,
     overduePolicy: definition.overduePolicy ?? 'WITHDRAW',
     reserveOnApproval: definition.reserveOnApproval !== false,
+    spaceSelection: definition.spaceSelection === 'MAP' ? 'MAP' : 'TIERS',
     tiers: definition.tiers.map((t, i) => ({ id: `t${i}`, ...t })),
     questions: definition.questions.map((q, i): Question => ({ id: `q${i}`, displayOrder: i, ...q })),
   };
@@ -181,6 +182,7 @@ export default function TemplateEditorPage({ params }: { params: { templateId: s
                       paymentDueDays: Number(settings.paymentDueDays),
                       overduePolicy: settings.overduePolicy as TemplateDefinition['overduePolicy'],
                       reserveOnApproval: settings.reserveOnApproval !== false,
+                      spaceSelection: settings.spaceSelection === 'MAP' ? 'MAP' : 'TIERS',
                     }
                   : {}),
               }));

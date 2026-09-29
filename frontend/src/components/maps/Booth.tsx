@@ -41,6 +41,8 @@ interface BoothProps {
   handles?: boolean;
   /** Checkmark on a selected booth without handles (default). The builder draws its own chrome. */
   checkmark?: boolean;
+  /** Spec 039: mark a booth that carries its own price (builder). */
+  priceBadge?: boolean;
 }
 
 export default function Booth({
@@ -56,6 +58,7 @@ export default function Booth({
   disabled = false,
   handles = true,
   checkmark = !handles,
+  priceBadge = false,
 }: BoothProps) {
   const x = booth.x * gridSize;
   const y = booth.y * gridSize;
@@ -230,6 +233,15 @@ export default function Booth({
         >
           {vendorName.slice(0, Math.floor(w / 6))}
         </text>
+      )}
+
+      {priceBadge && typeof booth.price === 'number' && (
+        <g aria-hidden="true" pointerEvents="none" data-testid={`booth-price-badge-${booth.label}`}>
+          <circle cx={x + w - 5} cy={y + 5} r={4} fill={dark ? '#fbbf24' : '#b45309'} />
+          <text x={x + w - 5} y={y + 5.3} textAnchor="middle" dominantBaseline="central" fontSize={6} fontWeight={700} fill={dark ? '#0f172a' : '#ffffff'}>
+            $
+          </text>
+        </g>
       )}
 
       {selected && handles && (

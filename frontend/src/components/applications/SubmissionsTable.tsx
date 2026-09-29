@@ -560,7 +560,14 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
                   </td>
                   <td className="px-3 py-2 align-top text-gray-800 dark:text-slate-200">
                     {row.formName}
-                    {row.tier && <div className="text-xs text-gray-600 dark:text-slate-400">{row.tier.name}</div>}
+                    {row.tier ? (
+                      <div className="text-xs text-gray-600 dark:text-slate-400">{row.tier.name}</div>
+                    ) : row.status === 'APPROVED' && row.paymentStatus === 'AWAITING_SELECTION' ? (
+                      // Spec 039 D6: approved on a TIERS form without a tier — the vendor picks one.
+                      <div className="text-xs italic text-gray-500 dark:text-slate-400" data-testid={`application-vendor-choosing-${row.id}`}>
+                        Vendor choosing
+                      </div>
+                    ) : null}
                     {orgWide && row.event && (
                       <div className="text-xs text-gray-600 dark:text-slate-400" data-testid={`application-event-${row.id}`}>
                         {row.event.name} · {formatEventDate(row.event.date, row.event.timezone)}
