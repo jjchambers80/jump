@@ -390,6 +390,16 @@ describe('Maps contract', () => {
     // Only the SOLD booth exposes its holder; nothing internal leaks.
     expect(sold.applicationId).toBeUndefined();
 
+    // The storefront map page lives at the event's slug URL and asks with it.
+    const slug = `maps-slug-${Date.now()}`;
+    await prisma.event.update({ where: { id: event.id }, data: { slug } });
+    const bySlug = await request(app).get(`/events/${slug}/map`);
+    expect(bySlug.status).toBe(200);
+    expect(bySlug.body.eventId).toBe(event.id);
+    expect(bySlug.body.booths.find((b) => b.label === 'A1')).toMatchObject({ status: 'SOLD', vendorName: `${TAG} Vendor Co` });
+    expect(bySlug.body.vendors).toHaveLength(1);
+    expect((await request(app).get(`/events/no-such-event-${Date.now()}/map`)).status).toBe(404);
+
     const again = await request(app).get(`/events/${event.id}/map`).set('If-None-Match', res.headers.etag);
     expect(again.status).toBe(304);
 
