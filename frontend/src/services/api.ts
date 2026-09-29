@@ -482,6 +482,8 @@ export interface PublicMapBooth {
   status: BoothStatus;
   /** Spec 039: what this booth costs the vendor, all in; null when it has no tier. */
   price?: number | null;
+  /** Spec 039: the same before fees and tax, for totals with extras (`estimateSpaceTotal`). */
+  listedPrice?: number | null;
   tier: { id: string; name: string; price: number } | null;
   vendorName: string | null;
 }

@@ -881,6 +881,8 @@ class ApplicationService {
         name: tier.name,
         description: tier.description ?? null,
         price: Number(tier.price),
+        // Before fees and tax, the placed booth's own price when it has one.
+        listedPrice: spacePriceFor({ tier, booth: a.tier ? placed : null }),
         applicantPays: amounts.applicantPays,
         feesIncluded: amounts.feeMode === 'PASS' ? Math.round((amounts.applicantPays - amounts.subtotal - amounts.tax) * 100) / 100 : 0,
         tax: amounts.tax,
@@ -899,6 +901,16 @@ class ApplicationService {
       reserveOnApproval: a.form.reserveOnApproval !== false,
       placedBooth: placed ? { id: placed.id, label: placed.label, w: placed.w, h: placed.h } : null,
       savedCard: card,
+      // What the vendor screen needs to total a choice exactly like the
+      // order will: listed prices go through the same fee math (lib/fees.ts ↔
+      // FeeService) instead of summing per-line all-in prices, which counts
+      // Stripe's fixed fee once per line.
+      pricing: {
+        feeMode: a.form.feeMode === 'ABSORB' ? 'ABSORB' : 'PASS',
+        taxable: a.form.taxable === true,
+        taxRate: Number(event.taxRate || 0),
+        taxInclusive: organization.taxInclusivePricing === true,
+      },
     };
     const noMap = { available: false, pending: false, mapId: null, boothsAvailable: 0, priceFrom: null, priceTo: null };
 

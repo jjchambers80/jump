@@ -656,6 +656,8 @@ class MapService {
         status: b.status,
         // Spec 039: what this booth costs the vendor, fees and tax included.
         price: boothPrices.get(b.id),
+        // Before fees and tax: what the vendor screen totals with its extras.
+        listedPrice: tierMap[b.tierId] ? spacePriceFor({ tier: tierMap[b.tierId], booth: b }) : null,
         tier: b.tierId && tierMap[b.tierId]
           ? { id: b.tierId, name: tierMap[b.tierId].name, price: Number(tierMap[b.tierId].price) }
           : null,

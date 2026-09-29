@@ -181,7 +181,9 @@ describe('Vendor space selection modes (spec 039)', () => {
         categories: null,
         category: expect.objectContaining({ id: truck.id, name: 'Food truck' }),
         map: { available: true, pending: false, mapId: map.id, boothsAvailable: 1, priceFrom: 450, priceTo: 450 },
+        pricing: { feeMode: 'ABSORB', taxable: false, taxRate: 0, taxInclusive: false },
       });
+      expect(view.body.selection.category).toMatchObject({ price: 300, listedPrice: 300 });
     });
 
     it('shows a waiting state while the map is unpublished', async () => {

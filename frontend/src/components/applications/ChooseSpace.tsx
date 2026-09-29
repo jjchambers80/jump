@@ -26,7 +26,7 @@ import AddOnPicker from '@/components/AddOnPicker';
 import BoothPicker from '@/components/maps/BoothPicker';
 import { formatCountdown, holdRemaining } from '@/components/maps/boothSelection';
 import type { ChooseBoothResult } from '@/services/api';
-import { formatDate, money, type AddOnLineInput, type ApplicantApplication, type SpaceCategory, type SpaceSelection } from '@/lib/applications';
+import { estimateSpaceTotal, formatDate, money, type AddOnLineInput, type ApplicantApplication, type SpaceCategory, type SpaceSelection } from '@/lib/applications';
 
 export interface SpaceApi {
   /** `POST …/select` — a booth (map) or the category (list), with add-ons; optionally charge the saved card. */
@@ -130,9 +130,14 @@ export default function ChooseSpace({ application, spaceApi, refresh }: ChooseSp
     () => offeredAddOns.filter((a) => (qty[a.id] ?? 0) > 0).map((a) => ({ addOnId: a.id, quantity: qty[a.id] })),
     [offeredAddOns, qty]
   );
-  // Estimates from per-unit figures: the order allocates fees across its lines to the cent.
   const extrasTotal = Math.round(offeredAddOns.reduce((s, a) => s + a.applicantPays * (qty[a.id] ?? 0), 0) * 100) / 100;
-  const total = Math.round(((category?.applicantPays ?? 0) + extrasTotal) * 100) / 100;
+  const extraLines = offeredAddOns.map((a) => ({ price: a.price, taxable: a.taxable, quantity: qty[a.id] ?? 0 }));
+  // The total for a space listed at `listed` plus the extras, computed like the
+  // order will be (one fee calculation). Older payloads without `pricing` fall
+  // back to summing all-in figures, which can be a few cents high.
+  const totalAt = (listed: number | null | undefined, allIn: number) =>
+    sel.pricing && typeof listed === 'number' ? estimateSpaceTotal(listed, extraLines, sel.pricing) : Math.round((allIn + extrasTotal) * 100) / 100;
+  const total = totalAt(category?.listedPrice ?? category?.price, category?.applicantPays ?? 0);
   const useSavedCard = payWith === 'card' && Boolean(sel.savedCard);
   const soldOut = category ? !category.guaranteed && category.spacesLeft <= 0 : false;
 
@@ -219,6 +224,13 @@ export default function ChooseSpace({ application, spaceApi, refresh }: ChooseSp
           : e.code === 'BOOTH_TAKEN'
             ? 'That spot was just taken. Pick another one.'
             : e.message || 'Could not hold your space';
+      // A screen that missed the hold (another tab, a failed refresh) catches up:
+      // the refresh below shows the held space, so say so instead of an error.
+      if (e.code === 'NOT_AWAITING_SELECTION') {
+        setNotice({ tone: 'info', text: 'Your space is already held. Finish paying below, or change your choice.' });
+        await refresh().catch(() => null);
+        return;
+      }
       setNotice({ tone: 'error', text });
       await refresh().catch(() => null);
     }
@@ -525,6 +537,7 @@ export default function ChooseSpace({ application, spaceApi, refresh }: ChooseSp
                   application={application}
                   price={total}
                   extrasTotal={extrasTotal}
+                  totalFor={(booth) => totalAt(booth.listedPrice, typeof booth.price === 'number' ? booth.price : category.applicantPays)}
                   chargesSavedCard={useSavedCard}
                   chooseBooth={(boothId) => spaceApi.select({ boothId, addOns: addOnLines, useSavedCard })}
                   payNow={spaceApi.pay}
@@ -538,6 +551,7 @@ export default function ChooseSpace({ application, spaceApi, refresh }: ChooseSp
                   tierId={category.id}
                   fallbackPrice={category.applicantPays}
                   extrasTotal={extrasTotal}
+                  totalFor={(spot) => totalAt(spot.listedPrice, typeof spot.price === 'number' ? spot.price : category.applicantPays)}
                   busy={Boolean(busy)}
                   actionLabel={payLabel}
                   onHold={(boothId) => hold({ boothId })}

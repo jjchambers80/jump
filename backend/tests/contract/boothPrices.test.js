@@ -164,6 +164,9 @@ describe('Per-booth prices (spec 039)', () => {
       expect(res.status).toBe(200);
       expect(res.body.booths.find((b) => b.label === 'A1').price).toBe(350);
       expect(res.body.booths.find((b) => b.label === 'A2').price).toBe(200);
+      // Before fees and tax, for the vendor screen's exact totals with extras.
+      expect(res.body.booths.find((b) => b.label === 'A1').listedPrice).toBe(350);
+      expect(res.body.booths.find((b) => b.label === 'A2').listedPrice).toBe(200);
       expect(res.body.legend).toEqual([expect.objectContaining({ tierId: tier.id, price: 200, priceFrom: 200, priceTo: 350 })]);
     });
   });
