@@ -8,7 +8,7 @@
 // the rollout" and serves the legacy client page: existing specs are unaffected.
 
 import { createServer } from 'node:http';
-import { FIXTURES } from './storefront.mjs';
+import { EVENTS_TEMPLATE, FIXTURES } from './storefront.mjs';
 
 const port = Number(process.env.FIXTURE_API_PORT || 3002);
 
@@ -72,7 +72,13 @@ createServer(async (req, res) => {
     if (fixture.render.renderer === 'legacy') return send(res, 200, fixture.render);
     if (locked(fixture, req)) return send(res, 403, gateBody(fixture));
     const page = url.searchParams.get('page');
-    const body = page === 'frame' ? { ...fixture.render, page: 'frame', documents: { ...fixture.render.documents, template: null } } : fixture.render;
+    const withTemplate = (template, extra) => ({ ...fixture.render, ...extra, documents: { ...fixture.render.documents, template } });
+    const body =
+      page === 'frame'
+        ? withTemplate(null, { page: 'frame' })
+        : page === 'events'
+          ? withTemplate(EVENTS_TEMPLATE, { page: 'events', fallback: false })
+          : fixture.render;
     return send(res, 200, body);
   }
 

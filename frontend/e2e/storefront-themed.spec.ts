@@ -276,3 +276,33 @@ test.describe('screenshot parity with today\'s org home (test 10)', () => {
     }
   }
 });
+
+test.describe('starter homepage sections (038S)', () => {
+  test('a saved homepage renders on the server from the starter sections', async ({ request }) => {
+    const html = await (await request.get('/organizations/theme-home')).text();
+    expect(html).toContain('Summer Series 2031');
+    expect(html).toContain('About the series');
+    expect(html).toContain('Bring a friend');
+    expect(html).not.toContain('data-section="EventList"');
+  });
+
+  test('buttons resolve their links, a gone target drops out, upcoming events link to the Events page', async ({ page }) => {
+    await page.goto('/organizations/theme-home');
+    const hero = page.locator('[data-section="Hero"]');
+    await expect(hero.getByRole('heading', { level: 2, name: 'Summer Series 2031' })).toBeVisible();
+    await expect(hero.getByRole('link', { name: 'See all events' })).toHaveAttribute('href', '/organizations/theme-home/events');
+    await expect(hero.getByText('Deleted page')).toHaveCount(0);
+
+    const upcoming = page.getByRole('region', { name: 'Coming up' });
+    await expect(upcoming.locator('[data-testid^="event-card-name-"]')).toHaveCount(2);
+    await upcoming.getByRole('link', { name: 'View all events' }).click();
+    await expect(page).toHaveURL(/\/organizations\/theme-home\/events$/);
+    await expect(page.locator('[data-section="EventList"]')).toHaveCount(1);
+  });
+
+  test('one h1 per page: the organization name on the homepage', async ({ page }) => {
+    await page.goto('/organizations/theme-home');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Riverside Presents');
+  });
+});

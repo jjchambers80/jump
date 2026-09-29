@@ -9,12 +9,20 @@ import FooterSection from '../sections/FooterSection';
 import HeaderSection from '../sections/HeaderSection';
 import EventsHeroSection from '../sections/EventsHeroSection';
 import EventListSection from '../sections/EventListSection';
+import ButtonBlock from '../sections/ButtonBlock';
+import CallToActionSection from '../sections/CallToActionSection';
+import HeroSection from '../sections/HeroSection';
+import RichTextSection from '../sections/RichTextSection';
+import UpcomingEventsSection from '../sections/UpcomingEventsSection';
 import { sectionContext } from '../sections/context';
 
 // Puck hands every component its props plus `puck` (metadata) and, for slot
-// fields, a render function. Our sections take plain `blocks` arrays, so the
-// raw data is read from props before Puck's slot rendering is involved.
+// fields, a render function. Template sections declare `blocks` as a slot so
+// Puck renders their Button blocks (and the editor can select them); header
+// and footer blocks are data their section lays out itself.
 type PuckProps = Record<string, any> & { puck: { metadata: Record<string, unknown> } };
+
+const buttonsSlot = { type: 'slot' as const, allow: ['Button'] };
 
 export const renderConfig: Config = {
   components: {
@@ -32,6 +40,30 @@ export const renderConfig: Config = {
     EventList: {
       render: ({ puck, ...props }: PuckProps) => <EventListSection {...(props as any)} ctx={sectionContext(puck.metadata)} />,
     },
+    Hero: {
+      fields: { blocks: buttonsSlot },
+      render: ({ puck, blocks, ...props }: PuckProps) => (
+        <HeroSection {...(props as any)} Buttons={slotWrapper(blocks)} ctx={sectionContext(puck.metadata)} />
+      ),
+    },
+    RichText: {
+      fields: { blocks: buttonsSlot },
+      render: ({ puck, blocks, ...props }: PuckProps) => (
+        <RichTextSection {...(props as any)} Buttons={slotWrapper(blocks)} ctx={sectionContext(puck.metadata)} />
+      ),
+    },
+    CallToAction: {
+      fields: { blocks: buttonsSlot },
+      render: ({ puck, blocks, ...props }: PuckProps) => (
+        <CallToActionSection {...(props as any)} Buttons={slotWrapper(blocks)} ctx={sectionContext(puck.metadata)} />
+      ),
+    },
+    UpcomingEvents: {
+      render: ({ puck, ...props }: PuckProps) => <UpcomingEventsSection {...(props as any)} ctx={sectionContext(puck.metadata)} />,
+    },
+    Button: {
+      render: ({ puck, ...props }: PuckProps) => <ButtonBlock {...(props as any)} ctx={sectionContext(puck.metadata)} />,
+    },
     Footer: {
       render: ({ puck, blocks, ...props }: PuckProps) => (
         <FooterSection {...(props as any)} blocks={blocksOf(blocks)} ctx={sectionContext(puck.metadata)} />
@@ -39,6 +71,18 @@ export const renderConfig: Config = {
     },
   },
 };
+
+/**
+ * The slot renders its own wrapper element, so layout classes go on it
+ * (contracts C12). `empty:hidden` drops the wrapper's spacing when every
+ * button is gone (no buttons, or targets that no longer resolve).
+ */
+function slotWrapper(Slot: unknown) {
+  const Render = typeof Slot === 'function' ? (Slot as (p?: { className?: string }) => JSX.Element) : null;
+  return function Buttons({ className = '' }: { className?: string } = {}) {
+    return Render ? <Render className={`${className} empty:hidden`} /> : null;
+  };
+}
 
 function blocksOf(value: unknown) {
   return Array.isArray(value) ? value : [];
