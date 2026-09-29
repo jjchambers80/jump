@@ -41,7 +41,7 @@ Decision: **no**. In map mode the second tab becomes an accessible **Spots list*
 Decision: freely until the first application on the form is approved; after that only if no application is in `AWAITING_SELECTION` / `PAYMENT_DUE` / `PROCESSING` (409 `SPACE_SELECTION_LOCKED` with the count). Paid vendors are unaffected either way.
 
 **D9 (was O4). Map mode prerequisites.**
-Decision: saving `MAP` requires the event's map to be **published** with at least one booth bound to each active tier of the form (422 lists the tiers without booths). If the map is later unpublished, the vendor sees "The floor plan is being updated — check back soon" instead of a picker, and the Approve dialog warns.
+Decision: an **open** `MAP` form requires the event's map to be **published** with at least one booth bound to each active tier of the form (400 `MAP_NOT_READY` lists the tiers without booths). Refined in 039B: the rule is checked when a MAP form opens, and when an open form switches to MAP. A draft form may be set to MAP before the map is ready, so a duplicated event, whose map copy starts as a draft, works too. If the map is later unpublished, the vendor sees "The floor plan is being updated — check back soon" instead of a picker, and the Approve dialog warns.
 
 **D10 (was O5). Staff-placed booth price.** Today a booth placed by staff before payment means "pay for the category only".
 Decision: before payment the vendor pays the **placed booth's price** (override or tier); the assign dialog shows the price change. After payment, placement never re-prices; staff use an order adjustment.

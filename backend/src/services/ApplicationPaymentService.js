@@ -567,14 +567,23 @@ class ApplicationPaymentService {
       });
       if (lines.length) await addOnService.release(tx, lines);
       let capacitySlot = locked.capacitySlot;
-      if (locked.tierId && capacitySlot === 'RESERVED' && form?.reserveOnApproval === false) {
+      // Spec 039 D6: a tier the vendor picked at selection goes back with its
+      // slot (the approval took none), so they can pick again.
+      const vendorTier = locked.tierChosenByVendor === true;
+      if (locked.tierId && capacitySlot === 'RESERVED' && (vendorTier || form?.reserveOnApproval === false)) {
         await tx.$executeRaw`UPDATE "ApplicationTier" SET "quantityReserved" = GREATEST("quantityReserved" - 1, 0) WHERE "id" = ${locked.tierId}`;
         capacitySlot = 'NONE';
       }
       await boothService.releaseHoldOnFailure(applicationId, { tx });
       const row = await tx.application.update({
         where: { id: applicationId },
-        data: { paymentStatus: 'AWAITING_SELECTION', capacitySlot, selectionHeldUntil: null, stripeCheckoutSessionId: null },
+        data: {
+          paymentStatus: 'AWAITING_SELECTION',
+          capacitySlot,
+          selectionHeldUntil: null,
+          stripeCheckoutSessionId: null,
+          ...(vendorTier && { tierId: null, tierChosenByVendor: false }),
+        },
         select: { status: true, paymentStatus: true, order: { select: { id: true, totalAmount: true, currency: true } } },
       });
       if (row.order) {

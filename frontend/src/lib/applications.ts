@@ -123,6 +123,8 @@ export interface AdminForm {
   overduePolicy: 'WITHDRAW' | 'HOLD';
   /** Spec 037 D5: approval takes a slot in the category (true) or approved vendors choose first-come (false). */
   reserveOnApproval: boolean;
+  /** Spec 039: how an approved vendor chooses — a tier, or a spot on the floor map (PAID forms; null on FREE). */
+  spaceSelection?: 'TIERS' | 'MAP' | null;
   displayOrder: number;
   /** Spec 019: the template this form was created from (informational). */
   createdFromTemplateId: string | null;
@@ -194,6 +196,12 @@ export interface AnswerView {
  * while the chosen space (booth or category slot) is held for payment.
  */
 export interface SpaceSelection {
+  /** Spec 039: the form's `spaceSelection` — pick a tier, or a spot on the floor map. */
+  mode?: 'TIERS' | 'MAP';
+  /** Spec 039: false while the vendor picks (or holds a tier they picked) on a TIERS form. */
+  tierLocked?: boolean;
+  /** Spec 039: TIERS form approved without a category — the tiers to pick from, each with its add-ons; `category` is then null (typed non-null until 039D). */
+  categories?: Array<SpaceSelection['category'] & { addOns: PublicTierAddOn[] }> | null;
   state: 'CHOOSE' | 'HELD';
   heldUntil: string | null;
   /** Choose and pay by (the clock started at approval). */
@@ -214,7 +222,16 @@ export interface SpaceSelection {
   };
   addOns: PublicTierAddOn[];
   /** The event's published map sells this category (and staff have not placed the vendor yet). */
-  map: { available: boolean; mapId: string | null; boothsAvailable: number };
+  map: {
+    available: boolean;
+    mapId: string | null;
+    boothsAvailable: number;
+    /** Spec 039: MAP form whose floor map is not published yet — the vendor waits. */
+    pending?: boolean;
+    /** Spec 039: all-in price range across the category's spots. */
+    priceFrom?: number | null;
+    priceTo?: number | null;
+  };
   /** A booth staff already placed the vendor on: they pay for the category only. */
   placedBooth: { id: string; label: string; w: number; h: number } | null;
   /** A card saved before apply-then-choose, offered as "Pay with … ending 4242". */
@@ -339,6 +356,7 @@ export interface TemplateDefinition {
   paymentDueDays: number | null;
   overduePolicy: 'WITHDRAW' | 'HOLD' | null;
   reserveOnApproval?: boolean | null;
+  spaceSelection?: 'TIERS' | 'MAP' | null;
   tiers: TemplateTier[];
   questions: TemplateQuestion[];
 }
