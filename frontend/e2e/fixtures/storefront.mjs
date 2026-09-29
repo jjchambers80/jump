@@ -5,6 +5,8 @@
 import { getPreset, resolveContent, resolveSettings } from '@jump/theme';
 
 const preset = getPreset('eventimus-default');
+/** The Events template every fixture serves for `page=events`. */
+export const EVENTS_TEMPLATE = preset.documents.events;
 const future = (days) => new Date(Date.UTC(2031, 5, 1 + days, 23, 0)).toISOString();
 
 function org(id, extra = {}) {
@@ -47,16 +49,16 @@ const menus = (orgId) => ({
   footer: [{ id: 'f-contact', label: 'Contact us', href: `/organizations/${orgId}/pages/contact`, newTab: false, children: [] }],
 });
 
-function render(orgId, { organization = {}, header, footer } = {}) {
+function render(orgId, { organization = {}, header, footer, template } = {}) {
   const documents = {
     header: header ?? { root: { props: {} }, content: [{ type: 'Header', props: { id: 'Header-default' } }] },
-    template: preset.documents.events,
+    template: template ?? preset.documents.events,
     footer: footer ?? preset.documents.footer,
   };
   return {
     renderer: 'theme',
-    page: 'events',
-    fallback: true,
+    page: template ? 'home' : 'events',
+    fallback: !template,
     theme: { id: `${orgId}-theme`, name: 'Eventimus Default' },
     organization: org(orgId, organization),
     settings: resolveSettings({}, preset.settings),
@@ -140,8 +142,31 @@ export function parityPublic(orgId, themeMode = 'LIGHT') {
 }
 export const parityMenus = () => menus('theme-parity');
 
+// A saved homepage built from the starter sections (038S).
+const homeDocument = {
+  root: { props: { title: 'Home' } },
+  content: [
+    {
+      type: 'Hero',
+      props: {
+        id: 'Hero-home',
+        heading: 'Summer Series 2031',
+        subheading: 'Twelve nights of music by the river.',
+        blocks: [
+          { type: 'Button', props: { id: 'B-events', label: 'See all events', link: { type: 'EVENTS' } } },
+          { type: 'Button', props: { id: 'B-gone', label: 'Deleted page', link: { type: 'PAGE', targetId: 'gone' } } },
+        ],
+      },
+    },
+    { type: 'UpcomingEvents', props: { id: 'Upcoming-home', heading: 'Coming up', count: 2, layout: 'list' } },
+    { type: 'RichText', props: { id: 'Rich-home', heading: 'About the series', body: '<p>Since 2009 on the river bank.</p>' } },
+    { type: 'CallToAction', props: { id: 'Cta-home', heading: 'Bring a friend', text: 'Two-for-one on Thursdays.', blocks: [] } },
+  ],
+};
+
 /** orgId → { render, routes, gate? } */
 export const FIXTURES = {
+  'theme-home': { render: render('theme-home', { template: homeDocument }), routes: {} },
   'theme-parity': { render: render('theme-parity', { organization: { coverUrl: PARITY_COVER } }), routes: {} },
   'theme-parity-dark': {
     render: { ...render('theme-parity', { organization: { coverUrl: PARITY_COVER, themeMode: 'DARK' } }), organization: org('theme-parity-dark', { coverUrl: PARITY_COVER, themeMode: 'DARK' }) },
