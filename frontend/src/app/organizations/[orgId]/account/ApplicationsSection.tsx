@@ -3,8 +3,8 @@
 // Applications section of the buyer account page (spec 011): this
 // organization's applications with status, payment state, withdraw, and
 // (phase 2) pay-now for an outstanding balance or replacing the saved card.
-// Approved vendors on a PAID form choose their space (list or map) and pay
-// inline (spec 037 phase 5, ChooseSpace).
+// Approved vendors on a PAID form choose their space (tier, or a spot in the
+// stacked SpotWorkspace) and pay inline (spec 037 phase 5, ChooseSpace).
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
@@ -98,7 +98,8 @@ export default function ApplicationsSection() {
           const pickerOpen = choosing && (pickerId === a.id || a.selection?.state === 'HELD');
           return (
           <li key={a.id} className="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-4 space-y-3">
-          <div className="flex items-center justify-between gap-4">
+          {/* Phones: details, then the actions wrapping underneath; from sm they share a row. */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <div className="min-w-0">
               <p className="font-semibold text-gray-900 dark:text-slate-100">
                 {a.event.name} · {a.form.name}{a.tier ? ` (${a.tier.name})` : ''}
@@ -113,7 +114,7 @@ export default function ApplicationsSection() {
                 <p className="text-xs text-gray-500 dark:text-slate-400" data-testid="account-application-add-ons">Add-ons: {addOnSummary(a.addOns)}</p>
               )}
             </div>
-            <div className="flex items-center gap-3 shrink-0">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 sm:shrink-0 sm:flex-nowrap">
               {choosing ? (
                 <button type="button" onClick={() => setPickerId((id) => (id === a.id ? null : a.id))} data-testid="account-application-choose-space" aria-expanded={pickerOpen} className="rounded-md bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-60">
                   {a.selection?.state === 'HELD' ? 'Finish paying' : pickerOpen ? 'Hide' : 'Choose your space'}
