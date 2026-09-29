@@ -6,17 +6,19 @@
 //               one chosen in the list is centred on the map.
 //   2. Review — extras and how to pay, only when the category offers extras or
 //               a card is saved; otherwise step 1 holds the spot directly.
-// `layout="page"` is the status page: mobile first (map full width and square,
-// then the list, a fixed action bar once a spot is chosen); from `lg` the map
-// takes the left ~72 % and stays in view while the right column scrolls.
-// `layout="inline"` (buyer account) keeps the stacked mobile layout.
+// `layout="page"` is the status page: mobile first (a short map pinned to the
+// top of the screen while the list scrolls under it, a fixed action bar once a
+// spot is chosen); from `lg` the map takes the left ~72 % and stays in view
+// while the right column scrolls. `layout="inline"` (buyer account) keeps the
+// stacked mobile layout. Both can open the map full screen: the same element
+// becomes a fixed overlay (never a portal, which would remount the canvas).
 //
 // The workspace only chooses. Holding, charging and every payment state stay
 // in ChooseSpace (`onHold`); nothing here treats a hold as a sale, and a spot
 // taken meanwhile just refetches the map.
 
 import { ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, Lock, Maximize2, Minus, Plus, X } from 'lucide-react';
+import { ArrowLeft, Check, Expand, Lock, Minus, Plus, Scan, Shrink, X } from 'lucide-react';
 import type { ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
 import { useTheme } from 'next-themes';
 import { mapsApi, type MapBooth, type MapElement, type PublicMap } from '@/services/api';
@@ -176,6 +178,8 @@ export default function SpotWorkspace({
   const [sort, setSort] = useState<SpotSort>('label');
   const transformRef = useRef<ReactZoomPanPinchRef | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const mapBoxRef = useRef<HTMLDivElement>(null);
+  const [full, setFull] = useState(false);
   const listRef = useRef<HTMLUListElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const stepMounted = useRef(false);
@@ -231,6 +235,14 @@ export default function SpotWorkspace({
   }, [map, spots, selectedId]);
 
   // ─── Map viewport: fit on load and on width change, zoom buttons, centre a spot ──
+  // Full screen, the top button row and the bottom bar cover the canvas edges:
+  // fit and centre within what is left.
+  const insets = useCallback(() => {
+    if (!full) return { top: 0, bottom: 0 };
+    const bar = mapBoxRef.current?.querySelector<HTMLElement>('[data-testid="space-map-full-bar"]');
+    return { top: 64, bottom: bar?.offsetHeight ?? 0 };
+  }, [full]);
+
   const fit = useCallback(
     (animate: boolean) => {
       const ref = transformRef.current;
@@ -239,26 +251,29 @@ export default function SpotWorkspace({
       const sw = map.width * map.gridSize;
       const sh = map.height * map.gridSize;
       const cw = el.clientWidth;
-      const ch = el.clientHeight;
-      if (!cw || !ch || !sw || !sh) return;
+      const { top, bottom } = insets();
+      const ch = el.clientHeight - top - bottom;
+      if (!cw || ch <= 0 || !sw || !sh) return;
       const scale = Math.min(cw / sw, ch / sh) * 0.94;
-      ref.setTransform((cw - sw * scale) / 2, (ch - sh * scale) / 2, scale, animate && !reducedMotion ? 200 : 0);
+      ref.setTransform((cw - sw * scale) / 2, top + (ch - sh * scale) / 2, scale, animate && !reducedMotion ? 200 : 0);
     },
-    [map, reducedMotion]
+    [map, reducedMotion, insets]
   );
+  const fitRef = useRef(fit);
+  fitRef.current = fit;
 
   const mapLoaded = Boolean(map);
   useEffect(() => {
     if (!mapLoaded) return;
     const el = canvasRef.current;
     if (!el) return;
-    const frame = requestAnimationFrame(() => fit(false));
+    const frame = requestAnimationFrame(() => fitRef.current(false));
     let lastWidth = el.clientWidth;
     const observer = new ResizeObserver(() => {
       // Width only: a mobile address bar changing the height must not undo the vendor's zoom.
       if (Math.abs(el.clientWidth - lastWidth) < 24) return;
       lastWidth = el.clientWidth;
-      fit(false);
+      fitRef.current(false);
     });
     observer.observe(el);
     return () => {
@@ -274,9 +289,58 @@ export default function SpotWorkspace({
     const el = canvasRef.current;
     if (!ref || !el || !map) return;
     const scale = ref.state.scale;
+    const { top, bottom } = insets();
     const cx = (spot.x + (spot.rotation === 90 ? spot.h : spot.w) / 2) * map.gridSize;
     const cy = (spot.y + (spot.rotation === 90 ? spot.w : spot.h) / 2) * map.gridSize;
-    ref.setTransform(el.clientWidth / 2 - cx * scale, el.clientHeight / 2 - cy * scale, scale, reducedMotion ? 0 : 250);
+    ref.setTransform(el.clientWidth / 2 - cx * scale, top + (el.clientHeight - top - bottom) / 2 - cy * scale, scale, reducedMotion ? 0 : 250);
+  };
+
+  // ─── Full screen: a fixed overlay over the page; Escape or Done leaves it ──
+  const fullMounted = useRef(false);
+  useEffect(() => {
+    if (!fullMounted.current) {
+      fullMounted.current = true;
+      return;
+    }
+    // The box changed size (height too, which the observer ignores): refit, then keep the chosen spot centred.
+    const frame = requestAnimationFrame(() => {
+      fit(false);
+      if (selected) centreOn(selected);
+    });
+    if (!full) return () => cancelAnimationFrame(frame);
+    const root = document.documentElement;
+    const overflow = root.style.overflow;
+    root.style.overflow = 'hidden';
+    return () => {
+      cancelAnimationFrame(frame);
+      root.style.overflow = overflow;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [full]);
+  // Leaving the spot step (or a hold starting) closes full screen.
+  useEffect(() => {
+    if (step !== 'spot' || busy) setFull(false);
+  }, [step, busy]);
+  // Keyboard: Escape closes (after any open tip), Tab stays inside the overlay.
+  const onFullKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!full) return;
+    if (e.key === 'Escape' && !tip) {
+      e.stopPropagation();
+      setFull(false);
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    const focusable = Array.from(mapBoxRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), [tabindex]:not([tabindex="-1"])') ?? []).filter((el) => el.offsetParent !== null);
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
   };
 
   // ─── Choosing ──────────────────────────────────────────────────────────────
@@ -286,7 +350,7 @@ export default function SpotWorkspace({
     const next = selectedId === booth.id ? null : booth.id;
     setSelectedId(next);
     // Beside the map (lg), bring the matching row into view in the list.
-    if (next && page && window.matchMedia('(min-width: 1024px)').matches) {
+    if (next && page && !full && window.matchMedia('(min-width: 1024px)').matches) {
       requestAnimationFrame(() => {
         listRef.current?.querySelector<HTMLElement>(`[data-spot-id="${next}"]`)?.scrollIntoView({ block: 'nearest', behavior: reducedMotion ? 'auto' : 'smooth' });
       });
@@ -345,10 +409,14 @@ export default function SpotWorkspace({
     const heading = headingRef.current;
     if (!heading) return;
     heading.focus({ preventScroll: true });
-    // Beside the map the heading is usually in view already; stacked, it may be far below.
-    const top = heading.getBoundingClientRect().top;
-    if (top < 48 || top > window.innerHeight * 0.4) {
-      (heading.parentElement ?? heading).scrollIntoView({ block: 'start', behavior: reducedMotion ? 'auto' : 'smooth' });
+    // Beside the map the heading is usually in view already; stacked, it may be
+    // far below, or under the map pinned to the top of a phone screen.
+    const pinned = page && step === 'spot' && !window.matchMedia('(min-width: 1024px)').matches;
+    const floor = pinned ? Math.max(0, mapBoxRef.current?.getBoundingClientRect().bottom ?? 0) : 0;
+    const target = heading.parentElement ?? heading;
+    const top = target.getBoundingClientRect().top;
+    if (top < floor + 16 || top > floor + (window.innerHeight - floor) * 0.4) {
+      window.scrollBy({ top: top - floor - 16, behavior: reducedMotion ? 'auto' : 'smooth' });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
@@ -380,17 +448,32 @@ export default function SpotWorkspace({
   const total = selected ? (step === 'review' ? totalFor(selected) : review ? spotPrice(selected) : totalFor(selected)) : null;
   const primaryLabel = busyLabel ?? (!selected ? (review ? 'Continue' : 'Choose a spot') : step === 'spot' && review ? 'Continue' : actionLabel(total ?? 0));
 
+  const fullLabel = full ? 'Exit full screen' : 'Full screen';
   const mapPane = (
     <div
       className={
         page
-          ? `relative ${step === 'review' ? 'hidden lg:block' : ''} lg:sticky lg:top-0 lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:h-dvh lg:self-start lg:border-r lg:border-gray-200 dark:lg:border-slate-800`
-          : `relative ${step === 'review' ? 'hidden' : ''}`
+          ? // Phones: pinned to the top while the list scrolls under it. lg: the left column.
+            `${step === 'review' ? 'hidden lg:block' : ''} sticky top-0 ${full ? 'z-50' : 'z-20'} self-start shadow-[0_8px_16px_-12px_rgb(0_0_0/0.35)] lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:h-dvh lg:border-r lg:border-gray-200 lg:shadow-none dark:lg:border-slate-800`
+          : `relative ${full ? 'z-50' : ''} ${step === 'review' ? 'hidden' : ''}`
       }
       data-testid="space-map"
+      data-full={full || undefined}
     >
       <div
-        className={`relative w-full overflow-hidden bg-gray-100 dark:bg-slate-950 ${page ? 'aspect-square sm:aspect-[4/3] lg:aspect-auto lg:h-full' : 'aspect-square rounded-xl border border-gray-200 dark:border-slate-700 sm:aspect-[4/3]'}`}
+        ref={mapBoxRef}
+        role={full ? 'dialog' : undefined}
+        aria-modal={full || undefined}
+        aria-label={full ? 'Floor map, full screen' : undefined}
+        onKeyDown={onFullKeyDown}
+        data-testid="space-map-box"
+        className={`w-full overflow-hidden bg-gray-100 dark:bg-slate-950 ${
+          full
+            ? 'fixed inset-0 z-50 h-dvh'
+            : page
+              ? 'relative h-[38svh] min-h-[15rem] max-h-[26rem] sm:h-[45svh] sm:max-h-[32rem] lg:h-full lg:max-h-none'
+              : 'relative aspect-square rounded-xl border border-gray-200 dark:border-slate-700 sm:aspect-[4/3]'
+        }`}
       >
         {/* Faint grid so the floor reads as a floor, not an empty box. */}
         <div
@@ -438,9 +521,24 @@ export default function SpotWorkspace({
               <Minus className="h-4 w-4" aria-hidden />
             </button>
             <button type="button" className={iconButton} aria-label="Fit the whole map" onClick={() => fit(true)}>
-              <Maximize2 className="h-4 w-4" aria-hidden />
+              <Scan className="h-4 w-4" aria-hidden />
             </button>
           </div>
+        )}
+
+        {map && (
+          <button
+            type="button"
+            onClick={() => setFull((f) => !f)}
+            aria-pressed={full}
+            data-testid="space-map-full"
+            className={`absolute left-3 z-10 inline-flex h-10 items-center gap-2 rounded-full border border-gray-300 bg-white/95 pl-3.5 pr-4 text-sm font-semibold text-gray-900 shadow-sm backdrop-blur transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link motion-reduce:transition-none dark:border-slate-600 dark:bg-slate-800/95 dark:text-slate-100 dark:hover:bg-slate-800 ${
+              full ? 'top-[max(0.75rem,env(safe-area-inset-top))]' : page ? 'top-3 lg:bottom-3 lg:top-auto' : 'top-3'
+            }`}
+          >
+            {full ? <Shrink className="h-4 w-4" aria-hidden /> : <Expand className="h-4 w-4" aria-hidden />}
+            {fullLabel}
+          </button>
         )}
 
         {tip && (
@@ -471,17 +569,54 @@ export default function SpotWorkspace({
         )}
 
         {/* Beside the list (lg) the legend floats on the map; stacked, it sits under it. */}
-        {map && page && (
+        {map && page && !full && (
           <div className="absolute left-3 top-3 hidden max-w-[min(34rem,calc(100%-5rem))] rounded-xl border border-gray-200 bg-white/95 px-3.5 py-2.5 shadow-sm backdrop-blur dark:border-slate-700 dark:bg-slate-800/95 lg:block">
             <Legend map={map} tierId={category.id} unit={unit} />
           </div>
         )}
+
+        {/* Full screen: the legend and the choice at the bottom, and a way back to the list. */}
+        {map && full && (
+          <div
+            data-testid="space-map-full-bar"
+            className="absolute inset-x-0 bottom-0 z-10 space-y-3 border-t border-gray-200 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-8px_24px_-12px_rgb(0_0_0/0.25)] backdrop-blur dark:border-slate-700 dark:bg-slate-900/95 sm:px-6"
+          >
+            <Legend map={map} tierId={category.id} unit={unit} />
+            <div className="flex items-center gap-3">
+              <p className="min-w-0 flex-1 truncate text-sm text-gray-700 dark:text-slate-300" aria-live="polite">
+                {selected ? (
+                  <>
+                    <span className="font-semibold text-gray-900 dark:text-slate-100">Spot {selected.label}</span> · {size(selected)} ·{' '}
+                    <strong className="tabular-nums text-gray-900 dark:text-slate-50">{formatPrice(spotPrice(selected))}</strong>
+                  </>
+                ) : (
+                  'Tap an open spot to choose it.'
+                )}
+              </p>
+              <button
+                type="button"
+                onClick={() => setFull(false)}
+                data-testid="space-map-full-done"
+                className="inline-flex min-h-[2.75rem] shrink-0 items-center justify-center rounded-xl bg-brand px-5 text-sm font-semibold text-brand-fg transition-colors hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2 motion-reduce:transition-none dark:focus-visible:ring-offset-slate-900"
+              >
+                {selected ? 'Done' : 'Back to list'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
-      {map && (
-        <div className={`border-b border-gray-200 px-4 py-3 dark:border-slate-800 ${page ? 'bg-white dark:bg-slate-900 lg:hidden' : 'rounded-b-xl'}`}>
+      {map && !page && (
+        <div className="rounded-b-xl border-b border-gray-200 px-4 py-3 dark:border-slate-800">
           <Legend map={map} tierId={category.id} unit={unit} />
         </div>
       )}
+    </div>
+  );
+
+  // Stacked (page), the legend sits under the pinned map and scrolls away with the page.
+  const stackedLegend = map && page && (
+    <div className={`border-b border-gray-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900 lg:hidden ${step === 'review' ? 'hidden' : ''}`}>
+      <Legend map={map} tierId={category.id} unit={unit} />
     </div>
   );
 
@@ -738,6 +873,7 @@ export default function SpotWorkspace({
         </a>
       )}
       {mapPane}
+      {stackedLegend}
       <div className={page ? 'space-y-5 border-b border-gray-200 px-4 py-5 dark:border-slate-800 sm:px-6 lg:col-start-2 lg:row-start-1 lg:border-b-0 lg:pb-0 lg:pt-6' : 'space-y-4'}>
         {summary}
         {stepHeader}

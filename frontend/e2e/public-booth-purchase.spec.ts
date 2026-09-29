@@ -319,7 +319,7 @@ test.describe('choose your space', () => {
     expect(calls.filter((c) => c === `GET /applications/${APP_ID}/status`).length).toBeGreaterThanOrEqual(2);
   });
 
-  test('map, mobile: compact header, a square map, then the list; the action bar appears once a spot is chosen', async ({ page }) => {
+  test('map, mobile: compact header, a short map, then the list; the action bar appears once a spot is chosen', async ({ page }) => {
     await mockVendor(page, { app: applicantApp(), states: {}, version: 1, choose: 'card' });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(statusUrl);
@@ -331,8 +331,9 @@ test.describe('choose your space', () => {
     const heroBox = await hero.boundingBox();
     expect(heroBox && heroBox.height < 110).toBe(true);
 
-    const mapBox = await page.getByTestId('space-map').locator('> div').first().boundingBox();
-    expect(mapBox && Math.abs(mapBox.width - mapBox.height) < 2 && mapBox.width >= 389).toBe(true);
+    const mapBox = await page.getByTestId('space-map-box').boundingBox();
+    // Full width, but short enough that the list shows under it.
+    expect(mapBox && mapBox.width >= 389 && mapBox.height < 844 * 0.45).toBe(true);
     const listBox = await page.getByTestId('space-spots').boundingBox();
     expect(mapBox && listBox && listBox.y > mapBox.y + mapBox.height).toBe(true);
     // No horizontal scroll at phone width.
@@ -350,6 +351,67 @@ test.describe('choose your space', () => {
     await page.getByTestId('space-change-spot').click();
     await expect(page.getByTestId('choose-space')).toHaveAttribute('data-step', 'spot');
     await expect(page.getByRole('radio', { name: /Spot A2/ })).toBeChecked();
+  });
+
+  test('map, mobile: the map stays pinned while the list scrolls, and opens full screen', async ({ page }) => {
+    await mockVendor(page, { app: applicantApp(), states: {}, version: 1, choose: 'card' });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(statusUrl);
+    const box = page.getByTestId('space-map-box');
+    await expect(page.getByTestId('spot-option')).toHaveCount(2);
+
+    // Scroll the list well past the map: the map stays at the top of the screen.
+    await page.getByTestId('spot-other-categories').scrollIntoViewIfNeeded();
+    await page.evaluate(() => window.scrollBy(0, 400));
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(200);
+    const pinned = await box.boundingBox();
+    expect(pinned && Math.abs(pinned.y) < 1 && pinned.height > 200).toBe(true);
+    // A spot chosen in the list is shown on the pinned map.
+    await page.getByTestId('spot-option').filter({ hasText: 'Spot A5' }).click();
+    await expect(page.getByTestId('booth-A5')).toBeInViewport();
+
+    // Full screen: the map covers the screen, the page behind stops scrolling.
+    const toggle = page.getByTestId('space-map-full');
+    await expect(toggle).toHaveText('Full screen');
+    await toggle.click();
+    await expect(page.getByTestId('space-map')).toHaveAttribute('data-full', 'true');
+    await expect(page.getByRole('dialog', { name: 'Floor map, full screen' })).toBeVisible();
+    const full = await box.boundingBox();
+    expect(full && full.y === 0 && full.height >= 843 && full.width >= 389).toBe(true);
+    await expect(toggle).toHaveText('Exit full screen');
+    await expect(toggle).toBeFocused();
+    const bar = page.getByTestId('space-map-full-bar');
+    await expect(bar).toContainText('Spot A5');
+    await expect(page.getByTestId('booth-A5')).toBeInViewport();
+    // Choose another spot on the full-screen map; Done keeps it and returns to the list.
+    await page.getByTestId('booth-A2').click();
+    await expect(bar).toContainText('Spot A2');
+    await bar.getByRole('button', { name: 'Done' }).click();
+    await expect(page.getByTestId('space-map')).not.toHaveAttribute('data-full', 'true');
+    await expect(page.getByRole('radio', { name: /Spot A2/ })).toBeChecked();
+    await expect(page.getByTestId('space-action-bar')).toContainText('Spot A2');
+    const back = await box.boundingBox();
+    expect(back && back.height < 844 * 0.45).toBe(true);
+
+    // Escape leaves full screen too.
+    await toggle.click();
+    await expect(page.getByTestId('space-map')).toHaveAttribute('data-full', 'true');
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('space-map')).not.toHaveAttribute('data-full', 'true');
+    expect(await page.evaluate(() => document.documentElement.style.overflow)).toBe('');
+  });
+
+  test('map, desktop: full screen covers the list column and Escape returns', async ({ page }) => {
+    await mockVendor(page, { app: applicantApp(), states: {}, version: 1, choose: 'card' });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(statusUrl);
+    await page.getByTestId('space-map-full').click();
+    const full = await page.getByTestId('space-map-box').boundingBox();
+    expect(full && full.x === 0 && full.width >= 1439 && full.height >= 899).toBe(true);
+    await page.keyboard.press('Escape');
+    const back = await page.getByTestId('space-map-box').boundingBox();
+    const listBox = await page.getByTestId('space-spots').boundingBox();
+    expect(back && listBox && back.x + back.width <= listBox.x).toBe(true);
   });
 
   test('map: paying on Checkout instead holds the booth and follows the pay-now checkout', async ({ page }) => {
