@@ -1,4 +1,4 @@
-'use client';
+// Server-safe (no hooks): blog listings render it on the server and client.
 
 import Link from 'next/link';
 import { resolveAssetUrl } from '@/lib/assets';

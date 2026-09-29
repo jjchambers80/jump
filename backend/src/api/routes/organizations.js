@@ -25,6 +25,7 @@ import pageService from '../../services/PageService.js';
 import menuService from '../../services/MenuService.js';
 import urlRedirectService from '../../services/UrlRedirectService.js';
 import { findByPublicIdentifier } from '../../utils/publicIdentifier.js';
+import { clientIpForRateLimit } from '../../utils/clientIp.js';
 import themeService, { themesEnabledFor } from '../../services/ThemeService.js';
 
 const router = Router();
@@ -38,7 +39,9 @@ const unlockLimiter = rateLimit({
   limit: 10,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
-  keyGenerator: (req) => `${ipKeyGenerator(req.ip)}:${req.params.id}`,
+  // Themed storefronts unlock through the Next route handler (spec 038), so
+  // count the signed visitor IP, not the frontend server's (spec 020).
+  keyGenerator: (req) => `${ipKeyGenerator(clientIpForRateLimit(req))}:${req.params.id}`,
   message: { message: 'Too many attempts. Try again later.' },
 });
 

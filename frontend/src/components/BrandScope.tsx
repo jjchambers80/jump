@@ -1,10 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
-import type { CSSProperties, ReactNode } from 'react';
-import { brandCssVars } from '@/lib/color';
-import { themeModeToForced, type ThemeMode } from '@/lib/theme';
-import { useThemeMode } from '@/components/ThemeProvider';
+import type { ReactNode } from 'react';
+import ThemeScope from '@/theme/ThemeScope';
+import type { ThemeMode } from '@/lib/theme';
 
 interface BrandScopeProps {
   /** Organization brand color (#rrggbb). Null/undefined keeps platform defaults. */
@@ -22,26 +20,14 @@ interface BrandScopeProps {
  *
  * When `themeMode` is LIGHT/DARK/SYSTEM the org theme is forced site-wide while this scope is
  * mounted and released on unmount, so the visitor's own preference returns on other pages.
+ *
+ * Client-rendered pages (checkout, apply, account) learn the mode only after their fetch, so
+ * they get no blocking script: ThemeScope without it, plus ThemeModeSync (spec 038 §9a.6).
  */
 export default function BrandScope({ color, themeMode, className, children }: BrandScopeProps) {
-  const { setForced } = useThemeMode();
-  const forced = themeModeToForced(themeMode);
-
-  useEffect(() => {
-    if (!forced) return;
-    setForced(forced);
-    return () => setForced(null);
-  }, [forced, setForced]);
-
-  const vars = brandCssVars(color);
   return (
-    <div
-      className={className ? `brand-scope ${className}` : 'brand-scope'}
-      style={vars as CSSProperties | undefined}
-      data-brand-color={vars ? vars['--brand'] : undefined}
-      data-theme-mode={themeMode ?? undefined}
-    >
+    <ThemeScope brandColor={color} themeMode={themeMode} script={false} className={className}>
       {children}
-    </div>
+    </ThemeScope>
   );
 }

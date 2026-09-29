@@ -1,7 +1,7 @@
 'use client';
 
 import { ThemeProvider as NextThemesProvider } from 'next-themes';
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ForcedTheme } from '@/lib/theme';
 
 interface ThemeModeContextValue {
@@ -28,9 +28,30 @@ export function useThemeMode() {
  * overwritten. "system" is resolved here with a live matchMedia listener because next-themes
  * does not re-apply a forced theme when the OS scheme changes.
  */
+// Server-rendered org pages (spec 038, contracts C8): ThemeScope's blocking
+// script records the forced mode on <html data-jump-forced> before first
+// paint. Reading it as the initial state makes next-themes apply the org mode
+// in its first effect; otherwise it applies the visitor's theme first and the
+// page flips for a frame after hydration.
+function initialForced(): ForcedTheme | null {
+  if (typeof document === 'undefined') return null;
+  const value = document.documentElement.dataset.jumpForced;
+  return value === 'light' || value === 'dark' || value === 'system' ? value : null;
+}
+
+function initialSystem(): 'light' | 'dark' {
+  if (typeof window === 'undefined' || !window.matchMedia) return 'light';
+  return window.matchMedia(DARK_QUERY).matches ? 'dark' : 'light';
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [forced, setForced] = useState<ForcedTheme | null>(null);
-  const [systemTheme, setSystemTheme] = useState<'light' | 'dark'>('light');
+  const [forced, setForcedState] = useState<ForcedTheme | null>(initialForced);
+  const [systemTheme, setSystemTheme] = useState<'light' | 'dark'>(initialSystem);
+  const setForced = useCallback((value: ForcedTheme | null) => {
+    // Releasing the org mode also drops the marker, so a later mount starts clean.
+    if (value === null && typeof document !== 'undefined') delete document.documentElement.dataset.jumpForced;
+    setForcedState(value);
+  }, []);
 
   useEffect(() => {
     if (forced !== 'system') return;
@@ -42,7 +63,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [forced]);
 
   const forcedTheme = forced === 'system' ? systemTheme : forced ?? undefined;
-  const value = useMemo(() => ({ forced, setForced }), [forced]);
+  const value = useMemo(() => ({ forced, setForced }), [forced, setForced]);
 
   return (
     <ThemeModeContext.Provider value={value}>

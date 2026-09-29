@@ -27,6 +27,8 @@ These are the rules every 038 implementation card builds on. A card that needs t
   - The route sets `Cache-Control: private, no-store` before the gate runs, so the 403 carries it too.
   - `{ renderer: 'legacy' }` is decided **before** the gate: an organization outside the rollout keeps today's client-rendered storefront, which handles its own gate.
   - `{ renderer: 'theme', page, fallback, theme: { id, name }, organization, settings, content, documents: { header, template, footer }, resolved: { events, menus, files }, preview? }`: `settings` and `content` are fully resolved (preset + overrides); hidden items, announcements outside their window and an empty announcement bar are already removed; `page`/`fallback` say whether `/` fell back to the Events page (D5). `theme.id` is null when the organization has no Theme row yet (the preset renders from code).
+- **(038B) `page=frame`** answers header and footer only (`documents.template: null`, no events) for routes whose body the theme does not own yet (Content pages, blog; 038G makes them templates). The server route fetches its body from the existing gated public route in parallel.
+- **(038B) `resolved.links`** maps `linkKey(link)` (`TYPE:targetId|url`) to an href, resolved through `MenuService.resolveLinks` exactly like menu items; a missing or hidden target is absent and the section drops the link.
 - The org behind `:id` may be addressed by slug. The response always carries `organization.id`; the frontend uses it for cookie names and unlock calls.
 
 ## C2. Private store access on the server
@@ -35,12 +37,14 @@ These are the rules every 038 implementation card builds on. A card that needs t
 - **Cookie:** `jump_store_access_<orgId>`, `httpOnly`, `Secure` outside development, `SameSite=Lax`, `Path=/`, host-only (no `Domain`). `Max-Age` = the token's own remaining lifetime, read from its `exp` claim (30 d today, `ACCESS_TOKEN_TTL`). **(spike)** The backend returns only `{ token }`; there is no `expiresIn` field.
 - **Forwarding (spike):** the server component forwards **every** `jump_store_access_*` cookie, at most 10, comma-separated, as `X-Storefront-Access`. The page URL may carry the slug while the cookie is keyed by id, and the backend already accepts up to 10 tokens (`MAX_TOKENS_PER_REQUEST`), exactly as the browser does today with its `localStorage` tokens.
 - **Clearing:** a Server Component cannot delete cookies in Next 14. When a cookie was forwarded and the answer is `locked`, the gate mounts a client island that calls `DELETE /api/storefront/access/[orgId]` (route handler, `Max-Age=0`). Proven by the spike test "stale cookie cleared".
+- **(038B) Rate limit per visitor.** The route handler forwards the signed client IP (`signedClientIpHeaders`, spec 020), and the backend unlock limiter now keys on `clientIpForRateLimit(req)` instead of `req.ip`: through the proxy every visitor would otherwise share one 10-per-15-min bucket per store, so one person could lock everyone out.
 - **Transition:** `StorefrontPasswordGate` keeps writing `localStorage` too, because checkout and account stay client-rendered. The backend gate is unchanged.
 
 ## C3. Server fetches
 
 - Every storefront render fetch uses `cache: 'no-store'` and a 5 s timeout. Reading `cookies()` makes the route dynamic, so the Full Route Cache never holds a themed page.
 - **Server-side base URL (spike):** `INTERNAL_API_URL ?? NEXT_PUBLIC_API_URL`. `INTERNAL_API_URL` is optional (Railway private networking later); nothing sets it today.
+- **(038B) Frontend switch and fail-safe.** `NEXT_PUBLIC_THEME_EDITOR_ENABLED` off: no render call at all. On: `loadStorefrontFrame` serves the themed page only on a definite `renderer: 'theme'` or gate (403 `details.locked`) answer; `legacy`, 404, 5xx or a network error render today's client component, so the renderer switch can never take a storefront down.
 - `generateMetadata` keeps its own short fetch (`/public/meta`, 2 s, `revalidate: 60`). It carries no access data and is safe to cache.
 
 ## C4. Cache contract
@@ -98,6 +102,7 @@ These are the rules every 038 implementation card builds on. A card that needs t
 
 - `frontend/e2e/fixtures/server.mjs`: a Node HTTP server with canned JSON per organization id under `frontend/e2e/fixtures/storefront/`, no network, no Postgres, no Stripe. It implements the render route (with the `gate` rule and thumbnail bypass) and the unlock route.
 - **(spike) It listens on the API port the e2e job already sets (`NEXT_PUBLIC_API_URL=http://localhost:3002`).** No new env var: the Next server's own fetches reach it, and browser-side `page.route` mocks still win because Playwright intercepts inside Chromium.
+- **(038B) Local runs:** when a dev backend holds 3002, set `FIXTURE_API_PORT`: the fixture moves there and Playwright points only the Next server's fetches at it (`INTERNAL_API_URL`), so browser mocks on `:3002` still match. The Next server runs with `NEXT_PUBLIC_THEME_EDITOR_ENABLED=true`; organizations without a fixture answer 404 and keep the legacy pages. The fixture sends permissive CORS so an unmocked browser call fails as a plain 404.
 - Playwright starts it through a second `webServer` entry (`url: …/health`). The fixture set is the organization id in the URL, so tests stay independent across the 3 shards without headers.
 - 038B migrates every storefront spec that loads a server-rendered route and adds the fixture server to `frontend/playwright.config.ts`.
 

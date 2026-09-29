@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Shared spec 038 theme package (plain ESM JS in packages/theme).
+  transpilePackages: ['@jump/theme'],
   async redirects() {
     // Users moved from the main admin menu to Settings › Users.
     return [

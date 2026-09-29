@@ -505,6 +505,26 @@ class MenuService {
     };
   }
 
+  /**
+   * Theme links (spec 038): `{ type, targetId?, url? }` objects → hrefs, keyed
+   * by `keyOf(link)`. Missing or hidden targets are left out, exactly as the
+   * storefront menus drop them.
+   */
+  async resolveLinks(organizationId, links, keyOf) {
+    if (!links.length) return {};
+    const items = links.map((link) => ({ linkType: link.type, targetId: link.targetId ?? null, url: link.url ?? null }));
+    const [targets, organizationSlug] = await Promise.all([
+      this._resolveTargets(organizationId, items),
+      this._organizationSlug(organizationId),
+    ]);
+    const out = {};
+    links.forEach((link, i) => {
+      const described = this._describeTarget(organizationSlug, items[i], targets);
+      if (described.status === 'ok' && described.href) out[keyOf(link)] = described.href;
+    });
+    return out;
+  }
+
   async _organizationSlug(organizationId) {
     const organization = await prisma.organization.findUnique({
       where: { id: organizationId },

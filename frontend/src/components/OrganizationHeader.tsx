@@ -8,6 +8,7 @@ import StorefrontNav from './storefront/StorefrontNav';
 import { useStorefrontMenus } from './storefront/useStorefrontMenus';
 import { storefrontHref } from '../lib/storefrontPath';
 import { useBuyer } from '../lib/useBuyer';
+import type { PublicMenus } from '../lib/menus';
 
 export interface OrganizationHeaderProps {
   organization: { id?: string | null; name: string; logoUrl?: string | null };
@@ -30,13 +31,23 @@ export interface OrganizationHeaderProps {
    * flows. Pages pass the organization's `buyerSignInLinks` flag.
    */
   signIn?: boolean;
+  /**
+   * Themed storefront (spec 038): menus resolved on the server. The header
+   * then renders them at once instead of fetching after hydration.
+   */
+  menus?: PublicMenus;
+  /** Theme Header section: logo and name on the left (default) or centred above the menu. */
+  logoPosition?: 'left' | 'center';
+  /** Theme Header section: logo width from the theme's Logo settings (CSS variables). */
+  themedLogo?: boolean;
 }
 
-// Skip link: moves focus to whatever the page renders right after the header,
-// so no page has to agree on a #main id.
+// Skip link: moves focus to the themed page body (#storefront-main, spec 038)
+// or else to whatever the page renders right after the header, so legacy
+// pages need no agreed id.
 function skipToContent(event: MouseEvent<HTMLAnchorElement>) {
   const header = event.currentTarget.closest('header');
-  const target = header?.nextElementSibling as HTMLElement | null;
+  const target = (document.getElementById('storefront-main') ?? header?.nextElementSibling) as HTMLElement | null;
   if (!target) return;
   event.preventDefault();
   if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1');
@@ -54,8 +65,12 @@ export default function OrganizationHeader({
   as = 'link',
   nav = false,
   signIn = false,
+  menus: serverMenus,
+  logoPosition = 'left',
+  themedLogo = false,
 }: OrganizationHeaderProps) {
-  const menus = useStorefrontMenus(nav ? organization.id : null);
+  const fetchedMenus = useStorefrontMenus(nav && !serverMenus ? organization.id : null);
+  const menus = serverMenus ?? fetchedMenus;
   const navItems = nav && organization.id ? (menus?.main ?? []) : [];
   const { buyer, loading: buyerLoading } = useBuyer(signIn ? organization.id : null);
   const orgSlug = organizationSlug ?? organization.id ?? '';
@@ -76,7 +91,13 @@ export default function OrganizationHeader({
     <LogoBox
       src={logoSrc}
       alt={`${organization.name} logo`}
-      className={`shrink-0 rounded-lg ${isHeading ? 'w-14 sm:w-16' : 'w-10 sm:w-12'}`}
+      className={`shrink-0 rounded-lg ${
+        themedLogo
+          ? 'w-[var(--theme-logo-width-mobile)] sm:w-[var(--theme-logo-width)]'
+          : isHeading
+            ? 'w-14 sm:w-16'
+            : 'w-10 sm:w-12'
+      }`}
     />
   );
 
@@ -100,8 +121,12 @@ export default function OrganizationHeader({
       >
         Skip to content
       </a>
-      <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:gap-6 sm:px-6 sm:py-5 lg:px-8">
-        <div className="min-w-0 flex-1">
+      <div
+        className={`mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:gap-6 sm:px-6 sm:py-5 lg:px-8 ${
+          logoPosition === 'center' ? 'md:flex-col md:gap-3' : ''
+        }`}
+      >
+        <div className={`min-w-0 flex-1 ${logoPosition === 'center' ? 'md:flex md:justify-center' : ''}`}>
           {href && !isHeading ? (
             <Link
               href={href}
