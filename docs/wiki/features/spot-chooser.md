@@ -23,7 +23,7 @@ On the status page the workspace takes the whole screen. The buyer account shows
 | `frontend/src/components/maps/MapCanvas.tsx` | `ariaLabel` prop; `transformRef` drives fit, zoom and centring |
 | `frontend/src/components/maps/Booth.tsx` | Unselectable booths get `tabIndex={-1}` |
 | `frontend/src/components/maps/boothSelection.ts` | `selectability`, `sortSpots`, `spotPrice` (shared rules, Vitest) |
-| `frontend/e2e/public-booth-purchase.spec.ts` | Desktop sync + saved card, mobile layout, Checkout, taken spot, declined card, single step + hold / release |
+| `frontend/e2e/public-booth-purchase.spec.ts` | Desktop sync + saved card, mobile layout, pinned map + full screen, Checkout, taken spot, declined card, single step + hold / release |
 
 `BoothPicker.tsx` and `SpotList.tsx` were removed; the workspace replaces both.
 
@@ -49,8 +49,8 @@ Otherwise `ChooseSpace` renders its narrow views: held, waiting for the map, TIE
 **Phone (mobile first)**:
 
 - Compact hero.
-- The map at full width and square.
-- The legend.
+- The map at full width and short (`38svh`, 15–26 rem; `45svh` from `sm`), pinned to the top of the screen (`sticky top-0`) while everything below scrolls under it.
+- The legend (scrolls away; it is not pinned).
 - The application summary (form · category, business, status badge, "Choose and pay by …").
 - The step header and the spot list.
 - A fixed bottom action bar, which appears once a spot is chosen.
@@ -64,11 +64,13 @@ In step 2 the map is hidden so the review sits at the top.
 
 **Buyer account (`layout="inline"`)**: everything stacks. The action bar is sticky within the card.
 
+**Full screen** (every layout): the **Full screen** pill (top left; bottom left on `lg`, under the floating legend) turns the map box itself into a `fixed inset-0` overlay (`role="dialog"`, `aria-modal`). The page stops scrolling, Tab stays inside, and Escape or the bottom bar's **Done** / **Back to list** closes it. The bottom bar holds the legend and the chosen spot with its price. The map refits on enter and exit, within what the pill row and the bottom bar leave visible, and re-centres the chosen spot. Leaving step 1 or starting a hold closes full screen.
+
 ### Sync between map and list
 
 - **Map to list**: tapping an open booth checks its radio row. On `lg` it also scrolls the row into view.
 - **List to map**: choosing a row marks the booth and centres it at the current zoom (`setTransform`, instant under reduced motion).
-- **Map viewport**: the map fits once on load and again when the width changes by 24 px or more. Height changes, such as a phone's address bar, never undo the vendor's zoom.
+- **Map viewport**: the map fits once on load and again when the width changes by 24 px or more. Height changes, such as a phone's address bar, never undo the vendor's zoom. Entering or leaving full screen refits explicitly.
 
 ### What the list shows
 
@@ -118,6 +120,7 @@ None.
 - **`ChooseSpace` must keep one tree position on the status page.**
   - A hold switches the page from the workspace to the held layout. If `ChooseSpace` remounted, its settle poll (`pollRef`), `busy` and notice would be lost, and a saved-card charge would sit on "Confirming your payment" until a reload.
   - The page therefore renders it in one wrapper `<div>` whose class alone changes, and `ApplyShell` keeps `<main>` at the same slot for both widths.
+- **Full screen is a class change, never a portal.** Moving the map box into a portal would remount `MapCanvas` and lose its transform. The pane raises itself to `z-50` while full, because the pinned pane (`sticky z-20`) is a stacking context the overlay would otherwise be trapped in, under the `z-30` action bar. Keep ancestors free of `transform` / `filter` / `backdrop-filter`, or `fixed` stops covering the screen.
 - **Two legends are in the DOM**: one floating on the map (`lg`) and one under it (stacked). Only one is visible at a time. Scope e2e assertions with `locator('visible=true')`.
 - **The radios are `sr-only`.** Click the row label in tests (`getByTestId('spot-option').filter({ hasText })`). A forced `check()` on the 1 px input can miss.
 - **The action bar is `fixed` on phones.** The spots column adds `pb-40` while a spot is chosen so nothing hides behind it.
