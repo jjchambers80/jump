@@ -30,6 +30,8 @@ interface MapCanvasProps {
   selectedIds?: Set<string>;
   onSelect?: (id: string, e?: React.MouseEvent | React.KeyboardEvent) => void;
   onBoothClick?: (booth: MapBooth) => void;
+  /** Picker: a click on a booth in `disabledIds`, to say why it cannot be chosen. */
+  onDisabledBoothClick?: (booth: MapBooth, e: React.MouseEvent) => void;
   onPointerDown?: (e: React.PointerEvent) => void;
   onPointerMove?: (e: React.PointerEvent) => void;
   onPointerUp?: (e: React.PointerEvent) => void;
@@ -63,6 +65,7 @@ export default function MapCanvas({
   selectedIds = new Set<string>(),
   onSelect,
   onBoothClick,
+  onDisabledBoothClick,
   onPointerDown,
   onPointerMove,
   onPointerUp,
@@ -160,6 +163,7 @@ export default function MapCanvas({
             tierSwatchIndex={tierIdx >= 0 ? tierIdx : undefined}
             onSelect={onSelect}
             onClick={onBoothClick}
+            onDisabledClick={onDisabledBoothClick}
             highlight={booth.id === highlightBooth}
             dimmed={dimmedIds?.has(booth.id)}
             disabled={disabledIds?.has(booth.id)}

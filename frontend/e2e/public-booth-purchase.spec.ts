@@ -277,6 +277,22 @@ test.describe('choose your space', () => {
       await expect(page.getByTestId('space-selection-summary')).toContainText('Spot A5');
     }
 
+    // Tapping a spot that cannot be chosen says why, where it was tapped.
+    const tip = page.getByTestId('spot-disabled-tip');
+    await page.getByTestId('booth-T1').click({ force: true });
+    await expect(tip).toHaveText('Spot T1 is for Table. You are approved as 10×10 booth, so it cannot be chosen.');
+    await expect(tip).toHaveAttribute('role', 'status');
+    await page.getByTestId('booth-A1').click({ force: true });
+    await expect(tip).toHaveText('Spot A1 is already taken.');
+    await page.getByTestId('booth-A4').click({ force: true });
+    await expect(tip).toContainText('on hold for another vendor');
+    await page.keyboard.press('Escape');
+    await expect(tip).toHaveCount(0);
+    await page.getByTestId('booth-A3').click({ force: true });
+    await expect(tip).toHaveText('Spot A3 is not for sale.');
+    await tip.getByRole('button', { name: 'Close' }).click();
+    await expect(tip).toHaveCount(0);
+
     // List → map: choosing a row marks the booth.
     await page.getByText('Spot A2').click();
     await expect(page.getByTestId('booth-A2')).toHaveAttribute('aria-pressed', 'true');

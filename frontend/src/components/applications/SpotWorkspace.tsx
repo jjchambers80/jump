@@ -16,7 +16,7 @@
 // taken meanwhile just refetches the map.
 
 import { ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, Maximize2, Minus, Plus } from 'lucide-react';
+import { ArrowLeft, Check, Lock, Maximize2, Minus, Plus, X } from 'lucide-react';
 import type { ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
 import { useTheme } from 'next-themes';
 import { mapsApi, type MapBooth, type MapElement, type PublicMap } from '@/services/api';
@@ -281,6 +281,7 @@ export default function SpotWorkspace({
 
   // ─── Choosing ──────────────────────────────────────────────────────────────
   const chooseFromMap = (booth: MapBooth) => {
+    setTip(null);
     if (busy || step !== 'spot' || !sets.selectable.has(booth.id)) return;
     const next = selectedId === booth.id ? null : booth.id;
     setSelectedId(next);
@@ -291,6 +292,43 @@ export default function SpotWorkspace({
       });
     }
   };
+
+  // ─── Why a spot cannot be chosen: a small tip where the vendor tapped ─────
+  const [tip, setTip] = useState<{ id: string; text: string; left: number; top: number; below: boolean; arrow: number } | null>(null);
+  const reasonFor = (booth: MapBooth): string | null => {
+    const spot = booths.find((b) => b.id === booth.id);
+    if (!spot || busy) return null;
+    const name = `Spot ${spot.label}`;
+    if (step === 'review') return 'Go back to step 1 to change your spot.';
+    if (!spot.tier) return `${name} is not for sale.`;
+    if (spot.tier.id !== category.id) return `${name} is for ${spot.tier.name}. You are approved as ${category.name}, so it cannot be chosen.`;
+    if (spot.status === 'SOLD') return `${name} is already taken.`;
+    if (spot.status === 'HELD') return `${name} is on hold for another vendor right now. It may open up again soon.`;
+    if (spot.status === 'RESERVED') return `${name} is reserved.`;
+    return `${name} is not available.`;
+  };
+  const explainDisabled = (booth: MapBooth, e: React.MouseEvent) => {
+    const text = reasonFor(booth);
+    const box = canvasRef.current?.getBoundingClientRect();
+    if (!text || !box) return;
+    const half = 144; // half the tip's max width (17rem) plus an 8px margin, so it stays on the map
+    const x = e.clientX - box.left;
+    const y = e.clientY - box.top;
+    const left = box.width <= half * 2 ? box.width / 2 : Math.min(Math.max(x, half), box.width - half);
+    setTip((current) => (current?.id === booth.id ? null : { id: booth.id, text, left, top: y, below: y < 110, arrow: Math.max(-half + 16, Math.min(half - 16, x - left)) }));
+  };
+  useEffect(() => {
+    if (!tip) return;
+    const timer = setTimeout(() => setTip(null), 6000);
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setTip(null);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [tip]);
+  // A tip describes the map as it was; a step change or a refetch retires it.
+  useEffect(() => setTip(null), [step, map]);
 
   const chooseFromList = (spot: Spot) => {
     if (busy) return;
@@ -360,7 +398,7 @@ export default function SpotWorkspace({
           className="pointer-events-none absolute inset-0 opacity-60 dark:opacity-40"
           style={{ backgroundImage: 'radial-gradient(circle, rgb(148 163 184 / 0.35) 1px, transparent 1px)', backgroundSize: '18px 18px' }}
         />
-        <div ref={canvasRef} className="absolute inset-0">
+        <div ref={canvasRef} className="absolute inset-0" onPointerDown={() => tip && setTip(null)}>
           {map ? (
             <MapCanvas
               width={map.width}
@@ -378,6 +416,7 @@ export default function SpotWorkspace({
               disabledIds={busy || step === 'review' ? allIds : sets.disabled}
               tierSwatches={swatchFor}
               onBoothClick={chooseFromMap}
+              onDisabledBoothClick={explainDisabled}
               reducedMotion={reducedMotion}
               transformRef={transformRef}
               ariaLabel={`Floor map. Open ${category.name} spots can be chosen; the list of spots offers the same choice.`}
@@ -400,6 +439,33 @@ export default function SpotWorkspace({
             <button type="button" className={iconButton} aria-label="Fit the whole map" onClick={() => fit(true)}>
               <Maximize2 className="h-4 w-4" aria-hidden />
             </button>
+          </div>
+        )}
+
+        {tip && (
+          <div
+            role="status"
+            data-testid="spot-disabled-tip"
+            className="pointer-events-auto absolute z-20 w-max max-w-[17rem] -translate-x-1/2 rounded-xl bg-gray-900 py-2.5 pl-3 pr-9 text-sm leading-snug text-white shadow-lg ring-1 ring-black/10 dark:bg-slate-100 dark:text-slate-900"
+            style={{ left: tip.left, top: tip.top, transform: `translate(-50%, ${tip.below ? '14px' : 'calc(-100% - 14px)'})` }}
+          >
+            <span className="flex items-start gap-2">
+              <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+              <span>{tip.text}</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setTip(null)}
+              aria-label="Close"
+              className="absolute right-1 top-1 grid h-7 w-7 place-items-center rounded-lg opacity-80 hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white dark:focus-visible:ring-slate-900"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden />
+            </button>
+            <span
+              aria-hidden
+              style={{ left: `calc(50% + ${tip.arrow}px)` }}
+              className={`absolute h-3 w-3 -translate-x-1/2 rotate-45 bg-gray-900 dark:bg-slate-100 ${tip.below ? '-top-1.5' : '-bottom-1.5'}`}
+            />
           </div>
         )}
 
