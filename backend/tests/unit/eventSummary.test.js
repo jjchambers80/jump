@@ -24,6 +24,7 @@ describe('formatEventSummary', () => {
       date: event.date,
       venue: event.venue,
       category: 'music',
+      imageUrl: null,
       status: 'PUBLISHED',
       admissionMode: 'TICKETED',
       rsvpLimit: null,

@@ -1,5 +1,5 @@
 // Theme Hero section (spec 038 §7, card 038S): heading, text, an optional
-// image (full bleed behind the text or beside it) and up to two buttons.
+// image (behind the text in a rounded frame, or beside it) and up to two buttons.
 
 import type { ReactNode } from 'react';
 import SectionShell from './SectionShell';
@@ -56,14 +56,31 @@ export default function HeroSection({
   );
 
   if (file && layout === 'full-bleed') {
+    // Inside the header and event list container (max-w-7xl) with 32px corners. The image is fitted whole
+    // (contain), whatever its orientation, and a blurred copy of itself
+    // fills the rest of the frame so there are never empty bars.
     return (
       <SectionShell type="Hero" props={common}>
-        <section aria-labelledby={heading ? headingId : undefined} className={`relative isolate flex items-center overflow-hidden ${MIN_HEIGHT[height]}`}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={file.url} alt={alt} className="absolute inset-0 -z-10 h-full w-full object-cover" />
-          <div aria-hidden className="absolute inset-0 -z-10 bg-black" style={{ opacity: Math.min(80, Math.max(0, overlay)) / 100 }} />
-          <div className="mx-auto w-full max-w-[var(--theme-page-width,80rem)] px-4 py-16 sm:px-6 lg:px-8">{text(true)}</div>
-        </section>
+        <div className="mx-auto w-full max-w-7xl px-4 pt-4 sm:px-6 sm:pt-6 lg:px-8">
+          <section
+            aria-labelledby={heading ? headingId : undefined}
+            className={`relative isolate flex items-center overflow-hidden rounded-[32px] bg-slate-900 ${MIN_HEIGHT[height]}`}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={file.url}
+              alt=""
+              aria-hidden
+              data-testid="hero-backdrop"
+              className="absolute inset-0 -z-10 h-full w-full scale-125 object-cover opacity-80 blur-2xl saturate-150"
+            />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={file.url} alt={alt} className="absolute inset-0 -z-10 h-full w-full object-contain" />
+            <div aria-hidden className="absolute inset-0 -z-10 bg-black" style={{ opacity: Math.min(80, Math.max(0, overlay)) / 100 }} />
+            <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[32px] ring-1 ring-inset ring-white/10" />
+            <div className="w-full px-6 py-16 sm:px-10 lg:px-12">{text(true)}</div>
+          </section>
+        </div>
       </SectionShell>
     );
   }
