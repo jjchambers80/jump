@@ -1,11 +1,13 @@
 'use client';
 
 // Choose your space (spec 037 phase 5, apply-then-choose; spec 039 modes). An
-// approved vendor on a PAID form picks extras, how to pay, then what the form
-// sells (`selection.mode`):
+// approved vendor on a PAID form picks what the form sells (`selection.mode`):
 //   TIERS — a space type: the one the organizer approved them as, or, when
 //           approved without one, their own pick from the form's tiers. The
-//           organizer places them on the floor later.
+//           organizer places them on the floor later. Numbered steps, each
+//           shown only when it has something to ask: space type (vendor
+//           picks) → extras (the space type offers add-ons) → review and pay.
+//           With neither, the vendor lands straight on review and pay.
 //   MAP   — a spot of their category, on the floor map and in the list beside
 //           it (SpotWorkspace): pick the spot first, then extras and how to
 //           pay. Spots can carry their own price; other categories are faded
@@ -21,7 +23,7 @@
 // limited to a reduced-motion-safe spinner so nothing masks payment state.
 
 import { ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { CalendarClock, CreditCard, MapPin, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, CalendarClock, CreditCard, MapPin, ShieldCheck } from 'lucide-react';
 import SpotWorkspace, { type HoldOutcome } from './SpotWorkspace';
 import AddOnPicker from '@/components/AddOnPicker';
 import { formatCountdown, holdRemaining } from '@/components/maps/boothSelection';
@@ -60,6 +62,7 @@ export function usesSpotWorkspace(app: Pick<ApplicantApplication, 'status' | 'se
 }
 
 type Notice = { tone: 'error' | 'info' | 'success'; text: string };
+type Step = 'type' | 'extras' | 'pay';
 
 const POLL_MS = 2000;
 const POLL_LIMIT = 30;
@@ -131,10 +134,35 @@ export default function ChooseSpace({ application, spaceApi, refresh, layout = '
   const [notice, setNotice] = useState<Notice | null>(null);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const baseId = useId();
+  // Steps before paying, each only when it asks something. A MAP form whose
+  // floor plan is not up yet has nothing to pay for, so it gets no extras step.
+  const steps: Step[] = choosingSpot
+    ? ['pay']
+    : [...(tierChoices ? (['type'] as const) : []), ...(offeredAddOns.length > 0 ? (['extras'] as const) : []), 'pay'];
+  const [stepState, setStep] = useState<Step>(steps[0]);
+  const step = steps.includes(stepState) ? stepState : steps[0];
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const shownStep = useRef(step);
 
   useEffect(() => () => {
     if (pollRef.current) clearTimeout(pollRef.current);
   }, []);
+
+  // Moving between steps puts focus on the step's heading and brings it into view.
+  useEffect(() => {
+    // Compare with the step last shown, not a mount flag: dev strict mode runs
+    // effects twice, and focus must never move on page load.
+    if (shownStep.current === step) return;
+    shownStep.current = step;
+    const heading = headingRef.current;
+    if (!heading) return;
+    heading.focus({ preventScroll: true });
+    const top = heading.getBoundingClientRect().top;
+    if (top < 16 || top > window.innerHeight * 0.4) {
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      heading.scrollIntoView({ block: 'start', behavior: reduced ? 'auto' : 'smooth' });
+    }
+  }, [step]);
 
   const addOnLines: AddOnLineInput[] = useMemo(
     () => offeredAddOns.filter((a) => (qty[a.id] ?? 0) > 0).map((a) => ({ addOnId: a.id, quantity: qty[a.id] })),
@@ -246,6 +274,12 @@ export default function ChooseSpace({ application, spaceApi, refresh, layout = '
         return 'failed';
       }
       setNotice({ tone: 'error', text });
+      // The picked space type sold out: back to the types, with fresh counts.
+      if (e.code === 'SOLD_OUT' && tierChoices) {
+        setPickedTierId(null);
+        setQty({});
+        setStep('type');
+      }
       await refresh().catch(() => null);
       return e.code === 'BOOTH_TAKEN' ? 'taken' : 'failed';
     }
@@ -339,22 +373,11 @@ export default function ChooseSpace({ application, spaceApi, refresh, layout = '
     );
   }
 
-  // ─── Choose: what, extras, how to pay, then where ─────────────────────────
+  // ─── Choose ────────────────────────────────────────────────────────────────
   const payLabel = (amount: number) => (useSavedCard ? `Pay ${money(amount)} with ${cardName(sel.savedCard)}` : `Hold this space and pay ${money(amount)}`);
   const due = sel.dueAt ? ` by ${formatDate(sel.dueAt)}` : '';
   const holdBusyLabel =
     busy === 'holding' ? 'Holding your space…' : busy === 'charging' ? 'Charging your card…' : busy === 'redirecting' ? 'Opening secure checkout…' : null;
-  const holdButton = (onClick: () => void, disabled: boolean, idleLabel: string) => (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={Boolean(busy) || disabled}
-      data-testid="space-hold"
-      className="rounded-xl bg-brand px-5 py-2.5 font-semibold text-brand-fg transition-colors hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2 disabled:opacity-60 motion-reduce:transition-none dark:focus-visible:ring-offset-slate-800"
-    >
-      {holdBusyLabel ?? idleLabel}
-    </button>
-  );
   const payWithField = sel.savedCard ? (
     <fieldset className="space-y-2" data-testid="space-pay-with">
       <legend className="mb-1 text-sm font-semibold text-gray-900 dark:text-slate-100">How you pay</legend>
@@ -380,13 +403,6 @@ export default function ChooseSpace({ application, spaceApi, refresh, layout = '
       ))}
     </fieldset>
   ) : null;
-  const totalLine = (
-    <p className="text-sm text-gray-600 dark:text-slate-400" data-testid="space-total">
-      Total <strong className="ml-1 text-lg font-extrabold tabular-nums text-gray-900 dark:text-slate-50">{money(total)}</strong>
-      {addOnLines.length > 0 && <span className="ml-1 text-xs">(extras included)</span>}
-    </p>
-  );
-
   if (usesSpotWorkspace(application) && category) {
     const extras =
       offeredAddOns.length > 0 ? (
@@ -428,46 +444,182 @@ export default function ChooseSpace({ application, spaceApi, refresh, layout = '
     );
   }
 
-  return (
-    <section aria-labelledby={`${baseId}-title`} data-testid="choose-space" data-state="CHOOSE" data-mode={spotMode ? 'MAP' : 'TIERS'} className="space-y-6">
-      <header className="space-y-1.5">
-        <h3 id={`${baseId}-title`} className="text-xl font-bold tracking-tight text-gray-900 dark:text-slate-100">
-          {choosingSpot ? 'Choose your spot' : 'Choose your space'}
-        </h3>
-        <p className="text-sm leading-relaxed text-gray-600 dark:text-slate-400" data-testid="space-intro">
-          {tierChoices ? (
-            <>
-              You are approved. Pick the space type that fits you and pay{due} to confirm it. Spaces go to whoever pays first; the organizer places you on the floor.
-            </>
-          ) : (
-            <>
-              You are approved as <strong className="text-gray-900 dark:text-slate-100">{category?.name}</strong>.
-              {choosingSpot
-                ? ` Pick your spot on the floor map and pay${due} to confirm it. Each spot shows its price.`
-                : ` Choose and pay${due} to confirm your spot.`}
-              {category?.guaranteed
-                ? choosingSpot
-                  ? ' A space in your category is reserved for you; specific spots go to whoever pays first.'
-                  : ' Your place in this category is reserved; specific spots go to whoever pays first.'
-                : ' Spaces go to whoever pays first.'}
-            </>
-          )}
-        </p>
-      </header>
+  // ─── Steps: space type → extras → review and pay (TIERS, a placed booth) ──
+  const stepNo = steps.indexOf(step) + 1;
+  const stepped = steps.length > 1;
+  const stepTitle =
+    step === 'type' ? 'Choose your space type' : step === 'extras' ? 'Add extras' : stepped ? 'Review and pay' : choosingSpot ? 'Choose your spot' : 'Choose your space';
+  const goTo = (next: Step) => {
+    setNotice(null);
+    setStep(next);
+  };
+  const nextStep = steps[stepNo] ?? null;
+  const prevStep = stepNo > 1 ? steps[stepNo - 2] : null;
+  const chosenExtras = offeredAddOns.filter((a) => (qty[a.id] ?? 0) > 0);
+  const spaceCaption = sel.placedBooth
+    ? `Booth ${sel.placedBooth.label}, placed by the organizer`
+    : category?.guaranteed
+      ? 'Reserved for you'
+      : category
+        ? `${category.spacesLeft} space${category.spacesLeft === 1 ? '' : 's'} left`
+        : '';
 
-      {notice && <NoticeBox notice={notice} />}
+  const intro = tierChoices ? (
+    <>You are approved. Pick the space type that fits you and pay{due} to confirm it. Spaces go to whoever pays first; the organizer places you on the floor.</>
+  ) : (
+    <>
+      You are approved as <strong className="text-gray-900 dark:text-slate-100">{category?.name}</strong>.
+      {choosingSpot ? ` Pick your spot on the floor map and pay${due} to confirm it. Each spot shows its price.` : ` Choose and pay${due} to confirm your spot.`}
+      {category?.guaranteed
+        ? choosingSpot
+          ? ' A space in your category is reserved for you; specific spots go to whoever pays first.'
+          : ' Your place in this category is reserved; specific spots go to whoever pays first.'
+        : ' Spaces go to whoever pays first.'}
+    </>
+  );
 
-      {sel.placedBooth && (
-        <p className="flex items-start gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200" data-testid="space-placed-booth">
-          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-brand-link" aria-hidden />
-          <span>
-            The organizer has placed you at <strong>booth {sel.placedBooth.label}</strong>
-            {sel.placedBooth.w && sel.placedBooth.h ? ` (${sel.placedBooth.w}×${sel.placedBooth.h})` : ''}. Pay for it to confirm it.
+  const stepHeader = (
+    <header className="space-y-1.5">
+      {stepped && (
+        <div className="flex items-center gap-3" aria-hidden data-testid="space-step-meter">
+          <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-gray-500 dark:text-slate-400">
+            Step {stepNo} of {steps.length}
           </span>
+          <span className="flex flex-1 gap-1">
+            {steps.map((s, i) => (
+              <span key={s} className={`h-1 flex-1 rounded-full ${i < stepNo ? 'bg-brand' : 'bg-gray-200 dark:bg-slate-700'}`} />
+            ))}
+          </span>
+        </div>
+      )}
+      <h2 ref={headingRef} tabIndex={-1} id={`${baseId}-title`} className="scroll-mt-4 text-xl font-bold tracking-tight text-gray-900 focus:outline-none dark:text-slate-100">
+        {stepped ? <span className="sr-only">Step {stepNo} of {steps.length}: </span> : null}
+        {stepTitle}
+      </h2>
+      {stepNo === 1 && (
+        <p className="text-sm leading-relaxed text-gray-600 dark:text-slate-400" data-testid="space-intro">
+          {intro}
         </p>
       )}
+    </header>
+  );
 
+  const primaryClass =
+    'inline-flex min-h-[2.75rem] flex-1 items-center justify-center gap-2 rounded-xl bg-brand px-5 py-2.5 text-sm font-semibold text-brand-fg transition-colors hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none sm:flex-none dark:focus-visible:ring-offset-slate-800';
+  const linkButtonClass =
+    'rounded-lg px-2 py-1.5 text-sm font-semibold text-brand-link hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link disabled:opacity-60';
+
+  /** The step's footer: running total on the left, back + the step's action on the right. Sticks to the bottom while the step is taller than the screen. */
+  const actionBar = (summaryLine: ReactNode, action: ReactNode, note?: ReactNode) => (
+    <div
+      className="sticky bottom-0 z-10 -mx-1 border-t border-gray-200 bg-white/95 px-1 pb-1 pt-3 backdrop-blur dark:border-slate-700 dark:bg-slate-800/95"
+      data-testid="space-action-bar"
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0" aria-live="polite">
+          {summaryLine}
+        </div>
+        <div className="flex items-center gap-2.5">
+          {prevStep && (
+            <button
+              type="button"
+              onClick={() => goTo(prevStep)}
+              disabled={Boolean(busy)}
+              aria-label={prevStep === 'type' ? 'Back to space types' : 'Back to extras'}
+              data-testid="space-back"
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+            >
+              <ArrowLeft className="h-4 w-4" aria-hidden />
+            </button>
+          )}
+          {action}
+        </div>
+      </div>
+      {note && <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">{note}</p>}
+    </div>
+  );
+
+  const continueButton = (disabled: boolean, label: string) => (
+    <button type="button" onClick={() => nextStep && goTo(nextStep)} disabled={Boolean(busy) || disabled} data-testid="space-continue" className={primaryClass}>
+      {label}
+    </button>
+  );
+  const holdButton = (onClick: () => void, disabled: boolean, idleLabel: string) => (
+    <button type="button" onClick={onClick} disabled={Boolean(busy) || disabled} data-testid="space-hold" className={primaryClass}>
+      {holdBusyLabel && <span aria-hidden className="inline-block h-3.5 w-3.5 rounded-full border-2 border-current border-r-transparent motion-safe:animate-spin" />}
+      {holdBusyLabel ?? idleLabel}
+    </button>
+  );
+  const totalLine = (
+    <p className="text-sm text-gray-600 dark:text-slate-400" data-testid="space-total">
+      {chosenExtras.length > 0 ? 'Total with extras' : 'Total'}{' '}
+      <strong className="ml-1 text-lg font-extrabold tabular-nums text-gray-900 dark:text-slate-50">{money(total)}</strong>
+    </p>
+  );
+
+  /** One line for the space being bought, with a way back to change the type. */
+  const spaceRow = category && (
+    <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-3.5 dark:border-slate-700 dark:bg-slate-800" data-testid="space-review-space">
+      <span aria-hidden className="h-10 w-1.5 shrink-0 rounded-full bg-brand" />
+      <span className="min-w-0 flex-1">
+        <span className="block font-semibold text-gray-900 dark:text-slate-100">{category.name}</span>
+        {spaceCaption && <span className="block text-xs text-gray-600 dark:text-slate-400">{spaceCaption}</span>}
+      </span>
+      <span className="font-bold tabular-nums text-gray-900 dark:text-slate-50">{money(category.applicantPays)}</span>
       {tierChoices && (
+        <button type="button" onClick={() => goTo('type')} disabled={Boolean(busy)} data-testid="space-change-type" className={linkButtonClass}>
+          Change<span className="sr-only"> space type</span>
+        </button>
+      )}
+    </div>
+  );
+
+  // The space as a ticket stub: what it is, where it goes, what it costs.
+  const spaceStub = category && (
+    <div className="tier-stub-shadow">
+      <div className="tier-stub relative grid grid-cols-1 overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-800 sm:grid-cols-[minmax(0,1fr)_10rem]">
+        <span aria-hidden className="absolute inset-y-0 left-0 w-1 bg-brand" />
+        <div className="min-w-0 py-4 pl-5 pr-4 sm:py-5">
+          <p className="text-[17px] font-semibold leading-snug tracking-tight text-gray-900 dark:text-slate-100">{category.name}</p>
+          {category.description && <p className="mt-1 text-sm leading-relaxed text-gray-600 dark:text-slate-400">{category.description}</p>}
+          <p className="mt-2 text-sm text-gray-600 dark:text-slate-400">
+            {sel.placedBooth ? `Booth ${sel.placedBooth.label}, placed by the organizer.` : 'The organizer assigns your exact spot.'}
+          </p>
+          <p className="mt-2 text-xs font-semibold" data-testid="space-left">
+            {category.guaranteed ? (
+              <span className="inline-flex items-center gap-1 text-green-700 dark:text-green-400">
+                <ShieldCheck className="h-3.5 w-3.5" aria-hidden /> Your space is reserved
+              </span>
+            ) : soldOut ? (
+              <span className="text-red-700 dark:text-red-400">Sold out</span>
+            ) : (
+              <span className="text-gray-700 dark:text-slate-300">
+                {category.spacesLeft} space{category.spacesLeft === 1 ? '' : 's'} left
+              </span>
+            )}
+          </p>
+          {tierChoices && (
+            <button type="button" onClick={() => goTo('type')} disabled={Boolean(busy)} data-testid="space-change-type" className={`-ml-2 mt-2 ${linkButtonClass}`}>
+              Change<span className="sr-only"> space type</span>
+            </button>
+          )}
+        </div>
+        <div className="relative flex h-16 items-center justify-between gap-3 border-t-2 border-dashed border-gray-200 pl-5 pr-4 dark:border-slate-700 sm:h-auto sm:flex-col sm:justify-center sm:gap-0.5 sm:border-l-2 sm:border-t-0 sm:px-2 sm:py-4 sm:text-center">
+          <span className="text-xl font-extrabold tabular-nums tracking-tight text-gray-900 dark:text-slate-50 sm:text-2xl">{money(category.applicantPays)}</span>
+          {category.feesIncluded > 0 ? (
+            <span className="text-xs text-gray-500 dark:text-slate-400">incl. {money(category.feesIncluded)} fees</span>
+          ) : category.tax > 0 ? (
+            <span className="text-xs text-gray-500 dark:text-slate-400">incl. tax</span>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+
+  let body: ReactNode = null;
+  if (step === 'type' && tierChoices) {
+    body = (
+      <>
         <fieldset className="space-y-2" data-testid="space-tier-choice">
           <legend className="mb-1 text-sm font-semibold text-gray-900 dark:text-slate-100">Space type</legend>
           {tierChoices.map((tier) => {
@@ -476,7 +628,7 @@ export default function ChooseSpace({ application, spaceApi, refresh, layout = '
               <label
                 key={tier.id}
                 data-testid="space-tier-option"
-                className={`flex items-start gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3.5 text-sm transition-colors has-[:checked]:border-brand-link has-[:checked]:ring-1 has-[:checked]:ring-brand-link motion-reduce:transition-none dark:border-slate-700 dark:bg-slate-800 ${
+                className={`flex items-start gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3.5 text-sm transition-colors has-[:checked]:border-brand-link has-[:checked]:ring-1 has-[:checked]:ring-brand-link has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-link motion-reduce:transition-none dark:border-slate-700 dark:bg-slate-800 ${
                   tierSoldOut ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-gray-300 dark:hover:border-slate-600'
                 }`}
               >
@@ -494,6 +646,7 @@ export default function ChooseSpace({ application, spaceApi, refresh, layout = '
                   {tier.description && <span className="mt-0.5 block text-gray-600 dark:text-slate-400">{tier.description}</span>}
                   <span className={`mt-1 block text-xs font-semibold ${tierSoldOut ? 'text-red-700 dark:text-red-400' : 'text-gray-600 dark:text-slate-400'}`}>
                     {tierSoldOut ? 'Sold out' : `${tier.spacesLeft} space${tier.spacesLeft === 1 ? '' : 's'} left`}
+                    {!tierSoldOut && tier.addOns.length > 0 ? ' · extras available' : ''}
                   </span>
                 </span>
                 <span className="text-right">
@@ -508,86 +661,111 @@ export default function ChooseSpace({ application, spaceApi, refresh, layout = '
             );
           })}
         </fieldset>
-      )}
-
-      {offeredAddOns.length > 0 && (
+        {actionBar(
+          picked ? (
+            <p className="text-sm text-gray-600 dark:text-slate-400" data-testid="space-total">
+              {picked.name} <strong className="ml-1 text-lg font-extrabold tabular-nums text-gray-900 dark:text-slate-50">{money(picked.applicantPays)}</strong>
+            </p>
+          ) : (
+            <p className="text-sm text-gray-600 dark:text-slate-400">Pick a space type to continue.</p>
+          ),
+          continueButton(!picked || soldOut, 'Continue')
+        )}
+      </>
+    );
+  } else if (step === 'extras' && category) {
+    body = (
+      <>
+        {spaceRow}
         <AddOnPicker
           addOns={offeredAddOns}
           quantities={qty}
           onChange={(id, quantity) => setQty((prev) => ({ ...prev, [id]: quantity }))}
           unitPrice={(a) => offeredAddOns.find((x) => x.id === a.id)?.applicantPays ?? a.price}
-          title="Extras"
-          hint="Optional. Charged with your space."
+          title="Available extras"
+          hint="Optional. Charged with your space. You can skip this step."
+          headingLevel="h3"
         />
+        {actionBar(totalLine, continueButton(soldOut, chosenExtras.length > 0 ? 'Continue to payment' : 'Skip extras'))}
+      </>
+    );
+  } else if (choosingSpot) {
+    body = sel.map.pending ? (
+      <p className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300" role="status" data-testid="space-map-pending">
+        The floor plan is being updated. Check back soon to pick your spot{due}.
+      </p>
+    ) : (
+      // A published map with open spots renders SpotWorkspace above, never here.
+      <p className="text-sm text-gray-600 dark:text-slate-400" data-testid="space-map-empty">
+        No spots are open in your category right now. The organizer can still place you — reply to your approval email.
+      </p>
+    );
+  } else if (category) {
+    // Review and pay: the space, the extras (with a way back), how to pay, total.
+    body = (
+      <div className="space-y-5" data-testid="space-list">
+        {spaceStub}
+        {offeredAddOns.length > 0 && (
+          <section aria-labelledby={`${baseId}-extras`} className="rounded-xl border border-gray-200 p-3.5 dark:border-slate-700" data-testid="space-review-extras">
+            <div className="flex items-center justify-between gap-3">
+              <h3 id={`${baseId}-extras`} className="text-sm font-semibold text-gray-900 dark:text-slate-100">
+                Extras
+              </h3>
+              <button type="button" onClick={() => goTo('extras')} disabled={Boolean(busy)} data-testid="space-edit-extras" className={linkButtonClass}>
+                {chosenExtras.length > 0 ? 'Edit' : 'Add'}
+                <span className="sr-only"> extras</span>
+              </button>
+            </div>
+            {chosenExtras.length > 0 ? (
+              <ul className="mt-1.5 space-y-1 text-sm tabular-nums text-gray-700 dark:text-slate-300">
+                {chosenExtras.map((a) => (
+                  <li key={a.id} className="flex justify-between gap-3">
+                    <span>
+                      {a.name} ×{qty[a.id]}
+                    </span>
+                    <span>{money(Math.round(a.applicantPays * qty[a.id] * 100) / 100)}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-0.5 text-sm text-gray-600 dark:text-slate-400">No extras added.</p>
+            )}
+          </section>
+        )}
+        {payWithField}
+        {actionBar(
+          totalLine,
+          holdButton(() => hold(picked ? { tierId: picked.id } : {}), soldOut, soldOut ? 'Sold out' : payLabel(total)),
+          'Your space is held for 15 minutes while you pay.'
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <section
+      aria-labelledby={`${baseId}-title`}
+      data-testid="choose-space"
+      data-state="CHOOSE"
+      data-mode={spotMode ? 'MAP' : 'TIERS'}
+      data-step={step}
+      className="space-y-6"
+    >
+      {stepHeader}
+
+      {notice && <NoticeBox notice={notice} />}
+
+      {sel.placedBooth && step === 'pay' && (
+        <p className="flex items-start gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200" data-testid="space-placed-booth">
+          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-brand-link" aria-hidden />
+          <span>
+            The organizer has placed you at <strong>booth {sel.placedBooth.label}</strong>
+            {sel.placedBooth.w && sel.placedBooth.h ? ` (${sel.placedBooth.w}×${sel.placedBooth.h})` : ''}. Pay for it to confirm it.
+          </span>
+        </p>
       )}
 
-      {payWithField}
-
-      {tierChoices ? (
-        // TIERS, vendor picks: the radio cards above are the choice.
-        <div className="space-y-2" data-testid="space-list">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            {picked ? totalLine : <p className="text-sm text-gray-600 dark:text-slate-400">Pick a space type to see your total.</p>}
-            {holdButton(() => picked && hold({ tierId: picked.id }), !picked || soldOut, picked ? payLabel(total) : 'Pick a space type')}
-          </div>
-          <p className="text-xs text-gray-500 dark:text-slate-400">Your space is held for 15 minutes while you pay.</p>
-        </div>
-      ) : choosingSpot ? (
-        sel.map.pending ? (
-          <p className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300" role="status" data-testid="space-map-pending">
-            The floor plan is being updated. Check back soon to pick your spot{due}.
-          </p>
-        ) : !sel.map.available || !category ? (
-          <p className="text-sm text-gray-600 dark:text-slate-400" data-testid="space-map-empty">
-            No spots are open in your category right now. The organizer can still place you — reply to your approval email.
-          </p>
-        ) : (
-          // Published map: rendered by SpotWorkspace above, never here.
-          null
-        )
-      ) : category ? (
-        // TIERS with the organizer's category, or a booth staff placed the vendor on.
-        <div data-testid="space-list">
-          <div className="tier-stub-shadow">
-            <div className="tier-stub relative grid grid-cols-1 overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-800 sm:grid-cols-[minmax(0,1fr)_10rem]">
-              <span aria-hidden className="absolute inset-y-0 left-0 w-1 bg-brand" />
-              <div className="min-w-0 py-4 pl-5 pr-4 sm:py-5">
-                <p className="text-[17px] font-semibold leading-snug tracking-tight text-gray-900 dark:text-slate-100">{category.name}</p>
-                {category.description && <p className="mt-1 text-sm leading-relaxed text-gray-600 dark:text-slate-400">{category.description}</p>}
-                <p className="mt-2 text-sm text-gray-600 dark:text-slate-400">
-                  {sel.placedBooth ? `Booth ${sel.placedBooth.label}, placed by the organizer.` : 'The organizer assigns your exact spot.'}
-                </p>
-                <p className="mt-2 text-xs font-semibold" data-testid="space-left">
-                  {category.guaranteed ? (
-                    <span className="inline-flex items-center gap-1 text-green-700 dark:text-green-400">
-                      <ShieldCheck className="h-3.5 w-3.5" aria-hidden /> Your space is reserved
-                    </span>
-                  ) : soldOut ? (
-                    <span className="text-red-700 dark:text-red-400">Sold out</span>
-                  ) : (
-                    <span className="text-gray-700 dark:text-slate-300">
-                      {category.spacesLeft} space{category.spacesLeft === 1 ? '' : 's'} left
-                    </span>
-                  )}
-                </p>
-              </div>
-              <div className="relative flex h-16 items-center justify-between gap-3 border-t-2 border-dashed border-gray-200 pl-5 pr-4 dark:border-slate-700 sm:h-auto sm:flex-col sm:justify-center sm:gap-0.5 sm:border-l-2 sm:border-t-0 sm:px-2 sm:py-4 sm:text-center">
-                <span className="text-xl font-extrabold tabular-nums tracking-tight text-gray-900 dark:text-slate-50 sm:text-2xl">{money(category.applicantPays)}</span>
-                {category.feesIncluded > 0 ? (
-                  <span className="text-xs text-gray-500 dark:text-slate-400">incl. {money(category.feesIncluded)} fees</span>
-                ) : category.tax > 0 ? (
-                  <span className="text-xs text-gray-500 dark:text-slate-400">incl. tax</span>
-                ) : null}
-              </div>
-            </div>
-          </div>
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            {totalLine}
-            {holdButton(() => hold(), soldOut, soldOut ? 'Sold out' : payLabel(total))}
-          </div>
-          <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">Your space is held for 15 minutes while you pay.</p>
-        </div>
-      ) : null}
+      {body}
     </section>
   );
 }
