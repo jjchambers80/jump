@@ -141,7 +141,7 @@ describe('BuyerAuthService', () => {
       const token = service.signSession({ contactId: 'c1', organizationId: 'o1', email: 'e@x.test' });
       const decoded = jwt.decode(token);
       expect(decoded.typ).toBe(BUYER_SESSION_TYP);
-      expect(service.verifySession(token)).toEqual({ contactId: 'c1', organizationId: 'o1', email: 'e@x.test' });
+      expect(service.verifySession(token)).toEqual({ contactId: 'c1', organizationId: 'o1', email: 'e@x.test', issuedAt: decoded.iat });
     });
 
     it('rejects a staff (Auth.js) token signed with the same secret', () => {

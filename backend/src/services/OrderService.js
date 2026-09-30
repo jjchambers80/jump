@@ -17,6 +17,7 @@ import legalAcceptanceService from './LegalAcceptanceService.js';
 import { checkoutAcceptanceRequired } from '../config/legal.js';
 import { normalizeEmail } from '../utils/normalizeEmail.js';
 import { upsertContactFillBlanks } from './contactRecord.js';
+import { PAID_ORDER_STATUSES } from './paidStatuses.js';
 
 /** Include for org-wide order rows (spec 024 phase 2): enough to describe either kind without a second query. */
 const LIST_INCLUDE = {
@@ -591,6 +592,92 @@ class OrderService {
   async getOrdersForContact(contactId, pagination = {}) {
     // Both kinds (spec 024 phase 2): application orders link to the status page through `applicationId`.
     return this.listOrders({ contactId, status: { notIn: ['FAILED', 'CANCELLED'] } }, pagination);
+  }
+
+  /**
+   * Printable receipt for one of the buyer's own paid orders (spec 040 PA-06).
+   * Amounts only — no Stripe ids, no QR codes. 404 for anyone else's order or
+   * an order that never took money, so ids cannot be probed.
+   * @param {string} contactId
+   * @param {string} orderId
+   */
+  async getReceiptForContact(contactId, orderId) {
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, contactId, status: { in: PAID_ORDER_STATUSES } },
+      include: {
+        event: {
+          select: {
+            name: true,
+            date: true,
+            venue: {
+              select: {
+                name: true,
+                address: true,
+                city: true,
+                state: true,
+                timezone: true,
+                organization: { select: { name: true, logoUrl: true } },
+              },
+            },
+          },
+        },
+        contact: { select: { firstName: true, lastName: true, email: true } },
+        items: { include: { priceTier: { select: { name: true } }, applicationTier: { select: { name: true } } }, orderBy: { createdAt: 'asc' } },
+        addOns: { include: { addOn: { select: { name: true } } }, orderBy: { createdAt: 'asc' } },
+        refunds: { where: { status: 'SUCCEEDED' }, select: { amount: true, feeAmount: true, createdAt: true }, orderBy: { createdAt: 'asc' } },
+        payment: { select: { source: true, offlineMethod: true, createdAt: true } },
+      },
+    });
+    if (!order) throw new NotFoundError('Order not found');
+
+    const venue = order.event?.venue;
+    const subtotal = Number(order.subtotalAmount);
+    const tax = Number(order.taxAmount);
+    const total = Number(order.totalAmount);
+    return {
+      id: order.id,
+      orderRef: order.orderRef,
+      kind: order.kind,
+      status: order.status,
+      organization: { name: venue?.organization?.name ?? null, logoUrl: venue?.organization?.logoUrl ?? null },
+      event: {
+        name: order.event?.name ?? null,
+        date: order.event?.date ?? null,
+        // Spec 033: the venue's zone travels with the event date.
+        timezone: venue?.timezone ?? null,
+        venue: venue ? { name: venue.name, address: venue.address, city: venue.city, state: venue.state } : null,
+      },
+      billedTo: order.contact,
+      createdAt: order.createdAt,
+      paidAt: order.paidAt ?? order.payment?.createdAt ?? null,
+      paymentSource: order.payment?.source ?? null,
+      offlineMethod: order.payment?.offlineMethod ?? null,
+      lines: [
+        ...order.items.map((item) => ({
+          description: item.description || item.priceTier?.name || item.applicationTier?.name || 'Item',
+          quantity: item.quantity,
+          unitPrice: Number(item.unitPrice),
+          amount: Number(item.unitPrice) * item.quantity,
+        })),
+        ...order.addOns.map((line) => ({
+          description: line.name ?? line.addOn?.name ?? 'Add-on',
+          quantity: line.quantity,
+          unitPrice: Number(line.unitPrice),
+          amount: Number(line.unitPrice) * line.quantity,
+        })),
+      ],
+      subtotal,
+      // Whatever the buyer paid beyond the lines and tax: service and processing fees on PASS orders, 0 on ABSORB.
+      fees: Math.max(0, Math.round((total - subtotal - tax) * 100) / 100),
+      tax,
+      total,
+      currency: order.currency,
+      refunds: order.refunds.map((refund) => ({
+        amount: Number(refund.amount),
+        feeRetained: Number(refund.feeAmount),
+        createdAt: refund.createdAt,
+      })),
+    };
   }
 
   /**

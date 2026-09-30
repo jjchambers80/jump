@@ -8,6 +8,8 @@
 //   GET  /buyer/me/orders                                 -> this org's orders only
 //   GET  /buyer/me/tickets                                -> this org's tickets only
 //   POST /buyer/me/tickets/:ticketId/refund               -> self-service refund of an owned ticket
+//   PATCH /buyer/me, /me/email*, /me/rsvps*, /me/orders/:id/receipt,
+//   /me/preferences, /me/sessions/revoke-all, /unsubscribe  -> patron account (spec 040)
 //
 // The frontend proxies these through Next route handlers so the session lives
 // in a first-party httpOnly cookie; browsers never hold the bearer token.
@@ -23,6 +25,9 @@ import refundService from '../../services/RefundService.js';
 import emailService from '../../services/EmailService.js';
 import applicationService from '../../services/ApplicationService.js';
 import applicantProfileService from '../../services/ApplicantProfileService.js';
+import buyerAccountService from '../../services/BuyerAccountService.js';
+import { validateEmailChange, validatePreferences, validateUpdateBuyerProfile } from '../validators/buyerAccountValidators.js';
+import { contactIdFromUnsubscribeToken, verifyUnsubscribeToken } from '../../utils/unsubscribeToken.js';
 import { validateSelectionBody } from '../validators/applicationValidators.js';
 import { requireBuyer } from '../../middleware/buyerAuth.js';
 import { ForbiddenError, NotFoundError, ValidationError } from '../../middleware/errorHandler.js';
@@ -44,6 +49,8 @@ export { clientIpForRateLimit };
 const requestLimiter = makeLimiter('BUYER_AUTH_REQUEST', LIMITS.BUYER_AUTH_REQUEST);
 const verifyLimiter = makeLimiter('BUYER_AUTH_VERIFY', LIMITS.BUYER_AUTH_VERIFY);
 const boothLimiter = makeLimiter('BOOTH_CHOOSE', LIMITS.BOOTH_CHOOSE);
+// Unsubscribe links carry an unguessable HMAC; the limiter only blunts scanning.
+const unsubscribeLimiter = makeLimiter('BUYER_AUTH_VERIFY', LIMITS.BUYER_AUTH_VERIFY);
 
 /** POST /buyer/auth/request — email a sign-in link. Never reveals account existence. */
 router.post('/auth/request', requestLimiter, async (req, res, next) => {
@@ -120,14 +127,134 @@ router.post('/auth/verify-code', verifyLimiter, async (req, res, next) => {
 router.get('/me', requireBuyer, async (req, res, next) => {
   try {
     const contact = await buyerAuthService.getProfile(req.buyer.contactId);
-    res.json({
-      id: contact.id,
-      email: contact.email,
-      firstName: contact.firstName,
-      lastName: contact.lastName,
-      emailSubscribed: contact.emailSubscribed,
-      organization: contact.organization,
-    });
+    const profile = await buyerAccountService.profile(contact.id);
+    res.json({ ...profile, organization: contact.organization });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ─── Account (spec 040) ─────────────────────────────────────────────────────
+
+/** PATCH /buyer/me — the buyer's own name, phone, city. Never email, notes, tags or marketing. */
+router.patch('/me', requireBuyer, validateUpdateBuyerProfile, async (req, res, next) => {
+  try {
+    res.json(await buyerAccountService.updateProfile(req.buyer.contactId, req.body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** POST /buyer/me/email { newEmail } — confirmation link to the new address; nothing changes until it is used. */
+router.post('/me/email', requireBuyer, requestLimiter, validateEmailChange, async (req, res, next) => {
+  try {
+    res.status(202).json(await buyerAccountService.requestEmailChange(req.buyer.contactId, req.body.newEmail));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** DELETE /buyer/me/email — withdraw a pending email change. */
+router.delete('/me/email', requireBuyer, async (req, res, next) => {
+  try {
+    res.json(await buyerAccountService.cancelEmailChange(req.buyer.contactId));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** POST /buyer/me/email/confirm { token } — the emailed link; the token is the proof, no session needed. */
+router.post('/me/email/confirm', verifyLimiter, async (req, res, next) => {
+  try {
+    res.json(await buyerAccountService.confirmEmailChange(req.body?.token));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** GET /buyer/me/rsvps — this buyer's RSVPs at this organization. */
+router.get('/me/rsvps', requireBuyer, async (req, res, next) => {
+  try {
+    res.json({ data: await buyerAccountService.listRsvps(req.buyer.contactId) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** POST /buyer/me/rsvps/:id/cancel */
+router.post('/me/rsvps/:id/cancel', requireBuyer, async (req, res, next) => {
+  try {
+    res.json(await buyerAccountService.cancelRsvp(req.buyer.contactId, req.params.id));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** GET /buyer/me/orders/:orderId/receipt — printable receipt for one of the buyer's paid orders. */
+router.get('/me/orders/:orderId/receipt', requireBuyer, async (req, res, next) => {
+  try {
+    res.json(await orderService.getReceiptForContact(req.buyer.contactId, req.params.orderId));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** PATCH /buyer/me/preferences { emailSubscribed } — marketing email from this organization. */
+router.patch('/me/preferences', requireBuyer, validatePreferences, async (req, res, next) => {
+  try {
+    res.json(await buyerAccountService.setMarketing(req.buyer.contactId, req.body.emailSubscribed, req));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** POST /buyer/me/sessions/revoke-all → { sessionToken } — every other device is signed out; this one gets a fresh session. */
+router.post('/me/sessions/revoke-all', requireBuyer, async (req, res, next) => {
+  try {
+    res.json({ sessionToken: await buyerAccountService.revokeAllSessions(req.buyer.contactId) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Unsubscribe without signing in (spec 040 PA-08). GET describes what the
+ * token would do (the storefront page shows it and asks for one click — link
+ * scanners must not unsubscribe anyone); POST does it, including the mailbox
+ * provider's RFC 8058 `List-Unsubscribe=One-Click` form post.
+ */
+async function contactForUnsubscribe(req) {
+  const token = req.query.t || req.body?.t;
+  const contactId = contactIdFromUnsubscribeToken(token);
+  const contact = contactId
+    ? await prisma.contact.findUnique({
+        where: { id: contactId },
+        select: { id: true, organizationId: true, email: true, emailSubscribed: true, organization: { select: { id: true, name: true } } },
+      })
+    : null;
+  if (!verifyUnsubscribeToken(token, contact)) throw new NotFoundError('This unsubscribe link is not valid');
+  return contact;
+}
+
+function maskEmail(email) {
+  const [local, domain] = String(email).split('@');
+  return `${local.slice(0, 1)}${'•'.repeat(Math.max(1, Math.min(local.length - 1, 6)))}@${domain}`;
+}
+
+router.get('/unsubscribe', unsubscribeLimiter, async (req, res, next) => {
+  try {
+    const contact = await contactForUnsubscribe(req);
+    res.json({ organization: contact.organization, email: maskEmail(contact.email), emailSubscribed: contact.emailSubscribed });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/unsubscribe', unsubscribeLimiter, express.urlencoded({ extended: false, limit: '2kb' }), async (req, res, next) => {
+  try {
+    const contact = await contactForUnsubscribe(req);
+    await buyerAccountService.setMarketing(contact.id, false, req);
+    res.json({ organization: contact.organization, email: maskEmail(contact.email), emailSubscribed: false });
   } catch (error) {
     next(error);
   }

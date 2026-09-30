@@ -54,3 +54,15 @@ export function cardAuthorizationText({ amount, paymentDueDays, organizationName
 export function applyConsentText({ organizationName }) {
   return `I agree to ${organizationName || 'the organizer'} and Jump collecting and storing the information in this application, as described in the Privacy Policy.`;
 }
+
+/**
+ * Marketing consent given on the buyer's Preferences page (spec 040). Recorded
+ * as a `MARKETING` acceptance with this version and the label as
+ * `presentedText`, so the trail shows exactly what the buyer switched on.
+ * Bump the version whenever the label changes.
+ */
+export const MARKETING_CONSENT_VERSION = '2026-09-29';
+
+export function marketingConsentText({ organizationName }) {
+  return `Email me news and offers from ${organizationName || 'this organizer'}. I can turn this off at any time.`;
+}

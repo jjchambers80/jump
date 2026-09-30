@@ -4,21 +4,27 @@
 // row on phones, a vertical list beside the content from `lg` — never two
 // copies of the nav in the DOM.
 
+import { useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ClipboardList, Receipt, Ticket, type LucideIcon } from 'lucide-react';
+import { CalendarCheck, ClipboardList, Mail, Receipt, Ticket, UserRound, type LucideIcon } from 'lucide-react';
 import { useAccount } from './AccountContext';
 
 interface Section {
   key: string;
   label: string;
   icon: LucideIcon;
+  /** Settings sections sit under a rule on the sidebar. */
+  settings?: boolean;
 }
 
 const SECTIONS: Section[] = [
   { key: '', label: 'Tickets', icon: Ticket },
   { key: 'orders', label: 'Orders', icon: Receipt },
+  { key: 'rsvps', label: 'RSVPs', icon: CalendarCheck },
   { key: 'applications', label: 'Applications', icon: ClipboardList },
+  { key: 'profile', label: 'Profile', icon: UserRound, settings: true },
+  { key: 'preferences', label: 'Email preferences', icon: Mail, settings: true },
 ];
 
 /** Which section a path belongs to; works for the platform and the custom-domain form alike. */
@@ -28,21 +34,33 @@ export function sectionOf(pathname: string): string {
 }
 
 export default function AccountNav() {
-  const { applications, href } = useAccount();
+  const { applications, rsvps, href } = useAccount();
   const pathname = usePathname() ?? '';
   const current = sectionOf(pathname);
-  // Applications only for buyers who have one; the page itself stays reachable.
-  const sections = SECTIONS.filter(
-    (s) => s.key !== 'applications' || (applications?.length ?? 0) > 0 || current === 'applications'
-  );
+  // Applications and RSVPs only for buyers who have some; the pages stay reachable.
+  const has = { applications: (applications?.length ?? 0) > 0, rsvps: (rsvps?.length ?? 0) > 0 } as Record<string, boolean>;
+  const sections = SECTIONS.filter((s) => !(s.key in has) || has[s.key] || current === s.key);
+  const firstSetting = sections.findIndex((s) => s.settings);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  // Phones: the tab row scrolls sideways; bring the current tab into view (no page scroll).
+  useEffect(() => {
+    const list = listRef.current;
+    const active = list?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!list || !active || list.scrollWidth <= list.clientWidth) return;
+    list.scrollLeft = active.offsetLeft - (list.clientWidth - active.offsetWidth) / 2;
+  }, [current]);
 
   return (
     <nav aria-label="Account" data-testid="account-nav" className="-mx-4 lg:mx-0">
-      <ul className="flex gap-1 overflow-x-auto border-b border-gray-200 px-4 [scrollbar-width:none] dark:border-slate-700 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:border-b-0 lg:px-0">
-        {sections.map(({ key, label, icon: Icon }) => {
+      <ul ref={listRef} className="relative flex gap-1 overflow-x-auto border-b border-gray-200 px-4 [scrollbar-width:none] dark:border-slate-700 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:border-b-0 lg:px-0">
+        {sections.map(({ key, label, icon: Icon }, index) => {
           const active = current === key;
           return (
-            <li key={key || 'tickets'} className="shrink-0">
+            <li
+              key={key || 'tickets'}
+              className={`shrink-0 ${index === firstSetting ? 'lg:mt-3 lg:border-t lg:border-gray-200 lg:pt-3 dark:lg:border-slate-700' : ''}`}
+            >
               <Link
                 href={href(key)}
                 aria-current={active ? 'page' : undefined}

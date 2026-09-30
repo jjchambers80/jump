@@ -101,3 +101,11 @@ export class ConflictError extends Error {
     this.details = details;
   }
 }
+
+export class TooManyRequestsError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'TooManyRequestsError';
+    this.statusCode = 429;
+  }
+}

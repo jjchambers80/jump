@@ -17,7 +17,7 @@ const ticket = (id: string, n: number, eventDate: string, eventName: string) => 
 });
 const TICKETS = [ticket('t1', 1, future, 'Spring Fair'), ticket('t2', 2, past, 'Winter Fair')];
 const ORDERS = [
-  { id: 'o1', orderRef: 'ORD-1', kind: 'TICKET', eventName: 'Spring Fair', eventDate: future, eventTimezone: 'America/New_York', quantity: 2, totalAmount: 40, status: 'PAID', createdAt: past },
+  { id: 'o1', orderRef: 'ORD-1', kind: 'TICKET', eventName: 'Spring Fair', eventDate: future, eventTimezone: 'America/New_York', quantity: 2, totalAmount: 40, status: 'COMPLETED', createdAt: past },
   { id: 'o2', orderRef: 'ORD-2', kind: 'APPLICATION', applicationId: 'a1', description: 'Vendor', eventName: 'Spring Fair', eventDate: future, eventTimezone: 'America/New_York', quantity: 0, totalAmount: 100, status: 'PAID', createdAt: past },
 ];
 const APPLICATION = {
@@ -36,6 +36,7 @@ async function mockAccount(page: Page, { applications = [] as unknown[] } = {}) 
   await page.route('**/api/buyer/me/orders', (r) => r.fulfill(json({ data: ORDERS })));
   await page.route('**/api/buyer/me/applications', (r) => r.fulfill(json({ data: applications })));
   await page.route('**/api/buyer/me/applicant-profile', (r) => r.fulfill(json(null)));
+  await page.route('**/api/buyer/me/rsvps', (r) => r.fulfill(json({ data: [] })));
 }
 
 test('overview splits upcoming and past tickets; no Applications tab without applications', async ({ page }) => {
@@ -74,8 +75,10 @@ test('orders section: ticket orders open the order, application orders the Appli
 
   const rows = page.getByTestId('account-order');
   await expect(rows).toHaveCount(2);
-  await expect(rows.nth(0).getByRole('link')).toHaveAttribute('href', '/orders/o1');
-  await expect(rows.nth(1).getByRole('link')).toHaveAttribute('href', `/organizations/${ORG_ID}/account/applications`);
+  await expect(rows.nth(0).getByRole('link').first()).toHaveAttribute('href', '/orders/o1');
+  await expect(rows.nth(1).getByRole('link').first()).toHaveAttribute('href', `/organizations/${ORG_ID}/account/applications`);
+  // Paid orders carry a printable receipt (spec 040 card B).
+  await expect(rows.nth(0).getByRole('link', { name: 'Receipt for ORD-1' })).toHaveAttribute('href', `/organizations/${ORG_ID}/account/orders/o1/receipt`);
   await expect(rows.nth(0)).toContainText('ORD-1');
   await expect(rows.nth(0)).toContainText('$40.00');
 });
@@ -88,7 +91,8 @@ test('phones: the nav is one scrolling tab row above the content', async ({ page
   const nav = page.getByTestId('account-nav');
   await expect(nav).toHaveCount(1);
   const tabs = nav.getByRole('link');
-  await expect(tabs).toHaveCount(3);
+  // Tickets, Orders, Applications, Profile, Email preferences (no RSVPs → no RSVPs tab)
+  await expect(tabs).toHaveCount(5);
   const [first, second] = [await tabs.nth(0).boundingBox(), await tabs.nth(1).boundingBox()];
   expect(first && second && Math.abs(first.y - second.y) < 2).toBeTruthy();
   await expect(nav.getByRole('link', { name: 'Orders' })).toHaveAttribute('aria-current', 'page');
