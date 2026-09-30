@@ -115,7 +115,7 @@ test.describe('theme editor (038D)', () => {
     await template.getByRole('button', { name: 'Add section' }).click();
     await addable.getByRole('button', { name: 'Hero carousel' }).click();
     await expect(canvas(page).getByText('Your next big show').first()).toBeVisible();
-    await expect(canvas(page).getByRole('button', { name: 'Next slide' })).toBeVisible();
+    await expect(canvas(page).getByRole('button', { name: 'Slide 2 of 2' })).toBeVisible();
     await template.getByRole('button', { name: 'Add section' }).click();
     await addable.getByRole('button', { name: 'FAQ' }).click();
     await expect(canvas(page).getByText('When do doors open?').first()).toBeVisible();

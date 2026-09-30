@@ -233,3 +233,51 @@ body {
     opacity: 0;
   }
 }
+
+/* Theme Hero carousel (spec 041): the active dot fills over the rotation
+   interval (its animationend advances the slide, so the timer keeps running
+   under reduced motion only if rotation does, which it never starts), and the
+   active slide's copy settles in. */
+.hero-carousel-progress {
+  transform-origin: left center;
+  animation-name: hero-carousel-progress;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+@keyframes hero-carousel-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .hero-carousel-track > [data-active] [data-slide-copy] {
+    animation: hero-slide-copy 480ms cubic-bezier(0.2, 0.7, 0.2, 1) 120ms backwards;
+  }
+  /* Theme FAQ (spec 041): an answer eases in when its question opens. */
+  .faq-list details[open] > [data-faq-answer] {
+    animation: faq-answer 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+}
+@keyframes hero-slide-copy {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes faq-answer {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

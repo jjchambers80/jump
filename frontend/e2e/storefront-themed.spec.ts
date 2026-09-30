@@ -312,9 +312,10 @@ test.describe('starter homepage sections (038S)', () => {
     await expect(carousel).toHaveAttribute('aria-roledescription', 'carousel');
     await expect(carousel.getByRole('group', { name: 'Slide 1 of 3' })).toBeVisible();
     const pause = carousel.getByRole('button', { name: 'Pause slides' });
-    await pause.click();
-    await expect(pause).toHaveAttribute('aria-pressed', 'true');
+    await expect(pause).toHaveAttribute('aria-pressed', 'false');
+    // Moving the slides yourself stops the rotation for good.
     await carousel.getByRole('button', { name: 'Next slide' }).click();
+    await expect(pause).toHaveAttribute('aria-pressed', 'true');
     await expect(carousel.getByRole('button', { name: 'Slide 2 of 3' })).toHaveAttribute('aria-current', 'true');
     await expect(carousel.getByRole('heading', { name: 'Late show' })).toBeInViewport();
     await carousel.getByRole('button', { name: 'Slide 3 of 3' }).click();

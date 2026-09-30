@@ -184,7 +184,7 @@ describe('HeroCarouselSection and SlideBlock', () => {
     expect(html).toContain('data-section="HeroCarousel"');
     expect(html).toContain('One');
     expect(html).toContain('Two');
-    expect(html.match(/data-slide/g)).toHaveLength(2);
+    expect(html.match(/data-slide="/g)).toHaveLength(2);
   });
 });
 

@@ -1,10 +1,14 @@
 'use client';
 
 // HeroCarousel island (spec 041): the rounded frame around the slide track
-// plus previous / next, one dot per slide and an optional rotation. The
-// rotation has a pause control (WCAG 2.2.2), stops while the pointer or focus
-// is inside, and never starts under prefers-reduced-motion. The track is
-// server-rendered slot markup, so slides are found in the DOM, not in props.
+// plus previous / next, one dot per slide and an optional rotation. The track
+// is server-rendered slot markup, so slides are found in the DOM, not props.
+//
+// Rotation (WCAG 2.2.2): a pause button; holds while the pointer is over the
+// carousel or a slide's link has focus; stops for good once the visitor moves
+// the slides themselves; never starts under prefers-reduced-motion. The active
+// dot fills over the interval and its animation end advances the slide, so the
+// progress shown and the timer can never drift apart.
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react';
@@ -42,6 +46,7 @@ export default function HeroCarouselFrame({
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const [holding, setHolding] = useState(false);
+  const [announce, setAnnounce] = useState(false);
   const reduced = useRef(false);
 
   const track = () => frameRef.current?.querySelector<HTMLElement>(`.${CAROUSEL_TRACK_CLASS}`) ?? null;
@@ -85,6 +90,12 @@ export default function HeroCarouselFrame({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [labels.slide]);
 
+  // The active slide's copy settles in (globals.css, motion-safe only).
+  useEffect(() => {
+    slides().forEach((slide, i) => slide.toggleAttribute('data-active', i === index));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index, count]);
+
   const goTo = useCallback((to: number) => {
     const el = track();
     const list = slides();
@@ -96,16 +107,30 @@ export default function HeroCarouselFrame({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const rotating = count > 1 && intervalMs > 0 && !paused && !holding;
-  useEffect(() => {
-    if (!rotating) return;
-    const timer = window.setInterval(() => goTo(index + 1), intervalMs);
-    return () => window.clearInterval(timer);
-  }, [rotating, intervalMs, index, goTo]);
+  /** The visitor moved the slides: stop rotating and say where they are. */
+  const byVisitor = (to: number) => {
+    setPaused(true);
+    setAnnounce(true);
+    goTo(to);
+  };
 
   const many = count > 1;
+  const timed = many && intervalMs > 0;
+  const rotating = timed && !paused;
   const round =
-    'inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm transition-colors hover:bg-black/65 motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-white';
+    'inline-flex items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm transition-colors hover:bg-black/65 motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black/40';
+
+  // Fills over the interval; its end is the rotation's only clock.
+  const progress = (className: string) =>
+    rotating ? (
+      <span
+        key={`progress-${index}`}
+        aria-hidden
+        className={`hero-carousel-progress ${className}`}
+        style={{ animationDuration: `${intervalMs}ms`, animationPlayState: holding ? 'paused' : 'running' }}
+        onAnimationEnd={() => goTo(index + 1)}
+      />
+    ) : null;
 
   return (
     <section
@@ -118,63 +143,98 @@ export default function HeroCarouselFrame({
       onMouseEnter={() => setHolding(true)}
       onMouseLeave={() => setHolding(false)}
       onKeyDown={(e) => {
-        if (e.target !== e.currentTarget && !(e.target as HTMLElement).dataset.carouselControl) return;
-        if (e.key === 'ArrowLeft') goTo(index - 1);
-        if (e.key === 'ArrowRight') goTo(index + 1);
+        if (!(e.target as HTMLElement).dataset.carouselControl) return;
+        if (e.key === 'ArrowLeft') byVisitor(index - 1);
+        if (e.key === 'ArrowRight') byVisitor(index + 1);
       }}
     >
-      {/* Focus on a slide's link holds the rotation; focus on the controls does
-          not, so Play works from the keyboard. */}
+      {/* Focus on a slide's link holds the rotation; focus on the controls
+          does not, so Play works from the keyboard. A swipe is the visitor
+          taking over, like an arrow press. */}
       <div
-        aria-live={rotating ? 'off' : 'polite'}
         className="contents"
         onFocus={() => setHolding(true)}
         onBlur={(e) => {
           if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setHolding(false);
         }}
+        onTouchStart={() => setPaused(true)}
       >
         {children}
       </div>
       <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[32px] ring-1 ring-inset ring-white/10" />
+      <p className="sr-only" aria-live="polite" aria-atomic="true">
+        {announce && many ? slideLabel(labels.slide, index + 1, count) : ''}
+      </p>
+
+      {/* Phones swipe; arrows would sit on the text there. */}
       {many && showArrows && (
         <>
-          <button type="button" data-carousel-control="1" className={`${round} absolute left-3 top-1/2 -translate-y-1/2 sm:left-4`} onClick={() => goTo(index - 1)} aria-label={labels.previous}>
+          <button
+            type="button"
+            data-carousel-control="1"
+            className={`${round} absolute left-4 top-1/2 hidden h-11 w-11 -translate-y-1/2 sm:inline-flex`}
+            onClick={() => byVisitor(index - 1)}
+            aria-label={labels.previous}
+          >
             <ChevronLeft className="h-5 w-5" aria-hidden />
           </button>
-          <button type="button" data-carousel-control="1" className={`${round} absolute right-3 top-1/2 -translate-y-1/2 sm:right-4`} onClick={() => goTo(index + 1)} aria-label={labels.next}>
+          <button
+            type="button"
+            data-carousel-control="1"
+            className={`${round} absolute right-4 top-1/2 hidden h-11 w-11 -translate-y-1/2 sm:inline-flex`}
+            onClick={() => byVisitor(index + 1)}
+            aria-label={labels.next}
+          >
             <ChevronRight className="h-5 w-5" aria-hidden />
           </button>
         </>
       )}
-      {many && (showDots || intervalMs > 0) && (
-        <div className="absolute inset-x-0 bottom-4 flex items-center justify-center gap-3">
+
+      {many && (showDots || timed) && (
+        <div className="absolute inset-x-0 bottom-4 flex items-center justify-center gap-2">
           {showDots && (
-            <div className="flex items-center gap-1 rounded-full bg-black/35 px-2 py-1 backdrop-blur-sm">
-              {Array.from({ length: count }, (_, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  data-carousel-control="1"
-                  onClick={() => goTo(i)}
-                  aria-label={slideLabel(labels.slide, i + 1, count)}
-                  aria-current={i === index ? 'true' : undefined}
-                  className="group inline-flex h-6 w-6 items-center justify-center rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
-                >
-                  <span
-                    aria-hidden
-                    className={`block h-2 rounded-full bg-white transition-all motion-reduce:transition-none ${i === index ? 'w-5 opacity-100' : 'w-2 opacity-60 group-hover:opacity-90'}`}
-                  />
-                </button>
-              ))}
+            <div className="flex items-center rounded-full bg-black/40 px-1.5 py-0.5 backdrop-blur-sm">
+              {Array.from({ length: count }, (_, i) => {
+                const active = i === index;
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    data-carousel-control="1"
+                    onClick={() => byVisitor(i)}
+                    aria-label={slideLabel(labels.slide, i + 1, count)}
+                    aria-current={active ? 'true' : undefined}
+                    className="group inline-flex h-7 min-w-7 items-center justify-center rounded-full px-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                  >
+                    <span
+                      aria-hidden
+                      className={`relative block h-1.5 overflow-hidden rounded-full transition-[width,background-color] duration-300 ease-out motion-reduce:transition-none ${
+                        active ? `w-6 ${rotating ? 'bg-white/35' : 'bg-white'}` : 'w-1.5 bg-white/55 group-hover:bg-white/85'
+                      }`}
+                    >
+                      {active && progress('absolute inset-0 rounded-full bg-white')}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           )}
-          {intervalMs > 0 && (
-            <button type="button" data-carousel-control="1" className={`${round} h-8 w-8`} onClick={() => setPaused((p) => !p)} aria-pressed={paused} aria-label={labels.pause}>
-              {paused ? <Play className="h-4 w-4" aria-hidden /> : <Pause className="h-4 w-4" aria-hidden />}
+          {timed && (
+            <button
+              type="button"
+              data-carousel-control="1"
+              className={`${round} h-8 w-8`}
+              onClick={() => setPaused((p) => !p)}
+              aria-pressed={paused}
+              aria-label={labels.pause}
+            >
+              {paused ? <Play className="h-3.5 w-3.5 translate-x-px" aria-hidden /> : <Pause className="h-3.5 w-3.5" aria-hidden />}
             </button>
           )}
         </div>
       )}
+      {/* Without dots, the interval shows as a hairline along the bottom edge. */}
+      {!showDots && progress('absolute inset-x-0 bottom-0 h-0.5 bg-white/70')}
     </section>
   );
 }

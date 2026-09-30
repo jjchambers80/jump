@@ -25,7 +25,10 @@ Storefront pages are built from **sections** (Announcement bar, Header, Hero, He
 Up to six **Slide** blocks in the Hero's rounded frame. Each slide has an image (alt text or decorative), heading, subheading, a button label + link, and text alignment. Section settings: autoplay (off / 5s / 8s), height, overlay opacity, arrows, dots.
 
 - Slides are a CSS scroll-snap track (`HeroCarouselSection`), so they swipe without JavaScript. `HeroCarouselFrame` adds arrows, dots, keyboard arrows and rotation.
-- Rotation: pause button, holds on hover or when a slide's link has focus, never starts under reduced motion, off in the editor.
+- Rotation: pause button, holds on hover or when a slide's link has focus, stops for good once the visitor moves the slides (arrow, dot, keyboard, swipe), never starts under reduced motion, off in the editor.
+- The active dot fills over the interval (a hairline along the bottom edge when dots are off). That animation's end advances the slide, so the progress shown and the timer cannot drift, and holding simply pauses the animation.
+- Arrows show from `sm` up; phones swipe and use the dots. After a visitor's own move, a hidden live region announces "Slide n of N"; automatic rotation announces nothing.
+- The active slide's copy settles in, and FAQ answers ease in on open (`globals.css`, `prefers-reduced-motion: no-preference` only).
 - Images use the Hero treatment (`HeroMedia`: fitted whole over a blurred copy, overlay on top) and load lazily.
 
 ## FAQ (spec 041)
