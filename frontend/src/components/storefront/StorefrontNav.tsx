@@ -321,7 +321,7 @@ export default function StorefrontNav({
         {drawerOpen && (
           <div className="fixed inset-0 z-50">
             <div
-              className="absolute inset-0 bg-black/40"
+              className="absolute inset-0 bg-black/40 motion-safe:animate-fade-in"
               onClick={() => setDrawerOpen(false)}
               aria-hidden
             />
@@ -331,7 +331,7 @@ export default function StorefrontNav({
               role="dialog"
               aria-modal="true"
               aria-label="Menu"
-              className={`absolute inset-y-0 ${side === 'left' ? 'left-0' : 'right-0'} flex w-80 max-w-[85vw] flex-col bg-white shadow-xl dark:bg-slate-900`}
+              className={`absolute inset-y-0 ${side === 'left' ? 'left-0 motion-safe:animate-slide-in-left' : 'right-0 motion-safe:animate-slide-in-right'} flex w-80 max-w-[85vw] flex-col bg-white shadow-xl dark:bg-slate-900`}
             >
               <div className="flex items-center justify-between py-2 pl-6 pr-3">
                 <span className="text-xs font-semibold uppercase tracking-widest text-gray-600 dark:text-slate-300">Menu</span>

@@ -20,10 +20,13 @@ export default function MapEventSummary({ name, when, venueName, eventHref, imag
   return (
     <div className="flex items-center gap-3 sm:gap-4" data-testid="map-event-summary">
       {image && (
-        <div className="hidden h-16 w-24 shrink-0 overflow-hidden rounded-md bg-gray-200 dark:bg-slate-800 sm:block">
-          {/* eslint-disable-next-line @next/next/no-img-element -- whole-image fit, decorative */}
-          <img src={image} alt="" className="h-full w-full object-contain" />
-        </div>
+        // Whole image at its own aspect ratio (a poster stays a poster): no crop, no letterbox bands.
+        // eslint-disable-next-line @next/next/no-img-element -- decorative, sized by height
+        <img
+          src={image}
+          alt=""
+          className="hidden h-16 w-auto max-w-[7rem] shrink-0 rounded-md object-contain shadow-sm ring-1 ring-black/5 dark:ring-white/10 sm:block"
+        />
       )}
       <div className="min-w-0">
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-gray-600 dark:text-slate-400">Floor map</p>

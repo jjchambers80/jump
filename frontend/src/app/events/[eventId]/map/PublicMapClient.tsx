@@ -510,7 +510,7 @@ export default function PublicMapClient({ params }: PublicMapClientProps) {
           }
         />
       )}
-      <main id="storefront-main" tabIndex={-1} className="mx-auto max-w-7xl px-4 pb-16 pt-6 outline-none sm:px-6 sm:pt-8 lg:px-8">
+      <main id="storefront-main" tabIndex={-1} className="mx-auto max-w-[100rem] px-4 pb-16 pt-5 outline-none sm:px-7 sm:pt-6">
         {/* 1. Header: the map bar's event summary; this fallback only while the event loads or if it fails. */}
         {!eventData?.organizationName && (
           <header className="max-w-3xl">

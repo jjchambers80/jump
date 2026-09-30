@@ -104,12 +104,13 @@ export default function OrganizationHeader({
       src={logoSrc}
       alt={`${organization.name} logo`}
       bare
+      fit={isBar ? 'height' : 'box'}
       // One size on every page: the theme's Logo widths inside a ThemeScope,
       // otherwise the same defaults (packages/theme/src/settings.js: 90 / 120 px).
       // The map bar is the one exception: a slim bar leaves the map the screen.
       className={
         isBar
-          ? 'w-10 shrink-0 sm:w-12'
+          ? 'h-9 max-w-[9rem] shrink-0 sm:h-11 sm:max-w-[13rem]'
           : 'w-[var(--theme-logo-width-mobile,90px)] shrink-0 sm:w-[var(--theme-logo-width,120px)]'
       }
     />
@@ -176,7 +177,7 @@ export default function OrganizationHeader({
       <header
         data-testid="organization-header"
         data-layout="bar"
-        className="relative w-full border-b border-gray-200 dark:border-slate-800"
+        className="relative w-full border-b border-gray-200 bg-white dark:border-slate-800 dark:bg-slate-950"
       >
         {skipLink}
         <div className="flex min-h-14 items-center gap-1 px-2 sm:gap-2 sm:px-4">
@@ -186,7 +187,7 @@ export default function OrganizationHeader({
           <div className="min-w-0 flex-1 py-1.5">{identityLink}</div>
           {signInLink && <div className="shrink-0">{signInLink}</div>}
         </div>
-        {subheader && <div className="px-5 pb-3 sm:px-7">{subheader}</div>}
+        {subheader && <div className="px-4 pb-3 sm:px-7">{subheader}</div>}
       </header>
     );
   }

@@ -343,7 +343,8 @@ test.describe('public floor map header bar', () => {
     await open.click();
     const drawer = page.getByRole('dialog', { name: 'Menu' });
     await expect(drawer).toBeVisible();
-    expect(Math.round((await drawer.boundingBox())!.x)).toBe(0);
+    // Slides in from the left edge (200 ms, skipped under reduced motion).
+    await expect.poll(async () => Math.round((await drawer.boundingBox())!.x)).toBe(0);
     await expect(drawer.getByRole('button', { name: 'Close menu' })).toBeFocused();
     await expect(drawer.getByRole('link', { name: 'Events' })).toHaveAttribute('href', '/organizations/org-map/events');
     await page.keyboard.press('Escape');
