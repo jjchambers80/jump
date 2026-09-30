@@ -516,6 +516,9 @@ test.describe('choose your space', () => {
     await expect(page.getByTestId('space-map')).toHaveCount(0);
     await expect(page.getByTestId('space-list')).toContainText('The organizer assigns your exact spot');
     await expect(page.getByTestId('space-left')).toContainText('Your space is reserved');
+    // No extras offered and nothing to pick: no steps, straight to paying.
+    await expect(page.getByTestId('choose-space')).toHaveAttribute('data-step', 'pay');
+    await expect(page.getByTestId('space-step-meter')).toHaveCount(0);
     await page.route(`${API}/applications/${APP_ID}/pay**`, (route) => route.fulfill(json({ error: 'ServiceUnavailable', message: 'Checkout is down for a moment' }, 503)), { times: 1 });
     await page.getByTestId('space-hold').click();
     await expect(page.getByTestId('space-notice')).toContainText('Checkout is down for a moment');
@@ -546,13 +549,25 @@ test.describe('choose your space', () => {
     await expect(options).toHaveCount(3);
     await expect(options.nth(1)).toContainText('Sold out');
     await expect(page.getByRole('radio', { name: /Corner/ })).toBeDisabled();
-    await expect(page.getByTestId('space-hold')).toBeDisabled();
-    await expect(page.getByTestId('space-hold')).toHaveText('Pick a space type');
+    await expect(choose).toHaveAttribute('data-step', 'type');
+    await expect(page.getByTestId('space-hold')).toHaveCount(0);
+    await expect(page.getByTestId('space-continue')).toBeDisabled();
 
+    // A type with extras: three steps, the extras step follows the pick.
     await page.getByRole('radio', { name: /10×10 booth/ }).check();
     await expect(page.getByTestId('space-total')).toContainText('$303.30');
+    await expect(page.getByTestId('space-step-meter')).toContainText('Step 1 of 3');
+    await page.getByTestId('space-continue').click();
+    await expect(choose).toHaveAttribute('data-step', 'extras');
     await expect(choose).toContainText('Power');
+    await page.getByTestId('space-change-type').click();
+    await expect(choose).toHaveAttribute('data-step', 'type');
+
+    // A type without extras: straight from the type to paying.
     await page.getByRole('radio', { name: /Table/ }).check();
+    await expect(page.getByTestId('space-step-meter')).toContainText('Step 1 of 2');
+    await page.getByTestId('space-continue').click();
+    await expect(choose).toHaveAttribute('data-step', 'pay');
     await expect(page.getByTestId('space-total')).toContainText('$104.60');
     await expect(choose).not.toContainText('Power');
 

@@ -18,6 +18,8 @@ interface AddOnPickerProps {
   unitPrice?: (addOn: PickableAddOn) => number;
   title?: string;
   hint?: string;
+  /** Heading level for `title`, so the picker nests under the page's outline (default h3). */
+  headingLevel?: 'h2' | 'h3' | 'h4';
 }
 
 export default function AddOnPicker({
@@ -29,14 +31,16 @@ export default function AddOnPicker({
   unitPrice,
   title = 'Add-ons',
   hint = 'Optional extras for this order.',
+  headingLevel: Heading = 'h3',
 }: AddOnPickerProps) {
+  const titleId = React.useId();
   if (addOns.length === 0) return null;
 
   return (
-    <section className="mt-6" data-testid="add-on-picker" aria-labelledby="add-on-picker-title">
-      <h3 id="add-on-picker-title" className="text-lg font-bold text-gray-900 dark:text-slate-100">
+    <section className="mt-6" data-testid="add-on-picker" aria-labelledby={titleId}>
+      <Heading id={titleId} className="text-lg font-bold text-gray-900 dark:text-slate-100">
         {title}
-      </h3>
+      </Heading>
       {hint && <p className="text-sm text-gray-500 dark:text-slate-400 mt-0.5">{hint}</p>}
       <div className="mt-3 space-y-3">
         {addOns.map((addOn) => {
@@ -70,11 +74,12 @@ export default function AddOnPicker({
                   aria-label={`Decrease ${addOn.name} quantity`}
                   onClick={() => onChange(addOn.id, Math.max(0, quantity - 1))}
                   disabled={quantity === 0}
-                  className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xl font-bold leading-none text-gray-700 dark:text-slate-200 transition-colors hover:border-gray-400 dark:hover:border-slate-500 disabled:opacity-30"
+                  className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xl font-bold leading-none text-gray-700 dark:text-slate-200 transition-colors hover:border-gray-400 dark:hover:border-slate-500 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800"
                 >
                   −
                 </button>
-                <span className="min-w-6 text-center text-lg font-semibold text-gray-900 dark:text-slate-100" aria-label={`${addOn.name} quantity`}>
+                <span className="min-w-6 text-center text-lg font-semibold tabular-nums text-gray-900 dark:text-slate-100" aria-live="polite" aria-atomic="true">
+                  <span className="sr-only">{addOn.name} quantity: </span>
                   {quantity}
                 </span>
                 <button
@@ -82,7 +87,7 @@ export default function AddOnPicker({
                   aria-label={`Increase ${addOn.name} quantity`}
                   onClick={() => onChange(addOn.id, Math.min(max, quantity + 1))}
                   disabled={soldOut || quantity >= max}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-brand text-brand-fg text-xl font-bold leading-none transition-opacity hover:opacity-90 disabled:opacity-30"
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-brand text-brand-fg text-xl font-bold leading-none transition-opacity hover:opacity-90 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800"
                 >
                   +
                 </button>

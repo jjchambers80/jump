@@ -230,7 +230,7 @@ test('apply form (spec 037 phase 5): no category, no add-ons, no total and no ca
   await expect(page).toHaveURL(new RegExp(`/apply/status/${APP_ID}`));
 });
 
-test('choose your space: the category offers its add-ons, the total line updates, and the hold carries the lines', async ({ page }) => {
+test('choose your space: extras are a step before paying, the total follows, and the hold carries the lines', async ({ page }) => {
   await page.route(`${API}/events/${EVENT_ID}`, (route) => route.fulfill(json(event)));
   let selectBody: Record<string, unknown> | null = null;
   await page.route(`${API}/applications/${APP_ID}/**`, (route) => {
@@ -283,24 +283,91 @@ test('choose your space: the category offers its add-ons, the total line updates
     return route.fulfill(json({ error: 'NotFoundError', message: 'unmocked' }, 404));
   });
 
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(`/events/${EVENT_ID}/apply/status/${APP_ID}?token=tok`);
   const choose = page.getByTestId('choose-space');
   await expect(choose).toBeVisible();
-  // No map for this event: no tabs, the list only.
+  // The category offers extras, so they come first, as their own step.
+  await expect(choose).toHaveAttribute('data-step', 'extras');
+  await expect(page.getByTestId('space-step-meter')).toContainText('Step 1 of 2');
+  await expect(page.getByRole('heading', { name: /Add extras/ })).toBeVisible();
+  // No map for this event: no tabs.
   await expect(page.getByRole('tab')).toHaveCount(0);
-  await expect(page.getByTestId('space-left')).toContainText('4 spaces left');
   await expect(choose).toContainText('Spaces go to whoever pays first');
+  await expect(page.getByTestId('space-review-space')).toContainText('4 spaces left');
   await expect(page.getByTestId(`add-on-${POWER.id}`)).toContainText('$135.95');
+  await expect(page.getByTestId('space-continue')).toHaveText('Skip extras');
+
+  // Desktop: two columns, the vendor's details beside the steps.
+  const [stepsBox, asideBox] = [await choose.boundingBox(), await page.getByTestId('apply-status-aside').boundingBox()];
+  expect(stepsBox && asideBox && asideBox.x >= stepsBox.x + stepsBox.width).toBe(true);
 
   await page.getByRole('button', { name: `Increase ${POWER.name} quantity` }).click();
   await page.getByRole('button', { name: `Increase ${BADGE.name} quantity` }).click();
   await page.getByRole('button', { name: `Increase ${BADGE.name} quantity` }).click();
+  await expect(page.getByTestId('space-total')).toContainText('$461.47');
+  await page.getByTestId('space-continue').click();
+
+  // Step 2: review and pay, focus on its heading, the extras listed with a way back.
+  await expect(choose).toHaveAttribute('data-step', 'pay');
+  await expect(page.getByRole('heading', { name: /Review and pay/ })).toBeFocused();
+  await expect(page.getByTestId('space-left')).toContainText('4 spaces left');
+  await expect(page.getByTestId('space-review-extras')).toContainText('Booth power ×1');
+  await expect(page.getByTestId('space-review-extras')).toContainText('Extra vendor badge ×2');
+  await page.getByTestId('space-edit-extras').click();
+  await expect(choose).toHaveAttribute('data-step', 'extras');
+  await expect(page.getByRole('heading', { name: /Add extras/ })).toBeFocused();
+  // Quantities survive the round trip.
+  await expect(page.getByTestId('space-total')).toContainText('$461.47');
+  await page.getByTestId('space-continue').click();
   await expect(page.getByTestId('space-total')).toContainText('$461.47');
   await page.getByTestId('space-hold').click();
   await expect.poll(() => selectBody).not.toBeNull();
   expect(selectBody).toEqual({ addOns: [{ addOnId: POWER.id, quantity: 1 }, { addOnId: BADGE.id, quantity: 2 }], useSavedCard: false });
   // Someone took the last space first: the vendor is told plainly.
   await expect(page.getByTestId('space-notice')).toContainText('No Booth spaces are left right now');
+});
+
+test('phone: the extras step and the pay step stack in one column with no sideways scroll', async ({ page }) => {
+  await page.route(`${API}/events/${EVENT_ID}`, (route) => route.fulfill(json(event)));
+  await page.route(`${API}/applications/${APP_ID}/**`, (route) =>
+    route.fulfill(
+      json({
+        id: APP_ID, orderRef: null,
+        form: { id: FORM_ID, name: 'Vendor Booth', kind: 'PAID' },
+        event: { id: EVENT_ID, name: event.name, date: event.date },
+        organization: { id: ORG_ID, name: 'Durham Makers' },
+        status: 'APPROVED', paymentStatus: 'AWAITING_SELECTION',
+        tier: { id: boothTier.id, name: 'Booth', mapBound: false },
+        amounts: { ...amounts, subtotal: 0, applicantPays: 0, orgReceives: 0, platformFee: 0, processingFee: 0 },
+        addOns: [], paymentDueAt: '2026-10-01T00:00:00.000Z',
+        selection: {
+          state: 'CHOOSE', heldUntil: null, dueAt: '2026-10-01T00:00:00.000Z', reserveOnApproval: true,
+          category: { id: boothTier.id, name: 'Booth', description: null, price: 275, applicantPays: 303.3, feesIncluded: 28.3, tax: 0, spacesLeft: 4, guaranteed: true },
+          addOns: [POWER], map: { available: false, mapId: null, boothsAvailable: 0 }, placedBooth: null, savedCard: null,
+        },
+        profile, answers: [{ questionId: 'q1', label: 'What do you sell?', value: 'pokemon' }], boothLabel: null, booth: null, hasCardOnFile: false,
+        submittedAt: '2026-09-16T14:00:00.000Z', decidedAt: '2026-09-17T09:00:00.000Z', paidAt: null, refundedTotal: 0,
+        canWithdraw: false, canResume: false, canPay: false, canUpdateCard: false,
+      })
+    )
+  );
+  await page.setViewportSize({ width: 375, height: 740 });
+  await page.goto(`/events/${EVENT_ID}/apply/status/${APP_ID}?token=tok`);
+  const choose = page.getByTestId('choose-space');
+  await expect(choose).toHaveAttribute('data-step', 'extras');
+  // The status card carries one due date instead of repeating "choose and pay".
+  await expect(page.getByTestId('apply-payment')).toContainText('Choose and pay by');
+  const [stepsBox, asideBox] = [await choose.boundingBox(), await page.getByTestId('apply-status-aside').boundingBox()];
+  expect(stepsBox && asideBox && asideBox.y >= stepsBox.y + stepsBox.height).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.getByTestId('space-continue').click();
+  await expect(choose).toHaveAttribute('data-step', 'pay');
+  await expect(page.getByTestId('space-review-extras')).toContainText('No extras added');
+  await expect(page.getByTestId('space-hold')).toHaveText('Hold this space and pay $303.30');
+  await page.getByTestId('space-back').click();
+  await expect(choose).toHaveAttribute('data-step', 'extras');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
 test('status page itemises the tier and add-on lines', async ({ page }) => {

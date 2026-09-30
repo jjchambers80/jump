@@ -4,8 +4,11 @@
 // on a PAID form chooses their space here — from the list or on the floor
 // map — and pays (ChooseSpace). A MAP form's spot choice takes the whole
 // screen (compact hero, map beside the list from lg; `usesSpotWorkspace`),
-// with this application's summary in the list column. Add-on lines (spec 012) are itemised under the
-// amount once a space is chosen. Rows from before the change can still resume
+// with this application's summary in the list column. Otherwise the page is two
+// columns from lg (status and the space steps, then the vendor's answers in a
+// sticky aside) and stacks on phones. Extras are their own step before paying,
+// only when the space type offers any (ChooseSpace). Add-on lines (spec 012)
+// are itemised under the amount once a space is chosen. Rows from before the change can still resume
 // an abandoned Checkout or pay an outstanding balance.
 'use client';
 
@@ -112,7 +115,7 @@ function StatusContent({ params }: { params: { eventId: string; applicationId: s
   const workspace = Boolean(app && token && usesSpotWorkspace(app));
 
   return (
-    <ApplyShell eventId={params.eventId} title="Your application" width={workspace ? 'full' : 'narrow'} hero={workspace ? 'compact' : 'full'}>
+    <ApplyShell eventId={params.eventId} title="Your application" width={workspace ? 'full' : 'wide'} hero={workspace ? 'compact' : 'full'}>
       {(event) => {
         if (error) return <p role="alert" data-testid="apply-status-error" className="text-red-700 dark:text-red-300">{error}</p>;
         if (!app) return <p className="text-gray-600 dark:text-slate-400">Loading…</p>;
@@ -195,13 +198,21 @@ function StatusContent({ params }: { params: { eventId: string; applicationId: s
         );
 
         // ChooseSpace keeps one place in the tree in both layouts (only class
-        // names change), so a hold that turns the workspace into the held view
-        // never remounts it mid-charge and loses its poll or notice.
+        // names change, and the main column wraps it either way), so a hold
+        // that turns the workspace into the held view never remounts it
+        // mid-charge and loses its poll or notice.
+        //
+        // From lg the page is two columns, like the apply form: the status and
+        // the space steps on the left, what the vendor told us beside them.
         return (
-          <div className={workspace ? undefined : 'space-y-6'} data-testid={workspace ? undefined : 'apply-status'}>
+          <div
+            className={workspace ? undefined : 'space-y-6 lg:grid lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start lg:gap-10 lg:space-y-0'}
+            data-testid={workspace ? undefined : 'apply-status'}
+          >
+            <div className={workspace ? undefined : 'min-w-0 space-y-6'}>
             {!workspace && checkoutNotice}
             {!workspace && (
-              <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-5 sm:p-6">
+              <div className="bg-white dark:bg-slate-800 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm p-5 sm:p-6">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="text-sm text-gray-600 dark:text-slate-400">
@@ -213,7 +224,7 @@ function StatusContent({ params }: { params: { eventId: string; applicationId: s
                   <span data-testid="apply-status-pill" className={`rounded-full px-3 py-1 text-sm font-semibold ${STATUS_STYLE[app.status]}`}>{STATUS_LABEL[app.status]}</span>
                 </div>
                 <p className="mt-4 text-gray-800 dark:text-slate-200" data-testid="apply-status-copy">
-                  {choosing ? 'You are approved! Choose your space below and pay to confirm your spot.' : STATUS_COPY[app.status]}
+                  {choosing ? 'You are approved! Choose your space and pay to confirm your spot.' : STATUS_COPY[app.status]}
                 </p>
                 {app.status === 'APPROVED' && (app.booth?.status === 'SOLD' || app.booth?.status === 'RESERVED' || (!app.booth && app.boothLabel)) && (
                   <p className="mt-2 text-sm text-gray-700 dark:text-slate-300" data-testid="apply-placement">
@@ -229,7 +240,14 @@ function StatusContent({ params }: { params: { eventId: string; applicationId: s
                     )}
                   </p>
                 )}
-                {app.form.kind === 'PAID' && (
+                {/* Choosing: the steps below own the payment; one due date here instead of a third "choose and pay". */}
+                {choosing && app.paymentDueAt && (
+                  <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900 ring-1 ring-inset ring-amber-200 dark:bg-amber-900/20 dark:text-amber-200 dark:ring-amber-800" data-testid="apply-payment">
+                    <CalendarClock className="h-3.5 w-3.5" aria-hidden />
+                    Choose and pay by {formatDate(app.paymentDueAt)}
+                  </p>
+                )}
+                {app.form.kind === 'PAID' && !choosing && (
                   <div className="mt-3 rounded-lg bg-gray-50 dark:bg-slate-900/40 p-3 text-sm text-gray-700 dark:text-slate-300" data-testid="apply-payment">
                     <p>
                       <span className="font-semibold">Payment:</span> {PAYMENT_LABEL[app.paymentStatus]}
@@ -256,12 +274,10 @@ function StatusContent({ params }: { params: { eventId: string; applicationId: s
                         ))}
                       </ul>
                     )}
-                    {app.status !== 'DRAFT' && (choosing || PAYMENT_COPY[app.paymentStatus]) && (
-                      <p className="mt-1 text-gray-600 dark:text-slate-400">
-                        {choosing ? 'Choose your space below and pay to confirm your spot.' : PAYMENT_COPY[app.paymentStatus]}
-                      </p>
+                    {app.status !== 'DRAFT' && PAYMENT_COPY[app.paymentStatus] && (
+                      <p className="mt-1 text-gray-600 dark:text-slate-400">{PAYMENT_COPY[app.paymentStatus]}</p>
                     )}
-                    {(app.canResume || app.canPay) && !choosing && (
+                    {(app.canResume || app.canPay) && (
                       <div className="mt-3 flex flex-wrap items-center gap-3">
                         <button
                           type="button"
@@ -282,19 +298,23 @@ function StatusContent({ params }: { params: { eventId: string; applicationId: s
             )}
 
             {choosing && token && (
-              <div className={workspace ? undefined : 'bg-white dark:bg-slate-800 rounded-lg shadow-sm p-5 sm:p-6'}>
+              <div className={workspace ? undefined : 'rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-6'}>
                 <ChooseSpace application={app} spaceApi={spaceApi} refresh={load} layout={workspace ? 'page' : 'inline'} summary={summary} footer={footer} />
               </div>
             )}
+            </div>
 
-            {!workspace && app.answers.length > 0 && (
-              <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-5 sm:p-6">
-                <h3 className="text-base font-semibold text-gray-900 dark:text-slate-100 mb-3">What you told us</h3>
-                {answerRows}
-              </div>
+            {!workspace && (
+              <aside className="space-y-6 lg:sticky lg:top-6" aria-label="Application details" data-testid="apply-status-aside">
+                {app.answers.length > 0 && (
+                  <section aria-labelledby="apply-answers-title" className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-6">
+                    <h2 id="apply-answers-title" className="mb-3 text-base font-semibold text-gray-900 dark:text-slate-100">What you told us</h2>
+                    {answerRows}
+                  </section>
+                )}
+                {accountLink}
+              </aside>
             )}
-
-            {!workspace && accountLink}
           </div>
         );
       }}
