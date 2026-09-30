@@ -328,8 +328,10 @@ test.describe('choose your space', () => {
     await expect(hero).toContainText('Map Expo');
     await expect(hero).toContainText('Hall');
     await expect(hero.getByRole('link', { name: 'Back to Map Expo' })).toBeVisible();
+    // One dark band: menu, logo and account on top, then the event row.
+    await expect(hero.getByRole('button', { name: 'Open menu' })).toHaveCount(0); // no menus mocked
     const heroBox = await hero.boundingBox();
-    expect(heroBox && heroBox.height < 110).toBe(true);
+    expect(heroBox && heroBox.height < 170).toBe(true);
 
     const mapBox = await page.getByTestId('space-map-box').boundingBox();
     // Full width, but short enough that the list shows under it.

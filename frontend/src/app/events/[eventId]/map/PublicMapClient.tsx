@@ -14,13 +14,11 @@ import { ArrowLeft, Maximize2, Minus, Plus, X } from 'lucide-react';
 import type { ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
 import { api, mapsApi, type PublicMap, type PublicMapBooth, type PublicMapVendor, type MapBooth, type MapElement } from '@/services/api';
 import BrandScope from '@/components/BrandScope';
-import OrganizationHeader from '@/components/OrganizationHeader';
-import MapEventSummary from '@/components/storefront/MapEventSummary';
+import EventMapHeader from '@/components/storefront/EventMapHeader';
 import StorefrontFooter from '@/components/storefront/StorefrontFooter';
 import MapCanvas from '@/components/maps/MapCanvas';
 import { LEGEND_STATE_DARK, LEGEND_STATE_LIGHT, LEGEND_STATE_STROKE_DARK, LEGEND_STATE_STROKE_LIGHT, TIER_SWATCHES } from '@/components/maps/mapTheme';
 import { formatPrice } from '@/lib/fees';
-import { formatEventDateTime } from '@/lib/eventTime';
 import { eventPath } from '@/lib/publicPaths';
 import VendorDirectory from './VendorDirectory';
 
@@ -485,34 +483,32 @@ export default function PublicMapClient({ params }: PublicMapClientProps) {
     );
   }
 
-  const zone = eventData?.venue?.timezone;
-  const when = eventData?.date ? formatEventDateTime(eventData.date, zone) : null;
   const eventName = eventData?.name || mapData.name;
   const boothTotal = mapData.booths.filter((b) => b.tier).length;
   const openTotal = mapData.booths.filter((b) => b.tier && b.status === 'AVAILABLE').length;
 
   return (
     <BrandScope color={brandColor} themeMode={themeMode} className="min-h-screen bg-gray-50 dark:bg-slate-900">
-      {eventData?.organizationName && (
-        <OrganizationHeader
-          organization={{ id: eventData.organizationId, name: eventData.organizationName, logoUrl: eventData.organizationLogoUrl }}
-          nav
-          signIn={eventData.organizationSignInLinks !== false}
-          layout="bar"
-          subheader={
-            <MapEventSummary
-              name={eventName}
-              when={when}
-              venueName={eventData.venue?.name}
-              eventHref={eventPath(params.eventId)}
-              imageUrl={eventData.logoUrl}
-            />
-          }
+      {eventData?.date && (
+        <EventMapHeader
+          event={{
+            id: params.eventId,
+            name: eventName,
+            date: eventData.date,
+            logoUrl: eventData.logoUrl,
+            organizationId: eventData.organizationId,
+            organizationName: eventData.organizationName,
+            organizationLogoUrl: eventData.organizationLogoUrl,
+            organizationSignInLinks: eventData.organizationSignInLinks,
+            venue: eventData.venue,
+          }}
+          title="Floor map"
+          backHref={eventPath(params.eventId)}
         />
       )}
       <main id="storefront-main" tabIndex={-1} className="mx-auto max-w-[100rem] px-4 pb-16 pt-5 outline-none sm:px-7 sm:pt-6">
         {/* 1. Header: the map bar's event summary; this fallback only while the event loads or if it fails. */}
-        {!eventData?.organizationName && (
+        {!eventData?.date && (
           <header className="max-w-3xl">
             <Link
               href={eventPath(params.eventId)}
