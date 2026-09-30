@@ -5,6 +5,7 @@
 // tab when it is empty; the overview surfaces the ones waiting on the buyer).
 // Provided by `account/(member)/layout.tsx`; every account page reads it.
 
+import type { StorefrontLogo } from '@/components/OrganizationHeader';
 import { createContext, useContext } from 'react';
 import type { ThemeMode } from '@/lib/theme';
 import type { ApplicantApplication } from '@/lib/applications';
@@ -14,6 +15,7 @@ export interface AccountOrganization {
   name: string;
   slug?: string | null;
   logoUrl: string | null;
+  storefrontLogo?: StorefrontLogo | null;
   brandColor?: string | null;
   themeMode?: ThemeMode | null;
   /** Spec 031 phase 3: CODE organizations show a six-digit code field after the email step. */

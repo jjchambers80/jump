@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import type { MouseEvent, ReactNode } from 'react';
+import type { CSSProperties, MouseEvent, ReactNode } from 'react';
 import LogoBox from './LogoBox';
 import { resolveAssetUrl } from '../lib/assets';
 import StorefrontNav from './storefront/StorefrontNav';
@@ -10,8 +10,20 @@ import { storefrontHref } from '../lib/storefrontPath';
 import { useBuyer } from '../lib/useBuyer';
 import type { PublicMenus } from '../lib/menus';
 
+/**
+ * The organization's theme Logo settings (backend `storefrontLogoFor`), sent
+ * with the payloads of pages the theme frame does not render (checkout,
+ * confirmation, apply, map, account) so their header matches the themed pages.
+ */
+export interface StorefrontLogo {
+  /** The theme's logo image (overrides the organization logo), or null. */
+  url: string | null;
+  desktopWidth: number;
+  mobileWidth: number;
+}
+
 export interface OrganizationHeaderProps {
-  organization: { id?: string | null; name: string; logoUrl?: string | null };
+  organization: { id?: string | null; name: string; logoUrl?: string | null; storefrontLogo?: StorefrontLogo | null };
   organizationSlug?: string | null;
   /**
    * Render the name as the page's h1 (organization page) or as plain text
@@ -84,7 +96,16 @@ export default function OrganizationHeader({
   const accountHref = organization.id
     ? storefrontHref(`/organizations/${encodeURIComponent(orgSlug)}/account`, organization.id)
     : null;
-  const logoSrc = organization.logoUrl ? resolveAssetUrl(organization.logoUrl) : null;
+  const storefrontLogo = organization.storefrontLogo;
+  const rawLogo = storefrontLogo?.url || organization.logoUrl;
+  const logoSrc = rawLogo ? resolveAssetUrl(rawLogo) : null;
+  // Outside a theme frame: the theme's widths as the same CSS variables the frame sets.
+  const logoVars = storefrontLogo
+    ? ({
+        '--theme-logo-width': `${storefrontLogo.desktopWidth}px`,
+        '--theme-logo-width-mobile': `${storefrontLogo.mobileWidth}px`,
+      } as CSSProperties)
+    : undefined;
   const href = organization.id ? `/organizations/${encodeURIComponent(orgSlug)}` : null;
   const isHeading = as === 'h1';
   // With a logo the name is read by screen readers only; without one it is the visible identity.
@@ -200,7 +221,7 @@ export default function OrganizationHeader({
   }
 
   return (
-    <header data-testid="organization-header" className="relative w-full">
+    <header data-testid="organization-header" className="relative w-full" style={logoVars}>
       {skipLink}
       <div
         className={`mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:gap-6 sm:px-6 sm:py-5 lg:px-8 ${

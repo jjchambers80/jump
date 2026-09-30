@@ -4,6 +4,7 @@
 // Uses new schema: venue object, priceTiers array, computed quantityAvailable
 // RSVP mode (spec 034): inline form instead of tiers, no Order Summary column
 
+import type { StorefrontLogo } from '@/components/OrganizationHeader';
 import React, { useState, useEffect } from 'react';
 import StorefrontPasswordGate from '../../../components/StorefrontPasswordGate';
 import { storefrontLockFrom, type StorefrontLock } from '../../../lib/storefrontAccess';
@@ -77,6 +78,7 @@ interface Event {
   organizationId?: string | null;
   organizationName?: string | null;
   organizationLogoUrl?: string | null;
+  organizationStorefrontLogo?: StorefrontLogo | null;
   organizationBrandColor?: string | null;
   organizationThemeMode?: ThemeMode | null;
   /** Settings › Customer accounts › Show sign-in links (spec 031). */
@@ -352,7 +354,7 @@ export default function EventDetailPage({
     <BrandScope color={event.organizationBrandColor} themeMode={event.organizationThemeMode} className={`${chrome ? 'min-h-screen' : ''} bg-gray-50 dark:bg-slate-900 pb-24 lg:pb-0`}>
       {chrome && event.organizationName && (
         <OrganizationHeader
-          organization={{ id: event.organizationId, name: event.organizationName, logoUrl: event.organizationLogoUrl }}
+          organization={{ id: event.organizationId, name: event.organizationName, logoUrl: event.organizationLogoUrl, storefrontLogo: event.organizationStorefrontLogo }}
           nav
           signIn={event.organizationSignInLinks !== false}
         />

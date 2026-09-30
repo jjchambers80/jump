@@ -8,6 +8,7 @@
 // desktop so the pay button is above the fold; below lg the summary collapses
 // to one row and the pay button rides in a fixed bottom bar with the total.
 
+import type { StorefrontLogo } from '@/components/OrganizationHeader';
 import React, { Suspense, useState, useEffect, useRef } from 'react';
 import StorefrontPasswordGate from '../../../components/StorefrontPasswordGate';
 import { storefrontLockFrom, type StorefrontLock } from '../../../lib/storefrontAccess';
@@ -59,6 +60,7 @@ interface Event {
   organizationId?: string | null;
   organizationName?: string | null;
   organizationLogoUrl?: string | null;
+  organizationStorefrontLogo?: StorefrontLogo | null;
   organizationBrandColor?: string | null;
   organizationThemeMode?: ThemeMode | null;
   /** Settings › Customer accounts › Show sign-in links (spec 031). */
@@ -397,7 +399,7 @@ function CheckoutContent({ params }: { params: { eventId: string } }) {
     >
       {event.organizationName && (
         <OrganizationHeader
-          organization={{ id: event.organizationId, name: event.organizationName, logoUrl: event.organizationLogoUrl }}
+          organization={{ id: event.organizationId, name: event.organizationName, logoUrl: event.organizationLogoUrl, storefrontLogo: event.organizationStorefrontLogo }}
         />
       )}
       {children}

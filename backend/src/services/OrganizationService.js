@@ -2,6 +2,7 @@
 // CRUD operations for organizations per FR-048
 
 import { prisma } from '@jump/db';
+import { storefrontLogoFor } from './storefrontLogo.js';
 import logger from '../utils/logger.js';
 import storefrontPreferencesService from './StorefrontPreferencesService.js';
 import { NotFoundError } from '../middleware/errorHandler.js';
@@ -290,6 +291,7 @@ class OrganizationService {
         storefrontMessage: true,
         buyerSignInLinks: true,
         buyerSignInMethod: true,
+        themesEnabled: true,
         venues: { select: { events: PUBLIC_EVENTS_QUERY } },
       },
     });
@@ -303,6 +305,8 @@ class OrganizationService {
       name: org.name,
       slug: org.slug,
       logoUrl: org.logoUrl,
+      // Theme logo image + widths (account pages, legacy views): header matches the themed pages.
+      storefrontLogo: await storefrontLogoFor(org),
       coverUrl: org.coverUrl,
       brandColor: org.brandColor,
       themeMode: org.themeMode,

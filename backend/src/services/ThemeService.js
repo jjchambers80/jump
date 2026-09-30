@@ -36,14 +36,9 @@ import storeFileService from './StoreFileService.js';
 import menuService from './MenuService.js';
 import { publicEventSummaries } from './OrganizationService.js';
 
-/** Master switch (contracts C10). Off: every org renders the legacy storefront. */
-export function themesMasterSwitch() {
-  return process.env.THEME_EDITOR_ENABLED === 'true';
-}
+import { themesEnabledFor, themesMasterSwitch } from './storefrontLogo.js';
 
-export function themesEnabledFor(organization) {
-  return themesMasterSwitch() && Boolean(organization?.themesEnabled);
-}
+export { themesEnabledFor, themesMasterSwitch };
 
 function themeConflict(current) {
   const error = new ConflictError('This theme changed since you opened it', current);

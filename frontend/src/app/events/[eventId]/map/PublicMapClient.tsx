@@ -6,6 +6,7 @@
 // square on phones, 4:3 from `sm`, fitted to the floor on load and on width
 // change, with zoom buttons and the legend under the map.
 
+import type { StorefrontLogo } from '@/components/OrganizationHeader';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -35,6 +36,7 @@ interface EventSummary {
   organizationId?: string | null;
   organizationName?: string | null;
   organizationLogoUrl?: string | null;
+  organizationStorefrontLogo?: StorefrontLogo | null;
   organizationBrandColor?: string | null;
   organizationThemeMode?: string | null;
 }
@@ -308,6 +310,7 @@ export default function PublicMapClient({ params }: PublicMapClientProps) {
         organizationId: data.organizationId,
         organizationName: data.organizationName,
         organizationLogoUrl: data.organizationLogoUrl,
+        organizationStorefrontLogo: data.organizationStorefrontLogo,
         organizationBrandColor: data.organizationBrandColor,
         organizationThemeMode: data.organizationThemeMode,
       });
@@ -499,6 +502,7 @@ export default function PublicMapClient({ params }: PublicMapClientProps) {
             organizationId: eventData.organizationId,
             organizationName: eventData.organizationName,
             organizationLogoUrl: eventData.organizationLogoUrl,
+            organizationStorefrontLogo: eventData.organizationStorefrontLogo,
             organizationSignInLinks: eventData.organizationSignInLinks,
             venue: eventData.venue,
           }}

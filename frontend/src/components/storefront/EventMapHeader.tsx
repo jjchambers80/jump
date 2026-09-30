@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import type { StorefrontLogo } from '@/components/OrganizationHeader';
 import { ArrowLeft } from 'lucide-react';
 import OrganizationHeader from '@/components/OrganizationHeader';
 import { resolveAssetUrl } from '@/lib/assets';
@@ -20,6 +21,7 @@ export interface EventMapHeaderEvent {
   organizationId?: string | null;
   organizationName?: string | null;
   organizationLogoUrl?: string | null;
+  organizationStorefrontLogo?: StorefrontLogo | null;
   organizationSignInLinks?: boolean;
   venue?: { name?: string | null; timezone?: string | null } | null;
 }
@@ -95,7 +97,7 @@ export default function EventMapHeader({ event, title, backHref, testId = 'event
       <div className="relative">
         {event.organizationName ? (
           <OrganizationHeader
-            organization={{ id: event.organizationId, name: event.organizationName, logoUrl: event.organizationLogoUrl }}
+            organization={{ id: event.organizationId, name: event.organizationName, logoUrl: event.organizationLogoUrl, storefrontLogo: event.organizationStorefrontLogo }}
             nav
             signIn={event.organizationSignInLinks !== false}
             layout="bar"
