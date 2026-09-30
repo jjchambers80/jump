@@ -22,13 +22,32 @@ function hashBuffer(buffer) {
   return createHash('sha256').update(buffer).digest('hex');
 }
 
-function originalKey(hash, mimeType) {
+export function originalKey(hash, mimeType) {
   const ext = MIME_TO_EXT[mimeType] || 'bin';
   return `original/${hash}.${ext}`;
 }
 
 function variantKey(variant, hash) {
   return `${variant}/${hash}.webp`;
+}
+
+/** Intrinsic pixel size of an image buffer; nulls when sharp cannot read it. */
+export async function readDimensions(buffer) {
+  const meta = await sharp(buffer)
+    .metadata()
+    .catch(() => ({}));
+  if (!meta.width || !meta.height) return { width: null, height: null };
+  // EXIF orientations 5-8 are rotated a quarter turn: the browser shows height × width.
+  return meta.orientation >= 5 ? { width: meta.height, height: meta.width } : { width: meta.width, height: meta.height };
+}
+
+/**
+ * `?w=&h=` for an original's serving URL: lets pages reserve the image's box
+ * before it loads (the storefront header logo). The serving route ignores the
+ * query; `imageVariantUrl` on the frontend drops it for resized variants.
+ */
+export function dimensionQuery(file) {
+  return file?.width > 0 && file?.height > 0 ? `?w=${file.width}&h=${file.height}` : '';
 }
 
 class ImageService {
@@ -93,6 +112,7 @@ class ImageService {
 
     const hash = hashBuffer(buffer);
     const existingFile = await prisma.file.findUnique({ where: { hash } });
+    const dimensions = await readDimensions(buffer);
 
     if (existingFile) {
       const origKey = originalKey(hash, mimeType);
@@ -104,10 +124,13 @@ class ImageService {
         );
       }
 
-      if (originalName && originalName !== existingFile.originalName) {
+      const fileUpdate = {};
+      if (originalName && originalName !== existingFile.originalName) fileUpdate.originalName = originalName;
+      if (existingFile.width == null && dimensions.width) Object.assign(fileUpdate, dimensions);
+      if (Object.keys(fileUpdate).length) {
         await prisma.file.update({
           where: { id: existingFile.id },
-          data: { originalName },
+          data: fileUpdate,
         });
       }
 
@@ -147,6 +170,7 @@ class ImageService {
           mimeType,
           sizeBytes: buffer.length,
           originalName: originalName || null,
+          ...dimensions,
         },
       });
 
@@ -271,7 +295,8 @@ class ImageService {
   }
 
   /**
-   * Build the serving URL for one variant.
+   * Build the serving URL for one variant. The original carries its pixel
+   * size as `?w=&h=` when known (dimensionQuery).
    *
    * Default: route through GET /images/:id/:hash/:variant so the backend
    * streams bytes from storage. This works with a private bucket (Railway
@@ -284,9 +309,9 @@ class ImageService {
       const key = variant === 'original'
         ? originalKey(hash, image.file.mimeType)
         : variantKey(variant, hash);
-      return this.storage.getPublicUrl(key);
+      return `${this.storage.getPublicUrl(key)}${variant === 'original' ? dimensionQuery(image.file) : ''}`;
     }
-    return `/images/${image.id}/${image.file.hash}/${variant}`;
+    return `/images/${image.id}/${image.file.hash}/${variant}${variant === 'original' ? dimensionQuery(image.file) : ''}`;
   }
 
   /**

@@ -208,6 +208,9 @@ model File {
   mimeType     String
   sizeBytes    Int
   originalName String?
+  /// Intrinsic pixel size of an image file (null for PDFs and pre-backfill rows)
+  width        Int?
+  height       Int?
   createdAt    DateTime @default(now())
 
   images     Image[]

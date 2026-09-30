@@ -1,3 +1,5 @@
+import { imageDimensions } from '@/lib/assets';
+
 interface LogoBoxProps {
   src: string;
   alt: string;
@@ -32,6 +34,7 @@ interface LogoBoxProps {
  * Empty bands show the flat container background (none when `bare`); no image is painted behind.
  */
 export default function LogoBox({ src, alt, className = '', square = true, bare = false, fit = 'box', imgClassName = '' }: LogoBoxProps) {
+  const dimensions = imageDimensions(src);
   return (
     <div
       data-testid="logo-box"
@@ -40,6 +43,10 @@ export default function LogoBox({ src, alt, className = '', square = true, bare 
       <img
         src={src}
         alt={alt}
+        // The logo's pixel size (from `?w=&h=`): the browser reserves its box
+        // before it loads, so a header whose height follows the logo never jumps.
+        width={dimensions?.width}
+        height={dimensions?.height}
         className={`${
           fit === 'height'
             ? 'h-full w-auto max-w-full object-contain object-left'

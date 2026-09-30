@@ -65,3 +65,10 @@ Reads `Organization.logoUrl` and `Organization.coverUrl` (see [Organization Bran
 - [Organization Branding](organization-branding.md) — logo/cover upload endpoints and `ImageService`
 - [Organization Theme Mode](organization-theme-mode.md) — `BrandScope` wrapper on the same pages
 - [Theme System](theme-system.md) — `dark:` classes on the box background
+
+## No layout shift while the logo loads
+
+The header's height follows the logo, so the logo's shape must be known before its bytes arrive. `File.width` / `File.height` store every image's intrinsic size (read with sharp on upload, EXIF rotation applied), and `ImageService.servingUrl` appends it to the original's URL as `?w=&h=` (`dimensionQuery`; the serving route ignores the query). `LogoBox` reads it with `imageDimensions` (`lib/assets.ts`) and sets the `<img>` `width` / `height` attributes, so the browser reserves the exact box before load. Theme logo files carry their size through `withImageDimensions` in `HeaderSection`. `imageVariantUrl` drops the query for resized variants. The header row also has `min-h-11`, the height of the menu and sign-in controls, so their arrival after hydration does not change it either.
+
+Existing files and stored organization logo URLs are updated by `npm run db:backfill:image-dimensions` (backend; dry run unless `DRY_RUN=false`, idempotent). A logo URL without a size still works; it just shifts once, as before.
+
