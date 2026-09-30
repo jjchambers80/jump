@@ -39,7 +39,7 @@ async function mockAccount(page: Page) {
 test('phone: the application row stacks, and the inline chooser runs spot → extras and payment', async ({ page }) => {
   const selects = await mockAccount(page);
   await page.setViewportSize({ width: 375, height: 740 });
-  await page.goto(`/organizations/${ORG_ID}/account`);
+  await page.goto(`/organizations/${ORG_ID}/account/applications`);
   const section = page.getByTestId('account-applications');
   await expect(section).toContainText('TEST map vendors (pick a spot)');
   // The actions sit under the details, so the title is not squeezed into a one-word column.
@@ -70,7 +70,7 @@ test('phone: the application row stacks, and the inline chooser runs spot → ex
 test('desktop: the application row keeps details and actions on one line', async ({ page }) => {
   await mockAccount(page);
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto(`/organizations/${ORG_ID}/account`);
+  await page.goto(`/organizations/${ORG_ID}/account/applications`);
   const choose = page.getByTestId('account-application-choose-space');
   const title = page.getByTestId('account-applications').getByText(/TEST — Game and Geek copy/).first();
   const [titleBox, chooseBox] = [await title.boundingBox(), await choose.boundingBox()];

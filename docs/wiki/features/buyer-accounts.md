@@ -23,7 +23,8 @@ At checkout a buyer can tick "Create an account with `<Org>` to manage your tick
 | `backend/src/api/validators/orderValidators.js` | `createAccount` / `emailSubscribed` must be booleans when present |
 | `frontend/src/lib/buyerSession.ts` | Server-only: `jump_buyer` cookie helpers, `backendBuyerFetch`, `clientIpFrom` |
 | `frontend/src/app/api/buyer/{request,verify,logout,me,me/orders,me/tickets}/route.ts` | Same-origin proxies; the only place the buyer bearer token exists in the browser tier (inside the httpOnly cookie) |
-| `frontend/src/app/organizations/[orgId]/account/page.tsx` | Email form ↔ this org's orders and tickets |
+| `frontend/src/app/organizations/[orgId]/account/(member)/layout.tsx` | Account shell (spec 040): sign-in gate (`components/account/SignInForm.tsx`), section nav (`AccountNav`), `AccountContext` (org, buyer, applications) |
+| `frontend/src/app/organizations/[orgId]/account/(member)/{page,orders/page,applications/page}.tsx` | Sections: tickets (applications waiting on the buyer, upcoming / past ticket stubs via `components/account/TicketStubs.tsx`), orders, applications + business profile |
 | `frontend/src/app/organizations/[orgId]/account/verify/page.tsx` | Consumes `?token=` once (ref-guarded), redirects to the account page |
 | `frontend/src/app/checkout/[eventId]/page.tsx` | The two checkboxes; posts `createAccount`, `emailSubscribed` |
 | `backend/tests/unit/buyerAuthService.test.js`, `tests/unit/buyerRateLimitKey.test.js`, `tests/contract/buyerAuth.test.js` | 35 tests: token hashing/TTL/single-use, rate caps, opt-ins on completion, welcome link through the real webhook path, org scoping, principal separation |
@@ -87,6 +88,7 @@ See [Database Architecture](database-architecture.md).
 - **Stripe webhook is the trigger.** Locally there is no `stripe listen` by default, so orders stay PENDING and no confirmation/welcome email fires. Contract tests call `PaymentService.handleCheckoutCompleted` directly.
 - **The Auth.js buyer surface is gone** (phase 4): `/my-tickets`, `/tickets/[ticketId]`, the `/orders` list page, `GET /orders/my`, `GET /tickets/my`, `GET /tickets/:id`, `POST /tickets/:id/request-refund`, and `Contact.userId`. Staff who buy tickets use the organization's `/account` page like any buyer. `/orders/:id` accepts a buyer session and falls back to the staff gate.
 - **Refunds from the account page** go through `/api/buyer/me/tickets/:id/refund`; the button shows only for `isRefundable && status === 'VALID'`.
+- **Account sections (spec 040).** Pages under `account/(member)/` get the sign-in gate from the layout and read `useAccount()`; pages a signed-out visitor must reach (token links) go outside the group, next to `verify`. Build account links with `href(section)` from the context so custom domains get `/account/...`. The Applications tab shows only when the buyer has applications; the tickets overview lists the ones waiting on the buyer (space to choose, payment due) and links to that tab, so the emailed account link still leads there.
 
 ## Related Features
 
