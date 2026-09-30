@@ -119,3 +119,22 @@ export function looksLikeUrl(value: string) {
     /^[a-z0-9-]+(\.[a-z0-9-]+)+(\/\S*)?$/i.test(value.trim())
   );
 }
+
+/**
+ * The one menu path that is the current page: an exact match wins, otherwise
+ * the longest item path the pathname sits under. Without this, Home (the org
+ * root) would also be "current" on every page below it, e.g. Events.
+ * `hrefs` are resolved storefront hrefs; external links and `/` never match
+ * by prefix, and a `#hash` is ignored.
+ */
+export function currentMenuPath(pathname: string, hrefs: string[]): string | null {
+  let best: string | null = null;
+  for (const href of hrefs) {
+    if (/^https?:\/\//i.test(href)) continue;
+    const path = href.split('#')[0];
+    if (!path) continue;
+    if (path === pathname) return path;
+    if (path !== '/' && pathname.startsWith(`${path}/`) && (!best || path.length > best.length)) best = path;
+  }
+  return best;
+}

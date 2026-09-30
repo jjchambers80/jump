@@ -8,7 +8,7 @@
 // the rollout" and serves the legacy client page: existing specs are unaffected.
 
 import { createServer } from 'node:http';
-import { EVENTS_TEMPLATE, FIXTURES } from './storefront.mjs';
+import { EVENT_ROUTES, EVENTS_TEMPLATE, FIXTURES } from './storefront.mjs';
 
 const port = Number(process.env.FIXTURE_API_PORT || 3002);
 
@@ -56,6 +56,12 @@ createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${port}`);
   if (req.method === 'OPTIONS') return send(res, 204);
   if (url.pathname === '/__fixtures/health') return send(res, 200, { ok: true });
+
+  const eventMeta = url.pathname.match(/^\/events\/([^/]+)\/meta$/);
+  if (eventMeta) {
+    const meta = Object.prototype.hasOwnProperty.call(EVENT_ROUTES, eventMeta[1]) ? EVENT_ROUTES[eventMeta[1]] : null;
+    return meta ? send(res, 200, meta) : send(res, 404, { error: 'NotFoundError', message: 'No fixture' });
+  }
 
   const m = url.pathname.match(/^\/organizations\/([^/]+)(\/.*)$/);
   const fixture = m && Object.prototype.hasOwnProperty.call(FIXTURES, m[1]) ? FIXTURES[m[1]] : null;

@@ -7,6 +7,10 @@ import { getPreset, resolveContent, resolveSettings } from '@jump/theme';
 const preset = getPreset('eventimus-default');
 /** The Events template every fixture serves for `page=events`. */
 export const EVENTS_TEMPLATE = preset.documents.events;
+/** A square logo for header-size assertions (data URL: no asset server). */
+export const LOGO =
+  'data:image/svg+xml,' +
+  encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="200" height="200" fill="navy"/></svg>');
 const future = (days) => new Date(Date.UTC(2031, 5, 1 + days, 23, 0)).toISOString();
 
 function org(id, extra = {}) {
@@ -216,4 +220,16 @@ export const FIXTURES = {
     gate: { password: 'letmein', token: 'e2e-access-token', message: 'Members only until launch' },
   },
   'theme-legacy': { render: { renderer: 'legacy' }, routes: {} },
+  'theme-logo': { render: render('theme-logo', { organization: { logoUrl: LOGO } }), routes: {} },
 };
+
+/**
+ * Event route meta (`GET /events/:id/meta`) for event pages framed by a theme.
+ * Keyed by slug and id, as the backend resolves either.
+ */
+export const EVENT_ROUTES = Object.fromEntries(
+  ['theme-light', 'theme-logo'].flatMap((orgId) => {
+    const meta = { id: `${orgId}-event-0`, slug: `${orgId}-show-0`, organizationId: orgId };
+    return [[meta.id, meta], [meta.slug, meta]];
+  }),
+);

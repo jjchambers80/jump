@@ -45,7 +45,6 @@ export default function HeaderSection({
         menus={resolved.menus}
         signIn={showAccountLink && organization.buyerSignInLinks !== false}
         logoPosition={logoPosition}
-        themedLogo
       />
     </div>
   );

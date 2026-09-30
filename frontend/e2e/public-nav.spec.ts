@@ -198,3 +198,15 @@ test('mobile drawer traps focus and returns it to the menu button', async ({ pag
   await expect(drawer).toHaveCount(0);
   await expect(openButton).toBeFocused();
 });
+
+test('only the deepest matching item is the current page, never Home as well', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await mockStorefront(page);
+  await page.goto('/organizations/org-nav/pages/vendors');
+  await expect(page.getByTestId('storefront-page')).toContainText('Apply here.');
+  await page.getByRole('button', { name: 'Open menu' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Menu' });
+  await expect(drawer.locator('[aria-current="page"]')).toHaveCount(1);
+  await expect(drawer.getByRole('link', { name: 'Vendors' })).toHaveAttribute('aria-current', 'page');
+  await expect(drawer.getByRole('link', { name: 'Home' })).not.toHaveAttribute('aria-current', 'page');
+});

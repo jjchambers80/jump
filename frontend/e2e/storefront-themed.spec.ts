@@ -340,3 +340,76 @@ test.describe('starter homepage sections (038S)', () => {
     await expect(faq.getByText('Free parking behind the hall.')).toBeHidden();
   });
 });
+
+// One header everywhere: a themed organization's event page is framed by the
+// same theme header (and footer) as its home page, so the logo and header
+// height match. The event body is still the client page, mocked in the browser.
+test.describe('themed event page', () => {
+  function eventBody(orgId: string, logoUrl: string | null) {
+    return {
+      id: `${orgId}-event-0`,
+      slug: `${orgId}-show-0`,
+      name: 'Summer Show 1',
+      description: '<p>Fixture</p>',
+      date: '2031-06-01T23:00:00.000Z',
+      imageUrl: null,
+      logoUrl: null,
+      taxRate: 0,
+      organizationId: orgId,
+      organizationName: 'Riverside Presents',
+      organizationLogoUrl: logoUrl,
+      organizationBrandColor: '#0f766e',
+      organizationThemeMode: 'LIGHT',
+      organizationSignInLinks: false,
+      venue: { id: 'v1', name: 'Riverside Hall', address: '1 River Rd', timezone: 'America/New_York' },
+      priceTiers: [
+        { id: 't1', name: 'General', description: null, price: 20, quantityTotal: 100, quantityAvailable: 100, isActive: true, isRefundable: true, minPerOrder: 1, maxPerOrder: 10 },
+      ],
+      createdAt: '2031-01-01T00:00:00.000Z',
+      updatedAt: '2031-01-01T00:00:00.000Z',
+    };
+  }
+
+  async function mockEvent(page: Page, orgId: string, logoUrl: string | null = null) {
+    await page.route(`http://localhost:3002/events/${orgId}-show-0`, (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(eventBody(orgId, logoUrl)) }),
+    );
+  }
+
+  test('renders inside the theme frame with one header and one footer', async ({ page }) => {
+    await mockEvent(page, 'theme-light');
+    await page.goto('/events/theme-light-show-0');
+    await expect(page.getByRole('heading', { level: 1, name: 'Summer Show 1' })).toBeVisible();
+    await expect(page.locator('[data-theme-frame]')).toHaveCount(1);
+    await expect(page.getByTestId('organization-header')).toHaveCount(1);
+    await expect(page.locator('[data-section="Header"]')).toHaveCount(1);
+    await expect(page.locator('[data-section="Footer"]')).toHaveCount(1);
+    await expect(page.getByRole('link', { name: 'Contact us' })).toHaveCount(1);
+    // The organization name is a link home here, not the page's h1.
+    await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+  });
+
+  for (const viewport of [
+    { width: 390, height: 844, logo: 90 },
+    { width: 1440, height: 900, logo: 120 },
+  ]) {
+    test(`${viewport.width}px: logo and header height match the home page`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      const measure = async () => {
+        const header = page.getByTestId('organization-header');
+        const logo = header.getByTestId('logo-box');
+        await expect(logo).toBeVisible();
+        return { header: Math.round((await header.boundingBox())!.height), logo: Math.round((await logo.boundingBox())!.width) };
+      };
+
+      await page.goto('/organizations/theme-logo');
+      const home = await measure();
+      await mockEvent(page, 'theme-logo');
+      await page.goto('/events/theme-logo-show-0');
+      const event = await measure();
+
+      expect(home.logo).toBe(viewport.logo);
+      expect(event).toEqual(home);
+    });
+  }
+});
