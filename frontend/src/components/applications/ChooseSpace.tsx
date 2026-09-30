@@ -142,7 +142,7 @@ export default function ChooseSpace({ application, spaceApi, refresh, layout = '
   const [stepState, setStep] = useState<Step>(steps[0]);
   const step = steps.includes(stepState) ? stepState : steps[0];
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const stepMounted = useRef(false);
+  const shownStep = useRef(step);
 
   useEffect(() => () => {
     if (pollRef.current) clearTimeout(pollRef.current);
@@ -150,10 +150,10 @@ export default function ChooseSpace({ application, spaceApi, refresh, layout = '
 
   // Moving between steps puts focus on the step's heading and brings it into view.
   useEffect(() => {
-    if (!stepMounted.current) {
-      stepMounted.current = true;
-      return;
-    }
+    // Compare with the step last shown, not a mount flag: dev strict mode runs
+    // effects twice, and focus must never move on page load.
+    if (shownStep.current === step) return;
+    shownStep.current = step;
     const heading = headingRef.current;
     if (!heading) return;
     heading.focus({ preventScroll: true });

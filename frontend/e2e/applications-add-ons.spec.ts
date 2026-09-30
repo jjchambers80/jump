@@ -358,6 +358,8 @@ test('phone: the extras step and the pay step stack in one column with no sidewa
   await expect(choose).toHaveAttribute('data-step', 'extras');
   // The status card carries one due date instead of repeating "choose and pay".
   await expect(page.getByTestId('apply-payment')).toContainText('Choose and pay by');
+  // Nothing moves focus or scrolls on load.
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
   const [stepsBox, asideBox] = [await choose.boundingBox(), await page.getByTestId('apply-status-aside').boundingBox()];
   expect(stepsBox && asideBox && asideBox.y >= stepsBox.y + stepsBox.height).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

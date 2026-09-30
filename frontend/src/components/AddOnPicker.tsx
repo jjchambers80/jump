@@ -80,8 +80,7 @@ export default function AddOnPicker({
                 >
                   −
                 </button>
-                <span className="min-w-6 text-center text-lg font-semibold tabular-nums text-gray-900 dark:text-slate-100" aria-live="polite" aria-atomic="true">
-                  <span className="sr-only">{addOn.name} quantity: </span>
+                <span className="min-w-6 text-center text-lg font-semibold tabular-nums text-gray-900 dark:text-slate-100" aria-live="polite" aria-atomic="true" aria-label={`${addOn.name} quantity`}>
                   {quantity}
                 </span>
                 <button
