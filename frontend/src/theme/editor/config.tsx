@@ -12,7 +12,7 @@ import { renderConfig } from '../render/config';
 import ThemeScope from '../ThemeScope';
 import { schemeCss, settingsVars } from '../settingsCss';
 import { sectionContext } from '../sections/context';
-import type { Config, Fields } from './puck';
+import { createUsePuck, type Config, type Fields } from './puck';
 import { puckField, type FieldContext, type FieldSpec } from './fields';
 import { AnnouncementsList, FooterColumnsList } from './ListFields';
 
@@ -65,6 +65,27 @@ function editorProps(type: string, props: Record<string, any>) {
   return rest;
 }
 
+/**
+ * Blocks the canvas brings into view when selected: the carousel scrolls to
+ * the slide, the FAQ opens the question (spec 041). They get `editorSelected`.
+ */
+const FOLLOWS_SELECTION = new Set(['Slide', 'FaqItem']);
+const useSelectedId = createUsePuck();
+
+function followSelection(render: (props: any) => JSX.Element) {
+  return function Selectable(props: any) {
+    const selectedId = useSelectedId((s) => (s.selectedItem?.props as { id?: string } | undefined)?.id);
+    return render({ ...props, editorSelected: selectedId === props.id });
+  };
+}
+
+/** What a block added from the Sections panel starts with. */
+export const STARTER_BLOCK_PROPS: Record<string, Record<string, unknown>> = {
+  Slide: { heading: 'New slide' },
+  FaqItem: { question: 'New question' },
+  Button: { label: 'Get tickets', link: { type: 'EVENTS' } },
+};
+
 /** What a freshly added section starts with, so it is never an empty box. */
 const STARTER_BLOCKS: Record<string, { type: string; props: Record<string, unknown> }[]> = {
   HeroCarousel: [
@@ -85,7 +106,8 @@ export function buildEditorConfig(ctx: FieldContext): Config {
     const def = section ?? block;
     if (!def) continue;
     const specs: Record<string, FieldSpec> = section ? { ...def.settings, ...COMMON_SECTION_FIELDS } : def.settings;
-    const baseRender = base.render as (props: any) => JSX.Element;
+    const plainRender = base.render as (props: any) => JSX.Element;
+    const baseRender = FOLLOWS_SELECTION.has(type) ? followSelection(plainRender) : plainRender;
     components[type] = {
       label: def.label,
       fields: {
@@ -95,13 +117,15 @@ export function buildEditorConfig(ctx: FieldContext): Config {
       },
       defaultProps: {
         ...fieldDefaults(specs),
+        ...(block ? (STARTER_BLOCK_PROPS[type] ?? {}) : {}),
         ...(type === 'AnnouncementBar' ? { announcements: [] } : {}),
         ...(type === 'Footer' ? { columns: [] } : {}),
         ...((base.fields as Record<string, unknown> | undefined)?.blocks ? { blocks: STARTER_BLOCKS[type] ?? [] } : {}),
       },
       permissions: LOCKED.has(type) ? { drag: false, duplicate: false, delete: false } : undefined,
       render: ({ hidden, ...props }: any) => {
-        const out = baseRender(editorProps(type, props));
+        const Render = baseRender;
+        const out = FOLLOWS_SELECTION.has(type) ? <Render {...editorProps(type, props)} /> : baseRender(editorProps(type, props));
         if (!hidden) return out;
         return (
           <div data-hidden-section className="relative opacity-40">
