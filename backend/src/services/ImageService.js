@@ -295,8 +295,7 @@ class ImageService {
   }
 
   /**
-   * Build the serving URL for one variant. The original carries its pixel
-   * size as `?w=&h=` when known (dimensionQuery).
+   * Build the serving URL for one variant.
    *
    * Default: route through GET /images/:id/:hash/:variant so the backend
    * streams bytes from storage. This works with a private bucket (Railway
@@ -309,9 +308,18 @@ class ImageService {
       const key = variant === 'original'
         ? originalKey(hash, image.file.mimeType)
         : variantKey(variant, hash);
-      return `${this.storage.getPublicUrl(key)}${variant === 'original' ? dimensionQuery(image.file) : ''}`;
+      return this.storage.getPublicUrl(key);
     }
-    return `/images/${image.id}/${image.file.hash}/${variant}${variant === 'original' ? dimensionQuery(image.file) : ''}`;
+    return `/images/${image.id}/${image.file.hash}/${variant}`;
+  }
+
+  /**
+   * The original's serving URL with its pixel size (`?w=&h=`). Stored as an
+   * organization's logoUrl so every storefront header can reserve the logo's
+   * box before it loads. Plain `servingUrl` stays clean for CSVs and emails.
+   */
+  sizedOriginalUrl(image) {
+    return `${this.servingUrl(image, 'original')}${dimensionQuery(image.file)}`;
   }
 
   /**
@@ -331,6 +339,8 @@ class ImageService {
       mimeType: image.file.mimeType,
       sizeBytes: image.file.sizeBytes,
       originalName: image.file.originalName,
+      width: image.file.width ?? null,
+      height: image.file.height ?? null,
       usageType: image.usageType,
       focalX: image.focalX,
       focalY: image.focalY,

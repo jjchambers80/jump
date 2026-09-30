@@ -444,8 +444,7 @@ describe('Venue Contract Tests', () => {
         .attach('logo', png, { filename: 'venue.png', contentType: 'image/png' });
       expect(upload.status).toBe(200);
       // Content-addressed image pipeline: served through the backend proxy route
-      // Content-addressed image pipeline, with the original's pixel size so pages can reserve its box.
-      expect(upload.body.logoUrl).toMatch(/^\/images\/[a-z0-9]+\/[a-f0-9]{64}\/original\?w=1&h=1$/);
+      expect(upload.body.logoUrl).toMatch(/^\/images\/[a-z0-9]+\/[a-f0-9]{64}\/original$/);
 
       const replacement = await request(app)
         .post(`/organizations/${testOrgId}/venues/${emptyVenueId}/logo`)

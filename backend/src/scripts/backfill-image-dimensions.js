@@ -26,7 +26,7 @@ export function planLogoUrl(organization) {
   const image = organization.logoImage;
   if (!image?.file || !organization.logoUrl) return null;
   if (!organization.logoUrl.includes(image.file.hash)) return null;
-  const next = imageService.servingUrl(image, 'original');
+  const next = imageService.sizedOriginalUrl(image);
   return next === organization.logoUrl ? null : next;
 }
 

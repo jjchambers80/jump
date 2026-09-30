@@ -655,4 +655,28 @@ describe('Organization Contract Tests', () => {
       expect(res.status).toBe(400);
     });
   });
+  describe('POST /organizations/:id/logo', () => {
+    // 4×2 PNG: the stored logo URL carries its pixel size so storefront headers
+    // reserve the logo's box before it loads (no layout shift).
+    it('stores the logo URL with the image size', async () => {
+      const sharp = (await import('sharp')).default;
+      const png = await sharp({ create: { width: 4, height: 2, channels: 3, background: '#123456' } }).png().toBuffer();
+      const org = await request(app)
+        .post('/organizations')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ name: `Logo Size ${Date.now()}` });
+      expect(org.status).toBe(201);
+
+      const res = await request(app)
+        .post(`/organizations/${org.body.id}/logo`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .attach('logo', png, { filename: 'logo.png', contentType: 'image/png' });
+      expect(res.status).toBe(200);
+      const stored = await prisma.organization.findUnique({ where: { id: org.body.id }, select: { logoUrl: true } });
+      expect(stored.logoUrl).toMatch(/^\/images\/[a-z0-9]+\/[a-f0-9]{64}\/original\?w=4&h=2$/);
+
+      await prisma.organization.update({ where: { id: org.body.id }, data: { logoUrl: null, logoImageId: null } });
+      await prisma.organization.delete({ where: { id: org.body.id } }).catch(() => {});
+    });
+  });
 });
