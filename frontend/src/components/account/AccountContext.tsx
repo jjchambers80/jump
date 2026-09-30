@@ -32,6 +32,8 @@ export interface AccountProfile {
   pendingEmail?: string | null;
   /** The exact marketing consent label; the backend records it as the acceptance text. */
   marketingConsentText?: string;
+  /** "Delete my data" confirmed; the account is erased at this moment unless cancelled (spec 040 card D). */
+  erasureScheduledAt?: string | null;
   organization: { id: string; name: string };
 }
 

@@ -14,6 +14,7 @@ Generated and maintained by running `/doc-feature` after completing feature work
 - [Checkout Conversion & Accessibility](features/checkout-conversion-ux.md) — Pay button always on screen (sticky summary / fixed mobile bar), accessible form + email typo fix, cart restored after Stripe cancel
 - [Tenant Identity](features/tenant-identity.md) — Per-organization buyers (`Contact` unique on org + email), staff memberships (`OrganizationMember`), membership-based scoping
 - [Buyer Accounts](features/buyer-accounts.md) — Checkout account opt-in (pre-checked) + marketing consent (unchecked), passwordless magic-link sign-in, org-scoped account page with self-service refunds
+- [Patron Account](features/patron-account.md) — Spec 040 storefront "My account": sections (tickets, orders + receipts, RSVPs, applications, profile, email preferences, privacy), verified email change, one-click unsubscribe, sign out everywhere, Download my data, Delete my data (grace period, anonymization, staff erase)
 - [Customer Accounts Settings](features/customer-accounts-settings.md) — Settings › Customer accounts (spec 031): sign-in links toggle (storefront header + checkout, signed-in prefill, `?next=` return), account URL card, self-serve refund policy (cutoff + fee), email-code sign-in
 - [Custom Domains](features/custom-domains.md) — White-label storefront on an organization's own subdomain: CNAME + TXT verification, tenant-host middleware, per-org email/Stripe links
 

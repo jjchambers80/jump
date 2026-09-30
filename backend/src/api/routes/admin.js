@@ -32,6 +32,8 @@ import ticketService from '../../services/TicketService.js';
 import refundService from '../../services/RefundService.js';
 import customerService from '../../services/CustomerService.js';
 import buyerDataExportService from '../../services/BuyerDataExportService.js';
+import contactErasureService from '../../services/ContactErasureService.js';
+import { requireRecentAuth } from '../../middleware/recentAuth.js';
 import domainService from '../../services/DomainService.js';
 import taxService from '../../services/TaxService.js';
 import paymentSettingsService from '../../services/PaymentSettingsService.js';
@@ -1637,6 +1639,40 @@ router.get('/customers/:contactId/export', requireAdmin, async (req, res, next) 
     res.set('Content-Disposition', `attachment; filename="${buyerDataExportService.filename(data).replace('-my-data-', '-customer-data-')}"`);
     res.set('Cache-Control', 'no-store');
     res.json(data);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET  /admin/customers/:contactId/erasure — preview (what would be voided, what blocks it).
+ * POST /admin/customers/:contactId/anonymize — erase now, no grace period (spec 040 PA-18):
+ * ADMIN and a fresh step-up proof, for requests that arrive by email.
+ */
+async function contactInScope(req) {
+  const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
+  if (!isUnscoped(scope) && !scope.organizationId) throw new NotFoundError('Customer not found');
+  const contact = await prisma.contact.findFirst({
+    where: { id: req.params.contactId, ...(scope.organizationId && { organizationId: scope.organizationId }) },
+    select: { id: true, organizationId: true },
+  });
+  if (!contact) throw new NotFoundError('Customer not found');
+  return contact;
+}
+
+router.get('/customers/:contactId/erasure', requireAdmin, async (req, res, next) => {
+  try {
+    const contact = await contactInScope(req);
+    res.json(await contactErasureService.preview(contact.organizationId, contact.id));
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/customers/:contactId/anonymize', requireAdmin, requireRecentAuth, async (req, res, next) => {
+  try {
+    const contact = await contactInScope(req);
+    res.json(await contactErasureService.erase(contact.id, { organizationId: contact.organizationId, actorUserId: req.user.id }));
   } catch (error) {
     next(error);
   }

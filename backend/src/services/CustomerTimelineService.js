@@ -31,7 +31,7 @@ export function buildTimeline({ contact, comments = [], orders = [], application
 
   for (const comment of comments) {
     // EMAIL_CHANGED / PROFILE_UPDATED / DATA_EXPORTED are audit lines; a null author is the customer (spec 040).
-    const type = ['EMAIL_CHANGED', 'PROFILE_UPDATED', 'DATA_EXPORTED'].includes(comment.kind) ? comment.kind : 'COMMENT';
+    const type = ['EMAIL_CHANGED', 'PROFILE_UPDATED', 'DATA_EXPORTED', 'ERASURE_SCHEDULED', 'ERASURE_CANCELLED', 'ANONYMIZED'].includes(comment.kind) ? comment.kind : 'COMMENT';
     items.push({
       id: eventId(type, comment.id),
       sourceId: comment.id,

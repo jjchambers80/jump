@@ -9,6 +9,7 @@
 import { prisma } from '@jump/db';
 import { createStripeRefund } from './stripeRefund.js';
 import addOnService from './AddOnService.js';
+import { returnTicketsToSale } from './ticketInventory.js';
 import logger from '../utils/logger.js';
 import { NotFoundError, ConflictError, ValidationError } from '../middleware/errorHandler.js';
 import { orderStatusFor } from './applicationOrderStatus.js';
@@ -121,18 +122,8 @@ class RefundService {
         });
       }
 
-      // Restore inventory with FOR UPDATE lock on each tier
-      const tierQuantities = {};
-      for (const ticket of refundableTickets) {
-        tierQuantities[ticket.priceTierId] = (tierQuantities[ticket.priceTierId] || 0) + 1;
-      }
-      for (const [tierId, qty] of Object.entries(tierQuantities)) {
-        await tx.$executeRaw`
-          UPDATE "PriceTier"
-          SET "quantitySold" = "quantitySold" - ${qty}
-          WHERE "id" = ${tierId}
-        `;
-      }
+      // Restore inventory (row lock via the UPDATE)
+      await returnTicketsToSale(tx, refundableTickets);
 
       // Add-on lines (spec 012): the full refund covers them; release their quantity
       const openAddOnLines = await tx.orderAddOn.findMany({ where: { orderId, refundedAt: null } });
@@ -401,12 +392,8 @@ class RefundService {
         data: { status: 'VOIDED' },
       });
 
-      // Restore inventory with row-level lock
-      await tx.$executeRaw`
-        UPDATE "PriceTier"
-        SET "quantitySold" = "quantitySold" - 1
-        WHERE "id" = ${ticket.priceTierId}
-      `;
+      // Restore inventory (row lock via the UPDATE)
+      await returnTicketsToSale(tx, [ticket]);
 
       // Determine new order status from fresh DB state
       const activeTicketsAfter = await tx.ticket.count({
@@ -633,18 +620,8 @@ class RefundService {
         });
       }
 
-      // Restore inventory with row-level lock
-      const tierQuantities = {};
-      for (const ticket of ticketsToVoid) {
-        tierQuantities[ticket.priceTierId] = (tierQuantities[ticket.priceTierId] || 0) + 1;
-      }
-      for (const [tierId, qty] of Object.entries(tierQuantities)) {
-        await tx.$executeRaw`
-          UPDATE "PriceTier"
-          SET "quantitySold" = "quantitySold" - ${qty}
-          WHERE "id" = ${tierId}
-        `;
-      }
+      // Restore inventory (row lock via the UPDATE)
+      await returnTicketsToSale(tx, ticketsToVoid);
 
       const newStatus = isFullRefund ? 'REFUNDED' : 'PARTIALLY_REFUNDED';
       await tx.order.update({

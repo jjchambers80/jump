@@ -7,6 +7,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { safeNextPath, takeNext } from '@/lib/buyerNext';
 import { storefrontHref } from '@/lib/storefrontPath';
@@ -175,6 +176,17 @@ export default function AccountLayout({ children, params }: { children: React.Re
                 </button>
               </p>
             </div>
+            {context.profile.erasureScheduledAt && (
+              <div role="status" data-testid="erasure-banner" className="mb-6 flex flex-col gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-900 dark:bg-red-900/20 dark:text-red-200 sm:flex-row sm:items-center sm:justify-between print:hidden">
+                <p>
+                  Your data with {org.name} will be deleted on{' '}
+                  {new Date(context.profile.erasureScheduledAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}.
+                </p>
+                <Link href={context.href('privacy')} className="font-semibold underline">
+                  Cancel deletion
+                </Link>
+              </div>
+            )}
             <div className="lg:grid lg:grid-cols-[12.5rem_minmax(0,1fr)] lg:gap-10">
               <div className="lg:sticky lg:top-6 lg:self-start print:hidden">
                 <AccountNav />
