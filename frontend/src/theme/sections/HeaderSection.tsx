@@ -2,6 +2,7 @@
 // one header every storefront page uses, with server-resolved menus.
 
 import OrganizationHeader from '@/components/OrganizationHeader';
+import { withImageDimensions } from '@/lib/assets';
 import { schemeClass } from '../settingsCss';
 import type { SectionContext } from './context';
 import StickyOnScrollUp from './StickyOnScrollUp';
@@ -25,7 +26,9 @@ export default function HeaderSection({
 }: HeaderSectionProps) {
   const { organization, resolved, settings } = ctx;
   const logoFileId = settings.logo?.image?.fileId as string | undefined;
-  const logoUrl = (logoFileId && resolved.files[logoFileId]?.url) || organization.logoUrl;
+  const logoFile = logoFileId ? resolved.files[logoFileId] : undefined;
+  // Theme logo files know their size: carry it so the header reserves the logo's box.
+  const logoUrl = (logoFile?.url && withImageDimensions(logoFile.url, logoFile.width, logoFile.height)) || organization.logoUrl;
   const header = (
     <div
       data-section="Header"

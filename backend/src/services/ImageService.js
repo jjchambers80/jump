@@ -22,13 +22,32 @@ function hashBuffer(buffer) {
   return createHash('sha256').update(buffer).digest('hex');
 }
 
-function originalKey(hash, mimeType) {
+export function originalKey(hash, mimeType) {
   const ext = MIME_TO_EXT[mimeType] || 'bin';
   return `original/${hash}.${ext}`;
 }
 
 function variantKey(variant, hash) {
   return `${variant}/${hash}.webp`;
+}
+
+/** Intrinsic pixel size of an image buffer; nulls when sharp cannot read it. */
+export async function readDimensions(buffer) {
+  const meta = await sharp(buffer)
+    .metadata()
+    .catch(() => ({}));
+  if (!meta.width || !meta.height) return { width: null, height: null };
+  // EXIF orientations 5-8 are rotated a quarter turn: the browser shows height × width.
+  return meta.orientation >= 5 ? { width: meta.height, height: meta.width } : { width: meta.width, height: meta.height };
+}
+
+/**
+ * `?w=&h=` for an original's serving URL: lets pages reserve the image's box
+ * before it loads (the storefront header logo). The serving route ignores the
+ * query; `imageVariantUrl` on the frontend drops it for resized variants.
+ */
+export function dimensionQuery(file) {
+  return file?.width > 0 && file?.height > 0 ? `?w=${file.width}&h=${file.height}` : '';
 }
 
 class ImageService {
@@ -93,6 +112,7 @@ class ImageService {
 
     const hash = hashBuffer(buffer);
     const existingFile = await prisma.file.findUnique({ where: { hash } });
+    const dimensions = await readDimensions(buffer);
 
     if (existingFile) {
       const origKey = originalKey(hash, mimeType);
@@ -104,10 +124,13 @@ class ImageService {
         );
       }
 
-      if (originalName && originalName !== existingFile.originalName) {
+      const fileUpdate = {};
+      if (originalName && originalName !== existingFile.originalName) fileUpdate.originalName = originalName;
+      if (existingFile.width == null && dimensions.width) Object.assign(fileUpdate, dimensions);
+      if (Object.keys(fileUpdate).length) {
         await prisma.file.update({
           where: { id: existingFile.id },
-          data: { originalName },
+          data: fileUpdate,
         });
       }
 
@@ -147,6 +170,7 @@ class ImageService {
           mimeType,
           sizeBytes: buffer.length,
           originalName: originalName || null,
+          ...dimensions,
         },
       });
 
@@ -290,6 +314,15 @@ class ImageService {
   }
 
   /**
+   * The original's serving URL with its pixel size (`?w=&h=`). Stored as an
+   * organization's logoUrl so every storefront header can reserve the logo's
+   * box before it loads. Plain `servingUrl` stays clean for CSVs and emails.
+   */
+  sizedOriginalUrl(image) {
+    return `${this.servingUrl(image, 'original')}${dimensionQuery(image.file)}`;
+  }
+
+  /**
    * Format image record for API response with serving URLs.
    */
   formatImageResponse(image) {
@@ -306,6 +339,8 @@ class ImageService {
       mimeType: image.file.mimeType,
       sizeBytes: image.file.sizeBytes,
       originalName: image.file.originalName,
+      width: image.file.width ?? null,
+      height: image.file.height ?? null,
       usageType: image.usageType,
       focalX: image.focalX,
       focalY: image.focalY,

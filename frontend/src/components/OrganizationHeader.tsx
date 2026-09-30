@@ -207,7 +207,9 @@ export default function OrganizationHeader({
           logoPosition === 'center' ? 'md:flex-col md:gap-3' : ''
         }`}
       >
-        <div className={`min-w-0 flex-1 ${logoPosition === 'center' ? 'md:flex md:justify-center' : ''}`}>
+        {/* min-h-11: as tall as the menu / sign-in controls, which appear after
+            hydration, so their arrival never changes the header's height. */}
+        <div className={`flex min-h-11 min-w-0 flex-1 items-center ${logoPosition === 'center' ? 'md:justify-center' : ''}`}>
           {identityLink}
         </div>
 

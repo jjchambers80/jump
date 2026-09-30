@@ -16,7 +16,7 @@ import {
 import organizationService from '../../services/OrganizationService.js';
 import { NotFoundError } from '../../middleware/errorHandler.js';
 import { uploadImage } from '../../middleware/imageUpload.js';
-import imageService from '../../services/ImageService.js';
+import imageService, { dimensionQuery } from '../../services/ImageService.js';
 import storefrontPreferencesService from '../../services/StorefrontPreferencesService.js';
 import { validateStorefrontUnlock } from '../validators/storefrontPreferencesValidators.js';
 import { gateByOrgParam } from '../../middleware/storefrontGate.js';
@@ -328,7 +328,8 @@ router.post('/:id/logo', requireAuth, requireAdmin, verifyOrgOwnership, uploadIm
     );
     const { organization, previousLogoImageId } = await organizationService.setOrganizationLogo(
       req.params.id,
-      image.urls.original,
+      // The logo URL carries its pixel size so storefront headers reserve its box (no layout shift).
+      `${image.urls.original}${dimensionQuery(image)}`,
       image.id
     );
     if (previousLogoImageId && previousLogoImageId !== image.id) {

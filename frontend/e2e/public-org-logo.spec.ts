@@ -160,6 +160,34 @@ test.describe('public organization logo header', () => {
     expect(painted.w).toBeLessThan(painted.boxW);
   });
 
+  test('the header keeps its height while the logo loads (no layout shift)', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    // A slow 400×100 logo whose URL carries its size, as the backend serves it.
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.route(`${API}/images/logo-1/hash-1/original*`, async (route) => {
+      await held;
+      await route.fulfill({
+        status: 200,
+        contentType: 'image/svg+xml',
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="100"><rect width="400" height="100" fill="teal"/></svg>',
+      });
+    });
+    await mockOrg(page, 'org-slow-logo', `${API}/images/logo-1/hash-1/original?w=400&h=100`);
+    await page.goto('/organizations/org-slow-logo');
+
+    const header = page.getByTestId('organization-header');
+    const box = header.getByTestId('logo-box');
+    await expect(box).toBeAttached();
+    const before = (await header.boundingBox())!.height;
+    // The box is already the logo's shape: 120 px wide, 30 px tall.
+    expect(Math.round((await box.boundingBox())!.height)).toBe(30);
+
+    release();
+    await expect.poll(() => box.locator('img').evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+    expect((await header.boundingBox())!.height).toBe(before);
+  });
+
   test('only one accessible logo image is exposed', async ({ page }) => {
     await mockOrg(page, 'org-a11y', svgLogo(400, 100, 'teal'));
     await page.goto('/organizations/org-a11y');
