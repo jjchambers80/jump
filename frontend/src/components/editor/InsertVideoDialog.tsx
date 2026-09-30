@@ -1,6 +1,8 @@
 'use client';
 
 // Insert video: paste a YouTube / Vimeo embed snippet (or a plain link).
+// With `editing` it becomes Edit video for the selected one: prefilled with
+// its snippet, saves over it (replace) or removes it.
 // Escape, backdrop and ✕ cancel; focus returns to the toolbar button.
 // Portalled to <body> so the editor's .jump-prose type styles don't reach it.
 
@@ -9,24 +11,43 @@ import { RefObject, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { parseVideoEmbed } from '@/lib/videoEmbed';
 
+export interface VideoAttrs {
+  src: string;
+  title: string;
+}
+
 interface InsertVideoDialogProps {
+  /** The selected video: the dialog edits / replaces it instead of inserting. */
+  editing?: VideoAttrs | null;
   returnFocusRef?: RefObject<HTMLElement>;
   onClose: () => void;
-  onInsert: (video: { src: string; title: string }) => void;
+  onSubmit: (video: VideoAttrs) => void;
+  onRemove?: () => void;
+}
+
+function escapeAttribute(value: string) {
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+function snippetFor(video: VideoAttrs) {
+  return `<iframe src="${escapeAttribute(video.src)}" title="${escapeAttribute(video.title)}"></iframe>`;
 }
 
 export default function InsertVideoDialog({
+  editing,
   returnFocusRef,
   onClose,
-  onInsert,
+  onSubmit,
+  onRemove,
 }: InsertVideoDialogProps) {
   const id = useId();
-  const [snippet, setSnippet] = useState('');
+  const [snippet, setSnippet] = useState(() => (editing ? snippetFor(editing) : ''));
   const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     textareaRef.current?.focus();
+    textareaRef.current?.select();
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
@@ -49,7 +70,7 @@ export default function InsertVideoDialog({
       setError('Paste a YouTube or Vimeo embed snippet or link');
       return;
     }
-    onInsert(video);
+    onSubmit(video);
   };
 
   return createPortal(
@@ -67,7 +88,7 @@ export default function InsertVideoDialog({
       >
         <div className="flex items-center justify-between px-5 pb-2 pt-4">
           <h2 id={`${id}-title`} className="text-base font-semibold text-gray-900 dark:text-white">
-            Insert video
+            {editing ? 'Edit video' : 'Insert video'}
           </h2>
           <button
             type="button"
@@ -83,7 +104,9 @@ export default function InsertVideoDialog({
             htmlFor={`${id}-snippet`}
             className="block text-sm font-medium text-gray-800 dark:text-slate-200"
           >
-            Insert a video by pasting the embed snippet in the box below.
+            {editing
+              ? 'Replace the video by pasting a new embed snippet in the box below.'
+              : 'Insert a video by pasting the embed snippet in the box below.'}
           </label>
           <textarea
             ref={textareaRef}
@@ -112,7 +135,16 @@ export default function InsertVideoDialog({
               {error}
             </p>
           )}
-          <div className="mt-5 flex justify-end gap-2">
+          <div className="mt-5 flex items-center justify-end gap-2">
+            {editing && onRemove && (
+              <button
+                type="button"
+                onClick={onRemove}
+                className="mr-auto rounded-lg px-2 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 dark:text-red-400 dark:hover:bg-red-950/40"
+              >
+                Remove video
+              </button>
+            )}
             <button
               type="button"
               onClick={onClose}
@@ -126,7 +158,7 @@ export default function InsertVideoDialog({
               disabled={!snippet.trim()}
               className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50 dark:focus:ring-offset-slate-900"
             >
-              Insert video
+              {editing ? 'Save video' : 'Insert video'}
             </button>
           </div>
         </div>

@@ -5,7 +5,8 @@
 // Loaded with next/dynamic (ssr: false) by RichTextEditorField so it never
 // renders on the server.
 
-import { EditorContent, useEditor, type Editor } from '@tiptap/react';
+import { EditorContent, useEditor, useEditorState, type Editor } from '@tiptap/react';
+import { NodeSelection } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import {
@@ -27,7 +28,7 @@ import {
   Undo2,
 } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode, type Ref } from 'react';
-import InsertVideoDialog from './InsertVideoDialog';
+import InsertVideoDialog, { type VideoAttrs } from './InsertVideoDialog';
 import VideoEmbed from './VideoEmbed';
 
 export interface RichTextEditorProps {
@@ -52,6 +53,15 @@ function isAllowedHref(href: string) {
   } catch {
     return false;
   }
+}
+
+/** The video under a node selection, or null. */
+function selectedVideo(editor: Editor | null): VideoAttrs | null {
+  const selection = editor?.state.selection;
+  if (!(selection instanceof NodeSelection) || selection.node.type.name !== 'videoEmbed') {
+    return null;
+  }
+  return { src: selection.node.attrs.src, title: selection.node.attrs.title };
 }
 
 function ToolbarButton({
@@ -200,7 +210,8 @@ export default function RichTextEditor({
   ...aria
 }: RichTextEditorProps) {
   const [linkOpen, setLinkOpen] = useState(false);
-  const [videoOpen, setVideoOpen] = useState(false);
+  // null = closed; `editing` = the selected video's attributes (Edit video).
+  const [videoDialog, setVideoDialog] = useState<{ editing: VideoAttrs | null } | null>(null);
   const videoButtonRef = useRef<HTMLButtonElement>(null);
   const lastEmitted = useRef(value);
 
@@ -232,6 +243,13 @@ export default function RichTextEditor({
     ],
     content: value,
     editorProps: {
+      // Double-clicking a video opens it for editing.
+      handleDoubleClickOn: (view, pos, node) => {
+        if (node.type.name !== 'videoEmbed') return false;
+        view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos)));
+        setVideoDialog({ editing: { src: node.attrs.src, title: node.attrs.title } });
+        return true;
+      },
       attributes: {
         class: 'px-3 py-2 text-sm text-gray-900 dark:text-white',
         'aria-multiline': 'true',
@@ -274,6 +292,13 @@ export default function RichTextEditor({
       editor.off('update', sync);
     };
   }, [editor, placeholder]);
+
+  // The editor does not re-render on selection changes; this does, so the
+  // Video button shows when it will edit the selected video.
+  const videoSelected = useEditorState({
+    editor,
+    selector: ({ editor: current }) => selectedVideo(current) !== null,
+  });
 
   if (!editor) {
     return (
@@ -397,10 +422,10 @@ export default function RichTextEditor({
         )}
         {full && (
           <ToolbarButton
-            label="Video"
+            label={videoSelected ? 'Edit video' : 'Video'}
             buttonRef={videoButtonRef}
-            active={videoOpen}
-            onClick={() => setVideoOpen(true)}
+            active={videoSelected || videoDialog !== null}
+            onClick={() => setVideoDialog({ editing: selectedVideo(editor) })}
           >
             <CirclePlay className="h-4 w-4" aria-hidden />
           </ToolbarButton>
@@ -433,13 +458,19 @@ export default function RichTextEditor({
         editor={editor}
         className="rounded-b-md border border-gray-300 bg-white focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/30 dark:border-slate-600 dark:bg-slate-900"
       />
-      {videoOpen && (
+      {videoDialog && (
         <InsertVideoDialog
+          editing={videoDialog.editing}
           returnFocusRef={videoButtonRef}
-          onClose={() => setVideoOpen(false)}
-          onInsert={(video) => {
-            setVideoOpen(false);
-            editor.chain().focus().setVideoEmbed(video).run();
+          onClose={() => setVideoDialog(null)}
+          onSubmit={(video) => {
+            setVideoDialog(null);
+            if (videoDialog.editing) editor.chain().focus().updateAttributes('videoEmbed', video).run();
+            else editor.chain().focus().setVideoEmbed(video).run();
+          }}
+          onRemove={() => {
+            setVideoDialog(null);
+            editor.chain().focus().deleteSelection().run();
           }}
         />
       )}

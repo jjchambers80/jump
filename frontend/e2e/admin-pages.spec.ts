@@ -400,3 +400,64 @@ test('Insert video dialog closes on Escape and returns focus', async ({ page }) 
   await expect(page.getByRole('dialog', { name: 'Insert video' })).toHaveCount(0);
   await expect(videoButton).toBeFocused();
 });
+
+const SAVED_VIDEO =
+  '<p>Recap</p><iframe src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ" title="Vendor recap" class="jump-video" loading="lazy" allowfullscreen></iframe><p>After</p>';
+
+async function blockPlayers(page: Page) {
+  for (const host of ['https://www.youtube-nocookie.com/**', 'https://player.vimeo.com/**']) {
+    await page.route(host, (route) =>
+      route.fulfill({ status: 200, contentType: 'text/html', body: '<html></html>' })
+    );
+  }
+}
+
+test('a selected video can be replaced from the Video button', async ({ page }) => {
+  await blockPlayers(page);
+  const api = await mockPagesApi(page, [
+    storePage({ id: 'page-video', title: 'Video', content: SAVED_VIDEO }),
+  ]);
+  await page.goto('/admin/online-store/pages/page-video');
+
+  await page.getByTestId('editor-video').click();
+  await page.getByRole('button', { name: 'Edit video', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Edit video' });
+  const snippet = dialog.getByLabel('Replace the video by pasting a new embed snippet');
+  await expect(snippet).toHaveValue(
+    '<iframe src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ" title="Vendor recap"></iframe>'
+  );
+
+  await snippet.fill('https://vimeo.com/76979871');
+  await dialog.getByRole('button', { name: 'Save video' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByTestId('editor-video')).toHaveCount(1);
+  await expect(page.getByTestId('editor-video').locator('iframe')).toHaveAttribute(
+    'src',
+    'https://player.vimeo.com/video/76979871'
+  );
+
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page).toHaveURL(/\/admin\/online-store\/pages$/);
+  const content = String(api.calls.find((call) => call.method === 'PUT')?.body?.content);
+  expect(content).toContain('src="https://player.vimeo.com/video/76979871"');
+  expect(content).not.toContain('youtube');
+  expect(content).toContain('<p>Recap</p>');
+  expect(content).toContain('<p>After</p>');
+});
+
+test('double-clicking a video opens Edit video, which can remove it', async ({ page }) => {
+  await blockPlayers(page);
+  await mockPagesApi(page, [storePage({ id: 'page-video', title: 'Video', content: SAVED_VIDEO })]);
+  await page.goto('/admin/online-store/pages/page-video');
+
+  await page.getByTestId('editor-video').dblclick();
+  const dialog = page.getByRole('dialog', { name: 'Edit video' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Remove video' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByTestId('editor-video')).toHaveCount(0);
+  await expect(page.getByLabel('Page content')).toContainText('Recap');
+  await expect(page.getByLabel('Page content')).toContainText('After');
+  // Nothing selected any more: the button inserts again.
+  await expect(page.getByRole('button', { name: 'Video', exact: true })).toBeVisible();
+});
