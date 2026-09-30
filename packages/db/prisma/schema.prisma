@@ -498,6 +498,7 @@ model Organization {
   venues                   Venue[]
   members                  OrganizationMember[]
   contacts                 Contact[]
+  erasureSuppressions      ErasureSuppression[]
   contactComments          ContactComment[]
   domains                  OrganizationDomain[]
   people                   OrganizationPerson[]
@@ -722,6 +723,10 @@ model Contact {
   stripeCustomerId      String?                @unique // spec 011: platform-account Customer holding the applicant's saved card
   // Spec 040: "Sign out of all devices" — buyer sessions issued before this are refused.
   buyerSessionsValidAfter DateTime?
+  // Spec 040 card D: "Delete my data" is scheduled for this moment (grace period);
+  // anonymizedAt is set once ContactErasureService has scrubbed the row.
+  erasureScheduledAt      DateTime?
+  anonymizedAt            DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -738,6 +743,21 @@ model Contact {
   @@unique([organizationId, email])
   @@index([email])
   @@index([tags], type: Gin)
+  @@index([erasureScheduledAt])
+}
+
+// Spec 040 card D: an address whose owner deleted their data at this
+// organization. Salted SHA-256 only — the address itself is gone — so
+// imports and marketing can skip it without keeping it.
+model ErasureSuppression {
+  id             String   @id @default(cuid())
+  organizationId String
+  emailHash      String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, emailHash])
 }
 
 // Staff-authored notes and audit entries shown in the customer timeline.
@@ -765,6 +785,9 @@ enum ContactCommentKind {
   EMAIL_CHANGED
   PROFILE_UPDATED
   DATA_EXPORTED // spec 040 card C: "Download my data" (null author) or a staff export
+  ERASURE_SCHEDULED // spec 040 card D
+  ERASURE_CANCELLED
+  ANONYMIZED
 }
 
 // Single-use, hashed magic-link token for passwordless buyer sign-in.

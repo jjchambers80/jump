@@ -23,6 +23,7 @@ const TOKEN_TTL_MS = {
   LOGIN: 15 * 60 * 1000,
   WELCOME: 7 * 24 * 60 * 60 * 1000,
   CODE: 10 * 60 * 1000,
+  DELETE_CONFIRM: 10 * 60 * 1000, // spec 040 card D
 };
 
 export const CODE_LENGTH = 6;
@@ -92,6 +93,59 @@ class BuyerAuthService {
       },
     });
     return { rawCode, expiresAt };
+  }
+
+  /**
+   * Six-digit code that confirms an action on a signed-in account (spec 040:
+   * DELETE_CONFIRM). Bound to the contact and purpose; issuing one retires the
+   * previous live code for the same purpose.
+   * @returns {Promise<{ rawCode: string, expiresAt: Date }>}
+   */
+  async issueContactCode(contact, purpose) {
+    const ttl = TOKEN_TTL_MS[purpose];
+    if (!ttl) throw new Error(`Unknown buyer token purpose: ${purpose}`);
+    const rawCode = String(randomInt(0, 10 ** CODE_LENGTH)).padStart(CODE_LENGTH, '0');
+    const expiresAt = new Date(Date.now() + ttl);
+    await prisma.$transaction([
+      prisma.buyerLoginToken.updateMany({ where: { contactId: contact.id, purpose, usedAt: null }, data: { usedAt: new Date() } }),
+      prisma.buyerLoginToken.create({
+        data: {
+          contactId: contact.id,
+          organizationId: contact.organizationId,
+          tokenHash: hashToken(`${purpose}:${contact.id}:${rawCode}`),
+          purpose,
+          expiresAt,
+        },
+      }),
+    ]);
+    return { rawCode, expiresAt };
+  }
+
+  /**
+   * Check and spend a code from `issueContactCode`. Same lockout as sign-in
+   * codes: five wrong guesses kill it. Returns false on any failure.
+   */
+  async consumeContactCode(contactId, purpose, code) {
+    if (!isCodeShaped(code)) return false;
+    const now = new Date();
+    const token = await prisma.buyerLoginToken.findFirst({
+      where: { contactId, purpose, usedAt: null, expiresAt: { gt: now } },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, tokenHash: true, attempts: true },
+    });
+    if (!token) return false;
+    const expected = Buffer.from(token.tokenHash, 'hex');
+    const actual = Buffer.from(hashToken(`${purpose}:${contactId}:${code}`), 'hex');
+    if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
+      const attempts = token.attempts + 1;
+      await prisma.buyerLoginToken.update({
+        where: { id: token.id },
+        data: { attempts, ...(attempts >= CODE_MAX_ATTEMPTS ? { usedAt: now } : {}) },
+      });
+      return false;
+    }
+    const claimed = await prisma.buyerLoginToken.updateMany({ where: { id: token.id, usedAt: null }, data: { usedAt: now } });
+    return claimed.count === 1;
   }
 
   /**

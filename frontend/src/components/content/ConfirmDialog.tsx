@@ -11,6 +11,8 @@ interface ConfirmDialogProps {
   confirmLabel: string;
   busyLabel?: string;
   busy?: boolean;
+  /** Confirm stays disabled (e.g. until a typed confirmation matches); Cancel still works. */
+  confirmDisabled?: boolean;
   danger?: boolean;
   returnFocusRef?: RefObject<HTMLElement>;
   onClose: () => void;
@@ -24,6 +26,7 @@ export default function ConfirmDialog({
   confirmLabel,
   busyLabel = 'Working…',
   busy = false,
+  confirmDisabled = false,
   danger = false,
   returnFocusRef,
   onClose,
@@ -82,7 +85,7 @@ export default function ConfirmDialog({
             ref={confirmRef}
             type="button"
             onClick={onConfirm}
-            disabled={busy}
+            disabled={busy || confirmDisabled}
             className={`rounded-md px-4 py-2 text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
               danger
                 ? 'bg-red-600 hover:bg-red-500 focus:ring-red-500'

@@ -34,6 +34,7 @@ const PROFILE_SELECT = {
   location: true,
   emailSubscribed: true,
   accountCreatedAt: true,
+  erasureScheduledAt: true,
   organization: { select: { id: true, name: true, logoUrl: true } },
 };
 
@@ -73,6 +74,8 @@ class BuyerAccountService {
       location: contact.location,
       emailSubscribed: contact.emailSubscribed,
       pendingEmail: await this.pendingEmail(contactId),
+      // Spec 040 card D: "Delete my data" confirmed and waiting out the grace period.
+      erasureScheduledAt: contact.erasureScheduledAt,
       marketingConsentText: marketingConsentText({ organizationName: contact.organization.name }),
       organization: contact.organization,
     };

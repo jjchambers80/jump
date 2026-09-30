@@ -27,6 +27,7 @@ import applicationService from '../../services/ApplicationService.js';
 import applicantProfileService from '../../services/ApplicantProfileService.js';
 import buyerAccountService from '../../services/BuyerAccountService.js';
 import buyerDataExportService from '../../services/BuyerDataExportService.js';
+import contactErasureService from '../../services/ContactErasureService.js';
 import { validateEmailChange, validatePreferences, validateUpdateBuyerProfile } from '../validators/buyerAccountValidators.js';
 import { contactIdFromUnsubscribeToken, verifyUnsubscribeToken } from '../../utils/unsubscribeToken.js';
 import { validateSelectionBody } from '../validators/applicationValidators.js';
@@ -207,6 +208,44 @@ router.get('/me/export', requireBuyer, async (req, res, next) => {
     res.set('Content-Disposition', `attachment; filename="${buyerDataExportService.filename(data)}"`);
     res.set('Cache-Control', 'no-store');
     res.json(data);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ─── Delete my data (spec 040 card D) ─────────────────────────────────────────
+
+/** GET /buyer/me/erasure — what deleting would do, what blocks it, and any scheduled date. */
+router.get('/me/erasure', requireBuyer, async (req, res, next) => {
+  try {
+    res.json(await contactErasureService.preview(req.buyer.organizationId, req.buyer.contactId));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** POST /buyer/me/erasure/request — email a DELETE_CONFIRM code (409 ERASURE_BLOCKED with the reasons). */
+router.post('/me/erasure/request', requireBuyer, requestLimiter, async (req, res, next) => {
+  try {
+    res.status(202).json(await contactErasureService.request(req.buyer.organizationId, req.buyer.contactId));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** POST /buyer/me/erasure/confirm { code } — schedule erasure after the grace period. */
+router.post('/me/erasure/confirm', requireBuyer, verifyLimiter, async (req, res, next) => {
+  try {
+    res.json(await contactErasureService.confirm(req.buyer.organizationId, req.buyer.contactId, req.body?.code));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** DELETE /buyer/me/erasure — cancel a scheduled erasure. */
+router.delete('/me/erasure', requireBuyer, async (req, res, next) => {
+  try {
+    res.json(await contactErasureService.cancel(req.buyer.organizationId, req.buyer.contactId));
   } catch (error) {
     next(error);
   }

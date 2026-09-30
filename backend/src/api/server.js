@@ -28,6 +28,7 @@ import organizationsRouter from './routes/organizations.js';
 import signupRouter from './routes/signup.js';
 import { billingEnabled } from '../config/billing.js';
 import onboardingService from '../services/OnboardingService.js';
+import contactErasureService from '../services/ContactErasureService.js';
 import sessionService from '../services/SessionService.js';
 import venuesRouter, { orgVenuesRouter } from './routes/venues.js';
 import ordersRouter, { eventOrdersRouter } from './routes/orders.js';
@@ -258,6 +259,12 @@ if (process.env.NODE_ENV !== 'test') {
   const ONBOARDING_SWEEP_MS = Number(process.env.ONBOARDING_SWEEP_INTERVAL_MS) || 60 * 60 * 1000;
   setTimeout(() => onboardingService.sweepAbandoned().catch(() => {}), 45 * 1000).unref();
   setInterval(() => onboardingService.sweepAbandoned().catch(() => {}), ONBOARDING_SWEEP_MS).unref();
+
+  // Erasure sweep (spec 040 card D): contacts whose "Delete my data" grace
+  // period ended are anonymized; sign-in tokens a week past expiry are purged.
+  const ERASURE_SWEEP_MS = Number(process.env.ERASURE_SWEEP_INTERVAL_MS) || 60 * 60 * 1000;
+  setTimeout(() => contactErasureService.sweep().catch(() => {}), 75 * 1000).unref();
+  setInterval(() => contactErasureService.sweep().catch(() => {}), ERASURE_SWEEP_MS).unref();
 
   // Session sweep (spec 030 D): rows revoked or idle past the JWT lifetime
   // can never authenticate again and are deleted daily.

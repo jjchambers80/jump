@@ -214,6 +214,38 @@ ${manageTicketsHtml}
   }
 
   /**
+   * Plain organization-branded notice to a buyer (spec 040 card D: erasure
+   * code, scheduled, postponed, done). `code` renders the six digits large;
+   * `link` renders one button.
+   * @param {{ to: string, organization: { name?: string, logoUrl?: string|null }, subject: string, title: string, paragraphs: string[], code?: string|null, link?: { url: string, label: string }|null }} params
+   */
+  async sendBuyerNotice({ to, organization = {}, subject, title, paragraphs, code = null, link = null }) {
+    const orgName = organization.name || 'Jump';
+    const msg = {
+      to: [to],
+      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      subject,
+      html: `
+        <html>
+          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+            <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
+              ${orgLogoHtml(organization.logoUrl, orgName)}
+              <h1 style="color: #333; font-size: 22px;">${escapeHtml(title)}</h1>
+            </div>
+            <div style="padding: 20px;">
+              ${paragraphs.map((p) => `<p>${escapeHtml(p)}</p>`).join('\n              ')}
+              ${code ? `<p style="text-align: center; margin: 24px 0; font-size: 32px; font-weight: bold; letter-spacing: 8px; font-family: 'SF Mono', Menlo, Consolas, monospace;">${escapeHtml(code.slice(0, 3))} ${escapeHtml(code.slice(3))}</p>` : ''}
+              ${link ? `<div style="text-align: center; margin: 32px 0;"><a href="${link.url}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 16px; font-weight: bold; padding: 14px 32px; border-radius: 8px; text-decoration: none;">${escapeHtml(link.label)}</a></div>` : ''}
+            </div>
+          </body>
+        </html>
+      `,
+    };
+    await deliver(msg);
+    logger.info('Buyer notice sent', { event: 'buyer_notice_sent', subject });
+  }
+
+  /**
    * Buyer email change (spec 040): confirmation link to the NEW address.
    * Nothing changes until the link is used.
    * @param {{ to: string, currentEmail: string, confirmUrl: string, organization: { name?: string, logoUrl?: string|null } }} params

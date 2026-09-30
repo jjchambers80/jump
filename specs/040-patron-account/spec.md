@@ -1,6 +1,6 @@
 # Spec 040 — Patron "My account"
 
-**Status**: Proposed (2026-09-29). Not implemented.
+**Status**: Implemented (2026-09-30): 040A #251, 040B #253, 040C #254, 040D (erasure). See `docs/wiki/features/patron-account.md`.
 **Source**: research into buyer accounts on Shopify (new customer accounts), Eventbrite, Ticketmaster, AXS, DICE, Tixr and Etix, plus GDPR / UK GDPR, CCPA/CPRA, CAN-SPAM and the 2024 Gmail/Yahoo bulk-sender rules; assessed against what Jump already ships for buyer accounts (spec 007, spec 031) and the privacy design in spec 023 (LR-12, LR-13, §8.3, §8.4).
 **Plan**: [plan.md](./plan.md)
 
@@ -58,7 +58,7 @@ The organizer is the **controller** of its buyers' data; Jump is its **processor
   - open or approved applications that will be withdrawn;
   - RSVPs that will be cancelled;
   - what is kept: order, payment, refund and consent records "as required by law", attached to an anonymous record.
-- **PA-13** Hard stops (decision §5): a `PENDING` order, an application whose payment is `PROCESSING` or payment-due, or an open refund. The preview explains each and the request cannot proceed until they clear.
+- **PA-13** Hard stops (decision §5): a `PENDING` order, an application whose payment is `PROCESSING`, an open (`PENDING`) refund, or an **APPROVED** application (as built: an approved vendor holds a place, and possibly a paid booth, that the organizer cancels — releasing booths and capacity is organizer money logic this spec does not touch). The preview explains each and the request cannot proceed until they clear.
 - **PA-14** The patron ticks a confirmation box, then enters a code emailed to them (`BuyerLoginToken` purpose `DELETE_CONFIRM`, spec 031 code UX). Deletion is then **scheduled** for `ERASURE_GRACE_DAYS` (default 7); an email confirms with a cancel link and the account shows a banner with **Cancel deletion**. The account stays fully usable during the grace period.
 - **PA-15** When the grace period ends, a sweep re-checks the hard stops (if one appeared, it postpones and emails), then in order: voids the upcoming tickets and releases their tier and add-on capacity (no `Refund` row), withdraws open applications (`withdrawReason: 'erasure'`), cancels RSVPs, and **anonymizes** the Contact per spec 023 §8.4. A final email goes to the address captured before the scrub.
 - **PA-16** Anonymization (spec 023 §8.4): email → `deleted-<id8>@anonymized.invalid`; `firstName` → `Deleted`, `lastName` → `User`; `phone`, `location`, `note` → null, `tags` → `[]`; `emailSubscribed = false`; the Stripe Customer is deleted and `stripeCustomerId` nulled; `BuyerLoginToken` rows deleted; `ApplicantProfile` text scrubbed; free-text `ApplicationAnswer`s scrubbed; profile and answer images disabled then purged; `Ticket.qrCodeJwt` nulled; `anonymizedAt` set. Orders, tickets, payments, refunds, applications, decisions and `LegalAcceptance` rows stay linked to the tombstone (spec 023 §8.3, Gotcha 17).

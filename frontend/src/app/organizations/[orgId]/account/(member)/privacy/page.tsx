@@ -1,6 +1,6 @@
 // Privacy (spec 040): what this organization holds about the buyer and the
 // buyer's rights over it. Card C: "Download my data" (GDPR Art. 15 / 20).
-// Card D adds "Delete my data" below.
+// Card D: "Delete my data" (DeleteDataCard).
 'use client';
 
 import { useState } from 'react';
@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { Download } from 'lucide-react';
 import { LEGAL_PAGES_ENABLED, LEGAL_PATHS } from '@/lib/legal';
 import { useAccount } from '@/components/account/AccountContext';
+import DeleteDataCard from '@/components/account/DeleteDataCard';
 
 const CARD = 'rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-200 dark:bg-slate-800 dark:ring-slate-700 sm:p-6';
 
@@ -106,6 +107,7 @@ export default function AccountPrivacyPage() {
       </section>
 
       <DownloadCard />
+      <DeleteDataCard />
     </div>
   );
 }
