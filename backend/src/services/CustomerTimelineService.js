@@ -30,12 +30,14 @@ export function buildTimeline({ contact, comments = [], orders = [], application
   const items = [];
 
   for (const comment of comments) {
-    const type = comment.kind === 'EMAIL_CHANGED' ? 'EMAIL_CHANGED' : 'COMMENT';
+    // EMAIL_CHANGED / PROFILE_UPDATED are audit lines; a null author is the customer (spec 040).
+    const type = ['EMAIL_CHANGED', 'PROFILE_UPDATED'].includes(comment.kind) ? comment.kind : 'COMMENT';
     items.push({
       id: eventId(type, comment.id),
       sourceId: comment.id,
       type,
       body: comment.body,
+      ...(type !== 'COMMENT' && { text: comment.body }),
       createdAt: iso(comment.createdAt),
       author: comment.author || null,
     });

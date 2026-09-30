@@ -241,13 +241,16 @@ class BuyerAuthService {
    * Mint a buyer session JWT.
    * @param {{ contactId: string, organizationId: string, email: string }} buyer
    */
-  signSession(buyer) {
+  signSession(buyer, { issuedAt = null } = {}) {
     return jwt.sign(
       {
         sub: buyer.contactId,
         org: buyer.organizationId,
         email: buyer.email,
         typ: BUYER_SESSION_TYP,
+        // Spec 040: a session minted right after "sign out of all devices" must
+        // not fall in the same second as the cut-off, so round `iat` up past it.
+        ...(issuedAt && { iat: Math.ceil(issuedAt.getTime() / 1000) }),
       },
       process.env.AUTH_SECRET,
       { algorithm: 'HS256', expiresIn: SESSION_TTL }
@@ -269,7 +272,26 @@ class BuyerAuthService {
     if (decoded.typ !== BUYER_SESSION_TYP || !decoded.sub || !decoded.org) {
       throw new AuthenticationError('Not a buyer session');
     }
-    return { contactId: decoded.sub, organizationId: decoded.org, email: decoded.email };
+    return { contactId: decoded.sub, organizationId: decoded.org, email: decoded.email, issuedAt: decoded.iat ?? null };
+  }
+
+  /**
+   * Refuse a session issued before the buyer's "sign out of all devices"
+   * (spec 040). One indexed read per buyer request.
+   * @param {{ contactId: string, issuedAt: number|null }} buyer
+   */
+  async assertSessionCurrent(buyer) {
+    const contact = await prisma.contact.findUnique({
+      where: { id: buyer.contactId },
+      select: { buyerSessionsValidAfter: true },
+    });
+    if (!contact) throw new AuthenticationError('Account not found');
+    const cutoff = contact.buyerSessionsValidAfter?.getTime();
+    if (cutoff && (!buyer.issuedAt || buyer.issuedAt * 1000 < cutoff)) {
+      const error = new AuthenticationError('This session was signed out');
+      error.code = 'SESSION_REVOKED';
+      throw error;
+    }
   }
 
   /**

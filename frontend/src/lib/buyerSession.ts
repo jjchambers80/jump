@@ -84,3 +84,21 @@ export function clientIpFrom(req: Request): string | null {
   if (xff) return xff.split(',')[0].trim() || null;
   return req.headers.get('x-real-ip');
 }
+
+/**
+ * Forward one signed-in buyer call and answer with the backend's status and
+ * body (spec 040). No cookie → 401 without a backend round trip; a 401 from
+ * the backend (expired, or revoked by "sign out of all devices") clears the
+ * cookie so the account page falls back to the sign-in form.
+ */
+export async function proxyBuyer(
+  path: string,
+  init: { method?: string; body?: unknown } = {}
+): Promise<NextResponse> {
+  const token = getBuyerToken();
+  if (!token) return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
+  const { status, body } = await backendBuyerFetch(path, { ...init, token });
+  const res = NextResponse.json(body ?? {}, { status });
+  if (status === 401) clearBuyerCookie(res);
+  return res;
+}

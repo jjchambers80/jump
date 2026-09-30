@@ -720,6 +720,8 @@ model Contact {
   phone                 String?
   tags                  String[]               @default([])
   stripeCustomerId      String?                @unique // spec 011: platform-account Customer holding the applicant's saved card
+  // Spec 040: "Sign out of all devices" — buyer sessions issued before this are refused.
+  buyerSessionsValidAfter DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -744,14 +746,14 @@ model ContactComment {
   id             String             @id @default(cuid())
   contactId      String
   organizationId String
-  authorUserId   String
+  authorUserId   String? // null = the customer, from their own account (spec 040)
   kind           ContactCommentKind @default(COMMENT)
   body           String
   createdAt      DateTime           @default(now())
 
   contact      Contact      @relation(fields: [contactId], references: [id], onDelete: Cascade)
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  author       User         @relation(fields: [authorUserId], references: [id])
+  author       User?        @relation(fields: [authorUserId], references: [id], onDelete: Restrict)
 
   @@index([contactId, createdAt])
   @@index([organizationId, createdAt])
@@ -761,6 +763,7 @@ model ContactComment {
 enum ContactCommentKind {
   COMMENT
   EMAIL_CHANGED
+  PROFILE_UPDATED
 }
 
 // Single-use, hashed magic-link token for passwordless buyer sign-in.
@@ -775,6 +778,7 @@ model BuyerLoginToken {
   expiresAt      DateTime
   usedAt         DateTime?
   attempts       Int               @default(0) // failed guesses at a CODE token (spec 031); dead after 5
+  payload        Json? // purpose data, e.g. EMAIL_CHANGE { newEmail } (spec 040)
   createdAt      DateTime          @default(now())
 
   contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
@@ -1121,6 +1125,8 @@ enum BuyerTokenPurpose {
   WELCOME
   LOGIN
   CODE
+  EMAIL_CHANGE // spec 040: link to the new address; payload { newEmail }
+  DELETE_CONFIRM // spec 040 card D: code that confirms "Delete my data"
 }
 
 // Spec 031: buyer sign-in method per organization.
@@ -1428,6 +1434,7 @@ enum EmailSubscribedSource {
   RSVP
   ADMIN
   IMPORT
+  ACCOUNT // spec 040: the buyer's own Preferences page
 }
 
 // ─── Legal acceptances (spec 023 §8.1, built by spec 024 phase 3) ───────────

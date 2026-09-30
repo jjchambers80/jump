@@ -110,15 +110,16 @@ class ContactOptInService {
 
   /**
    * Staff edit of the marketing flag (Customers page): provenance ADMIN,
-   * `emailUnsubscribedAt` when turned off.
+   * `emailUnsubscribedAt` when turned off. The buyer's own Preferences page
+   * and the one-click unsubscribe link pass `source: 'ACCOUNT'` (spec 040).
    */
-  marketingChangeData(contact, emailSubscribed) {
+  marketingChangeData(contact, emailSubscribed, source = 'ADMIN') {
     if (emailSubscribed === contact.emailSubscribed) return {};
     return emailSubscribed
       ? {
           emailSubscribed: true,
           emailSubscribedAt: new Date(),
-          emailSubscribedSource: 'ADMIN',
+          emailSubscribedSource: source,
           emailUnsubscribedAt: null,
         }
       : { emailSubscribed: false, emailUnsubscribedAt: new Date() };

@@ -1,5 +1,6 @@
 // Order history for this organization (spec 040): ticket orders link to the
-// order page, application orders (spec 024) to the Applications section.
+// order page, application orders (spec 024) to the Applications section;
+// paid orders get a printable receipt.
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -7,6 +8,9 @@ import Link from 'next/link';
 import { ChevronRight, Receipt } from 'lucide-react';
 import { formatEventDate } from '@/lib/eventTime';
 import { useAccount } from '@/components/account/AccountContext';
+
+/** Orders that took money (backend `PAID_ORDER_STATUSES`): the ones with a receipt. */
+const PAID_STATUSES = ['COMPLETED', 'PARTIALLY_REFUNDED', 'REFUNDED'];
 
 interface OrderSummary {
   id: string;
@@ -60,11 +64,12 @@ export default function AccountOrdersPage() {
           {orders.map((o) => {
             const isApplication = o.kind === 'APPLICATION' && o.applicationId;
             const target = isApplication ? href('applications') : `/orders/${o.id}`;
+            const paid = PAID_STATUSES.includes(o.status);
             return (
-              <li key={o.id} data-testid="account-order" data-kind={o.kind ?? 'TICKET'}>
+              <li key={o.id} data-testid="account-order" data-kind={o.kind ?? 'TICKET'} className="flex items-stretch">
                 <Link
                   href={target}
-                  className="group flex items-center justify-between gap-4 p-4 outline-none hover:bg-gray-50 focus-visible:bg-gray-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand dark:hover:bg-slate-700/40 dark:focus-visible:bg-slate-700/40 sm:px-5"
+                  className="group flex min-w-0 flex-1 items-center justify-between gap-4 p-4 outline-none hover:bg-gray-50 focus-visible:bg-gray-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand dark:hover:bg-slate-700/40 dark:focus-visible:bg-slate-700/40 sm:px-5"
                 >
                   <span className="min-w-0">
                     <span className="block font-semibold text-gray-900 dark:text-slate-100">{o.eventName || 'Event'}</span>
@@ -85,6 +90,15 @@ export default function AccountOrdersPage() {
                     <span className="sr-only">{isApplication ? 'View application' : 'View order'}</span>
                   </span>
                 </Link>
+                {paid && (
+                  <Link
+                    href={href(`orders/${o.id}/receipt`)}
+                    aria-label={`Receipt for ${o.orderRef}`}
+                    className="flex shrink-0 items-center border-l border-gray-200 px-4 text-sm font-semibold text-brand-link outline-none hover:bg-gray-50 hover:underline focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand dark:border-slate-700 dark:hover:bg-slate-700/40"
+                  >
+                    Receipt
+                  </Link>
+                )}
               </li>
             );
           })}

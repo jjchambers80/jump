@@ -20,6 +20,7 @@ import {
   type AccountContextValue,
   type AccountOrganization,
   type AccountProfile,
+  type AccountRsvp,
 } from '@/components/account/AccountContext';
 import type { ApplicantApplication } from '@/lib/applications';
 
@@ -36,12 +37,19 @@ export default function AccountLayout({ children, params }: { children: React.Re
   const [orgError, setOrgError] = useState<string | null>(null);
   const [profile, setProfile] = useState<AccountProfile | null>(null);
   const [applications, setApplications] = useState<ApplicantApplication[] | null>(null);
+  const [rsvps, setRsvps] = useState<AccountRsvp[] | null>(null);
   const [loading, setLoading] = useState(true);
 
   const reloadApplications = useCallback(async () => {
     const res = await fetch('/api/buyer/me/applications', { cache: 'no-store' }).catch(() => null);
     const body = res?.ok ? await res.json().catch(() => null) : null;
     setApplications(body?.data ?? []);
+  }, []);
+
+  const reloadRsvps = useCallback(async () => {
+    const res = await fetch('/api/buyer/me/rsvps', { cache: 'no-store' }).catch(() => null);
+    const body = res?.ok ? await res.json().catch(() => null) : null;
+    setRsvps(body?.data ?? []);
   }, []);
 
   const loadSession = useCallback(async () => {
@@ -61,7 +69,8 @@ export default function AccountLayout({ children, params }: { children: React.Re
     }
     setProfile(data);
     void reloadApplications();
-  }, [params.orgId, router, reloadApplications]);
+    void reloadRsvps();
+  }, [params.orgId, router, reloadApplications, reloadRsvps]);
 
   useEffect(() => {
     let cancelled = false;
@@ -97,6 +106,7 @@ export default function AccountLayout({ children, params }: { children: React.Re
     await fetch('/api/buyer/logout', { method: 'POST' });
     setProfile(null);
     setApplications(null);
+    setRsvps(null);
   };
 
   const context = useMemo<AccountContextValue | null>(
@@ -105,13 +115,16 @@ export default function AccountLayout({ children, params }: { children: React.Re
         ? {
             org,
             profile,
+            setProfile,
             applications,
             reloadApplications,
+            rsvps,
+            reloadRsvps,
             href: (section = '') =>
               storefrontHref(`/organizations/${org.id}/account${section ? `/${section}` : ''}`, org.id),
           }
         : null,
-    [org, profile, applications, reloadApplications]
+    [org, profile, applications, reloadApplications, rsvps, reloadRsvps]
   );
 
   if (loading) {
@@ -134,9 +147,12 @@ export default function AccountLayout({ children, params }: { children: React.Re
   }
 
   return (
-    <BrandScope color={org.brandColor} themeMode={org.themeMode} className="min-h-screen bg-gray-50 dark:bg-slate-900">
-      <OrganizationHeader organization={{ id: org.id, name: org.name, logoUrl: org.logoUrl }} />
-      <main className="mx-auto max-w-5xl px-4 pb-16 pt-4 sm:pt-8">
+    <BrandScope color={org.brandColor} themeMode={org.themeMode} className="min-h-screen bg-gray-50 dark:bg-slate-900 print:bg-white">
+      {/* Receipts print on their own: header, greeting and nav are screen-only. */}
+      <div className="print:hidden">
+        <OrganizationHeader organization={{ id: org.id, name: org.name, logoUrl: org.logoUrl }} />
+      </div>
+      <main className="mx-auto max-w-5xl px-4 pb-16 pt-4 sm:pt-8 print:max-w-none print:p-0">
         {!context ? (
           <div className="py-6 sm:py-10">
             <h1 className="mb-2 text-center text-2xl font-bold tracking-tight text-gray-900 dark:text-slate-100 sm:text-3xl">
@@ -147,7 +163,7 @@ export default function AccountLayout({ children, params }: { children: React.Re
           </div>
         ) : (
           <AccountContext.Provider value={context}>
-            <div className="mb-6 flex flex-col gap-1 sm:mb-8">
+            <div className="mb-6 flex flex-col gap-1 sm:mb-8 print:hidden">
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-link">Your account</p>
               <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-slate-100 sm:text-3xl">
                 {context.profile.firstName ? `Hi, ${context.profile.firstName}` : `Your account with ${org.name}`}
@@ -160,10 +176,10 @@ export default function AccountLayout({ children, params }: { children: React.Re
               </p>
             </div>
             <div className="lg:grid lg:grid-cols-[12.5rem_minmax(0,1fr)] lg:gap-10">
-              <div className="lg:sticky lg:top-6 lg:self-start">
+              <div className="lg:sticky lg:top-6 lg:self-start print:hidden">
                 <AccountNav />
               </div>
-              <div className="mt-6 min-w-0 lg:mt-0">{children}</div>
+              <div className="mt-6 min-w-0 lg:mt-0 print:col-span-2 print:mt-0">{children}</div>
             </div>
           </AccountContext.Provider>
         )}

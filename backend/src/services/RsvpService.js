@@ -143,6 +143,19 @@ class RsvpService {
     return { status: 'ok' };
   }
 
+  /** Cancel from the buyer account (spec 040): same effect as the emailed token, keyed by id + owner. */
+  async cancelForContact(contactId, rsvpId) {
+    const existing = await prisma.eventRsvp.findFirst({ where: { id: rsvpId, contactId } });
+    if (!existing) throw new NotFoundError('RSVP not found');
+    if (existing.status === 'GOING') {
+      await prisma.eventRsvp.update({
+        where: { id: rsvpId },
+        data: { status: 'CANCELLED', cancelledAt: new Date() },
+      });
+    }
+    return { status: 'ok' };
+  }
+
   async headcount(eventId, db = prisma) {
     const result = await db.eventRsvp.aggregate({
       where: { eventId, status: 'GOING' },

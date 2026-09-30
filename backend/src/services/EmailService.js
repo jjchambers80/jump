@@ -214,6 +214,72 @@ ${manageTicketsHtml}
   }
 
   /**
+   * Buyer email change (spec 040): confirmation link to the NEW address.
+   * Nothing changes until the link is used.
+   * @param {{ to: string, currentEmail: string, confirmUrl: string, organization: { name?: string, logoUrl?: string|null } }} params
+   */
+  async sendBuyerEmailChangeConfirmation({ to, currentEmail, confirmUrl, organization = {} }) {
+    const orgName = organization.name || 'Jump';
+    const msg = {
+      to: [to],
+      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      subject: `Confirm your new email address for ${orgName}`,
+      html: `
+        <html>
+          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+            <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
+              ${orgLogoHtml(organization.logoUrl, orgName)}
+              <h1 style="color: #333; font-size: 22px;">Confirm your new email</h1>
+            </div>
+            <div style="padding: 20px;">
+              <p>You asked to change the email address on your ${escapeHtml(orgName)} account from <strong>${escapeHtml(currentEmail)}</strong> to <strong>${escapeHtml(to)}</strong>.</p>
+              <div style="text-align: center; margin: 32px 0;">
+                <a href="${confirmUrl}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 16px; font-weight: bold; padding: 14px 32px; border-radius: 8px; text-decoration: none;">Confirm email address</a>
+              </div>
+              <p style="color: #666; font-size: 13px;">This link works once and expires in 1 hour. If you did not request this change, you can ignore this email — your email address stays the same until the link is used.</p>
+            </div>
+          </body>
+        </html>
+      `,
+    };
+    await deliver(msg);
+    logger.info('Buyer email change confirmation sent', { event: 'buyer_email_change_sent' });
+  }
+
+  /**
+   * Buyer email change (spec 040): notice to the OLD address. Sent when the
+   * change is requested and again when it completes.
+   * @param {{ to: string, newEmail: string, completed: boolean, organization: { name?: string, logoUrl?: string|null } }} params
+   */
+  async sendBuyerEmailChangeNotice({ to, newEmail, completed, organization = {} }) {
+    const orgName = organization.name || 'Jump';
+    const body = completed
+      ? `The email address on your ${escapeHtml(orgName)} account was changed from <strong>${escapeHtml(to)}</strong> to <strong>${escapeHtml(newEmail)}</strong>. Sign-in links and ticket emails now go to the new address.`
+      : `Someone signed in to your ${escapeHtml(orgName)} account asked to change its email address to <strong>${escapeHtml(newEmail)}</strong>. Nothing changes unless that address confirms.`;
+    const msg = {
+      to: [to],
+      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      subject: completed ? `Your ${orgName} email address was changed` : `Email change requested for your ${orgName} account`,
+      html: `
+        <html>
+          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+            <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
+              ${orgLogoHtml(organization.logoUrl, orgName)}
+              <h1 style="color: #333; font-size: 22px;">${completed ? 'Email address changed' : 'Email change requested'}</h1>
+            </div>
+            <div style="padding: 20px;">
+              <p>${body}</p>
+              <p style="color: #666; font-size: 13px;">If this was not you, contact ${escapeHtml(orgName)} right away.</p>
+            </div>
+          </body>
+        </html>
+      `,
+    };
+    await deliver(msg);
+    logger.info('Buyer email change notice sent', { event: 'buyer_email_change_notice_sent', completed });
+  }
+
+  /**
    * Confirmation link for a staff account email change (spec 030). Sent to
    * the NEW address; nothing changes until it is used.
    * @param {{ to: string, currentEmail: string, confirmUrl: string }} params
