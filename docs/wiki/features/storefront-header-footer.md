@@ -11,7 +11,7 @@ The public storefront chrome (`OrganizationHeader` and `StorefrontFooter`) is mi
 
 | File | Purpose |
 |------|---------|
-| `frontend/src/components/OrganizationHeader.tsx` | One-row header: identity (logo + name) left; main menu, sign-in and menu button right. Skip link |
+| `frontend/src/components/OrganizationHeader.tsx` | One-row header: identity (logo, or the name when there is no logo) left; main menu, sign-in and menu button right. Skip link |
 | `frontend/src/components/storefront/StorefrontNav.tsx` | Desktop menu row with dropdowns; mobile drawer (right side, modal, Tab trap) |
 | `frontend/src/components/storefront/StorefrontFooter.tsx` | Footer menu: grouped columns, then one row with `© year name` and the plain links |
 | `frontend/src/components/storefront/StorefrontShell.tsx`, `frontend/src/app/organizations/[orgId]/OrganizationStorefront.tsx` | Loading skeletons mirror the new header (no white bar) |
@@ -24,11 +24,11 @@ The public storefront chrome (`OrganizationHeader` and `StorefrontFooter`) is mi
 
 | Breakpoint | Left | Right |
 |------------|------|-------|
-| < `sm` | logo (40 px, 56 px on the org page) + name | person icon (label is `sr-only`), hamburger |
-| `sm`–`md` | logo (48 / 64 px) + name | "Sign in" / "Account" with icon, hamburger |
-| ≥ `md` | logo + name | main menu inline, then "Sign in" / "Account" |
+| < `sm` | logo (40 px, 56 px on the org page), or name without a logo | person icon (label is `sr-only`), hamburger |
+| `sm`–`md` | logo (48 / 64 px), or name | "Sign in" / "Account" with icon, hamburger |
+| ≥ `md` | logo, or name | main menu inline, then "Sign in" / "Account" |
 
-The name is the page `<h1>` on the organization page (`as="h1"`, `text-xl sm:text-2xl`) and a link to the organization page elsewhere (`text-base sm:text-lg`). The current page in the desktop menu is marked with `aria-current="page"`, the brand link colour and an underline, so the state never depends on colour alone.
+With a logo the name is `sr-only`: the logo alone is painted, while the `<h1>` and the link's accessible name keep the organization name. Without a logo the name is the visible identity. The name is the page `<h1>` on the organization page (`as="h1"`, `text-xl sm:text-2xl`) and a link to the organization page elsewhere (`text-base sm:text-lg`). The current page in the desktop menu is marked with `aria-current="page"`, the brand link colour and an underline, so the state never depends on colour alone.
 
 ### Skip link
 

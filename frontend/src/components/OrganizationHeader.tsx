@@ -56,7 +56,7 @@ function skipToContent(event: MouseEvent<HTMLAnchorElement>) {
 
 /**
  * Organization identity row at the top of every public storefront page:
- * logo + name on the left, main menu and sign-in on the right. Minimal on
+ * logo (or the name when there is no logo) on the left, main menu and sign-in on the right. Minimal on
  * purpose: no background or border of its own, it sits on the page surface.
  */
 export default function OrganizationHeader({
@@ -80,9 +80,12 @@ export default function OrganizationHeader({
   const logoSrc = organization.logoUrl ? resolveAssetUrl(organization.logoUrl) : null;
   const href = organization.id ? `/organizations/${encodeURIComponent(orgSlug)}` : null;
   const isHeading = as === 'h1';
-  const nameClass = `min-w-0 break-words font-semibold tracking-tight text-gray-900 dark:text-slate-100 ${
-    isHeading ? 'text-xl sm:text-2xl' : 'text-base sm:text-lg'
-  }`;
+  // With a logo the name is read by screen readers only; without one it is the visible identity.
+  const nameClass = logoSrc
+    ? 'sr-only'
+    : `min-w-0 break-words font-semibold tracking-tight text-gray-900 dark:text-slate-100 ${
+        isHeading ? 'text-xl sm:text-2xl' : 'text-base sm:text-lg'
+      }`;
   const focusRing =
     'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-transparent';
   const hasNav = navItems.length > 0 && !!organization.id;
