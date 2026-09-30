@@ -5,6 +5,7 @@
 // language (blurred poster, date tile, venue block) with a back link.
 // Children receive the event once loaded.
 
+import type { StorefrontLogo } from '@/components/OrganizationHeader';
 import Link from 'next/link';
 import { ReactNode, useEffect, useState } from 'react';
 import { ArrowLeft, CalendarDays, MapPin } from 'lucide-react';
@@ -28,6 +29,7 @@ export interface ApplyEvent {
   organizationId?: string | null;
   organizationName?: string | null;
   organizationLogoUrl?: string | null;
+  organizationStorefrontLogo?: StorefrontLogo | null;
   organizationBrandColor?: string | null;
   organizationThemeMode?: ThemeMode | null;
   organizationSignInLinks?: boolean;
@@ -121,7 +123,7 @@ export default function ApplyShell({ eventId, title, kicker = 'Get involved', wi
       <>
       {event.organizationName && (
         <OrganizationHeader
-          organization={{ id: event.organizationId, name: event.organizationName, logoUrl: event.organizationLogoUrl }}
+          organization={{ id: event.organizationId, name: event.organizationName, logoUrl: event.organizationLogoUrl, storefrontLogo: event.organizationStorefrontLogo }}
         />
       )}
       {/* Hero: the event this application belongs to */}

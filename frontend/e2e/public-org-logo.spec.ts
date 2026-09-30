@@ -188,6 +188,39 @@ test.describe('public organization logo header', () => {
     expect((await header.boundingBox())!.height).toBe(before);
   });
 
+  test('pages outside the theme frame use the theme logo widths from their payload', async ({ page }) => {
+    const future = new Date();
+    future.setFullYear(future.getFullYear() + 1);
+    await page.route(`${API}/events/ev-widths`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'ev-widths',
+          name: 'Widths Show',
+          description: '<p>Fixture</p>',
+          date: future.toISOString(),
+          taxRate: 0,
+          organizationId: 'org-widths',
+          organizationName: 'Logo Test Org',
+          organizationLogoUrl: svgLogo(200, 200, 'navy'),
+          organizationStorefrontLogo: { url: null, desktopWidth: 180, mobileWidth: 110 },
+          organizationBrandColor: null,
+          organizationThemeMode: 'LIGHT',
+          organizationSignInLinks: false,
+          venue: { id: 'v1', name: 'Hall', address: '1 St', timezone: 'America/New_York' },
+          priceTiers: [],
+        }),
+      })
+    );
+    await page.goto('/events/ev-widths');
+    const box = page.getByTestId('organization-header').getByTestId('logo-box');
+    await expect(box).toBeVisible();
+    expect(Math.round((await box.boundingBox())!.width)).toBe(110);
+    await page.setViewportSize(DESKTOP);
+    await expect.poll(async () => Math.round((await box.boundingBox())!.width)).toBe(180);
+  });
+
   test('only one accessible logo image is exposed', async ({ page }) => {
     await mockOrg(page, 'org-a11y', svgLogo(400, 100, 'teal'));
     await page.goto('/organizations/org-a11y');

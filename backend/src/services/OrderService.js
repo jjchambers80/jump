@@ -3,6 +3,7 @@
 // Per FR-023, FR-024, FR-052, FR-053, FR-054, contracts/api.yaml
 
 import { prisma } from '@jump/db';
+import { storefrontLogoFor } from './storefrontLogo.js';
 import { randomBytes } from 'crypto';
 import stripe from '../config/stripe.js';
 import logger from '../utils/logger.js';
@@ -534,7 +535,7 @@ class OrderService {
                 name: true,
                 address: true,
                 timezone: true,
-                organization: { select: { id: true, name: true, logoUrl: true, brandColor: true, themeMode: true } },
+                organization: { select: { id: true, name: true, logoUrl: true, brandColor: true, themeMode: true, themesEnabled: true } },
               },
             },
           },
@@ -730,7 +731,7 @@ class OrderService {
                 name: true,
                 address: true,
                 timezone: true,
-                organization: { select: { id: true, name: true, logoUrl: true, brandColor: true, themeMode: true } },
+                organization: { select: { id: true, name: true, logoUrl: true, brandColor: true, themeMode: true, themesEnabled: true } },
               },
             },
           },
@@ -1209,6 +1210,8 @@ class OrderService {
         organizationId: order.event.venue?.organization?.id || null,
         organizationName: order.event.venue?.organization?.name || null,
         organizationLogoUrl: order.event.venue?.organization?.logoUrl || null,
+        // Theme logo image + widths: the confirmation header matches the themed pages.
+        organizationStorefrontLogo: await storefrontLogoFor(order.event.venue?.organization),
         organizationBrandColor: order.event.venue?.organization?.brandColor || null,
         organizationThemeMode: order.event.venue?.organization?.themeMode || 'SYSTEM',
         venue: order.event.venue

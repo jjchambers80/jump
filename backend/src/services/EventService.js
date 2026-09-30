@@ -3,6 +3,7 @@
 // Per FR-012, FR-013, FR-050
 
 import { prisma } from '@jump/db';
+import { storefrontLogoFor } from './storefrontLogo.js';
 import { NotFoundError, ValidationError, ConflictError } from '../middleware/errorHandler.js';
 import logger from '../utils/logger.js';
 import { formatEventSummary } from '../utils/eventSummary.js';
@@ -564,7 +565,7 @@ class EventService {
   async getEventById(identifier) {
     const event = await findByPublicIdentifier(prisma.event, identifier, {
       include: {
-        venue: { include: { organization: { select: { id: true, slug: true, name: true, logoUrl: true, brandColor: true, themeMode: true, taxInclusivePricing: true, buyerSignInLinks: true } } } },
+        venue: { include: { organization: { select: { id: true, slug: true, name: true, logoUrl: true, brandColor: true, themeMode: true, taxInclusivePricing: true, buyerSignInLinks: true, themesEnabled: true } } } },
         priceTiers: { orderBy: { displayOrder: 'asc' } },
         // Add-ons a ticket checkout may offer (spec 012); the storefront picks
         // per cart tier via `allTiers` / `priceTierIds`.
@@ -584,7 +585,10 @@ class EventService {
       const { headcount } = await rsvpService.headcount(event.id);
       event.rsvpHeadcount = headcount;
     }
-    return this._formatEventDetail(event, { publicView: true });
+    const detail = this._formatEventDetail(event, { publicView: true });
+    // Theme logo image + widths, so the header here matches the themed pages.
+    detail.organizationStorefrontLogo = await storefrontLogoFor(event.venue?.organization);
+    return detail;
   }
 
   /** Canonical public route data; intentionally bypasses the private-store gate. */

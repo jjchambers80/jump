@@ -26,7 +26,7 @@ export default function TokenPageShell({ orgId, children }: { orgId: string; chi
 
   return (
     <BrandScope color={org?.brandColor} themeMode={org?.themeMode} className="min-h-screen bg-gray-50 dark:bg-slate-900">
-      {org && <OrganizationHeader organization={{ id: org.id, name: org.name, logoUrl: org.logoUrl }} />}
+      {org && <OrganizationHeader organization={{ id: org.id, name: org.name, logoUrl: org.logoUrl, storefrontLogo: org.storefrontLogo }} />}
       <main className="flex justify-center px-4 py-12 sm:py-20">
         <div className="w-full max-w-md rounded-2xl bg-white p-6 text-center shadow-sm ring-1 ring-gray-200 dark:bg-slate-800 dark:ring-slate-700 sm:p-8">
           {children}

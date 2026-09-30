@@ -5,6 +5,7 @@
 // Also supports direct order fetch via GET /orders/:orderId with session params
 // Per FR-043, T083
 
+import type { StorefrontLogo } from '@/components/OrganizationHeader';
 import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -50,6 +51,7 @@ interface OrderDetail {
     organizationId?: string | null;
     organizationName?: string | null;
     organizationLogoUrl?: string | null;
+    organizationStorefrontLogo?: StorefrontLogo | null;
     organizationBrandColor?: string | null;
     organizationThemeMode?: ThemeMode | null;
     venue: {
@@ -258,6 +260,7 @@ function ConfirmationContent() {
             id: order.event.organizationId,
             name: order.event.organizationName,
             logoUrl: order.event.organizationLogoUrl,
+            storefrontLogo: order.event.organizationStorefrontLogo,
           }}
         />
       )}
