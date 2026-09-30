@@ -72,6 +72,8 @@ test.describe('public organization logo header', () => {
     expect(Math.round(headerDims.width)).toBe(DESKTOP.width);
     expect(Math.round(boxDims.width)).toBe(64);
     await expect(box).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    // Logo only: the name stays in the accessibility tree but is not painted.
+    await expect(header.getByRole('heading', { name: 'Logo Test Org', level: 1 })).toHaveClass(/sr-only/);
     await expect(header.getByRole('img', { name: 'Logo Test Org logo' })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth === document.documentElement.clientWidth)).toBe(true);
   });
@@ -91,6 +93,7 @@ test.describe('public organization logo header', () => {
 
     const header = page.getByTestId('organization-header');
     await expect(header.getByRole('heading', { name: 'Logo Test Org', level: 1 })).toBeVisible();
+    await expect(header.getByRole('heading', { name: 'Logo Test Org', level: 1 })).not.toHaveClass(/sr-only/);
     await expect(header.getByTestId('logo-box')).toHaveCount(0);
   });
 

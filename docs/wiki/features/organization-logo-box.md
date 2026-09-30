@@ -5,7 +5,7 @@
 
 ## Overview
 
-Every public storefront page opens with a full-width organization header: the organization logo (square box; 56px on mobile and 64px from `sm` on the organization page, 40px / 48px elsewhere) next to the organization name. Layout, menu and accessibility details live in [Storefront Header and Footer](storefront-header-footer.md). On `/organizations/[orgId]` the name is the page `<h1>`; on event, apply, checkout and confirmation pages the whole header links back to the organization page. Logos of any aspect ratio fit the box with `object-contain` — no blurred backdrop. In the header the box is `bare`: no background, no rounding, so the logo sits directly on the header surface.
+Every public storefront page opens with a full-width organization header: the organization logo (square box; 56px on mobile and 64px from `sm` on the organization page, 40px / 48px elsewhere). The organization name is not painted beside a logo; it stays `sr-only` for screen readers and is shown only when there is no logo. Layout, menu and accessibility details live in [Storefront Header and Footer](storefront-header-footer.md). On `/organizations/[orgId]` the name is the page `<h1>`; on event, apply, checkout and confirmation pages the whole header links back to the organization page. Logos of any aspect ratio fit the box with `object-contain` — no blurred backdrop. In the header the box is `bare`: no background, no rounding, so the logo sits directly on the header surface.
 
 ## Key Files
 
