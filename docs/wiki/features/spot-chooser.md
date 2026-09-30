@@ -132,3 +132,4 @@ None.
 - [Applications](applications.md): apply-then-choose, holds, payment
 - [Floor Maps and Vendor Booth Purchases](floor-maps.md): booth holds and the sold state
 - [Add-ons](add-ons.md): the extras in step 2
+- [Public Floor Map Page](public-floor-map.md): the public page reuses this viewport (fit maths, zoom buttons, legend under the map)

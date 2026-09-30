@@ -1,0 +1,58 @@
+# Public Floor Map Page
+
+**Status**: Implemented (PR #244, in prod 2026-09-29)
+**Last Updated**: 2026-09-29
+
+## Overview
+`/events/:slug/map` is the public floor map of an event. Visitors see which booths exist, what they cost and which vendor holds each one. One column at every width, in the event page's order: event header, map, then the [vendor directory](vendor-directory.md). The map uses the same viewport as the vendor [spot chooser](spot-chooser.md), so vendors see the same map they bought from.
+
+## Key Files
+| File | Purpose |
+|------|---------|
+| `frontend/src/app/events/[eventId]/map/page.tsx` | Server wrapper: 308 from an event id to its slug, keeping `?booth=` (not on tenant hosts) |
+| `frontend/src/app/events/[eventId]/map/PublicMapClient.tsx` | The page: header, map viewport (fit / zoom / centre), inline legend, booth dialog, 30 s ETag polling, `?booth=` deep links |
+| `frontend/src/app/events/[eventId]/map/VendorDirectory.tsx` | Vendor search, category filter and cards; "View booth" focuses the booth on the map |
+| `frontend/src/components/maps/MapCanvas.tsx` | Shared SVG canvas in `react-zoom-pan-pinch`. `fitOnInit` prop (default `true`) |
+| `frontend/src/components/maps/Booth.tsx`, `MapElement.tsx`, `mapTheme.ts` | Shared booth and element rendering, tier swatches, legend state colours |
+| `frontend/src/app/events/[eventId]/FloorMapPreview.tsx` | Non-interactive preview on the event page, with the **Open map →** link here |
+| `frontend/e2e/public-map.spec.ts` | Legend, booth states, deep links, directory, phone order and full width, desktop containment, dialog focus |
+
+## Configuration
+None. The page shows only a **published** map (`GET /events/:eventId/map` returns 404 otherwise).
+
+## How It Works
+1. **Data.** The client fetches `GET /events/:eventId` for the header and brand (name, date, venue name + time zone, org identity, brand colour, theme mode), and `GET /events/:eventId/map` for geometry, legend, booths and vendors. The map is polled every 30 s with `If-None-Match` while the tab is visible. A 304 keeps the current map.
+2. **Header.** "Back to {event}" link (`eventPath`), a "Floor map" eyebrow, the event name as `h1`, then map name · date · venue. The date is formatted with `formatEventDate` in the **venue's** zone (spec 033).
+3. **Map.** On phones the map section runs edge to edge (`-mx-4`) and is square. From `sm` it sits inside the content column with a rounded border, 4:3, and 16:9 from `lg`. The box has a dotted floor background, zoom in / out / **Fit the whole map** buttons (44 px), and the legend under it (tiers with all-in price ranges, then booth states). The header row shows "N of M booths open", counting only booths with a tier.
+4. **Fit.** `fit()` scales the whole floor (`width × gridSize` by `height × gridSize`) to 94 % of the box and centres it. It runs once when the map first loads and again when the box width changes by 24 px or more. Height changes (a phone's address bar) never undo the visitor's zoom, and polls never refit.
+5. **Choosing a booth.** A click or Enter on a booth, a directory "View booth" link, or `?booth=` opens the booth dialog, pushes `?booth=<id>` and centres the booth at least twice the fit scale (never zooming out). From the directory the page also scrolls back up to the map. The highlight pulses for about 4.5 s. With reduced motion it stays until the dialog closes, and nothing animates.
+6. **Deep links.** `?booth=` accepts the booth id (canonical) or its label (links sent before spec 014 phase 3). An unknown value shows an alert and opens nothing. The deep-link effect runs on the `booth` param and the first map load only, so a poll never reopens a dialog the visitor closed.
+7. **Booth dialog.** One `role="dialog"` for every width: a bottom sheet on phones, centred from `sm`. It lists status (Available, Sold to X, Reserved for X, Not for sale, Being purchased), category, all-in price (the booth's own `price` wins over its tier's, spec 039) and the vendor. Sold or reserved booths with a vendor get a permanent link. Focus moves to **Close**, Tab is trapped, Escape or the backdrop closes it, and focus returns to what opened it. Closing replaces the URL without `?booth=`.
+
+## API Endpoints
+No new endpoints.
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/events/:eventId/meta` | None | Slug for the server redirect |
+| GET | `/events/:eventId` | None (store gate) | Header, brand and theme |
+| GET | `/events/:eventId/map` | None (store gate) | Published map, legend, booths, vendors; ETag, `no-store` |
+
+## Database
+Read-only: `FloorMap`, `Booth`, tiers and approved vendor profiles through `MapService`'s public serialisation. See [Floor Maps](floor-maps.md) and [database-architecture.md](database-architecture.md).
+
+## Gotchas
+- **Pass `fitOnInit={false}` to `MapCanvas` when the page fits the map itself.** `react-zoom-pan-pinch` re-applies its own `fitOnInit` on every size change during its first seconds and silently undoes a custom fit. The public map and `SpotWorkspace` both turn it off; the preview and the builder keep the default.
+- **Keep the two viewports alike.** The public map copies the spot chooser's box (dotted floor, zoom buttons, legend under the map, fit maths) so vendors recognise the map. A visual change to one usually belongs in both.
+- **One dialog, not a mobile and desktop copy.** The old page mounted both, which duplicated `id="booth-detail-title"`. Specs rely on exactly one visible dialog.
+- **Brand tokens only** (`text-brand-link`, `bg-brand`) and `BrandScope` with the org `themeMode` (root gotchas 6 and 7).
+- The page is in `<main id="main-content">`, and a "Skip the map" link jumps to the vendor directory heading. Keep new controls at 44 px and inputs at 16 px on phones (iOS zooms smaller inputs).
+- Playwright: when a dev backend holds `:3002`, run with `FIXTURE_API_PORT=<free port> PLAYWRIGHT_PORT=<free port>`.
+
+## Related Features
+- [Floor Maps and Vendor Booth Purchases](floor-maps.md): publication, holds, sold state
+- [Vendor directory](vendor-directory.md): the section under the map
+- [Spot Chooser](spot-chooser.md): the vendor-side viewport this page mirrors
+- [Vendor Space Selection](vendor-space-selection.md): per-spot prices
+- [Venue time zones](venue-time-zones.md): the header date
+- [Organization branding](organization-branding.md) and [theme mode](organization-theme-mode.md)

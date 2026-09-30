@@ -70,7 +70,8 @@ The backend schedules the booth sweep with unref'd timers. Tests may invoke `Boo
 | `frontend/src/components/applications/SpotWorkspace.tsx` | Vendor picker (replaced `BoothPicker` in PR #240): the map beside a synced list of the category's open spots, other categories greyed; holds and payment stay in `ChooseSpace`. See [Spot Chooser](spot-chooser.md) |
 | `frontend/src/app/events/[eventId]/apply/status/[applicationId]/page.tsx` | Guest vendor purchase surface |
 | `frontend/src/app/organizations/[orgId]/account/AccountClient.tsx` | Signed-in buyer application purchase surface |
-| `frontend/src/components/maps/PublicMap.tsx` | Shared accessible SVG map renderer |
+| `frontend/src/components/maps/MapCanvas.tsx` | Shared SVG map canvas (builder preview, public map, spot chooser) |
+| `frontend/src/app/events/[eventId]/map/PublicMapClient.tsx` | Public map page. See [Public Floor Map Page](public-floor-map.md) |
 
 ## Testing
 
