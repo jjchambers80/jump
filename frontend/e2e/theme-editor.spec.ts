@@ -145,8 +145,20 @@ test.describe('theme editor (038D)', () => {
     await page.getByRole('textbox', { name: 'Heading', exact: true }).fill('x');
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     const alert = page.getByRole('alert').filter({ hasText: 'The theme has errors' });
-    await expect(alert).toContainText('must be at most 120 characters');
+    await expect(alert).toContainText('Home page › Hero › Heading: must be at most 120 characters');
     await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
+  });
+
+  test('problems the browser can see are named before anything is sent', async ({ page }) => {
+    const api = await mockThemeEditorApi(page);
+    await openEditor(page);
+    await outline(page).getByRole('button', { name: 'Hero', exact: true }).click();
+    // A heading over the 120-character limit: the same check the server runs.
+    await page.getByRole('textbox', { name: 'Heading', exact: true }).fill('x'.repeat(121));
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    const alert = page.getByRole('alert').filter({ hasText: 'Fix these before saving' });
+    await expect(alert).toContainText('Home page › Hero › Heading: must be at most 120 characters');
+    expect(api.saves).toEqual([]);
   });
 
   test('revision history restores the whole theme after a confirm (test 16)', async ({ page }) => {

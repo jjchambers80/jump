@@ -7,7 +7,8 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
-import { getPreset } from '@jump/theme';
+import { getPreset, validateDocument } from '@jump/theme';
+import { describeDocumentError, describeSaveError } from './errors';
 import ActionsMenu from '@/components/ActionsMenu';
 import { useThemeMode } from '@/components/ThemeProvider';
 import { useOrg } from '@/components/OrgContext';
@@ -240,6 +241,19 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
     setSaving(true);
     setSaveError(null);
     setStatus(null);
+    // Same validator the server runs: catch problems here, name them in
+    // words, and skip the round trip.
+    const schemeIds = new Set(schemes.map((s: { id: string }) => s.id));
+    const problems = dirtyKeys.flatMap((key) =>
+      Object.entries(validateDocument(key, docs[key], { schemeIds }).errors).map(([path, message]) =>
+        describeDocumentError(key, path, message as string, docs[key]),
+      ),
+    );
+    if (problems.length) {
+      setSaveError({ message: 'Fix these before saving:', details: problems });
+      setSaving(false);
+      return;
+    }
     const presetDocs = getPreset(loaded.theme.presetKey)?.documents ?? {};
     const documents = Object.fromEntries(
       dirtyKeys.map((key) => {
@@ -272,7 +286,7 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
         const errors = err?.details?.errors as Record<string, string> | undefined;
         setSaveError({
           message: err?.message || 'Could not save',
-          details: errors ? Object.entries(errors).map(([path, message]) => `${path}: ${message}`) : undefined,
+          details: errors ? Object.entries(errors).map(([path, message]) => describeSaveError(path, message, docs)) : undefined,
         });
       }
     } finally {
