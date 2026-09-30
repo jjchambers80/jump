@@ -13,7 +13,7 @@ app/
 ├── confirmation/    # Post-purchase confirmation
 ├── orders/          # [orderId] detail (buyer session or staff) + lookup
 ├── venues/          # Venue pages
-├── organizations/   # Public org page + [orgId]/account (buyer sign-in, orders, tickets, applications, applicant business profile)
+├── organizations/   # Public org page + [orgId]/account (spec 040): `(member)/layout.tsx` = sign-in gate + section nav + `AccountContext`; sections `/account` (tickets), `/account/orders`, `/account/applications` (applications + business profile). Token pages (`verify`) stay outside the `(member)` group
 ├── api/auth/        # Auth.js API route handler (staff)
 └── api/buyer/       # Buyer session proxies: request/verify/logout/me/* (httpOnly jump_buyer cookie); me/applications*, me/applicant-profile[/photos] forward JSON — the photos route forwards multipart
 ```
