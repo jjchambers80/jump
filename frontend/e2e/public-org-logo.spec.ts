@@ -134,7 +134,10 @@ test.describe('public organization logo header', () => {
       return { boxW, boxH, w, h };
     });
     expect(Math.round(painted.w)).toBe(Math.round(painted.boxW));
-    expect(painted.h).toBeLessThan(painted.boxH);
+    // No letterbox: the box is as tall as the logo, so a wordmark never pads the header.
+    expect(Math.round(painted.h)).toBe(Math.round(painted.boxH));
+    const dims = (await box.boundingBox())!;
+    expect(Math.round(dims.height)).toBe(Math.round(dims.width / 4));
   });
 
   test('portrait logo spans full height with no blurred backdrop', async ({ page }) => {

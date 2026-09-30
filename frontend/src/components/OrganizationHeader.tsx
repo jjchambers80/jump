@@ -106,7 +106,10 @@ export default function OrganizationHeader({
       src={logoSrc}
       alt={`${organization.name} logo`}
       bare
-      fit={isBar ? 'height' : 'box'}
+      fit={isBar ? 'height' : 'width'}
+      // Height follows the logo (a wordmark stays short, no square padding),
+      // capped at the width so a tall logo cannot stretch the header either.
+      imgClassName={isBar ? '' : 'max-h-[var(--theme-logo-width-mobile,90px)] sm:max-h-[var(--theme-logo-width,120px)]'}
       // One size on every page: the theme's Logo widths inside a ThemeScope,
       // otherwise the same defaults (packages/theme/src/settings.js: 90 / 120 px).
       // The map bar is the one exception: a slim bar leaves the map the screen.
