@@ -37,10 +37,12 @@ export default function AddOnPicker({
   if (addOns.length === 0) return null;
 
   return (
-    <section className="mt-6" data-testid="add-on-picker" aria-labelledby={titleId}>
-      <Heading id={titleId} className="text-lg font-bold text-gray-900 dark:text-slate-100">
-        {title}
-      </Heading>
+    <section className="mt-6" data-testid="add-on-picker" aria-labelledby={title ? titleId : undefined} aria-label={title ? undefined : 'Add-ons'}>
+      {title && (
+        <Heading id={titleId} className="text-lg font-bold text-gray-900 dark:text-slate-100">
+          {title}
+        </Heading>
+      )}
       {hint && <p className="text-sm text-gray-500 dark:text-slate-400 mt-0.5">{hint}</p>}
       <div className="mt-3 space-y-3">
         {addOns.map((addOn) => {
