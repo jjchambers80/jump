@@ -62,6 +62,15 @@
   height: auto;
   border-radius: 0.5rem;
 }
+.jump-prose iframe.jump-video {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border: 0;
+  border-radius: 0.5rem;
+  background: rgb(0 0 0);
+}
 .jump-prose pre {
   background: rgb(243 244 246);
   border-radius: 0.5rem;
@@ -132,4 +141,13 @@
 .jump-prose--editor .ProseMirror-selectednode {
   outline: 2px solid rgb(99 102 241);
   outline-offset: 2px;
+}
+/* Video node view: clicks land on the frame (selecting the node), never
+   on the player. */
+.jump-prose--editor .jump-video-frame {
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+.jump-prose--editor .jump-video-frame iframe {
+  pointer-events: none;
 }

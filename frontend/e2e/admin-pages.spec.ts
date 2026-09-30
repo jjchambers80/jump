@@ -345,3 +345,58 @@ test('editing a page that does not exist shows the standard alert', async ({ pag
   await expect(page.getByRole('alert').filter({ hasText: 'Page not found' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Save' })).toHaveCount(0);
 });
+
+test('Video toolbar button embeds a YouTube player from its embed snippet', async ({ page }) => {
+  // Keep the suite offline: the player iframe gets a blank page.
+  await page.route('https://www.youtube-nocookie.com/**', (route) =>
+    route.fulfill({ status: 200, contentType: 'text/html', body: '<html></html>' })
+  );
+  const api = await mockPagesApi(page, [
+    storePage({ id: 'page-vendors', title: 'Vendors', content: '<p>Become a vendor</p>' }),
+  ]);
+  await page.goto('/admin/online-store/pages/page-vendors');
+  await expect(page.getByLabel('Page content')).toContainText('Become a vendor');
+
+  const videoButton = page.getByRole('button', { name: 'Video', exact: true });
+  await videoButton.click();
+  const dialog = page.getByRole('dialog', { name: 'Insert video' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByLabel('Insert a video by pasting the embed snippet')).toBeFocused();
+  await expect(dialog.getByRole('button', { name: 'Insert video' })).toBeDisabled();
+
+  await dialog.getByLabel('Insert a video by pasting the embed snippet').fill(
+    '<iframe src="https://example.com/video/1"></iframe>'
+  );
+  await dialog.getByRole('button', { name: 'Insert video' }).click();
+  await expect(dialog.getByRole('alert')).toHaveText(
+    'Paste a YouTube or Vimeo embed snippet or link'
+  );
+
+  await dialog.getByLabel('Insert a video by pasting the embed snippet').fill(
+    '<iframe width="560" height="315" src="https://www.youtube.com/embed/dQw4w9WgXcQ?si=abc" title="Vendor recap" frameborder="0" allowfullscreen></iframe>'
+  );
+  await dialog.getByRole('button', { name: 'Insert video' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByTestId('editor-video').locator('iframe')).toHaveAttribute(
+    'src',
+    'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ'
+  );
+
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page).toHaveURL(/\/admin\/online-store\/pages$/);
+  const content = String(api.calls.find((call) => call.method === 'PUT')?.body?.content);
+  expect(content).toContain('src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ"');
+  expect(content).toContain('title="Vendor recap"');
+  expect(content).toContain('class="jump-video"');
+});
+
+test('Insert video dialog closes on Escape and returns focus', async ({ page }) => {
+  await mockPagesApi(page, [storePage({ id: 'page-a', title: 'A' })]);
+  await page.goto('/admin/online-store/pages/page-a');
+  const videoButton = page.getByRole('button', { name: 'Video', exact: true });
+  await videoButton.click();
+  await expect(page.getByRole('dialog', { name: 'Insert video' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: 'Insert video' })).toHaveCount(0);
+  await expect(videoButton).toBeFocused();
+});

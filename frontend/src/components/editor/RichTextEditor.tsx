@@ -10,6 +10,7 @@ import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import {
   Bold,
+  CirclePlay,
   Heading2,
   Heading3,
   Image as ImageIcon,
@@ -25,7 +26,9 @@ import {
   Underline,
   Undo2,
 } from 'lucide-react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type Ref } from 'react';
+import InsertVideoDialog from './InsertVideoDialog';
+import VideoEmbed from './VideoEmbed';
 
 export interface RichTextEditorProps {
   value: string;
@@ -56,16 +59,19 @@ function ToolbarButton({
   active,
   disabled,
   onClick,
+  buttonRef,
   children,
 }: {
   label: string;
   active?: boolean;
   disabled?: boolean;
   onClick: () => void;
+  buttonRef?: Ref<HTMLButtonElement>;
   children: ReactNode;
 }) {
   return (
     <button
+      ref={buttonRef}
       type="button"
       aria-label={label}
       title={label}
@@ -194,6 +200,8 @@ export default function RichTextEditor({
   ...aria
 }: RichTextEditorProps) {
   const [linkOpen, setLinkOpen] = useState(false);
+  const [videoOpen, setVideoOpen] = useState(false);
+  const videoButtonRef = useRef<HTMLButtonElement>(null);
   const lastEmitted = useRef(value);
 
   const editor = useEditor({
@@ -218,6 +226,7 @@ export default function RichTextEditor({
               allowBase64: false,
               HTMLAttributes: { loading: 'lazy' },
             }),
+            VideoEmbed,
           ]
         : []),
     ],
@@ -388,6 +397,16 @@ export default function RichTextEditor({
         )}
         {full && (
           <ToolbarButton
+            label="Video"
+            buttonRef={videoButtonRef}
+            active={videoOpen}
+            onClick={() => setVideoOpen(true)}
+          >
+            <CirclePlay className="h-4 w-4" aria-hidden />
+          </ToolbarButton>
+        )}
+        {full && (
+          <ToolbarButton
             label="Divider"
             onClick={() => editor.chain().focus().setHorizontalRule().run()}
           >
@@ -414,6 +433,16 @@ export default function RichTextEditor({
         editor={editor}
         className="rounded-b-md border border-gray-300 bg-white focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/30 dark:border-slate-600 dark:bg-slate-900"
       />
+      {videoOpen && (
+        <InsertVideoDialog
+          returnFocusRef={videoButtonRef}
+          onClose={() => setVideoOpen(false)}
+          onInsert={(video) => {
+            setVideoOpen(false);
+            editor.chain().focus().setVideoEmbed(video).run();
+          }}
+        />
+      )}
     </div>
   );
 }

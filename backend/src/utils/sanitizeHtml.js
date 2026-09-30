@@ -3,6 +3,7 @@
 // as-is, so everything must be cleaned on write.
 
 import sanitize from 'sanitize-html';
+import { VIDEO_EMBED_ALLOW, VIDEO_EMBED_HOSTS, videoEmbedSrc } from './videoEmbed.js';
 
 export const CONTENT_HTML = {
   allowedTags: [
@@ -34,15 +35,23 @@ export const CONTENT_HTML = {
     'td',
     'figure',
     'figcaption',
+    'iframe',
   ],
   allowedAttributes: {
     a: ['href', 'title', 'target', 'rel'],
     img: ['src', 'alt', 'width', 'height', 'loading'],
     td: ['colspan', 'rowspan'],
     th: ['colspan', 'rowspan'],
+    iframe: ['src', 'title', 'class', 'loading', 'allow', 'allowfullscreen', 'referrerpolicy'],
   },
+  allowedClasses: { iframe: ['jump-video'] },
   allowedSchemes: ['http', 'https', 'mailto', 'tel'],
-  allowedSchemesByTag: { img: ['http', 'https'] },
+  allowedSchemesByTag: { img: ['http', 'https'], iframe: ['https'] },
+  // Video embeds (the editor's Insert video): the iframe transform below
+  // rewrites src to a canonical YouTube / Vimeo player URL; the host list is
+  // the second lock.
+  allowedIframeHostnames: VIDEO_EMBED_HOSTS,
+  allowIframeRelativeUrls: false,
   allowProtocolRelative: false,
   transformTags: {
     // The page title owns h1; demote pasted headings.
@@ -53,7 +62,28 @@ export const CONTENT_HTML = {
       else delete next.target;
       return { tagName, attribs: next };
     },
+    iframe: (tagName, attribs) => {
+      const src = videoEmbedSrc(attribs.src);
+      if (!src) return { tagName, attribs: {} };
+      return {
+        tagName,
+        attribs: {
+          src,
+          title: attribs.title?.trim() || 'Embedded video',
+          class: 'jump-video',
+          loading: 'lazy',
+          allow: VIDEO_EMBED_ALLOW,
+          allowfullscreen: '',
+          referrerpolicy: 'strict-origin-when-cross-origin',
+        },
+      };
+    },
   },
+  // An iframe that is not a YouTube / Vimeo player loses its src above; drop
+  // it (and anything nested in it) entirely.
+  exclusiveFilter: (frame) => frame.tag === 'iframe' && !frame.attribs.src,
+  // Fallback text inside a kept player never renders; don't store it.
+  textFilter: (text, tagName) => (tagName === 'iframe' ? '' : text),
 };
 
 export function sanitizeContentHtml(html) {
