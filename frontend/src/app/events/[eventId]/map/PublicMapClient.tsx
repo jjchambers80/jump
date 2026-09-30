@@ -50,7 +50,7 @@ function useReducedMotion() {
   return reduced;
 }
 
-function toMapBooth(pb: PublicMapBooth): MapBooth {
+export function toMapBooth(pb: PublicMapBooth): MapBooth {
   return {
     id: pb.id,
     mapId: '',
@@ -71,7 +71,7 @@ function toMapBooth(pb: PublicMapBooth): MapBooth {
   };
 }
 
-function priceRange(l: PublicMap['legend'][number]) {
+export function priceRange(l: PublicMap['legend'][number]) {
   return l.priceFrom !== undefined && l.priceTo !== undefined && l.priceFrom !== l.priceTo
     ? `${formatPrice(l.priceFrom)}–${formatPrice(l.priceTo)}`
     : formatPrice(l.priceFrom ?? l.price);
@@ -84,7 +84,7 @@ const LEGEND_STATES = [
   ['BLOCKED', 'Blocked'],
 ] as const;
 
-function Legend({ map }: { map: PublicMap }) {
+export function Legend({ map }: { map: PublicMap }) {
   const { resolvedTheme } = useTheme();
   const dark = resolvedTheme === 'dark';
   return (
@@ -123,7 +123,7 @@ function Legend({ map }: { map: PublicMap }) {
   );
 }
 
-interface BoothDetailProps {
+export interface BoothDetailProps {
   booth: PublicMapBooth;
   legend: PublicMap['legend'];
   unit: string;
@@ -135,7 +135,7 @@ interface BoothDetailProps {
 // One dialog for every width: a bottom sheet on phones, centred from `sm`.
 // Focus moves to the close button on open, stays inside while open and goes
 // back to whatever opened it on close.
-function BoothDetail({ booth, legend, unit, vendor, boothHref, onClose }: BoothDetailProps) {
+export function BoothDetail({ booth, legend, unit, vendor, boothHref, onClose }: BoothDetailProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const tier = legend.find((t) => t.tierId === booth.tier?.id);
@@ -255,7 +255,7 @@ function BoothDetail({ booth, legend, unit, vendor, boothHref, onClose }: BoothD
   );
 }
 
-const iconButton =
+export const iconButton =
   'grid h-11 w-11 place-items-center text-gray-700 transition-colors hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-link motion-reduce:transition-none dark:text-slate-200 dark:hover:bg-slate-700';
 
 export default function PublicMapClient({ params }: PublicMapClientProps) {

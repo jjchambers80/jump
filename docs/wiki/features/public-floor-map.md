@@ -1,6 +1,6 @@
 # Public Floor Map Page
 
-**Status**: Implemented (PR #244, in prod 2026-09-29)
+**Status**: Implemented (PR #244, in prod 2026-09-29; event-page full-screen map 2026-09-29)
 **Last Updated**: 2026-09-29
 
 ## Overview
@@ -14,8 +14,8 @@
 | `frontend/src/app/events/[eventId]/map/VendorDirectory.tsx` | Vendor search, category filter and cards; "View booth" focuses the booth on the map |
 | `frontend/src/components/maps/MapCanvas.tsx` | Shared SVG canvas in `react-zoom-pan-pinch`. `fitOnInit` prop (default `true`) |
 | `frontend/src/components/maps/Booth.tsx`, `MapElement.tsx`, `mapTheme.ts` | Shared booth and element rendering, tier swatches, legend state colours |
-| `frontend/src/app/events/[eventId]/FloorMapPreview.tsx` | Non-interactive preview on the event page, with the **Open map →** link here |
-| `frontend/e2e/public-map.spec.ts` | Legend, booth states, deep links, directory, phone order and full width, desktop containment, dialog focus |
+| `frontend/src/app/events/[eventId]/FloorMapButton.tsx` | **Floor map** pill in the event page hero; opens the map as a full-screen dialog on every width. Replaces the old preview section at the bottom of the event page |
+| `frontend/e2e/public-map.spec.ts` | Legend, booth states, deep links, directory, phone order and full width, desktop containment, dialog focus, event-page full-screen map (desktop + phone) |
 
 ## Configuration
 None. The page shows only a **published** map (`GET /events/:eventId/map` returns 404 otherwise).
@@ -28,6 +28,7 @@ None. The page shows only a **published** map (`GET /events/:eventId/map` return
 5. **Choosing a booth.** A click or Enter on a booth, a directory "View booth" link, or `?booth=` opens the booth dialog, pushes `?booth=<id>` and centres the booth at least twice the fit scale (never zooming out). From the directory the page also scrolls back up to the map. The highlight pulses for about 4.5 s. With reduced motion it stays until the dialog closes, and nothing animates.
 6. **Deep links.** `?booth=` accepts the booth id (canonical) or its label (links sent before spec 014 phase 3). An unknown value shows an alert and opens nothing. The deep-link effect runs on the `booth` param and the first map load only, so a poll never reopens a dialog the visitor closed.
 7. **Booth dialog.** One `role="dialog"` for every width: a bottom sheet on phones, centred from `sm`. It lists status (Available, Sold to X, Reserved for X, Not for sale, Being purchased), category, all-in price (the booth's own `price` wins over its tier's, spec 039) and the vendor. Sold or reserved booths with a vendor get a permanent link. Focus moves to **Close**, Tab is trapped, Escape or the backdrop closes it, and focus returns to what opened it. Closing replaces the URL without `?booth=`.
+8. **From the event page.** The event hero's actions row (next to **Event Information** and the Get involved pills) shows a **Floor map** pill once `GET /events/:eventId/map` returns a published map; on 404 nothing renders. The pill opens a `role="dialog"` that fills the viewport (`fixed inset-0 h-dvh`) on phones and desktop alike: a top bar (Floor map eyebrow, event name, map name · N of M booths open, **Vendor directory** link to this page, 44 px **Close the floor map**), the map filling the rest (dotted floor, zoom / fit buttons, fitted on open and on real resizes), and the legend pinned at the bottom with safe-area padding. The map is refetched each time the pill opens. Choosing a booth opens the same booth sheet as this page (`BoothDetail`, exported from `PublicMapClient.tsx` with `Legend`, `toMapBooth` and `iconButton`); its permanent link points at `/events/:slug/map?booth=<id>`. Escape closes the booth sheet first, then the map; focus starts on Close, Tab stays inside, and focus returns to the pill. Page scroll is locked while open.
 
 ## API Endpoints
 No new endpoints.
@@ -42,8 +43,10 @@ No new endpoints.
 Read-only: `FloorMap`, `Booth`, tiers and approved vendor profiles through `MapService`'s public serialisation. See [Floor Maps](floor-maps.md) and [database-architecture.md](database-architecture.md).
 
 ## Gotchas
-- **Pass `fitOnInit={false}` to `MapCanvas` when the page fits the map itself.** `react-zoom-pan-pinch` re-applies its own `fitOnInit` on every size change during its first seconds and silently undoes a custom fit. The public map and `SpotWorkspace` both turn it off; the preview and the builder keep the default.
+- **Pass `fitOnInit={false}` to `MapCanvas` when the page fits the map itself.** `react-zoom-pan-pinch` re-applies its own `fitOnInit` on every size change during its first seconds and silently undoes a custom fit. The public map, the event-page full-screen map and `SpotWorkspace` turn it off; the builder keeps the default.
 - **Keep the two viewports alike.** The public map copies the spot chooser's box (dotted floor, zoom buttons, legend under the map, fit maths) so vendors recognise the map. A visual change to one usually belongs in both.
+- **The full-screen map is not portalled.** It renders inside the event page's `BrandScope` so brand tokens and theme mode apply. Nothing above it in the hero may gain a `transform`, `filter` or `backdrop-filter`, or `fixed inset-0` would be trapped inside that box; its entrance animation (`animate-fade-in`) is opacity only for the same reason.
+- **Nested dialogs, one Escape.** The full-screen map's key handler returns early while the booth sheet is open, so the sheet owns Escape and Tab.
 - **One dialog, not a mobile and desktop copy.** The old page mounted both, which duplicated `id="booth-detail-title"`. Specs rely on exactly one visible dialog.
 - **Brand tokens only** (`text-brand-link`, `bg-brand`) and `BrandScope` with the org `themeMode` (root gotchas 6 and 7).
 - The page is in `<main id="main-content">`, and a "Skip the map" link jumps to the vendor directory heading. Keep new controls at 44 px and inputs at 16 px on phones (iOS zooms smaller inputs).

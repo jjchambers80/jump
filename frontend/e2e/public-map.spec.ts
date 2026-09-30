@@ -223,15 +223,58 @@ test.describe('public floor map', () => {
     await expect(page.getByTestId('booth-A1')).toHaveCount(0);
   });
 
-  test('the event page shows a floor map preview only when published', async ({ page }) => {
+  test('the event page opens the floor map full screen from the header, only when published', async ({ page }) => {
     await mockEvent(page);
     await page.goto('/events/ev-map');
-    await expect(page.getByRole('heading', { name: 'Floor map' })).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByRole('link', { name: /Open map/ })).toHaveAttribute('href', '/events/ev-map/map');
+    const button = page.getByRole('button', { name: 'Floor map' });
+    await expect(button).toBeVisible({ timeout: 10_000 });
+    // The old preview section at the bottom of the page is gone.
+    await expect(page.getByRole('heading', { name: 'Floor map' })).toHaveCount(0);
+
+    await button.click();
+    const dialog = page.getByRole('dialog', { name: 'Map Expo' });
+    await expect(dialog).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Close the floor map' })).toBeFocused();
+    // Full screen: the dialog covers the whole viewport.
+    const box = await dialog.boundingBox();
+    const viewport = page.viewportSize()!;
+    expect(box).not.toBeNull();
+    expect(Math.round(box!.width)).toBe(viewport.width);
+    expect(Math.round(box!.height)).toBe(viewport.height);
+    await expect(dialog.getByTestId('floor-map-dialog-count')).toContainText('1 of 2 booths open');
+    await expect(dialog.getByTestId('map-legend')).toContainText('10×10 booth');
+    await expect(dialog.getByRole('link', { name: /Vendor directory/ }).locator('visible=true')).toHaveAttribute('href', '/events/ev-map/map');
+
+    // A booth opens its sheet; Escape closes the sheet first, then the map.
+    await dialog.getByTestId('booth-A1').click();
+    await expect(page.getByRole('dialog', { name: 'Booth A1' })).toBeVisible();
+    await expect(page.getByText('Sold to Acme Crafts')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog', { name: 'Booth A1' })).toHaveCount(0);
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(button).toBeFocused();
 
     await page.unrouteAll({ behavior: 'ignoreErrors' });
     await mockEvent(page, { published: false });
     await page.goto('/events/ev-map');
-    await expect(page.getByRole('heading', { name: 'Floor map' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Map Expo' })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('button', { name: 'Floor map' })).toHaveCount(0);
+  });
+
+  test('the full-screen floor map fills a phone screen', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await mockEvent(page);
+    await page.goto('/events/ev-map');
+    await page.getByRole('button', { name: 'Floor map' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Map Expo' });
+    await expect(dialog).toBeVisible();
+    const box = await dialog.boundingBox();
+    expect(box).toMatchObject({ x: 0, y: 0, width: 390, height: 844 });
+    await expect(dialog.getByTestId('booth-A2')).toBeInViewport();
+    await expect(dialog.getByRole('link', { name: /Vendor directory/ }).locator('visible=true')).toHaveCount(1);
+    await page.getByRole('button', { name: 'Close the floor map' }).click();
+    await expect(dialog).toHaveCount(0);
   });
 });
