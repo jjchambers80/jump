@@ -94,8 +94,10 @@ export default function OrganizationHeader({
       `min-w-0 break-words font-semibold tracking-tight text-gray-900 dark:text-slate-100 ${
         layout === 'bar' ? 'text-base sm:text-lg' : 'text-xl sm:text-2xl'
       }`;
-  const focusRing =
-    'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-transparent';
+  // The bar sits on a dark band: a white ring reads on it whatever the brand colour.
+  const focusRing = `focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent ${
+    layout === 'bar' ? 'focus-visible:ring-white' : 'focus-visible:ring-brand'
+  }`;
   const hasNav = navItems.length > 0 && !!organization.id;
   const isBar = layout === 'bar';
 
@@ -172,12 +174,13 @@ export default function OrganizationHeader({
   );
 
   if (isBar) {
-    // Map pages (Ticketmaster-style): one slim full-width row, then the subheader.
+    // Map pages (Ticketmaster-style), inside EventMapHeader's dark band, which
+    // owns the background: one slim full-width row, then the subheader row.
     return (
       <header
         data-testid="organization-header"
         data-layout="bar"
-        className="relative w-full border-b border-gray-200 bg-white dark:border-slate-800 dark:bg-slate-950"
+        className="relative w-full"
       >
         {skipLink}
         <div className="flex min-h-14 items-center gap-1 px-2 sm:gap-2 sm:px-4">
@@ -187,7 +190,8 @@ export default function OrganizationHeader({
           <div className="min-w-0 flex-1 py-1.5">{identityLink}</div>
           {signInLink && <div className="shrink-0">{signInLink}</div>}
         </div>
-        {subheader && <div className="px-4 pb-3 sm:px-7">{subheader}</div>}
+        {/* Same gutter as the row above: the back button sits under the menu button. */}
+        {subheader && <div className="px-2 pb-3 sm:px-4">{subheader}</div>}
       </header>
     );
   }

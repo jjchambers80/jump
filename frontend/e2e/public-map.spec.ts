@@ -173,11 +173,11 @@ test.describe('public floor map', () => {
     await page.setViewportSize({ width: 375, height: 812 });
     await mockEvent(page);
     await page.goto('/events/ev-map/map');
-    const heading = page.getByRole('heading', { level: 1, name: 'Map Expo' });
+    const heading = page.getByRole('heading', { level: 1, name: /Floor map/ });
     const map = page.getByTestId('public-map');
     const directory = page.getByTestId('vendor-directory');
     await expect(heading).toBeVisible();
-    await expect(page.getByRole('link', { name: /back to Map Expo/ })).toHaveAttribute('href', '/events/ev-map');
+    await expect(page.getByRole('link', { name: 'Back to Map Expo' })).toHaveAttribute('href', '/events/ev-map');
     await expect(page.getByTestId('booth-A1')).toBeVisible();
 
     const [h, m, d] = await Promise.all([heading.boundingBox(), map.boundingBox(), directory.boundingBox()]);
@@ -327,10 +327,21 @@ test.describe('public floor map header bar', () => {
       expect(m!.height).toBeGreaterThanOrEqual(44);
       expect(s!.height).toBeGreaterThanOrEqual(44);
 
+      // Header row and event row share one band (one background), like Ticketmaster.
+      const band = page.getByTestId('event-map-header');
+      const b = (await band.boundingBox())!;
+      expect(h!.y).toBeGreaterThanOrEqual(b.y);
       const summary = page.getByTestId('map-event-summary');
-      await expect(summary.getByRole('heading', { level: 1, name: 'Map Expo' })).toBeVisible();
+      const sb = (await summary.boundingBox())!;
+      expect(sb.y + sb.height).toBeLessThanOrEqual(b.y + b.height);
+      expect(sb.y).toBeGreaterThanOrEqual(o!.y + o!.height - 1);
+      await expect(summary.getByRole('heading', { level: 1, name: /Floor map/ })).toBeVisible();
       await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
-      await expect(summary.getByText(/[AP]M [A-Z]{2,5}$/)).toBeVisible();
+      await expect(summary.getByRole('link', { name: 'Back to Map Expo' })).toHaveAttribute('href', '/events/ev-map');
+      await expect(summary).toContainText(/[AP]M [A-Z]{2,5}/);
+      // Back button sits under the menu button.
+      const back = (await summary.getByRole('link', { name: 'Back to Map Expo' }).boundingBox())!;
+      expect(Math.abs(back.x - m!.x)).toBeLessThanOrEqual(2);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     });
   }

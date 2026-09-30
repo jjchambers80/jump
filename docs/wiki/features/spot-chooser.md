@@ -19,7 +19,7 @@ On the status page the workspace takes the whole screen. The buyer account shows
 | `frontend/src/components/applications/SpotWorkspace.tsx` | The workspace: map pane (legend, zoom / fit controls), spot list, "Other categories" reference list, step 2 review, action bar. Owns the map fetch (ETag), selection, sort and step |
 | `frontend/src/components/applications/ChooseSpace.tsx` | Mounts `SpotWorkspace` when `usesSpotWorkspace(app)`; owns holding, charging, polling, notices and the held view. Builds the extras (`AddOnPicker`) and "How you pay" fields passed in as step 2 |
 | `frontend/src/app/events/[eventId]/apply/status/[applicationId]/page.tsx` | Status page. With the workspace: `ApplyShell width="full" hero="compact"` and a compact application summary + footer (answers in a `<details>`, account link) handed to `ChooseSpace` |
-| `frontend/src/app/events/[eventId]/apply/ApplyShell.tsx` | `width: 'full'` (edge-to-edge `main`) and `hero: 'compact'` (one bar: back button, date tile, title, event, date and venue) |
+| `frontend/src/app/events/[eventId]/apply/ApplyShell.tsx` | `width: 'full'` (edge-to-edge `main`) and `hero: 'compact'` (`EventMapHeader`, the map pages' band: menu button, logo and account link, then back button, date tile, title, event, date and venue on the same dark background — see [Public floor map](public-floor-map.md)) |
 | `frontend/src/components/maps/MapCanvas.tsx` | `ariaLabel` prop; `transformRef` drives fit, zoom and centring |
 | `frontend/src/components/maps/Booth.tsx` | Unselectable booths get `tabIndex={-1}` |
 | `frontend/src/components/maps/boothSelection.ts` | `selectability`, `sortSpots`, `spotPrice` (shared rules, Vitest) |
