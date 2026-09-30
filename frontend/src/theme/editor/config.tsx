@@ -65,6 +65,18 @@ function editorProps(type: string, props: Record<string, any>) {
   return rest;
 }
 
+/** What a freshly added section starts with, so it is never an empty box. */
+const STARTER_BLOCKS: Record<string, { type: string; props: Record<string, unknown> }[]> = {
+  HeroCarousel: [
+    { type: 'Slide', props: { heading: 'Your next big show', subheading: 'Add an image, a line of text and a button.' } },
+    { type: 'Slide', props: { heading: 'Another highlight' } },
+  ],
+  Faq: [
+    { type: 'FaqItem', props: { question: 'When do doors open?', answer: '<p>Doors open one hour before the show.</p>' } },
+    { type: 'FaqItem', props: { question: 'Can I get a refund?', answer: '<p>See the refund policy on your ticket.</p>' } },
+  ],
+};
+
 export function buildEditorConfig(ctx: FieldContext): Config {
   const components: Config['components'] = {};
   for (const [type, base] of Object.entries(renderConfig.components)) {
@@ -85,7 +97,7 @@ export function buildEditorConfig(ctx: FieldContext): Config {
         ...fieldDefaults(specs),
         ...(type === 'AnnouncementBar' ? { announcements: [] } : {}),
         ...(type === 'Footer' ? { columns: [] } : {}),
-        ...((base.fields as Record<string, unknown> | undefined)?.blocks ? { blocks: [] } : {}),
+        ...((base.fields as Record<string, unknown> | undefined)?.blocks ? { blocks: STARTER_BLOCKS[type] ?? [] } : {}),
       },
       permissions: LOCKED.has(type) ? { drag: false, duplicate: false, delete: false } : undefined,
       render: ({ hidden, ...props }: any) => {

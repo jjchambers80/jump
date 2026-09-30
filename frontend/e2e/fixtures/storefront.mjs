@@ -164,9 +164,44 @@ const homeDocument = {
   ],
 };
 
+// Hero carousel + FAQ (spec 041).
+const blocksDocument = {
+  root: { props: { title: 'Home' } },
+  content: [
+    {
+      type: 'HeroCarousel',
+      props: {
+        id: 'Carousel-home',
+        autoplay: '8s',
+        blocks: [
+          { type: 'Slide', props: { id: 'Slide-1', heading: 'Opening night', buttonLabel: 'See all events', link: { type: 'EVENTS' } } },
+          { type: 'Slide', props: { id: 'Slide-2', heading: 'Late show', image: { fileId: 'cover', alt: 'The stage at night' } } },
+          { type: 'Slide', props: { id: 'Slide-3', heading: 'Closing party' } },
+        ],
+      },
+    },
+    {
+      type: 'Faq',
+      props: {
+        id: 'Faq-home',
+        heading: 'Good to know',
+        singleOpen: true,
+        blocks: [
+          { type: 'FaqItem', props: { id: 'Q-parking', question: 'Is there parking?', answer: '<p>Free parking behind the hall.</p>' } },
+          { type: 'FaqItem', props: { id: 'Q-doors', question: 'When do doors open?', answer: '<p>One hour before the show.</p>' } },
+        ],
+      },
+    },
+  ],
+};
+
 /** orgId → { render, routes, gate? } */
 export const FIXTURES = {
   'theme-home': { render: render('theme-home', { template: homeDocument }), routes: {} },
+  'theme-blocks': (() => {
+    const base = render('theme-blocks', { template: blocksDocument });
+    return { render: { ...base, resolved: { ...base.resolved, files: { cover: { url: PARITY_COVER, alt: 'The stage at night' } } } }, routes: {} };
+  })(),
   'theme-parity': { render: render('theme-parity', { organization: { coverUrl: PARITY_COVER } }), routes: {} },
   'theme-parity-dark': {
     render: { ...render('theme-parity', { organization: { coverUrl: PARITY_COVER, themeMode: 'DARK' } }), organization: org('theme-parity-dark', { coverUrl: PARITY_COVER, themeMode: 'DARK' }) },

@@ -68,6 +68,8 @@ const ORGANIZATION_IDENTITY = {
   buyerSignInLinks: true,
 };
 
+const BLOCKS_ONLY = new Set(['AnnouncementBar', 'HeroCarousel', 'Faq']);
+
 class ThemeService {
   /** 404 unless themes are on for this organization (master switch + rollout flag). */
   async assertEnabled(organizationId) {
@@ -415,8 +417,9 @@ class ThemeService {
               }
             : section,
         )
-        // An announcement bar with nothing to announce does not render.
-        .filter((section) => section.type !== 'AnnouncementBar' || section.props.blocks?.length),
+        // A section that is only its blocks (announcements, slides, questions)
+        // does not render without any.
+        .filter((section) => !BLOCKS_ONLY.has(section.type) || section.props.blocks?.length),
     };
   }
 

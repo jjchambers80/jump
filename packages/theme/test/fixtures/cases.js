@@ -5,6 +5,10 @@
 const hero = (id, extra = {}) => ({ type: 'Hero', props: { id, heading: 'Hi', ...extra } });
 const eventsDoc = (content) => ({ root: { props: { title: 'Events' } }, content });
 const list = { type: 'EventList', props: { id: 'EventList-1' } };
+const slide = (id, extra = {}) => ({ type: 'Slide', props: { id, heading: 'Slide', ...extra } });
+const carousel = (id, blocks, extra = {}) => ({ type: 'HeroCarousel', props: { id, ...extra, blocks } });
+const question = (id, extra = {}) => ({ type: 'FaqItem', props: { id, question: 'When?', answer: '<p>Soon</p>', ...extra } });
+const faq = (id, blocks, extra = {}) => ({ type: 'Faq', props: { id, ...extra, blocks } });
 
 export const DOCUMENT_CASES = [
   { name: 'minimal events template', key: 'events', data: eventsDoc([list]), errors: [] },
@@ -30,6 +34,15 @@ export const DOCUMENT_CASES = [
   { name: 'drop zones refused', key: 'home', data: { ...eventsDoc([]), zones: { 'Hero-1:x': [] } }, errors: ['zones'] },
   { name: 'empty zones accepted', key: 'home', data: { ...eventsDoc([]), zones: {} }, errors: [] },
   { name: '41 sections', key: 'home', data: eventsDoc(Array.from({ length: 41 }, (_, i) => hero(`Hero-${i}`))), errors: ['content'] },
+  { name: 'hero carousel with slides', key: 'home', data: eventsDoc([carousel('C', [slide('S1', { image: { fileId: 'f1', alt: 'Crowd' }, buttonLabel: 'Tickets', link: { type: 'EVENTS' } }), slide('S2')])]), errors: [] },
+  { name: 'hero carousel over 6 slides', key: 'home', data: eventsDoc([carousel('C', Array.from({ length: 7 }, (_, i) => slide(`S${i}`)))]), errors: ['content[0].props.blocks'] },
+  { name: 'hero carousel refuses a question block', key: 'home', data: eventsDoc([carousel('C', [{ type: 'FaqItem', props: { id: 'Q' } }])]), errors: ['content[0].props.blocks[0].type'] },
+  { name: 'slide cannot hold blocks', key: 'home', data: eventsDoc([carousel('C', [slide('S', { blocks: [] })])]), errors: ['content[0].props.blocks[0].props.blocks'] },
+  { name: 'slide image needs alt text', key: 'home', data: eventsDoc([carousel('C', [slide('S', { image: { fileId: 'f1' } })])]), errors: ['content[0].props.blocks[0].props.image'] },
+  { name: 'FAQ with questions', key: 'home', data: eventsDoc([faq('F', [question('Q1'), question('Q2')], { singleOpen: false })]), errors: [] },
+  { name: 'FAQ over 30 questions', key: 'home', data: eventsDoc([faq('F', Array.from({ length: 31 }, (_, i) => question(`Q${i}`)))]), errors: ['content[0].props.blocks'] },
+  { name: 'FAQ question too long', key: 'home', data: eventsDoc([faq('F', [question('Q', { question: 'x'.repeat(201) })])]), errors: ['content[0].props.blocks[0].props.question'] },
+  { name: 'FAQ refuses a slide', key: 'home', data: eventsDoc([faq('F', [slide('S')])]), errors: ['content[0].props.blocks[0].type'] },
   { name: 'over 256 KB', key: 'home', data: eventsDoc([{ type: 'RichText', props: { id: 'R', body: 'x'.repeat(270 * 1024) } }]), errors: ['.'] },
 ];
 

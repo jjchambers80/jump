@@ -62,6 +62,24 @@ export const BLOCKS = {
     },
   },
   BrandInfo: { label: 'Brand information', settings: {} },
+  Slide: {
+    label: 'Slide',
+    settings: {
+      image: image('Image'),
+      heading: text('Heading', { max: 120, default: '' }),
+      subheading: textarea('Subheading', { max: 300, default: '' }),
+      buttonLabel: text('Button label', { max: 40, default: '' }),
+      link: link('Button link'),
+      alignment: radio('Text alignment', ['center', 'left']),
+    },
+  },
+  FaqItem: {
+    label: 'Question',
+    settings: {
+      question: text('Question', { max: 200, default: 'Question' }),
+      answer: richtext('Answer', { max: 4000 }),
+    },
+  },
   SocialLinks: { label: 'Social media', settings: {} },
 };
 
@@ -157,6 +175,19 @@ export const SECTIONS = {
     },
     blocks: buttons,
   },
+  HeroCarousel: {
+    label: 'Hero carousel',
+    category: 'Banners',
+    groups: ['template'],
+    settings: {
+      autoplay: select('Autoplay', ['off', '5s', '8s'], '5s'),
+      height: select('Height', HEIGHTS, 'medium'),
+      overlay: range('Overlay opacity', 0, 80, { step: 10, unit: '%', default: 40 }),
+      showArrows: toggle('Show arrows', true),
+      showDots: toggle('Show dots', true),
+    },
+    blocks: { types: ['Slide'], max: 6 },
+  },
   UpcomingEvents: {
     label: 'Upcoming events',
     category: 'Events',
@@ -190,6 +221,19 @@ export const SECTIONS = {
       text: textarea('Text', { max: 300, default: '' }),
     },
     blocks: buttons,
+  },
+  Faq: {
+    label: 'FAQ',
+    category: 'Text',
+    groups: ['template'],
+    settings: {
+      heading: text('Heading', { max: 120, default: 'Frequently asked questions' }),
+      intro: textarea('Intro', { max: 300, default: '' }),
+      singleOpen: toggle('Open one answer at a time', true),
+      openFirst: toggle('Open the first answer', false),
+      width: select('Width', ['narrow', 'normal', 'wide'], 'normal'),
+    },
+    blocks: { types: ['FaqItem'], max: 30 },
   },
 };
 
