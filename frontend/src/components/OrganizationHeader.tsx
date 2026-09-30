@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import type { MouseEvent } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import LogoBox from './LogoBox';
 import { resolveAssetUrl } from '../lib/assets';
 import StorefrontNav from './storefront/StorefrontNav';
@@ -38,6 +38,14 @@ export interface OrganizationHeaderProps {
   menus?: PublicMenus;
   /** Theme Header section: logo and name on the left (default) or centred above the menu. */
   logoPosition?: 'left' | 'center';
+  /**
+   * `bar`: the slim full-width header of map pages. Menu button always (drawer
+   * from the left), then the logo flush left, sign-in flush right, and an
+   * optional `subheader` row (event summary) under them.
+   */
+  layout?: 'standard' | 'bar';
+  /** Bar layout only: the row under the bar, aligned with the menu button. */
+  subheader?: ReactNode;
 }
 
 // Skip link: moves focus to the themed page body (#storefront-main, spec 038)
@@ -65,6 +73,8 @@ export default function OrganizationHeader({
   signIn = false,
   menus: serverMenus,
   logoPosition = 'left',
+  layout = 'standard',
+  subheader,
 }: OrganizationHeaderProps) {
   const fetchedMenus = useStorefrontMenus(nav && !serverMenus ? organization.id : null);
   const menus = serverMenus ?? fetchedMenus;
@@ -81,10 +91,13 @@ export default function OrganizationHeader({
   const nameClass = logoSrc
     ? 'sr-only'
     : // Same size whether or not the name is the page's h1: one header on every page.
-      'min-w-0 break-words text-xl font-semibold tracking-tight text-gray-900 dark:text-slate-100 sm:text-2xl';
+      `min-w-0 break-words font-semibold tracking-tight text-gray-900 dark:text-slate-100 ${
+        layout === 'bar' ? 'text-base sm:text-lg' : 'text-xl sm:text-2xl'
+      }`;
   const focusRing =
     'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-transparent';
   const hasNav = navItems.length > 0 && !!organization.id;
+  const isBar = layout === 'bar';
 
   const logo = logoSrc && (
     <LogoBox
@@ -93,7 +106,12 @@ export default function OrganizationHeader({
       bare
       // One size on every page: the theme's Logo widths inside a ThemeScope,
       // otherwise the same defaults (packages/theme/src/settings.js: 90 / 120 px).
-      className="w-[var(--theme-logo-width-mobile,90px)] shrink-0 sm:w-[var(--theme-logo-width,120px)]"
+      // The map bar is the one exception: a slim bar leaves the map the screen.
+      className={
+        isBar
+          ? 'w-10 shrink-0 sm:w-12'
+          : 'w-[var(--theme-logo-width-mobile,90px)] shrink-0 sm:w-[var(--theme-logo-width,120px)]'
+      }
     />
   );
 
@@ -108,61 +126,90 @@ export default function OrganizationHeader({
     </>
   );
 
+  const skipLink = (
+    <a
+      href="#"
+      onClick={skipToContent}
+      className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-2 focus:z-50 focus:rounded-md focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-gray-900 focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-brand dark:focus:bg-slate-800 dark:focus:text-slate-100"
+    >
+      Skip to content
+    </a>
+  );
+
+  const signInLink = signIn && accountHref && !buyerLoading ? (
+    <Link
+      href={accountHref}
+      data-testid="buyer-sign-in-link"
+      className={`inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-md px-2 text-sm font-medium text-gray-700 transition-colors hover:text-brand-link motion-reduce:transition-none dark:text-slate-200 sm:px-3 ${focusRing}`}
+    >
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 20 20"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="h-5 w-5 sm:h-4 sm:w-4"
+      >
+        <circle cx="10" cy="6.5" r="3" />
+        <path d="M4 17v-1a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v1" />
+      </svg>
+      <span className="sr-only sm:not-sr-only">{buyer ? 'Account' : 'Sign in'}</span>
+    </Link>
+  ) : null;
+
+  const identityLink = href && !isHeading ? (
+    <Link
+      href={href}
+      className={`-m-1 flex w-fit max-w-full items-center gap-3 rounded-lg p-1 transition-opacity hover:opacity-80 motion-reduce:transition-none sm:gap-4 ${focusRing}`}
+    >
+      {identity}
+    </Link>
+  ) : (
+    <div className="flex items-center gap-3 sm:gap-4">{identity}</div>
+  );
+
+  if (isBar) {
+    // Map pages (Ticketmaster-style): one slim full-width row, then the subheader.
+    return (
+      <header
+        data-testid="organization-header"
+        data-layout="bar"
+        className="relative w-full border-b border-gray-200 dark:border-slate-800"
+      >
+        {skipLink}
+        <div className="flex min-h-14 items-center gap-1 px-2 sm:gap-2 sm:px-4">
+          {hasNav && (
+            <StorefrontNav orgId={organization.id!} items={navItems} variant="mobile" side="left" />
+          )}
+          <div className="min-w-0 flex-1 py-1.5">{identityLink}</div>
+          {signInLink && <div className="shrink-0">{signInLink}</div>}
+        </div>
+        {subheader && <div className="px-5 pb-3 sm:px-7">{subheader}</div>}
+      </header>
+    );
+  }
+
   return (
     <header data-testid="organization-header" className="relative w-full">
-      <a
-        href="#"
-        onClick={skipToContent}
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-2 focus:z-50 focus:rounded-md focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-gray-900 focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-brand dark:focus:bg-slate-800 dark:focus:text-slate-100"
-      >
-        Skip to content
-      </a>
+      {skipLink}
       <div
         className={`mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:gap-6 sm:px-6 sm:py-5 lg:px-8 ${
           logoPosition === 'center' ? 'md:flex-col md:gap-3' : ''
         }`}
       >
         <div className={`min-w-0 flex-1 ${logoPosition === 'center' ? 'md:flex md:justify-center' : ''}`}>
-          {href && !isHeading ? (
-            <Link
-              href={href}
-              className={`-m-1 flex w-fit max-w-full items-center gap-3 rounded-lg p-1 transition-opacity hover:opacity-80 motion-reduce:transition-none sm:gap-4 ${focusRing}`}
-            >
-              {identity}
-            </Link>
-          ) : (
-            <div className="flex items-center gap-3 sm:gap-4">{identity}</div>
-          )}
+          {identityLink}
         </div>
 
         {hasNav && (
           <StorefrontNav orgId={organization.id!} items={navItems} className="hidden md:block" />
         )}
 
-        {((signIn && accountHref && !buyerLoading) || hasNav) && (
+        {(signInLink || hasNav) && (
           <div className="flex shrink-0 items-center gap-1">
-            {signIn && accountHref && !buyerLoading && (
-              <Link
-                href={accountHref}
-                data-testid="buyer-sign-in-link"
-                className={`inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-md px-2 text-sm font-medium text-gray-700 transition-colors hover:text-brand-link motion-reduce:transition-none dark:text-slate-200 sm:px-3 ${focusRing}`}
-              >
-                <svg
-                  aria-hidden="true"
-                  viewBox="0 0 20 20"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="h-5 w-5 sm:h-4 sm:w-4"
-                >
-                  <circle cx="10" cy="6.5" r="3" />
-                  <path d="M4 17v-1a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v1" />
-                </svg>
-                <span className="sr-only sm:not-sr-only">{buyer ? 'Account' : 'Sign in'}</span>
-              </Link>
-            )}
+            {signInLink}
             {hasNav && (
               <StorefrontNav
                 orgId={organization.id!}
