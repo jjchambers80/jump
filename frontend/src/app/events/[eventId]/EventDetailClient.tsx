@@ -15,7 +15,7 @@ import BrandScope from '../../../components/BrandScope';
 import OrganizationHeader from '../../../components/OrganizationHeader';
 import StorefrontFooter from '../../../components/storefront/StorefrontFooter';
 import GetInvolved from './GetInvolved';
-import FloorMapPreview from './FloorMapPreview';
+import FloorMapButton from './FloorMapButton';
 import RsvpPass from './RsvpPass';
 import TierStub from './TierStub';
 import CartLineItem from '../../../components/CartLineItem';
@@ -452,6 +452,8 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                       <span>Event Information</span>
                     </button>
                   )}
+                  {/* Floor map (spec 014): opens full screen; renders only once a map is published */}
+                  <FloorMapButton eventId={event.id} eventName={event.name} />
                   {/* Applications (spec 011): vendors, sponsors, press, panels — above the fold */}
                   <GetInvolved eventId={event.id} />
                 </div>
@@ -608,12 +610,6 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
                 )}
               </>
             )}
-          </div>
-
-          {/* Line both up with the ticketed content's gutter (px-4, sm:p-10) */}
-          <div className={isRsvpMode ? '' : '-mx-2 sm:mx-0 sm:px-2'}>
-            {/* Floor map preview (spec 014 phase 1) */}
-            <FloorMapPreview eventId={event.id} />
           </div>
         </div>
         {/* End content card */}

@@ -211,7 +211,7 @@ Table: event (link to builder), status pill, booths (sold / total), published da
 ### 4.6 Public map
 
 - Route `frontend/src/app/events/[eventId]/map/page.tsx` (server component fetches the event like `events/[eventId]/page.tsx`, then `PublicMapClient`): `BrandScope` with the org's `themeMode`, `OrganizationHeader` + `StorefrontFooter` (Gotcha 21 allows event pages), title "Floor map", `MapCanvas interactive` + `MapLegend`, tap / click → bottom sheet on `< md`, popover on desktop: label, size, tier + all-in price, vendor name when sold, "Not for sale" for blocked. `?booth=A12` → fit-to-booth + 3 pulses (none under reduced motion). 404 when the map is not published.
-- `EventDetailClient.tsx`: below `GetInvolved`, a **Floor map** section (`getPublicEventMap` on mount; renders nothing on 404) with a compact non-interactive preview and "Open map" link.
+- `EventDetailClient.tsx`: below `GetInvolved`, a **Floor map** section (`getPublicEventMap` on mount; renders nothing on 404) with a compact non-interactive preview and "Open map" link. *(Superseded 2026-09-29: the preview section is gone; a **Floor map** pill in the hero opens the map full screen — see `docs/wiki/features/public-floor-map.md`.)*
 - `storefrontHost.ts` `tenantResourceFor`: regex `^\/(events|checkout|orders|venues)\/([^/]+)(?:\/map)?\/?$` so custom domains check ownership of `/events/:id/map`. Redirect reserved list already covers `/events/*`.
 - Polling: the public client refetches every 30 s with `If-None-Match` while visible (`document.visibilityState`) — cheap 304s, no cache.
 
