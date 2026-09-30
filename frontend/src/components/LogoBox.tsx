@@ -5,6 +5,8 @@ interface LogoBoxProps {
   className?: string;
   /** Force a square box (default). `false` lets the box take the logo's own aspect ratio. */
   square?: boolean;
+  /** Drop the flat background so the logo sits directly on the surface behind it. */
+  bare?: boolean;
 }
 
 /**
@@ -14,13 +16,13 @@ interface LogoBoxProps {
  * - Landscape logo: spans full width, letterboxed top/bottom.
  * - Portrait logo: spans full height, pillarboxed left/right.
  *
- * Empty bands show the flat container background; no image is painted behind.
+ * Empty bands show the flat container background (none when `bare`); no image is painted behind.
  */
-export default function LogoBox({ src, alt, className = '', square = true }: LogoBoxProps) {
+export default function LogoBox({ src, alt, className = '', square = true, bare = false }: LogoBoxProps) {
   return (
     <div
       data-testid="logo-box"
-      className={`relative ${square ? 'aspect-square ' : ''}overflow-hidden bg-gray-100 dark:bg-slate-800 ${className}`}
+      className={`relative ${square ? 'aspect-square ' : ''}overflow-hidden ${bare ? '' : 'bg-gray-100 dark:bg-slate-800 '}${className}`}
     >
       <img src={src} alt={alt} className="h-full w-full object-contain" />
     </div>

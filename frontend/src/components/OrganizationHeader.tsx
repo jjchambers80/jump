@@ -91,7 +91,8 @@ export default function OrganizationHeader({
     <LogoBox
       src={logoSrc}
       alt={`${organization.name} logo`}
-      className={`shrink-0 rounded-lg ${
+      bare
+      className={`shrink-0 ${
         themedLogo
           ? 'w-[var(--theme-logo-width-mobile)] sm:w-[var(--theme-logo-width)]'
           : isHeading

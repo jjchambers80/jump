@@ -71,6 +71,7 @@ test.describe('public organization logo header', () => {
     expect(Math.round(headerDims.x)).toBe(0);
     expect(Math.round(headerDims.width)).toBe(DESKTOP.width);
     expect(Math.round(boxDims.width)).toBe(64);
+    await expect(box).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     await expect(header.getByRole('img', { name: 'Logo Test Org logo' })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth === document.documentElement.clientWidth)).toBe(true);
   });
