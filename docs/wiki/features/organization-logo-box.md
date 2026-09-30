@@ -5,7 +5,7 @@
 
 ## Overview
 
-Every public storefront page opens with a full-width organization header: the organization logo (square box; 56px on mobile and 64px from `sm` on the organization page, 40px / 48px elsewhere) next to the organization name. Layout, menu and accessibility details live in [Storefront Header and Footer](storefront-header-footer.md). On `/organizations/[orgId]` the name is the page `<h1>`; on event, apply, checkout and confirmation pages the whole header links back to the organization page. Logos of any aspect ratio fit the box with `object-contain` over a flat background — no blurred backdrop.
+Every public storefront page opens with a full-width organization header: the organization logo (square box; 56px on mobile and 64px from `sm` on the organization page, 40px / 48px elsewhere) next to the organization name. Layout, menu and accessibility details live in [Storefront Header and Footer](storefront-header-footer.md). On `/organizations/[orgId]` the name is the page `<h1>`; on event, apply, checkout and confirmation pages the whole header links back to the organization page. Logos of any aspect ratio fit the box with `object-contain` — no blurred backdrop. In the header the box is `bare`: no background, no rounding, so the logo sits directly on the header surface.
 
 ## Key Files
 
@@ -40,7 +40,7 @@ The header renders only when `organizationName` is present; the logo box renders
 
 ### Aspect-ratio fitting (`LogoBox`)
 
-`<div class="relative aspect-square overflow-hidden bg-gray-100 dark:bg-slate-800">` with the logo as `<img class="h-full w-full object-contain">`. Square logos fill the box; landscape logos are letterboxed, portrait logos pillarboxed, and the bands show the flat container background. There is no aspect-ratio measurement and no second image.
+`<div class="relative aspect-square overflow-hidden bg-gray-100 dark:bg-slate-800">` with the logo as `<img class="h-full w-full object-contain">`. Square logos fill the box; landscape logos are letterboxed, portrait logos pillarboxed, and the bands show the flat container background. `OrganizationHeader` passes `bare`, which drops the background classes; the password gate and theme footer keep the flat box. There is no aspect-ratio measurement and no second image.
 
 ## API Endpoints
 
