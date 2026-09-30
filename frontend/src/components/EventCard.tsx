@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { ArrowUpRight, Clock, MapPin } from 'lucide-react';
 import { formatEventTime } from '@/lib/eventTime';
 import { dateTile } from '@/lib/dateTile';
-import { imageVariantUrl } from '@/lib/assets';
+import { resolveAssetUrl } from '@/lib/assets';
 
 export interface EventVenue {
   id: string;
@@ -53,7 +53,9 @@ export default function EventCard({ event }: { event: EventSummary }) {
   const zone = event.venue?.timezone;
   const tile = dateTile(event.date, zone);
   const time = formatEventTime(event.date, zone);
-  const image = imageVariantUrl(event.imageUrl, 'hero');
+  // The original, not a variant: every ImageService variant is center-cropped,
+  // which would cut a flyer's printed date and name.
+  const image = resolveAssetUrl(event.imageUrl);
   const isRsvp = event.admissionMode === 'RSVP';
   const isSoldOut = !isRsvp && event.availableTickets === 0;
   const isScarce = !isRsvp && event.availableTickets > 0 && event.availableTickets <= SCARCE_AT;
@@ -151,36 +153,34 @@ export default function EventCard({ event }: { event: EventSummary }) {
             </li>
           </ul>
 
-          <div className="mt-auto flex items-end justify-between gap-3 pt-5">
-            <div className="min-w-0">
-              {isRsvp ? (
-                <>
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Free</p>
-                  <p className="text-xl font-bold text-brand-link">RSVP</p>
-                </>
-              ) : event.priceRange ? (
-                <>
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">
-                    {event.priceRange.min !== event.priceRange.max ? 'From' : 'Price'}
-                  </p>
-                  <p className="flex items-baseline gap-1 whitespace-nowrap">
-                    <span className="text-2xl font-extrabold tracking-tight text-brand-link tabular-nums">
-                      {formatPrice(event.priceRange.min)}
-                    </span>
-                    {event.priceRange.min !== event.priceRange.max && (
-                      <span className="text-sm text-gray-500 dark:text-slate-400">– {formatPrice(event.priceRange.max)}</span>
-                    )}
-                  </p>
-                </>
-              ) : (
-                <p className="text-sm text-gray-500 dark:text-slate-400">No tiers available</p>
-              )}
-              {!isRsvp && !isSoldOut && event.priceRange && (
-                <p className="mt-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                  {event.availableTickets} tickets available
+          <div className="mt-auto min-w-0 pt-5">
+            {isRsvp ? (
+              <>
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Free</p>
+                <p className="text-xl font-bold text-brand-link">RSVP</p>
+              </>
+            ) : event.priceRange ? (
+              <>
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">
+                  {event.priceRange.min !== event.priceRange.max ? 'From' : 'Price'}
                 </p>
-              )}
-            </div>
+                <p className="flex items-baseline gap-1 whitespace-nowrap">
+                  <span className="text-2xl font-extrabold tracking-tight text-brand-link tabular-nums">
+                    {formatPrice(event.priceRange.min)}
+                  </span>
+                  {event.priceRange.min !== event.priceRange.max && (
+                    <span className="text-sm text-gray-500 dark:text-slate-400">– {formatPrice(event.priceRange.max)}</span>
+                  )}
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-gray-500 dark:text-slate-400">No tiers available</p>
+            )}
+            {!isRsvp && !isSoldOut && event.priceRange && (
+              <p className="mt-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                {event.availableTickets} tickets available
+              </p>
+            )}
           </div>
 
           <span
