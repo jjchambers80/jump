@@ -26,6 +26,7 @@ import emailService from '../../services/EmailService.js';
 import applicationService from '../../services/ApplicationService.js';
 import applicantProfileService from '../../services/ApplicantProfileService.js';
 import buyerAccountService from '../../services/BuyerAccountService.js';
+import buyerDataExportService from '../../services/BuyerDataExportService.js';
 import { validateEmailChange, validatePreferences, validateUpdateBuyerProfile } from '../validators/buyerAccountValidators.js';
 import { contactIdFromUnsubscribeToken, verifyUnsubscribeToken } from '../../utils/unsubscribeToken.js';
 import { validateSelectionBody } from '../validators/applicationValidators.js';
@@ -194,6 +195,18 @@ router.post('/me/rsvps/:id/cancel', requireBuyer, async (req, res, next) => {
 router.get('/me/orders/:orderId/receipt', requireBuyer, async (req, res, next) => {
   try {
     res.json(await orderService.getReceiptForContact(req.buyer.contactId, req.params.orderId));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** GET /buyer/me/export — "Download my data" (spec 040 PA-10): one JSON file, 3 a day. */
+router.get('/me/export', requireBuyer, async (req, res, next) => {
+  try {
+    const data = await buyerDataExportService.exportForBuyer(req.buyer.organizationId, req.buyer.contactId);
+    res.set('Content-Disposition', `attachment; filename="${buyerDataExportService.filename(data)}"`);
+    res.set('Cache-Control', 'no-store');
+    res.json(data);
   } catch (error) {
     next(error);
   }

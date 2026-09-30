@@ -31,6 +31,7 @@ import orderService from '../../services/OrderService.js';
 import ticketService from '../../services/TicketService.js';
 import refundService from '../../services/RefundService.js';
 import customerService from '../../services/CustomerService.js';
+import buyerDataExportService from '../../services/BuyerDataExportService.js';
 import domainService from '../../services/DomainService.js';
 import taxService from '../../services/TaxService.js';
 import paymentSettingsService from '../../services/PaymentSettingsService.js';
@@ -1618,6 +1619,28 @@ router.patch(
     }
   }
 );
+
+/**
+ * GET /admin/customers/:contactId/export — the customer's data as one JSON file,
+ * staff notes included, for an access request that arrived by email (spec 040 PA-11).
+ */
+router.get('/customers/:contactId/export', requireAdmin, async (req, res, next) => {
+  try {
+    const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
+    if (!isUnscoped(scope) && !scope.organizationId) throw new NotFoundError('Customer not found');
+    const contact = await prisma.contact.findFirst({
+      where: { id: req.params.contactId, ...(scope.organizationId && { organizationId: scope.organizationId }) },
+      select: { id: true, organizationId: true },
+    });
+    if (!contact) throw new NotFoundError('Customer not found');
+    const data = await buyerDataExportService.exportForStaff(contact.organizationId, contact.id, req.user.id);
+    res.set('Content-Disposition', `attachment; filename="${buyerDataExportService.filename(data).replace('-my-data-', '-customer-data-')}"`);
+    res.set('Cache-Control', 'no-store');
+    res.json(data);
+  } catch (error) {
+    next(error);
+  }
+});
 
 /** POST /admin/customers/:contactId/send-sign-in-link — issue and email a passwordless sign-in link (spec 032 phase 1). */
 const sendSignInLinkLimiter = makeLimiter('BUYER_AUTH_REQUEST', LIMITS.BUYER_AUTH_REQUEST);

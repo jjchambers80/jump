@@ -363,6 +363,30 @@ function CustomerDetailPageContent() {
     }
   };
 
+  // ── Export customer data (spec 040 PA-11) ──────────────────────────────
+
+  const exportData = async () => {
+    if (!customer) return;
+    setSignInLinkResult(null);
+    try {
+      const data = await api.get<Record<string, unknown>>(`/admin/customers/${customer.id}/export`);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const name = `${customer.firstName}-${customer.lastName}`.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'customer';
+      link.href = url;
+      link.download = `${name}-customer-data-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setSignInLinkResult({ ok: true, message: 'Customer data downloaded.' });
+    } catch (err: any) {
+      setSignInLinkResult({
+        ok: false,
+        message: err.status === 403 ? 'Only administrators can export customer data.' : err.message || 'Could not export customer data.',
+      });
+    }
+  };
+
   // ── Send sign-in link ─────────────────────────────────────────────────
 
   const sendSignInLink = async () => {
@@ -608,6 +632,12 @@ function CustomerDetailPageContent() {
                   Copy account URL
                 </button>
               )}
+              <button
+                onClick={() => { setActionsMenuOpen(false); exportData(); }}
+                className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700/50"
+              >
+                Export customer data
+              </button>
               <hr className="my-1 border-gray-200 dark:border-slate-700" />
               <button
                 disabled

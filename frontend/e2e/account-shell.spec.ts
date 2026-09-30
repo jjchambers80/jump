@@ -91,8 +91,8 @@ test('phones: the nav is one scrolling tab row above the content', async ({ page
   const nav = page.getByTestId('account-nav');
   await expect(nav).toHaveCount(1);
   const tabs = nav.getByRole('link');
-  // Tickets, Orders, Applications, Profile, Email preferences (no RSVPs → no RSVPs tab)
-  await expect(tabs).toHaveCount(5);
+  // Tickets, Orders, Applications, Profile, Email preferences, Privacy (no RSVPs → no RSVPs tab)
+  await expect(tabs).toHaveCount(6);
   const [first, second] = [await tabs.nth(0).boundingBox(), await tabs.nth(1).boundingBox()];
   expect(first && second && Math.abs(first.y - second.y) < 2).toBeTruthy();
   await expect(nav.getByRole('link', { name: 'Orders' })).toHaveAttribute('aria-current', 'page');
