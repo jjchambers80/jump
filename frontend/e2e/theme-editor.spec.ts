@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect as baseExpect, test, type Page } from '@playwright/test';
 import { signInAsStaff } from './helpers/session';
-import { mockThemeEditorApi } from './helpers/themeEditorMocks';
+import { API, editorOrg, mockThemeEditorApi } from './helpers/themeEditorMocks';
 
 // Spec 038D: the theme editor against a mocked API (documents from the real
 // preset). Covers §16 editor tests and acceptance tests 11 (axe) and 16 (restore).
@@ -229,6 +229,21 @@ test.describe('theme editor (038D)', () => {
     await expect(page.getByRole('spinbutton', { name: 'Overlay opacity (%)' })).toHaveAttribute('placeholder', 'Default: 40');
   });
 
+  test('a stylesheet that never finishes loading (e.g. a browser extension\'s) does not stall the canvas', async ({ page }) => {
+    await mockThemeEditorApi(page);
+    await page.route('**/never-loads.css', () => {});
+    await page.addInitScript(() => {
+      document.addEventListener('DOMContentLoaded', () => {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = '/never-loads.css';
+        document.head.appendChild(link);
+      });
+    });
+    await page.goto(EDITOR, { waitUntil: 'domcontentloaded' });
+    await expect(canvas(page).getByText('Welcome').first()).toBeVisible({ timeout: 60_000 });
+  });
+
   test('our editor chrome passes axe (test 11)', async ({ page }) => {
     await mockThemeEditorApi(page);
     await openEditor(page);
@@ -238,5 +253,28 @@ test.describe('theme editor (038D)', () => {
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
       .analyze();
     expect(results.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
+  });
+});
+
+test.describe('theme editor as a system administrator', () => {
+  test.describe.configure({ timeout: 120_000 });
+
+  test('waits for the org switcher, so every call carries X-Jump-Org', async ({ page, baseURL }) => {
+    await signInAsStaff(page, { id: 'sys', email: 'sys@test.com', role: 'SYSTEM_ADMIN' }, baseURL!);
+    await mockThemeEditorApi(page);
+    // Production: the org list is slower than the editor's first render.
+    await page.route(`${API}/organizations`, async (route) => {
+      await new Promise((r) => setTimeout(r, 1500));
+      await route.fulfill({ json: [editorOrg] });
+    });
+    const withoutOrg: string[] = [];
+    // SYSTEM_ADMIN has no memberships: without X-Jump-Org the backend answers 404.
+    await page.route(`${API}/admin/**`, (route) => {
+      if (route.request().headers()['x-jump-org']) return route.fallback();
+      withoutOrg.push(route.request().url());
+      return route.fulfill({ status: 404, json: { error: 'NotFoundError', message: 'No organization is assigned to this user' } });
+    });
+    await openEditor(page);
+    expect(withoutOrg).toEqual([]);
   });
 });

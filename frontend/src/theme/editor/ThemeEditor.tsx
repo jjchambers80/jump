@@ -10,6 +10,7 @@ import { ArrowLeft } from 'lucide-react';
 import { getPreset } from '@jump/theme';
 import ActionsMenu from '@/components/ActionsMenu';
 import { useThemeMode } from '@/components/ThemeProvider';
+import { useOrg } from '@/components/OrgContext';
 import { useMenusApi } from '@/app/admin/content/menus/useMenusApi';
 import type { StoreFile } from '@/lib/content';
 import { themesApi, type ThemeDetail, type ThemeDocumentData } from '@/lib/themes';
@@ -100,6 +101,10 @@ const sectionsPlugin: Plugin = {
 
 export default function ThemeEditor({ themeId }: { themeId: string }) {
   const menusApi = useMenusApi();
+  // Admin calls are org-scoped through X-Jump-Org, which the org switcher
+  // sets once it has loaded: fetching earlier sends none, and a SYSTEM_ADMIN
+  // (no memberships) gets 404 "No organization is assigned".
+  const { selectedOrgId, loading: orgLoading } = useOrg();
   // Puck's panels are light-only: an admin in dark mode got near-white text
   // on white panels. Force light while the editor is open and hand the
   // visitor's own choice back on exit (gotcha 7: setForced, never setTheme).
@@ -146,6 +151,7 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
   }, [themeId]);
 
   useEffect(() => {
+    if (orgLoading || !selectedOrgId) return;
     void reload();
     menusApi
       .list()
@@ -157,7 +163,7 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
     } catch {
       /* no backup */
     }
-  }, [themeId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [themeId, selectedOrgId, orgLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dirtyKeys = useMemo(
     () => (docs && saved ? DOC_KEYS.filter((key) => resetKeys.current.has(key) || !sameDocument(docs[key], saved[key])) : []),
@@ -351,7 +357,10 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
             metadata={metadata}
             onChange={onChange}
             plugins={[sectionsPlugin, blocksPlugin({ label: 'Add' })]}
-            iframe={{ enabled: true, waitForStyles: true }}
+            // Never wait for the host's stylesheets: one that never finishes
+            // loading (a browser extension's, a blocked font CSS) left the
+            // canvas spinning forever. Styles apply as they arrive.
+            iframe={{ enabled: true, waitForStyles: false }}
             viewports={[
               { width: '100%', label: 'Desktop', icon: 'Monitor' as any },
               { width: 390, height: 'auto', label: 'Mobile', icon: 'Smartphone' as any },
