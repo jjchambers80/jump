@@ -15,11 +15,12 @@ import type { ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
 import { api, mapsApi, type PublicMap, type PublicMapBooth, type PublicMapVendor, type MapBooth, type MapElement } from '@/services/api';
 import BrandScope from '@/components/BrandScope';
 import OrganizationHeader from '@/components/OrganizationHeader';
+import MapEventSummary from '@/components/storefront/MapEventSummary';
 import StorefrontFooter from '@/components/storefront/StorefrontFooter';
 import MapCanvas from '@/components/maps/MapCanvas';
 import { LEGEND_STATE_DARK, LEGEND_STATE_LIGHT, LEGEND_STATE_STROKE_DARK, LEGEND_STATE_STROKE_LIGHT, TIER_SWATCHES } from '@/components/maps/mapTheme';
 import { formatPrice } from '@/lib/fees';
-import { formatEventDate } from '@/lib/eventTime';
+import { formatEventDateTime } from '@/lib/eventTime';
 import { eventPath } from '@/lib/publicPaths';
 import VendorDirectory from './VendorDirectory';
 
@@ -29,6 +30,8 @@ interface PublicMapClientProps {
 
 interface EventSummary {
   name?: string | null;
+  logoUrl?: string | null;
+  organizationSignInLinks?: boolean;
   date?: string | null;
   venue?: { name?: string | null; timezone?: string | null } | null;
   organizationId?: string | null;
@@ -300,6 +303,8 @@ export default function PublicMapClient({ params }: PublicMapClientProps) {
       const data = await api.get<EventSummary>(`/events/${encodeURIComponent(params.eventId)}`);
       setEventData({
         name: data.name,
+        logoUrl: data.logoUrl,
+        organizationSignInLinks: data.organizationSignInLinks,
         date: data.date,
         venue: data.venue ? { name: data.venue.name, timezone: data.venue.timezone } : null,
         organizationId: data.organizationId,
@@ -481,8 +486,8 @@ export default function PublicMapClient({ params }: PublicMapClientProps) {
   }
 
   const zone = eventData?.venue?.timezone;
-  const dateLabel = eventData?.date ? formatEventDate(eventData.date, zone, { weekday: 'short', month: 'short' }) : null;
-  const meta = [mapData.name, dateLabel, eventData?.venue?.name].filter(Boolean) as string[];
+  const when = eventData?.date ? formatEventDateTime(eventData.date, zone) : null;
+  const eventName = eventData?.name || mapData.name;
   const boothTotal = mapData.booths.filter((b) => b.tier).length;
   const openTotal = mapData.booths.filter((b) => b.tier && b.status === 'AVAILABLE').length;
 
@@ -492,33 +497,36 @@ export default function PublicMapClient({ params }: PublicMapClientProps) {
         <OrganizationHeader
           organization={{ id: eventData.organizationId, name: eventData.organizationName, logoUrl: eventData.organizationLogoUrl }}
           nav
+          signIn={eventData.organizationSignInLinks !== false}
+          layout="bar"
+          subheader={
+            <MapEventSummary
+              name={eventName}
+              when={when}
+              venueName={eventData.venue?.name}
+              eventHref={eventPath(params.eventId)}
+              imageUrl={eventData.logoUrl}
+            />
+          }
         />
       )}
-      <main id="main-content" className="mx-auto max-w-7xl px-4 pb-16 pt-6 sm:px-6 sm:pt-10 lg:px-8">
-        {/* 1. Header */}
-        <header className="max-w-3xl">
-          <Link
-            href={eventPath(params.eventId)}
-            className="-ml-1 inline-flex min-h-[2.75rem] items-center gap-1.5 rounded-lg px-1 text-sm font-semibold text-brand-link hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link"
-          >
-            <ArrowLeft className="h-4 w-4" aria-hidden />
-            {eventData?.name ? <span>Back to {eventData.name}</span> : <span>Back to the event</span>}
-          </Link>
-          <p className="mt-3 text-xs font-bold uppercase tracking-[0.16em] text-gray-600 dark:text-slate-400">Floor map</p>
-          <h1 className="mt-1 text-balance text-3xl font-extrabold leading-tight tracking-tight text-gray-900 dark:text-slate-50 sm:text-4xl">
-            {eventData?.name || mapData.name}
-          </h1>
-          {meta.length > 0 && (
-            <p className="mt-2 flex flex-wrap gap-x-2 text-sm text-gray-700 dark:text-slate-300">
-              {meta.map((part, i) => (
-                <span key={part} className="whitespace-nowrap">
-                  {i > 0 && <span aria-hidden className="mr-2 text-gray-400 dark:text-slate-500">·</span>}
-                  {part}
-                </span>
-              ))}
-            </p>
-          )}
-        </header>
+      <main id="storefront-main" tabIndex={-1} className="mx-auto max-w-[100rem] px-4 pb-16 pt-5 outline-none sm:px-7 sm:pt-6">
+        {/* 1. Header: the map bar's event summary; this fallback only while the event loads or if it fails. */}
+        {!eventData?.organizationName && (
+          <header className="max-w-3xl">
+            <Link
+              href={eventPath(params.eventId)}
+              className="-ml-1 inline-flex min-h-[2.75rem] items-center gap-1.5 rounded-lg px-1 text-sm font-semibold text-brand-link hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link"
+            >
+              <ArrowLeft className="h-4 w-4" aria-hidden />
+              <span>Back to the event</span>
+            </Link>
+            <p className="mt-3 text-xs font-bold uppercase tracking-[0.16em] text-gray-600 dark:text-slate-400">Floor map</p>
+            <h1 className="mt-1 text-balance text-3xl font-extrabold leading-tight tracking-tight text-gray-900 dark:text-slate-50 sm:text-4xl">
+              {eventName}
+            </h1>
+          </header>
+        )}
 
         {deepLinkError && (
           <div role="alert" className="mt-6 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">

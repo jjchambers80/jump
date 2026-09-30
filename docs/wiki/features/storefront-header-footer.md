@@ -35,6 +35,10 @@ With a logo the name is `sr-only`: the logo alone is painted, while the `<h1>` a
 
 **Current page.** `currentMenuPath` (`lib/menus.ts`) picks one menu path: an exact match, else the longest item path the URL sits under. Only that item gets `aria-current="page"` (brand link colour and an underline, so the state never depends on colour alone). Before this, Home — the org root — was also "current" on every page under it, so Home and Events were both underlined on `/events`.
 
+### Bar layout (map pages)
+
+`layout="bar"` is the header on pages built around a floor map (today `/events/:id/map`), modelled on Ticketmaster's seat-map header. It is full width (no `max-w-7xl`), one `min-h-14` row with a bottom border: menu button (always, all widths; `StorefrontNav variant="mobile" side="left"`), then the organization identity flush left (logo sized by height, 36 / 44 px, `LogoBox fit="height"`), then Sign in / Account flush right. The optional `subheader` row sits under it, aligned with the menu icon. Unlike the standard header it has a surface (`bg-white` / `dark:bg-slate-950`) and a bottom border, so it reads as one band over the map. The drawer slides in from the left in 200 ms (`motion-safe`). It reuses the skip link, sign-in link, menus and drawer of the standard layout, so the accessibility rules below apply unchanged. See [Public floor map](public-floor-map.md).
+
 ### Skip link
 
 The first focusable element in the header is **Skip to content**, visually hidden until focused. It moves focus to the header's next sibling element (adding `tabindex="-1"` if needed), so no page needs a shared `#main` id.

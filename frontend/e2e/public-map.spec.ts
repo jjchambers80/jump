@@ -177,7 +177,7 @@ test.describe('public floor map', () => {
     const map = page.getByTestId('public-map');
     const directory = page.getByTestId('vendor-directory');
     await expect(heading).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Back to Map Expo' })).toHaveAttribute('href', '/events/ev-map');
+    await expect(page.getByRole('link', { name: /back to Map Expo/ })).toHaveAttribute('href', '/events/ev-map');
     await expect(page.getByTestId('booth-A1')).toBeVisible();
 
     const [h, m, d] = await Promise.all([heading.boundingBox(), map.boundingBox(), directory.boundingBox()]);
@@ -276,5 +276,79 @@ test.describe('public floor map', () => {
     await expect(dialog.getByRole('link', { name: /Vendor directory/ }).locator('visible=true')).toHaveCount(1);
     await page.getByRole('button', { name: 'Close the floor map' }).click();
     await expect(dialog).toHaveCount(0);
+  });
+});
+
+// Map pages get the slim Ticketmaster-style bar: menu button, logo flush left,
+// sign-in flush right, then the event summary (OrganizationHeader layout="bar").
+test.describe('public floor map header bar', () => {
+  async function mockBar(page: Page) {
+    await mockEvent(page);
+    await page.route(`${API}/organizations/org-map/public/menus`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          main: [
+            { id: 'm1', label: 'Home', href: '/organizations/org-map', newTab: false, children: [] },
+            { id: 'm2', label: 'Events', href: '/organizations/org-map/events', newTab: false, children: [] },
+          ],
+          footer: [],
+        }),
+      })
+    );
+    await page.route('**/api/buyer/me', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: 'null' }));
+  }
+
+  for (const width of [390, 1280]) {
+    test(`${width}px: menu, then the organization, then sign-in at the far right`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await mockBar(page);
+      await page.goto('/events/ev-map/map');
+
+      const header = page.getByTestId('organization-header');
+      await expect(header).toHaveAttribute('data-layout', 'bar');
+      const menu = header.getByRole('button', { name: 'Open menu' });
+      const org = header.getByRole('link', { name: 'Map Org' });
+      const signIn = header.getByTestId('buyer-sign-in-link');
+      await expect(signIn).toBeVisible();
+      // Menus load after hydration: measure only once the menu button is in the row.
+      await expect(menu).toBeVisible();
+      // The inline desktop menu is never rendered in the bar: the menu button is the menu.
+      await expect(header.getByTestId('storefront-nav')).toHaveCount(0);
+
+      const [m, o, s, h] = await Promise.all([menu.boundingBox(), org.boundingBox(), signIn.boundingBox(), header.boundingBox()]);
+      expect(m!.x).toBeLessThan(24);
+      expect(m!.x + m!.width).toBeLessThanOrEqual(o!.x);
+      expect(o!.x + o!.width).toBeLessThanOrEqual(s!.x);
+      expect(width - (s!.x + s!.width)).toBeLessThan(24);
+      expect(Math.round(h!.width)).toBe(width);
+      // 44 px targets.
+      expect(m!.height).toBeGreaterThanOrEqual(44);
+      expect(s!.height).toBeGreaterThanOrEqual(44);
+
+      const summary = page.getByTestId('map-event-summary');
+      await expect(summary.getByRole('heading', { level: 1, name: 'Map Expo' })).toBeVisible();
+      await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+      await expect(summary.getByText(/[AP]M [A-Z]{2,5}$/)).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    });
+  }
+
+  test('the menu opens a drawer from the left that traps focus and closes on Escape', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await mockBar(page);
+    await page.goto('/events/ev-map/map');
+    const open = page.getByRole('button', { name: 'Open menu' });
+    await open.click();
+    const drawer = page.getByRole('dialog', { name: 'Menu' });
+    await expect(drawer).toBeVisible();
+    // Slides in from the left edge (200 ms, skipped under reduced motion).
+    await expect.poll(async () => Math.round((await drawer.boundingBox())!.x)).toBe(0);
+    await expect(drawer.getByRole('button', { name: 'Close menu' })).toBeFocused();
+    await expect(drawer.getByRole('link', { name: 'Events' })).toHaveAttribute('href', '/organizations/org-map/events');
+    await page.keyboard.press('Escape');
+    await expect(drawer).toHaveCount(0);
+    await expect(open).toBeFocused();
   });
 });
