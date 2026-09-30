@@ -10,13 +10,15 @@ export interface FaqItemProps {
   id: string;
   question?: string;
   answer?: string;
+  /** Theme editor: this question is selected, so it shows its answer. */
+  editorSelected?: boolean;
   ctx: SectionContext;
 }
 
-export default function FaqItemBlock({ question = 'Question', answer = '' }: FaqItemProps) {
+export default function FaqItemBlock({ question = 'Question', answer = '', editorSelected }: FaqItemProps) {
   if (!question) return null;
   return (
-    <details className="group">
+    <details className="group" open={editorSelected || undefined}>
       <summary className="-mx-3 flex cursor-pointer list-none items-center justify-between gap-6 rounded-lg px-3 py-5 text-left text-lg font-semibold text-gray-900 transition-colors hover:text-brand-link focus:outline-none focus-visible:ring-2 focus-visible:ring-brand motion-reduce:transition-none dark:text-slate-100 [&::-webkit-details-marker]:hidden">
         <span className="text-pretty">{question}</span>
         <span

@@ -11,6 +11,13 @@ const canvas = (page: Page) => page.frameLocator('iframe').first();
 const outline = (page: Page) => page.getByTestId('sections-outline');
 const EDITOR = '/admin/online-store/themes/theme-main/editor';
 
+/** Which slide the canvas carousel shows (0-based), from its track's scroll position. */
+const shownSlide = (page: Page) =>
+  page.frames()[1].evaluate(() => {
+    const track = document.querySelector('.hero-carousel-track');
+    return track ? Math.round(track.scrollLeft / track.clientWidth) : -1;
+  });
+
 async function openEditor(page: Page) {
   await page.goto(EDITOR);
   await expect(canvas(page).getByText('Welcome').first()).toBeVisible({ timeout: 60_000 });
@@ -128,6 +135,32 @@ test.describe('theme editor (038D)', () => {
     expect(carousel.props.blocks.map((b: any) => b.type)).toEqual(['Slide', 'Slide']);
     expect(faq.props.blocks.map((b: any) => b.props.question)).toEqual(['When do doors open?', 'Can I get a refund?']);
     for (const block of [...carousel.props.blocks, ...faq.props.blocks]) expect(block.props.id).toBeTruthy();
+  });
+
+  test('slides and questions are told apart, followed on the canvas and added from the Sections panel (spec 041)', async ({ page }) => {
+    await mockThemeEditorApi(page);
+    await openEditor(page);
+    const template = outline(page).getByRole('region', { name: 'Template' });
+    const addable = template.getByRole('list', { name: /Sections you can add to the template/ });
+    await template.getByRole('button', { name: 'Add section' }).click();
+    await addable.getByRole('button', { name: 'Hero carousel' }).click();
+
+    // Selecting slide 2 in the panel scrolls the carousel on the canvas to it.
+    await outline(page).getByRole('button', { name: 'Slide 2 · Another highlight', exact: true }).click();
+    await expect(page.getByRole('textbox', { name: 'Heading', exact: true })).toHaveValue('Another highlight');
+    await expect.poll(() => shownSlide(page)).toBe(1);
+
+    await outline(page).getByRole('button', { name: 'Add slide to Hero carousel' }).click();
+    await expect(outline(page).getByRole('button', { name: 'Slide 3 · New slide', exact: true })).toHaveAttribute('aria-current', 'true');
+    await expect.poll(() => shownSlide(page)).toBe(2);
+
+    // Selecting a question opens it on the canvas.
+    await template.getByRole('button', { name: 'Add section' }).click();
+    await addable.getByRole('button', { name: 'FAQ' }).click();
+    await outline(page).getByRole('button', { name: 'Question 2 · Can I get a refund?', exact: true }).click();
+    await expect(canvas(page).getByText('See the refund policy on your ticket.')).toBeVisible();
+    await outline(page).getByRole('button', { name: 'Add question to FAQ' }).click();
+    await expect(outline(page).getByRole('button', { name: 'Question 3 · New question', exact: true })).toBeVisible();
   });
 
   test('announcements are edited as a list and render on the canvas', async ({ page }) => {

@@ -80,9 +80,18 @@ export default function HeroCarouselFrame({
       );
       list.forEach((slide) => visible?.observe(slide));
     };
+    // Theme editor: bring the slide selected in the Sections panel into view.
+    const follow = () => {
+      const i = slides().findIndex((slide) => slide.matches('[data-editor-selected]') || slide.querySelector('[data-editor-selected]'));
+      if (i >= 0) goToRef.current(i);
+    };
     label();
-    const changes = new MutationObserver(label);
-    changes.observe(el, { childList: true });
+    follow();
+    const changes = new MutationObserver((records) => {
+      if (records.some((r) => r.type === 'childList' && r.target === el)) label();
+      follow();
+    });
+    changes.observe(el, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-editor-selected'] });
     return () => {
       changes.disconnect();
       visible?.disconnect();
@@ -106,6 +115,9 @@ export default function HeroCarouselFrame({
     setIndex(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const goToRef = useRef(goTo);
+  goToRef.current = goTo;
 
   /** The visitor moved the slides: stop rotating and say where they are. */
   const byVisitor = (to: number) => {

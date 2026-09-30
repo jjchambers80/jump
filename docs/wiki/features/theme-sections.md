@@ -31,6 +31,12 @@ Up to six **Slide** blocks in the Hero's rounded frame. Each slide has an image 
 - The active slide's copy settles in, and FAQ answers ease in on open (`globals.css`, `prefers-reduced-motion: no-preference` only).
 - Images use the Hero treatment (`HeroMedia`: fitted whole over a blurred copy, overlay on top) and load lazily.
 
+### Editing slides
+
+In the theme editor, open **Sections**. Under **Hero carousel**, each slide is listed as "Slide 2 · its heading". Click one to edit it: the canvas carousel scrolls to that slide. **+ Add slide** under the carousel adds a slide and selects it (up to 6). Use a slide's ⋯ menu to duplicate, reorder or remove it. FAQ questions work the same way: **+ Add question**, and a selected question opens on the canvas. Hero buttons get **+ Add button**.
+
+Under the hood, `followSelection` (`theme/editor/config.tsx`) passes `editorSelected` to `Slide` / `FaqItem`. The slide marks itself `data-editor-selected`, and `HeroCarouselFrame` scrolls to it. The question renders `open`.
+
 ## FAQ (spec 041)
 
 Heading, intro and up to 30 **Question** blocks (question + rich-text answer). Each question is a native `<details>` disclosure. "Open one answer at a time" (default on) and "Open the first answer" are applied by the `FaqBehavior` island.

@@ -15,15 +15,17 @@ export interface SlideProps {
   buttonLabel?: string;
   link?: ThemeLink | null;
   alignment?: 'center' | 'left';
+  /** Theme editor: this slide is selected, so the carousel scrolls to it. */
+  editorSelected?: boolean;
   ctx: SectionContext;
 }
 
-export default function SlideBlock({ image, heading = '', subheading = '', buttonLabel = '', link, alignment = 'center', ctx }: SlideProps) {
+export default function SlideBlock({ image, heading = '', subheading = '', buttonLabel = '', link, alignment = 'center', editorSelected, ctx }: SlideProps) {
   const file = image?.fileId ? ctx.resolved.files[image.fileId] : null;
   const alt = image?.decorative ? '' : (image?.alt ?? file?.alt ?? '');
   const centered = alignment === 'center';
   return (
-    <div data-slide className="relative isolate flex min-h-full items-center overflow-hidden">
+    <div data-slide data-editor-selected={editorSelected || undefined} className="relative isolate flex min-h-full items-center overflow-hidden">
       {/* Off-screen slides load lazily; the first is on screen, so it loads at once. */}
       {file && <HeroMedia url={file.url} alt={alt} overlay="var(--carousel-overlay, 0.4)" loading="lazy" />}
       <div className="w-full px-6 pb-20 pt-16 sm:px-20 lg:px-24">

@@ -11,6 +11,7 @@ import { useState } from 'react';
 import ActionsMenu from '@/components/ActionsMenu';
 import { usePuck } from './puck';
 import { LOCKED } from './config';
+import { renderConfig } from '../render/config';
 
 const GROUPS = [
   { slot: 'header', label: 'Header' },
@@ -21,12 +22,26 @@ const GROUPS = [
 type Item = { type: string; props: Record<string, any> };
 const labelOf = (type: string) => (SECTIONS as any)[type]?.label ?? (BLOCKS as any)[type]?.label ?? type;
 
+/** "Slide 2 · Another highlight": blocks of one kind are told apart by number and their own text. */
+function blockLabel(item: Item, index: number) {
+  const text = [item.props.heading, item.props.question, item.props.label].find((v) => typeof v === 'string' && v.trim());
+  return `${labelOf(item.type)} ${index + 1}${text ? ` · ${text.trim()}` : ''}`;
+}
+
+/** The one block type a section's slot takes, when it takes exactly one and has room for another. */
+function addableBlock(item: Item, count: number): string | null {
+  const def = (SECTIONS as any)[item.type];
+  const slot = (renderConfig.components[item.type]?.fields as Record<string, unknown> | undefined)?.blocks;
+  if (!def?.blocks || !slot || def.blocks.types.length !== 1 || count >= def.blocks.max) return null;
+  return def.blocks.types[0];
+}
+
 function Row({ item, index, zone, count, depth }: { item: Item; index: number; zone: string; count: number; depth: number }) {
   const { appState, dispatch } = usePuck();
   const selector = appState.ui.itemSelector;
   const selected = selector?.zone === zone && selector.index === index;
   const locked = LOCKED.has(item.type);
-  const label = labelOf(item.type);
+  const label = depth > 0 ? blockLabel(item, index) : labelOf(item.type);
   const blocks: Item[] = Array.isArray(item.props.blocks) ? item.props.blocks : [];
   const select = () => dispatch({ type: 'setUi', ui: { itemSelector: { index, zone } } });
   const setHidden = (hidden: boolean) =>
@@ -40,7 +55,7 @@ function Row({ item, index, zone, count, depth }: { item: Item; index: number; z
         }`}
         style={{ paddingLeft: 8 + depth * 16 }}
       >
-        <button type="button" className="min-w-0 flex-1 truncate text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500" onClick={select} aria-current={selected ? 'true' : undefined}>
+        <button type="button" title={label} className="min-w-0 flex-1 truncate text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500" onClick={select} aria-current={selected ? 'true' : undefined}>
           {label}
         </button>
         {locked && <Lock className="h-3.5 w-3.5 text-gray-500" aria-label="Locked" />}
@@ -89,7 +104,30 @@ function Row({ item, index, zone, count, depth }: { item: Item; index: number; z
           ))}
         </ul>
       )}
+      {depth === 0 && <AddBlock item={item} count={blocks.length} />}
     </li>
+  );
+}
+
+function AddBlock({ item, count }: { item: Item; count: number }) {
+  const { dispatch } = usePuck();
+  const type = addableBlock(item, count);
+  if (!type) return null;
+  const zone = `${item.props.id}:blocks`;
+  const noun = labelOf(type).toLowerCase();
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        dispatch({ type: 'insert', componentType: type, destinationIndex: count, destinationZone: zone });
+        dispatch({ type: 'setUi', ui: { itemSelector: { index: count, zone } } });
+      }}
+      style={{ paddingLeft: 24 }}
+      aria-label={`Add ${noun} to ${labelOf(item.type)}`}
+      className="inline-flex items-center gap-1 rounded py-0.5 pr-1 text-xs font-medium text-indigo-700 hover:bg-indigo-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+    >
+      <Plus className="h-3 w-3" aria-hidden /> Add {noun}
+    </button>
   );
 }
 
