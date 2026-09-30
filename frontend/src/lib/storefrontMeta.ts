@@ -4,9 +4,12 @@
 import type { Metadata } from 'next';
 import { API_URL, resolveAssetUrl } from './assets';
 
+// Server-only, like theme/server/storefront.ts: the private backend URL when set.
+const SERVER_API_URL = process.env.INTERNAL_API_URL || API_URL;
+
 export async function fetchPublicJson<T>(path: string): Promise<T | null> {
   try {
-    const res = await fetch(`${API_URL}${path}`, {
+    const res = await fetch(`${SERVER_API_URL}${path}`, {
       signal: AbortSignal.timeout(2000),
       next: { revalidate: 60 },
     });

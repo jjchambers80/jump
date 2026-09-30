@@ -591,10 +591,11 @@ class EventService {
   async getPublicRoute(identifier) {
     const event = await findByPublicIdentifier(prisma.event, identifier, {
       where: { status: 'PUBLISHED', venue: { organization: { status: 'ACTIVE' } } },
-      select: { id: true, slug: true },
+      select: { id: true, slug: true, venue: { select: { organizationId: true } } },
     });
     if (!event) throw new NotFoundError('Event not found');
-    return event;
+    // organizationId: the event page loads its organization's theme frame (spec 038).
+    return { id: event.id, slug: event.slug, organizationId: event.venue.organizationId };
   }
 
   /**

@@ -103,6 +103,13 @@ describe('public slug routes', () => {
     expect(legacy.body).toMatchObject({ id: event.id, slug: event.slug });
   });
 
+  it('returns the organization id with the event route meta (themed event page frame)', async () => {
+    const meta = await request(app).get(`/events/${event.slug}/meta`);
+
+    expect(meta.status).toBe(200);
+    expect(meta.body).toEqual({ id: event.id, slug: event.slug, organizationId: organization.id });
+  });
+
   it('resolves pages by canonical slug and legacy id under either organization identifier', async () => {
     const canonical = await request(app).get(
       `/organizations/${organization.slug}/public/pages/${page.slug}`

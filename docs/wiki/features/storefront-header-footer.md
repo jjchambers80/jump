@@ -16,7 +16,8 @@ The public storefront chrome (`OrganizationHeader` and `StorefrontFooter`) is mi
 | `frontend/src/components/storefront/StorefrontFooter.tsx` | Footer menu: grouped columns, then one row with `© year name` and the plain links |
 | `frontend/src/components/storefront/StorefrontShell.tsx`, `frontend/src/app/organizations/[orgId]/OrganizationStorefront.tsx` | Loading skeletons mirror the new header (no white bar) |
 | `frontend/e2e/public-nav.spec.ts` | Playwright: no background/border, skip link, drawer focus trap + focus return, 44 px menu button |
-| `frontend/e2e/public-org-logo.spec.ts` | Playwright: logo box sizes (56 px mobile / 64 px desktop on the org page) |
+| `frontend/e2e/public-org-logo.spec.ts` | Playwright: logo box sizes (90 px mobile / 120 px desktop) |
+| `frontend/e2e/storefront-themed.spec.ts` (themed event page) | Playwright: the event page sits in the theme frame; logo and header height equal the home page's at 390 and 1440 px |
 
 ## How It Works
 
@@ -24,11 +25,15 @@ The public storefront chrome (`OrganizationHeader` and `StorefrontFooter`) is mi
 
 | Breakpoint | Left | Right |
 |------------|------|-------|
-| < `sm` | logo (40 px, 56 px on the org page), or name without a logo | person icon (label is `sr-only`), hamburger |
-| `sm`–`md` | logo (48 / 64 px), or name | "Sign in" / "Account" with icon, hamburger |
+| < `sm` | logo (`--theme-logo-width-mobile`, default 90 px), or name without a logo | person icon (label is `sr-only`), hamburger |
+| `sm`–`md` | logo (`--theme-logo-width`, default 120 px), or name | "Sign in" / "Account" with icon, hamburger |
 | ≥ `md` | logo, or name | main menu inline, then "Sign in" / "Account" |
 
-With a logo the name is `sr-only`: the logo alone is painted, while the `<h1>` and the link's accessible name keep the organization name. Without a logo the name is the visible identity. The name is the page `<h1>` on the organization page (`as="h1"`, `text-xl sm:text-2xl`) and a link to the organization page elsewhere (`text-base sm:text-lg`). The current page in the desktop menu is marked with `aria-current="page"`, the brand link colour and an underline, so the state never depends on colour alone.
+With a logo the name is `sr-only`: the logo alone is painted, while the `<h1>` and the link's accessible name keep the organization name. Without a logo the name is the visible identity. The name is the page `<h1>` on the organization page (`as="h1"`) and a link to the organization page elsewhere; both are `text-xl sm:text-2xl`.
+
+**One header on every page.** Logo size, name size and padding never depend on the page. The logo width is `var(--theme-logo-width-mobile, 90px)` / `var(--theme-logo-width, 120px)`: inside a theme frame the org's Logo settings apply, anywhere else the same defaults (`packages/theme/src/settings.js`). For themed organizations the event page (tickets and RSVP) is framed by the theme like home, events, pages and blog: `app/events/[eventId]/page.tsx` reads `organizationId` from `GET /events/:id/meta`, calls `loadStorefrontFrame(orgId, 'frame')` and renders `EventDetailClient chrome={false}` inside `ThemedStorefront`. Legacy and locked stores keep the client page with its own header.
+
+**Current page.** `currentMenuPath` (`lib/menus.ts`) picks one menu path: an exact match, else the longest item path the URL sits under. Only that item gets `aria-current="page"` (brand link colour and an underline, so the state never depends on colour alone). Before this, Home — the org root — was also "current" on every page under it, so Home and Events were both underlined on `/events`.
 
 ### Skip link
 

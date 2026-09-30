@@ -9,8 +9,8 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChevronDown, Menu as MenuIcon, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-import type { PublicMenuItem } from '@/lib/menus';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { currentMenuPath, type PublicMenuItem } from '@/lib/menus';
 import { storefrontHref } from '@/lib/storefrontPath';
 
 interface StorefrontNavProps {
@@ -19,6 +19,13 @@ interface StorefrontNavProps {
   /** Which rendering this instance owns; the header mounts one of each. */
   variant?: 'desktop' | 'mobile';
   className?: string;
+}
+
+// The single current path for this menu (currentMenuPath), shared by every link.
+const CurrentPathContext = createContext<string | null>(null);
+
+function flattenHrefs(items: PublicMenuItem[], orgId: string): string[] {
+  return items.flatMap((item) => [storefrontHref(item.href, orgId), ...flattenHrefs(item.children, orgId)]);
 }
 
 function NavLink({
@@ -32,13 +39,10 @@ function NavLink({
   className: string;
   onNavigate?: () => void;
 }) {
-  const pathname = usePathname();
+  const currentPath = useContext(CurrentPathContext);
   const href = storefrontHref(item.href, orgId);
   const external = /^https?:\/\//i.test(href) || item.newTab;
-  const current =
-    !external &&
-    (pathname === href.split('#')[0] ||
-      (href.split('#')[0] !== '/' && pathname.startsWith(`${href.split('#')[0]}/`)));
+  const current = !external && currentPath !== null && href.split('#')[0] === currentPath;
   if (external) {
     return (
       <a
@@ -233,6 +237,8 @@ export default function StorefrontNav({
   variant = 'desktop',
   className = '',
 }: StorefrontNavProps) {
+  const pathname = usePathname();
+  const currentPath = useMemo(() => currentMenuPath(pathname, flattenHrefs(items, orgId)), [pathname, items, orgId]);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const openButtonRef = useRef<HTMLButtonElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -273,80 +279,84 @@ export default function StorefrontNav({
 
   if (variant === 'desktop') {
     return (
-      <nav aria-label="Main" className={className} data-testid="storefront-nav">
-        <ul className="flex flex-wrap items-center justify-end gap-x-1">
-          {items.map((item) =>
-            item.children.length ? (
-              <Dropdown key={item.id} item={item} orgId={orgId} />
-            ) : (
-              <li key={item.id}>
-                <NavLink
-                  item={item}
-                  orgId={orgId}
-                  className="inline-flex min-h-11 items-center rounded-md px-3 text-sm font-medium text-gray-700 transition-colors hover:text-brand-link motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-brand aria-[current=page]:text-brand-link aria-[current=page]:underline aria-[current=page]:decoration-2 aria-[current=page]:underline-offset-8 dark:text-slate-200"
-                />
-              </li>
-            )
-          )}
-        </ul>
-      </nav>
+      <CurrentPathContext.Provider value={currentPath}>
+        <nav aria-label="Main" className={className} data-testid="storefront-nav">
+          <ul className="flex flex-wrap items-center justify-end gap-x-1">
+            {items.map((item) =>
+              item.children.length ? (
+                <Dropdown key={item.id} item={item} orgId={orgId} />
+              ) : (
+                <li key={item.id}>
+                  <NavLink
+                    item={item}
+                    orgId={orgId}
+                    className="inline-flex min-h-11 items-center rounded-md px-3 text-sm font-medium text-gray-700 transition-colors hover:text-brand-link motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-brand aria-[current=page]:text-brand-link aria-[current=page]:underline aria-[current=page]:decoration-2 aria-[current=page]:underline-offset-8 dark:text-slate-200"
+                  />
+                </li>
+              )
+            )}
+          </ul>
+        </nav>
+      </CurrentPathContext.Provider>
     );
   }
 
   return (
-    <nav aria-label="Main menu" className={className} data-testid="storefront-nav-mobile">
-      <button
-        ref={openButtonRef}
-        type="button"
-        aria-label="Open menu"
-        aria-expanded={drawerOpen}
-        aria-controls="storefront-drawer"
-        onClick={() => setDrawerOpen(true)}
-        className="inline-flex h-11 w-11 items-center justify-center rounded-md text-gray-700 transition-colors hover:text-brand-link motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-brand dark:text-slate-200"
-      >
-        <MenuIcon className="h-6 w-6" aria-hidden />
-      </button>
-      {drawerOpen && (
-        <div className="fixed inset-0 z-50">
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setDrawerOpen(false)}
-            aria-hidden
-          />
-          <div
-            ref={drawerRef}
-            id="storefront-drawer"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Menu"
-            className="absolute inset-y-0 right-0 flex w-80 max-w-[85vw] flex-col bg-white shadow-xl dark:bg-slate-900"
-          >
-            <div className="flex items-center justify-between py-2 pl-6 pr-3">
-              <span className="text-xs font-semibold uppercase tracking-widest text-gray-600 dark:text-slate-300">Menu</span>
-              <button
-                ref={closeButtonRef}
-                type="button"
-                aria-label="Close menu"
-                onClick={() => setDrawerOpen(false)}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand dark:text-slate-300 dark:hover:bg-slate-800"
-              >
-                <X className="h-5 w-5" aria-hidden />
-              </button>
+    <CurrentPathContext.Provider value={currentPath}>
+      <nav aria-label="Main menu" className={className} data-testid="storefront-nav-mobile">
+        <button
+          ref={openButtonRef}
+          type="button"
+          aria-label="Open menu"
+          aria-expanded={drawerOpen}
+          aria-controls="storefront-drawer"
+          onClick={() => setDrawerOpen(true)}
+          className="inline-flex h-11 w-11 items-center justify-center rounded-md text-gray-700 transition-colors hover:text-brand-link motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-brand dark:text-slate-200"
+        >
+          <MenuIcon className="h-6 w-6" aria-hidden />
+        </button>
+        {drawerOpen && (
+          <div className="fixed inset-0 z-50">
+            <div
+              className="absolute inset-0 bg-black/40"
+              onClick={() => setDrawerOpen(false)}
+              aria-hidden
+            />
+            <div
+              ref={drawerRef}
+              id="storefront-drawer"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Menu"
+              className="absolute inset-y-0 right-0 flex w-80 max-w-[85vw] flex-col bg-white shadow-xl dark:bg-slate-900"
+            >
+              <div className="flex items-center justify-between py-2 pl-6 pr-3">
+                <span className="text-xs font-semibold uppercase tracking-widest text-gray-600 dark:text-slate-300">Menu</span>
+                <button
+                  ref={closeButtonRef}
+                  type="button"
+                  aria-label="Close menu"
+                  onClick={() => setDrawerOpen(false)}
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  <X className="h-5 w-5" aria-hidden />
+                </button>
+              </div>
+              <ul className="flex-1 overflow-y-auto pb-6">
+                {items.map((item) => (
+                  <DrawerItem
+                    key={item.id}
+                    item={item}
+                    orgId={orgId}
+                    depth={0}
+                    onNavigate={() => setDrawerOpen(false)}
+                  />
+                ))}
+              </ul>
             </div>
-            <ul className="flex-1 overflow-y-auto pb-6">
-              {items.map((item) => (
-                <DrawerItem
-                  key={item.id}
-                  item={item}
-                  orgId={orgId}
-                  depth={0}
-                  onNavigate={() => setDrawerOpen(false)}
-                />
-              ))}
-            </ul>
           </div>
-        </div>
-      )}
-    </nav>
+        )}
+      </nav>
+    </CurrentPathContext.Provider>
   );
 }

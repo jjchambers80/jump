@@ -53,7 +53,7 @@ test.describe('public organization logo header', () => {
     const coverDims = (await cover.boundingBox())!;
     expect(Math.round(headerDims.x)).toBe(0);
     expect(Math.round(headerDims.width)).toBe(MOBILE.width);
-    expect(Math.round(boxDims.width)).toBe(56);
+    expect(Math.round(boxDims.width)).toBe(90);
     expect(coverDims.y).toBeGreaterThanOrEqual(headerDims.y + headerDims.height - 1);
     await expect(header.getByRole('heading', { name: 'Logo Test Org', level: 1 })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth === document.documentElement.clientWidth)).toBe(true);
@@ -70,7 +70,7 @@ test.describe('public organization logo header', () => {
     const boxDims = (await box.boundingBox())!;
     expect(Math.round(headerDims.x)).toBe(0);
     expect(Math.round(headerDims.width)).toBe(DESKTOP.width);
-    expect(Math.round(boxDims.width)).toBe(64);
+    expect(Math.round(boxDims.width)).toBe(120);
     await expect(box).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     // Logo only: the name stays in the accessibility tree but is not painted.
     await expect(header.getByRole('heading', { name: 'Logo Test Org', level: 1 })).toHaveClass(/sr-only/);

@@ -38,8 +38,6 @@ export interface OrganizationHeaderProps {
   menus?: PublicMenus;
   /** Theme Header section: logo and name on the left (default) or centred above the menu. */
   logoPosition?: 'left' | 'center';
-  /** Theme Header section: logo width from the theme's Logo settings (CSS variables). */
-  themedLogo?: boolean;
 }
 
 // Skip link: moves focus to the themed page body (#storefront-main, spec 038)
@@ -67,7 +65,6 @@ export default function OrganizationHeader({
   signIn = false,
   menus: serverMenus,
   logoPosition = 'left',
-  themedLogo = false,
 }: OrganizationHeaderProps) {
   const fetchedMenus = useStorefrontMenus(nav && !serverMenus ? organization.id : null);
   const menus = serverMenus ?? fetchedMenus;
@@ -83,9 +80,8 @@ export default function OrganizationHeader({
   // With a logo the name is read by screen readers only; without one it is the visible identity.
   const nameClass = logoSrc
     ? 'sr-only'
-    : `min-w-0 break-words font-semibold tracking-tight text-gray-900 dark:text-slate-100 ${
-        isHeading ? 'text-xl sm:text-2xl' : 'text-base sm:text-lg'
-      }`;
+    : // Same size whether or not the name is the page's h1: one header on every page.
+      'min-w-0 break-words text-xl font-semibold tracking-tight text-gray-900 dark:text-slate-100 sm:text-2xl';
   const focusRing =
     'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-transparent';
   const hasNav = navItems.length > 0 && !!organization.id;
@@ -95,13 +91,9 @@ export default function OrganizationHeader({
       src={logoSrc}
       alt={`${organization.name} logo`}
       bare
-      className={`shrink-0 ${
-        themedLogo
-          ? 'w-[var(--theme-logo-width-mobile)] sm:w-[var(--theme-logo-width)]'
-          : isHeading
-            ? 'w-14 sm:w-16'
-            : 'w-10 sm:w-12'
-      }`}
+      // One size on every page: the theme's Logo widths inside a ThemeScope,
+      // otherwise the same defaults (packages/theme/src/settings.js: 90 / 120 px).
+      className="w-[var(--theme-logo-width-mobile,90px)] shrink-0 sm:w-[var(--theme-logo-width,120px)]"
     />
   );
 
@@ -134,7 +126,7 @@ export default function OrganizationHeader({
           {href && !isHeading ? (
             <Link
               href={href}
-              className={`-m-1 inline-flex max-w-full items-center gap-3 rounded-lg p-1 transition-opacity hover:opacity-80 motion-reduce:transition-none sm:gap-4 ${focusRing}`}
+              className={`-m-1 flex w-fit max-w-full items-center gap-3 rounded-lg p-1 transition-opacity hover:opacity-80 motion-reduce:transition-none sm:gap-4 ${focusRing}`}
             >
               {identity}
             </Link>

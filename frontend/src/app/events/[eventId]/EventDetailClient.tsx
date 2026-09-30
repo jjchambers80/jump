@@ -89,7 +89,14 @@ interface Event {
   updatedAt: string;
 }
 
-export default function EventDetailPage({ params }: { params: { eventId: string } }) {
+export default function EventDetailPage({
+  params,
+  chrome = true,
+}: {
+  params: { eventId: string };
+  /** False when the theme frame (spec 038) already renders the header and footer around this page. */
+  chrome?: boolean;
+}) {
   const router = useRouter();
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
@@ -342,8 +349,8 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
     : null;
 
   return (
-    <BrandScope color={event.organizationBrandColor} themeMode={event.organizationThemeMode} className="min-h-screen bg-gray-50 dark:bg-slate-900 pb-24 lg:pb-0">
-      {event.organizationName && (
+    <BrandScope color={event.organizationBrandColor} themeMode={event.organizationThemeMode} className={`${chrome ? 'min-h-screen' : ''} bg-gray-50 dark:bg-slate-900 pb-24 lg:pb-0`}>
+      {chrome && event.organizationName && (
         <OrganizationHeader
           organization={{ id: event.organizationId, name: event.organizationName, logoUrl: event.organizationLogoUrl }}
           nav
@@ -987,7 +994,7 @@ export default function EventDetailPage({ params }: { params: { eventId: string 
           </div>
         </div>
       )}
-      {event.organizationId && event.organizationName && (
+      {chrome && event.organizationId && event.organizationName && (
         <StorefrontFooter organization={{ id: event.organizationId, name: event.organizationName }} />
       )}
     </BrandScope>
