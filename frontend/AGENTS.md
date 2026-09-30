@@ -13,7 +13,7 @@ app/
 ├── confirmation/    # Post-purchase confirmation
 ├── orders/          # [orderId] detail (buyer session or staff) + lookup
 ├── venues/          # Venue pages
-├── organizations/   # Public org page + [orgId]/account (spec 040): `(member)/layout.tsx` = sign-in gate + section nav + `AccountContext`; sections `/account` (tickets), `/account/orders` (+ `orders/[orderId]/receipt`, print-only sheet), `/account/rsvps`, `/account/applications` (applications + business profile), `/account/profile`, `/account/preferences`. Token pages (`verify`, `email-confirm`, `unsubscribe`, framed by `components/account/TokenPageShell`) stay outside the `(member)` group
+├── organizations/   # Public org page + [orgId]/account (spec 040): `(member)/layout.tsx` = sign-in gate + section nav + `AccountContext`; sections `/account` (tickets), `/account/orders` (+ `orders/[orderId]/receipt`, print-only sheet), `/account/rsvps`, `/account/applications` (applications + business profile), `/account/profile`, `/account/preferences`, `/account/privacy` (Download my data). Token pages (`verify`, `email-confirm`, `unsubscribe`, framed by `components/account/TokenPageShell`) stay outside the `(member)` group
 ├── api/auth/        # Auth.js API route handler (staff)
 └── api/buyer/       # Buyer session proxies: request/verify/logout/me/* (httpOnly jump_buyer cookie); me/applications*, me/applicant-profile[/photos] forward JSON — the photos route forwards multipart; spec 040 account routes use `proxyBuyer` (`lib/buyerSession.ts`), which clears the cookie on a backend 401
 ```

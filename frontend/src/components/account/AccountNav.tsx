@@ -7,7 +7,7 @@
 import { useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { CalendarCheck, ClipboardList, Mail, Receipt, Ticket, UserRound, type LucideIcon } from 'lucide-react';
+import { CalendarCheck, ClipboardList, Mail, Receipt, ShieldCheck, Ticket, UserRound, type LucideIcon } from 'lucide-react';
 import { useAccount } from './AccountContext';
 
 interface Section {
@@ -25,6 +25,7 @@ const SECTIONS: Section[] = [
   { key: 'applications', label: 'Applications', icon: ClipboardList },
   { key: 'profile', label: 'Profile', icon: UserRound, settings: true },
   { key: 'preferences', label: 'Email preferences', icon: Mail, settings: true },
+  { key: 'privacy', label: 'Privacy', icon: ShieldCheck, settings: true },
 ];
 
 /** Which section a path belongs to; works for the platform and the custom-domain form alike. */

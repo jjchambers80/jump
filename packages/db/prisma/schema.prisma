@@ -764,6 +764,7 @@ enum ContactCommentKind {
   COMMENT
   EMAIL_CHANGED
   PROFILE_UPDATED
+  DATA_EXPORTED // spec 040 card C: "Download my data" (null author) or a staff export
 }
 
 // Single-use, hashed magic-link token for passwordless buyer sign-in.
