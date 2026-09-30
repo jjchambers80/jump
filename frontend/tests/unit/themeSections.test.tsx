@@ -85,6 +85,14 @@ describe('HeroSection', () => {
     expect(decorative).toContain('alt=""');
   });
 
+  it('full-bleed image sits in the content container with 32px corners, fitted whole over a blurred copy', () => {
+    const html = renderToStaticMarkup(<HeroSection id="h" heading="x" image={{ fileId: 'f1', alt: 'Crowd' }} Buttons={noButtons} ctx={ctx()} />);
+    expect(html).toContain('max-w-7xl');
+    expect(html).toContain('rounded-[32px]');
+    expect(html).toMatch(/alt="Crowd" class="[^"]*object-contain/);
+    expect(html).toMatch(/data-testid="hero-backdrop" class="[^"]*blur-2xl/);
+  });
+
   it('an image of another organization (unresolved) is left out', () => {
     const html = renderToStaticMarkup(<HeroSection id="h" heading="x" image={{ fileId: 'foreign', alt: 'x' }} Buttons={noButtons} ctx={ctx()} />);
     expect(html).not.toContain('<img');

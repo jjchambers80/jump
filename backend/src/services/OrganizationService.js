@@ -37,6 +37,7 @@ export const PUBLIC_EVENTS_QUERY = {
     name: true,
     date: true,
     category: true,
+    logoUrl: true,
     status: true,
     admissionMode: true,
     rsvpLimit: true,

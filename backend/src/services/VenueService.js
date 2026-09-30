@@ -118,6 +118,7 @@ class VenueService {
             date: true,
             category: true,
             status: true,
+            logoUrl: true,
             admissionMode: true,
             rsvpLimit: true,
             rsvpMaxPartySize: true,

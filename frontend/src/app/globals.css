@@ -145,6 +145,35 @@ body {
   }
 }
 
+/* Storefront event cards (EventCard): the poster and the stub meet at a
+   perforation with a round notch bitten out of each edge. */
+.ticket-notch-bottom,
+.ticket-notch-top {
+  --notch: 10px;
+}
+
+.ticket-notch-bottom {
+  -webkit-mask:
+    radial-gradient(circle var(--notch) at left bottom, transparent 97%, #000 100%),
+    radial-gradient(circle var(--notch) at right bottom, transparent 97%, #000 100%);
+  -webkit-mask-composite: source-in;
+  mask:
+    radial-gradient(circle var(--notch) at left bottom, transparent 97%, #000 100%),
+    radial-gradient(circle var(--notch) at right bottom, transparent 97%, #000 100%);
+  mask-composite: intersect;
+}
+
+.ticket-notch-top {
+  -webkit-mask:
+    radial-gradient(circle var(--notch) at left top, transparent 97%, #000 100%),
+    radial-gradient(circle var(--notch) at right top, transparent 97%, #000 100%);
+  -webkit-mask-composite: source-in;
+  mask:
+    radial-gradient(circle var(--notch) at left top, transparent 97%, #000 100%),
+    radial-gradient(circle var(--notch) at right top, transparent 97%, #000 100%);
+  mask-composite: intersect;
+}
+
 .event-stub-shadow {
   filter: drop-shadow(0 1px 1px rgb(15 23 42 / 0.06)) drop-shadow(0 2px 6px rgb(15 23 42 / 0.05));
   transition: filter 200ms ease, transform 200ms ease;
