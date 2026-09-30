@@ -107,6 +107,29 @@ test.describe('theme editor (038D)', () => {
     await expect(outline(page).getByRole('region', { name: 'Header' }).getByRole('button', { name: 'Add section' })).toHaveCount(0);
   });
 
+  test('hero carousel and FAQ are added with starter blocks and saved as sections with blocks (spec 041)', async ({ page }) => {
+    const api = await mockThemeEditorApi(page);
+    await openEditor(page);
+    const template = outline(page).getByRole('region', { name: 'Template' });
+    const addable = template.getByRole('list', { name: /Sections you can add to the template/ });
+    await template.getByRole('button', { name: 'Add section' }).click();
+    await addable.getByRole('button', { name: 'Hero carousel' }).click();
+    await expect(canvas(page).getByText('Your next big show').first()).toBeVisible();
+    await expect(canvas(page).getByRole('button', { name: 'Slide 2 of 2' })).toBeVisible();
+    await template.getByRole('button', { name: 'Add section' }).click();
+    await addable.getByRole('button', { name: 'FAQ' }).click();
+    await expect(canvas(page).getByText('When do doors open?').first()).toBeVisible();
+
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect.poll(() => api.saves.length).toBe(1);
+    const content = api.saves[0].documents.home.data.content;
+    const carousel = content.find((s: any) => s.type === 'HeroCarousel');
+    const faq = content.find((s: any) => s.type === 'Faq');
+    expect(carousel.props.blocks.map((b: any) => b.type)).toEqual(['Slide', 'Slide']);
+    expect(faq.props.blocks.map((b: any) => b.props.question)).toEqual(['When do doors open?', 'Can I get a refund?']);
+    for (const block of [...carousel.props.blocks, ...faq.props.blocks]) expect(block.props.id).toBeTruthy();
+  });
+
   test('announcements are edited as a list and render on the canvas', async ({ page }) => {
     const api = await mockThemeEditorApi(page);
     await openEditor(page);

@@ -22,7 +22,32 @@ export interface HeroProps {
   ctx: SectionContext;
 }
 
-const MIN_HEIGHT = { small: 'min-h-[18rem]', medium: 'min-h-[26rem]', large: 'min-h-[36rem]' } as const;
+export const MIN_HEIGHT = { small: 'min-h-[18rem]', medium: 'min-h-[26rem]', large: 'min-h-[36rem]' } as const;
+
+/**
+ * The image fitted whole (contain), whatever its orientation, over a blurred
+ * copy of itself so there are never empty bars, under a black overlay
+ * (0-1, or a CSS value). Fills its positioned, isolated parent. Shared with
+ * the carousel's slides.
+ */
+export function HeroMedia({ url, alt, overlay, loading }: { url: string; alt: string; overlay: number | string; loading?: 'lazy' }) {
+  return (
+    <>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={url}
+        alt=""
+        aria-hidden
+        loading={loading}
+        data-testid="hero-backdrop"
+        className="absolute inset-0 -z-10 h-full w-full scale-125 object-cover opacity-80 blur-2xl saturate-150"
+      />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={url} alt={alt} loading={loading} className="absolute inset-0 -z-10 h-full w-full object-contain" />
+      <div aria-hidden className="absolute inset-0 -z-10 bg-black" style={{ opacity: overlay }} />
+    </>
+  );
+}
 
 export default function HeroSection({
   id,
@@ -56,9 +81,7 @@ export default function HeroSection({
   );
 
   if (file && layout === 'full-bleed') {
-    // Inside the header and event list container (max-w-7xl) with 32px corners. The image is fitted whole
-    // (contain), whatever its orientation, and a blurred copy of itself
-    // fills the rest of the frame so there are never empty bars.
+    // Inside the header and event list container (max-w-7xl) with 32px corners.
     return (
       <SectionShell type="Hero" props={common}>
         <div className="mx-auto w-full max-w-7xl px-4 pt-4 sm:px-6 sm:pt-6 lg:px-8">
@@ -66,17 +89,7 @@ export default function HeroSection({
             aria-labelledby={heading ? headingId : undefined}
             className={`relative isolate flex items-center overflow-hidden rounded-[32px] bg-slate-900 ${MIN_HEIGHT[height]}`}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={file.url}
-              alt=""
-              aria-hidden
-              data-testid="hero-backdrop"
-              className="absolute inset-0 -z-10 h-full w-full scale-125 object-cover opacity-80 blur-2xl saturate-150"
-            />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={file.url} alt={alt} className="absolute inset-0 -z-10 h-full w-full object-contain" />
-            <div aria-hidden className="absolute inset-0 -z-10 bg-black" style={{ opacity: Math.min(80, Math.max(0, overlay)) / 100 }} />
+            <HeroMedia url={file.url} alt={alt} overlay={Math.min(80, Math.max(0, overlay)) / 100} />
             <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[32px] ring-1 ring-inset ring-white/10" />
             <div className="w-full px-6 py-16 sm:px-10 lg:px-12">{text(true)}</div>
           </section>

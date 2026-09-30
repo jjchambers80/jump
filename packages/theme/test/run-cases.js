@@ -30,6 +30,12 @@ export function runThemeCases({ describe, it, expect }) {
       const { value } = validateDocument('home', data, { sanitizeHtml: (html) => html.replace(/<script>.*<\/script>/, '') });
       expect(value.content[0].props.body).toBe('<p>a</p>');
     });
+    it('sanitises FAQ answers inside blocks too', () => {
+      const data = { root: { props: {} }, content: [{ type: 'Faq', props: { id: 'F', blocks: [{ type: 'FaqItem', props: { id: 'Q', question: 'Why?', answer: '<p>a</p><script>x</script>' } }] } }] };
+      const { value, errors } = validateDocument('home', data, { sanitizeHtml: (html) => html.replace(/<script>.*<\/script>/, '') });
+      expect(errors).toEqual({});
+      expect(value.content[0].props.blocks[0].props.answer).toBe('<p>a</p>');
+    });
     it('every preset document validates', () => {
       for (const key of Object.keys(DOCUMENTS)) {
         expect(validateDocument(key, preset.documents[key], { schemeIds }).errors).toEqual({});

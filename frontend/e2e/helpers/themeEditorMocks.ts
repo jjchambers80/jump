@@ -86,7 +86,7 @@ export async function mockThemeEditorApi(page: Page, options: EditorMockOptions 
     }),
   );
   await page.route(`${API}/admin/themes/theme-main/content`, (route) =>
-    route.fulfill({ json: { overrides: {}, resolved: { 'events.upcoming': 'Upcoming events', 'events.viewAll': 'View all events', 'events.empty': 'No upcoming events', 'event.getTickets': 'Get tickets', 'event.rsvp': 'RSVP', 'event.soldOut': 'Sold out', 'announcement.pause': 'Pause announcements', 'announcement.close': 'Close' } } }),
+    route.fulfill({ json: { overrides: {}, resolved: { 'events.upcoming': 'Upcoming events', 'events.viewAll': 'View all events', 'events.empty': 'No upcoming events', 'event.getTickets': 'Get tickets', 'event.rsvp': 'RSVP', 'event.soldOut': 'Sold out', 'announcement.pause': 'Pause announcements', 'announcement.close': 'Close', 'carousel.label': 'Featured', 'carousel.previous': 'Previous slide', 'carousel.next': 'Next slide', 'carousel.pause': 'Pause slides', 'carousel.slide': 'Slide {n} of {total}' } } }),
   );
   await page.route(`${API}/admin/themes/theme-main/preview-data**`, (route) =>
     route.fulfill({

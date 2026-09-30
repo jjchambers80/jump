@@ -35,6 +35,7 @@ Last updated: 2026-09-22.
 | 033 | Venue time zones — make the venue zone authoritative for event times, then derive it from the postal code | **Implemented** | All three phases built 2026-09-22 (PRs #137 / #138 / #139, stacked; merge in order). See `docs/wiki/features/venue-time-zones.md`. |
 | 034 | RSVP events — free admission, headcount and marketing capture | **Implemented** | All three phases + §9.2 reminder email built 2026-09-22. Phases 1-3 (PR #150). Reminder sweep: backend service, migration, unit tests (this card). See `docs/wiki/features/rsvp-events.md`. |
 | 040 | Patron "My account" — profile, RSVPs, receipts, marketing preferences, sign-out-everywhere, download and delete my data | **Implemented** | 2026-09-30: 040A #251, 040B #253, 040C #254, 040D erasure. See `docs/wiki/features/patron-account.md`. |
+| 041 | Hero carousel and FAQ theme sections | **Implemented** | 2026-09-30: `HeroCarousel` + `Slide`, `Faq` + `FaqItem` in the `@jump/theme` registry. See `docs/wiki/features/theme-sections.md`. |
 
 ## Documents archived as historical
 

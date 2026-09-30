@@ -8,6 +8,10 @@ import { getPreset } from '@jump/theme';
 import ButtonBlock from '@/theme/sections/ButtonBlock';
 import CallToActionSection from '@/theme/sections/CallToActionSection';
 import HeroSection from '@/theme/sections/HeroSection';
+import HeroCarouselSection from '@/theme/sections/HeroCarouselSection';
+import SlideBlock from '@/theme/sections/SlideBlock';
+import FaqSection from '@/theme/sections/FaqSection';
+import FaqItemBlock from '@/theme/sections/FaqItemBlock';
 import RichTextSection from '@/theme/sections/RichTextSection';
 import UpcomingEventsSection from '@/theme/sections/UpcomingEventsSection';
 import EventsHeroSection from '@/theme/sections/EventsHeroSection';
@@ -142,6 +146,74 @@ describe('EventsHero and EventList', () => {
     const list = renderToStaticMarkup(<EventListSection categoryFilter ctx={ctx({ query: { category: 'Comedy' } })} />);
     expect(list).toContain('1 event');
     expect(list).toContain('aria-label="Filter events"');
+  });
+});
+
+describe('HeroCarouselSection and SlideBlock', () => {
+  const carouselCtx = () => ctx({ content: { 'carousel.label': 'Featured', 'carousel.previous': 'Previous slide', 'carousel.next': 'Next slide', 'carousel.pause': 'Pause slides', 'carousel.slide': 'Slide {n} of {total}' } });
+
+  it('is a labelled carousel whose slot is a scroll-snap track carrying the overlay', () => {
+    const html = renderToStaticMarkup(<HeroCarouselSection id="c" overlay={60} Slides={(p) => <div className={p?.className} style={p?.style} />} ctx={carouselCtx()} />);
+    expect(html).toContain('aria-roledescription="carousel"');
+    expect(html).toContain('aria-label="Featured"');
+    expect(html).toMatch(/class="hero-carousel-track [^"]*snap-x snap-mandatory/);
+    expect(html).toContain('--carousel-overlay:0.6');
+    expect(html).toContain('rounded-[32px]');
+  });
+
+  it('a slide draws its image like the hero, with alt text, and a button when it has a label and a live link', () => {
+    const html = renderToStaticMarkup(
+      <SlideBlock id="s" heading="Summer Series" subheading="By the river" image={{ fileId: 'f1', alt: 'Crowd' }} buttonLabel="Tickets" link={{ type: 'EVENTS' }} ctx={ctx()} />,
+    );
+    expect(html).toContain('<h2');
+    expect(html).toContain('By the river');
+    expect(html).toMatch(/alt="Crowd" loading="lazy" class="[^"]*object-contain/);
+    expect(html).toContain('opacity:var(--carousel-overlay, 0.4)');
+    expect(html).toContain('href="/organizations/riverside/events"');
+    const noLink = renderToStaticMarkup(<SlideBlock id="s" heading="x" buttonLabel="Tickets" link={{ type: 'PAGE', targetId: 'gone' }} ctx={ctx()} />);
+    expect(noLink).not.toContain('Tickets</a>');
+  });
+
+  it('renders every slide through the Puck slot', () => {
+    const data = {
+      root: { props: {} },
+      content: [{ type: 'HeroCarousel', props: { id: 'C', blocks: [{ type: 'Slide', props: { id: 'S1', heading: 'One' } }, { type: 'Slide', props: { id: 'S2', heading: 'Two' } }] } }],
+      zones: {},
+    };
+    const html = renderToStaticMarkup(<Render config={renderConfig} data={data as any} metadata={{ ctx: carouselCtx() }} />);
+    expect(html).toContain('data-section="HeroCarousel"');
+    expect(html).toContain('One');
+    expect(html).toContain('Two');
+    expect(html.match(/data-slide="/g)).toHaveLength(2);
+  });
+});
+
+describe('FaqSection and FaqItemBlock', () => {
+  it('each question is a native disclosure with its sanitised answer', () => {
+    const html = renderToStaticMarkup(<FaqItemBlock id="q" question="When do doors open?" answer="<p>At 7</p>" ctx={ctx()} />);
+    expect(html).toMatch(/^<details/);
+    expect(html).toContain('<summary');
+    expect(html).toContain('When do doors open?');
+    expect(html).toContain('<p>At 7</p>');
+    expect(html).toContain('jump-prose');
+  });
+
+  it('labels the section by its heading and renders the questions slot', () => {
+    const html = renderToStaticMarkup(<FaqSection id="f" heading="FAQ" intro="Good to know" Items={buttons('<details><summary>Q</summary></details>')} ctx={ctx()} />);
+    expect(html).toContain('aria-labelledby="faq-f"');
+    expect(html).toContain('Good to know');
+    expect(html).toContain('<summary>Q</summary>');
+  });
+
+  it('renders every question through the Puck slot', () => {
+    const data = {
+      root: { props: {} },
+      content: [{ type: 'Faq', props: { id: 'F', heading: 'FAQ', blocks: [{ type: 'FaqItem', props: { id: 'Q1', question: 'Parking?' } }, { type: 'FaqItem', props: { id: 'Q2', question: 'Pets?' } }] } }],
+      zones: {},
+    };
+    const html = renderToStaticMarkup(<Render config={renderConfig} data={data as any} metadata={{ ctx: ctx() }} />);
+    expect(html).toMatch(/class="faq-list /);
+    expect(html.match(/<details/g)).toHaveLength(2);
   });
 });
 

@@ -305,4 +305,38 @@ test.describe('starter homepage sections (038S)', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Riverside Presents');
   });
+
+  test('hero carousel: slides swipe in a track, arrows and dots move it, rotation pauses (spec 041)', async ({ page }) => {
+    await page.goto('/organizations/theme-blocks');
+    const carousel = page.getByRole('region', { name: 'Featured' });
+    await expect(carousel).toHaveAttribute('aria-roledescription', 'carousel');
+    await expect(carousel.getByRole('group', { name: 'Slide 1 of 3' })).toBeVisible();
+    const pause = carousel.getByRole('button', { name: 'Pause slides' });
+    await expect(pause).toHaveAttribute('aria-pressed', 'false');
+    // Moving the slides yourself stops the rotation for good.
+    await carousel.getByRole('button', { name: 'Next slide' }).click();
+    await expect(pause).toHaveAttribute('aria-pressed', 'true');
+    await expect(carousel.getByRole('button', { name: 'Slide 2 of 3' })).toHaveAttribute('aria-current', 'true');
+    await expect(carousel.getByRole('heading', { name: 'Late show' })).toBeInViewport();
+    await carousel.getByRole('button', { name: 'Slide 3 of 3' }).click();
+    await expect(carousel.getByRole('heading', { name: 'Closing party' })).toBeInViewport();
+    await expect(carousel.getByRole('link', { name: 'See all events' })).toHaveAttribute('href', '/organizations/theme-blocks/events');
+  });
+
+  test('hero carousel never rotates on its own under reduced motion (spec 041)', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/organizations/theme-blocks');
+    const carousel = page.getByRole('region', { name: 'Featured' });
+    await expect(carousel.getByRole('button', { name: 'Pause slides' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('FAQ: native disclosures, one answer open at a time (spec 041)', async ({ page }) => {
+    await page.goto('/organizations/theme-blocks');
+    const faq = page.getByRole('region', { name: 'Good to know' });
+    await faq.getByText('Is there parking?').click();
+    await expect(faq.getByText('Free parking behind the hall.')).toBeVisible();
+    await faq.getByText('When do doors open?').click();
+    await expect(faq.getByText('One hour before the show.')).toBeVisible();
+    await expect(faq.getByText('Free parking behind the hall.')).toBeHidden();
+  });
 });

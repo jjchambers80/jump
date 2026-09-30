@@ -79,6 +79,7 @@ Generated and maintained by running `/doc-feature` after completing feature work
 
 ### Frontend
 - [Theme System](features/theme-system.md) — Light/dark/auto modes, localStorage persistence
+- [Storefront Theme Sections](features/theme-sections.md) — Section registry, Hero carousel and FAQ (spec 041), how to add a section
 - [Account Settings › General](features/account-settings.md) — `/admin/account` from the org menu: photo, name, verified email change, phone, language, time zone; `locale`/`timeZone`/`picture` JWT claims (spec 030 A)
 - [Account Security — sign-in methods](features/account-security.md) — Account › Security: step-up proof, passkeys, password (scrypt + HIBP), Google connect/disconnect, secondary email + recovery, `token-bridge` provider (spec 030 B)
 - [Two-step Authentication](features/two-step-authentication.md) — authenticator app / security key / recovery codes, `mfa` claim gate in middleware + `requireAuth`, `/auth/two-step`, trusted devices (spec 030 C)

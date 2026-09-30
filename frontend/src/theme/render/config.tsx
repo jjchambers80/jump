@@ -11,7 +11,11 @@ import EventsHeroSection from '../sections/EventsHeroSection';
 import EventListSection from '../sections/EventListSection';
 import ButtonBlock from '../sections/ButtonBlock';
 import CallToActionSection from '../sections/CallToActionSection';
+import FaqItemBlock from '../sections/FaqItemBlock';
+import FaqSection from '../sections/FaqSection';
+import HeroCarouselSection from '../sections/HeroCarouselSection';
 import HeroSection from '../sections/HeroSection';
+import SlideBlock from '../sections/SlideBlock';
 import RichTextSection from '../sections/RichTextSection';
 import UpcomingEventsSection from '../sections/UpcomingEventsSection';
 import { sectionContext } from '../sections/context';
@@ -58,6 +62,24 @@ export const renderConfig: Config = {
         <CallToActionSection {...(props as any)} Buttons={slotWrapper(blocks)} ctx={sectionContext(puck.metadata)} />
       ),
     },
+    HeroCarousel: {
+      fields: { blocks: { type: 'slot', allow: ['Slide'] } },
+      render: ({ puck, blocks, ...props }: PuckProps) => (
+        <HeroCarouselSection {...(props as any)} Slides={slotRender(blocks)} ctx={sectionContext(puck.metadata)} />
+      ),
+    },
+    Slide: {
+      render: ({ puck, ...props }: PuckProps) => <SlideBlock {...(props as any)} ctx={sectionContext(puck.metadata)} />,
+    },
+    Faq: {
+      fields: { blocks: { type: 'slot', allow: ['FaqItem'] } },
+      render: ({ puck, blocks, ...props }: PuckProps) => (
+        <FaqSection {...(props as any)} Items={slotRender(blocks)} ctx={sectionContext(puck.metadata)} />
+      ),
+    },
+    FaqItem: {
+      render: ({ puck, ...props }: PuckProps) => <FaqItemBlock {...(props as any)} ctx={sectionContext(puck.metadata)} />,
+    },
     UpcomingEvents: {
       render: ({ puck, ...props }: PuckProps) => <UpcomingEventsSection {...(props as any)} ctx={sectionContext(puck.metadata)} />,
     },
@@ -81,6 +103,14 @@ function slotWrapper(Slot: unknown) {
   const Render = typeof Slot === 'function' ? (Slot as (p?: { className?: string }) => JSX.Element) : null;
   return function Buttons({ className = '' }: { className?: string } = {}) {
     return Render ? <Render className={`${className} empty:hidden`} /> : null;
+  };
+}
+
+/** A slot the section lays out itself (track, list): class, style and drag axis pass through. */
+function slotRender(Slot: unknown) {
+  const Render = typeof Slot === 'function' ? (Slot as (p?: Record<string, unknown>) => JSX.Element) : null;
+  return function SlotItems(props: Record<string, unknown> = {}) {
+    return Render ? <Render {...props} /> : null;
   };
 }
 

@@ -391,6 +391,23 @@ describe('Online store themes contract', () => {
               content: [
                 { type: 'Hero', props: { id: 'Shown', heading: 'Shown' } },
                 { type: 'RichText', props: { id: 'Hidden', hidden: true, heading: 'Hidden' } },
+                {
+                  type: 'HeroCarousel',
+                  props: {
+                    id: 'Carousel',
+                    blocks: [
+                      { type: 'Slide', props: { id: 'Slide1', heading: 'One' } },
+                      { type: 'Slide', props: { id: 'SlideOff', heading: 'Off', hidden: true } },
+                    ],
+                  },
+                },
+                // Nothing left to show: a carousel or FAQ without blocks does not render.
+                { type: 'HeroCarousel', props: { id: 'EmptyCarousel', blocks: [{ type: 'Slide', props: { id: 'SlideGone', hidden: true } }] } },
+                {
+                  type: 'Faq',
+                  props: { id: 'Faq', blocks: [{ type: 'FaqItem', props: { id: 'Q1', question: 'Parking?', answer: '<p>Free</p><script>x</script>' } }] },
+                },
+                { type: 'Faq', props: { id: 'EmptyFaq', blocks: [] } },
               ],
             },
           },
@@ -420,7 +437,9 @@ describe('Online store themes contract', () => {
       const res = await render(organization.slug);
       expect(res.status).toBe(200);
       expect(res.body).toMatchObject({ page: 'home', fallback: false, theme: { id: theme.id } });
-      expect(res.body.documents.template.content.map((s) => s.props.id)).toEqual(['Shown']);
+      expect(res.body.documents.template.content.map((s) => s.props.id)).toEqual(['Shown', 'Carousel', 'Faq']);
+      expect(res.body.documents.template.content[1].props.blocks.map((b) => b.props.id)).toEqual(['Slide1']);
+      expect(res.body.documents.template.content[2].props.blocks[0].props.answer).toBe('<p>Free</p>');
       expect(res.body.documents.header.content[0].props.blocks.map((b) => b.props.id)).toEqual(['Now']);
       expect(res.body.organization).toMatchObject({ id: organization.id, slug: organization.slug });
       expect(res.body.settings.layout.pageWidth).toBe(1100);
