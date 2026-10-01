@@ -4,6 +4,8 @@ import { NotFoundError } from '../middleware/errorHandler.js';
 import storeFileService from './StoreFileService.js';
 import { sanitizeContentHtml } from '../utils/sanitizeHtml.js';
 import { findByPublicIdentifier } from '../utils/publicIdentifier.js';
+import pageTemplateService from './PageTemplateService.js';
+import { contactFormSection } from '../utils/pageTemplateManifest.js';
 
 /** Optional text field: trims, and stores an empty string as null. */
 function optionalText(value) {
@@ -28,8 +30,30 @@ class PageService {
     return page;
   }
 
-  /** Storefront: a visible page by handle; hidden pages are 404. */
+  /**
+   * Storefront: a visible page by handle; hidden pages are 404. A page with a
+   * template carries its sections (spec 042); `contactFormAvailable` says
+   * whether a contact form can deliver — the store email itself never leaves
+   * the backend.
+   */
   async getPublic(organizationId, identifier) {
+    const { template: templateName, ...page } = await this._findPublic(organizationId, identifier);
+    const template = await pageTemplateService.resolve(organizationId, templateName);
+    if (!template) return { ...page, template: null };
+    const sections = template.definition?.sections ?? [];
+    let contactFormAvailable = false;
+    if (contactFormSection(template.definition)) {
+      const organization = await prisma.organization.findUnique({
+        where: { id: organizationId },
+        select: { email: true },
+      });
+      contactFormAvailable = Boolean(organization?.email);
+    }
+    return { ...page, template: { name: template.name, sections }, contactFormAvailable };
+  }
+
+  /** The visible page row the storefront reads (with its template name). */
+  async _findPublic(organizationId, identifier) {
     const page = await findByPublicIdentifier(prisma.page, identifier, {
       where: { organizationId, isVisible: true },
       select: {
@@ -39,6 +63,7 @@ class PageService {
         content: true,
         seoTitle: true,
         seoDescription: true,
+        template: true,
         updatedAt: true,
       },
     });
@@ -47,6 +72,7 @@ class PageService {
   }
 
   async create(organizationId, data) {
+    await pageTemplateService.assertAssignable(organizationId, data.template);
     const title = data.title.trim();
     const slugState = await resolveUniqueSlug(prisma.page, {
       scope: { organizationId },
@@ -64,6 +90,7 @@ class PageService {
           isVisible: data.isVisible ?? true,
           seoTitle: optionalText(data.seoTitle) ?? null,
           seoDescription: optionalText(data.seoDescription) ?? null,
+          template: data.template ?? null,
         },
       });
     } catch (error) {
@@ -88,6 +115,10 @@ class PageService {
     if (data.isVisible !== undefined) patch.isVisible = data.isVisible;
     if (data.seoTitle !== undefined) patch.seoTitle = optionalText(data.seoTitle);
     if (data.seoDescription !== undefined) patch.seoDescription = optionalText(data.seoDescription);
+    if (data.template !== undefined) {
+      await pageTemplateService.assertAssignable(organizationId, data.template);
+      patch.template = data.template;
+    }
     if (data.title !== undefined || data.slug !== undefined) {
       Object.assign(
         patch,

@@ -2,6 +2,7 @@
 // Seed data for Schema Redesign — MVP Data Architecture
 // Creates: 1 org, 2 venues, 1 admin, 2 organizers, 2 customers, 3 events, 2 contacts, 1 completed order with tickets
 
+import { readFileSync } from "node:fs";
 import {
   PrismaClient,
   UserRole,
@@ -37,9 +38,34 @@ async function main() {
       name: "Jump Events Co.",
       brandColor: "#047857", // emerald-700 — passes WCAG AA, shows brand inheritance locally
       themeMode: "DARK", // default is SYSTEM; DARK makes enforcement visible in local QA
+      email: "hello@jump.events", // store email: contact-form messages go here (spec 042)
     },
   });
   console.log(`  ✅ Organization: ${org.name} (${org.id})`);
+
+  // Spec 042: the shipped contact page template and a Contact page using it.
+  const contactManifest = JSON.parse(
+    readFileSync(new URL("../../../templates/pages/page.contact.json", import.meta.url), "utf8")
+  );
+  await prisma.pageTemplate.create({
+    data: {
+      organizationId: org.id,
+      name: contactManifest.name,
+      label: contactManifest.label,
+      description: contactManifest.description,
+      definition: contactManifest,
+    },
+  });
+  await prisma.page.create({
+    data: {
+      organizationId: org.id,
+      title: "Contact",
+      slug: "contact",
+      content: "<p>Have a question about an event or your tickets? We are happy to help.</p>",
+      template: contactManifest.name,
+    },
+  });
+  console.log("  ✅ Page template: contact, Page: Contact");
 
   // 2. Venues
   const venue1 = await prisma.venue.create({

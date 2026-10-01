@@ -33,13 +33,13 @@ export default async function StorefrontPage({ params }: { params: Params }) {
   const frame = await loadStorefrontFrame(params.orgId, 'frame');
   if (frame.kind === 'legacy') return <StorefrontPageView orgId={params.orgId} slug={params.slug} />;
   return (
-    <ThemedContentPage<{ page: PublicPage }>
+    <ThemedContentPage<{ organization: { id: string }; page: PublicPage }>
       frame={frame}
       pagePath={`/organizations/${params.orgId}/pages/${params.slug}`}
       path={`/organizations/${encodeURIComponent(params.orgId)}/public/pages/${encodeURIComponent(params.slug)}`}
       notFoundTitle="Page not found"
     >
-      {({ page }) => <StorefrontPageBody page={page} />}
+      {({ organization, page }) => <StorefrontPageBody page={page} organizationId={organization.id} />}
     </ThemedContentPage>
   );
 }

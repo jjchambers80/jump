@@ -521,6 +521,8 @@ model Organization {
   floorMapTemplates        FloorMapTemplate[]
   addOnProducts            AddOnProduct[]
   themes                   Theme[]
+  pageTemplates            PageTemplate[]
+  contactInquiries         ContactInquiry[]
 }
 
 // Custom content pages managed under Online Store. Content is stored as the
@@ -538,12 +540,56 @@ model Page {
   // Search engine listing overrides; null falls back to title / no description.
   seoTitle       String?
   seoDescription String?
+  // Spec 042: name of the organization's PageTemplate that lays this page out.
+  // Null renders the default body. No FK on purpose: deleting a template
+  // clears it (PageTemplateService.remove), and an unknown name renders the default.
+  template       String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, slug])
+  @@index([organizationId, createdAt])
+}
+
+// Spec 042: a page layout a developer (SYSTEM_ADMIN) uploads to one
+// organization. `definition` is the normalized JSON manifest — an ordered list
+// of whitelisted sections (utils/pageTemplateManifest.js); no code or raw HTML
+// beyond sanitized rich text.
+model PageTemplate {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String // "contact" — what Page.template stores
+  label          String
+  description    String?
+  definition     Json
+  createdById    String? // plain id, no FK
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, name])
+}
+
+// Spec 042: a storefront contact-form message. Emailed to the store email
+// (Organization.email); the row is the record when the email fails. No IP.
+model ContactInquiry {
+  id             String    @id @default(cuid())
+  organizationId String
+  pageId         String? // plain id, no FK: the page may be deleted later
+  name           String
+  email          String
+  phone          String?
+  subject        String?
+  message        String
+  emailedAt      DateTime?
+  emailError     String?
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
   @@index([organizationId, createdAt])
 }
 

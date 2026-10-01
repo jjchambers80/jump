@@ -301,6 +301,8 @@ export interface OnlineStorePage {
   /** Search engine listing overrides; null falls back to the title / no description */
   seoTitle: string | null;
   seoDescription: string | null;
+  /** Spec 042: name of the page template laying the page out; null = default */
+  template: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -314,6 +316,46 @@ export interface OnlineStorePageInput {
   slug: string;
   seoTitle: string | null;
   seoDescription: string | null;
+  template: string | null;
+}
+
+// ===== Page templates (spec 042) =====
+
+export type PageTemplateSection =
+  | { type: 'page_content' }
+  | { type: 'rich_text'; settings: { html: string } }
+  | { type: 'contact_form'; settings: ContactFormSettings };
+
+export interface ContactFormSettings {
+  heading?: string;
+  intro?: string;
+  submitLabel: string;
+  successMessage: string;
+  showPhone: boolean;
+  showSubject: boolean;
+}
+
+/** GET /admin/page-templates — uploaded by a developer (SYSTEM_ADMIN) to one organization. */
+export interface PageTemplate {
+  id: string;
+  name: string;
+  label: string;
+  description: string | null;
+  sections: PageTemplateSection[];
+  /** Pages of the organization using it */
+  pageCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Body for POST /organizations/:id/public/pages/:slug/contact. `website` is the honeypot. */
+export interface ContactInquiryInput {
+  name: string;
+  email: string;
+  phone?: string;
+  subject?: string;
+  message: string;
+  website?: string;
 }
 
 // ===== Online Store Preferences =====

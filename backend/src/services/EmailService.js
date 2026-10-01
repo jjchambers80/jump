@@ -531,6 +531,70 @@ ${manageTicketsHtml}
   }
 
   /**
+   * Storefront contact-form message (spec 042) to the store email. Every
+   * visitor value is escaped; replies go straight to the visitor. Nothing is
+   * sent to the visitor, so the form can never relay mail to a third party.
+   *
+   * @param {{ to: string, inquiry: { name: string, email: string, phone?: string|null, subject?: string|null, message: string }, organization?: { name?: string, logoUrl?: string }, pageTitle?: string }} params
+   */
+  async sendContactInquiry({ to, inquiry, organization = {}, pageTitle }) {
+    const orgName = organization.name || 'your store';
+    const oneLine = (value) => String(value || '').replace(/[\r\n]+/g, ' ').trim();
+    const subject = oneLine(
+      inquiry.subject
+        ? `${inquiry.subject} — message from ${inquiry.name}`
+        : `New message from ${inquiry.name} via ${orgName}`
+    ).slice(0, 200);
+    const rows = [
+      ['Name', inquiry.name],
+      ['Email', inquiry.email],
+      ['Phone', inquiry.phone],
+      ['Subject', inquiry.subject],
+      ['Page', pageTitle],
+    ].filter(([, value]) => value);
+    const text = [
+      `New message from the ${orgName} contact form.`,
+      '',
+      ...rows.map(([label, value]) => `${label}: ${oneLine(value)}`),
+      '',
+      inquiry.message,
+      '',
+      'Reply to this email to answer the sender.',
+    ].join('\n');
+    const messageHtml = escapeHtml(inquiry.message).replace(/\r?\n/g, '<br />');
+    const msg = {
+      to: [to],
+      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      subject,
+      reply_to: inquiry.email,
+      text,
+      html: `
+        <html>
+          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+            <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
+              ${orgLogoHtml(organization.logoUrl, orgName)}
+              <h1 style="color: #333; font-size: 20px; margin: 0;">New contact form message</h1>
+            </div>
+            <div style="padding: 24px; color: #111827; font-size: 15px;">
+              <table style="border-collapse: collapse; margin-bottom: 16px;">
+                ${rows
+                  .map(
+                    ([label, value]) =>
+                      `<tr><td style="padding: 4px 16px 4px 0; color: #6b7280;">${label}</td><td style="padding: 4px 0;">${escapeHtml(oneLine(value))}</td></tr>`
+                  )
+                  .join('')}
+              </table>
+              <p style="margin: 0 0 14px; line-height: 1.5; white-space: normal;">${messageHtml}</p>
+              <p style="color: #6b7280; font-size: 13px;">Reply to this email to answer ${escapeHtml(oneLine(inquiry.name))}.</p>
+            </div>
+          </body>
+        </html>
+      `,
+    };
+    await deliver(msg);
+  }
+
+  /**
    * Send cancellation notification to all ticket holders (FR-037)
    * @param {Object} event - Event object
    * @param {Array} tickets - Tickets to notify (with contact relations)

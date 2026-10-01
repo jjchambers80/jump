@@ -16,7 +16,7 @@ export default function StorefrontPageView({ orgId, slug }: { orgId: string; slu
 
   return (
     <StorefrontShell orgId={orgId} state={state} notFoundTitle="Page not found">
-      {({ page }) => <StorefrontPageBody page={page} />}
+      {({ organization, page }) => <StorefrontPageBody page={page} organizationId={organization.id} />}
     </StorefrontShell>
   );
 }

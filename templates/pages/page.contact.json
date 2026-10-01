@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "name": "contact",
+  "label": "Contact",
+  "description": "The page content followed by a general contact form. Messages are emailed to the store email.",
+  "sections": [
+    { "type": "page_content" },
+    {
+      "type": "contact_form",
+      "settings": {
+        "heading": "Get in touch",
+        "intro": "Questions about an event, tickets or a booth? Send us a message and we'll reply by email.",
+        "submitLabel": "Send message",
+        "successMessage": "Thanks for your message. We'll get back to you soon.",
+        "showPhone": true,
+        "showSubject": true
+      }
+    }
+  ]
+}

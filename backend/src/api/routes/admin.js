@@ -4,7 +4,7 @@
 import express from 'express';
 import { prisma } from '@jump/db';
 import { requireAuth } from '../../middleware/auth.js';
-import { requireOrganizer, requireAdmin } from '../../middleware/rbac.js';
+import { requireOrganizer, requireAdmin, requireSystemAdmin } from '../../middleware/rbac.js';
 import { NotFoundError, ValidationError, ForbiddenError } from '../../middleware/errorHandler.js';
 import { resolveOrgScope, isUnscoped } from '../../middleware/orgScope.js';
 import {
@@ -51,6 +51,7 @@ import setupGuideService from '../../services/SetupGuideService.js';
 import customerAccountSettingsService from '../../services/CustomerAccountSettingsService.js';
 import billingService from '../../services/BillingService.js';
 import pageService from '../../services/PageService.js';
+import pageTemplateService from '../../services/PageTemplateService.js';
 import storefrontPreferencesService from '../../services/StorefrontPreferencesService.js';
 import adminSearchService from '../../services/AdminSearchService.js';
 import customerTimelineService from '../../services/CustomerTimelineService.js';
@@ -146,6 +147,47 @@ router.get('/pages/:pageId', async (req, res, next) => {
 router.put('/pages/:pageId', validateUpdatePage, async (req, res, next) => {
   try {
     res.json(await pageService.update(await activeOrgFor(req), req.params.pageId, req.body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** GET /admin/page-templates — the active organization's page templates (spec 042). */
+router.get('/page-templates', async (req, res, next) => {
+  try {
+    res.json({ templates: await pageTemplateService.list(await activeOrgFor(req)) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /admin/page-templates — upload a template manifest (JSON body). A
+ * template with the same name is replaced. Developers only (SYSTEM_ADMIN).
+ */
+router.post('/page-templates', requireSystemAdmin, async (req, res, next) => {
+  try {
+    res
+      .status(201)
+      .json(await pageTemplateService.upsert(await activeOrgFor(req), req.body, req.user.id));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** GET /admin/page-templates/:id/manifest — the stored manifest, for download. */
+router.get('/page-templates/:id/manifest', requireSystemAdmin, async (req, res, next) => {
+  try {
+    res.json(await pageTemplateService.manifest(await activeOrgFor(req), req.params.id));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** DELETE /admin/page-templates/:id — pages using it fall back to the default layout. */
+router.delete('/page-templates/:id', requireSystemAdmin, async (req, res, next) => {
+  try {
+    res.json(await pageTemplateService.remove(await activeOrgFor(req), req.params.id));
   } catch (error) {
     next(error);
   }
