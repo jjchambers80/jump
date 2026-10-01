@@ -36,6 +36,7 @@ Last updated: 2026-09-22.
 | 034 | RSVP events — free admission, headcount and marketing capture | **Implemented** | All three phases + §9.2 reminder email built 2026-09-22. Phases 1-3 (PR #150). Reminder sweep: backend service, migration, unit tests (this card). See `docs/wiki/features/rsvp-events.md`. |
 | 040 | Patron "My account" — profile, RSVPs, receipts, marketing preferences, sign-out-everywhere, download and delete my data | **Implemented** | 2026-09-30: 040A #251, 040B #253, 040C #254, 040D erasure. See `docs/wiki/features/patron-account.md`. |
 | 041 | Hero carousel and FAQ theme sections | **Implemented** | 2026-09-30: `HeroCarousel` + `Slide`, `Faq` + `FaqItem` in the `@jump/theme` registry. See `docs/wiki/features/theme-sections.md`. |
+| 042 | Page templates (developer-uploaded JSON manifests) + contact form template | **Implemented** | 2026-10-01: two-column page editor, `/admin/online-store/page-templates`, `templates/pages/page.contact.json`. See `docs/wiki/features/page-templates.md`. |
 
 ## Documents archived as historical
 

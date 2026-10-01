@@ -21,17 +21,16 @@ import api from '@/services/api';
 import { acceptanceLine, SOCIAL_FIELDS, type PublicForm, type Question } from '@/lib/applications';
 import { acceptancesFor, applyConsentText, fetchLegalVersions, LEGAL_PAGES_ENABLED, LEGAL_PATHS, type LegalVersions } from '@/lib/legal';
 import ApplyShell from '../ApplyShell';
+import { storefrontInput, storefrontLabel, storefrontTextarea } from '@/components/storefront/formStyles';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
 const MAX_PHOTOS = 6;
 const MAX_PHOTO_MB = 5;
 const ACCEPT = 'image/jpeg,image/png,image/gif,image/webp';
 
-const field =
-  'w-full px-3.5 border rounded-xl bg-white text-[15px] text-gray-900 placeholder:text-gray-400 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-link focus:border-transparent border-gray-300 hover:border-gray-400 dark:border-slate-600 dark:hover:border-slate-500 dark:bg-slate-900/60 dark:text-slate-100 dark:placeholder:text-slate-500';
-const input = `${field} h-11`;
-const textarea = `${field} py-2.5 leading-relaxed`;
-const label = 'block text-sm font-semibold text-gray-800 dark:text-slate-200 mb-1.5';
+const input = storefrontInput;
+const textarea = storefrontTextarea;
+const label = storefrontLabel;
 const check = 'mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 accent-brand dark:border-slate-600';
 const choice = 'flex items-start gap-3 rounded-xl border border-gray-200 px-3.5 py-3 text-sm text-gray-800 transition-colors hover:border-gray-300 has-[:checked]:border-brand-link has-[:checked]:bg-gray-50 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600 dark:has-[:checked]:bg-slate-900/50 cursor-pointer';
 

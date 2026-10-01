@@ -1,6 +1,7 @@
 import { ValidationError } from '../../middleware/errorHandler.js';
 import { SEO_TITLE_MAX, SEO_DESCRIPTION_MAX } from '../../utils/pageLimits.js';
 import { normalizeCustomSlug } from '../../utils/slug.js';
+import { TEMPLATE_NAME_RE } from '../../utils/pageTemplateManifest.js';
 
 /**
  * Shared field checks. `partial` (PUT) lets required fields be absent but
@@ -8,7 +9,7 @@ import { normalizeCustomSlug } from '../../utils/slug.js';
  */
 function collectErrors(body, { partial }) {
   const errors = [];
-  const { title, content, isVisible, slug, seoTitle, seoDescription } = body;
+  const { title, content, isVisible, slug, seoTitle, seoDescription, template } = body;
 
   if (title !== undefined || !partial) {
     if (typeof title !== 'string' || title.trim().length === 0) {
@@ -26,6 +27,14 @@ function collectErrors(body, { partial }) {
 
   if (isVisible !== undefined && typeof isVisible !== 'boolean') {
     errors.push({ field: 'isVisible', message: 'isVisible must be a boolean' });
+  }
+
+  // Spec 042: a page template name, or null for the default layout. Whether
+  // the organization has it is checked in PageService.
+  if (template !== undefined && template !== null) {
+    if (typeof template !== 'string' || !TEMPLATE_NAME_RE.test(template)) {
+      errors.push({ field: 'template', message: 'template must be a page template name or null' });
+    }
   }
 
   if (slug !== undefined && slug !== null) {

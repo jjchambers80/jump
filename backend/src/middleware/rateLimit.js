@@ -120,6 +120,12 @@ export const LIMITS = Object.freeze({
     limit: 30,
     message: 'Too many applications from this address. Try again later.',
   },
+  // Spec 042: storefront contact-form messages per IP
+  CONTACT_SUBMIT: {
+    windowMs: 60 * 60 * 1000,
+    limit: 10,
+    message: 'Too many messages from this address. Try again later.',
+  },
   RSVP_CREATE: {
     windowMs: 60 * 60 * 1000,
     limit: 30,

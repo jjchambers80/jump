@@ -27,8 +27,13 @@ import urlRedirectService from '../../services/UrlRedirectService.js';
 import { findByPublicIdentifier } from '../../utils/publicIdentifier.js';
 import { clientIpForRateLimit } from '../../utils/clientIp.js';
 import themeService, { themesEnabledFor } from '../../services/ThemeService.js';
+import contactInquiryService from '../../services/ContactInquiryService.js';
+import { validateContactInquiry } from '../validators/contactInquiryValidators.js';
+import { LIMITS, makeLimiter } from '../../middleware/rateLimit.js';
 
 const router = Router();
+
+const contactLimiter = makeLimiter('CONTACT_SUBMIT', LIMITS.CONTACT_SUBMIT);
 
 const verifyOrgOwnership = requireOrgMembership('id');
 
@@ -298,6 +303,29 @@ router.get('/:id/public/pages/:slug', gateByOrgParam, async (req, res, next) => 
     next(error);
   }
 });
+
+/**
+ * POST /organizations/:id/public/pages/:slug/contact
+ * Contact-form message from a page whose template has a contact_form (spec
+ * 042). Saved, then emailed to the store email. 202 either way once saved;
+ * a filled honeypot gets the same 202 with nothing saved.
+ */
+router.post(
+  '/:id/public/pages/:slug/contact',
+  contactLimiter,
+  gateByOrgParam,
+  validateContactInquiry,
+  async (req, res, next) => {
+    try {
+      const organization = await publicOrganizationIdentity(req.params.id);
+      if (req.contactHoneypot) return res.status(202).json({ ok: true });
+      await contactInquiryService.submit(organization.id, req.params.slug, req.body);
+      res.status(202).json({ ok: true });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 /**
  * POST /organizations/:id/storefront-access
