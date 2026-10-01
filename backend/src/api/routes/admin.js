@@ -52,6 +52,7 @@ import customerAccountSettingsService from '../../services/CustomerAccountSettin
 import billingService from '../../services/BillingService.js';
 import pageService from '../../services/PageService.js';
 import pageTemplateService from '../../services/PageTemplateService.js';
+import contactInquiryService from '../../services/ContactInquiryService.js';
 import storefrontPreferencesService from '../../services/StorefrontPreferencesService.js';
 import adminSearchService from '../../services/AdminSearchService.js';
 import customerTimelineService from '../../services/CustomerTimelineService.js';
@@ -188,6 +189,56 @@ router.get('/page-templates/:id/manifest', requireSystemAdmin, async (req, res, 
 router.delete('/page-templates/:id', requireSystemAdmin, async (req, res, next) => {
   try {
     res.json(await pageTemplateService.remove(await activeOrgFor(req), req.params.id));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /admin/contact-inquiries — contact-form messages of the active
+ * organization (spec 042 inbox). Query: status=all|unread, q, page.
+ */
+router.get('/contact-inquiries', async (req, res, next) => {
+  try {
+    const status = req.query.status === 'unread' ? 'unread' : 'all';
+    res.json(
+      await contactInquiryService.list(await activeOrgFor(req), {
+        status,
+        q: typeof req.query.q === 'string' ? req.query.q.slice(0, 200) : '',
+        page: req.query.page,
+      })
+    );
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** GET /admin/contact-inquiries/unread-count — sidebar badge. */
+router.get('/contact-inquiries/unread-count', async (req, res, next) => {
+  try {
+    res.json({ unreadCount: await contactInquiryService.unreadCount(await activeOrgFor(req)) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** PATCH /admin/contact-inquiries/:id — { read: boolean }. */
+router.patch('/contact-inquiries/:id', async (req, res, next) => {
+  try {
+    if (typeof req.body?.read !== 'boolean') {
+      throw new ValidationError('Validation failed', [{ field: 'read', message: 'read must be a boolean' }]);
+    }
+    res.json(await contactInquiryService.setRead(await activeOrgFor(req), req.params.id, req.body.read));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** DELETE /admin/contact-inquiries/:id — ADMIN only. */
+router.delete('/contact-inquiries/:id', requireAdmin, async (req, res, next) => {
+  try {
+    await contactInquiryService.remove(await activeOrgFor(req), req.params.id);
+    res.status(204).end();
   } catch (error) {
     next(error);
   }

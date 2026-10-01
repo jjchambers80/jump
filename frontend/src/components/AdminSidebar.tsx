@@ -66,6 +66,8 @@ const navItems: NavItem[] = [
     icon: Store,
     children: [
       { label: 'Pages', href: '/admin/online-store/pages' },
+      // Spec 042: contact-form messages
+      { label: 'Messages', href: '/admin/online-store/messages' },
       { label: 'Preferences', href: '/admin/online-store/preferences' },
     ],
   },

@@ -586,11 +586,14 @@ model ContactInquiry {
   message        String
   emailedAt      DateTime?
   emailError     String?
+  // Admin inbox (Online store › Messages): null = unread.
+  readAt         DateTime?
   createdAt      DateTime  @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, createdAt])
+  @@index([organizationId, readAt])
 }
 
 // Spec 010 phase 2: the organization's Stripe Connect (Express) account that
