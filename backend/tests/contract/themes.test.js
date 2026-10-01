@@ -526,5 +526,28 @@ describe('Online store themes contract', () => {
       expect(Object.keys(res.body.resolved.files)).toContain(files[0].id);
       expect(res.body.resolved.files[files[0].id].url).toContain(`/files/${files[0].id}/`);
     });
+
+    it('resolves files on every page, not only the one asked for', async () => {
+      // The editor loads preview data once (page=events) and switches pages
+      // locally; a Home hero slide image must still resolve after a reload.
+      const { body: home } = await request(app).get(`/admin/themes/${theme.id}/documents/home`).set(...auth(adminToken));
+      const slides = {
+        root: { props: { title: 'Home' } },
+        content: [
+          {
+            type: 'HeroCarousel',
+            props: {
+              id: 'HC-1',
+              blocks: [{ type: 'Slide', props: { id: 'S-1', heading: 'x', image: { fileId: files[1].id, alt: 'Stage' } } }],
+            },
+          },
+        ],
+      };
+      const saved = await save({ themeVersion: (await current()).version, documents: { home: { data: slides, version: home.version } } });
+      expect(saved.status).toBe(200);
+      const res = await request(app).get(`/admin/themes/${theme.id}/preview-data?page=events`).set(...auth(adminToken));
+      expect(res.status).toBe(200);
+      expect(Object.keys(res.body.resolved.files)).toContain(files[1].id);
+    });
   });
 });

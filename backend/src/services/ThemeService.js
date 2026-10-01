@@ -484,13 +484,18 @@ class ThemeService {
     };
   }
 
-  /** Resolved data for the editor iframe (hidden items included). */
+  /**
+   * Resolved data for the editor iframe (hidden items included). Files are
+   * resolved across EVERY document, not just `page`: the editor loads this
+   * once and switches pages without reloading, so a hero image on Home must
+   * resolve even when the editor asked for another page.
+   */
   async previewData(organizationId, themeId, page = 'home') {
     if (!documentDef(page)) throw new NotFoundError('Theme document not found');
     const theme = await this._theme(organizationId, themeId);
     const rows = await prisma.themeDocument.findMany({ where: { themeId } });
     const byKey = new Map(rows.map((r) => [r.key, r]));
-    const values = ['header', page, 'footer'].map((key) => this._readDocument(theme, key, byKey.get(key)).data);
+    const values = Object.keys(DOCUMENTS).map((key) => this._readDocument(theme, key, byKey.get(key)).data);
     const organization = await prisma.organization.findUnique({ where: { id: organizationId }, select: ORGANIZATION_IDENTITY });
     return { organization, resolved: await this._resolve(organizationId, { settings: theme.settings, values }) };
   }
