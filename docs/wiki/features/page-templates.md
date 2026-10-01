@@ -7,7 +7,7 @@
 
 The Online store › Pages editor has a right column on desktop (stacks under the content on phones) with **Visibility** (Visible / Hidden) and, under it, **Template**. Templates are declarative JSON manifests a developer (`SYSTEM_ADMIN`) uploads to one organization from `/admin/online-store/page-templates`; once uploaded they appear in that organization's Template menu. "Default page" keeps today's layout.
 
-The first shipped template is **contact** (`templates/pages/page.contact.json`): the page content followed by a general contact form. A message is saved as a `ContactInquiry` row, then emailed to the store email (`Organization.email`, Settings › Store contact) with `reply_to` set to the visitor. The row records `emailedAt` or `emailError`, so a Resend failure never loses a message. There is no inbox UI yet.
+The first shipped template is **contact** (`templates/pages/page.contact.json`): the page content followed by a general contact form. A message is saved as a `ContactInquiry` row, then emailed to the store email (`Organization.email`, Settings › Store contact) with `reply_to` set to the visitor. The row records `emailedAt` or `emailError`, so a Resend failure never loses a message. Staff read them in **Online store › Messages** (`/admin/online-store/messages`): list + reading pane on desktop, list → message on phones; All / Unread filter, search, opening marks read, Mark unread, Reply (`mailto:`), Delete (ADMIN). Messages whose email failed are flagged "only here".
 
 Developer guide (manifest format, section reference): `docs/development/page-templates.md`.
 
@@ -27,8 +27,10 @@ Developer guide (manifest format, section reference): `docs/development/page-tem
 | `frontend/src/app/admin/online-store/page-templates/page.tsx` | Developer screen: upload `.json`, per-path errors, download, delete |
 | `frontend/src/components/storefront/StorefrontPageBody.tsx` | Renders template sections in order (shared by legacy and themed renderers) |
 | `frontend/src/components/storefront/ContactFormSection.tsx` | Client island: brand-token form, client + server validation, honeypot, success status |
+| `backend/src/services/ContactInquiryService.js` (inbox) + `admin.js` `/admin/contact-inquiries` | `GET` (status=all\|unread, q, page; 25 a page, newest first, page titles), `GET /unread-count`, `PATCH /:id {read}`, `DELETE /:id` (ADMIN); `ContactInquiry.readAt` null = unread |
+| `frontend/src/app/admin/online-store/messages/page.tsx` | Inbox UI |
 | `frontend/src/components/storefront/formStyles.ts` | Storefront input styles shared with the apply form |
-| `backend/tests/unit/pageTemplateManifest.test.js`, `backend/tests/contract/pageTemplates.test.js`, `frontend/e2e/{admin-pages,admin-page-templates,public-contact-page}.spec.ts` | Tests |
+| `backend/tests/unit/pageTemplateManifest.test.js`, `backend/tests/contract/pageTemplates.test.js`, `backend/tests/contract/contactInbox.test.js`, `frontend/e2e/{admin-pages,admin-page-templates,public-contact-page,admin-messages}.spec.ts` | Tests |
 
 ## Rules
 
