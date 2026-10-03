@@ -18,6 +18,7 @@ export interface FaqProps {
   width?: 'narrow' | 'normal' | 'wide';
   colorScheme?: string;
   paddingTop?: number;
+  sectionWidth?: string;
   paddingBottom?: number;
   /** Puck renders the FaqItem blocks into this slot. */
   Items: (props?: { className?: string }) => ReactNode;

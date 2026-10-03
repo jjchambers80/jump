@@ -25,6 +25,8 @@ export const COMMON_SECTION_FIELDS = {
   colorScheme: colorScheme(),
   paddingTop: range('Top padding', 0, 80, { step: 4, unit: 'px', default: 32 }),
   paddingBottom: range('Bottom padding', 0, 80, { step: 4, unit: 'px', default: 32 }),
+  // page = the page width; narrow 768 px, wide 1600 px, full = edge to edge.
+  sectionWidth: select('Section width', ['page', 'narrow', 'wide', 'full'], 'page'),
 };
 
 const HEIGHTS = ['small', 'medium', 'large'];

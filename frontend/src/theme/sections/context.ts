@@ -34,6 +34,14 @@ export function t(ctx: SectionContext, key: string, vars: Record<string, string>
  * Only values the organizer set: a preset section without them keeps its
  * own spacing, so the default theme matches today's pages.
  */
+const SECTION_WIDTHS: Record<string, string> = { narrow: '768px', wide: '1600px', full: 'none' };
+
+/** `--theme-section-width` from the common sectionWidth enum; `page` (default) sets nothing. */
+export function sectionWidthStyle(props: { sectionWidth?: unknown }): Record<string, string> {
+  const width = typeof props.sectionWidth === 'string' ? SECTION_WIDTHS[props.sectionWidth] : undefined;
+  return width ? { '--theme-section-width': width } : {};
+}
+
 export function sectionPadding(props: { paddingTop?: unknown; paddingBottom?: unknown }) {
   const style: { paddingTop?: string; paddingBottom?: string } = {};
   if (typeof props.paddingTop === 'number') style.paddingTop = `${props.paddingTop}px`;

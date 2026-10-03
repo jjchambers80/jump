@@ -41,6 +41,13 @@ Under the hood, `followSelection` (`theme/editor/config.tsx`) passes `editorSele
 
 Heading, intro and up to 30 **Question** blocks (question + rich-text answer). Each question is a native `<details>` disclosure. "Open one answer at a time" (default on) and "Open the first answer" are applied by the `FaqBehavior` island.
 
+## Layout widths
+
+- **Theme page width**: `settings.layout.pageWidth` (1000-1600 px, default 1280 = the old `max-w-7xl`) sets `--theme-page-width` on the frame.
+- **Page override**: a template document's `root.props.pageWidth` (same range, unset = theme value) sets `--theme-page-width` on that page's whole frame, header and footer included (`pageWidthVars` in `settingsCss.ts`; the editor's root field "Page width").
+- **Section width**: every section has the common `sectionWidth` field: `page` (default), `narrow` (768 px), `wide` (1600 px), `full` (no max, side padding kept). `sectionWidthStyle` in `sections/context.ts` turns it into `--theme-section-width` on the section wrapper; only enum values reach CSS.
+- One rule in `app/globals.css` applies both: `.brand-scope [data-section] .max-w-7xl { max-width: var(--theme-section-width, var(--theme-page-width, 80rem)) }`. Sections and the shared components they render (`OrganizationHeader`, `FooterMenu`, `EventsListing`, `EventsCover`) keep using `max-w-7xl` for their content container; outside a themed section the class is plain Tailwind. RichText/FAQ `width` sizes their text column inside that container and is separate.
+
 ## Adding a section
 
 1. **Registry**: add the section (and any block) to `SECTIONS` / `BLOCKS` in `packages/theme/src/registry.js` with a `category` (Add-panel group), `groups` (`template`, `header`, `footer`) and `blocks: { types, max }`. Validation, migration, file references and hidden-block filtering are generic.

@@ -4,7 +4,7 @@
 import { linkHref } from '../links';
 import { schemeClass } from '../settingsCss';
 import AnnouncementRotator, { type Announcement } from './AnnouncementRotator';
-import { t, type SectionContext } from './context';
+import { sectionWidthStyle, t, type SectionContext } from './context';
 import type { ThemeItem } from '../types';
 
 export interface AnnouncementBarProps {
@@ -12,11 +12,12 @@ export interface AnnouncementBarProps {
   rotate?: 'off' | '5s' | '8s';
   dismissible?: boolean;
   colorScheme?: string;
+  sectionWidth?: string;
   blocks?: ThemeItem[];
   ctx: SectionContext;
 }
 
-export default function AnnouncementBarSection({ id, rotate = 'off', dismissible = false, colorScheme, blocks = [], ctx }: AnnouncementBarProps) {
+export default function AnnouncementBarSection({ id, rotate = 'off', dismissible = false, colorScheme, sectionWidth, blocks = [], ctx }: AnnouncementBarProps) {
   const announcements: Announcement[] = blocks
     .filter((block) => block.type === 'Announcement' && block.props.text)
     .map((block) => ({
@@ -26,7 +27,7 @@ export default function AnnouncementBarSection({ id, rotate = 'off', dismissible
     }));
   if (!announcements.length) return null;
   return (
-    <div data-section="AnnouncementBar" className={schemeClass(colorScheme) || undefined}>
+    <div data-section="AnnouncementBar" className={schemeClass(colorScheme) || undefined} style={sectionWidthStyle({ sectionWidth })}>
       <AnnouncementRotator
         barId={id}
         announcements={announcements}

@@ -199,9 +199,19 @@ const blocksDocument = {
   ],
 };
 
+/** Layout widths: a 1000 px page override, one narrow and one full-width section. */
+const widthsDocument = {
+  root: { props: { pageWidth: 1000 } },
+  content: [
+    { type: 'UpcomingEvents', props: { id: 'Upcoming-narrow', heading: 'Narrow list', count: 3, sectionWidth: 'narrow' } },
+    { type: 'UpcomingEvents', props: { id: 'Upcoming-full', heading: 'Full list', count: 3, sectionWidth: 'full' } },
+  ],
+};
+
 /** orgId → { render, routes, gate? } */
 export const FIXTURES = {
   'theme-home': { render: render('theme-home', { template: homeDocument }), routes: {} },
+  'theme-widths': { render: render('theme-widths', { template: widthsDocument }), routes: {} },
   'theme-blocks': (() => {
     const base = render('theme-blocks', { template: blocksDocument });
     return { render: { ...base, resolved: { ...base.resolved, files: { cover: { url: PARITY_COVER, alt: 'The stage at night' } } } }, routes: {} };

@@ -11,6 +11,7 @@ export interface EventsHeroProps {
   height?: 'small' | 'medium' | 'large';
   colorScheme?: string;
   paddingTop?: number;
+  sectionWidth?: string;
   paddingBottom?: number;
   ctx: SectionContext;
 }

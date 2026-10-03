@@ -14,6 +14,7 @@ export interface RichTextProps {
   width?: 'narrow' | 'normal' | 'wide';
   colorScheme?: string;
   paddingTop?: number;
+  sectionWidth?: string;
   paddingBottom?: number;
   Buttons: (props?: { className?: string }) => ReactNode;
   ctx: SectionContext;

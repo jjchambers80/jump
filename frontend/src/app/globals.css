@@ -33,6 +33,15 @@
   --brand-link: var(--brand-link-dark, #818cf8);
 }
 
+/*
+ * Theme layout widths (spec 038): inside a theme section the shared 7xl
+ * container follows the section's width (sectionWidthStyle), else the page
+ * width (settings.layout.pageWidth or the template's root pageWidth).
+ */
+.brand-scope [data-section] .max-w-7xl {
+  max-width: var(--theme-section-width, var(--theme-page-width, 80rem));
+}
+
 body {
   color: var(--foreground);
   background-color: var(--background);

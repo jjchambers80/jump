@@ -18,6 +18,7 @@ export interface UpcomingEventsProps {
   showViewAll?: boolean;
   colorScheme?: string;
   paddingTop?: number;
+  sectionWidth?: string;
   paddingBottom?: number;
   ctx: SectionContext;
 }

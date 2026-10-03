@@ -6,7 +6,7 @@ import { BLOCKS, COMMON_SECTION_FIELDS, SECTIONS } from '@jump/theme';
 import type { ThemeDocumentData } from '@/lib/themes';
 
 const DOC_LABELS: Record<string, string> = { header: 'Header', footer: 'Footer', home: 'Home page', events: 'Events page' };
-const ROOT_LABELS: Record<string, string> = { title: 'Page title', seoTitle: 'SEO title', seoDescription: 'SEO description' };
+const ROOT_LABELS: Record<string, string> = { title: 'Page title', seoTitle: 'SEO title', seoDescription: 'SEO description', pageWidth: 'Page width' };
 
 type Item = { type: string; props: Record<string, any> };
 

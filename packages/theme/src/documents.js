@@ -2,13 +2,15 @@
 // validateDocument is the server check on every save and import.
 
 import { BLOCKS, COMMON_SECTION_FIELDS, SECTIONS } from './registry.js';
-import { checkFields, isPlainObject, text, textarea } from './fields.js';
+import { checkFields, isPlainObject, range, text, textarea } from './fields.js';
 import { DOCUMENT_MAX_BYTES, SECTIONS_PER_DOCUMENT, jsonBytes } from './limits.js';
 
 const pageRoot = {
   title: text('Title', { max: 70 }),
   seoTitle: text('SEO title', { max: 70 }),
   seoDescription: textarea('SEO description', { max: 320 }),
+  // Unset: the theme's settings.layout.pageWidth.
+  pageWidth: range('Page width', 1000, 1600, { step: 10, unit: 'px', default: null }),
 };
 
 /**
