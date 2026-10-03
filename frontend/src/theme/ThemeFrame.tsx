@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import { Render } from '@puckeditor/core/rsc';
 import { renderConfig, renderable } from './render/config';
 import ThemeScope from './ThemeScope';
+import PreviewBar, { ClearPreviewCookie } from './PreviewBar';
 import { schemeCss, settingsVars } from './settingsCss';
 import type { SectionContext } from './sections/context';
 import type { ThemeDocument, ThemeRender } from './types';
@@ -53,6 +54,8 @@ export default function ThemeFrame({
       css={schemeCss(data.settings)}
       className="min-h-screen bg-gray-50 dark:bg-slate-900"
     >
+      {data.preview && <PreviewBar name={data.preview.name} path={path} />}
+      {data.previewInvalid && <ClearPreviewCookie />}
       <div data-theme-frame={data.theme.id ?? 'preset'}>
         {renderDocument(data.documents.header, ctx)}
         {children ??

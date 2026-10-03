@@ -413,3 +413,37 @@ test.describe('themed event page', () => {
     });
   }
 });
+
+test.describe('Draft theme preview (038K)', () => {
+  const previewToken = (sig: string) => `${Buffer.from('{}').toString('base64url')}.${Buffer.from(JSON.stringify({ orgId: 'theme-home', exp: 4102444800 })).toString('base64url')}.${sig}`;
+
+  test('a preview link sets the cookie, shows the bar, and Exit clears it', async ({ page, context }) => {
+    // The route handler only reads orgId/exp; the fixture API accepts this one cookie value.
+    await page.goto(`/api/storefront/preview?token=${previewToken('sig')}`);
+    await expect(page).toHaveURL(/\/organizations\/theme-home$/);
+    const cookie = (await context.cookies()).find((c) => c.name === 'jump_theme_preview');
+    expect(cookie).toMatchObject({ httpOnly: true, sameSite: 'Lax', path: '/' });
+
+    await context.addCookies([{ name: 'jump_theme_preview', value: 'fixture-preview', domain: 'localhost', path: '/' }]);
+    await page.reload();
+    const bar = page.getByRole('region', { name: 'Theme preview' });
+    await expect(bar).toContainText('Previewing Summer draft');
+    await bar.getByRole('link', { name: 'Exit preview' }).click();
+    await expect(page.getByRole('region', { name: 'Theme preview' })).toHaveCount(0);
+    expect((await context.cookies()).some((c) => c.name === 'jump_theme_preview')).toBe(false);
+  });
+
+  test('a refused preview cookie is expired by the route handler', async ({ page, context }) => {
+    await context.addCookies([{ name: 'jump_theme_preview', value: 'expired', domain: 'localhost', path: '/' }]);
+    await page.goto('/organizations/theme-home');
+    await expect(page.getByRole('region', { name: 'Theme preview' })).toHaveCount(0);
+    await expect.poll(async () => (await context.cookies()).some((c) => c.name === 'jump_theme_preview')).toBe(false);
+  });
+
+  test('preview links never redirect off-site on exit', async ({ request }) => {
+    const res = await request.get('/api/storefront/preview?to=//evil.example', { maxRedirects: 0 });
+    expect(res.status()).toBe(307);
+    expect(new URL(res.headers().location).pathname).toBe('/');
+    expect(new URL(res.headers().location).host).toMatch(/^localhost/);
+  });
+});

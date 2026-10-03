@@ -2,8 +2,8 @@
 
 // Online Store page for organizations in the themes rollout (spec 038 §10,
 // card 038J1): store access, View store, the live theme card with Edit
-// theme, and draft themes (038J2: rename, duplicate, publish, delete).
-// Previews and import arrive with 038K / 038N.
+// theme, and draft themes (038J2: rename, duplicate, publish, delete; 038K:
+// preview and share preview links). Thumbnails and import come later.
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -32,6 +32,7 @@ export default function ThemesOverview() {
   const [themes, setThemes] = useState<ThemeSummary[] | null>(null);
   const [prefs, setPrefs] = useState<StorefrontPreferences | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [accessSaving, setAccessSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -71,8 +72,35 @@ export default function ThemesOverview() {
     if (!name || name === theme.name) return;
     void run(() => themesApi.rename(theme.id, name, theme.version), 'Could not rename the theme');
   };
+  const preview = async (theme: ThemeSummary) => {
+    // Open the tab inside the click so pop-up blockers allow it, then point it at the link.
+    const tab = window.open('', '_blank');
+    try {
+      const { url } = await themesApi.previewLink(theme.id);
+      if (tab) tab.location.href = url;
+      else window.location.href = url;
+    } catch (err: any) {
+      tab?.close();
+      setError(err?.message || 'Could not open the preview');
+    }
+  };
+  const sharePreview = async (theme: ThemeSummary) => {
+    setError(null);
+    try {
+      const { url, expiresAt } = await themesApi.previewLink(theme.id, true);
+      await navigator.clipboard?.writeText(url).catch(() => {});
+      setNotice(`Preview link for ${theme.name} copied (expires ${formatDateTime(expiresAt, { month: 'short', day: 'numeric' })}): ${url}`);
+    } catch (err: any) {
+      setError(err?.message || 'Could not create a preview link');
+    }
+  };
   const themeActions = (theme: ThemeSummary) => [
-    ...(theme.role === 'MAIN' ? [{ label: 'View', href: storeUrl, external: true }] : []),
+    ...(theme.role === 'MAIN'
+      ? [{ label: 'View', href: storeUrl, external: true }]
+      : [
+          { label: 'Preview', onSelect: () => void preview(theme) },
+          { label: 'Share preview', onSelect: () => void sharePreview(theme) },
+        ]),
     { label: 'Rename', onSelect: () => rename(theme) },
     { label: 'Duplicate', onSelect: () => void run(() => themesApi.duplicate(theme.id), 'Could not duplicate the theme') },
     ...(theme.role === 'MAIN'
@@ -159,6 +187,12 @@ export default function ThemesOverview() {
       {error && (
         <p role="alert" className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
           {error}
+        </p>
+      )}
+
+      {notice && (
+        <p role="status" className="mb-4 break-all rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-800 dark:border-green-800 dark:bg-green-900/20 dark:text-green-300">
+          {notice}
         </p>
       )}
 
