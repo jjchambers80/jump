@@ -70,6 +70,7 @@ model User {
   platformCustomers PlatformCustomer[]
   // Spec 030: revocable sessions (Devices) and the security audit trail
   sessions          UserSession[]
+  developerTokens   DeveloperToken[]
   securityEvents    SecurityEvent[]
   contactComments   ContactComment[]
 
@@ -521,6 +522,7 @@ model Organization {
   floorMapTemplates        FloorMapTemplate[]
   addOnProducts            AddOnProduct[]
   themes                   Theme[]
+  developerTokens          DeveloperToken[]
   pageTemplates            PageTemplate[]
 }
 
@@ -698,12 +700,12 @@ model OrganizationPerson {
 }
 
 model Venue {
-  id             String  @id @default(cuid())
+  id             String              @id @default(cuid())
   organizationId String
   name           String
   // Public namespace is /venues/:slug, so venue slugs are globally unique.
-  slug           String  @unique @default(cuid())
-  slugCustomized Boolean @default(false)
+  slug           String              @unique @default(cuid())
+  slugCustomized Boolean             @default(false)
   address        String
   city           String?
   state          String?
@@ -733,22 +735,22 @@ model Venue {
 // Buyer record, scoped per organization. The same email at two organizations is
 // two rows with separate notes, consent, and order history. Buyers never live in User.
 model Contact {
-  id                    String                 @id @default(cuid())
-  organizationId        String
-  email                 String
-  firstName             String
-  lastName              String
-  location              String?
-  note                  String?
-  emailSubscribed       Boolean                @default(false)
+  id                      String                 @id @default(cuid())
+  organizationId          String
+  email                   String
+  firstName               String
+  lastName                String
+  location                String?
+  note                    String?
+  emailSubscribed         Boolean                @default(false)
   // Marketing consent provenance (spec 023 LR-07, built by spec 024 phase 3)
-  emailSubscribedAt     DateTime?
-  emailSubscribedSource EmailSubscribedSource?
-  emailUnsubscribedAt   DateTime?
-  accountCreatedAt      DateTime? // null = guest checkout; set = login-enabled buyer account
-  phone                 String?
-  tags                  String[]              @default([])
-  stripeCustomerId      String?                @unique // spec 011: platform-account Customer holding the applicant's saved card
+  emailSubscribedAt       DateTime?
+  emailSubscribedSource   EmailSubscribedSource?
+  emailUnsubscribedAt     DateTime?
+  accountCreatedAt        DateTime? // null = guest checkout; set = login-enabled buyer account
+  phone                   String?
+  tags                    String[]               @default([])
+  stripeCustomerId        String?                @unique // spec 011: platform-account Customer holding the applicant's saved card
   // Spec 040: "Sign out of all devices" — buyer sessions issued before this are refused.
   buyerSessionsValidAfter DateTime?
   // Spec 040 card D: "Delete my data" is scheduled for this moment (grace period);
@@ -840,18 +842,18 @@ model BuyerLoginToken {
 }
 
 model Event {
-  id             String      @id @default(cuid())
-  venueId        String
-  name           String
+  id               String        @id @default(cuid())
+  venueId          String
+  name             String
   // Public namespace is /events/:slug, so event slugs are globally unique.
-  slug           String      @unique @default(cuid())
-  slugCustomized Boolean     @default(false)
-  description    String?
-  logoUrl        String?
-  imageId        String?
-  date           DateTime
-  capacity       Int
-  category       String?
+  slug             String        @unique @default(cuid())
+  slugCustomized   Boolean       @default(false)
+  description      String?
+  logoUrl          String?
+  imageId          String?
+  date             DateTime
+  capacity         Int
+  category         String?
   status           EventStatus   @default(DRAFT)
   admissionMode    AdmissionMode @default(TICKETED)
   rsvpLimit        Int?
@@ -1359,22 +1361,22 @@ enum BoothStatus {
 }
 
 model FloorMap {
-  id              String         @id @default(cuid())
-  organizationId  String
-  eventId         String         @unique // one map per event in v1
-  name            String
-  status          FloorMapStatus @default(DRAFT)
-  unit            String         @default("ft") // display only
-  gridSize        Int            @default(10) // px per grid unit in the editor
-  width           Int // grid units
-  height          Int
-  underlayFileId  String? // StoreFile
-  underlayOpacity Int            @default(40)
-  layout          Json // { version: 1, elements: [...] }
+  id                    String         @id @default(cuid())
+  organizationId        String
+  eventId               String         @unique // one map per event in v1
+  name                  String
+  status                FloorMapStatus @default(DRAFT)
+  unit                  String         @default("ft") // display only
+  gridSize              Int            @default(10) // px per grid unit in the editor
+  width                 Int // grid units
+  height                Int
+  underlayFileId        String? // StoreFile
+  underlayOpacity       Int            @default(40)
+  layout                Json // { version: 1, elements: [...] }
   createdFromTemplateId String? // informational; templates are snapshots, not parents
-  publishedAt     DateTime?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  publishedAt           DateTime?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   event        Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
@@ -1744,21 +1746,21 @@ model ApplicantProfileImage {
 }
 
 model Application {
-  id             String             @id @default(cuid())
-  formId         String
-  eventId        String
-  organizationId String
-  contactId      String
-  profileId      String
-  tierId         String?
-  status         ApplicationStatus  @default(DRAFT)
+  id                 String             @id @default(cuid())
+  formId             String
+  eventId            String
+  organizationId     String
+  contactId          String
+  profileId          String
+  tierId             String?
+  status             ApplicationStatus  @default(DRAFT)
   // Fine-grained payment state machine; the coarse money state is Order.status
   // (spec 024), written in the same transaction through orderStatusFor().
-  paymentStatus  ApplicationPayment @default(NOT_REQUIRED)
-  capacitySlot   CapacitySlot       @default(NONE)
+  paymentStatus      ApplicationPayment @default(NOT_REQUIRED)
+  capacitySlot       CapacitySlot       @default(NONE)
   // Spec 039 D6: the vendor picked `tierId` at selection (TIERS form, approved
   // without a category). A release gives it back; an organizer's pick locks it.
-  tierChosenByVendor Boolean @default(false)
+  tierChosenByVendor Boolean            @default(false)
 
   // Money lives on `order` (spec 024): amount snapshot as order lines,
   // PaymentTransaction, Refund. PAID forms only; FREE forms have no order.
@@ -2115,4 +2117,42 @@ model StripeWebhookEvent {
   @@index([type, receivedAt])
   @@index([status, receivedAt])
   @@index([objectId])
+}
+
+// Spec 043: a developer's credential for one organization, minted by the
+// Jump CLI's browser login (loopback + PKCE). Only routers mounted with
+// allowDeveloperToken(scope) accept it; requireAuth refuses it everywhere else.
+model DeveloperToken {
+  id             String    @id @default(cuid())
+  organizationId String
+  userId         String
+  name           String // "Jump CLI on jj-mbp"
+  tokenHash      String    @unique // sha256 of the `jmp_` token; the token itself is never stored
+  prefix         String // first characters, shown in Settings › Developers
+  scopes         String[] // ["themes"]
+  lastUsedAt     DateTime?
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([userId])
+}
+
+// One-time code between the browser consent page and the CLI (5 minutes,
+// single use, bound to the PKCE challenge and the loopback redirect).
+model DeveloperAuthCode {
+  id             String    @id @default(cuid())
+  codeHash       String    @unique
+  codeChallenge  String
+  redirectUri    String
+  userId         String
+  organizationId String
+  name           String
+  expiresAt      DateTime
+  usedAt         DateTime?
+  createdAt      DateTime  @default(now())
 }
