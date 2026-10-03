@@ -120,6 +120,12 @@ export const LIMITS = Object.freeze({
     limit: 30,
     message: 'Too many applications from this address. Try again later.',
   },
+  // Spec 043: CLI login code exchanges per IP (codes are single use and expire in 5 min)
+  DEVELOPER_TOKEN: {
+    windowMs: 15 * 60 * 1000,
+    limit: 20,
+    message: 'Too many sign-in attempts from this address. Try again later.',
+  },
   // Spec 042: storefront contact-form messages per IP
   CONTACT_SUBMIT: {
     windowMs: 60 * 60 * 1000,
