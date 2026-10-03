@@ -15,8 +15,12 @@ export function client({ apiUrl, token }) {
     try {
       res = await fetch(`${apiUrl}${path}`, {
         method,
-        headers: { ...(token && { Authorization: `Bearer ${token}` }), ...(body !== undefined && { 'Content-Type': 'application/json' }) },
-        body: body === undefined ? undefined : JSON.stringify(body),
+        // FormData (file uploads) sets its own multipart Content-Type.
+        headers: {
+          ...(token && { Authorization: `Bearer ${token}` }),
+          ...(body !== undefined && !(body instanceof FormData) && { 'Content-Type': 'application/json' }),
+        },
+        body: body === undefined || body instanceof FormData ? body : JSON.stringify(body),
       });
     } catch (error) {
       throw new Error(`Could not reach ${apiUrl} (${error.cause?.code || error.message})`);

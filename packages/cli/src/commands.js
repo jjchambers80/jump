@@ -9,7 +9,7 @@ import { readCredentials, storeCredentials, writeCredentials } from './config.js
 import { ApiError, client } from './client.js';
 import { login } from './login.js';
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import {
   LOCK,
   changesFor,
@@ -45,6 +45,10 @@ const HELP = `Usage: jump <command> [options]
   theme preview [--share]    Print a preview link for the draft theme
   theme publish [--yes]      Make the theme in jump.theme.json live
 
+  files upload <path>...     Upload images, MP4/WebM videos or PDFs to Content › Files
+                             (20 MB each); prints each file's id for { "fileId": … }
+  files list [--type image|video|pdf] [--search <text>]
+
 Options: --dir <path> (default: current folder), --store <slug>
 `;
 
@@ -54,6 +58,8 @@ const OPTIONS = {
   'api-url': { type: 'string' },
   theme: { type: 'string' },
   dir: { type: 'string' },
+  type: { type: 'string' },
+  search: { type: 'string' },
   live: { type: 'boolean' },
   'allow-live': { type: 'boolean' },
   share: { type: 'boolean' },
@@ -309,6 +315,25 @@ const commands = {
     console.log(`${url}\n(expires ${new Date(expiresAt).toLocaleString()}${values.share ? '; store password still applies' : ''})`);
   },
 
+  async 'files upload'(values, dir, paths) {
+    if (!paths.length) throw new Error('jump files upload <path>...');
+    const { call } = await session(values, dir);
+    const form = new FormData();
+    for (const path of paths) form.append('files', new Blob([await readFile(path)]), basename(path));
+    const { files, errors } = await call('POST', '/admin/files', form);
+    for (const f of files) console.log(`${f.id}  ${f.kind.padEnd(8)}  ${f.name}.${f.extension}  ${f.url}`);
+    for (const e of errors ?? []) console.error(`  ${e.name}: ${e.message}`);
+    if (errors?.length) throw new Error(`${errors.length} of ${paths.length} files were not uploaded.`);
+  },
+
+  async 'files list'(values, dir) {
+    const { call } = await session(values, dir);
+    const query = new URLSearchParams({ ...(values.type && { type: values.type }), ...(values.search && { q: values.search }) });
+    const { files, total } = await call('GET', `/admin/files?${query}`);
+    for (const f of files) console.log(`${f.id}  ${f.kind.padEnd(8)}  ${f.name}.${f.extension}`);
+    if (total > files.length) console.log(`(${files.length} of ${total}; narrow with --search)`);
+  },
+
   async 'theme publish'(values, dir) {
     const { call } = await session(values, dir);
     const lock = await readLock(dir);
@@ -324,11 +349,12 @@ const commands = {
 
 export async function main(argv) {
   const { values, positionals } = parseArgs({ args: argv, options: OPTIONS, allowPositionals: true });
-  const name = positionals[0] === 'theme' ? `theme ${positionals[1] ?? ''}` : positionals[0];
+  const grouped = positionals[0] === 'theme' || positionals[0] === 'files';
+  const name = grouped ? `${positionals[0]} ${positionals[1] ?? ''}` : positionals[0];
   const command = commands[name];
   if (values.help || !command) {
     console.log(HELP);
     return command || values.help ? 0 : 1;
   }
-  return command(values, values.dir || process.cwd());
+  return command(values, values.dir || process.cwd(), positionals.slice(grouped ? 2 : 1));
 }

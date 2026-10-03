@@ -32,8 +32,21 @@ function fakeApi() {
   const server = createServer(async (req, res) => {
     let raw = '';
     for await (const chunk of req) raw += chunk;
-    const body = raw ? JSON.parse(raw) : undefined;
     const url = new URL(req.url, 'http://x');
+    if (url.pathname === '/admin/files') {
+      if (req.headers.authorization !== `Bearer ${TOKEN}`) return send(res, 401, { message: 'Invalid token' });
+      if (req.method === 'GET') return send(res, 200, { files: state.files ?? [], total: (state.files ?? []).length, query: url.search });
+      // Multipart: one part per file, named in its Content-Disposition.
+      const names = [...raw.matchAll(/name="files"; filename="([^"]+)"/g)].map((m) => m[1]);
+      state.uploads = { contentType: req.headers['content-type'], names, raw };
+      const files = names.filter((n) => !n.endsWith('.exe')).map((n, i) => {
+        const [name, extension] = n.split('.');
+        return { id: `file${i + 1}`, kind: extension === 'mp4' ? 'video' : 'image', name, extension, url: `http://files.test/${n}` };
+      });
+      const errors = names.filter((n) => n.endsWith('.exe')).map((n) => ({ name: n, message: 'Only JPG, PNG, GIF, WebP images, MP4 and WebM videos and PDF files are supported' }));
+      return send(res, 201, { files, errors });
+    }
+    const body = raw ? JSON.parse(raw) : undefined;
     if (url.pathname === '/developer/token') {
       const ok = state.pending && body.code === 'the-code' && createHash('sha256').update(body.codeVerifier).digest('base64url') === state.pending.challenge && body.redirectUri === state.pending.redirect;
       return ok
@@ -249,6 +262,30 @@ describe('jump CLI', () => {
     assert.match(logs, /is live/);
     assert.equal(api.state.themes.dev.role, 'MAIN');
     assert.equal((await readLock(dir)).role, 'MAIN');
+  });
+
+  it('files upload sends multipart and prints each id; a refused file fails the command', async () => {
+    const loop = join(dir, 'hero-loop.mp4');
+    const poster = join(dir, 'poster.jpg');
+    await writeFile(loop, 'video bytes');
+    await writeFile(poster, 'jpeg bytes');
+    const ok = await quiet(() => main(['files', 'upload', loop, poster, '--dir', dir]));
+    assert.equal(ok.code, undefined);
+    assert.match(api.state.uploads.contentType, /^multipart\/form-data; boundary=/);
+    assert.deepEqual(api.state.uploads.names, ['hero-loop.mp4', 'poster.jpg']);
+    assert.match(api.state.uploads.raw, /video bytes/);
+    assert.match(ok.logs, /file1 +video +hero-loop\.mp4/);
+    assert.match(ok.logs, /file2 +image +poster\.jpg/);
+
+    const bad = join(dir, 'tool.exe');
+    await writeFile(bad, 'MZ');
+    await assert.rejects(quiet(() => main(['files', 'upload', loop, bad, '--dir', dir])), /1 of 2 files were not uploaded/);
+  });
+
+  it('files list prints ids and passes the filters', async () => {
+    api.state.files = [{ id: 'v1', kind: 'video', name: 'loop', extension: 'mp4' }];
+    const { logs } = await quiet(() => main(['files', 'list', '--type', 'video', '--search', 'loop', '--dir', dir]));
+    assert.match(logs, /v1 +video +loop\.mp4/);
   });
 
   it('a deleted document file goes back to the preset default', () => {

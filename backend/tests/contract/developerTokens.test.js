@@ -171,10 +171,38 @@ describe('Developer tokens contract (043A)', () => {
 
     it('is refused everywhere else', async () => {
       const { token } = await login();
-      for (const path of ['/admin/orders', '/admin/online-store/preferences', '/account', '/admin/files']) {
+      for (const path of ['/admin/orders', '/admin/online-store/preferences', '/account', '/admin/files/some-id']) {
         const res = await request(app).get(path).set(...bearer(token));
         expect(res.status).toBe(401);
       }
+    });
+
+    it('lists and uploads files for its organization, and nothing more', async () => {
+      const { token } = await login();
+      const PNG = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+        'base64'
+      );
+      const uploaded = await request(app)
+        .post('/admin/files')
+        .set(...bearer(token))
+        .set('X-Jump-Org', other.id)
+        .attach('files', PNG, { filename: 'poster.png', contentType: 'image/png' });
+      expect(uploaded.status).toBe(201);
+      const [file] = uploaded.body.files;
+      expect(file.organizationId).toBe(organization.id);
+
+      const listed = await request(app).get('/admin/files').set(...bearer(token));
+      expect(listed.status).toBe(200);
+      expect(listed.body.files.map((f) => f.id)).toContain(file.id);
+
+      const refused = [
+        request(app).get(`/admin/files/${file.id}`).set(...bearer(token)),
+        request(app).patch(`/admin/files/${file.id}`).set(...bearer(token)).send({ name: 'x' }),
+        request(app).delete(`/admin/files/${file.id}`).set(...bearer(token)),
+        request(app).post('/admin/files/from-url').set(...bearer(token)).send({ url: 'https://example.com/a.png' }),
+      ];
+      for (const res of await Promise.all(refused)) expect(res.status).toBe(401);
     });
 
     it('stops working once revoked, expired, or the member leaves', async () => {

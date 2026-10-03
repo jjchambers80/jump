@@ -6,6 +6,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { requireAuth } from '../../middleware/auth.js';
+import { allowDeveloperToken } from '../../middleware/developerToken.js';
 import { requireOrganizer } from '../../middleware/rbac.js';
 import { NotFoundError, ValidationError } from '../../middleware/errorHandler.js';
 import { activeOrgFor } from './adminScope.js';
@@ -46,7 +47,14 @@ const fromUrlLimiter = rateLimit({
 });
 
 export const adminFilesRouter = Router();
-adminFilesRouter.use(requireAuth);
+// Spec 043: the Jump CLI's theme token may list and upload files (theme
+// images and videos reference them by id) — never rename, delete or fetch
+// from a URL. Everything else goes through requireAuth, which refuses it.
+const cliToken = allowDeveloperToken('themes');
+adminFilesRouter.use((req, res, next) =>
+  req.path === '/' && (req.method === 'GET' || req.method === 'POST') ? cliToken(req, res, next) : next()
+);
+adminFilesRouter.use((req, res, next) => (req.user?.developerTokenId ? next() : requireAuth(req, res, next)));
 adminFilesRouter.use(requireOrganizer);
 
 /** GET /admin/files — list (q, type, sort, page). */
