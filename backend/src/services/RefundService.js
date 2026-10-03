@@ -714,6 +714,7 @@ class RefundService {
           select: { id: true, barcode: true, ticketNumber: true },
         },
         orderAddOn: { include: { addOn: { select: { name: true } } } },
+        dispute: { select: { state: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -735,6 +736,8 @@ class RefundService {
       addOn: r.orderAddOn ? { id: r.orderAddOn.id, name: r.orderAddOn.name ?? r.orderAddOn.addOn?.name ?? null, quantity: r.orderAddOn.quantity } : null,
       initiatedBy: r.initiatedBy,
       manual: r.manual === true,
+      // Spec 037: money Stripe pulled back for a chargeback, not a refund Jump issued.
+      dispute: r.disputeId ? { id: r.disputeId, state: r.dispute?.state ?? null } : null,
       createdAt: r.createdAt,
     }));
   }
