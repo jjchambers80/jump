@@ -19,6 +19,7 @@ export interface EventListProps {
   emptyText?: string;
   colorScheme?: string;
   paddingTop?: number;
+  sectionWidth?: string;
   paddingBottom?: number;
   ctx: SectionContext;
 }

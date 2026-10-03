@@ -13,7 +13,7 @@ export function settingsVars(settings: ThemeSettings): Record<string, string> {
   const buttons = settings.buttons ?? {};
   const radius = buttons.shape === 'pill' ? 9999 : buttons.shape === 'square' ? 0 : num(buttons.radius, 8);
   return {
-    '--theme-page-width': `${num(layout.pageWidth, 1200)}px`,
+    '--theme-page-width': `${num(layout.pageWidth, 1280)}px`,
     '--theme-section-gap': `${num(layout.sectionSpacing, 0)}px`,
     '--theme-logo-width': `${num(logo.desktopWidth, 120)}px`,
     '--theme-logo-width-mobile': `${num(logo.mobileWidth, 90)}px`,
@@ -26,6 +26,12 @@ export function settingsVars(settings: ThemeSettings): Record<string, string> {
  * nothing, so they follow the page's light/dark tokens (D7); `brand` accent
  * keeps the brand variables from BrandScope.
  */
+/** A template's own page width (root.props.pageWidth) over the theme's, for its whole frame. */
+export function pageWidthVars(root: { props?: Record<string, unknown> } | null | undefined): Record<string, string> | undefined {
+  const width = root?.props?.pageWidth;
+  return typeof width === 'number' && Number.isFinite(width) ? { '--theme-page-width': `${width}px` } : undefined;
+}
+
 export function schemeCss(settings: ThemeSettings): string | null {
   const rules: string[] = [];
   for (const scheme of settings.colors?.schemes ?? []) {

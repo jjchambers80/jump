@@ -16,6 +16,7 @@ export interface HeroProps {
   height?: 'small' | 'medium' | 'large';
   colorScheme?: string;
   paddingTop?: number;
+  sectionWidth?: string;
   paddingBottom?: number;
   /** Puck renders the Button blocks into this slot. */
   Buttons: (props?: { className?: string }) => ReactNode;
@@ -102,7 +103,7 @@ export default function HeroSection({
     <SectionShell type="Hero" props={common}>
       <section aria-labelledby={heading ? headingId : undefined} className={`flex items-center ${MIN_HEIGHT[height]}`}>
         <div
-          className={`mx-auto grid w-full max-w-[var(--theme-page-width,80rem)] items-center gap-10 px-4 py-16 sm:px-6 lg:px-8 ${
+          className={`mx-auto grid w-full max-w-7xl items-center gap-10 px-4 py-16 sm:px-6 lg:px-8 ${
             file ? 'lg:grid-cols-2' : ''
           }`}
         >

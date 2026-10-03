@@ -103,6 +103,14 @@ describe('HeroSection', () => {
   });
 });
 
+describe('section width', () => {
+  it('sets --theme-section-width on the section wrapper', () => {
+    const html = renderToStaticMarkup(<UpcomingEventsSection id="U" heading="Upcoming" count={3} sectionWidth="full" ctx={ctx()} />);
+    expect(html).toMatch(/data-section="UpcomingEvents"[^>]*style="--theme-section-width:none/);
+    expect(html).toContain('max-w-7xl');
+  });
+});
+
 describe('RichTextSection and CallToActionSection', () => {
   it('render their text and headings', () => {
     const rich = renderToStaticMarkup(<RichTextSection id="r" heading="About" body="<p>Since 2009</p>" alignment="center" Buttons={noButtons} ctx={ctx()} />);

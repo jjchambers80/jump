@@ -4,7 +4,7 @@
 import OrganizationHeader from '@/components/OrganizationHeader';
 import { withImageDimensions } from '@/lib/assets';
 import { schemeClass } from '../settingsCss';
-import type { SectionContext } from './context';
+import { sectionWidthStyle, type SectionContext } from './context';
 import StickyOnScrollUp from './StickyOnScrollUp';
 
 export interface HeaderSectionProps {
@@ -13,6 +13,7 @@ export interface HeaderSectionProps {
   separator?: boolean;
   showAccountLink?: boolean;
   colorScheme?: string;
+  sectionWidth?: string;
   ctx: SectionContext;
 }
 
@@ -22,6 +23,7 @@ export default function HeaderSection({
   separator = false,
   showAccountLink = true,
   colorScheme,
+  sectionWidth,
   ctx,
 }: HeaderSectionProps) {
   const { organization, resolved, settings } = ctx;
@@ -32,6 +34,7 @@ export default function HeaderSection({
   const header = (
     <div
       data-section="Header"
+      style={sectionWidthStyle({ sectionWidth })}
       className={[
         schemeClass(colorScheme),
         separator ? 'border-b border-gray-200 dark:border-slate-700' : '',

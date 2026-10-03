@@ -6,11 +6,11 @@
 // array fields). Render functions are the storefront's own, so the canvas
 // shows exactly what the store will.
 
-import { BLOCKS, COMMON_SECTION_FIELDS, SECTIONS, fieldDefaults, sectionsForGroup } from '@jump/theme';
+import { BLOCKS, COMMON_SECTION_FIELDS, DOCUMENTS, SECTIONS, fieldDefaults, sectionsForGroup } from '@jump/theme';
 import { EyeOff } from 'lucide-react';
 import { renderConfig } from '../render/config';
 import ThemeScope from '../ThemeScope';
-import { schemeCss, settingsVars } from '../settingsCss';
+import { pageWidthVars, schemeCss, settingsVars } from '../settingsCss';
 import { sectionContext } from '../sections/context';
 import { createUsePuck, type Config, type Fields } from './puck';
 import { puckField, type FieldContext, type FieldSpec } from './fields';
@@ -145,11 +145,12 @@ export function buildEditorConfig(ctx: FieldContext): Config {
         title: { type: 'text', label: 'Page title' },
         seoTitle: { type: 'text', label: 'SEO title' },
         seoDescription: { type: 'textarea', label: 'SEO description' },
+        pageWidth: puckField((DOCUMENTS as any).home.root.pageWidth, ctx),
         header: { type: 'slot', allow: sectionsForGroup('header') },
         template: { type: 'slot', allow: sectionsForGroup('template') },
         footer: { type: 'slot', allow: sectionsForGroup('footer') },
       } as Fields,
-      render: ({ header: Header, template: Template, footer: Footer, puck }: any) => {
+      render: ({ header: Header, template: Template, footer: Footer, pageWidth, puck }: any) => {
         const section = sectionContext(puck.metadata);
         const dark = section.organization.themeMode === 'DARK';
         // staticMode: no mode script and no ThemeModeSync, which would force
@@ -164,11 +165,13 @@ export function buildEditorConfig(ctx: FieldContext): Config {
               staticMode
               className="min-h-screen bg-gray-50 dark:bg-slate-900"
             >
-              <Header />
-              <main>
-                <Template />
-              </main>
-              <Footer />
+              <div style={pageWidthVars({ props: { pageWidth } })}>
+                <Header />
+                <main>
+                  <Template />
+                </main>
+                <Footer />
+              </div>
             </ThemeScope>
           </div>
         );

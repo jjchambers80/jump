@@ -112,13 +112,15 @@ export function toEditorData(docs: { header: ThemeDocumentData; footer: ThemeDoc
 
 export function fromEditorData(data: EditorData): { header: ThemeDocumentData; template: ThemeDocumentData; footer: ThemeDocumentData } {
   const { header = [], template = [], footer = [], ...rootProps } = data.root.props ?? ({} as EditorData['root']['props']);
+  // A cleared number field leaves '' or NaN behind: unset = the theme's page width.
+  if (typeof rootProps.pageWidth !== 'number' || !Number.isFinite(rootProps.pageWidth)) delete (rootProps as Record<string, unknown>).pageWidth;
   const doc = (items: Item[], props: Record<string, any> = {}): ThemeDocumentData => ({
     root: { props },
     content: items.map(unflattenItem),
   });
   return {
     header: doc(header),
-    template: doc(template, clean(pick(rootProps, ['title', 'seoTitle', 'seoDescription']))),
+    template: doc(template, clean(pick(rootProps, ['title', 'seoTitle', 'seoDescription', 'pageWidth']))),
     footer: doc(footer),
   };
 }

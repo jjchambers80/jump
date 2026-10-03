@@ -67,6 +67,8 @@ documents/<key>.json   one Puck document per key (header, footer, home, events, 
 .jump/schema.json      every section type and field the AI may use (from @jump/theme)
 AGENTS.md, CLAUDE.md   rules for AI assistants, written once, never overwritten
 ```
+Widths are plain JSON too: `settings.json` `layout.pageWidth`, a document's `root.props.pageWidth`, and each section's `props.sectionWidth` (see [Storefront Theme Sections](theme-sections.md#layout-widths)). Folders pulled before this change keep their old `AGENTS.md` (written once); `.jump/schema.json` is rewritten on every pull, so `jump theme pull` picks up the new fields.
+
 `jump theme check` runs the same `@jump/theme` validators as the server and never touches the network.
 
 ### Developer loop

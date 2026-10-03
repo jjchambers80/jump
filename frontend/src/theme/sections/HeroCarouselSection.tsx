@@ -20,6 +20,7 @@ export interface HeroCarouselProps {
   showDots?: boolean;
   colorScheme?: string;
   paddingTop?: number;
+  sectionWidth?: string;
   paddingBottom?: number;
   /** Puck renders the Slide blocks into this slot. */
   Slides: (props?: SlotProps) => ReactNode;

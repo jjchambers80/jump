@@ -11,6 +11,7 @@ export interface CallToActionProps {
   text?: string;
   colorScheme?: string;
   paddingTop?: number;
+  sectionWidth?: string;
   paddingBottom?: number;
   Buttons: (props?: { className?: string }) => ReactNode;
   ctx: SectionContext;
@@ -21,7 +22,7 @@ export default function CallToActionSection({ id, heading = '', text = '', Butto
   return (
     <SectionShell type="CallToAction" props={common}>
       <section aria-labelledby={heading ? headingId : undefined} className="px-4 py-12 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-[var(--theme-page-width,80rem)] rounded-[var(--theme-container-radius,1.5rem)] bg-white px-6 py-12 text-center ring-1 ring-inset ring-gray-200 dark:bg-slate-800 dark:ring-slate-700 sm:px-12">
+        <div className="mx-auto max-w-7xl rounded-[var(--theme-container-radius,1.5rem)] bg-white px-6 py-12 text-center ring-1 ring-inset ring-gray-200 dark:bg-slate-800 dark:ring-slate-700 sm:px-12">
           {heading && (
             <h2 id={headingId} className="text-3xl font-bold tracking-tight text-gray-900 dark:text-slate-100">
               {heading}

@@ -188,9 +188,10 @@ Edit the JSON files to change the store's look and content, then push them.
 1. Edit only \`settings.json\`, \`content.json\` and \`documents/*.json\`. There is no CSS, HTML, script or template code to edit, and none is accepted.
 2. Every section needs a unique \`props.id\`. Sections marked \`locked\` in the schema (Header, Footer, EventList) must stay in their document.
 3. Images are \`{ "fileId": "<id>", "alt": "…" }\` references to files already uploaded in Content › Files. Never invent a fileId; leave an image unset if you have none. Every image needs \`alt\` text or \`"decorative": true\`.
-4. Rich text fields take simple HTML (p, strong, em, a, ul, ol, li, h2-h4); the server sanitises it.
-5. After every change run \`jump theme check\` and fix every error before pushing.
-6. Push with \`jump theme push\` to the development theme and check the preview link. Never push or publish to the live theme (\`--live\`, \`jump theme publish\`) unless the user explicitly asks.
+4. Widths: the theme's page width is \`settings.json\` \`layout.pageWidth\` (1000-1600 px). A page can override it with \`root.props.pageWidth\` in its document. Each section takes \`props.sectionWidth\`: \`page\` (default), \`narrow\`, \`wide\` or \`full\` (edge to edge).
+5. Rich text fields take simple HTML (p, strong, em, a, ul, ol, li, h2-h4); the server sanitises it.
+6. After every change run \`jump theme check\` and fix every error before pushing.
+7. Push with \`jump theme push\` to the development theme and check the preview link. Never push or publish to the live theme (\`--live\`, \`jump theme publish\`) unless the user explicitly asks.
 
 ## Commands
 

@@ -457,3 +457,16 @@ test.describe('Draft theme preview (038K)', () => {
     expect(new URL(res.headers().location).host).toMatch(/^localhost/);
   });
 });
+
+test.describe('layout widths', () => {
+  test('page width override and section widths size the content containers', async ({ page }) => {
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.goto('/organizations/theme-widths');
+    const width = (selector: string) => page.locator(selector).first().evaluate((el) => Math.round(el.getBoundingClientRect().width));
+    await expect(page.getByRole('heading', { name: 'Full list' })).toBeVisible();
+    // Header follows the page's own 1000 px width, not the theme's 1280.
+    expect(await width('[data-section="Header"] .max-w-7xl')).toBe(1000);
+    expect(await width('[data-section="UpcomingEvents"]:has-text("Narrow list") .max-w-7xl')).toBe(768);
+    expect(await width('[data-section="UpcomingEvents"]:has-text("Full list") .max-w-7xl')).toBe(await page.evaluate(() => document.documentElement.clientWidth));
+  });
+});

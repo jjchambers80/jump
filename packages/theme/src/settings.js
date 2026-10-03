@@ -56,7 +56,7 @@ export const SETTINGS_GROUPS = {
   layout: {
     label: 'Layout',
     fields: {
-      pageWidth: range('Page width', 1000, 1600, { step: 10, unit: 'px', default: 1200 }),
+      pageWidth: range('Page width', 1000, 1600, { step: 10, unit: 'px', default: 1280 }),
       sectionSpacing: range('Space between template sections', 0, 100, { step: 4, unit: 'px', default: 0 }),
       gridHorizontal: range('Grid horizontal space', 4, 40, { step: 4, unit: 'px', default: 16 }),
       gridVertical: range('Grid vertical space', 4, 40, { step: 4, unit: 'px', default: 16 }),

@@ -5,7 +5,8 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { schemeCss, schemeClass, settingsVars } from '@/theme/settingsCss';
+import { pageWidthVars, schemeCss, schemeClass, settingsVars } from '@/theme/settingsCss';
+import { sectionWidthStyle } from '@/theme/sections/context';
 
 const SECTIONS_DIR = path.join(__dirname, '../../src/theme/sections');
 // Chromatic Tailwind palettes: a raw `bg-blue-600` would ignore the org's brand.
@@ -26,6 +27,19 @@ describe('settings → CSS', () => {
     expect(vars['--theme-page-width']).toBe('1300px');
     expect(vars['--theme-section-gap']).toBe('0px');
     expect(vars['--theme-button-radius']).toBe('9999px');
+  });
+
+  it('a template page width overrides the theme one; anything but a number is ignored', () => {
+    expect(pageWidthVars({ props: { pageWidth: 1000 } })).toEqual({ '--theme-page-width': '1000px' });
+    expect(pageWidthVars({ props: { pageWidth: '100vw' } })).toBeUndefined();
+    expect(pageWidthVars(null)).toBeUndefined();
+  });
+
+  it('section width comes only from the enum', () => {
+    expect(sectionWidthStyle({ sectionWidth: 'full' })).toEqual({ '--theme-section-width': 'none' });
+    expect(sectionWidthStyle({ sectionWidth: 'narrow' })).toEqual({ '--theme-section-width': '768px' });
+    expect(sectionWidthStyle({ sectionWidth: 'page' })).toEqual({});
+    expect(sectionWidthStyle({ sectionWidth: '100vw;color:red' })).toEqual({});
   });
 
   it('emits scheme classes only for #rrggbb values and valid ids', () => {

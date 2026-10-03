@@ -10,7 +10,7 @@ import { resolveAssetUrl } from '@/lib/assets';
 import { LEGAL_PAGES_ENABLED, LEGAL_PATHS } from '@/lib/legal';
 import { schemeClass } from '../settingsCss';
 import type { ThemeItem } from '../types';
-import type { SectionContext } from './context';
+import { sectionWidthStyle, type SectionContext } from './context';
 
 const SOCIAL_LABELS: Record<string, string> = {
   instagram: 'Instagram',
@@ -28,6 +28,7 @@ export interface FooterSectionProps {
   poweredBy?: boolean;
   copyright?: string;
   colorScheme?: string;
+  sectionWidth?: string;
   blocks?: ThemeItem[];
   ctx: SectionContext;
 }
@@ -107,6 +108,7 @@ export default function FooterSection({
   poweredBy = false,
   copyright = '',
   colorScheme,
+  sectionWidth,
   blocks = [],
   ctx,
 }: FooterSectionProps) {
@@ -140,7 +142,7 @@ export default function FooterSection({
     ) : null;
 
   return (
-    <div data-section="Footer" className={schemeClass(colorScheme) || undefined}>
+    <div data-section="Footer" className={schemeClass(colorScheme) || undefined} style={sectionWidthStyle({ sectionWidth })}>
       <FooterMenu
         items={items}
         organization={organization}

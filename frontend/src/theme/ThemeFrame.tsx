@@ -3,12 +3,12 @@
 // page body and the footer group. Server Component; islands inside (nav
 // drawer, announcement rotation, sign-in link) hydrate on their own.
 
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { Render } from '@puckeditor/core/rsc';
 import { renderConfig, renderable } from './render/config';
 import ThemeScope from './ThemeScope';
 import PreviewBar, { ClearPreviewCookie } from './PreviewBar';
-import { schemeCss, settingsVars } from './settingsCss';
+import { pageWidthVars, schemeCss, settingsVars } from './settingsCss';
 import type { SectionContext } from './sections/context';
 import type { ThemeDocument, ThemeRender } from './types';
 
@@ -56,7 +56,7 @@ export default function ThemeFrame({
     >
       {data.preview && <PreviewBar name={data.preview.name} path={path} />}
       {data.previewInvalid && <ClearPreviewCookie />}
-      <div data-theme-frame={data.theme.id ?? 'preset'}>
+      <div data-theme-frame={data.theme.id ?? 'preset'} style={pageWidthVars(data.documents.template?.root) as CSSProperties | undefined}>
         {renderDocument(data.documents.header, ctx)}
         {children ??
           (data.documents.template && (
