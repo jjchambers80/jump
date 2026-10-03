@@ -34,6 +34,32 @@ export function validateThemeSave(req, res, next) {
   next();
 }
 
+const THEME_NAME_MAX = 50;
+const nameError = (name) =>
+  typeof name !== 'string' || !name.trim() || name.trim().length > THEME_NAME_MAX
+    ? `name must be 1-${THEME_NAME_MAX} characters`
+    : null;
+
+/** PATCH /admin/themes/:id { name, themeVersion } — rename (038J2). */
+export function validateThemeRename(req, res, next) {
+  const errors = [];
+  const message = nameError(req.body?.name);
+  if (message) errors.push({ field: 'name', message });
+  if (!isVersion(req.body?.themeVersion, 1)) errors.push({ field: 'themeVersion', message: 'themeVersion is required' });
+  if (errors.length) return next(new ValidationError('Validation failed', errors));
+  req.body.name = req.body.name.trim();
+  next();
+}
+
+/** POST /admin/themes/:id/duplicate { name? } (038J2). */
+export function validateThemeDuplicate(req, res, next) {
+  if (req.body?.name === undefined) return next();
+  const message = nameError(req.body.name);
+  if (message) return next(new ValidationError('Validation failed', [{ field: 'name', message }]));
+  req.body.name = req.body.name.trim();
+  next();
+}
+
 /** POST /admin/themes/:id/revisions/:revisionId/restore */
 export function validateThemeRestore(req, res, next) {
   if (!isVersion(req.body?.themeVersion, 1))

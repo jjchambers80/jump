@@ -90,6 +90,10 @@ export const themesApi = {
   previewData: (id: string, page: string) => api.get<{ organization: any; resolved: any }>(`/admin/themes/${id}/preview-data?page=${encodeURIComponent(page)}`),
   save: (id: string, body: ThemeSaveBody) => api.put<ThemeSaveResult>(`/admin/themes/${id}/save`, body),
   revisions: (id: string) => api.get<{ revisions: ThemeRevision[] }>(`/admin/themes/${id}/revisions`),
+  rename: (id: string, name: string, themeVersion: number) => api.patch<ThemeSummary>(`/admin/themes/${id}`, { name, themeVersion }),
+  duplicate: (id: string, name?: string) => api.post<ThemeSummary>(`/admin/themes/${id}/duplicate`, name ? { name } : {}),
+  publish: (id: string) => api.post<ThemeSummary>(`/admin/themes/${id}/publish`, {}),
+  remove: (id: string) => api.delete<void>(`/admin/themes/${id}`),
   restore: (id: string, revisionId: string, themeVersion: number) =>
     api.post<ThemeSaveResult>(`/admin/themes/${id}/revisions/${revisionId}/restore`, { themeVersion }),
 };
