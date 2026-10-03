@@ -7,7 +7,7 @@ Status: **Built 2026-10-03, in review** · PRs #276 (038J2 draft themes), #277 (
 - **Schema endpoint dropped.** The CLI builds `.jump/schema.json` from its own `@jump/theme`, so there is no `GET /admin/themes/schema`. The CLI therefore runs from this monorepo (`npx jump`); publishing it to npm means publishing or bundling `@jump/theme` with it.
 - **Agent kit** is `AGENTS.md` plus a one-line `CLAUDE.md` (`@AGENTS.md`), not a separate skill folder.
 - **No `theme/:id/preview-link` beyond 038K's**: the staff link (1 h) is what `jump theme dev` / `jump theme preview` print; `--share` gives the 14-day link.
-- **Defaults** are `http://localhost:3001` (app) and `http://localhost:3000` (API); set `JUMP_APP_URL` / `JUMP_API_URL` or `--app-url` / `--api-url` until production hosts are fixed in the CLI.
+- **Defaults** are production (`https://frontend-production-43e9.up.railway.app` app, `https://backend-production-7d5c.up.railway.app` API); local dev sets `JUMP_APP_URL` / `JUMP_API_URL` or passes `--app-url` / `--api-url`.
 - 038K thumbnails (`/theme-thumbnail/[orgId]`) are not part of this work.
 
 ## Context

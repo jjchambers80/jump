@@ -10,8 +10,9 @@ import { ApiError, client } from './client.js';
 import { login } from './login.js';
 import { LOCK, changesFor, checkTheme, lockAfterSave, readLock, readTheme, writeAgentKit, writeLock, writeTheme } from './themeDir.js';
 
-const DEFAULT_APP_URL = process.env.JUMP_APP_URL || 'http://localhost:3001';
-const DEFAULT_API_URL = process.env.JUMP_API_URL || 'http://localhost:3000';
+// Production by default; local dev: JUMP_APP_URL=http://localhost:3001 JUMP_API_URL=http://localhost:3000
+const DEFAULT_APP_URL = process.env.JUMP_APP_URL || 'https://frontend-production-43e9.up.railway.app';
+const DEFAULT_API_URL = process.env.JUMP_API_URL || 'https://backend-production-7d5c.up.railway.app';
 const NAME_MAX = 50;
 
 const HELP = `Usage: jump <command> [options]

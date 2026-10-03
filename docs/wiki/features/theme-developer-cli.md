@@ -40,7 +40,7 @@ Three pieces make it work:
 | `THEME_EDITOR_ENABLED` / `NEXT_PUBLIC_THEME_EDITOR_ENABLED` | Yes | Themes master switch (spec 038). The org's `themesEnabled` flag must also be on, or every themes route is 404 |
 | `STOREFRONT_PREVIEW_SECRET` | No | HS256 key for preview tokens. Unset: derived from `AUTH_SECRET` with an HMAC label, never the raw session key |
 | `RATE_LIMIT_DEVELOPER_TOKEN_LIMIT` / `_WINDOW_MS` | No | Override the `POST /developer/token` limiter (default 20 per 15 min per IP) |
-| `JUMP_APP_URL` / `JUMP_API_URL` | No (CLI) | App and API base URLs for `jump login`. Default `http://localhost:3001` / `http://localhost:3000`; `--app-url` / `--api-url` override per run. Production defaults are not set yet |
+| `JUMP_APP_URL` / `JUMP_API_URL` | No (CLI) | App and API base URLs for `jump login`. Default production (`https://frontend-production-43e9.up.railway.app` / `https://backend-production-7d5c.up.railway.app`); set them to `http://localhost:3001` / `http://localhost:3000` for local dev, or pass `--app-url` / `--api-url` per run |
 | `JUMP_CONFIG_DIR` | No (CLI) | Credentials directory. Default `$XDG_CONFIG_HOME/jump` or `~/.config/jump` |
 
 ## How It Works
