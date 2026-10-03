@@ -19,6 +19,7 @@ import { FormEvent, ReactNode, useEffect, useState } from 'react';
 import { ImagePlus, Lock, ShieldCheck, X } from 'lucide-react';
 import api from '@/services/api';
 import { acceptanceLine, SOCIAL_FIELDS, type PublicForm, type Question } from '@/lib/applications';
+import { allStorefrontAccessTokens } from '@/lib/storefrontAccess';
 import { acceptancesFor, applyConsentText, fetchLegalVersions, LEGAL_PAGES_ENABLED, LEGAL_PATHS, type LegalVersions } from '@/lib/legal';
 import ApplyShell from '../ApplyShell';
 import { storefrontInput, storefrontLabel, storefrontTextarea } from '@/components/storefront/formStyles';
@@ -121,7 +122,10 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
       body.append('payload', JSON.stringify(payload));
       photos.forEach((p) => body.append('profilePhotos', p, p.name));
       Object.entries(answerPhotos).forEach(([qid, file]) => body.append(`answer:${qid}`, file, file.name));
-      const res = await fetch(`${API_URL}/events/${params.eventId}/applications`, { method: 'POST', body });
+      // Raw multipart fetch skips services/api.ts, so attach the private-store tokens here.
+      const tokens = allStorefrontAccessTokens();
+      const headers: Record<string, string> = tokens.length ? { 'X-Storefront-Access': tokens.join(',') } : {};
+      const res = await fetch(`${API_URL}/events/${params.eventId}/applications`, { method: 'POST', body, headers });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         // The versions moved under us: forget the cached ones so the next try shows the current text.
