@@ -522,7 +522,6 @@ model Organization {
   addOnProducts            AddOnProduct[]
   themes                   Theme[]
   pageTemplates            PageTemplate[]
-  contactInquiries         ContactInquiry[]
 }
 
 // Custom content pages managed under Online Store. Content is stored as the
@@ -571,29 +570,6 @@ model PageTemplate {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, name])
-}
-
-// Spec 042: a storefront contact-form message. Emailed to the store email
-// (Organization.email); the row is the record when the email fails. No IP.
-model ContactInquiry {
-  id             String    @id @default(cuid())
-  organizationId String
-  pageId         String? // plain id, no FK: the page may be deleted later
-  name           String
-  email          String
-  phone          String?
-  subject        String?
-  message        String
-  emailedAt      DateTime?
-  emailError     String?
-  // Admin inbox (Online store › Messages): null = unread.
-  readAt         DateTime?
-  createdAt      DateTime  @default(now())
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@index([organizationId, createdAt])
-  @@index([organizationId, readAt])
 }
 
 // Spec 010 phase 2: the organization's Stripe Connect (Express) account that

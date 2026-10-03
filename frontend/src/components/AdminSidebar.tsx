@@ -15,8 +15,6 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { useOrg } from '@/components/OrgContext';
-import api from '@/services/api';
 import {
   CalendarDays,
   ChartColumn,
@@ -45,10 +43,6 @@ interface NavItem {
   roles?: string[];
 }
 
-const MESSAGES_HREF = '/admin/online-store/messages';
-/** Fired by the Messages inbox when read state changes, so the badge refreshes. */
-export const MESSAGES_CHANGED_EVENT = 'jump:messages-changed';
-
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
   // Spec 037 D1: tier presets, application templates and the org-wide
@@ -72,8 +66,6 @@ const navItems: NavItem[] = [
     icon: Store,
     children: [
       { label: 'Pages', href: '/admin/online-store/pages' },
-      // Spec 042: contact-form messages
-      { label: 'Messages', href: MESSAGES_HREF },
       { label: 'Preferences', href: '/admin/online-store/preferences' },
     ],
   },
@@ -126,26 +118,6 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
     const current = sectionFor(pathname);
     if (current) setExpanded((prev) => (prev[current] ? prev : { ...prev, [current]: true }));
   }, [pathname]);
-
-  // Unread contact-form messages (spec 042), refreshed on navigation and
-  // whenever the inbox changes read state.
-  const { selectedOrgId } = useOrg();
-  const [unread, setUnread] = useState(0);
-  useEffect(() => {
-    if (!selectedOrgId) return setUnread(0);
-    let cancelled = false;
-    const load = () =>
-      api
-        .get<{ unreadCount: number }>('/admin/contact-inquiries/unread-count')
-        .then((result) => !cancelled && setUnread(result.unreadCount))
-        .catch(() => !cancelled && setUnread(0));
-    void load();
-    window.addEventListener(MESSAGES_CHANGED_EVENT, load);
-    return () => {
-      cancelled = true;
-      window.removeEventListener(MESSAGES_CHANGED_EVENT, load);
-    };
-  }, [selectedOrgId, pathname]);
 
   const toggle = (href: string) => setExpanded((prev) => ({ ...prev, [href]: !prev[href] }));
 
@@ -235,14 +207,6 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                 >
                   {Icon && <Icon className="w-4 h-4 mr-3 shrink-0" aria-hidden="true" />}
                   {item.label}
-                  {item.children?.some((child) => child.href === MESSAGES_HREF) &&
-                    !expanded[item.href] &&
-                    unread > 0 && (
-                      <span
-                        className="ml-auto h-2 w-2 rounded-full bg-indigo-600"
-                        aria-label={`${unread} unread messages`}
-                      />
-                    )}
                 </Link>
               );
 
@@ -284,15 +248,6 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                           className={`${linkClass(childActive)} ml-4 pl-6`}
                         >
                           {child.label}
-                          {child.href === MESSAGES_HREF && unread > 0 && (
-                            <span
-                              className="ml-auto rounded-full bg-indigo-600 px-2 py-0.5 text-xs font-semibold text-white"
-                              data-testid="messages-unread-badge"
-                            >
-                              {unread > 99 ? '99+' : unread}
-                              <span className="sr-only"> unread</span>
-                            </span>
-                          )}
                         </Link>
                       );
                     })}

@@ -51,7 +51,7 @@ Unknown keys anywhere are rejected. The whole file must be ≤ 64 KB.
 |------|----------|-------|
 | `page_content` | none | The page's own rich-text content. **Exactly one** per template, so choosing a template never hides what the organizer wrote |
 | `rich_text` | `html` (≤ 20 KB) | Fixed copy that is the same on every page using the template. Sanitized with the same allowlist as page content (`backend/src/utils/sanitizeHtml.js`) |
-| `contact_form` | `heading` (≤ 100), `intro` (≤ 500), `submitLabel` (≤ 40), `successMessage` (≤ 300), `showPhone`, `showSubject` (booleans) | At most one. Name, email and message are always asked; phone and subject are optional fields when shown. Messages are saved as `ContactInquiry` rows and emailed to the store email (Settings › Store contact) with reply-to set to the visitor. Missing settings use the defaults in `CONTACT_FORM_DEFAULTS` |
+| `contact_form` | `heading` (≤ 100), `intro` (≤ 500), `submitLabel` (≤ 40), `successMessage` (≤ 300), `showPhone`, `showSubject` (booleans) | At most one. Name, email and message are always asked; phone and subject are optional fields when shown. Messages are emailed to the store email (Settings › Store contact) with reply-to set to the visitor; nothing is stored, and a failed send shows the visitor an error. Missing settings use the defaults in `CONTACT_FORM_DEFAULTS` |
 
 Adding a section type means: the validator (`backend/src/utils/pageTemplateManifest.js`),
 the `PageTemplateSection` type in `frontend/src/services/api.ts`, a case in

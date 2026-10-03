@@ -15,7 +15,7 @@ const FIELDS = {
 /**
  * Normalizes `req.body` to trimmed strings (optional fields → null). A filled
  * honeypot (`website`, hidden from people) marks the request as a bot:
- * `req.contactHoneypot` lets the route answer 202 without saving or sending.
+ * `req.contactHoneypot` lets the route answer 202 without sending.
  */
 export function validateContactInquiry(req, res, next) {
   const body = req.body && typeof req.body === 'object' ? req.body : {};
