@@ -9,3 +9,4 @@ export * from './files.js';
 export * from './links.js';
 export * from './migrate.js';
 export * from './presets/index.js';
+export * from './files-check.js';

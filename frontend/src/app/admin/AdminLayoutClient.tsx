@@ -13,7 +13,7 @@ import OrgSwitcher from '@/components/OrgSwitcher';
 import { OrgProvider } from '@/components/OrgContext';
 
 // Full-screen admin tools that bring their own chrome (spec 038 theme editor).
-const FULL_SCREEN = /^\/admin\/online-store\/themes\/[^/]+\/editor\/?$/;
+const FULL_SCREEN = /^\/admin\/online-store\/themes\/[^/]+\/(editor|code)\/?$/;
 
 export default function AdminLayoutClient({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
