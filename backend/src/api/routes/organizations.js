@@ -307,8 +307,9 @@ router.get('/:id/public/pages/:slug', gateByOrgParam, async (req, res, next) => 
 /**
  * POST /organizations/:id/public/pages/:slug/contact
  * Contact-form message from a page whose template has a contact_form (spec
- * 042). Saved, then emailed to the store email. 202 either way once saved;
- * a filled honeypot gets the same 202 with nothing saved.
+ * 042). Emailed to the store email with reply-to = visitor; nothing is
+ * stored. 202 once sent, 502 CONTACT_SEND_FAILED when the email fails; a
+ * filled honeypot gets the same 202 with nothing sent.
  */
 router.post(
   '/:id/public/pages/:slug/contact',

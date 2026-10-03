@@ -348,30 +348,6 @@ export interface PageTemplate {
   updatedAt: string;
 }
 
-/** GET /admin/contact-inquiries — a contact-form message in the admin inbox (spec 042). */
-export interface ContactInquiry {
-  id: string;
-  name: string;
-  email: string;
-  phone: string | null;
-  subject: string | null;
-  message: string;
-  /** The page the form was on; title null when that page was since deleted */
-  page: { id: string; title: string | null } | null;
-  emailedAt: string | null;
-  /** Set when the email to the store failed — the inbox is then the only copy */
-  emailError: string | null;
-  /** Null = unread */
-  readAt: string | null;
-  createdAt: string;
-}
-
-export interface ContactInquiryList {
-  inquiries: ContactInquiry[];
-  unreadCount: number;
-  pagination: { page: number; limit: number; total: number; totalPages: number };
-}
-
 /** Body for POST /organizations/:id/public/pages/:slug/contact. `website` is the honeypot. */
 export interface ContactInquiryInput {
   name: string;

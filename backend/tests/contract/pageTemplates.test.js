@@ -1,6 +1,7 @@
 // Contract tests for page templates and the storefront contact form (spec 042):
 // SYSTEM_ADMIN-only upload / replace / delete, assigning a template to a page,
-// the public page payload, and contact-form delivery. Resend mocked.
+// the public page payload, and contact-form delivery (email only, nothing
+// stored). Resend mocked.
 
 import { jest } from '@jest/globals';
 import { readFileSync } from 'node:fs';
@@ -172,7 +173,7 @@ describe('Page templates + contact form contract (spec 042)', () => {
     expect(JSON.stringify(res.body)).not.toContain('store@page-templates-ct.test');
   });
 
-  it('emails a contact message to the store email and saves it', async () => {
+  it('emails a contact message to the store email', async () => {
     const res = await request(app).post(contactUrl()).send(message);
     expect(res.status).toBe(202);
     expect(sentEmails).toHaveLength(1);
@@ -182,12 +183,7 @@ describe('Page templates + contact form contract (spec 042)', () => {
     });
     expect(sentEmails[0].subject).toContain('Booth question');
     expect(sentEmails[0].html).toContain('Do you have power at the booths?<br />Thanks!');
-    const row = await prisma.contactInquiry.findFirst({
-      where: { organizationId: organization.id },
-      orderBy: { createdAt: 'desc' },
-    });
-    expect(row).toMatchObject({ pageId: page.id, email: 'ada@example.com', subject: 'Booth question' });
-    expect(row.emailedAt).not.toBeNull();
+    expect(sentEmails[0].text).toContain('Phone: 555-0100');
   });
 
   it('escapes visitor markup in the email', async () => {
@@ -203,21 +199,18 @@ describe('Page templates + contact form contract (spec 042)', () => {
     expect(sentEmails).toHaveLength(0);
   });
 
-  it('answers a filled honeypot with 202 and saves nothing', async () => {
-    const before = await prisma.contactInquiry.count({ where: { organizationId: organization.id } });
+  it('answers a filled honeypot with 202 and sends nothing', async () => {
     const res = await request(app).post(contactUrl()).send({ ...message, website: 'http://spam.test' });
     expect(res.status).toBe(202);
     expect(sentEmails).toHaveLength(0);
-    expect(await prisma.contactInquiry.count({ where: { organizationId: organization.id } })).toBe(before);
   });
 
-  it('keeps the message when the email fails', async () => {
+  it('tells the visitor when the email could not be sent', async () => {
     failNextEmail = true;
-    const res = await request(app).post(contactUrl()).send({ ...message, subject: 'Email will fail' });
-    expect(res.status).toBe(202);
-    const row = await prisma.contactInquiry.findFirst({ where: { subject: 'Email will fail' } });
-    expect(row.emailedAt).toBeNull();
-    expect(row.emailError).toMatch(/refused/);
+    const res = await request(app).post(contactUrl()).send(message);
+    expect(res.status).toBe(502);
+    expect(res.body.code).toBe('CONTACT_SEND_FAILED');
+    expect(res.body.message).not.toMatch(/refused/);
   });
 
   it('is 404 on pages without a contact form and hidden pages', async () => {
