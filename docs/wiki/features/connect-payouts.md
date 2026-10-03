@@ -53,6 +53,26 @@ Buyer pays T on the PLATFORM account (Checkout Session, destination charge)
 → Organization is paid out on its schedule; platform remits sales tax (spec 009 unchanged)
 ```
 
+### Who holds what, who owes what, who is liable
+
+The charge model is **destination charges on the platform account** — never direct charges on the connected account. Everything below follows from that one choice, and it is the reason Jump can keep a single ledger and a single tax remittance.
+
+| | Platform (Jump) | Organization (connected Express account) |
+|---|---|---|
+| **Merchant of record** | Yes — the PaymentIntent is created on and settles to the platform account | No |
+| **Who the buyer's card is charged by** | Jump's account; the statement descriptor is the platform prefix + the org suffix | — |
+| **Who holds the funds first** | Yes, for the instant before Stripe splits the charge | Receives the ex-tax **subtotal** via `transfer_data.destination` |
+| **Who keeps the platform service fee** | Yes — `application_fee_amount` = total cents − subtotal cents (service fee + processing fee + tax) | No |
+| **Who pays Stripe's 2.9% + 30¢** | Yes — debited from the platform balance, and it is **not returned on a refund** | No |
+| **Who remits sales tax** | Yes — tax is inside `application_fee_amount`, so it never reaches the organization | No |
+| **Who is liable for a refund** | Fronts the buyer's money; `reverse_transfer: true` claws the organization's share back pro rata and `refund_application_fee: true` returns the platform fee. Jump eats only Stripe's non-refundable processing cost | Effectively bears its own share, via the reversal |
+| **Who is liable for a chargeback** | **Jump.** `losses.payments = application` on the Express account means the platform covers disputes, and the dispute fee lands on the platform balance | No |
+| **Who owns KYC, bank details and identity documents** | No — never touches Jump's servers (`requirement_collection: 'stripe'`) | Stripe collects and holds these on the organization's behalf |
+| **Who is liable for a negative connected balance** | No | Stripe/Express |
+| **Who controls the payout schedule** | Can set it (`updatePayoutSettings`) | Owns the bank account; Stripe pauses payouts after a bank change |
+
+**The chargeback row is the one that costs money.** A disputed ticket sale is debited from Jump's balance along with Stripe's dispute fee, *after* the organization has already been paid its subtotal and possibly paid out to its bank — and Jump has no automatic way to claw that back. Before Connect is enabled in live mode, decide whether that is acceptable at the expected dispute rate, or move `losses.payments` to `stripe` so the connected account bears them. See the runbook in `stripe-live-activation.md`.
+
 `application_fee_amount` is computed **by subtraction from the exact Checkout line-item cents**, not by summing fees in dollars, so per-unit rounding of the all-in price never moves a cent between the parties. `applicationFeeCents({ fees, lineItems })` returns `null` for anything inconsistent (non-integer cents, subtotal above the charge), in which case the charge stays on the platform account and `connect_routing_skipped` is logged. The statement descriptor suffix, Stripe Tax, Radar and payment-method capabilities are all platform-level and unchanged (no `on_behalf_of`).
 
 ### Routing rule (`ConnectService.destinationFor`)

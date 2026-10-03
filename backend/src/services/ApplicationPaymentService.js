@@ -34,7 +34,7 @@ import boothService from './BoothService.js';
 import { ORDER_INCLUDE, adjustmentItems, buyerLineTotal, tierItem } from './OrderLineService.js';
 import { orderStatusFor } from './applicationOrderStatus.js';
 import logger from '../utils/logger.js';
-import { createStripeRefund } from './stripeRefund.js';
+import { createStripeRefund, refundIdempotencyKey } from './stripeRefund.js';
 
 const SESSION_TTL_SECONDS = 30 * 60;
 /** Saved-card brand / last four by payment method id (a card never changes). */
@@ -803,6 +803,8 @@ class ApplicationPaymentService {
       reason: 'superseded',
       connected: Boolean(intent?.transfer_data?.destination),
       metadata: { applicationId, reason: 'superseded_checkout_session', sessionId: session.id },
+      // A paid session is refunded in full at most once; webhook redeliveries replay it.
+      idempotencyKey: refundIdempotencyKey(`superseded-session:${session.id}`),
     });
     logger.error('Superseded application checkout session was paid; refunded in full', {
       event: 'application_superseded_session_refunded',

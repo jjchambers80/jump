@@ -546,7 +546,10 @@ describe('Approved vendor booth purchase API', () => {
     const row = await prisma.application.findUnique({ where: { id: application.id } });
     expect(row.paymentStatus).toBe('PROCESSING');
     expect((await prisma.booth.findUnique({ where: { id: booths[2].id } })).status).toBe('HELD');
-    expect(mockRefundsCreate).toHaveBeenCalledWith(expect.objectContaining({ payment_intent: `pi_${TAG}_old`, amount: 5000 }));
+    expect(mockRefundsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ payment_intent: `pi_${TAG}_old`, amount: 5000 }),
+      { idempotencyKey: `jump:refund:superseded-session:cs_${TAG}_old` }
+    );
 
     // Its payment_intent.succeeded twin never marks anything paid either.
     await applicationPaymentService.handleEvent({
