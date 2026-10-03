@@ -8,6 +8,8 @@ import type { StorefrontLockInfo, ThemeRender } from '../types';
 
 const SERVER_API_URL = process.env.INTERNAL_API_URL || API_URL;
 const ACCESS_COOKIE_PREFIX = 'jump_store_access_';
+/** Draft theme preview token (contracts C7), set by /api/storefront/preview. */
+export const PREVIEW_COOKIE = 'jump_theme_preview';
 // The backend reads at most this many comma-separated tokens (MAX_TOKENS_PER_REQUEST).
 const MAX_ACCESS_TOKENS = 10;
 
@@ -47,10 +49,11 @@ export interface StorefrontResponse<T> {
 /** GET a public storefront route from the server, forwarding store access. */
 export async function storefrontGet<T>(path: string): Promise<StorefrontResponse<T>> {
   const access = accessHeader();
+  const preview = cookies().get(PREVIEW_COOKIE)?.value;
   try {
     const res = await fetch(`${SERVER_API_URL}${path}`, {
       cache: 'no-store',
-      headers: access ? { 'X-Storefront-Access': access } : {},
+      headers: { ...(access && { 'X-Storefront-Access': access }), ...(preview && { 'X-Theme-Preview': preview }) },
       signal: AbortSignal.timeout(5000),
     });
     const body = (await res.json().catch(() => null)) as T | null;
