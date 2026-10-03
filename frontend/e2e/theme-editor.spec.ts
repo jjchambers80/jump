@@ -244,6 +244,10 @@ test.describe('theme editor (038D)', () => {
 
     page.once('dialog', (d) => d.accept());
     await page.getByRole('button', { name: 'More editor actions' }).click();
+    // The menu sits above the editor panels: its last item is on top, not clipped under the sidebar.
+    const box = (await page.getByRole('menuitem', { name: 'View store' }).boundingBox())!;
+    const onTop = await page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest('[role="menu"]'), [box.x + box.width / 2, box.y + box.height / 2]);
+    expect(onTop).toBe(true);
     await page.getByRole('menuitem', { name: 'Reset home page to theme default' }).click();
     await expect(canvas(page).getByText('Welcome').first()).toBeVisible();
     await page.getByRole('button', { name: 'Save', exact: true }).click();
