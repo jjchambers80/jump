@@ -544,13 +544,19 @@ class ThemeService {
    * (contracts C1). `/` shows `home` once it has been saved, else the
    * Events page (D5). With no Theme row the preset renders from code.
    */
-  async renderPublic(organizationId, page = 'home', { now = Date.now() } = {}) {
+  async renderPublic(organizationId, page = 'home', { now = Date.now(), preview = null } = {}) {
     // `frame`: header and footer only, for pages whose body the theme does not
     // own yet (Content pages, blog; 038G turns them into templates).
     if (page !== 'frame' && !PAGE_KEYS.includes(page)) throw new NotFoundError('Page not found');
     const organization = await prisma.organization.findUnique({ where: { id: organizationId }, select: ORGANIZATION_IDENTITY });
     if (!organization) throw new NotFoundError('Organization not found');
+    // A valid preview token renders that draft instead (D11); a published or
+    // deleted theme falls back to the live one, with no preview bar.
+    const draft = preview
+      ? await prisma.theme.findFirst({ where: { id: preview.themeId, organizationId, role: 'UNPUBLISHED' } })
+      : null;
     const theme =
+      draft ??
       (await prisma.theme.findFirst({ where: { organizationId, role: 'MAIN' } })) ?? {
         id: null,
         name: getPreset(DEFAULT_PRESET_KEY).preset.name,
@@ -578,6 +584,7 @@ class ThemeService {
       content: resolveContent(theme.content),
       documents,
       resolved: await this._resolve(organizationId, { settings, documents }, { events: page !== 'frame' }),
+      ...(draft && { preview: { themeId: draft.id, name: draft.name, expiresAt: preview.expiresAt, share: preview.share } }),
     };
   }
 
