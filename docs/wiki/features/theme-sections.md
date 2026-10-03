@@ -20,6 +20,14 @@ Storefront pages are built from **sections** (Announcement bar, Header, Hero, He
 | `frontend/src/theme/editor/config.tsx` | Editor config generated from the registry + render config; `STARTER_BLOCKS` for newly added sections |
 | `backend/src/services/ThemeService.js` | Save / validate / render; `_visible` drops hidden sections and blocks, and sections that are only their blocks (`BLOCKS_ONLY`) when none are left |
 
+## Hero video, full window, edge to edge
+
+The Hero takes a background **video** (`video`, optional `videoWebm`: `{ fileId }` of an MP4 / WebM in Content › Files) behind the text in the full-bleed layout. The Hero image becomes its poster.
+
+- `HeroVideo` (client island) starts the video from script, muted and looping. It never starts under `prefers-reduced-motion` or in the editor; the poster stays. A pause / play button (`hero.pauseVideo` content key, `aria-pressed` = paused) is always shown (WCAG 2.2.2).
+- `height: 'screen'` fills the window below the header: `HeroScreenOffset` measures the bottom of `[data-section="Header"]` into `--hero-offset`, and the section is `min-h-[calc(100svh-var(--hero-offset))]`.
+- `sectionWidth: 'full'` is edge to edge: no gutters, square corners, and the image is cropped to fill (`HeroMedia cover`) instead of fitted over a blurred copy. Set `paddingTop: 0` to sit flush under the header.
+
 ## Hero carousel (spec 041)
 
 Up to six **Slide** blocks in the Hero's rounded frame. Each slide has an image (alt text or decorative), heading, subheading, a button label + link, and text alignment. Section settings: autoplay (off / 5s / 8s), height, overlay opacity, arrows, dots.

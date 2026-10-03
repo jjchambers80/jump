@@ -15,6 +15,7 @@ import {
   text,
   textarea,
   toggle,
+  video,
 } from './fields.js';
 
 /** Groups a section can be placed in (Shopify `enabled_on.groups`). */
@@ -170,10 +171,15 @@ export const SECTIONS = {
       heading: text('Heading', { max: 120, default: 'Welcome' }),
       subheading: textarea('Subheading', { max: 300, default: '' }),
       image: image('Image'),
+      // Behind the text (full-bleed layout); the image is its poster and the
+      // still shown under reduced motion. Loops muted, with a pause button.
+      video: video('Background video (MP4 or WebM)'),
+      videoWebm: video('Background video, WebM version (optional)'),
       layout: select('Layout', ['full-bleed', 'split-left', 'split-right']),
       overlay: range('Overlay opacity', 0, 80, { step: 10, unit: '%', default: 40 }),
       alignment: radio('Text alignment', ['center', 'left']),
-      height: select('Height', HEIGHTS, 'medium'),
+      // screen = the window's height minus whatever sits above the hero (header).
+      height: select('Height', [...HEIGHTS, 'screen'], 'medium'),
     },
     blocks: buttons,
   },

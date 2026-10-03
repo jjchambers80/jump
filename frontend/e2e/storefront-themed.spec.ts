@@ -330,6 +330,23 @@ test.describe('starter homepage sections (038S)', () => {
     await expect(carousel.getByRole('button', { name: 'Pause slides' })).toHaveAttribute('aria-pressed', 'true');
   });
 
+  test('hero video: edge to edge, fills the window below the header, never plays under reduced motion', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/organizations/theme-video');
+    const hero = page.locator('[data-section="Hero"] section');
+    const video = hero.getByTestId('hero-video');
+    await expect(video).toHaveAttribute('poster', /parity-cover/);
+    await expect(hero.getByRole('button', { name: 'Pause background video' })).toHaveAttribute('aria-pressed', 'true');
+    expect(await video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
+    const box = (await hero.boundingBox())!;
+    const header = (await page.locator('[data-section="Header"]').boundingBox())!;
+    expect(box.x).toBe(0);
+    expect(box.width).toBe(390);
+    await expect.poll(async () => Math.round((await hero.boundingBox())!.y + (await hero.boundingBox())!.height)).toBe(844);
+    expect(Math.round(box.y)).toBe(Math.round(header.y + header.height));
+  });
+
   test('FAQ: native disclosures, one answer open at a time (spec 041)', async ({ page }) => {
     await page.goto('/organizations/theme-blocks');
     const faq = page.getByRole('region', { name: 'Good to know' });

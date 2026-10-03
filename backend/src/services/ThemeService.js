@@ -533,7 +533,7 @@ class ThemeService {
       files: Object.fromEntries(
         files.map((row) => [
           row.id,
-          { url: storeFileService.url(row), width: row.width ?? null, height: row.height ?? null, alt: row.altText ?? null },
+          { url: storeFileService.url(row), width: row.width ?? null, height: row.height ?? null, alt: row.altText ?? null, mimeType: row.file.mimeType },
         ]),
       ),
     };

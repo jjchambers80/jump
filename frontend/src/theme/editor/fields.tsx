@@ -42,6 +42,7 @@ const OPTION_LABELS: Record<string, string> = {
   '5s': 'Every 5 seconds',
   '8s': 'Every 8 seconds',
   none: 'None',
+  screen: 'Fill the window',
 };
 
 function optionLabel(value: unknown) {
@@ -117,6 +118,49 @@ function ImageFieldControl({ label, value, onChange }: { label: string; value: I
           onPick={(file) => {
             services.registerFile(file);
             onChange({ fileId: file.id, alt: value?.alt || file.altText || '', ...(value?.decorative ? { decorative: true } : {}) });
+            setOpen(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+type VideoValue = { fileId: string } | null;
+
+function VideoFieldControl({ label, value, onChange }: { label: string; value: VideoValue; onChange: (v: VideoValue) => void }) {
+  const [open, setOpen] = useState(false);
+  const chooseRef = useRef<HTMLButtonElement>(null);
+  const services = useEditorServices();
+  const url = value?.fileId ? services.fileUrl(value.fileId) : null;
+  return (
+    <div className="space-y-2">
+      <span className="block text-sm font-medium text-gray-700">{label}</span>
+      {value?.fileId &&
+        (url ? (
+          <video src={resolveAssetUrl(url) || undefined} muted preload="metadata" aria-hidden className="h-28 w-full rounded-md bg-black object-cover" />
+        ) : (
+          <p className="rounded-md border border-gray-200 bg-gray-50 p-3 text-xs text-gray-500">Video selected</p>
+        ))}
+      <div className="flex gap-2">
+        <button ref={chooseRef} type="button" className={button} onClick={() => setOpen(true)}>
+          {value?.fileId ? 'Replace video' : 'Choose video'}
+        </button>
+        {value?.fileId && (
+          <button type="button" className={button} onClick={() => onChange(null)}>
+            Remove
+          </button>
+        )}
+      </div>
+      <p className={small}>Plays muted on a loop with a pause button. The image is shown while it loads and to visitors who prefer reduced motion.</p>
+      {open && (
+        <FilePickerDialog
+          kind="video"
+          returnFocusRef={chooseRef}
+          onClose={() => setOpen(false)}
+          onPick={(file) => {
+            services.registerFile(file);
+            onChange({ fileId: file.id });
             setOpen(false);
           }}
         />
@@ -217,6 +261,8 @@ export function puckField(spec: FieldSpec, ctx: FieldContext): Field {
       return { type: 'select', label: spec.label, options: ctx.schemes.map((s) => ({ label: s.name, value: s.id })) };
     case 'image':
       return custom<ImageValue>(spec.label, ({ value, onChange }) => <ImageFieldControl label={spec.label} value={value ?? null} onChange={onChange} />);
+    case 'video':
+      return custom<VideoValue>(spec.label, ({ value, onChange }) => <VideoFieldControl label={spec.label} value={value ?? null} onChange={onChange} />);
     case 'link':
       return custom<LinkValue>(spec.label, ({ id, value, onChange }) => <LinkFieldControl id={id} label={spec.label} value={value ?? null} onChange={onChange} />);
     case 'reference':

@@ -30,6 +30,8 @@ export const DOCUMENT_CASES = [
   { name: 'page link needs a target', key: 'home', data: eventsDoc([hero('Hero-1', { blocks: [{ type: 'Button', props: { id: 'B', link: { type: 'PAGE' } } }] })]), errors: ['content[0].props.blocks[0].props.link'] },
   { name: 'image needs alt text', key: 'home', data: eventsDoc([hero('Hero-1', { image: { fileId: 'f1' } })]), errors: ['content[0].props.image'] },
   { name: 'decorative image needs no alt', key: 'home', data: eventsDoc([hero('Hero-1', { image: { fileId: 'f1', decorative: true } })]), errors: [] },
+  { name: 'hero video with poster, full window', key: 'home', data: eventsDoc([hero('Hero-1', { video: { fileId: 'v1' }, videoWebm: { fileId: 'v2' }, image: { fileId: 'f1', decorative: true }, height: 'screen', sectionWidth: 'full' })]), errors: [] },
+  { name: 'hero video takes only a fileId', key: 'home', data: eventsDoc([hero('Hero-1', { video: { fileId: 'v1', autoplay: true } })]), errors: ['content[0].props.video'] },
   { name: 'section width', key: 'home', data: eventsDoc([hero('Hero-1', { sectionWidth: 'full' })]), errors: [] },
   { name: 'section width not an option', key: 'home', data: eventsDoc([hero('Hero-1', { sectionWidth: '100vw' })]), errors: ['content[0].props.sectionWidth'] },
   { name: 'page width override', key: 'home', data: { root: { props: { pageWidth: 1000 } }, content: [] }, errors: [] },

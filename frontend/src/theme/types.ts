@@ -46,7 +46,7 @@ export interface ResolvedData {
   events: EventSummary[];
   menus: PublicMenus;
   links: Record<string, string>;
-  files: Record<string, { url: string; width: number | null; height: number | null; alt: string | null }>;
+  files: Record<string, { url: string; width: number | null; height: number | null; alt: string | null; mimeType?: string }>;
 }
 
 export interface ThemeRender {
