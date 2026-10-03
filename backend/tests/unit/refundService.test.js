@@ -79,7 +79,7 @@ describe('refund idempotency key scopes', () => {
     expect(refundIdempotencyKey('order-add-on:line_1')).toBe('jump:refund:order-add-on:line_1');
 
     const keys = new Set(
-      ['order:ord_1:full', 'ticket:tkt_1', 'order-add-on:line_1', 'application-order:ord_1:rf_1'].map(
+      ['order:ord_1:full', 'ticket:tkt_1', 'order-add-on:line_1', 'application-order:ord_1:4000:0'].map(
         refundIdempotencyKey
       )
     );
