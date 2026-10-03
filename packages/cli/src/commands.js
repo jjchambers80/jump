@@ -246,7 +246,10 @@ const commands = {
         });
       }, 500);
     });
-    await new Promise((resolve) => process.once('SIGINT', resolve));
+    await new Promise((resolve) => {
+      process.once('SIGINT', resolve);
+      process.once('SIGTERM', resolve);
+    });
     watcher.close();
   },
 
