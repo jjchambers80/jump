@@ -17,6 +17,7 @@ npm run db:generate         # Regenerate Prisma client (required after schema ch
 npm run db:migrate          # Run pending migrations
 npm run db:seed             # Seed sample data
 npm run db:studio           # Prisma Studio GUI
+npx jump --help             # Jump CLI (spec 043): login, theme pull/check/push/dev/preview/publish
 ```
 
 ## Testing
@@ -28,6 +29,7 @@ cd backend && npm run test:unit     # Unit tests only
 cd backend && npm run test:contract # Contract tests
 cd frontend && npm run test         # Playwright E2E
 cd frontend && npm run test:unit    # Vitest unit tests (lib/color.ts)
+npm test --workspace=packages/cli   # Jump CLI (spec 043), node --test against a fake API
 ```
 
 ## Core Constraints
