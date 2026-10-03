@@ -402,6 +402,33 @@ describe('Application orders contract (spec 024 phase 1)', () => {
       addOn: null,
     });
 
+    // A lost response: Stripe may have refunded, we never heard back. The
+    // admin's retry carries the same key, so Stripe replays that one refund
+    // instead of issuing a second.
+    mockRefundsCreate.mockRejectedValueOnce(new Error('socket hang up'));
+    const lost = await request(app)
+      .post(`/admin/orders/${order.id}/refund`)
+      .set(...auth(adminToken))
+      .send({ amount: 10 });
+    expect(lost.status).toBe(400);
+    const retry = await request(app)
+      .post(`/admin/orders/${order.id}/refund`)
+      .set(...auth(adminToken))
+      .send({ amount: 10 });
+    expect(retry.status).toBe(200);
+    const keys = mockRefundsCreate.mock.calls.map((call) => call[1].idempotencyKey);
+    expect(keys[2]).toBe(keys[1]);
+    expect(keys[1]).not.toBe(keys[0]);
+
+    // A refund already on its way to Stripe blocks a second one (double-click).
+    const inFlight = await prisma.refund.create({ data: { orderId: order.id, amount: 5, status: 'PENDING' } });
+    const blocked = await request(app)
+      .post(`/admin/orders/${order.id}/refund`)
+      .set(...auth(adminToken))
+      .send({ amount: 5 });
+    expect(blocked.status).toBe(409);
+    await prisma.refund.delete({ where: { id: inFlight.id } });
+
     // Full refund from the application route lands on the same ledger
     const full = await request(app)
       .post(`${adminBase()}/applications/${id}/refund`)
@@ -410,7 +437,8 @@ describe('Application orders contract (spec 024 phase 1)', () => {
     expect(full.status).toBe(200);
     expect(full.body).toMatchObject({ paymentStatus: 'REFUNDED' });
     expect((await orderRow(id)).status).toBe('REFUNDED');
-    expect((await orderRow(id)).refunds).toHaveLength(2);
+    // partial 40 + the lost 10 (FAILED) + its retry + the full refund
+    expect((await orderRow(id)).refunds).toHaveLength(4);
 
     // Rejected under review: no order ever existed
     const rejected = await submit(paidForm.slug, undefined, `rejected@${TAG}.test`);

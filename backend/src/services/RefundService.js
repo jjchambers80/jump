@@ -16,6 +16,9 @@ import { orderStatusFor } from './applicationOrderStatus.js';
 import boothService from './BoothService.js';
 
 const round = (v) => Math.round((v + Number.EPSILON) * 100) / 100;
+const cents = (v) => Math.round(Number(v) * 100);
+/** How long a PENDING Stripe refund counts as in flight (see _refundApplicationOrder). */
+const IN_FLIGHT_MS = 2 * 60 * 1000;
 
 class RefundService {
   /**
@@ -212,15 +215,29 @@ class RefundService {
         });
         return { refund: manual, order, done: true };
       }
+      // A refund already on its way to Stripe (double-click, two admins) would
+      // read the same refunded total, get the same key below, and record Stripe's
+      // one refund twice. Rows older than the window are a crashed attempt, not
+      // a live one, and must not block the order forever.
+      const inFlight = await tx.refund.findFirst({
+        where: {
+          orderId,
+          status: 'PENDING',
+          manual: false,
+          stripeRefundId: null,
+          createdAt: { gt: new Date(Date.now() - IN_FLIGHT_MS) },
+        },
+      });
+      if (inFlight) throw new ConflictError('A refund for this order is already in progress');
       const pending = await tx.refund.create({
         data: { orderId, amount: value, reason, status: 'PENDING', initiatedBy },
       });
-      return { refund: pending, order, done: false, value };
+      return { refund: pending, order, done: false, value, alreadyRefunded: Number(alreadyRaw) };
     });
     if (prepared.done) return this._formatRefund(prepared.refund, prepared.order);
 
     // Stripe outside the lock, like ApplicationPaymentService.refund did (spec 011).
-    const { refund, order, value } = prepared;
+    const { refund, order, value, alreadyRefunded } = prepared;
     let stripeRefund;
     try {
       stripeRefund = await createStripeRefund({
@@ -229,13 +246,16 @@ class RefundService {
         reason,
         connected: Boolean(order.stripeAccountId),
         metadata: { orderId, applicationId: order.applicationId },
-        // Unlike the ticket scopes above, an application refund takes a
-        // caller-chosen amount and the same amount may legitimately be
-        // refunded twice (two $50 partials on a $200 booth). So the operation
-        // really is this Refund row — and here that is safe, because the row
-        // was committed by the transaction above *before* Stripe is called and
-        // is marked FAILED rather than deleted if this throws.
-        idempotencyKey: refundIdempotencyKey(`application-order:${orderId}:${refund.id}`),
+        // Not the Refund row id: an admin retrying after a lost response gets a
+        // new row, so a row key would be fresh and Stripe would refund twice.
+        // The amount plus the total already refunded is the same on that retry
+        // (a lost refund never counts as SUCCEEDED), and different for a genuine
+        // second partial of the same amount.
+        // ponytail: Stripe keeps keys 24 h; a retry after that relies on the
+        // remaining-amount guard and Stripe's own over-refund refusal.
+        idempotencyKey: refundIdempotencyKey(
+          `application-order:${orderId}:${cents(value)}:${cents(alreadyRefunded)}`
+        ),
       });
     } catch (error) {
       await prisma.refund.update({ where: { id: refund.id }, data: { status: 'FAILED' } });
