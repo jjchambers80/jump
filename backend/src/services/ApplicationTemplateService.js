@@ -226,7 +226,7 @@ class ApplicationTemplateService {
         to: application.contact.email,
         subject: message.subject,
         body: message.body,
-        organization: application.event?.venue?.organization || {},
+        organization: { id: organizationId, ...application.event?.venue?.organization },
       });
       logger.info('Application email sent', { event: 'application_email_sent', applicationId: application.id, action });
     } catch (error) {

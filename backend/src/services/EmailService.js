@@ -40,6 +40,21 @@ async function deliver(msg) {
   return result?.data ?? null;
 }
 
+/**
+ * Sender for one email: `"Store Name" <store+<organizationId>@EMAIL_FROM_DOMAIN>`,
+ * or `Eventimus <noreply@EMAIL_FROM_DOMAIN>` when no store is behind it (staff
+ * account mail). The id, not the slug, keeps one store's address stable. With
+ * EMAIL_FROM_DOMAIN unset (dev, or before Resend verifies the domain) every
+ * email keeps the single RESEND_FROM_EMAIL sender.
+ */
+export function senderFor(organization) {
+  const domain = process.env.EMAIL_FROM_DOMAIN;
+  if (!domain) return process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>';
+  if (!organization?.id) return `Eventimus <noreply@${domain}>`;
+  const name = String(organization.name || '').replace(/["\\<>\r\n]/g, '').trim() || 'Eventimus';
+  return `"${name}" <store+${organization.id}@${domain}>`;
+}
+
 function icsText(value) {
   return String(value || '').replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;');
 }
@@ -96,7 +111,7 @@ class EmailService {
 
         const msg = {
           to: [order.contact?.email || order.contactEmail],
-          from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+          from: senderFor({ id: order.event?.organizationId, name: order.event?.organizationName }),
           subject: `Order Confirmed — ${order.event?.name || 'Your Event'} (${order.orderRef})`,
           html: `
             <html>
@@ -184,7 +199,7 @@ ${manageTicketsHtml}
               <p>Use the button below to sign in and see your tickets and orders with ${escapeHtml(orgName)}.</p>`;
     const msg = {
       to: [contact.email],
-      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      from: senderFor({ id: contact.organizationId, name: organization.name }),
       subject: code ? `${code} is your sign-in code for ${orgName}` : `Your sign-in link for ${orgName}`,
       html: `
         <html>
@@ -223,7 +238,7 @@ ${manageTicketsHtml}
     const orgName = organization.name || 'Jump';
     const msg = {
       to: [to],
-      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      from: senderFor(organization),
       subject,
       html: `
         <html>
@@ -254,7 +269,7 @@ ${manageTicketsHtml}
     const orgName = organization.name || 'Jump';
     const msg = {
       to: [to],
-      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      from: senderFor(organization),
       subject: `Confirm your new email address for ${orgName}`,
       html: `
         <html>
@@ -290,7 +305,7 @@ ${manageTicketsHtml}
       : `Someone signed in to your ${escapeHtml(orgName)} account asked to change its email address to <strong>${escapeHtml(newEmail)}</strong>. Nothing changes unless that address confirms.`;
     const msg = {
       to: [to],
-      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      from: senderFor(organization),
       subject: completed ? `Your ${orgName} email address was changed` : `Email change requested for your ${orgName} account`,
       html: `
         <html>
@@ -319,7 +334,7 @@ ${manageTicketsHtml}
   async sendEmailChangeConfirmation({ to, currentEmail, confirmUrl }) {
     const msg = {
       to: [to],
-      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      from: senderFor(),
       subject: 'Confirm your new email address for Jump',
       html: `
         <html>
@@ -350,7 +365,7 @@ ${manageTicketsHtml}
   async sendEmailChangedNotice({ to, newEmail }) {
     const msg = {
       to: [to],
-      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      from: senderFor(),
       subject: 'Your Jump email address was changed',
       html: `
         <html>
@@ -381,7 +396,7 @@ ${manageTicketsHtml}
     if (recipients.length === 0) return;
     const msg = {
       to: recipients,
-      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      from: senderFor(),
       subject: `Jump security: ${title}`,
       html: `
         <html>
@@ -405,7 +420,7 @@ ${manageTicketsHtml}
   async sendReauthCode({ to, code }) {
     const msg = {
       to: [to],
-      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      from: senderFor(),
       subject: `${code} is your Jump verification code`,
       html: `
         <html>
@@ -430,7 +445,7 @@ ${manageTicketsHtml}
   async sendSecondaryEmailVerification({ to, confirmUrl }) {
     const msg = {
       to: [to],
-      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      from: senderFor(),
       subject: 'Verify your secondary email for Jump',
       html: `
         <html>
@@ -457,7 +472,7 @@ ${manageTicketsHtml}
   async sendRecoveryLink({ to, primaryEmail, recoverUrl }) {
     const msg = {
       to: [to],
-      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      from: senderFor(),
       subject: 'Restore access to your Jump account',
       html: `
         <html>
@@ -509,7 +524,7 @@ ${manageTicketsHtml}
 
     const msg = {
       to: [to],
-      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      from: senderFor(organization),
       subject,
       text: body,
       ...(organization.email && { reply_to: organization.email }),
@@ -564,7 +579,7 @@ ${manageTicketsHtml}
     const messageHtml = escapeHtml(inquiry.message).replace(/\r?\n/g, '<br />');
     const msg = {
       to: [to],
-      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      from: senderFor(organization),
       subject,
       reply_to: inquiry.email,
       text,
@@ -616,7 +631,7 @@ ${manageTicketsHtml}
       try {
         const msg = {
           to: [email],
-          from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+          from: senderFor(event.venue?.organization ?? { id: event.organizationId, name: event.organizationName }),
           subject: `Event Cancelled — ${event.name}`,
           html: `
             <html>
@@ -682,7 +697,7 @@ ${manageTicketsHtml}
 
         const msg = {
           to: [contact.email],
-          from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+          from: senderFor(organization),
           subject: `Reminder: ${event.name} is happening tomorrow — ${orgName}`,
           html: `
             <html>
@@ -779,7 +794,7 @@ ${manageTicketsHtml}
     ].join('\r\n');
     const msg = {
       to: [contact.email],
-      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      from: senderFor(organization),
       subject: `You're on the list — ${event.name}`,
       text: [
         `Hi ${contact.firstName || 'there'},`, '', `You're on the list for ${event.name}.`,
@@ -870,7 +885,7 @@ ${manageTicketsHtml}
     ];
     const msg = {
       to: [to],
-      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      from: senderFor(organization),
       subject: `Receipt for ${application.event?.name || 'your application'} (${order.orderRef})`,
       text: textLines.join('\n'),
       html: `

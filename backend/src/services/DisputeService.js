@@ -484,7 +484,7 @@ class DisputeService {
           to,
           subject: `${heading} — ${organization.name}`,
           body: lines.join('\n'),
-          organization: { name: organization.name, logoUrl: organization.logoUrl },
+          organization: { id: organization.id, name: organization.name, logoUrl: organization.logoUrl },
         });
       } catch (error) {
         logger.error('Dispute email failed', { orderId, to, error: error.message });

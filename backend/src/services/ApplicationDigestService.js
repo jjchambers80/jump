@@ -99,7 +99,7 @@ class ApplicationDigestService {
     const { subject, body } = this.compose(org, rows, since, now, { awaitingSpace });
     for (const to of recipients) {
       try {
-        await emailService.sendApplicationMessage({ to, subject, body, organization: { name: org.name, logoUrl: org.logoUrl } });
+        await emailService.sendApplicationMessage({ to, subject, body, organization: { id: org.id, name: org.name, logoUrl: org.logoUrl } });
       } catch (error) {
         logger.error('Application digest email failed', { organizationId: org.id, to, error: error.message });
       }
