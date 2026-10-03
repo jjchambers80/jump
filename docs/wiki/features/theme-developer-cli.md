@@ -120,6 +120,7 @@ See [database-architecture.md](database-architecture.md) for the full schema.
 - **Preview cookie is host-only.** A link minted for a custom domain works only on that domain; the route never redirects off-site (`safePath`).
 
 ## Related Features
+- [Theme Code Editor](theme-code-editor.md): the same files edited in the browser
 - [Storefront Theme Sections](theme-sections.md): section registry the schema dump comes from
 - [Account Security](account-security.md): `withReauth` / `requireRecentAuth` step-up used by the approval page
 - [Two-step Authentication](two-step-authentication.md): enforced before `/admin/cli/authorize` renders

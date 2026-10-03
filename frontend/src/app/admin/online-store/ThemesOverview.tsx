@@ -14,7 +14,7 @@ import ActionsMenu from '@/components/ActionsMenu';
 import { useOrg } from '@/components/OrgContext';
 import api, { type StorefrontPreferences } from '@/services/api';
 import { useAccountFormat } from '@/lib/accountFormat';
-import { editorHref, presetLabel, themesApi, type ThemeSummary } from '@/lib/themes';
+import { codeHref, editorHref, presetLabel, themesApi, type ThemeSummary } from '@/lib/themes';
 import ThemePreviewPlaceholder from './ThemePreviewPlaceholder';
 
 const card = 'rounded-lg border border-gray-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800';
@@ -101,6 +101,7 @@ export default function ThemesOverview() {
           { label: 'Preview', onSelect: () => void preview(theme) },
           { label: 'Share preview', onSelect: () => void sharePreview(theme) },
         ]),
+    { label: 'Edit code', href: codeHref(theme.id) },
     { label: 'Rename', onSelect: () => rename(theme) },
     { label: 'Duplicate', onSelect: () => void run(() => themesApi.duplicate(theme.id), 'Could not duplicate the theme') },
     ...(theme.role === 'MAIN'

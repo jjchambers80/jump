@@ -82,6 +82,7 @@ Generated and maintained by running `/doc-feature` after completing feature work
 ### Frontend
 - [Theme System](features/theme-system.md) — Light/dark/auto modes, localStorage persistence
 - [Storefront Theme Sections](features/theme-sections.md) — Section registry, Hero carousel and FAQ (spec 041), how to add a section
+- [Theme Code Editor](features/theme-code-editor.md) — Online Store › Edit code: the CLI's theme files in Monaco, server checks in the browser, same save path
 - [Theme Developer CLI](features/theme-developer-cli.md) — `npx jump` sign-in (loopback + PKCE, `jmp_` developer tokens, deny-by-default), theme pull/check/dev/push/publish, draft themes + preview links, Settings › Developers (spec 043, 038J2/K)
 - [Account Settings › General](features/account-settings.md) — `/admin/account` from the org menu: photo, name, verified email change, phone, language, time zone; `locale`/`timeZone`/`picture` JWT claims (spec 030 A)
 - [Account Security — sign-in methods](features/account-security.md) — Account › Security: step-up proof, passkeys, password (scrypt + HIBP), Google connect/disconnect, secondary email + recovery, `token-bridge` provider (spec 030 B)

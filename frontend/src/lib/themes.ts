@@ -79,6 +79,7 @@ export function presetLabel(theme: Pick<ThemeSummary, 'presetKey' | 'presetVersi
 }
 
 export const editorHref = (themeId: string) => `/admin/online-store/themes/${themeId}/editor`;
+export const codeHref = (themeId: string) => `/admin/online-store/themes/${themeId}/code`;
 
 export const themesApi = {
   status: () => api.get<ThemeStatus>('/admin/themes/status'),

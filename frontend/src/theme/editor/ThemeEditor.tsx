@@ -5,6 +5,7 @@
 // Loaded with ssr: false from the editor page; the only Puck user.
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { getPreset, validateDocument } from '@jump/theme';
@@ -14,7 +15,7 @@ import { useThemeMode } from '@/components/ThemeProvider';
 import { useOrg } from '@/components/OrgContext';
 import { useMenusApi } from '@/app/admin/content/menus/useMenusApi';
 import type { StoreFile } from '@/lib/content';
-import { themesApi, type ThemeDetail, type ThemeDocumentData } from '@/lib/themes';
+import { codeHref, themesApi, type ThemeDetail, type ThemeDocumentData } from '@/lib/themes';
 import type { SectionContext } from '../sections/context';
 import type { ResolvedData } from '../types';
 import { Puck, blocksPlugin, usePuck, type Data, type Plugin } from './puck';
@@ -101,6 +102,7 @@ const sectionsPlugin: Plugin = {
 };
 
 export default function ThemeEditor({ themeId }: { themeId: string }) {
+  const router = useRouter();
   const menusApi = useMenusApi();
   // Admin calls are org-scoped through X-Jump-Org, which the org switcher
   // sets once it has loaded: fetching earlier sends none, and a SYSTEM_ADMIN
@@ -414,6 +416,12 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
                   items={[
                     ...(loaded.theme.role === 'MAIN' ? [{ label: 'Revision history', onSelect: () => setHistoryOpen(true) }] : []),
                     { label: `Reset ${TEMPLATE_LABELS[page].toLowerCase()} to theme default`, onSelect: resetPage },
+                    {
+                      label: 'Edit code',
+                      onSelect: () => {
+                        if (!dirty || window.confirm('Open the code editor? Unsaved changes will be lost.')) router.push(codeHref(themeId));
+                      },
+                    },
                     { label: 'View store', href: `/organizations/${loaded.organization.slug}`, external: true },
                   ]}
                 />
