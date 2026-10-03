@@ -85,7 +85,16 @@ createServer(async (req, res) => {
         : page === 'events'
           ? withTemplate(EVENTS_TEMPLATE, { page: 'events', fallback: false })
           : fixture.render;
-    return send(res, 200, body);
+    // Draft preview (038K): one valid token; any other value is refused, so the frame clears the cookie.
+    const preview = req.headers['x-theme-preview'];
+    if (!preview) return send(res, 200, body);
+    return send(
+      res,
+      200,
+      preview === 'fixture-preview'
+        ? { ...body, preview: { themeId: 'draft-1', name: 'Summer draft', expiresAt: '2099-01-01T00:00:00.000Z', share: false } }
+        : { ...body, previewInvalid: true },
+    );
   }
 
   const route = fixture.routes[`${rest}${url.search}`] ?? fixture.routes[rest];

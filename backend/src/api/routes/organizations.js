@@ -27,6 +27,7 @@ import urlRedirectService from '../../services/UrlRedirectService.js';
 import { findByPublicIdentifier } from '../../utils/publicIdentifier.js';
 import { clientIpForRateLimit } from '../../utils/clientIp.js';
 import themeService, { themesEnabledFor } from '../../services/ThemeService.js';
+import themePreviewService from '../../services/ThemePreviewService.js';
 import contactInquiryService from '../../services/ContactInquiryService.js';
 import { validateContactInquiry } from '../validators/contactInquiryValidators.js';
 import { LIMITS, makeLimiter } from '../../middleware/rateLimit.js';
@@ -268,15 +269,25 @@ router.get(
       if (!organization) throw new NotFoundError('Organization not found');
       if (!themesEnabledFor(organization)) return res.json({ renderer: 'legacy' });
       req.themeOrganizationId = organization.id;
+      // Draft preview (D11): null = none sent, false = sent but not valid here.
+      const previewToken = req.get('X-Theme-Preview');
+      if (previewToken) req.themePreview = themePreviewService.verify(previewToken, organization.id) ?? false;
       next();
     } catch (error) {
       next(error);
     }
   },
-  gateByOrgParam,
+  // A staff preview renders past the store password; a share link does not (contracts C7).
+  (req, res, next) => (req.themePreview && !req.themePreview.share ? next() : gateByOrgParam(req, res, next)),
   async (req, res, next) => {
     try {
-      res.json(await themeService.renderPublic(req.themeOrganizationId, String(req.query.page || 'home')));
+      const result = await themeService.renderPublic(req.themeOrganizationId, String(req.query.page || 'home'), {
+        preview: req.themePreview || null,
+      });
+      if (result.preview) res.set('X-Robots-Tag', 'noindex');
+      // Tells the Next server to clear the cookie (Server Components cannot).
+      else if (req.themePreview !== undefined) result.previewInvalid = true;
+      res.json(result);
     } catch (error) {
       next(error);
     }

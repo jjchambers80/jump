@@ -7,6 +7,7 @@ import { requireAuth } from '../../middleware/auth.js';
 import { requireOrganizer, requireSystemAdmin } from '../../middleware/rbac.js';
 import { activeOrgFor } from './adminScope.js';
 import themeService from '../../services/ThemeService.js';
+import themePreviewService from '../../services/ThemePreviewService.js';
 import {
   validateThemeDuplicate,
   validateThemeRename,
@@ -75,6 +76,11 @@ router.post('/:themeId/duplicate', validateThemeDuplicate, enabled(async (req, r
 /** POST /admin/themes/:id/publish — swap with the live theme (409 THEME_ACTIVE). */
 router.post('/:themeId/publish', enabled(async (req, res, organizationId) => {
   res.json(await themeService.publish(organizationId, req.params.themeId));
+}));
+
+/** POST /admin/themes/:id/preview-link { share? } → { url, expiresAt, share } (D11; drafts only). */
+router.post('/:themeId/preview-link', enabled(async (req, res, organizationId) => {
+  res.json(await themePreviewService.mint(organizationId, req.params.themeId, { share: req.body?.share === true }));
 }));
 
 router.get('/:themeId/content', enabled(async (req, res, organizationId) => {

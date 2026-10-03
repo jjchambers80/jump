@@ -1,0 +1,61 @@
+// Draft theme preview links (spec 038 D11, contracts C7). A signed token names
+// one theme of one organization; the Next route /api/storefront/preview keeps
+// it in the host-only `jump_theme_preview` cookie and forwards it to the
+// render endpoint as X-Theme-Preview.
+//
+// Staff links (1 h) render past a private store's password because only
+// signed-in staff of that organization can mint them. Share links (14 d) do
+// not: their visitor still meets the store gate.
+
+import { createHmac } from 'crypto';
+import jwt from 'jsonwebtoken';
+import { prisma } from '@jump/db';
+import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
+import { storefrontFor } from '../utils/storefrontUrl.js';
+
+const AUDIENCE = 'theme-preview';
+const STAFF_TTL_S = 60 * 60;
+const SHARE_TTL_S = 14 * 24 * 60 * 60;
+
+// Never the raw AUTH_SECRET: a session verifier must not accept a preview token.
+function secret() {
+  return (
+    process.env.STOREFRONT_PREVIEW_SECRET ||
+    createHmac('sha256', process.env.AUTH_SECRET || 'dev-secret').update('theme-preview').digest('hex')
+  );
+}
+
+class ThemePreviewService {
+  /** POST /admin/themes/:id/preview-link → { url, expiresAt, share }. Drafts only. */
+  async mint(organizationId, themeId, { share = false } = {}) {
+    const theme = await prisma.theme.findFirst({ where: { id: themeId, organizationId }, select: { id: true, role: true } });
+    if (!theme) throw new NotFoundError('Theme not found');
+    if (theme.role === 'MAIN') throw new ValidationError('The live theme has no preview: view the store instead');
+    const ttl = share ? SHARE_TTL_S : STAFF_TTL_S;
+    const token = jwt.sign({ orgId: organizationId, themeId, share: Boolean(share) }, secret(), {
+      algorithm: 'HS256',
+      audience: AUDIENCE,
+      expiresIn: ttl,
+    });
+    const { base } = await storefrontFor(organizationId);
+    return {
+      url: `${base}/api/storefront/preview?token=${encodeURIComponent(token)}`,
+      expiresAt: new Date(Date.now() + ttl * 1000).toISOString(),
+      share: Boolean(share),
+    };
+  }
+
+  /** The token's claims when it is valid for this organization, else null. */
+  verify(token, organizationId) {
+    if (!token) return null;
+    try {
+      const claims = jwt.verify(token, secret(), { algorithms: ['HS256'], audience: AUDIENCE });
+      if (claims.orgId !== organizationId || typeof claims.themeId !== 'string') return null;
+      return { themeId: claims.themeId, share: Boolean(claims.share), expiresAt: new Date(claims.exp * 1000).toISOString() };
+    } catch {
+      return null;
+    }
+  }
+}
+
+export default new ThemePreviewService();
