@@ -40,11 +40,18 @@ function PlanContent() {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [busy, setBusy] = useState<'checkout' | 'portal' | 'confirm' | null>(null);
 
+  // The plan load and the Checkout confirm can be in flight together; only the
+  // most recently started one may write, so a slow GET never overwrites the
+  // confirmed trial with the plan as it was before Checkout.
+  const latest = useRef(0);
   const load = useCallback(async () => {
+    const mine = ++latest.current;
     setError(null);
     try {
-      setData(await planApi.get());
+      const plan = await planApi.get();
+      if (mine === latest.current) setData(plan);
     } catch (err) {
+      if (mine !== latest.current) return;
       setData(null);
       setError(describeError(err, 'Could not load your plan'));
     }
@@ -65,11 +72,12 @@ function PlanContent() {
     const sessionId = params.get('session_id');
     if (!sessionId || confirmed.current || (orgLoading && !selectedOrgId)) return;
     confirmed.current = true;
+    const mine = ++latest.current;
     (async () => {
       try {
         setBusy('confirm');
         const result = await planApi.confirm(sessionId);
-        setData(result);
+        if (mine === latest.current) setData(result);
         setNotice(result.subscribed ? 'Your trial has started.' : 'Checkout was not completed.');
         window.history.replaceState(window.history.state, '', window.location.pathname);
       } catch (err) {
