@@ -4,6 +4,8 @@
 
 import { Router } from 'express';
 import { requireAuth } from '../../middleware/auth.js';
+import { allowDeveloperToken } from '../../middleware/developerToken.js';
+import { ForbiddenError } from '../../middleware/errorHandler.js';
 import { requireOrganizer, requireSystemAdmin } from '../../middleware/rbac.js';
 import { activeOrgFor } from './adminScope.js';
 import themeService from '../../services/ThemeService.js';
@@ -17,7 +19,9 @@ import {
 } from '../validators/themeValidators.js';
 
 const router = Router();
-router.use(requireAuth);
+// Spec 043: the Jump CLI's developer token (scope `themes`) works here and nowhere else.
+router.use(allowDeveloperToken('themes'));
+router.use((req, res, next) => (req.user?.developerTokenId ? next() : requireAuth(req, res, next)));
 router.use(requireOrganizer);
 
 const handle = (fn) => async (req, res, next) => {
@@ -35,6 +39,7 @@ router.get('/status', handle(async (req, res) => {
 
 /** PUT /admin/themes/rollout { enabled } — SYSTEM_ADMIN per-org rollout (contracts C10). */
 router.put('/rollout', requireSystemAdmin, validateThemeRollout, handle(async (req, res) => {
+  if (req.user.developerTokenId) throw new ForbiddenError('Developer tokens cannot change the rollout');
   res.json(await themeService.setRollout(await activeOrgFor(req), req.body.enabled));
 }));
 
