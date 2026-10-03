@@ -13,7 +13,7 @@ const BASE = 100;
 const TOTAL = 115;
 
 /** Minimal in-memory Prisma double covering the calls the refund paths make. */
-function makeDb({ ticketCount = 1, base = BASE, total = TOTAL, uneven = false } = {}) {
+function makeDb({ ticketCount = 1, base = BASE, total = TOTAL, uneven = false, inclusiveTax = 0 } = {}) {
   // `uneven`: $10.00 of fees over the whole line, which does not divide evenly
   // by 3 tickets. Exercises the remainder allocation.
   const lineExtras = uneven ? 10 : (total - base) * ticketCount;
@@ -45,7 +45,9 @@ function makeDb({ ticketCount = 1, base = BASE, total = TOTAL, uneven = false } 
       unitPrice: base,
       platformFee: lineExtras,
       processingFee: 0,
-      tax: 0,
+      // Tax-inclusive pricing: the tax is backed out of the listed price, so it
+      // is recorded on the line but never added to the order total.
+      tax: inclusiveTax * ticketCount,
     },
   ];
   const refunds = [];
@@ -74,7 +76,7 @@ function makeDb({ ticketCount = 1, base = BASE, total = TOTAL, uneven = false } 
       findUnique: async ({ where }) => {
         const t = tickets.find((x) => x.id === where.id);
         if (!t) return null;
-        return { ...t, order: { ...order, payment, tickets, items }, priceTier: { isRefundable: true, name: 'GA' } };
+        return { ...t, order: { ...order, payment, tickets, items, addOns: [] }, priceTier: { isRefundable: true, name: 'GA' } };
       },
       findMany: async ({ where }) =>
         tickets.filter((t) => t.orderId === where.orderId && where.status.in.includes(t.status)),
@@ -137,7 +139,9 @@ describe('per-ticket refund on an order that carries fees and tax', () => {
 
     // The buyer was charged $115 for this one ticket. All of it must come back.
     expect(db.refundedTotal()).toBeCloseTo(TOTAL, 2);
-    expect(refundsCreate).toHaveBeenCalledWith(expect.objectContaining({ amount: 11500 }));
+    expect(refundsCreate).toHaveBeenCalledWith(expect.objectContaining({ amount: 11500 }), {
+      idempotencyKey: 'jump:refund:ticket:ticket_1',
+    });
   });
 
   it('does not mark the order REFUNDED while any money is still held', async () => {
@@ -194,6 +198,16 @@ describe('the two staff refund paths agree', () => {
     for (const t of db.tickets) await refundService.refundTicket(t.id, { initiatedBy: 'staff' });
 
     expect(db.refundedTotal()).toBeCloseTo(charged, 2);
+    expect(db.order.status).toBe('REFUNDED');
+  });
+
+  it('does not add tax again when the listed price already includes it', async () => {
+    // $100 listed with $6.76 of tax inside it, $15 of fees on top: $115 charged.
+    reset({ inclusiveTax: 6.76 });
+
+    await refundService.refundTicket('ticket_1', { initiatedBy: 'staff' });
+
+    expect(refundsCreate.mock.calls[0][0].amount).toBe(Math.round(TOTAL * 100));
     expect(db.order.status).toBe('REFUNDED');
   });
 

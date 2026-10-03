@@ -346,7 +346,10 @@ class RefundService {
               payment: true,
               tickets: true,
               // Per-line fees and tax: what this ticket actually cost the buyer.
+              // Add-on lines too: the order total is read against all lines
+              // to tell tax-inclusive orders apart (ticketAmounts.taxOnTop).
               items: true,
+              addOns: true,
             },
           },
           priceTier: { select: { isRefundable: true, name: true } },
