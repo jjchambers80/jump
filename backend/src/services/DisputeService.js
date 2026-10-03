@@ -17,6 +17,7 @@
 //      already applied is recorded and ignored, so a late `.funds_withdrawn`
 //      can never take money back out of an order whose dispute Jump won.
 
+import { TICKET_AMOUNT_INCLUDE, ticketAmountPaid } from './ticketAmounts.js';
 import { prisma } from '@jump/db';
 import addOnService from './AddOnService.js';
 import refundService from './RefundService.js';
@@ -260,17 +261,23 @@ class DisputeService {
     // Void cheapest-first until the disputed amount is covered — the same rule
     // as an external partial refund, because Stripe does not say which line
     // the buyer disputed. A full chargeback therefore voids everything.
-    const activeTickets = await tx.ticket.findMany({
-      where: { orderId: order.id, status: { in: ['VALID', 'REDEEMED'] } },
-      orderBy: { pricePaid: 'asc' },
-      select: { id: true, status: true, pricePaid: true, priceTierId: true },
-    });
+    // Measured by what each ticket actually cost (price + its share of fees
+    // and tax), not the listed price: a dispute for exactly one all-in ticket
+    // must void one ticket, not spill over onto a second.
+    const activeTickets = (
+      await tx.ticket.findMany({
+        where: { orderId: order.id, status: { in: ['VALID', 'REDEEMED'] } },
+        select: { id: true, status: true, pricePaid: true, priceTierId: true, ticketNumber: true, ...TICKET_AMOUNT_INCLUDE },
+      })
+    )
+      .map((ticket) => ({ ...ticket, paid: ticketAmountPaid(ticket) }))
+      .sort((a, b) => a.paid - b.paid);
     let remaining = amount;
     const voided = [];
     for (const ticket of activeTickets) {
-      if (remaining <= 0) break;
+      if (remaining <= 0.005) break;
       voided.push(ticket);
-      remaining -= Number(ticket.pricePaid);
+      remaining -= ticket.paid;
     }
 
     for (const ticket of voided) {

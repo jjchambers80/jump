@@ -50,6 +50,7 @@ async function deliverTwice(event) {
 }
 
 let seq = 0;
+const RUN = Date.now();
 /**
  * A Stripe dispute event. `withdrawn` / `reinstated` drive
  * `balance_transactions`, which is what the handler actually reads — the event
@@ -60,7 +61,9 @@ function disputeEvent(type, { disputeId, paymentIntent, chargeId, amountCents, s
   if (withdrawn) balance_transactions.push({ id: `txn_w_${disputeId}`, amount: -amountCents, reporting_category: 'dispute' });
   if (reinstated) balance_transactions.push({ id: `txn_r_${disputeId}`, amount: amountCents, reporting_category: 'dispute_reversal' });
   return {
-    id: `evt_${TAG}_${(seq += 1)}`,
+    // Unique per run: the webhook ledger (#195) keeps event ids, so a fixed id
+    // replayed against a reused database would be skipped as a duplicate.
+    id: `evt_${TAG}_${RUN}_${(seq += 1)}`,
     object: 'event',
     type,
     created: T0 + createdOffset,
@@ -91,8 +94,8 @@ describe('Stripe disputes contract (spec 037)', () => {
   const fixtures = {};
 
   /** A COMPLETED ticket order with a SUCCEEDED payment and `count` VALID tickets. */
-  async function makeOrder(key, { unitPrice = 50, count = 2 } = {}) {
-    const total = unitPrice * count;
+  async function makeOrder(key, { unitPrice = 50, count = 2, feePerTicket = 0 } = {}) {
+    const total = (unitPrice + feePerTicket) * count;
     const order = await prisma.order.create({
       data: {
         eventId: event.id,
@@ -103,6 +106,10 @@ describe('Stripe disputes contract (spec 037)', () => {
         quantity: count,
         status: 'COMPLETED',
         paidAt: new Date(),
+        // All-in pricing: the fees live on the line, on top of the listed price.
+        ...(feePerTicket > 0 && {
+          items: { create: { kind: 'TICKET_TIER', priceTierId: tier.id, description: 'GA', quantity: count, unitPrice, platformFee: feePerTicket * count } },
+        }),
       },
     });
     await prisma.paymentTransaction.create({
@@ -152,6 +159,7 @@ describe('Stripe disputes contract (spec 037)', () => {
     await makeOrder('won');
     await makeOrder('ooo');
     await makeOrder('inquiry');
+    await makeOrder('allin', { feePerTicket: 7.5 });
   });
 
   afterAll(async () => {
@@ -489,6 +497,22 @@ describe('Stripe disputes contract (spec 037)', () => {
     expect(await liveRefunds('booth')).toHaveLength(0);
   });
 
+  it('a dispute for exactly one all-in ticket voids one ticket, not two', async () => {
+    // $50 listed + $7.50 fees: the buyer paid $57.50 for the ticket they dispute.
+    await deliverTwice(
+      disputeEvent('charge.dispute.funds_withdrawn', {
+        disputeId: `dp_${TAG}_allin`,
+        paymentIntent: `pi_${TAG}_allin`,
+        chargeId: `ch_${TAG}_allin`,
+        amountCents: 5750,
+        status: 'under_review',
+        withdrawn: true,
+      })
+    );
+    expect(await ticketStatuses('allin')).toEqual(['VOIDED', 'VALID']);
+    expect(await orderStatus('allin')).toBe('PARTIALLY_REFUNDED');
+  });
+
   // ── unresolvable ───────────────────────────────────────────────────────────
 
   it('answers 200 and writes nothing for a dispute on a payment Jump never recorded', async () => {
@@ -510,9 +534,9 @@ describe('Stripe disputes contract (spec 037)', () => {
 
   it('reconciles every dispute to exactly one order and back', async () => {
     const report = await disputeService.reconcile({ organizationId: org.id });
-    expect(report.disputes).toBe(5); // lost, won, ooo, inquiry, booth — the alien one was never written
-    expect(report.orders).toBe(5); // one order each, counted the other way
-    expect(report.withMoneyOut).toBe(1); // only the lost one is still holding money
+    expect(report.disputes).toBe(6); // lost, won, ooo, inquiry, booth, allin — the alien one was never written
+    expect(report.orders).toBe(6); // one order each, counted the other way
+    expect(report.withMoneyOut).toBe(2); // lost and allin still hold money
     expect(report.missingProjection).toEqual([]);
     expect(report.orphanProjections).toEqual([]);
     expect(report.danglingRefunds).toBe(0);
