@@ -41,14 +41,17 @@ export default function HeroCarouselSection({
   // Slides are rendered by Puck, not by this section, so the section-wide
   // overlay reaches them as a CSS variable on the track.
   const style = { '--carousel-overlay': Math.min(80, Math.max(0, overlay)) / 100 } as CSSProperties;
+  // Full width is edge to edge: no gutters, no rounded corners.
+  const full = common.sectionWidth === 'full';
   return (
     <SectionShell type="HeroCarousel" props={common}>
-      <div className="mx-auto w-full max-w-7xl px-4 pt-4 sm:px-6 sm:pt-6 lg:px-8">
+      <div className={full ? 'w-full' : 'mx-auto w-full max-w-7xl px-4 pt-4 sm:px-6 sm:pt-6 lg:px-8'}>
         <HeroCarouselFrame
           id={id}
           intervalMs={ctx.editing ? 0 : autoplay === '5s' ? 5000 : autoplay === '8s' ? 8000 : 0}
           showArrows={showArrows}
           showDots={showDots}
+          edgeToEdge={full}
           labels={{
             carousel: t(ctx, 'carousel.label'),
             previous: t(ctx, 'carousel.previous'),

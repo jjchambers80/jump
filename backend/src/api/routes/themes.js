@@ -2,7 +2,9 @@
 // Everything but /status and /rollout is 404 until the master switch
 // (THEME_EDITOR_ENABLED) and the organization's rollout flag are both on.
 
+import { createHash } from 'node:crypto';
 import { Router } from 'express';
+import { themeKit } from '@jump/theme';
 import { requireAuth } from '../../middleware/auth.js';
 import { allowDeveloperToken } from '../../middleware/developerToken.js';
 import { ForbiddenError } from '../../middleware/errorHandler.js';
@@ -53,6 +55,17 @@ const enabled = (fn) => async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * GET /admin/themes/schema — the schema and AI-assistant guide this server
+ * validates against, for the Jump CLI's .jump/ folder. `version` lets a CLI
+ * built from older @jump/theme notice it is stale. Before /:themeId.
+ */
+const KIT = themeKit();
+const KIT_BODY = { ...KIT, version: createHash('sha256').update(JSON.stringify(KIT)).digest('hex') };
+router.get('/schema', enabled(async (req, res) => {
+  res.json(KIT_BODY);
+}));
 
 router.get('/', enabled(async (req, res, organizationId) => {
   res.json({ themes: await themeService.list(organizationId) });

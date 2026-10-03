@@ -126,6 +126,14 @@ describe('Online store themes contract', () => {
       expect(doc.body.data.content.map((s) => s.type)).toEqual(['EventsHero', 'EventList']);
     });
 
+    it('serves the deployed schema and guide for the CLI, versioned by their hash', async () => {
+      const res = await request(app).get('/admin/themes/schema').set(...auth(adminToken));
+      expect(res.status).toBe(200);
+      expect(res.body.schema.commonSectionFields.sectionWidth).toBeTruthy();
+      expect(res.body.guide).toMatch(/sectionWidth/);
+      expect(res.body.version).toBe(sha(JSON.stringify({ schema: res.body.schema, guide: res.body.guide })));
+    });
+
     it('is invisible to another organization', async () => {
       const res = await request(app).get(`/admin/themes/${theme.id}`).set(...auth(otherToken));
       expect(res.status).toBe(404);

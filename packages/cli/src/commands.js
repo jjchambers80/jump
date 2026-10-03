@@ -8,7 +8,21 @@ import { parseArgs } from 'node:util';
 import { readCredentials, storeCredentials, writeCredentials } from './config.js';
 import { ApiError, client } from './client.js';
 import { login } from './login.js';
-import { LOCK, changesFor, checkTheme, lockAfterSave, readLock, readTheme, writeAgentKit, writeLock, writeTheme } from './themeDir.js';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import {
+  LOCK,
+  changesFor,
+  checkTheme,
+  localKitVersion,
+  lockAfterSave,
+  pulledKitVersion,
+  readLock,
+  readTheme,
+  writeAgentKit,
+  writeLock,
+  writeTheme,
+} from './themeDir.js';
 
 // Production by default; local dev: JUMP_APP_URL=http://localhost:3001 JUMP_API_URL=http://localhost:3000
 const DEFAULT_APP_URL = process.env.JUMP_APP_URL || 'https://frontend-production-43e9.up.railway.app';
@@ -79,17 +93,50 @@ async function getTheme(call, themeId) {
   return { theme: detail, settings: detail.settings ?? {}, content: detail.content ?? {}, documents };
 }
 
+const OUTDATED = 'This Jump CLI is older than the server: .jump/ holds the server\'s schema, local checks are skipped and the server checks every push. Update the CLI (`git pull` in its checkout).';
+
+/** The server's schema + guide; null on a server that predates GET /admin/themes/schema (404). */
+async function serverKit(call) {
+  try {
+    return await call('GET', '/admin/themes/schema');
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null;
+    throw error;
+  }
+}
+
+/**
+ * Local check errors, or {} when this CLI's schema differs from the one
+ * pulled from the server: a stale CLI would refuse fields the server
+ * accepts, so the server's own validation decides instead.
+ */
+async function localErrors(dir, lock) {
+  const pulled = await pulledKitVersion(dir);
+  if (pulled && pulled !== localKitVersion()) {
+    if (!localErrors.warned) console.warn(OUTDATED);
+    localErrors.warned = true;
+    return {};
+  }
+  return checkTheme(await readTheme(dir), lock.presetKey);
+}
+
 async function pull(call, store, dir, themeId) {
   const pulled = await getTheme(call, themeId);
   const lock = await writeTheme(dir, { store, ...pulled });
-  const kit = await writeAgentKit(dir);
+  const server = await serverKit(call);
+  const kit = await writeAgentKit(dir, server ?? undefined);
+  if (server && server.version !== localKitVersion()) console.warn(OUTDATED);
+  const pointer = await readFile(join(dir, 'AGENTS.md'), 'utf8').catch(() => '');
+  if (!pointer.includes('.jump/AGENTS.md')) {
+    console.warn('AGENTS.md predates .jump/AGENTS.md: add the line `@.jump/AGENTS.md` (or delete AGENTS.md and pull again) so assistants read the current rules.');
+  }
   return { lock, kit };
 }
 
 /** Push what changed; returns the new lock, or the old one when nothing changed. */
 async function push(call, dir, lock, { all = false, quiet = false } = {}) {
   const local = await readTheme(dir);
-  const errors = checkTheme(local, lock.presetKey);
+  const errors = await localErrors(dir, lock);
   if (Object.keys(errors).length) {
     console.error('Not pushed: fix these first (`jump theme check`):');
     printErrors(errors);
@@ -190,7 +237,7 @@ const commands = {
 
   async 'theme check'(values, dir) {
     const lock = await readLock(dir);
-    const errors = checkTheme(await readTheme(dir), lock.presetKey);
+    const errors = await localErrors(dir, lock);
     if (!Object.keys(errors).length) return console.log('No errors.');
     console.error(`${Object.keys(errors).length} error(s):`);
     printErrors(errors);

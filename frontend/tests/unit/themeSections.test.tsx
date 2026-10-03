@@ -169,6 +169,13 @@ describe('HeroCarouselSection and SlideBlock', () => {
     expect(html).toContain('rounded-[32px]');
   });
 
+  it('sectionWidth full drops the gutters and the rounded corners', () => {
+    const html = renderToStaticMarkup(<HeroCarouselSection id="c" sectionWidth="full" Slides={() => null} ctx={carouselCtx()} />);
+    expect(html).not.toContain('rounded-[32px]');
+    expect(html).not.toContain('max-w-7xl');
+    expect(html).toContain('--theme-section-width:none');
+  });
+
   it('a slide draws its image like the hero, with alt text, and a button when it has a label and a live link', () => {
     const html = renderToStaticMarkup(
       <SlideBlock id="s" heading="Summer Series" subheading="By the river" image={{ fileId: 'f1', alt: 'Crowd' }} buttonLabel="Tickets" link={{ type: 'EVENTS' }} ctx={ctx()} />,
