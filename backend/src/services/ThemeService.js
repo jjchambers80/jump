@@ -14,6 +14,7 @@ import {
   REVISIONS_KEPT,
   SCHEMA_VERSION,
   THEME_NAME_MAX,
+  THEMES_PER_ORG,
   documentDef,
   fileIdsInThemeJson,
   linkKey,
@@ -49,6 +50,12 @@ function themeConflict(current) {
 function themeInvalid(errors) {
   const error = new ValidationError('The theme has errors', { errors });
   error.code = 'THEME_INVALID';
+  return error;
+}
+
+function themeRefused(code, message) {
+  const error = new ConflictError(message);
+  error.code = code;
   return error;
 }
 
@@ -387,6 +394,96 @@ class ThemeService {
       userId,
       { changedKeysPrefix: [`restore:${revision.id}`] },
     );
+  }
+
+  // ── Theme library (038J2) ───────────────────────────────────────────
+
+  /** Rename: the same themeVersion rule as /save (plan §9a.2). */
+  async rename(organizationId, themeId, name, themeVersion) {
+    const theme = await prisma.$transaction(async (tx) => {
+      const [locked] = await tx.$queryRaw`
+        SELECT id, "organizationId", version FROM "Theme" WHERE id = ${themeId} FOR UPDATE`;
+      if (!locked || locked.organizationId !== organizationId) throw new NotFoundError('Theme not found');
+      if (locked.version !== themeVersion) throw themeConflict({ theme: locked.version, documents: {} });
+      return tx.theme.update({ where: { id: themeId }, data: { name, version: { increment: 1 } } });
+    });
+    return this._summary(theme, await this._userNames([theme.lastSavedById]));
+  }
+
+  /**
+   * Deep copy to a draft (D12): settings, content and every stored document.
+   * Images point at the same StoreFile rows, recorded as the copy's references.
+   */
+  async duplicate(organizationId, themeId, userId, { name } = {}) {
+    const copy = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Organization" WHERE id = ${organizationId} FOR UPDATE`;
+      const source = await this._theme(organizationId, themeId, tx);
+      if ((await tx.theme.count({ where: { organizationId } })) >= THEMES_PER_ORG) {
+        throw themeRefused('THEME_LIMIT', `An online store can have at most ${THEMES_PER_ORG} themes`);
+      }
+      const docs = await tx.themeDocument.findMany({ where: { themeId } });
+      const created = await tx.theme.create({
+        data: {
+          organizationId,
+          name: (name || `Copy of ${source.name}`).slice(0, THEME_NAME_MAX),
+          presetKey: source.presetKey,
+          presetVersion: source.presetVersion,
+          role: 'UNPUBLISHED',
+          settings: source.settings,
+          content: source.content,
+          lastSavedById: userId ?? null,
+        },
+      });
+      if (docs.length) {
+        await tx.themeDocument.createMany({
+          data: docs.map((d) => ({
+            themeId: created.id,
+            kind: d.kind,
+            key: d.key,
+            data: d.data,
+            schemaVersion: d.schemaVersion,
+            updatedById: userId ?? null,
+          })),
+        });
+      }
+      const fields = { settings: fileIdsInThemeJson(source.settings) };
+      for (const d of docs) fields[d.key] = fileIdsInThemeJson(d.data);
+      await storeFileService.syncReferences('THEME', created.id, fields, organizationId, { tx });
+      return created;
+    });
+    logger.info('Theme duplicated', { event: 'theme_duplicate', organizationId, themeId, copyId: copy.id });
+    return this._summary(copy, await this._userNames([copy.lastSavedById]));
+  }
+
+  /**
+   * Publish a draft: the current MAIN becomes a draft and this theme becomes
+   * MAIN in one transaction, so going back is one more publish (D6).
+   */
+  async publish(organizationId, themeId) {
+    const theme = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Organization" WHERE id = ${organizationId} FOR UPDATE`;
+      const target = await this._theme(organizationId, themeId, tx);
+      if (target.role === 'MAIN') throw themeRefused('THEME_ACTIVE', 'This theme is already live');
+      await tx.theme.updateMany({ where: { organizationId, role: 'MAIN' }, data: { role: 'UNPUBLISHED' } });
+      return tx.theme.update({
+        where: { id: themeId },
+        data: { role: 'MAIN', publishedAt: new Date(), scheduledPublishAt: null, scheduledById: null, scheduleError: null },
+      });
+    });
+    logger.info('Theme published', { event: 'theme_publish', organizationId, themeId });
+    return this._summary(theme, await this._userNames([theme.lastSavedById]));
+  }
+
+  /** Delete a draft; the live theme cannot be deleted. */
+  async remove(organizationId, themeId) {
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Organization" WHERE id = ${organizationId} FOR UPDATE`;
+      const theme = await this._theme(organizationId, themeId, tx);
+      if (theme.role === 'MAIN') throw themeRefused('THEME_ACTIVE', 'The live theme cannot be deleted');
+      await storeFileService.clearReferences('THEME', themeId, { tx });
+      await tx.theme.delete({ where: { id: themeId } });
+    });
+    logger.info('Theme deleted', { event: 'theme_delete', organizationId, themeId });
   }
 
   // ── Rendering ───────────────────────────────────────────────────────

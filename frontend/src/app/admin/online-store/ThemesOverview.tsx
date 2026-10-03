@@ -1,8 +1,9 @@
 'use client';
 
 // Online Store page for organizations in the themes rollout (spec 038 §10,
-// card 038J1): store access, View store, and the live theme card with Edit
-// theme. Draft themes, previews and import arrive with 038J2 / 038K / 038N.
+// card 038J1): store access, View store, the live theme card with Edit
+// theme, and draft themes (038J2: rename, duplicate, publish, delete).
+// Previews and import arrive with 038K / 038N.
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -54,6 +55,43 @@ export default function ThemesOverview() {
   if (!org) return null;
   const storeUrl = `/organizations/${org.slug || org.id}`;
   const live = themes?.find((t) => t.role === 'MAIN') ?? null;
+  const drafts = themes?.filter((t) => t.role !== 'MAIN') ?? [];
+
+  const run = async (action: () => Promise<unknown>, fallback: string) => {
+    setError(null);
+    try {
+      await action();
+      await load();
+    } catch (err: any) {
+      setError(err?.message || fallback);
+    }
+  };
+  const rename = (theme: ThemeSummary) => {
+    const name = window.prompt('Theme name', theme.name)?.trim();
+    if (!name || name === theme.name) return;
+    void run(() => themesApi.rename(theme.id, name, theme.version), 'Could not rename the theme');
+  };
+  const themeActions = (theme: ThemeSummary) => [
+    ...(theme.role === 'MAIN' ? [{ label: 'View', href: storeUrl, external: true }] : []),
+    { label: 'Rename', onSelect: () => rename(theme) },
+    { label: 'Duplicate', onSelect: () => void run(() => themesApi.duplicate(theme.id), 'Could not duplicate the theme') },
+    ...(theme.role === 'MAIN'
+      ? []
+      : [
+          {
+            label: 'Delete',
+            danger: true,
+            onSelect: () => {
+              if (window.confirm(`Delete ${theme.name}? This cannot be undone.`))
+                void run(() => themesApi.remove(theme.id), 'Could not delete the theme');
+            },
+          },
+        ]),
+  ];
+  const publish = (theme: ThemeSummary) => {
+    if (!window.confirm(`Publish ${theme.name}? It replaces ${live?.name ?? 'the live theme'} on your store at once.`)) return;
+    void run(() => themesApi.publish(theme.id), 'Could not publish the theme');
+  };
 
   const changeAccess = async (value: string) => {
     if (!prefs) return;
@@ -148,10 +186,7 @@ export default function ThemesOverview() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <ActionsMenu
-                label={`More actions for ${live.name}`}
-                items={[{ label: 'View', href: storeUrl, external: true }]}
-              />
+              <ActionsMenu label={`More actions for ${live.name}`} items={themeActions(live)} />
               <Link href={editorHref(live.id)} className={primary}>
                 Edit theme
               </Link>
@@ -160,8 +195,44 @@ export default function ThemesOverview() {
         </article>
       ) : null}
 
+      {themes && (
+        <section aria-labelledby="draft-themes" className={`${card} mt-6`}>
+          <h2 id="draft-themes" className="border-b border-gray-200 px-4 py-3 text-base font-semibold text-gray-900 dark:border-slate-700 dark:text-white">
+            Draft themes
+          </h2>
+          {drafts.length === 0 ? (
+            <p className="px-4 py-6 text-sm text-gray-600 dark:text-slate-400">
+              Duplicate your live theme to try changes without touching your store.
+            </p>
+          ) : (
+            <ul className="divide-y divide-gray-200 dark:divide-slate-700" data-testid="draft-themes">
+              {drafts.map((theme) => (
+                <li key={theme.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-gray-900 dark:text-white">{theme.name}</p>
+                    <p className="text-sm text-gray-600 dark:text-slate-400">
+                      Last saved: {formatDateTime(theme.lastSavedAt, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                      {theme.lastSavedBy ? ` by ${theme.lastSavedBy.name ?? 'a former member'}` : ''}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <ActionsMenu label={`More actions for ${theme.name}`} items={themeActions(theme)} />
+                    <button type="button" onClick={() => publish(theme)} className={secondary}>
+                      Publish
+                    </button>
+                    <Link href={editorHref(theme.id)} className={primary}>
+                      Edit theme
+                    </Link>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
       <p className="mt-6 text-sm text-gray-500 dark:text-slate-400">
-        Changes you save in the theme editor are live on your store at once.{' '}
+        Changes you save on the live theme show on your store at once; draft themes stay private until you publish them.{' '}
         <Link href="/admin/online-store/preferences" className="font-medium text-indigo-600 hover:underline dark:text-indigo-400">
           Brand and store preferences
         </Link>
