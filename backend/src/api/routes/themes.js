@@ -7,7 +7,13 @@ import { requireAuth } from '../../middleware/auth.js';
 import { requireOrganizer, requireSystemAdmin } from '../../middleware/rbac.js';
 import { activeOrgFor } from './adminScope.js';
 import themeService from '../../services/ThemeService.js';
-import { validateThemeRestore, validateThemeRollout, validateThemeSave } from '../validators/themeValidators.js';
+import {
+  validateThemeDuplicate,
+  validateThemeRename,
+  validateThemeRestore,
+  validateThemeRollout,
+  validateThemeSave,
+} from '../validators/themeValidators.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -48,6 +54,27 @@ router.get('/', enabled(async (req, res, organizationId) => {
 
 router.get('/:themeId', enabled(async (req, res, organizationId) => {
   res.json(await themeService.get(organizationId, req.params.themeId));
+}));
+
+/** PATCH /admin/themes/:id { name, themeVersion } — rename (038J2). */
+router.patch('/:themeId', validateThemeRename, enabled(async (req, res, organizationId) => {
+  res.json(await themeService.rename(organizationId, req.params.themeId, req.body.name, req.body.themeVersion));
+}));
+
+/** DELETE /admin/themes/:id — drafts only (409 THEME_ACTIVE). */
+router.delete('/:themeId', enabled(async (req, res, organizationId) => {
+  await themeService.remove(organizationId, req.params.themeId);
+  res.status(204).end();
+}));
+
+/** POST /admin/themes/:id/duplicate { name? } — deep copy to a draft (409 THEME_LIMIT). */
+router.post('/:themeId/duplicate', validateThemeDuplicate, enabled(async (req, res, organizationId) => {
+  res.status(201).json(await themeService.duplicate(organizationId, req.params.themeId, req.user.id, { name: req.body?.name }));
+}));
+
+/** POST /admin/themes/:id/publish — swap with the live theme (409 THEME_ACTIVE). */
+router.post('/:themeId/publish', enabled(async (req, res, organizationId) => {
+  res.json(await themeService.publish(organizationId, req.params.themeId));
 }));
 
 router.get('/:themeId/content', enabled(async (req, res, organizationId) => {
