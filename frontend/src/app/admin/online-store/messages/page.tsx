@@ -8,6 +8,7 @@ import { useSession } from 'next-auth/react';
 import { ArrowLeft, Mail, MailOpen, Reply, Trash2 } from 'lucide-react';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { useOrg } from '@/components/OrgContext';
+import { MESSAGES_CHANGED_EVENT } from '@/components/AdminSidebar';
 import { useAccountFormat } from '@/lib/accountFormat';
 import api, { type ContactInquiry, type ContactInquiryList } from '@/services/api';
 
@@ -79,6 +80,7 @@ export default function MessagesPage() {
     try {
       const updated = await api.patch<ContactInquiry>(`/admin/contact-inquiries/${inquiry.id}`, { read });
       replace(updated, read ? -1 : 1);
+      window.dispatchEvent(new Event(MESSAGES_CHANGED_EVENT));
     } catch (err: any) {
       setError(err.message || 'Failed to update the message');
     }
@@ -93,6 +95,7 @@ export default function MessagesPage() {
     if (!window.confirm(`Delete the message from ${inquiry.name}? This cannot be undone.`)) return;
     try {
       await api.delete(`/admin/contact-inquiries/${inquiry.id}`);
+      window.dispatchEvent(new Event(MESSAGES_CHANGED_EVENT));
       setOpenId(null);
       await load();
     } catch (err: any) {

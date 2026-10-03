@@ -57,6 +57,14 @@ async function mockApi(page: Page) {
     item.readAt = read ? '2026-10-01T12:00:00.000Z' : null;
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(item) });
   });
+  // Registered last so it wins over the /:id route above.
+  await page.route(`${API}/admin/contact-inquiries/unread-count`, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ unreadCount: inquiries.filter((item) => !item.readAt).length }),
+    })
+  );
   return { calls };
 }
 
@@ -68,6 +76,7 @@ test('reads a message, marks it read, replies by email and deletes it', async ({
 
   await expect(page.getByRole('heading', { name: 'Messages', level: 1 })).toBeVisible();
   await expect(page.getByTestId('messages-header')).toContainText('1 unread.');
+  await expect(page.locator('aside').getByTestId('messages-unread-badge')).toHaveText('1 unread');
   const list = page.getByRole('region', { name: 'Message list' });
   await expect(list.getByRole('button')).toHaveCount(4); // 2 filters + 2 messages
   await expect(page.getByTestId('message-detail')).toContainText('Select a message to read it.');
@@ -84,9 +93,11 @@ test('reads a message, marks it read, replies by email and deletes it', async ({
   );
   await expect(page.getByTestId('messages-header')).toContainText('0 unread.');
   expect(api.calls.find((call) => call.method === 'PATCH')?.body).toEqual({ read: true });
+  await expect(page.locator('aside').getByTestId('messages-unread-badge')).toHaveCount(0);
 
   await detail.getByRole('button', { name: 'Mark unread' }).click();
   await expect(page.getByTestId('messages-header')).toContainText('1 unread.');
+  await expect(page.locator('aside').getByTestId('messages-unread-badge')).toHaveText('1 unread');
 
   page.once('dialog', (dialog) => void dialog.accept());
   await detail.getByRole('button', { name: 'Delete' }).click();
