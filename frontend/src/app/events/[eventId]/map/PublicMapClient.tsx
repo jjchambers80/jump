@@ -82,6 +82,7 @@ export function priceRange(l: PublicMap['legend'][number]) {
 
 const LEGEND_STATES = [
   ['AVAILABLE', 'Available'],
+  ['HELD', 'Held'],
   ['SOLD', 'Sold'],
   ['RESERVED', 'Reserved'],
   ['BLOCKED', 'Blocked'],

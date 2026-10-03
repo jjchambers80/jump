@@ -271,7 +271,7 @@ test.describe('public floor map', () => {
     expect(box).not.toBeNull();
     expect(Math.round(box!.width)).toBe(viewport.width);
     expect(Math.round(box!.height)).toBe(viewport.height);
-    await expect(dialog.getByTestId('floor-map-dialog-count')).toContainText('1 of 2 booths open');
+    await expect(dialog.getByTestId('floor-map-dialog-count')).toContainText('1 of 3 booths open');
     await expect(dialog.getByTestId('map-legend')).toContainText('10×10 booth');
     await expect(dialog.getByRole('link', { name: /Vendor directory/ }).locator('visible=true')).toHaveAttribute('href', '/events/ev-map/map');
 

@@ -21,6 +21,9 @@ import path from 'path';
 import { fork } from 'child_process';
 import { fileURLToPath } from 'url';
 
+// The vendor choose route is behind the paid-applications switch.
+process.env.APPLICATIONS_PAYMENTS_ENABLED = 'true';
+
 jest.unstable_mockModule('../../src/config/stripe.js', () => ({
   default: {
     checkout: { sessions: { create: jest.fn(), retrieve: jest.fn(), expire: jest.fn().mockResolvedValue({}) } },
@@ -117,10 +120,10 @@ describe('Booth holds under concurrency', () => {
       data: { venueId: venue.id, name: `${prefix} Expo`, date: new Date(Date.now() + 86_400_000), status: 'PUBLISHED', capacity: 100 },
     });
     const seededForm = await prisma.applicationForm.create({
-      data: { eventId: seededEvent.id, kind: 'PAID', name: 'Vendors', slug: `${prefix}-vendors`, chargeTiming: 'APPROVAL', feeMode: 'ABSORB' },
+      data: { eventId: seededEvent.id, kind: 'PAID', name: 'Vendors', slug: `${prefix}-vendors`, chargeTiming: 'APPROVAL', feeMode: 'ABSORB', spaceSelection: 'MAP' },
     });
     const seededTier = await prisma.applicationTier.create({
-      data: { formId: seededForm.id, name: '10x10', price: 275, quantityTotal: 20, quantityReserved: 20, mapBound: true },
+      data: { formId: seededForm.id, name: '10x10', price: 275, quantityTotal: 20, quantityReserved: 20 },
     });
     const seededMap = await prisma.floorMap.create({
       data: {
@@ -154,25 +157,10 @@ describe('Booth holds under concurrency', () => {
         contactId: contact.id,
         profileId: profile.id,
         status: 'APPROVED',
-        paymentStatus: 'PAYMENT_DUE',
+        paymentStatus: 'AWAITING_SELECTION',
         capacitySlot: 'RESERVED',
         submittedAt: new Date(),
         statusTokenHash: `${prefix}-hash-${index}`,
-        order: {
-          create: {
-            kind: 'APPLICATION',
-            eventId: seededEvent.id,
-            contactId: contact.id,
-            orderRef: `JMP-${prefix.slice(-6).toUpperCase()}${index}`,
-            totalAmount: 275,
-            subtotalAmount: 275,
-            orgReceives: 275,
-            feeMode: 'ABSORB',
-            quantity: 1,
-            status: 'PENDING',
-            items: { create: { kind: 'APPLICATION_TIER', applicationTierId: seededTier.id, description: '10x10', quantity: 1, unitPrice: 275 } },
-          },
-        },
       },
     });
   }
@@ -320,7 +308,7 @@ describe('Booth holds under concurrency', () => {
   it('treats a double-submitted request as a conflict, not a second booth', async () => {
     const application = applications[1];
     const choose = () => request(app)
-      .post(`/applications/${application.id}/booth`)
+      .post(`/applications/${application.id}/select`)
       .query({ token: statusToken(application.id) })
       .send({ boothId: booths[0].id });
 
@@ -328,7 +316,8 @@ describe('Booth holds under concurrency', () => {
 
     const replay = await choose();
     expect(replay.status).toBe(409);
-    expect(replay.body.code).toBe('ALREADY_HOLDING_BOOTH');
+    // A held space takes the application out of choosing (spec 037 phase 5).
+    expect(replay.body.code).toBe('NOT_AWAITING_SELECTION');
 
     const held = await prisma.booth.findMany({ where: { holdApplicationId: application.id } });
     expect(held).toHaveLength(1);
@@ -338,7 +327,7 @@ describe('Booth holds under concurrency', () => {
   it('keeps the original booth when the vendor goes back and picks another', async () => {
     const application = applications[2];
     const first = await request(app)
-      .post(`/applications/${application.id}/booth`)
+      .post(`/applications/${application.id}/select`)
       .query({ token: statusToken(application.id) })
       .send({ boothId: booths[0].id });
     expect(first.status).toBe(200);
@@ -346,11 +335,12 @@ describe('Booth holds under concurrency', () => {
     // Back button, then a different booth: the vendor must release the first
     // one deliberately, never silently accumulate a second.
     const second = await request(app)
-      .post(`/applications/${application.id}/booth`)
+      .post(`/applications/${application.id}/select`)
       .query({ token: statusToken(application.id) })
       .send({ boothId: booths[1].id });
     expect(second.status).toBe(409);
-    expect(second.body.code).toBe('ALREADY_HOLDING_BOOTH');
+    // A held space takes the application out of choosing (spec 037 phase 5).
+    expect(second.body.code).toBe('NOT_AWAITING_SELECTION');
 
     expect(await prisma.booth.findMany({ where: { holdApplicationId: application.id } })).toHaveLength(1);
     expect(await prisma.booth.findUnique({ where: { id: booths[1].id } })).toMatchObject({ status: 'AVAILABLE' });
