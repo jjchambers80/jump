@@ -440,6 +440,16 @@ test.describe('Draft theme preview (038K)', () => {
     await expect.poll(async () => (await context.cookies()).some((c) => c.name === 'jump_theme_preview')).toBe(false);
   });
 
+  test('a preview link redirects to the public host, not the server listener', async ({ request }) => {
+    // Railway's proxy: request.url is the internal listener; the browser's host arrives forwarded.
+    const res = await request.get(`/api/storefront/preview?token=${previewToken('sig')}`, {
+      maxRedirects: 0,
+      headers: { 'x-forwarded-host': 'frontend-production-43e9.up.railway.app', 'x-forwarded-proto': 'https' },
+    });
+    expect(res.status()).toBe(307);
+    expect(res.headers().location).toBe('https://frontend-production-43e9.up.railway.app/organizations/theme-home');
+  });
+
   test('preview links never redirect off-site on exit', async ({ request }) => {
     const res = await request.get('/api/storefront/preview?to=//evil.example', { maxRedirects: 0 });
     expect(res.status()).toBe(307);

@@ -18,6 +18,19 @@ function claims(token: string): { orgId?: string; exp?: number } {
   }
 }
 
+/**
+ * The address the browser used. Behind Railway's proxy `request.url` names the
+ * server's own listener (localhost:3001), so redirects must come from the
+ * forwarded / Host header instead.
+ */
+function publicUrl(path: string, request: Request) {
+  const url = new URL(request.url);
+  const first = (name: string) => request.headers.get(name)?.split(',')[0].trim();
+  const host = first('x-forwarded-host') || first('host') || url.host;
+  const proto = first('x-forwarded-proto') || url.protocol.replace(':', '');
+  return new URL(path, `${proto}://${host}`);
+}
+
 /** Only same-site paths: never an open redirect. */
 function safePath(to: string | null) {
   return to && to.startsWith('/') && !to.startsWith('//') ? to : '/';
@@ -27,16 +40,16 @@ export function GET(request: Request) {
   const url = new URL(request.url);
   const token = url.searchParams.get('token');
   if (!token) {
-    const response = NextResponse.redirect(new URL(safePath(url.searchParams.get('to')), url));
+    const response = NextResponse.redirect(publicUrl(safePath(url.searchParams.get('to')), request));
     response.cookies.set(PREVIEW_COOKIE, '', { path: '/', maxAge: 0 });
     return response;
   }
   // Read, not trusted: the backend verifies the signature on every render.
   const { orgId, exp } = claims(token);
   if (!orgId || !/^[A-Za-z0-9_-]{1,64}$/.test(orgId)) return new NextResponse('Invalid preview link', { status: 400 });
-  const host = request.headers.get('host');
-  const home = isPlatformHost(host || '', PLATFORM_HOSTS) ? `/organizations/${orgId}` : '/';
-  const response = NextResponse.redirect(new URL(home, url));
+  const target = publicUrl('/', request);
+  const home = isPlatformHost(target.host, PLATFORM_HOSTS) ? `/organizations/${orgId}` : '/';
+  const response = NextResponse.redirect(new URL(home, target));
   response.cookies.set(PREVIEW_COOKIE, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
