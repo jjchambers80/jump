@@ -19,8 +19,17 @@ export const DOCUMENT_MIME_TO_EXT = {
   'application/pdf': 'pdf',
 };
 
-export const ALLOWED_MIME_TO_EXT = { ...IMAGE_MIME_TO_EXT, ...DOCUMENT_MIME_TO_EXT };
+// Theme Hero background videos: stored as-is like documents, served with
+// byte ranges (Safari will not play a video without them).
+export const VIDEO_MIME_TO_EXT = {
+  'video/mp4': 'mp4',
+  'video/webm': 'webm',
+};
+
+export const ALLOWED_MIME_TO_EXT = { ...IMAGE_MIME_TO_EXT, ...DOCUMENT_MIME_TO_EXT, ...VIDEO_MIME_TO_EXT };
 
 export function isImageMime(mimeType) {
   return Object.prototype.hasOwnProperty.call(IMAGE_MIME_TO_EXT, mimeType);
 }
+
+export const VIDEO_EXTENSIONS = Object.values(VIDEO_MIME_TO_EXT);

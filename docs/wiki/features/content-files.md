@@ -5,7 +5,7 @@
 
 ## Overview
 
-**Content › Files** (`/admin/content/files`) is the organization's asset library: images (JPG, PNG, GIF, WebP) and PDFs uploaded once and linked from pages, blog posts, emails or social. Every file has a public, hash-protected URL that keeps working after a rename and is served with immutable caching. The list shows thumbnail, name + type, alt text, date added, size and how many pages / blog posts reference the file; hovering a row reveals **Copy link**, **Download** and **Delete**. Rows open a detail page with the preview, an editable name and alt text, details, *Used in* links, a click-to-set focal point for images and a **Download** button. Nothing saves until the sticky save bar's **Save**.
+**Content › Files** (`/admin/content/files`) is the organization's asset library: images (JPG, PNG, GIF, WebP), videos (MP4, WebM — theme Hero backgrounds) and PDFs uploaded once and linked from pages, blog posts, emails or social. Every file has a public, hash-protected URL that keeps working after a rename and is served with immutable caching. The list shows thumbnail, name + type, alt text, date added, size and how many pages / blog posts reference the file; hovering a row reveals **Copy link**, **Download** and **Delete**. Rows open a detail page with the preview, an editable name and alt text, details, *Used in* links, a click-to-set focal point for images and a **Download** button. Nothing saves until the sticky save bar's **Save**.
 
 **Content** is a new sidebar section (this feature adds it); **Menus** (spec 027) and **Blog posts** (spec 026) join it as nested items.
 
@@ -35,7 +35,7 @@
 
 | Method | Path | Notes |
 |--------|------|-------|
-| `GET` | `/admin/files` | `q`, `type=image|pdf`, `sort=created_desc|created_asc|name|size_desc`, `page`, `pageSize` (≤ 50) → `{ files, total, page, pageSize }` |
+| `GET` | `/admin/files` | `q`, `type=image|video|pdf`, `sort=created_desc|created_asc|name|size_desc`, `page`, `pageSize` (≤ 50) → `{ files, total, page, pageSize }` |
 | `POST` | `/admin/files` | multipart `files[]` (1–10, ≤ 20 MB each). 201 `{ files, errors: [{ name, message }] }` — partial success; 400 only when nothing was stored |
 | `POST` | `/admin/files/from-url` | `{ url }`; 10/min per user |
 | `POST` | `/admin/files/bulk-delete` | `{ ids }` → `{ deleted, failed }` |
@@ -48,7 +48,7 @@ All admin routes are `requireAuth` + `requireOrganizer` and act on `activeOrgFor
 
 ## Storage
 
-- Bytes are content-addressed: images go through `ImageService.processUpload(…, 'store_file')` (`original/<hash>.<ext>` + `thumb`/`card`/`hero` variants); PDFs are stored once at `documents/<hash>.pdf`. Two organizations uploading the same bytes share one `File` row and one object, each with its own `StoreFile`.
+- Bytes are content-addressed: images go through `ImageService.processUpload(…, 'store_file')` (`original/<hash>.<ext>` + `thumb`/`card`/`hero` variants); PDFs and videos are stored once at `documents/<hash>.<ext>` (the public route answers `Range` requests with 206, which Safari needs to play a video). Two organizations uploading the same bytes share one `File` row and one object, each with its own `StoreFile`.
 - Public URL: `${BACKEND_URL}/files/:id/:hash/:slug.:ext`, or the bucket/CDN URL when `BUCKET_PUBLIC_URL` is set.
 - Deleting a `StoreFile` deletes its `Image` row; the `File` and bytes are removed by `POST /images/cleanup` once nothing references them.
 

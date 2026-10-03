@@ -210,7 +210,7 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
   const services = useMemo(
     () => ({
       registerFile: (file: StoreFile) =>
-        setFiles((prev) => ({ ...prev, [file.id]: { url: file.url, width: file.width, height: file.height, alt: file.altText } })),
+        setFiles((prev) => ({ ...prev, [file.id]: { url: file.url, width: file.width, height: file.height, alt: file.altText, mimeType: file.mimeType } })),
       fileUrl: (fileId: string) => files[fileId]?.url ?? null,
     }),
     [files],

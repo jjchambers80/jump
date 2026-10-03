@@ -15,6 +15,7 @@ import {
   ALLOWED_MIME_TO_EXT,
   FILE_NAME_MAX,
   MAX_FILE_BYTES,
+  VIDEO_EXTENSIONS,
   isImageMime,
 } from '../utils/fileLimits.js';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
@@ -75,6 +76,7 @@ class StoreFileService {
     const where = { organizationId };
     if (query.type === 'image') where.image = { isNot: null };
     if (query.type === 'pdf') where.extension = 'pdf';
+    if (query.type === 'video') where.extension = { in: VIDEO_EXTENSIONS };
     const q = typeof query.q === 'string' ? query.q.trim() : '';
     if (q) {
       where.OR = [
@@ -125,7 +127,7 @@ class StoreFileService {
     const mimeType = await imageService.sniffMimeType(buffer);
     const extension = ALLOWED_MIME_TO_EXT[mimeType];
     if (!extension) {
-      throw new ValidationError('Only JPG, PNG, GIF, WebP images and PDF files are supported');
+      throw new ValidationError('Only JPG, PNG, GIF, WebP images, MP4 and WebM videos and PDF files are supported');
     }
     if (claimedMimeType && claimedMimeType !== mimeType) {
       logger.warn('Store file MIME mismatch', { claimed: claimedMimeType, actual: mimeType });
@@ -330,7 +332,7 @@ class StoreFileService {
       organizationId: row.organizationId,
       name: row.name,
       extension: row.extension,
-      kind: row.image ? 'image' : 'document',
+      kind: row.image ? 'image' : VIDEO_EXTENSIONS.includes(row.extension) ? 'video' : 'document',
       mimeType: row.file.mimeType,
       sizeBytes: row.file.sizeBytes,
       width: row.width,

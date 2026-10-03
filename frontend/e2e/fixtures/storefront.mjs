@@ -208,6 +208,26 @@ const widthsDocument = {
   ],
 };
 
+/** Hero with a background video: full width, filling the window below the header. */
+const videoDocument = {
+  root: { props: { title: 'Home' } },
+  content: [
+    {
+      type: 'Hero',
+      props: {
+        id: 'Hero-video',
+        heading: 'Become a vendor',
+        video: { fileId: 'loop' },
+        image: { fileId: 'cover', decorative: true },
+        height: 'screen',
+        sectionWidth: 'full',
+        paddingTop: 0,
+        blocks: [],
+      },
+    },
+  ],
+};
+
 /** orgId → { render, routes, gate? } */
 export const FIXTURES = {
   'theme-home': { render: render('theme-home', { template: homeDocument }), routes: {} },
@@ -215,6 +235,11 @@ export const FIXTURES = {
   'theme-blocks': (() => {
     const base = render('theme-blocks', { template: blocksDocument });
     return { render: { ...base, resolved: { ...base.resolved, files: { cover: { url: PARITY_COVER, alt: 'The stage at night' } } } }, routes: {} };
+  })(),
+  'theme-video': (() => {
+    const base = render('theme-video', { template: videoDocument });
+    const files = { cover: { url: PARITY_COVER, alt: null }, loop: { url: '/uploads/hero-loop.mp4', alt: null, mimeType: 'video/mp4' } };
+    return { render: { ...base, resolved: { ...base.resolved, files } }, routes: {} };
   })(),
   'theme-parity': { render: render('theme-parity', { organization: { coverUrl: PARITY_COVER } }), routes: {} },
   'theme-parity-dark': {

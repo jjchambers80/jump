@@ -235,6 +235,7 @@ export default function FilesPage() {
             >
               <option value="all">All</option>
               <option value="image">Images</option>
+              <option value="video">Videos</option>
               <option value="pdf">PDFs</option>
             </select>
             <div className="relative min-w-[12rem] flex-1">

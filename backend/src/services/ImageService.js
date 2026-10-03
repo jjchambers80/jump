@@ -4,6 +4,7 @@ import { prisma } from '@jump/db';
 import logger from '../utils/logger.js';
 import { ValidationError, NotFoundError } from '../middleware/errorHandler.js';
 import { getStorageBackend } from './storage/index.js';
+import { DOCUMENT_MIME_TO_EXT, VIDEO_MIME_TO_EXT } from '../utils/fileLimits.js';
 
 const VARIANTS = {
   thumb: { width: 128, height: 128, fit: 'cover' },
@@ -277,8 +278,9 @@ class ImageService {
         await this.storage.delete(variantKey(variant, file.hash));
       }
       // Content › Files documents (spec 025) live under documents/<hash>.<ext>.
-      if (file.mimeType === 'application/pdf') {
-        await this.storage.delete(`documents/${file.hash}.pdf`);
+      const documentExt = DOCUMENT_MIME_TO_EXT[file.mimeType] || VIDEO_MIME_TO_EXT[file.mimeType];
+      if (documentExt) {
+        await this.storage.delete(`documents/${file.hash}.${documentExt}`);
       }
       await prisma.file.delete({ where: { id: file.id } });
       deleted++;

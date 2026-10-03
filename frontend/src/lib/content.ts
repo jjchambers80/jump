@@ -12,12 +12,14 @@ export const ACCEPTED_FILE_TYPES = [
   'image/png',
   'image/gif',
   'image/webp',
+  'video/mp4',
+  'video/webm',
   'application/pdf',
 ];
 export const ACCEPT_ATTRIBUTE =
-  '.jpg,.jpeg,.png,.gif,.webp,.pdf,image/jpeg,image/png,image/gif,image/webp,application/pdf';
+  '.jpg,.jpeg,.png,.gif,.webp,.mp4,.webm,.pdf,image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,application/pdf';
 
-export type StoreFileKind = 'image' | 'document';
+export type StoreFileKind = 'image' | 'video' | 'document';
 
 export interface StoreFileReference {
   kind: 'PAGE' | 'BLOG_POST';
@@ -59,7 +61,7 @@ export interface StoreFileList {
   pageSize: number;
 }
 
-export type FileTypeFilter = 'all' | 'image' | 'pdf';
+export type FileTypeFilter = 'all' | 'image' | 'video' | 'pdf';
 export type FileSort = 'created_desc' | 'created_asc' | 'name' | 'size_desc';
 
 export interface StoreFileListQuery {
@@ -96,8 +98,8 @@ export function formatDateAdded(value: string): string {
 /** Client-side pre-check so obviously wrong picks fail before the upload. */
 export function validateLocalFile(file: File): string | null {
   const byType = ACCEPTED_FILE_TYPES.includes(file.type);
-  const byName = /\.(jpe?g|png|gif|webp|pdf)$/i.test(file.name);
-  if (!byType && !byName) return 'Only JPG, PNG, GIF, WebP images and PDF files are supported';
+  const byName = /\.(jpe?g|png|gif|webp|mp4|webm|pdf)$/i.test(file.name);
+  if (!byType && !byName) return 'Only JPG, PNG, GIF, WebP images, MP4 and WebM videos and PDF files are supported';
   if (file.size > MAX_FILE_MB * 1024 * 1024) return `Must be ${MAX_FILE_MB} MB or smaller`;
   return null;
 }

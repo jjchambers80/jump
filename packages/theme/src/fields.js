@@ -27,6 +27,8 @@ export const range = (label, min, max, { step = 1, unit = '', default: def = min
 export const toggle = (label, def = false) => ({ kind: 'toggle', label, default: def });
 export const colorScheme = (label = 'Color scheme', def = 'scheme-1') => ({ kind: 'colorScheme', label, default: def });
 export const image = (label) => ({ kind: 'image', label, default: null });
+/** An MP4 or WebM from Content › Files: `{ fileId }`. Always decorative (muted, no captions needed). */
+export const video = (label) => ({ kind: 'video', label, default: null });
 export const link = (label, def = null) => ({ kind: 'link', label, default: def });
 export const reference = (label, target) => ({ kind: 'reference', label, target, default: null });
 export const datetime = (label) => ({ kind: 'datetime', label, default: null });
@@ -99,6 +101,14 @@ export function checkField(spec, value, ctx = {}) {
       if (value.alt !== undefined && (typeof value.alt !== 'string' || value.alt.length > ALT_MAX))
         return { error: `alt text must be at most ${ALT_MAX} characters` };
       if (!value.decorative && !String(value.alt ?? '').trim()) return { error: 'needs alt text, or mark it decorative' };
+      return { value };
+    }
+    case 'video': {
+      if (value === null) return { value };
+      if (!isPlainObject(value)) return { error: 'must be a video' };
+      const extra = Object.keys(value).filter((k) => k !== 'fileId');
+      if (extra.length) return { error: `has unknown keys: ${extra.join(', ')}` };
+      if (typeof value.fileId !== 'string' || !ID_RE.test(value.fileId)) return { error: 'must reference a file' };
       return { value };
     }
     case 'link': {
