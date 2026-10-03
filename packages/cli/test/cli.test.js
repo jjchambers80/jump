@@ -43,6 +43,7 @@ function fakeApi() {
     if (req.headers.authorization !== `Bearer ${TOKEN}`) return send(res, 401, { message: 'Invalid token', code: 'DEVELOPER_TOKEN_INVALID' });
     if (url.pathname === '/developer/me') return send(res, 200, { user: { email: 'dev@river.test' }, organizationId: 'org1' });
     if (url.pathname === '/developer/token' && req.method === 'DELETE') return send(res, 204);
+    if (url.pathname === '/admin/themes/schema' && state.kit) return send(res, 200, state.kit);
     if (url.pathname === '/admin/themes') return send(res, 200, { themes: Object.values(state.themes).map(({ docs, ...t }) => t) });
     const m = url.pathname.match(/^\/admin\/themes\/([^/]+)(\/.*)?$/);
     const theme = m && state.themes[m[1]];
@@ -91,14 +92,16 @@ function fakeApi() {
 
 const quiet = async (fn) => {
   const logs = [];
-  const { log, error } = console;
+  const { log, error, warn } = console;
   console.log = (...a) => logs.push(a.join(' '));
   console.error = (...a) => logs.push(a.join(' '));
+  console.warn = (...a) => logs.push(a.join(' '));
   try {
     return { code: await fn(), logs: logs.join('\n') };
   } finally {
     console.log = log;
     console.error = error;
+    console.warn = warn;
   }
 };
 
@@ -172,7 +175,8 @@ describe('jump CLI', () => {
     assert.deepEqual([lock.themeId, lock.role, lock.themeVersion], ['live', 'MAIN', 1]);
     assert.deepEqual(lock.documents, { header: 1, footer: 0, home: 2, events: 0 });
     assert.deepEqual(JSON.parse(await readFile(join(dir, 'documents/home.json'), 'utf8')), home('Live'));
-    assert.match(await readFile(join(dir, 'AGENTS.md'), 'utf8'), /Never invent a fileId/);
+    assert.match(await readFile(join(dir, '.jump/AGENTS.md'), 'utf8'), /Never invent a fileId/);
+    assert.match(await readFile(join(dir, 'AGENTS.md'), 'utf8'), /@\.jump\/AGENTS\.md/);
     assert.equal(await readFile(join(dir, 'CLAUDE.md'), 'utf8'), '@AGENTS.md\n');
     const schema = JSON.parse(await readFile(join(dir, '.jump/schema.json'), 'utf8'));
     assert.ok(schema.sections.Hero && schema.settings.colors);
@@ -189,6 +193,22 @@ describe('jump CLI', () => {
     const { code, logs } = await quiet(() => main(['theme', 'check', '--dir', dir]));
     assert.equal(code, 1);
     assert.match(logs, /documents\.home/);
+  });
+
+  it("writes the server's schema and guide; a stale CLI leaves validation to the server", async () => {
+    api.state.kit = { version: 'newer', schema: { sections: { Marquee: {} } }, guide: '# Server guide\n' };
+    try {
+      const pulled = await quiet(() => main(['theme', 'pull', '--dir', dir]));
+      assert.match(pulled.logs, /older than the server/);
+      assert.equal(await readFile(join(dir, '.jump/AGENTS.md'), 'utf8'), '# Server guide\n');
+      assert.equal(JSON.parse(await readFile(join(dir, '.jump/schema.json'), 'utf8')).version, 'newer');
+      await writeFile(join(dir, 'documents/home.json'), JSON.stringify({ root: { props: {} }, content: [{ type: 'Marquee', props: { id: 'x' } }] }));
+      const { logs } = await quiet(() => main(['theme', 'check', '--dir', dir]));
+      assert.match(logs, /No errors/);
+    } finally {
+      api.state.kit = null;
+      await quiet(() => main(['theme', 'pull', '--dir', dir]));
+    }
   });
 
   it('dev: creates the development theme, carries the folder over, prints a preview link', async () => {

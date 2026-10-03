@@ -5,7 +5,11 @@
 //   content.json           default-content overrides
 //   documents/<key>.json   one Puck document per key (header, footer, home, events, …)
 //   .jump/schema.json      every section, block, field and limit the server accepts
-//   AGENTS.md, CLAUDE.md   instructions for AI coding assistants (written once, never overwritten)
+//   .jump/AGENTS.md        instructions for AI coding assistants
+//   AGENTS.md, CLAUDE.md   pointers to .jump/AGENTS.md (written once, never overwritten)
+//
+// .jump/ comes from the server (GET /admin/themes/schema) on every pull, so a
+// deploy reaches every session without a new CLI.
 //
 // The lock's hashes say what changed since the pull, so a push sends only
 // those keys with the versions they were pulled at (409 if someone else saved).
@@ -13,7 +17,7 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { themeSchema } from '@jump/theme';
+import { themeKit } from '@jump/theme';
 
 export const LOCK = 'jump.theme.json';
 const KEY_RE = /^[a-z_]+(:[A-Za-z0-9_-]+)?$/;
@@ -120,47 +124,32 @@ export function lockAfterSave(lock, local, body, result) {
 
 export { checkTheme } from '@jump/theme';
 
-const AGENTS_MD = `# Jump theme
 
-This folder is an Eventimus (Jump) online store theme, pulled with the Jump CLI.
-Edit the JSON files to change the store's look and content, then push them.
+const POINTER_MD = `# Jump theme
 
-## Files
+Read \`.jump/AGENTS.md\` before editing: the rules for this theme, rewritten from the server on every \`jump theme pull\`.
 
-- \`settings.json\`: theme settings (colors, fonts, layout, social links). Only the values that differ from the preset.
-- \`content.json\`: overrides of the storefront's default wording.
-- \`documents/<key>.json\`: one page layout each (\`header\`, \`footer\`, \`home\`, \`events\`). Each is \`{ root: { props }, content: [ { type, props } ] }\`.
-- \`.jump/schema.json\`: every section and block type, its fields (kind, options, max length) and the limits. **Use only what it lists.**
-- \`jump.theme.json\`: the lock (theme id, versions). Never edit it.
-
-## Rules
-
-1. Edit only \`settings.json\`, \`content.json\` and \`documents/*.json\`. There is no CSS, HTML, script or template code to edit, and none is accepted.
-2. Every section needs a unique \`props.id\`. Sections marked \`locked\` in the schema (Header, Footer, EventList) must stay in their document.
-3. Images are \`{ "fileId": "<id>", "alt": "…" }\` references to files already uploaded in Content › Files. Never invent a fileId; leave an image unset if you have none. Every image needs \`alt\` text or \`"decorative": true\`.
-4. Widths: the theme's page width is \`settings.json\` \`layout.pageWidth\` (1000-1600 px). A page can override it with \`root.props.pageWidth\` in its document. Each section takes \`props.sectionWidth\`: \`page\` (default), \`narrow\`, \`wide\` or \`full\` (edge to edge).
-5. Rich text fields take simple HTML (p, strong, em, a, ul, ol, li, h2-h4); the server sanitises it.
-6. After every change run \`jump theme check\` and fix every error before pushing.
-7. Push with \`jump theme push\` to the development theme and check the preview link. Never push or publish to the live theme (\`--live\`, \`jump theme publish\`) unless the user explicitly asks.
-
-## Commands
-
-\`\`\`
-jump theme check     # validate locally, like the server does
-jump theme dev       # push to your development theme on every change, print the preview link
-jump theme push      # push changed files to the theme in jump.theme.json
-jump theme preview   # a fresh preview link
-jump theme publish   # make this theme live (asks first)
-\`\`\`
+@.jump/AGENTS.md
 `;
 
-/** Agent instructions and the schema. The instructions are written only once. */
-export async function writeAgentKit(dir) {
+/** Version of the schema + guide this CLI was built with; the server's is in .jump/schema.json. */
+export const localKitVersion = () => hashOf(themeKit());
+
+/** The .jump/schema.json version, or null for a folder pulled before versions existed. */
+export const pulledKitVersion = (dir) => readJson(join(dir, '.jump', 'schema.json'), {}).then((s) => s.version ?? null).catch(() => null);
+
+/**
+ * Write the server's schema and guide (`kit`, from GET /admin/themes/schema,
+ * or this CLI's own when the server predates it) into .jump/, and the
+ * pointer files once. Returns the pointer files written.
+ */
+export async function writeAgentKit(dir, kit = { ...themeKit(), version: localKitVersion() }) {
   await mkdir(join(dir, '.jump'), { recursive: true });
-  await writeFile(join(dir, '.jump', 'schema.json'), json(themeSchema()));
+  await writeFile(join(dir, '.jump', 'schema.json'), json({ version: kit.version, ...kit.schema }));
+  await writeFile(join(dir, '.jump', 'AGENTS.md'), kit.guide);
   const written = [];
   for (const [name, body] of [
-    ['AGENTS.md', AGENTS_MD],
+    ['AGENTS.md', POINTER_MD],
     ['CLAUDE.md', '@AGENTS.md\n'],
   ]) {
     try {

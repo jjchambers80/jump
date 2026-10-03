@@ -17,7 +17,8 @@ Three pieces make it work:
 | `packages/cli/bin/jump.js` | `jump` executable (run from the monorepo as `npx jump`) |
 | `packages/cli/src/commands.js` | All commands: login, logout, whoami, theme list/pull/check/push/dev/preview/publish |
 | `packages/cli/src/login.js` | Loopback listener + PKCE S256 + opens the browser |
-| `packages/cli/src/themeDir.js` | Theme folder layout, lock file, change diff, local validation, agent kit (`AGENTS.md`/`CLAUDE.md`), `.jump/schema.json` |
+| `packages/cli/src/themeDir.js` | Theme folder layout, lock file, change diff, local validation, agent kit (`.jump/schema.json` + `.jump/AGENTS.md` from the server, `AGENTS.md`/`CLAUDE.md` pointers) |
+| `packages/theme/src/agents.js` | The AI-assistant guide and `themeKit()`, served by `GET /admin/themes/schema` |
 | `packages/cli/src/config.js` | Credentials file (`~/.config/jump/credentials.json`, mode 0600) |
 | `packages/cli/src/client.js` | `fetch` wrapper with the bearer token; `ApiError` carries the backend `code` |
 | `backend/src/api/routes/developer.js` | Authorize, token exchange, whoami, self-revoke, Settings › Developers list/revoke |
@@ -64,10 +65,11 @@ jump.theme.json        lock: store, themeId, themeName, role, themeVersion, docu
 settings.json          setting overrides of the preset
 content.json           default-content overrides
 documents/<key>.json   one Puck document per key (header, footer, home, events, …)
-.jump/schema.json      every section type and field the AI may use (from @jump/theme)
-AGENTS.md, CLAUDE.md   rules for AI assistants, written once, never overwritten
+.jump/schema.json      every section type and field the AI may use (from the server, on every pull)
+.jump/AGENTS.md        rules for AI assistants (from the server, on every pull)
+AGENTS.md, CLAUDE.md   pointers to .jump/AGENTS.md, written once, never overwritten
 ```
-Widths are plain JSON too: `settings.json` `layout.pageWidth`, a document's `root.props.pageWidth`, and each section's `props.sectionWidth` (see [Storefront Theme Sections](theme-sections.md#layout-widths)). Folders pulled before this change keep their old `AGENTS.md` (written once); `.jump/schema.json` is rewritten on every pull, so `jump theme pull` picks up the new fields.
+Widths are plain JSON too: `settings.json` `layout.pageWidth`, a document's `root.props.pageWidth`, and each section's `props.sectionWidth` (see [Storefront Theme Sections](theme-sections.md#layout-widths)). `jump theme pull` fetches the schema and guide from `GET /admin/themes/schema`, so a deploy reaches every folder without a new CLI. The response carries a `version` (sha256 of `themeKit()`); when it differs from the CLI's own `@jump/theme`, the CLI warns that it is out of date and skips local validation, leaving `/save` to decide (a stale CLI would refuse fields the server accepts). A 404 (older server) falls back to the CLI's own kit. Folders pulled before `.jump/AGENTS.md` existed keep their old root `AGENTS.md`; pull warns until it points at `.jump/AGENTS.md`.
 
 `jump theme check` runs the same `@jump/theme` validators as the server and never touches the network.
 
@@ -114,7 +116,7 @@ See [database-architecture.md](database-architecture.md) for the full schema.
 - **Never widen tokens by accident.** A new scope or a new router that mounts `allowDeveloperToken` needs a contract test proving the token still gets 401 on every other router. See root `AGENTS.md` gotcha 32.
 - **Skip `requireAuth` explicitly.** A router that accepts tokens must skip `requireAuth` when `req.user.developerTokenId` is set (see the top of `routes/themes.js`), since `requireAuth` would reject the bearer.
 - **Membership is re-checked per request**, so removing someone from the organization kills their tokens immediately. SYSTEM_ADMIN can approve for any active store.
-- **The CLI is monorepo-only for now.** It validates with its own `@jump/theme` and writes `.jump/schema.json` from it; there is no server schema endpoint. Publishing `@jump/cli` means publishing or bundling `@jump/theme` too.
+- **The CLI is monorepo-only for now.** `~/.local/bin/jump` points at a checkout; keep that checkout on `main`. The server's schema always wins (above), but local `jump theme check` only runs when the CLI's `@jump/theme` matches the server's. Publishing `@jump/cli` means publishing or bundling `@jump/theme` too.
 - **The live theme has no preview link** (400): view the store instead.
 - **`jump theme dev` names the theme by email.** Two people get two development themes, and each counts toward the 20-theme limit.
 - **Preview cookie is host-only.** A link minted for a custom domain works only on that domain; the route never redirects off-site (`safePath`).

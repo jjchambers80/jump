@@ -32,6 +32,7 @@ export default function HeroCarouselFrame({
   showArrows,
   showDots,
   labels,
+  edgeToEdge = false,
   children,
 }: {
   id: string;
@@ -39,8 +40,11 @@ export default function HeroCarouselFrame({
   showArrows: boolean;
   showDots: boolean;
   labels: CarouselLabels;
+  /** sectionWidth "full": square corners so the frame meets the viewport edges. */
+  edgeToEdge?: boolean;
   children: ReactNode;
 }) {
+  const corners = edgeToEdge ? '' : 'rounded-[32px]';
   const frameRef = useRef<HTMLElement>(null);
   const [count, setCount] = useState(0);
   const [index, setIndex] = useState(0);
@@ -151,7 +155,7 @@ export default function HeroCarouselFrame({
       aria-roledescription="carousel"
       aria-label={labels.carousel}
       data-testid="hero-carousel"
-      className="relative overflow-hidden rounded-[32px] bg-slate-900"
+      className={`relative overflow-hidden bg-slate-900 ${corners}`}
       onMouseEnter={() => setHolding(true)}
       onMouseLeave={() => setHolding(false)}
       onKeyDown={(e) => {
@@ -173,7 +177,7 @@ export default function HeroCarouselFrame({
       >
         {children}
       </div>
-      <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[32px] ring-1 ring-inset ring-white/10" />
+      <div aria-hidden className={`pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10 ${corners}`} />
       <p className="sr-only" aria-live="polite" aria-atomic="true">
         {announce && many ? slideLabel(labels.slide, index + 1, count) : ''}
       </p>
