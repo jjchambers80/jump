@@ -23,6 +23,7 @@
     "db:backfill:033": "node src/scripts/backfill-venue-time-zones.js",
     "db:backfill:image-dimensions": "node src/scripts/backfill-image-dimensions.js",
     "report:033": "node src/scripts/reconcile-venue-time-zones.js",
+    "report:refunds": "node src/scripts/audit-refund-completeness.js",
     "lint": "eslint src tests --ext .js",
     "format": "prettier --write \"src/**/*.js\" \"tests/**/*.js\"",
     "verify:stripe": "node src/scripts/verify-stripe-testmode.js",
