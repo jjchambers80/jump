@@ -98,4 +98,4 @@ Application orders have no tickets, so nothing is voided.
 - `backend/src/api/routes/webhooks.js` — `charge.dispute.*` dispatch
 - `backend/src/scripts/reconcile-disputes.js` — `npm run report:disputes`
 - `backend/tests/contract/disputes.test.js` — every fixture replayed twice
-- `packages/db/prisma/migrations/20261009100000_disputes/`
+- `packages/db/prisma/migrations/20261022300000_disputes/`
