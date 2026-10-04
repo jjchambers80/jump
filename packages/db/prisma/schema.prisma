@@ -1816,9 +1816,9 @@ model Application {
   updatedAt DateTime @updatedAt
 
   form      ApplicationForm       @relation(fields: [formId], references: [id])
-  event     Event?                @relation(fields: [eventId], references: [id])
+  event     Event?                @relation(fields: [eventId], references: [id], onDelete: Restrict)
   contact   Contact               @relation(fields: [contactId], references: [id])
-  profile   ApplicantProfile?     @relation(fields: [profileId], references: [id])
+  profile   ApplicantProfile?     @relation(fields: [profileId], references: [id], onDelete: Restrict)
   tier      ApplicationTier?      @relation(fields: [tierId], references: [id])
   answers   ApplicationAnswer[]
   decisions ApplicationDecision[]

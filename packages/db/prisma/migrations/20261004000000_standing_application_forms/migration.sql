@@ -25,9 +25,9 @@ ALTER TABLE "Application"
   DROP CONSTRAINT "Application_eventId_fkey",
   DROP CONSTRAINT "Application_profileId_fkey",
   ADD CONSTRAINT "Application_eventId_fkey"
-    FOREIGN KEY ("eventId") REFERENCES "Event"("id") ON DELETE SET NULL ON UPDATE CASCADE,
+    FOREIGN KEY ("eventId") REFERENCES "Event"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
   ADD CONSTRAINT "Application_profileId_fkey"
-    FOREIGN KEY ("profileId") REFERENCES "ApplicantProfile"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    FOREIGN KEY ("profileId") REFERENCES "ApplicantProfile"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 ALTER TABLE "ApplicationMessageTemplate"
   ADD COLUMN "scope" "ApplicationMessageScope" NOT NULL DEFAULT 'EVENT';

@@ -230,6 +230,16 @@ describe('Standing applications contract (spec 044A)', () => {
     expect(response.body.message).toMatch(/approved, rejected, or waitlisted/);
   });
 
+  it('never turns an event application into a standing one when its event is deleted', async () => {
+    const contact = await prisma.contact.create({ data: { organizationId: org.id, email: `fk@${TAG}.test` } });
+    const application = await prisma.application.create({
+      data: { formId: eventForm.id, eventId: event.id, organizationId: org.id, contactId: contact.id, status: 'SUBMITTED', statusTokenHash: `${TAG}-fk` },
+    });
+    await expect(prisma.event.delete({ where: { id: event.id } })).rejects.toThrow();
+    expect((await prisma.application.findUnique({ where: { id: application.id } })).eventId).toBe(event.id);
+    await prisma.application.delete({ where: { id: application.id } });
+  });
+
   it('refuses submissions after a standing form is CLOSED, including honeypots', async () => {
     expect((await setStatus(generalForm.id, 'CLOSED')).status).toBe(200);
     const before = await prisma.application.count({ where: { formId: generalForm.id } });
