@@ -797,42 +797,51 @@ function CustomerDetailPageContent() {
                 <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Applications</h2>
               </div>
               <div className="divide-y divide-gray-100 dark:divide-slate-700/50">
-                {customer.applications.map((application) => (
-                  <Link
-                    key={application.id}
-                    href={application.detailUrl}
-                    className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
-                  >
-                    <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-slate-700 flex-shrink-0 overflow-hidden flex items-center justify-center">
-                      {application.event.logoUrl ? (
-                        <img src={resolveAssetUrl(application.event.logoUrl) || undefined} alt="" className="w-full h-full object-contain" />
-                      ) : (
-                        <svg className="w-5 h-5 text-gray-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6M7 4h10a2 2 0 012 2v14l-4-2-3 2-3-2-4 2V6a2 2 0 012-2z" />
-                        </svg>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                          {application.businessName || application.form.name}
-                        </span>
-                        <StatusBadge status={application.form.kind === 'FREE' ? application.status : application.paymentStatus} />
+                {customer.applications.map((application) => {
+                  const isStanding = application.eventId === null;
+                  return (
+                    <Link
+                      key={application.id}
+                      href={application.detailUrl}
+                      className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
+                    >
+                      <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-slate-700 flex-shrink-0 overflow-hidden flex items-center justify-center">
+                        {isStanding ? (
+                          <svg className="w-5 h-5 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                        ) : application.event.logoUrl ? (
+                          <img src={resolveAssetUrl(application.event.logoUrl) || undefined} alt="" className="w-full h-full object-contain" />
+                        ) : (
+                          <svg className="w-5 h-5 text-gray-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6M7 4h10a2 2 0 012 2v14l-4-2-3 2-3-2-4 2V6a2 2 0 012-2z" />
+                          </svg>
+                        )}
                       </div>
-                      <p className="text-xs text-gray-500 dark:text-slate-400 truncate">
-                        {application.event.name} &middot; {application.form.name}
-                        {application.tier ? ` \u2014 ${application.tier.name}` : ''}
-                      </p>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">{application.form.kind === 'FREE' ? 'Free' : formatCurrency(application.applicantPays)}</p>
-                      <p className="text-xs text-gray-500 dark:text-slate-400">
-                        {application.refunded > 0 ? `${formatCurrency(application.refunded)} refunded` : application.paidAt ? `Paid ${formatDate(application.paidAt)}` : application.status.toLowerCase()}
-                      </p>
-                    </div>
-                    <ChevronRightIcon className="w-4 h-4 text-gray-400 dark:text-slate-500 flex-shrink-0" />
-                  </Link>
-                ))}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                            {application.businessName || application.form.name}
+                          </span>
+                          <StatusBadge status={application.form.kind === 'FREE' ? application.status : application.paymentStatus} />
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-slate-400 truncate">
+                          {isStanding
+                            ? `Standing form · ${application.form.name}`
+                            : `${application.event.name} · ${application.form.name}`}
+                          {application.tier ? ` — ${application.tier.name}` : ''}
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">{application.form.kind === 'FREE' ? 'Free' : formatCurrency(application.applicantPays)}</p>
+                        <p className="text-xs text-gray-500 dark:text-slate-400">
+                          {application.refunded > 0 ? `${formatCurrency(application.refunded)} refunded` : application.paidAt ? `Paid ${formatDate(application.paidAt)}` : application.status.toLowerCase()}
+                        </p>
+                      </div>
+                      <ChevronRightIcon className="w-4 h-4 text-gray-400 dark:text-slate-500 flex-shrink-0" />
+                    </Link>
+                  );
+                })}
               </div>
             </div>
           )}

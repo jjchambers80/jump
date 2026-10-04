@@ -7,9 +7,23 @@ export const CUSTOMER_SEGMENTS: readonly CustomerSegment[] = [
   'Lapsed',
 ];
 
+export type CustomerSource = 'tickets' | 'rsvp' | 'subscribed' | 'form';
+
+export const CUSTOMER_SOURCES: readonly CustomerSource[] = [
+  'tickets',
+  'rsvp',
+  'subscribed',
+  'form',
+];
+
 export function customerSegmentFrom(value: string | null | undefined): CustomerSegment | '' {
   if (!value) return '';
   return CUSTOMER_SEGMENTS.find((segment) => segment.toLowerCase() === value.toLowerCase()) || '';
+}
+
+export function customerSourceFrom(value: string | null | undefined): CustomerSource | '' {
+  if (!value) return '';
+  return CUSTOMER_SOURCES.find((source) => source.toLowerCase() === value.toLowerCase()) || '';
 }
 
 export interface CustomerListState {
@@ -19,6 +33,8 @@ export interface CustomerListState {
   segment?: CustomerSegment | '';
   rsvp?: 'going' | '';
   eventId?: string;
+  source?: CustomerSource | '';
+  formId?: string;
   sort?: string;
   direction?: 'asc' | 'desc';
 }
@@ -31,6 +47,8 @@ export function customerListQuery(state: CustomerListState): URLSearchParams {
   if (state.segment) params.set('segment', state.segment);
   if (state.rsvp) params.set('rsvp', state.rsvp);
   if (state.rsvp && state.eventId) params.set('eventId', state.eventId);
+  if (state.source) params.set('source', state.source);
+  if (state.formId) params.set('formId', state.formId);
   if (state.sort) params.set('sort', state.sort);
   if (state.direction) params.set('direction', state.direction);
   return params;

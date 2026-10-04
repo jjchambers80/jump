@@ -46,6 +46,7 @@ const ORDER_SELECT = {
   select: {
     id: true,
     kind: true,
+    status: true,
     totalAmount: true,
     createdAt: true,
     paidAt: true,
@@ -84,6 +85,15 @@ function aggregates(orders, now = new Date()) {
 }
 
 function customerRow(contact, now = new Date()) {
+  // Source chips for the customer list (spec 044C)
+  const sources = [];
+  if (contact.orders?.some((o) => PAID_ORDER_STATUSES.includes(o.status))) sources.push('tickets');
+  if (contact.rsvps?.some((r) => r.status === 'GOING')) sources.push('rsvp');
+  if (contact.emailSubscribed) sources.push('subscribed');
+  const formSources = (contact.applications || [])
+    .filter((a) => a.status !== 'DRAFT' && a.form?.eventId === null)
+    .map((a) => ({ id: a.form.id, name: a.form.name }));
+
   return {
     id: contact.id,
     firstName: contact.firstName,
@@ -93,6 +103,8 @@ function customerRow(contact, now = new Date()) {
     note: contact.note,
     emailSubscribed: contact.emailSubscribed,
     tags: contact.tags,
+    sources,
+    formSources,
     ...aggregates(contact.orders, now),
     createdAt: contact.createdAt,
   };
@@ -152,10 +164,35 @@ export function customerNavigation(contacts, contactId, options = {}) {
   };
 }
 
-function customerWhere(organizationId, { search, tag, scope, rsvp, eventId } = {}) {
+const CUSTOMER_SOURCES = ['tickets', 'rsvp', 'subscribed', 'form'];
+
+function normalizedSource(source) {
+  return CUSTOMER_SOURCES.find((candidate) => candidate.toLowerCase() === String(source || '').toLowerCase());
+}
+
+function customerWhere(organizationId, { search, tag, scope, rsvp, eventId, source, formId } = {}) {
+  const validatedSource = normalizedSource(source);
+  // rsvp=going is kept as an alias for source=rsvp (backward compat)
+  const effectiveRsvp = validatedSource === 'rsvp' ? 'going' : rsvp;
+
   return {
     ...(organizationId && { organizationId }),
-    ...(rsvp === 'going'
+    ...(validatedSource === 'tickets'
+      ? { orders: { some: { status: { in: PAID_ORDER_STATUSES } } } }
+      : validatedSource === 'rsvp'
+      ? { rsvps: { some: { status: 'GOING', ...(eventId && { eventId }) } } }
+      : validatedSource === 'subscribed'
+      ? { emailSubscribed: true }
+      : validatedSource === 'form'
+      ? {
+          applications: {
+            some: {
+              status: { not: 'DRAFT' },
+              form: { eventId: null, ...(formId && { id: formId }) },
+            },
+          },
+        }
+      : effectiveRsvp === 'going'
       ? { rsvps: { some: { status: 'GOING', ...(eventId && { eventId }) } } }
       : customerPredicate(scope)),
     ...(tag && { tags: { has: tag } }),
@@ -183,19 +220,19 @@ class CustomerService {
    * List customers for an organization.
    *
    * @param {string|null} organizationId - null for system admins (unscoped)
-   * @param {Object} options - { page, limit, search, tag, scope, segment, rsvp, eventId, sort, direction }
+   * @param {Object} options - { page, limit, search, tag, scope, segment, rsvp, eventId, source, formId, sort, direction }
    * @returns {Promise<{ data: Customer[], pagination }>}
    */
   async getCustomersByOrganization(
     organizationId,
-    { page = 1, limit = 20, search, tag, scope, segment, rsvp, eventId, sort = 'createdAt', direction = 'desc' } = {}
+    { page = 1, limit = 20, search, tag, scope, segment, rsvp, eventId, source, formId, sort = 'createdAt', direction = 'desc' } = {}
   ) {
     page = Math.max(1, parseInt(page) || 1);
     limit = Math.max(1, parseInt(limit) || 20);
 
     // Segment and aggregate sorts are derived from paid orders, so filtering and
     // ordering happen before pagination. The same helper powers detail navigation.
-    const where = customerWhere(organizationId, { search, tag, scope, rsvp, eventId });
+    const where = customerWhere(organizationId, { search, tag, scope, rsvp, eventId, source, formId });
     const normalizedDirection = direction === 'asc' ? 'asc' : 'desc';
     const databaseOrder =
       sort === 'name'
@@ -210,7 +247,18 @@ class CustomerService {
       const [contacts, total] = await Promise.all([
         prisma.contact.findMany({
           where,
-          include: { orders: ORDER_SELECT },
+          include: {
+            orders: ORDER_SELECT,
+            rsvps: { where: { status: 'GOING' }, select: { status: true } },
+            applications: {
+              where: { status: { not: 'DRAFT' }, form: { eventId: null } },
+              select: {
+                id: true,
+                status: true,
+                form: { select: { id: true, name: true, eventId: true } },
+              },
+            },
+          },
           orderBy: databaseOrder,
           skip: (page - 1) * limit,
           take: limit,
@@ -227,7 +275,18 @@ class CustomerService {
     // query; compute them before slicing so pagination totals stay correct.
     const contacts = await prisma.contact.findMany({
       where,
-      include: { orders: ORDER_SELECT },
+      include: {
+        orders: ORDER_SELECT,
+        rsvps: { where: { status: 'GOING' }, select: { status: true } },
+        applications: {
+          where: { status: { not: 'DRAFT' }, form: { eventId: null } },
+          select: {
+            id: true,
+            status: true,
+            form: { select: { id: true, name: true, eventId: true } },
+          },
+        },
+      },
     });
     const ordered = filterAndSortCustomers(contacts, { segment, sort, direction });
     const total = ordered.length;
@@ -349,6 +408,7 @@ class CustomerService {
     // status (pending, due, paid, cancelled) — `orderStatus` carries it.
     const applications = (contact.applications || []).map((a) => {
       const o = a.order;
+      const isStanding = a.eventId === null;
       return {
         id: a.id,
         orderId: o?.id ?? null,
@@ -367,7 +427,10 @@ class CustomerService {
         submittedAt: a.submittedAt,
         createdAt: a.createdAt,
         event: a.event,
-        detailUrl: `/admin/events/${a.eventId}/applications/${a.id}`,
+        // Standing forms: link to Content › Forms submission detail
+        detailUrl: isStanding
+          ? `/admin/content/forms/${a.formId}/submissions/${a.id}`
+          : `/admin/events/${a.eventId}/applications/${a.id}`,
       };
     });
 

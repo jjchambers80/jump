@@ -8,8 +8,10 @@ import {
   customerDetailHref,
   customerListQuery,
   customerSegmentFrom,
+  customerSourceFrom,
   segmentBadgeClass,
   type CustomerSegment,
+  type CustomerSource,
 } from '@/lib/customers';
 import { customerScopeFrom, type CustomerScope } from '@/lib/customerNavigation';
 
@@ -21,6 +23,9 @@ interface Customer {
   location: string | null;
   note: string | null;
   emailSubscribed: boolean;
+  /** Source chips for the customer list (spec 044C) */
+  sources: string[];
+  formSources: { id: string; name: string }[];
   /** Orders + paid applications (spec 018). `orderCount` is the pre-018 alias. */
   transactionCount: number;
   ticketOrderCount: number;
@@ -51,14 +56,48 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
 }
 
+const SOURCE_LABEL: Record<string, string> = { tickets: 'Tickets', rsvp: 'RSVP', subscribed: 'Subscribed' };
+
+/** How a contact came in (spec 044C): one chip per source, one per standing form submitted. */
+function SourceChips({ customer }: { customer: Customer }) {
+  if (!customer.sources?.length && !customer.formSources?.length) {
+    return <span className="text-xs text-gray-400 dark:text-slate-500">—</span>;
+  }
+  return (
+    <ul className="flex flex-wrap gap-1" aria-label="Sources">
+      {customer.sources?.map((source) => (
+        <li key={source} className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 dark:bg-slate-700 dark:text-slate-200">
+          {SOURCE_LABEL[source] ?? source}
+        </li>
+      ))}
+      {customer.formSources?.map((form) => (
+        <li key={form.id} className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800 dark:bg-sky-900/40 dark:text-sky-200">
+          Form: {form.name}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function CustomersPageContent() {
   const { selectedOrgId } = useOrg();
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialSearch = searchParams.get('search') || '';
   const initialSegment = customerSegmentFrom(searchParams.get('segment'));
-  // Spec 032 phase 3: `all` also lists prospects (contacts with no paid order)
-  const [scope, setScope] = useState<CustomerScope>(() => customerScopeFrom(searchParams));
+  const initialSource = customerSourceFrom(searchParams.get('source'));
+  const initialFormId = searchParams.get('formId') || '';
+  const [source, setSource] = useState<CustomerSource | ''>(initialSource);
+  const [formId, setFormId] = useState<string>(initialFormId);
+
+  // Standing forms (spec 044) for the Source › form picker; loaded only once it is chosen.
+  const [standingForms, setStandingForms] = useState<{ id: string; name: string }[]>([]);
+
+  // source=form lists contacts with no paid order too, so it always runs on All contacts.
+  const [scope, setScope] = useState<CustomerScope>(() => {
+    if (initialSource === 'form') return 'all';
+    return customerScopeFrom(searchParams);
+  });
   const noun = scope === 'all' ? 'contact' : 'customer';
 
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -95,6 +134,8 @@ function CustomersPageContent() {
       if (segment) params.set('segment', segment);
       if (rsvp) params.set('rsvp', rsvp);
       if (rsvp && eventId) params.set('eventId', eventId);
+      if (source) params.set('source', source);
+      if (formId) params.set('formId', formId);
       params.set('sort', sort);
       params.set('direction', direction);
       const result = await api.get<CustomerListResponse>(`/admin/customers?${params}`);
@@ -106,19 +147,28 @@ function CustomersPageContent() {
     } finally {
       setLoading(false);
     }
-  }, [selectedOrgId, page, search, segment, rsvp, eventId, sort, direction, scope]);
+  }, [selectedOrgId, page, search, segment, rsvp, eventId, source, formId, sort, direction, scope]);
 
   useEffect(() => {
     fetchCustomers();
   }, [fetchCustomers]);
 
+  useEffect(() => {
+    if (!selectedOrgId || source !== 'form') return;
+    api
+      .get<{ data: { id: string; name: string }[] }>('/admin/standing-application-forms')
+      .then((result) => setStandingForms(result.data))
+      .catch(() => setStandingForms([]));
+  }, [selectedOrgId, source]);
+
   // Reset page when search changes
   useEffect(() => {
     setPage(1);
-  }, [search, segment, rsvp, sort, direction, scope]);
+  }, [search, segment, rsvp, source, formId, sort, direction, scope]);
 
-  const listQuery = customerListQuery({ page, search, segment, rsvp, eventId, sort, direction });
+  const listQuery = customerListQuery({ page, search, segment, rsvp, eventId, source, formId, sort, direction });
   if (scope === 'all') listQuery.set('scope', 'all');
+  else listQuery.delete('scope');
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -141,6 +191,10 @@ function CustomersPageContent() {
     nextParams.set('direction', direction);
     if (scope === 'all') nextParams.set('scope', scope);
     else nextParams.delete('scope');
+    if (source) nextParams.set('source', source);
+    if (formId) nextParams.set('formId', formId);
+    if (rsvp) nextParams.set('rsvp', rsvp);
+    if (rsvp && eventId) nextParams.set('eventId', eventId);
 
     const query = nextParams.toString();
     router.replace(`/admin/customers${query ? `?${query}` : ''}`, { scroll: false });
@@ -156,7 +210,66 @@ function CustomersPageContent() {
       nextParams.delete('rsvp');
       nextParams.delete('eventId');
     }
+    // rsvp=going is an alias for source=rsvp; clear source if it was rsvp
+    if (source === 'rsvp' && !nextRsvp) {
+      nextParams.delete('source');
+      nextParams.delete('formId');
+    }
     router.replace(`/admin/customers${nextParams.size ? `?${nextParams}` : ''}`, { scroll: false });
+  };
+
+  const handleSourceChange = (nextSource: CustomerSource | '') => {
+    setSource(nextSource);
+    setFormId('');
+    setPage(1);
+    // A form submitter usually has no paid order, so the Customers predicate would hide them.
+    if (nextSource === 'form') setScope('all');
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete('page');
+    if (search) nextParams.set('search', search);
+    else nextParams.delete('search');
+    if (segment) nextParams.set('segment', segment);
+    else nextParams.delete('segment');
+    if (nextSource) nextParams.set('source', nextSource);
+    else nextParams.delete('source');
+    nextParams.delete('formId');
+    nextParams.set('sort', sort);
+    nextParams.set('direction', direction);
+    // source=form flips to all contacts
+    if (nextSource === 'form') {
+      nextParams.set('scope', 'all');
+    } else if (scope === 'all' && source === 'form') {
+      nextParams.delete('scope');
+    }
+    if (rsvp && nextSource !== 'rsvp') {
+      nextParams.delete('rsvp');
+      nextParams.delete('eventId');
+    }
+
+    const query = nextParams.toString();
+    router.replace(`/admin/customers${query ? `?${query}` : ''}`, { scroll: false });
+  };
+
+  const handleFormChange = (nextFormId: string) => {
+    setFormId(nextFormId);
+    setPage(1);
+    // Build from the current list state, not searchParams: the Source change's
+    // router.replace may not have landed yet, and reading it would drop source=form.
+    const nextParams = new URLSearchParams(listQuery);
+    const tag = searchParams.get('tag');
+    if (tag) nextParams.set('tag', tag);
+    nextParams.delete('page');
+    if (nextFormId) {
+      nextParams.set('formId', nextFormId);
+      // Selecting a form implies source=form
+      nextParams.set('source', 'form');
+      // source=form requires scope=all (form submitters may not have paid orders)
+      nextParams.set('scope', 'all');
+    } else {
+      nextParams.delete('formId');
+    }
+    const query = nextParams.toString();
+    router.replace(`/admin/customers${query ? `?${query}` : ''}`, { scroll: false });
   };
 
   const startEdit = (customer: Customer, field: 'note' | 'location') => {
@@ -295,6 +408,41 @@ function CustomersPageContent() {
           <option value="">All</option>
           <option value="going">RSVP&apos;d{eventId ? ' to this event' : ''}</option>
         </select>
+        <label className="ml-2 text-xs font-medium text-gray-600 dark:text-slate-300" htmlFor="customer-source">
+          Source
+        </label>
+        <select
+          id="customer-source"
+          value={source}
+          onChange={(event) => handleSourceChange(event.target.value as CustomerSource | '')}
+          className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+        >
+          <option value="">Any source</option>
+          <option value="tickets">Bought tickets</option>
+          <option value="rsvp">RSVP&apos;d</option>
+          <option value="subscribed">Subscribed (email opt-in)</option>
+          <option value="form">Submitted a form</option>
+        </select>
+        {source === 'form' && (
+          <>
+            <label className="sr-only" htmlFor="customer-form">
+              Form
+            </label>
+            <select
+              id="customer-form"
+              value={formId}
+              onChange={(event) => handleFormChange(event.target.value)}
+              className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+            >
+              <option value="">Any form</option>
+              {standingForms.map((form) => (
+                <option key={form.id} value={form.id}>
+                  {form.name}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
         <label className="ml-auto text-xs font-medium text-gray-600 dark:text-slate-300" htmlFor="customer-sort">
           Sort
         </label>
@@ -350,11 +498,12 @@ function CustomersPageContent() {
       {!loading && customers.length > 0 && (
         <div className="border border-gray-200 dark:border-slate-700 rounded-lg overflow-hidden bg-white dark:bg-slate-800">
           {/* Desktop header */}
-          <div className="hidden lg:grid grid-cols-[minmax(140px,1.4fr)_minmax(170px,1.8fr)_85px_60px_minmax(100px,1fr)_70px_90px_minmax(110px,1.3fr)] gap-x-4 px-4 py-3 bg-gray-50 dark:bg-slate-800/80 border-b border-gray-200 dark:border-slate-700 text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+          <div className="hidden lg:grid grid-cols-[minmax(140px,1.4fr)_minmax(170px,1.8fr)_85px_60px_minmax(100px,1fr)_70px_90px_80px_minmax(110px,1.3fr)] gap-x-4 px-4 py-3 bg-gray-50 dark:bg-slate-800/80 border-b border-gray-200 dark:border-slate-700 text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">
             <div>Name</div>
             <div>Email</div>
             <div>Segment</div>
             <div className="text-center">Sub</div>
+            <div>Source</div>
             <div>Location</div>
             <div className="text-right">Transactions</div>
             <div className="text-right">Spent</div>
@@ -409,6 +558,10 @@ function CustomersPageContent() {
                         }`}
                       />
                     </button>
+                  </div>
+
+                  <div className="min-w-0">
+                    <SourceChips customer={customer} />
                   </div>
 
                   {/* Location */}
@@ -516,6 +669,7 @@ function CustomersPageContent() {
                       </button>
                     </div>
                   </div>
+                  <SourceChips customer={customer} />
                   <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-slate-400">
                     <span>{customer.transactionCount} transaction{customer.transactionCount !== 1 ? 's' : ''}</span>
                     <span>{formatCurrency(customer.totalSpent)}</span>
