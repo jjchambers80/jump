@@ -17,7 +17,8 @@ import multer from 'multer';
 import applicationFormService from '../../services/ApplicationFormService.js';
 import applicationService from '../../services/ApplicationService.js';
 import { MAX_FILES_PER_SUBMISSION, MAX_PHOTO_MB } from '../../config/applications.js';
-import { ValidationError } from '../../middleware/errorHandler.js';
+import { NotFoundError, ValidationError } from '../../middleware/errorHandler.js';
+import storefrontPreferencesService from '../../services/StorefrontPreferencesService.js';
 import { LIMITS, makeLimiter } from '../../middleware/rateLimit.js';
 import { requestMeta } from '../../services/LegalAcceptanceService.js';
 import { gateByEventParam, gateStorefront } from '../../middleware/storefrontGate.js';
@@ -97,11 +98,21 @@ eventApplicationsRouter.post('/', submitLimiter, gateByEventParam, parseSubmissi
   }
 });
 
-const gateByStandingOrg = gateStorefront((req) => ({ organizationId: req.params.orgId }));
+// Storefront URLs carry the organization slug or id: resolve it once, then gate.
+async function resolveStandingOrg(req, res, next) {
+  try {
+    req.organizationId = await storefrontPreferencesService.organizationIdFor({ organizationIdentifier: req.params.orgId });
+    if (!req.organizationId) throw new NotFoundError('Organization not found');
+    next();
+  } catch (error) {
+    next(error);
+  }
+}
+const gateByStandingOrg = [resolveStandingOrg, gateStorefront((req) => ({ organizationId: req.organizationId }))];
 
 standingApplicationsRouter.get('/status/:applicationId', gateByStandingOrg, async (req, res, next) => {
   try {
-    res.json(await applicationService.standingStatusView(req.params.orgId, req.params.applicationId, req.query.token));
+    res.json(await applicationService.standingStatusView(req.organizationId, req.params.applicationId, req.query.token));
   } catch (error) {
     next(error);
   }
@@ -109,7 +120,7 @@ standingApplicationsRouter.get('/status/:applicationId', gateByStandingOrg, asyn
 
 standingApplicationsRouter.get('/:formSlug', gateByStandingOrg, async (req, res, next) => {
   try {
-    res.json(await applicationFormService.publicStandingForm(req.params.orgId, req.params.formSlug));
+    res.json(await applicationFormService.publicStandingForm(req.organizationId, req.params.formSlug));
   } catch (error) {
     next(error);
   }
@@ -119,13 +130,13 @@ standingApplicationsRouter.post('/:formSlug', submitLimiter, gateByStandingOrg, 
   try {
     // Honeypot is intentionally accepted without writing so bots get no useful signal.
     if (req.submission.body?.honeypot) {
-      const form = await applicationFormService.publicStandingForm(req.params.orgId, req.params.formSlug);
+      const form = await applicationFormService.publicStandingForm(req.organizationId, req.params.formSlug);
       if (!form.acceptance.open) throw new ValidationError(`This form is not accepting applications (${form.acceptance.reason})`);
       return res.status(201).json({ accepted: true });
     }
     const body = { ...req.submission.body, formSlug: req.params.formSlug };
     const result = await applicationService.submit(null, body, req.submission.files, {
-      organizationId: req.params.orgId,
+      organizationId: req.organizationId,
       requestMeta: requestMeta(req),
     });
     res.status(201).json(result);

@@ -42,7 +42,8 @@ describe('Standing applications contract (spec 044A)', () => {
   async function submit(form, suffix, overrides = {}) {
     const question = form.questions?.[0];
     return request(app)
-      .post(`/organizations/${org.id}/public/apply/${form.slug}`)
+      // Storefront URLs use the organization slug; the honeypot test below uses the id.
+      .post(`/organizations/${org.slug}/public/apply/${form.slug}`)
       .send({
         contact: {
           email: `person-${suffix}@${TAG}.test`,
