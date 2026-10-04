@@ -253,7 +253,11 @@ function CustomersPageContent() {
   const handleFormChange = (nextFormId: string) => {
     setFormId(nextFormId);
     setPage(1);
-    const nextParams = new URLSearchParams(searchParams.toString());
+    // Build from the current list state, not searchParams: the Source change's
+    // router.replace may not have landed yet, and reading it would drop source=form.
+    const nextParams = new URLSearchParams(listQuery);
+    const tag = searchParams.get('tag');
+    if (tag) nextParams.set('tag', tag);
     nextParams.delete('page');
     if (nextFormId) nextParams.set('formId', nextFormId);
     else nextParams.delete('formId');

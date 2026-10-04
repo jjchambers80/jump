@@ -52,6 +52,7 @@ test('Submitted a form switches to all contacts, narrows by form and shows the f
   await expect.poll(() => listRequests.some((u) => u.searchParams.get('source') === 'form' && u.searchParams.get('scope') === 'all')).toBe(true);
   await expect(page.locator('li', { hasText: 'Form: Become a vendor' }).locator('visible=true').first()).toBeVisible();
 
+  await expect(page).toHaveURL(/source=form/);
   await page.getByLabel('Form', { exact: true }).selectOption('form-vendor');
   await expect.poll(() => listRequests.some((u) => u.searchParams.get('formId') === 'form-vendor')).toBe(true);
   await expect(page).toHaveURL(/source=form/);
