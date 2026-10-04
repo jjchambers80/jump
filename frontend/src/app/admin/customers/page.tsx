@@ -259,8 +259,15 @@ function CustomersPageContent() {
     const tag = searchParams.get('tag');
     if (tag) nextParams.set('tag', tag);
     nextParams.delete('page');
-    if (nextFormId) nextParams.set('formId', nextFormId);
-    else nextParams.delete('formId');
+    if (nextFormId) {
+      nextParams.set('formId', nextFormId);
+      // Selecting a form implies source=form
+      nextParams.set('source', 'form');
+      // source=form requires scope=all (form submitters may not have paid orders)
+      nextParams.set('scope', 'all');
+    } else {
+      nextParams.delete('formId');
+    }
     const query = nextParams.toString();
     router.replace(`/admin/customers${query ? `?${query}` : ''}`, { scroll: false });
   };
