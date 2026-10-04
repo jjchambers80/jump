@@ -25,7 +25,7 @@ class ContactInquiryService {
 
     const organization = await prisma.organization.findUnique({
       where: { id: organizationId },
-      select: { name: true, logoUrl: true, email: true },
+      select: { id: true, name: true, logoUrl: true, email: true },
     });
     if (!organization?.email) {
       const error = new ConflictError('This store is not accepting messages right now');

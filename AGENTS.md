@@ -53,6 +53,7 @@ npm test --workspace=packages/cli   # Jump CLI (spec 043), node --test against a
 | `STRIPE_SECRET_KEY` | backend | |
 | `STRIPE_WEBHOOK_SECRET` | backend | |
 | `RESEND_API_KEY` | backend | |
+| `EMAIL_FROM_DOMAIN` | backend | Optional. Verified Resend sending domain (prod: `eventimus.net`). Set: store emails send as `"Store Name" <store+<organizationId>@domain>`, platform/staff emails as `Eventimus <noreply@domain>`. Unset: every email uses `RESEND_FROM_EMAIL` |
 | `NEXT_PUBLIC_API_URL` | frontend | Points to backend URL |
 | `BUCKET_NAME`, `BUCKET_ENDPOINT`, `BUCKET_ACCESS_KEY_ID`, `BUCKET_SECRET_ACCESS_KEY`, `BUCKET_REGION` | backend | S3-compatible image storage (Railway Bucket). Unset → local `uploads/` disk (ephemeral on Railway) |
 | `BUCKET_PUBLIC_URL` | backend | Optional. Only set for a public bucket/CDN; otherwise images are served through `GET /images/:id/:hash/:variant` |

@@ -91,7 +91,7 @@ An organization can point a subdomain it owns (for example `tickets.venue.com`) 
 - **72 h grace.** An ACTIVE domain whose records disappear keeps serving for three days, with `lastError` set, before it is marked FAILED and links fall back to the platform URL.
 - **Local testing.** Spoof the host: `curl -H 'Host: tickets.example.test' http://localhost:3001/`. Insert an ACTIVE `OrganizationDomain` row directly for the org; `localhost` itself is always a platform host.
 - **The sweep runs on every backend instance** (in-process timer). With several replicas the same domain is re-checked by each; the work is idempotent and cheap, but a distributed lock would be needed before scaling out significantly.
-- **Per-organization sending domain is not implemented.** Emails are still sent from `RESEND_FROM_EMAIL`; only the links change.
+- **Per-organization sending domain is not implemented.** With `EMAIL_FROM_DOMAIN` set, store emails show the store name and a per-store `store+<organizationId>@` address on the shared Eventimus domain; only the links use the custom domain.
 
 ## Related Features
 
