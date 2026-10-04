@@ -1,6 +1,7 @@
 // Add-ons on applications (spec 012 phase 2) with the backend mocked at the
-// network layer: the apply form's picker and total line, the submission
-// payload, the admin detail lines + edit dialog, the list column + filter,
+// network layer: since spec 037 phase 5 the apply form carries none (they are
+// chosen with the space after approval) — the choose-your-space picker and
+// total line, the selection payload, the admin detail lines + edit dialog, the list column + filter,
 // and the form editor's per-tier "Add-ons offered".
 
 import { expect, test, type Page } from '@playwright/test';
@@ -150,6 +151,14 @@ async function mockAdmin(page: Page, baseURL: string, role: 'ADMIN' | 'ORGANIZER
     }
     if (path === `/admin/events/${EVENT_ID}/application-forms` && method === 'GET') return route.fulfill(json({ data: [state.form] }));
     if (path === `/admin/events/${EVENT_ID}/application-forms/${FORM_ID}` && method === 'GET') return route.fulfill(json(state.form));
+    if (path === `/admin/events/${EVENT_ID}/application-forms/${FORM_ID}` && method === 'PATCH') {
+      // Spec 039 D9: an open form cannot sell spots before the map is ready.
+      if (body.spaceSelection === 'MAP') {
+        return route.fulfill(json({ error: 'ValidationError', code: 'MAP_NOT_READY', message: 'Add spots on the floor map for: Corner', details: { tiers: [{ id: cornerTier.id, name: 'Corner' }] } }, 400));
+      }
+      state.form = { ...state.form, ...body };
+      return route.fulfill(json(state.form));
+    }
     if (path === `/admin/events/${EVENT_ID}/application-forms/${FORM_ID}/tiers/${cornerTier.id}` && method === 'PATCH') return route.fulfill(json(state.form.tiers[1]));
     if (path === `/admin/events/${EVENT_ID}/application-forms/${FORM_ID}/tiers/${cornerTier.id}/add-ons` && method === 'PUT') {
       const attached = state.form.addOns.filter((a) => !a.allTiers && body.addOnIds.includes(a.id));
@@ -178,7 +187,7 @@ async function mockAdmin(page: Page, baseURL: string, role: 'ADMIN' | 'ORGANIZER
 
 // ─── Public ──────────────────────────────────────────────────────────────────
 
-test('apply form: picker appears with the chosen tier, total line updates, submission carries the lines', async ({ page }) => {
+test('apply form (spec 037 phase 5): no category, no add-ons, no total and no card — the submission carries none', async ({ page }) => {
   await mockLegalVersions(page, API);
   await page.route(`${API}/events/${EVENT_ID}`, (route) => route.fulfill(json(event)));
   await page.route(`${API}/events/${EVENT_ID}/applications/forms/vendor-booth`, (route) => route.fulfill(json(publicForm)));
@@ -187,61 +196,180 @@ test('apply form: picker appears with the chosen tier, total line updates, submi
     const raw = route.request().postData() ?? '';
     const match = raw.match(/name="payload"\r?\n\r?\n([\s\S]*?)\r?\n--/);
     payload = match ? JSON.parse(match[1]) : null;
-    return route.fulfill(json({ applicationId: APP_ID, statusUrl: `http://localhost:3001/events/${EVENT_ID}/apply/status/${APP_ID}?token=t`, next: 'checkout', checkoutUrl: null }, 201));
+    return route.fulfill(json({ applicationId: APP_ID, orderRef: null, statusUrl: `http://localhost:3001/events/${EVENT_ID}/apply/status/${APP_ID}?token=t`, next: 'done' }, 201));
   });
+  await page.route(`${API}/applications/${APP_ID}/status**`, (route) => route.fulfill(json({ error: 'NotFoundError', message: 'later' }, 404)));
 
   await page.goto(`/events/${EVENT_ID}/apply/vendor-booth`);
   await expect(page.getByTestId('apply-form')).toBeVisible();
+  await expect(page.getByRole('radio', { name: /Booth/ })).toHaveCount(0);
   await expect(page.getByTestId('add-on-picker')).toHaveCount(0);
-  // The summary waits for a tier before it shows a total
+  await expect(page.getByTestId('apply-card-authorization')).toHaveCount(0);
   const summary = page.getByRole('complementary', { name: 'Application summary' });
-  await expect(summary).toContainText('Choose an option to see your total.');
-  await expect(summary.getByRole('button', { name: 'Continue to save a card' })).toBeVisible();
-
-  // Corner offers power and table only.
-  await page.getByRole('radio', { name: /Corner/ }).check();
-  await expect(page.getByTestId('add-on-picker')).toBeVisible();
-  await expect(page.getByTestId(`add-on-${POWER.id}`)).toBeVisible();
-  await expect(page.getByTestId(`add-on-${BADGE.id}`)).toHaveCount(0);
-  await expect(page.getByTestId(`add-on-${POWER.id}`)).toContainText('$135.95');
-
-  // Booth offers the badge too; pick 1 power + 2 badges.
-  await page.getByRole('radio', { name: /Booth/ }).check();
-  await expect(page.getByTestId(`add-on-${BADGE.id}`)).toBeVisible();
-  await page.getByRole('button', { name: `Increase ${POWER.name} quantity` }).click();
-  await page.getByRole('button', { name: `Increase ${BADGE.name} quantity` }).click();
-  await page.getByRole('button', { name: `Increase ${BADGE.name} quantity` }).click();
-  const total = page.getByTestId('apply-total-line');
-  await expect(total).toContainText('Booth $303.30');
-  await expect(total).toContainText('Booth power ×1 $135.95');
-  await expect(total).toContainText('Extra vendor badge ×2 $22.22');
-  await expect(total).toContainText('Total $461.47');
-  await expect(page.getByTestId('apply-price-note')).toContainText('charged $461.47 only if your application is accepted');
+  await expect(summary).toContainText('Cost to apply');
+  await expect(summary).toContainText('Free');
+  await expect(page.getByTestId('apply-next-steps')).toContainText('Choose your space and pay');
 
   await page.getByLabel('First name').fill('Vee');
   await page.getByLabel('Last name').fill('Vendor');
   await page.getByRole('textbox', { name: 'Email' }).fill('vee@hiddenblock.example');
   await page.getByLabel('Business or outlet name').fill('Hidden Block Games');
-  // Spec 024 phase 3: the card authorization names the estimated total and the pay-now window
-  const authorization = page.getByTestId('apply-card-authorization');
-  await expect(authorization).toBeVisible();
-  await expect(page.getByText(/charge \$461\.47 to the card I save now, only if my application is approved/)).toBeVisible();
   await page.getByTestId('apply-consent').check();
-  await page.getByRole('button', { name: 'Continue to save a card' }).click();
-  await expect(page.getByText('Please authorize the charge')).toBeVisible();
-  await authorization.check();
-  await page.getByRole('button', { name: 'Continue to save a card' }).click();
+  await summary.getByRole('button', { name: 'Submit application' }).click();
   await expect.poll(() => payload).not.toBeNull();
+  expect(payload).not.toHaveProperty('tierId');
+  expect(payload).not.toHaveProperty('addOns');
   expect(payload).toMatchObject({
-    tierId: boothTier.id,
-    addOns: [{ addOnId: POWER.id, quantity: 1 }, { addOnId: BADGE.id, quantity: 2 }],
+    formSlug: 'vendor-booth',
     optInAccount: true,
     acceptances: [
       { document: 'TERMS', version: LEGAL_VERSIONS.terms },
       { document: 'PRIVACY', version: LEGAL_VERSIONS.privacy },
-      { document: 'CARD_AUTHORIZATION', version: LEGAL_VERSIONS.cardAuthorization },
     ],
   });
+  await expect(page).toHaveURL(new RegExp(`/apply/status/${APP_ID}`));
+});
+
+test('choose your space: extras are a step before paying, the total follows, and the hold carries the lines', async ({ page }) => {
+  await page.route(`${API}/events/${EVENT_ID}`, (route) => route.fulfill(json(event)));
+  let selectBody: Record<string, unknown> | null = null;
+  await page.route(`${API}/applications/${APP_ID}/**`, (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith('/status')) {
+      return route.fulfill(
+        json({
+          id: APP_ID,
+          orderRef: null,
+          form: { id: FORM_ID, name: 'Vendor Booth', kind: 'PAID' },
+          event: { id: EVENT_ID, name: event.name, date: event.date },
+          organization: { id: ORG_ID, name: 'Durham Makers' },
+          status: 'APPROVED',
+          paymentStatus: 'AWAITING_SELECTION',
+          tier: { id: boothTier.id, name: 'Booth', mapBound: false },
+          amounts: { ...amounts, subtotal: 0, applicantPays: 0, orgReceives: 0, platformFee: 0, processingFee: 0 },
+          addOns: [],
+          paymentDueAt: '2026-10-01T00:00:00.000Z',
+          selection: {
+            state: 'CHOOSE',
+            heldUntil: null,
+            dueAt: '2026-10-01T00:00:00.000Z',
+            reserveOnApproval: false,
+            category: { id: boothTier.id, name: 'Booth', description: null, price: 275, applicantPays: 303.3, feesIncluded: 28.3, tax: 0, spacesLeft: 4, guaranteed: false },
+            addOns: [POWER, BADGE, TABLE],
+            map: { available: false, mapId: null, boothsAvailable: 0 },
+            placedBooth: null,
+            savedCard: null,
+          },
+          profile,
+          answers: [],
+          boothLabel: null,
+          booth: null,
+          hasCardOnFile: false,
+          submittedAt: '2026-09-16T14:00:00.000Z',
+          decidedAt: '2026-09-17T09:00:00.000Z',
+          paidAt: null,
+          refundedTotal: 0,
+          canWithdraw: false,
+          canResume: false,
+          canPay: false,
+          canUpdateCard: false,
+        })
+      );
+    }
+    if (url.pathname.endsWith('/select')) {
+      selectBody = route.request().postDataJSON();
+      return route.fulfill(json({ error: 'ConflictError', message: 'No Booth spaces are left.', code: 'SOLD_OUT' }, 409));
+    }
+    return route.fulfill(json({ error: 'NotFoundError', message: 'unmocked' }, 404));
+  });
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(`/events/${EVENT_ID}/apply/status/${APP_ID}?token=tok`);
+  const choose = page.getByTestId('choose-space');
+  await expect(choose).toBeVisible();
+  // The category offers extras, so they come first, as their own step.
+  await expect(choose).toHaveAttribute('data-step', 'extras');
+  await expect(page.getByTestId('space-step-meter')).toContainText('Step 1 of 2');
+  await expect(page.getByRole('heading', { name: /Add extras/ })).toBeVisible();
+  // No map for this event: no tabs.
+  await expect(page.getByRole('tab')).toHaveCount(0);
+  await expect(choose).toContainText('Spaces go to whoever pays first');
+  await expect(page.getByTestId('space-review-space')).toContainText('4 spaces left');
+  await expect(page.getByTestId(`add-on-${POWER.id}`)).toContainText('$135.95');
+  await expect(page.getByTestId('space-continue')).toHaveText('Skip extras');
+
+  // Desktop: two columns, the vendor's details beside the steps.
+  const [stepsBox, asideBox] = [await choose.boundingBox(), await page.getByTestId('apply-status-aside').boundingBox()];
+  expect(stepsBox && asideBox && asideBox.x >= stepsBox.x + stepsBox.width).toBe(true);
+
+  await page.getByRole('button', { name: `Increase ${POWER.name} quantity` }).click();
+  await page.getByRole('button', { name: `Increase ${BADGE.name} quantity` }).click();
+  await page.getByRole('button', { name: `Increase ${BADGE.name} quantity` }).click();
+  await expect(page.getByTestId('space-total')).toContainText('$461.47');
+  await page.getByTestId('space-continue').click();
+
+  // Step 2: review and pay, focus on its heading, the extras listed with a way back.
+  await expect(choose).toHaveAttribute('data-step', 'pay');
+  await expect(page.getByRole('heading', { name: /Review and pay/ })).toBeFocused();
+  await expect(page.getByTestId('space-left')).toContainText('4 spaces left');
+  await expect(page.getByTestId('space-review-extras')).toContainText('Booth power ×1');
+  await expect(page.getByTestId('space-review-extras')).toContainText('Extra vendor badge ×2');
+  await page.getByTestId('space-edit-extras').click();
+  await expect(choose).toHaveAttribute('data-step', 'extras');
+  await expect(page.getByRole('heading', { name: /Add extras/ })).toBeFocused();
+  // Quantities survive the round trip.
+  await expect(page.getByTestId('space-total')).toContainText('$461.47');
+  await page.getByTestId('space-continue').click();
+  await expect(page.getByTestId('space-total')).toContainText('$461.47');
+  await page.getByTestId('space-hold').click();
+  await expect.poll(() => selectBody).not.toBeNull();
+  expect(selectBody).toEqual({ addOns: [{ addOnId: POWER.id, quantity: 1 }, { addOnId: BADGE.id, quantity: 2 }], useSavedCard: false });
+  // Someone took the last space first: the vendor is told plainly.
+  await expect(page.getByTestId('space-notice')).toContainText('No Booth spaces are left right now');
+});
+
+test('phone: the extras step and the pay step stack in one column with no sideways scroll', async ({ page }) => {
+  await page.route(`${API}/events/${EVENT_ID}`, (route) => route.fulfill(json(event)));
+  await page.route(`${API}/applications/${APP_ID}/**`, (route) =>
+    route.fulfill(
+      json({
+        id: APP_ID, orderRef: null,
+        form: { id: FORM_ID, name: 'Vendor Booth', kind: 'PAID' },
+        event: { id: EVENT_ID, name: event.name, date: event.date },
+        organization: { id: ORG_ID, name: 'Durham Makers' },
+        status: 'APPROVED', paymentStatus: 'AWAITING_SELECTION',
+        tier: { id: boothTier.id, name: 'Booth', mapBound: false },
+        amounts: { ...amounts, subtotal: 0, applicantPays: 0, orgReceives: 0, platformFee: 0, processingFee: 0 },
+        addOns: [], paymentDueAt: '2026-10-01T00:00:00.000Z',
+        selection: {
+          state: 'CHOOSE', heldUntil: null, dueAt: '2026-10-01T00:00:00.000Z', reserveOnApproval: true,
+          category: { id: boothTier.id, name: 'Booth', description: null, price: 275, applicantPays: 303.3, feesIncluded: 28.3, tax: 0, spacesLeft: 4, guaranteed: true },
+          addOns: [POWER], map: { available: false, mapId: null, boothsAvailable: 0 }, placedBooth: null, savedCard: null,
+        },
+        profile, answers: [{ questionId: 'q1', label: 'What do you sell?', value: 'pokemon' }], boothLabel: null, booth: null, hasCardOnFile: false,
+        submittedAt: '2026-09-16T14:00:00.000Z', decidedAt: '2026-09-17T09:00:00.000Z', paidAt: null, refundedTotal: 0,
+        canWithdraw: false, canResume: false, canPay: false, canUpdateCard: false,
+      })
+    )
+  );
+  await page.setViewportSize({ width: 375, height: 740 });
+  await page.goto(`/events/${EVENT_ID}/apply/status/${APP_ID}?token=tok`);
+  const choose = page.getByTestId('choose-space');
+  await expect(choose).toHaveAttribute('data-step', 'extras');
+  // The status card carries one due date instead of repeating "choose and pay".
+  await expect(page.getByTestId('apply-payment')).toContainText('Choose and pay by');
+  // Nothing moves focus or scrolls on load.
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  const [stepsBox, asideBox] = [await choose.boundingBox(), await page.getByTestId('apply-status-aside').boundingBox()];
+  expect(stepsBox && asideBox && asideBox.y >= stepsBox.y + stepsBox.height).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.getByTestId('space-continue').click();
+  await expect(choose).toHaveAttribute('data-step', 'pay');
+  await expect(page.getByTestId('space-review-extras')).toContainText('No extras added');
+  await expect(page.getByTestId('space-hold')).toHaveText('Hold this space and pay $303.30');
+  await page.getByTestId('space-back').click();
+  await expect(choose).toHaveAttribute('data-step', 'extras');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
 test('status page itemises the tier and add-on lines', async ({ page }) => {
@@ -350,4 +478,24 @@ test('form editor: tier rows show offered add-ons; ADMIN attaches a restricted o
   const put = calls.find((c) => c.method === 'PUT' && c.path.endsWith(`/tiers/${cornerTier.id}/add-ons`));
   expect(put?.body).toEqual({ addOnIds: [BADGE.id] });
   await expect(page.getByTestId(`tier-add-ons-summary-${cornerTier.id}`)).toContainText('Extra vendor badge');
+});
+
+test('form editor: how vendors choose their space (spec 039); an open form cannot switch to the map before it is ready', async ({ page, baseURL }) => {
+  const { calls } = await mockAdmin(page, baseURL!, 'ADMIN');
+  await page.goto(`/admin/events/${EVENT_ID}/applications/forms/${FORM_ID}`);
+  const settings = page.getByTestId('form-settings');
+  await expect(settings.getByText('How vendors choose their space')).toBeVisible();
+  await expect(page.getByTestId('form-space-tiers')).toBeChecked();
+
+  await page.getByTestId('form-space-map').check();
+  await expect(page.getByTestId('form-space-map-hint')).toContainText('publish the event');
+  await expect(page.getByTestId('form-space-map-hint').getByRole('link', { name: 'Open the floor map' })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/map`);
+  await settings.getByRole('button', { name: 'Save settings' }).click();
+  await expect(page.getByText('Add spots on the floor map for: Corner')).toBeVisible();
+  expect(calls.filter((c) => c.method === 'PATCH').at(-1)?.body).toMatchObject({ spaceSelection: 'MAP' });
+
+  await page.getByTestId('form-space-tiers').check();
+  await settings.getByRole('button', { name: 'Save settings' }).click();
+  await expect(page.getByRole('status')).toContainText('Form settings saved.');
+  expect(calls.filter((c) => c.method === 'PATCH').at(-1)?.body).toMatchObject({ spaceSelection: 'TIERS' });
 });

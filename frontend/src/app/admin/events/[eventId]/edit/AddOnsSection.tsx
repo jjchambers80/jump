@@ -3,28 +3,22 @@
 // Admin › Event › Edit › Add-ons (spec 012). Self-contained: loads, creates,
 // edits, activates and reorders through the add-ons API as the organizer
 // works, independent of the surrounding event form's Save button.
+// Spec 037 D2/D9: add-ons come from the organization's saved add-ons through
+// `SavedAddOnPicker`; "Create '<name>'" opens the dialog below, which saves a
+// new saved add-on and its offering here in one call. Price stays per event.
 
 import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import api from '@/services/api';
 import { formatPrice } from '@/lib/fees';
 import { addOnAllInPrice, type AdminAddOn } from '@/lib/addOns';
+import SavedAddOnPicker from '@/components/events/SavedAddOnPicker';
 
 type Scope = AdminAddOn['scope'];
 
 interface TierOption {
   id: string;
   name: string;
-}
-
-interface Preset {
-  key: string;
-  name: string;
-  description?: string;
-  price: number;
-  scope: Scope;
-  maxPerOrder?: number;
-  taxable?: boolean;
 }
 
 interface AddOnsSectionProps {
@@ -77,9 +71,7 @@ export default function AddOnsSection({ orgId, eventId, priceTiers, taxRate, tax
   const base = `/organizations/${orgId}/events/${eventId}/add-ons`;
 
   const [addOns, setAddOns] = useState<AdminAddOn[] | null>(null);
-  const [presets, setPresets] = useState<Preset[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [showPresetMenu, setShowPresetMenu] = useState(false);
   const [draft, setDraft] = useState<DraftAddOn | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -95,26 +87,9 @@ export default function AddOnsSection({ orgId, eventId, priceTiers, taxRate, tax
 
   useEffect(() => {
     load();
-    api
-      .get<{ presets: Preset[] }>(`${base}/presets`)
-      .then((data) => setPresets(data.presets))
-      .catch(() => setPresets([]));
-  }, [base, load]);
+  }, [load]);
 
-  const openNew = (preset?: Preset) => {
-    setShowPresetMenu(false);
-    setDraft({
-      ...emptyDraft(),
-      ...(preset && {
-        name: preset.name,
-        description: preset.description ?? '',
-        price: String(preset.price),
-        scope: preset.scope,
-        maxPerOrder: preset.maxPerOrder ? String(preset.maxPerOrder) : '',
-        taxable: preset.taxable !== false,
-      }),
-    });
-  };
+  const openNew = (name = '') => setDraft({ ...emptyDraft(), name });
 
   const openEdit = (a: AdminAddOn) =>
     setDraft({
@@ -189,40 +164,8 @@ export default function AddOnsSection({ orgId, eventId, priceTiers, taxRate, tax
           </div>
         </div>
         {canEdit && (
-          <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
-            {presets.length > 0 && (
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setShowPresetMenu(!showPresetMenu)}
-                  className="rounded-md border border-indigo-300 dark:border-indigo-700 px-3 py-1.5 text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
-                >
-                  Add from Preset
-                </button>
-                {showPresetMenu && (
-                  <div className="absolute right-0 z-10 mt-1 w-60 rounded-md border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 shadow-lg">
-                    {presets.map((preset) => (
-                      <button
-                        key={preset.key}
-                        type="button"
-                        onClick={() => openNew(preset)}
-                        className="block w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700"
-                      >
-                        <span className="font-medium">{preset.name}</span>
-                        <span className="ml-2 text-gray-400 dark:text-slate-500">{formatPrice(preset.price)}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={() => openNew()}
-              className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500"
-            >
-              + Add Add-on
-            </button>
+          <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto">
+            <SavedAddOnPicker orgId={orgId} eventId={eventId} onAttached={load} onCreateNew={openNew} />
           </div>
         )}
       </div>
@@ -235,7 +178,7 @@ export default function AddOnsSection({ orgId, eventId, priceTiers, taxRate, tax
 
       {addOns && addOns.length === 0 && (
         <p className="text-sm text-gray-500 dark:text-slate-400 py-4 text-center">
-          No add-ons yet. {canEdit ? 'Add one, or start from a preset.' : ''}
+          No add-ons yet. {canEdit ? 'Search your saved add-ons above, or type a new name.' : ''}
         </p>
       )}
 
@@ -387,6 +330,11 @@ function AddOnDialog({ draft: initial, priceTiers, taxRate, taxInclusive, onSave
 
         <div className="px-6 py-4 space-y-4">
           {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+          {d.id && (
+            <p className="rounded-md bg-indigo-50 px-3 py-2 text-xs text-indigo-900 dark:bg-indigo-950/50 dark:text-indigo-200">
+              Name, description, &ldquo;sold with&rdquo; and tax belong to the saved add-on and change on every event that offers it. Price, stock and tiers are this event&apos;s own.
+            </p>
+          )}
 
           <div>
             <label className={label} htmlFor="add-on-name">Name</label>

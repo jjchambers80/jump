@@ -23,6 +23,7 @@ import {
   CloudOff,
   LayoutGrid,
   Square,
+  BookmarkPlus,
 } from 'lucide-react';
 import { mapsApi } from '@/services/api';
 import type { MapBooth, MapElement } from '@/services/api';
@@ -112,6 +113,23 @@ function BuilderContent() {
   const [flashIds, setFlashIds] = useState<Set<string>>(new Set());
   const [announcement, setAnnouncement] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
+  const [planNotice, setPlanNotice] = useState<string | null>(null);
+
+  // Spec 037 D1: a layout worth reusing is saved as a floor plan (a template
+  // snapshot); Maps › Use on an event copies it onto another event.
+  const saveAsFloorPlan = useCallback(async () => {
+    const name = window.prompt('Name this floor plan', state?.name ?? '');
+    if (!name?.trim()) return;
+    setActionError(null);
+    setPlanNotice(null);
+    try {
+      await save();
+      await mapsApi.saveAsFloorPlan(mapId, name.trim());
+      setPlanNotice(`Saved "${name.trim()}" as a floor plan. Use it on another event from Maps.`);
+    } catch (err: any) {
+      setActionError(err?.message || 'Could not save the floor plan');
+    }
+  }, [mapId, save, state?.name]);
 
   const announce = useCallback((message: string) => {
     // Clear first so repeating the same sentence is still read out.
@@ -424,7 +442,7 @@ function BuilderContent() {
   );
 
   const changeBooths = useCallback(
-    (ids: string[], patch: Partial<Pick<MapBooth, 'label' | 'kind' | 'w' | 'h' | 'tierId'>>) => {
+    (ids: string[], patch: Partial<Pick<MapBooth, 'label' | 'kind' | 'w' | 'h' | 'tierId' | 'price'>>) => {
       if (!state) return;
       const set = new Set(ids);
       commit((l) => ({
@@ -442,6 +460,10 @@ function BuilderContent() {
       if (patch.tierId !== undefined) {
         const tier = tiers.find((t) => t.id === patch.tierId);
         announce(`${ids.length === 1 ? 'Booth' : `${ids.length} booths`} set to ${tier ? tier.name : 'no tier'}`);
+      }
+      if (patch.price !== undefined) {
+        const who = ids.length === 1 ? 'Booth' : `${ids.length} booths`;
+        announce(patch.price === null ? `${who} now use${ids.length === 1 ? 's' : ''} the tier price` : `${who} priced at $${patch.price.toFixed(2)}`);
       }
     },
     [state, tiers, commit, announce]
@@ -650,9 +672,9 @@ function BuilderContent() {
       {/* Header */}
       <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-gray-200 bg-white px-4 py-2.5 dark:border-slate-700 dark:bg-slate-800">
         <Link
-          href="/admin/maps"
+          href={state.eventId ? `/admin/events/${state.eventId}` : '/admin/maps'}
           className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-400 dark:hover:bg-slate-700"
-          aria-label="Back to maps"
+          aria-label="Back to event"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         </Link>
@@ -709,6 +731,9 @@ function BuilderContent() {
           <IconButton label="Mouse and keyboard tips" shortcut="?" onClick={() => setShowShortcuts(true)}>
             <CircleHelp className="h-4 w-4" aria-hidden="true" />
           </IconButton>
+          <IconButton label="Save as floor plan" onClick={() => void saveAsFloorPlan()}>
+            <BookmarkPlus className="h-4 w-4" aria-hidden="true" />
+          </IconButton>
           <div className="mx-1 h-6 w-px bg-gray-200 dark:bg-slate-700" aria-hidden="true" />
           {state.status === 'PUBLISHED' ? (
             <>
@@ -747,6 +772,15 @@ function BuilderContent() {
         </div>
       </header>
 
+      {planNotice && !actionError && (
+        <div role="status" className="flex items-center gap-2 border-b border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-200">
+          <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span className="flex-1">{planNotice}</span>
+          <button type="button" onClick={() => setPlanNotice(null)} className="text-xs font-medium underline">
+            Dismiss
+          </button>
+        </div>
+      )}
       {(saveError || actionError) && (
         <div
           role="alert"

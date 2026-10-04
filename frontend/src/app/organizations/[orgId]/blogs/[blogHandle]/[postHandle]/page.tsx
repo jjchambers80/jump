@@ -3,6 +3,9 @@
 import type { Metadata } from 'next';
 import BlogPostView from '@/components/storefront/BlogPostView';
 import { articleMetadata, fetchPublicJson } from '@/lib/storefrontMeta';
+import BlogPostBody, { type PublicBlogPost } from '@/components/storefront/BlogPostBody';
+import ThemedContentPage from '@/theme/ThemedContentPage';
+import { loadStorefrontFrame } from '@/theme/server/storefront';
 
 type Params = { orgId: string; blogHandle: string; postHandle: string };
 
@@ -30,12 +33,19 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   });
 }
 
-export default function BlogPostPage({ params }: { params: Params }) {
+export default async function BlogPostPage({ params }: { params: Params }) {
+  const frame = await loadStorefrontFrame(params.orgId, 'frame');
+  if (frame.kind === 'legacy') {
+    return <BlogPostView orgId={params.orgId} blogHandle={params.blogHandle} postHandle={params.postHandle} />;
+  }
   return (
-    <BlogPostView
-      orgId={params.orgId}
-      blogHandle={params.blogHandle}
-      postHandle={params.postHandle}
-    />
+    <ThemedContentPage<{ post: PublicBlogPost }>
+      frame={frame}
+      pagePath={`/organizations/${params.orgId}/blogs/${params.blogHandle}/${params.postHandle}`}
+      path={`/organizations/${encodeURIComponent(params.orgId)}/public/blogs/${encodeURIComponent(params.blogHandle)}/${encodeURIComponent(params.postHandle)}`}
+      notFoundTitle="Post not found"
+    >
+      {({ post }) => <BlogPostBody post={post} orgId={params.orgId} />}
+    </ThemedContentPage>
   );
 }

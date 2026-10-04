@@ -5,12 +5,14 @@
 // language (blurred poster, date tile, venue block) with a back link.
 // Children receive the event once loaded.
 
+import type { StorefrontLogo } from '@/components/OrganizationHeader';
 import Link from 'next/link';
 import { ReactNode, useEffect, useState } from 'react';
 import { ArrowLeft, CalendarDays, MapPin } from 'lucide-react';
 import api from '@/services/api';
 import BrandScope from '@/components/BrandScope';
 import OrganizationHeader from '@/components/OrganizationHeader';
+import EventMapHeader from '@/components/storefront/EventMapHeader';
 import type { ThemeMode } from '@/lib/theme';
 import StorefrontPasswordGate from '@/components/StorefrontPasswordGate';
 import { storefrontLockFrom, type StorefrontLock } from '@/lib/storefrontAccess';
@@ -27,8 +29,10 @@ export interface ApplyEvent {
   organizationId?: string | null;
   organizationName?: string | null;
   organizationLogoUrl?: string | null;
+  organizationStorefrontLogo?: StorefrontLogo | null;
   organizationBrandColor?: string | null;
   organizationThemeMode?: ThemeMode | null;
+  organizationSignInLinks?: boolean;
   venue: { name: string; city?: string | null; state?: string | null; timezone?: string | null } | null;
 }
 
@@ -37,12 +41,19 @@ interface ApplyShellProps {
   title?: string;
   /** Small label over the title ("Application", "Get involved"). */
   kicker?: string;
-  /** `wide` makes room for the form's sticky summary column. */
-  width?: 'narrow' | 'wide';
+  /** `wide` makes room for the form's sticky summary column; `full` hands the page edge to edge to the children. */
+  width?: 'narrow' | 'wide' | 'full';
+  /**
+   * `compact`: the map pages' header (EventMapHeader) instead of the
+   * organization header + tall hero, for pages built around a floor map (the
+   * spot chooser): one dark band with the menu, logo and account link, then
+   * the back button, date tile, title, event, date and venue.
+   */
+  hero?: 'full' | 'compact';
   children: (event: ApplyEvent) => ReactNode;
 }
 
-export default function ApplyShell({ eventId, title, kicker = 'Get involved', width = 'narrow', children }: ApplyShellProps) {
+export default function ApplyShell({ eventId, title, kicker = 'Get involved', width = 'narrow', hero = 'full', children }: ApplyShellProps) {
   const [event, setEvent] = useState<ApplyEvent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lock, setLock] = useState<StorefrontLock | null>(null);
@@ -100,17 +111,21 @@ export default function ApplyShell({ eventId, title, kicker = 'Get involved', wi
   const zone = event.venue?.timezone;
   const tile = dateTile(event.date, zone);
   const poster = resolveAssetUrl(event.logoUrl);
-  const container = width === 'wide' ? 'max-w-6xl' : 'max-w-3xl';
+  const container = width === 'wide' ? 'max-w-7xl' : 'max-w-3xl';
+  const when = `${formatEventDate(event.date, zone)} · ${formatEventTime(event.date, zone)}`;
   const place = event.venue ? [event.venue.city, event.venue.state].filter(Boolean).join(', ') : '';
 
   return (
     <BrandScope color={event.organizationBrandColor} themeMode={event.organizationThemeMode} className="min-h-screen bg-gray-50 dark:bg-slate-900">
+      {hero === 'compact' ? (
+        <EventMapHeader event={event} title={title ?? `Get involved with ${event.name}`} backHref={`/events/${event.id}`} testId="apply-hero" />
+      ) : (
+      <>
       {event.organizationName && (
         <OrganizationHeader
-          organization={{ id: event.organizationId, name: event.organizationName, logoUrl: event.organizationLogoUrl }}
+          organization={{ id: event.organizationId, name: event.organizationName, logoUrl: event.organizationLogoUrl, storefrontLogo: event.organizationStorefrontLogo }}
         />
       )}
-
       {/* Hero: the event this application belongs to */}
       <div className="relative overflow-hidden bg-slate-900" data-testid="apply-hero">
         {poster && (
@@ -124,7 +139,7 @@ export default function ApplyShell({ eventId, title, kicker = 'Get involved', wi
         {/* A thin brand rule where the hero meets the page */}
         <div aria-hidden className="absolute inset-x-0 bottom-0 h-1 bg-brand" />
 
-        <div className={`relative mx-auto ${container} px-4 pb-9 pt-6 sm:px-6 sm:pb-12 sm:pt-8`}>
+        <div className={`relative mx-auto ${container} px-4 pb-9 pt-6 sm:px-6 lg:px-8 sm:pb-12 sm:pt-8`}>
           <Link
             href={`/events/${event.id}`}
             className="inline-flex items-center gap-1.5 rounded-full py-1 pr-2 text-sm font-semibold text-gray-300 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
@@ -184,7 +199,10 @@ export default function ApplyShell({ eventId, title, kicker = 'Get involved', wi
         </div>
       </div>
 
-      <main className={`mx-auto ${container} px-4 py-8 sm:px-6 sm:py-10`}>{children(event)}</main>
+      </>
+      )}
+
+      {width === 'full' ? <main>{children(event)}</main> : <main className={`mx-auto ${container} px-4 py-8 sm:px-6 lg:px-8 sm:py-10`}>{children(event)}</main>}
     </BrandScope>
   );
 }

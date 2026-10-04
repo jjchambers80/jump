@@ -23,7 +23,9 @@ Public routes: `/organizations/:orgId/blogs/:blogHandle` (listing, 12 per page) 
 | `backend/src/api/routes/organizations.js` | `GET /:id/public/blogs/:blogHandle[/:postHandle]`, `GET /:id/public/pages/:slug` — `gateByOrgParam`, payload carries the organization identity |
 | `backend/src/services/PageService.js` | Sanitises on write; `getPublic(orgId, slug)` (visible pages only) |
 | `backend/scripts/sanitize-pages.js` | One-off: clean pages saved before sanitisation |
-| `frontend/src/components/editor/RichTextEditor.tsx` (+ `RichTextEditorField.tsx`) | Tiptap StarterKit + Image, `immediatelyRender: false`, loaded with `next/dynamic` (`ssr: false`); toolbar (headings, marks, lists, quote, link popover, image from Files, divider, undo/redo); `variant="compact"` for excerpts |
+| `frontend/src/components/editor/RichTextEditor.tsx` (+ `RichTextEditorField.tsx`) | Tiptap StarterKit + Image, `immediatelyRender: false`, loaded with `next/dynamic` (`ssr: false`); toolbar (headings, marks, lists, quote, link popover, image from Files, video, divider, undo/redo); `variant="compact"` for excerpts |
+| `frontend/src/components/editor/InsertVideoDialog.tsx` + `VideoEmbed.ts`, `frontend/src/lib/videoEmbed.ts` | **Video** toolbar button (full variant): paste a YouTube / Vimeo embed snippet or link. With a video selected the button becomes **Edit video** (double-click also opens it): prefilled snippet, **Save video** replaces it, **Remove video** deletes it; the `videoEmbed` node stores `<iframe class="jump-video">` with a canonical player URL (`youtube-nocookie.com/embed/…`, `player.vimeo.com/video/…`) |
+| `backend/src/utils/videoEmbed.js` | Server copy of the embed parser; `sanitizeContentHtml` rewrites every `<iframe>` src through it and drops the iframe when it is not a YouTube / Vimeo player |
 | `frontend/src/styles/content.css` | `.jump-prose` shared by editor and storefront (`--storefront` uses `--brand-link`) |
 | `frontend/src/components/content/{SeoListingCard,SaveBar,TagInput,FilePickerDialog,StatusPill}.tsx`, `lib/useUnsavedChanges.ts` | Shared editor pieces (`SeoListingCard` also powers Pages) |
 | `frontend/src/app/admin/content/blog-posts/{page,BlogPostForm,PostEditorPage,useBlogApi}.tsx`, `new/`, `[postId]/` | List (tabs, search, blog filter, sort, bulk show/hide/delete), editor |
@@ -64,6 +66,7 @@ Public routes: `/organizations/:orgId/blogs/:blogHandle` (listing, 12 per page) 
 - Blog post handles are unique **per blog**; moving a post to a blog with a clashing handle suffixes it.
 - Playwright: register the catch-all `/admin/blog-posts**` route **before** the specific ones — Playwright runs later-registered routes first.
 - Session mock in `e2e/helpers/session.ts` now includes `name` (the author default depends on it).
+- **Video embeds are the only iframes** — `sanitizeContentHtml` keeps an `<iframe>` only when `videoEmbedSrc` turns its src into a YouTube (privacy-enhanced) or Vimeo player URL, and it forces `class`, `loading`, `allow` and `referrerpolicy` itself. `frontend/src/lib/videoEmbed.ts` mirrors `backend/src/utils/videoEmbed.js` (both tested with the same cases); change them together, and add a provider in both before the dialog accepts it.
 
 ## Related Features
 

@@ -13,7 +13,7 @@ const response = {
       id: 'event-1',
       title: 'Summer Festival',
       subtitle: 'Jun 21, 2026 · Civic Hall',
-      href: '/admin/events/event-1/edit?orgId=org-search',
+      href: '/admin/events/event-1?orgId=org-search',
       meta: { status: 'PUBLISHED' },
     },
     {
@@ -116,7 +116,7 @@ test('submits a query, groups results, and navigates when a result is selected',
   );
 
   await page.getByRole('option', { name: /^Summer Festival/ }).click();
-  await expect(page).toHaveURL(/\/admin\/events\/event-1\/edit\?orgId=org-search$/);
+  await expect(page).toHaveURL(/\/admin\/events\/event-1\?orgId=org-search$/);
 });
 
 test('supports Arrow keys, Enter, and Escape', async ({ page }) => {
@@ -138,7 +138,7 @@ test('supports Arrow keys, Enter, and Escape', async ({ page }) => {
 
   await search.press('ArrowDown');
   await search.press('Enter');
-  await expect(page).toHaveURL(/\/admin\/events\/event-1\/edit\?orgId=org-search$/);
+  await expect(page).toHaveURL(/\/admin\/events\/event-1\?orgId=org-search$/);
 });
 
 test('discards stale results when the query changes', async ({ page }) => {

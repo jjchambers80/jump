@@ -94,16 +94,25 @@ export const validateEventCreate = (req, res, next) => {
  * All fields optional, but if provided must be valid
  */
 /**
- * Validate attendee update request
- * All fields optional, but at least one required. If provided, must be valid.
+ * Validate attendee update request. Name only (spec 037 D13): the buyer's
+ * email is their Contact identity at the organization and is changed only on
+ * the customer page, never through a ticket. Named tickets are deferred.
  */
 export const validateUpdateAttendee = (req, res, next) => {
   try {
-    const { firstName, lastName, email } = req.body;
+    const { firstName, lastName, email } = req.body || {};
     const errors = [];
 
-    if (firstName === undefined && lastName === undefined && email === undefined) {
-      throw new ValidationError('At least one field (firstName, lastName, email) is required');
+    if (email !== undefined) {
+      const error = new ValidationError(
+        'The buyer email cannot be changed from a ticket. Edit it on the customer page.'
+      );
+      error.code = 'ATTENDEE_EMAIL_NOT_EDITABLE';
+      throw error;
+    }
+
+    if (firstName === undefined && lastName === undefined) {
+      throw new ValidationError('At least one field (firstName, lastName) is required');
     }
 
     if (firstName !== undefined) {
@@ -122,17 +131,6 @@ export const validateUpdateAttendee = (req, res, next) => {
       }
     }
 
-    if (email !== undefined) {
-      if (typeof email !== 'string' || email.trim().length === 0) {
-        errors.push('Email cannot be empty');
-      } else {
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email.trim())) {
-          errors.push('Email must be a valid email address');
-        }
-      }
-    }
-
     if (errors.length > 0) {
       throw new ValidationError('Validation failed', { errors });
     }
@@ -140,7 +138,6 @@ export const validateUpdateAttendee = (req, res, next) => {
     // Normalize
     if (firstName !== undefined) req.body.firstName = firstName.trim();
     if (lastName !== undefined) req.body.lastName = lastName.trim();
-    if (email !== undefined) req.body.email = email.trim().toLowerCase();
 
     next();
   } catch (error) {

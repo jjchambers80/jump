@@ -47,8 +47,11 @@ export const MERGE_FIELDS = [
   ['event.name', 'Event name'],
   ['event.date', 'Event date'],
   ['organization.name', 'Your organization name'],
+  ['organization.email', 'Your organization contact email (empty when not set)'],
   ['form.name', 'Application form name'],
-  ['tier.name', 'Selected tier'],
+  ['form.paid', 'Section flag: true on a paid form (the vendor chooses a space and pays after approval)'],
+  ['tier.name', 'Category (tier): assigned on approval for paid forms'],
+  ['tier.price', 'What the category costs the applicant, fees and tax included (paid forms)'],
   ['addOns.summary', 'Add-ons chosen, e.g. "Booth power ×1 ($125.00), Extra badge ×2 ($20.00)" (empty when none)'],
   ['amount.applicantPays', 'Amount charged to the applicant'],
   ['order.ref', 'Order number of the application (e.g. JMP-K7M2PQ); empty on free forms'],
@@ -59,31 +62,38 @@ export const MERGE_FIELDS = [
   ['account.created', 'Section flag: true on the RECEIVED email when the applicant chose to create an account'],
   ['booth.label', 'Booth the applicant owns on the floor map (or the placement typed on the application); empty until chosen'],
   ['booth.size', 'Booth size in grid units, e.g. "10×10" (empty without a map booth)'],
-  ['booth.chooseRequired', 'Section flag: true on an approved map-bound application until the applicant chooses and pays for a booth'],
+  ['booth.chooseRequired', 'Section flag: same as space.chooseRequired (kept for templates written before spec 037)'],
+  ['space.chooseRequired', 'Section flag: true on an approved paid application until the vendor chooses a space and pays'],
+  ['space.onMap', 'Section flag: true when the vendor picks their spot on the event\'s floor map (the form sells spots, spec 039)'],
+  ['space.pickTier', 'Section flag: true when the vendor picks the space type themselves (approved without a category, spec 039)'],
+  ['space.dueDate', 'Date the vendor must choose and pay by (the payment clock starts at approval)'],
   ['links.map', 'Link to the public floor map centred on the applicant\'s booth (empty until one is owned)'],
 ];
 
-/** Actions that have a template. PAYMENT_DUE is used from phase 2; ADD_ONS_CHANGED from spec 012; TIER_CHANGED / WAIVED / OFFLINE_PAID from spec 018. */
-export const TEMPLATE_ACTIONS = ['RECEIVED', 'APPROVED', 'REJECTED', 'WAITLISTED', 'WITHDRAWN', 'PAYMENT_DUE', 'ADD_ONS_CHANGED', 'TIER_CHANGED', 'WAIVED', 'OFFLINE_PAID'];
+/** Actions that have a template. PAYMENT_DUE is used from phase 2; ADD_ONS_CHANGED from spec 012; TIER_CHANGED / WAIVED / OFFLINE_PAID from spec 018; CHOOSE_SPACE from spec 037 phase 5. */
+export const TEMPLATE_ACTIONS = ['RECEIVED', 'APPROVED', 'CHOOSE_SPACE', 'REJECTED', 'WAITLISTED', 'WITHDRAWN', 'PAYMENT_DUE', 'ADD_ONS_CHANGED', 'TIER_CHANGED', 'WAIVED', 'OFFLINE_PAID'];
 
 export const DEFAULT_TEMPLATES = {
   RECEIVED: {
     subject: 'We received your application for {{event.name}}',
     body: `Hi {{applicant.firstName}},
 
-Thanks for applying to {{event.name}} as {{form.name}}{{#tier}} ({{tier.name}}){{/tier}}. We have your application and will review it soon.
-{{#addOns}}
-Add-ons: {{addOns.summary}}
-{{/addOns}}
-{{#order.ref}}
-Order number: {{order.ref}}
-{{/order.ref}}
-You can check its status any time: {{links.status}}
-{{#account.created}}
+Thanks for applying to {{event.name}}{{#event.date}} on {{event.date}}{{/event.date}}. We received your application ({{form.name}}) and will review it soon.{{#tier}}
 
-Your account with {{organization.name}} is ready — no password needed. Sign in any time from this link (it works once and expires in 7 days): {{links.account}}
-{{/account.created}}
+Category: {{tier.name}}{{/tier}}{{#addOns}}
+Add-ons: {{addOns.summary}}{{/addOns}}{{#order.ref}}
+Order number: {{order.ref}}{{/order.ref}}
 
+What happens next:
+- We review every application and email you as soon as we decide.{{#form.paid}}
+- Nothing to pay today. If you are approved, you will choose your space and pay then to confirm it.{{/form.paid}}{{#organization.email}}
+- Questions or changes? Reply to this email or write to {{organization.email}}.{{/organization.email}}
+
+Check your application any time: {{links.status}}{{#account.created}}
+
+Your account with {{organization.name}} is ready, no password needed. Sign in from this link (it works once and expires in 7 days): {{links.account}}{{/account.created}}
+
+Thanks,
 {{organization.name}}`,
   },
   APPROVED: {
@@ -106,6 +116,20 @@ See your booth on the map: {{links.map}}
 We will follow up with logistics closer to the event. Your application: {{links.status}}
 
 See you there,
+{{organization.name}}`,
+  },
+  // Spec 037 phase 5: approval on a PAID form. Nothing has been charged; the
+  // vendor chooses a space (list, or map when there is one) and pays.
+  CHOOSE_SPACE: {
+    subject: 'You are approved for {{event.name}}: choose your space',
+    body: `Hi {{applicant.firstName}},
+
+Good news: {{profile.businessName}} is approved for {{event.name}}{{#tier}} as {{tier.name}}{{/tier}}.
+
+Next step: choose your space and pay{{#tier.price}} {{tier.price}}{{/tier.price}} to confirm it{{#space.dueDate}} by {{space.dueDate}}{{/space.dueDate}}.{{#space.onMap}} Pick your spot on the floor map; each spot shows its price.{{/space.onMap}}{{#space.pickTier}} Pick the space type that fits you; spaces go to whoever pays first.{{/space.pickTier}} Your space is held for 15 minutes while you pay.
+
+Choose your space: {{links.status}}
+
 {{organization.name}}`,
   },
   REJECTED: {

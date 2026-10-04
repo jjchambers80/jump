@@ -8,6 +8,7 @@ import { prisma } from '@jump/db';
 import { NotFoundError, ConflictError } from '../middleware/errorHandler.js';
 import { PAID_ORDER_STATUSES } from './paidStatuses.js';
 import contactOptInService from './ContactOptInService.js';
+import { normalizeEmail } from '../utils/normalizeEmail.js';
 
 const round = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
 const sum = (rows, pick) => rows.reduce((total, r) => total + Number(pick(r) || 0), 0);
@@ -256,21 +257,37 @@ class CustomerService {
             tickets: { select: { id: true, ticketNumber: true, status: true, redeemedAt: true, priceTier: { select: { name: true } } } },
             refunds: { where: { status: 'SUCCEEDED' }, select: { amount: true } },
             payment: { select: { source: true } },
-            application: {
+          },
+          orderBy: [{ paidAt: 'desc' }, { createdAt: 'desc' }],
+        },
+        // Every application, whatever its status or form kind (spec 037 D3 /
+        // C2): the customer page is where a vendor's cross-event history lives.
+        applications: {
+          select: {
+            id: true,
+            eventId: true,
+            status: true,
+            paymentStatus: true,
+            submittedAt: true,
+            createdAt: true,
+            form: { select: { id: true, name: true, kind: true } },
+            tier: { select: { id: true, name: true } },
+            profile: { select: { businessName: true } },
+            event: { select: { id: true, name: true, date: true, logoUrl: true } },
+            order: {
               select: {
                 id: true,
-                eventId: true,
+                orderRef: true,
                 status: true,
-                paymentStatus: true,
-                submittedAt: true,
-                createdAt: true,
-                form: { select: { id: true, name: true, kind: true } },
-                tier: { select: { id: true, name: true } },
-                profile: { select: { businessName: true } },
+                totalAmount: true,
+                paidAt: true,
+                refunds: { where: { status: 'SUCCEEDED' }, select: { amount: true } },
+                payment: { select: { source: true } },
               },
             },
           },
-          orderBy: [{ paidAt: 'desc' }, { createdAt: 'desc' }],
+          // Newest first; a DRAFT (never submitted) sorts after submitted ones.
+          orderBy: [{ submittedAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
         },
         rsvps: {
           select: {
@@ -326,28 +343,33 @@ class CustomerService {
       event: o.event,
     }));
 
-    // Application orders in the shape the customer page has shown since spec 018.
-    const applications = contact.orders
-      .filter((o) => o.kind === 'APPLICATION' && o.application)
-      .map((o) => ({
-        id: o.application.id,
-        orderId: o.id,
-        orderRef: o.orderRef,
-        eventId: o.application.eventId,
-        form: o.application.form,
-        tier: o.application.tier,
-        businessName: o.application.profile?.businessName ?? null,
-        status: o.application.status,
-        paymentStatus: o.application.paymentStatus,
-        paymentSource: o.payment?.source === 'OFFLINE' ? 'offline' : 'stripe',
-        applicantPays: Number(o.totalAmount),
-        refunded: round(sum(o.refunds, (r) => r.amount)),
-        paidAt: o.paidAt,
-        submittedAt: o.application.submittedAt,
-        createdAt: o.application.createdAt,
-        event: o.event,
-        detailUrl: `/admin/events/${o.application.eventId}/applications/${o.application.id}`,
-      }));
+    // Every application of the contact (spec 037 C2), in the shape the
+    // customer page has shown since spec 018. FREE forms have no order, so
+    // their money fields are empty; PAID forms read their order whatever its
+    // status (pending, due, paid, cancelled) — `orderStatus` carries it.
+    const applications = (contact.applications || []).map((a) => {
+      const o = a.order;
+      return {
+        id: a.id,
+        orderId: o?.id ?? null,
+        orderRef: o?.orderRef ?? null,
+        orderStatus: o?.status ?? null,
+        eventId: a.eventId,
+        form: a.form,
+        tier: a.tier,
+        businessName: a.profile?.businessName ?? null,
+        status: a.status,
+        paymentStatus: a.paymentStatus,
+        paymentSource: o ? (o.payment?.source === 'OFFLINE' ? 'offline' : 'stripe') : null,
+        applicantPays: o ? Number(o.totalAmount) : 0,
+        refunded: o ? round(sum(o.refunds, (r) => r.amount)) : 0,
+        paidAt: o?.paidAt ?? null,
+        submittedAt: a.submittedAt,
+        createdAt: a.createdAt,
+        event: a.event,
+        detailUrl: `/admin/events/${a.eventId}/applications/${a.id}`,
+      };
+    });
 
     // Account URL: link to the buyer's account on the storefront
     const { buyerAccountUrl } = await import('../utils/storefrontUrl.js');
@@ -439,10 +461,11 @@ class CustomerService {
 
     // Email change: ADMIN-only, checked in the route layer. Here we check for
     // uniqueness on organizationId + email.
-    if (updates.email !== undefined && updates.email !== contact.email) {
+    const nextEmail = updates.email !== undefined ? normalizeEmail(updates.email) : undefined;
+    if (nextEmail !== undefined && nextEmail !== contact.email) {
       // Check for collision on organizationId + email
       const existing = await prisma.contact.findUnique({
-        where: { organizationId_email: { organizationId, email: updates.email } },
+        where: { organizationId_email: { organizationId, email: nextEmail } },
         select: { id: true },
       });
       if (existing && existing.id !== contactId) {
@@ -450,7 +473,7 @@ class CustomerService {
           code: 'EMAIL_TAKEN',
         });
       }
-      allowed.email = updates.email;
+      allowed.email = nextEmail;
     }
 
     try {

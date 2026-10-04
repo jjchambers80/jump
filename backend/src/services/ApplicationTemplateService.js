@@ -9,6 +9,8 @@
 
 import { prisma } from '@jump/db';
 import { moneyOf } from './applicationMoney.js';
+import { selectionDueAt } from './applicationSelection.js';
+import orderLineService from './OrderLineService.js';
 import { DEFAULT_TEMPLATES, MERGE_FIELDS, STANDING_DEFAULT_TEMPLATES, STANDING_TEMPLATE_ACTIONS, TEMPLATE_ACTIONS } from '../config/applications.js';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import emailService from './EmailService.js';
@@ -97,6 +99,20 @@ class ApplicationTemplateService {
       application.statusUrl || await statusUrlFor(application);
     const money = moneyOf(application, { taxInclusive: organization.taxInclusivePricing === true });
     const booth = await this._boothContext(application);
+    const space = await this._spaceContext(application);
+    // Spec 037 phase 5: the category's all-in price, what the vendor pays before add-ons.
+    // Spec 039: a booth the vendor owns or was placed on is priced on its own;
+    // on a MAP form still choosing, spots carry their own prices, so the
+    // category's price would mislead and is left out.
+    const placed = application.id && application.tier ? await boothService.boothForApplication(application.id).catch(() => null) : null;
+    const owned = placed && placed.status !== 'HELD' ? placed : null;
+    const spotsPriced = application.form?.spaceSelection === 'MAP' && !owned;
+    const tierPrice =
+      application.tier && application.form?.kind === 'PAID' && !spotsPriced
+        ? orderLineService.applicationOrderData(application.tier, application.form, [], [], application.event || {}, organization, {
+            booth: owned,
+          }).amounts.applicantPays
+        : null;
     return {
       applicant: {
         firstName: application.contact?.firstName || '',
@@ -105,9 +121,10 @@ class ApplicationTemplateService {
       },
       profile: { businessName: application.profile?.businessName || '' },
       event: { name: application.event?.name || '', date: formatDate(application.event?.date) },
-      organization: { name: organization.name || '' },
-      form: { name: application.form?.name || '' },
-      tier: application.tier ? { name: application.tier.name } : null,
+      organization: { name: organization.name || '', email: organization.email || '' },
+      // `paid` is a section flag: a PAID form charges on approval, never at submission.
+      form: { name: application.form?.name || '', paid: application.form?.kind === 'PAID' },
+      tier: application.tier ? { name: application.tier.name, price: tierPrice == null ? '' : formatMoney(tierPrice) } : null,
       // Spec 012: null when there are no lines so {{#addOns}} sections hide.
       // Spec 024: money comes from the application's order.
       addOns: money.addOns.length
@@ -120,8 +137,10 @@ class ApplicationTemplateService {
             count: money.addOns.length,
           }
         : null,
-      amount: { applicantPays: formatMoney(money.applicantPays) },
-      payment: { dueDate: formatDate(money.paymentDueAt) },
+      // No order yet (spec 037 phase 5): the amount is the category's price.
+      amount: { applicantPays: formatMoney(money.orderId ? money.applicantPays : tierPrice ?? money.applicantPays) },
+      payment: { dueDate: formatDate(money.paymentDueAt || selectionDueAt(application)) },
+      space,
       order: { ref: money.orderRef || '' },
       // Spec 024 phase 3: `account.created` is true on the RECEIVED email that
       // carries the applicant's first sign-in link (`links.account` is then that link).
@@ -145,13 +164,13 @@ class ApplicationTemplateService {
    * shown (the hold may lapse before the email is read).
    */
   async _boothContext(application) {
-    const mapBound = application.tier?.mapBound === true;
-    const owned = mapBound || application.boothLabel ? await boothService.boothForApplication(application.id).catch(() => null) : null;
+    const owned = application.id ? await boothService.boothForApplication(application.id).catch(() => null) : null;
     const sold = owned && owned.status !== 'HELD' ? owned : null;
-    const chooseRequired = mapBound && !sold && application.status === 'APPROVED' && application.paymentStatus === 'PAYMENT_DUE';
+    // Spec 037 phase 5: approved on a PAID form and still choosing a space.
+    const chooseRequired = application.status === 'APPROVED' && application.paymentStatus === 'AWAITING_SELECTION';
     const organizationId = application.organizationId || application.event?.venue?.organizationId || application.event?.venue?.organization?.id;
     const mapUrl = sold && organizationId ? await eventUrl(application.eventId, organizationId, `/map?booth=${encodeURIComponent(sold.label)}`) : '';
-    const label = sold?.label || (!mapBound ? application.boothLabel : null) || '';
+    const label = sold?.label || (!owned ? application.boothLabel : null) || '';
     if (!label && !chooseRequired) return { booth: null, mapUrl };
     return {
       booth: {
@@ -161,6 +180,20 @@ class ApplicationTemplateService {
       },
       mapUrl,
     };
+  }
+
+  /**
+   * Spec 037 phase 5: `space` merge fields \u2014 whether the vendor still has to
+   * choose, whether the event's published map sells their category, and the
+   * date the payment clock runs out (approval + paymentDueDays).
+   */
+  async _spaceContext(application) {
+    const chooseRequired = application.status === 'APPROVED' && application.paymentStatus === 'AWAITING_SELECTION';
+    // Spec 039: the form decides — MAP forms sell spots, TIERS forms never show the map.
+    const onMap = application.form?.spaceSelection === 'MAP' && Boolean(application.tierId);
+    const pickTier = chooseRequired && application.form?.kind === 'PAID' && !application.tierId;
+    const due = selectionDueAt(application);
+    return { chooseRequired, onMap, pickTier, dueDate: due ? formatDate(due) : '' };
   }
 
   /**

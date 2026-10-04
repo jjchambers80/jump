@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Shared spec 038 theme package (plain ESM JS in packages/theme).
+  transpilePackages: ['@jump/theme'],
   async redirects() {
     // Users moved from the main admin menu to Settings › Users.
     return [
@@ -11,6 +13,13 @@ const nextConfig = {
       // NEXT_PUBLIC_LEGAL_PAGES_ENABLED and counsel's text ship together.
       { source: '/terms', destination: '/legal/terms', permanent: true },
       { source: '/privacy', destination: '/legal/privacy', permanent: true },
+      // Spec 037 D1–D3: Tickets (tier presets) and Participants left the main
+      // nav. Saved tiers live in the event editor's "Saved tiers" menu,
+      // applications are reviewed per event, templates open from a form.
+      { source: '/admin/tickets', destination: '/admin/events', permanent: true },
+      { source: '/admin/participants', destination: '/admin/events', permanent: true },
+      { source: '/admin/participants/applications', destination: '/admin/events', permanent: true },
+      { source: '/admin/participants/templates/:templateId', destination: '/admin/events/templates/:templateId', permanent: true },
     ];
   },
   async rewrites() {

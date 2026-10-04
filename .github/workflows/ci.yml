@@ -145,3 +145,5 @@ jobs:
       - name: Unit tests
         working-directory: frontend
         run: npm run test:unit
+      - name: Jump CLI tests (spec 043)
+        run: npm test --workspace=packages/cli

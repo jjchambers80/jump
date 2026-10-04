@@ -15,7 +15,7 @@ const eventDate = (date) =>
     timeZone: 'UTC',
   }).format(date);
 const eventHref = (eventId, organizationId) =>
-  `/admin/events/${eventId}/edit${organizationId ? `?orgId=${encodeURIComponent(organizationId)}` : ''}`;
+  `/admin/events/${eventId}${organizationId ? `?orgId=${encodeURIComponent(organizationId)}` : ''}`;
 
 class AdminSearchService {
   /**

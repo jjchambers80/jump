@@ -21,6 +21,15 @@ const FORM_STATUSES = new Set(['DRAFT', 'OPEN', 'CLOSED']);
 const CHARGE_TIMINGS = new Set(['SUBMIT', 'APPROVAL']);
 const FEE_MODES = new Set(['PASS', 'ABSORB']);
 const OVERDUE_POLICIES = new Set(['WITHDRAW', 'HOLD']);
+/** An error the API answers with a machine-readable `code`. */
+function coded(error, code) {
+  error.code = code;
+  return error;
+}
+
+const SPACE_SELECTIONS = new Set(['TIERS', 'MAP']);
+// Spec 039 D8: vendors in the middle of choosing a space.
+const MID_SELECTION = ['AWAITING_SELECTION', 'PAYMENT_DUE', 'PROCESSING'];
 
 export function paymentsEnabled() {
   return String(process.env.APPLICATIONS_PAYMENTS_ENABLED || '').toLowerCase() === 'true';
@@ -244,7 +253,7 @@ class ApplicationFormService {
   _templateSettings(definition, kind) {
     const out = { intro: definition.intro ?? null };
     if (kind === 'PAID') {
-      for (const key of ['chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy']) {
+      for (const key of ['chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy', 'reserveOnApproval', 'spaceSelection']) {
         if (definition[key] !== undefined && definition[key] !== null) out[key] = definition[key];
       }
     }
@@ -307,6 +316,8 @@ class ApplicationFormService {
       taxable: paid ? form.taxable : null,
       paymentDueDays: paid ? form.paymentDueDays : null,
       overduePolicy: paid ? form.overduePolicy : null,
+      reserveOnApproval: paid ? form.reserveOnApproval !== false : null,
+      spaceSelection: paid ? form.spaceSelection ?? 'TIERS' : null,
       tiers: (form.tiers || []).map((t) => ({ name: t.name, description: t.description ?? null, price: Number(t.price), quantityTotal: t.quantityTotal, isActive: t.isActive })),
       questions: (form.questions || []).filter((q) => !q.archivedAt).map((q) => ({ label: q.label, helpText: q.helpText ?? null, type: q.type, required: q.required, options: q.options ?? [], pinned: q.pinned ?? false })),
     };
@@ -349,6 +360,10 @@ class ApplicationFormService {
           taxable: f.taxable,
           paymentDueDays: f.paymentDueDays,
           overduePolicy: f.overduePolicy,
+          reserveOnApproval: f.reserveOnApproval,
+          // Spec 039: the copy's map starts as a draft, so a MAP form cannot
+          // open until that map is published (see _assertCanOpen).
+          spaceSelection: f.spaceSelection,
           displayOrder: f.displayOrder,
           createdFromTemplateId: f.createdFromTemplateId,
         },
@@ -373,12 +388,14 @@ class ApplicationFormService {
     if (body.collectBusiness === false) throw new ValidationError('Event application forms must collect business details');
     const data = this._validateFormFields(body, existing.kind, existing);
     if (body.slug !== undefined) data.slug = await this._uniqueSlug(eventId, body.slug, formId);
-    if (data.status === 'OPEN') this._assertCanOpen({ ...existing, ...data });
-    // A map-bound tier sells its booth after approval (spec 014 §4.2): the
-    // vendor picks a spot, then pays. Charging at submission has no spot yet.
-    if (data.chargeTiming === 'SUBMIT' && existing.tiers.some((t) => t.mapBound)) {
-      throw new ValidationError('Forms with tiers bound to a floor map must charge on approval');
+    if (data.spaceSelection !== undefined && data.spaceSelection !== existing.spaceSelection) {
+      await this._assertSpaceSelectionChangeable(formId);
     }
+    const next = { ...existing, ...data };
+    if (data.status === 'OPEN') await this._assertCanOpen(next);
+    else if (next.status === 'OPEN' && data.spaceSelection === 'MAP') await this._assertMapReady(next);
+    // Spec 037 phase 5: every PAID form sells its space after approval, so
+    // `chargeTiming` is kept for legacy rows only and no longer gates anything.
     const form = await prisma.applicationForm.update({ where: { id: formId }, data, include: FORM_INCLUDE });
     return this._serializeForm(form, event, await this._addOnsForEvent(eventId));
   }
@@ -757,18 +774,63 @@ class ApplicationFormService {
         if (!OVERDUE_POLICIES.has(body.overduePolicy)) throw new ValidationError('overduePolicy must be WITHDRAW or HOLD');
         data.overduePolicy = body.overduePolicy;
       }
+      // Spec 037 D5: approval guarantees a space (takes a slot) or not (first-come).
+      if (body.reserveOnApproval !== undefined) {
+        if (typeof body.reserveOnApproval !== 'boolean') throw new ValidationError('reserveOnApproval must be a boolean');
+        data.reserveOnApproval = body.reserveOnApproval;
+      }
+      // Spec 039 D1: how an approved vendor chooses — a tier, or a spot on the floor map.
+      if (body.spaceSelection !== undefined) {
+        if (!SPACE_SELECTIONS.has(body.spaceSelection)) throw new ValidationError('spaceSelection must be TIERS or MAP');
+        data.spaceSelection = body.spaceSelection;
+      }
     } else {
-      for (const key of ['chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy']) {
+      for (const key of ['chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy', 'reserveOnApproval', 'spaceSelection']) {
         if (body[key] !== undefined) throw new ValidationError(`${key} applies to PAID forms only`);
       }
     }
     return data;
   }
 
-  _assertCanOpen(form) {
+  async _assertCanOpen(form) {
     if (form.kind !== 'PAID') return;
     if (!paymentsEnabled()) throw new ConflictError('Paid application forms cannot open until application payments are enabled');
     if (!(form.tiers || []).some((t) => t.isActive)) throw new ValidationError('A PAID form needs at least one active tier before it can open');
+    if (form.spaceSelection === 'MAP') await this._assertMapReady(form);
+  }
+
+  /**
+   * Spec 039 D9: a MAP form sells spots, so while it is open the event's map
+   * must be published with at least one booth on every active tier. A draft
+   * form may be set to MAP before the map is ready; opening it checks.
+   */
+  async _assertMapReady(form) {
+    const map = await prisma.floorMap.findUnique({ where: { eventId: form.eventId }, select: { id: true, status: true } });
+    if (!map || map.status !== 'PUBLISHED') {
+      throw coded(new ValidationError('Publish the event\'s floor map before vendors choose spots on it'), 'MAP_NOT_READY');
+    }
+    const active = (form.tiers || []).filter((t) => t.isActive);
+    const bound = new Set(
+      (await prisma.booth.findMany({ where: { mapId: map.id, tierId: { in: active.map((t) => t.id) } }, select: { tierId: true }, distinct: ['tierId'] })).map((b) => b.tierId)
+    );
+    const missing = active.filter((t) => !bound.has(t.id));
+    if (missing.length) {
+      throw coded(
+        new ValidationError(`Add spots on the floor map for: ${missing.map((t) => t.name).join(', ')}`, { tiers: missing.map((t) => ({ id: t.id, name: t.name })) }),
+        'MAP_NOT_READY'
+      );
+    }
+  }
+
+  /** Spec 039 D8: the mode cannot change while a vendor is choosing or paying for a space. */
+  async _assertSpaceSelectionChangeable(formId) {
+    const choosing = await prisma.application.count({ where: { formId, status: 'APPROVED', paymentStatus: { in: MID_SELECTION } } });
+    if (choosing > 0) {
+      throw coded(
+        new ConflictError(`${choosing} approved vendor${choosing === 1 ? ' is' : 's are'} choosing a space; change this once they have paid or been released`, { choosing }),
+        'SPACE_SELECTION_LOCKED'
+      );
+    }
   }
 
   _validateTier(body, displayOrder, partial = false) {
@@ -867,6 +929,8 @@ class ApplicationFormService {
       taxable: form.taxable,
       paymentDueDays: form.paymentDueDays,
       overduePolicy: form.overduePolicy,
+      reserveOnApproval: form.reserveOnApproval !== false,
+      spaceSelection: form.kind === 'PAID' ? form.spaceSelection ?? 'TIERS' : null,
       displayOrder: form.displayOrder,
       createdFromTemplateId: form.createdFromTemplateId ?? null,
       acceptance: this.acceptance(form),

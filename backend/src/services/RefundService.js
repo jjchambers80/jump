@@ -7,14 +7,19 @@
 // a Stripe call.
 
 import { prisma } from '@jump/db';
-import { createStripeRefund } from './stripeRefund.js';
+import { createStripeRefund, refundIdempotencyKey } from './stripeRefund.js';
 import addOnService from './AddOnService.js';
+import { returnTicketsToSale } from './ticketInventory.js';
 import logger from '../utils/logger.js';
 import { NotFoundError, ConflictError, ValidationError } from '../middleware/errorHandler.js';
 import { orderStatusFor } from './applicationOrderStatus.js';
 import boothService from './BoothService.js';
+import { ticketAmountPaid } from './ticketAmounts.js';
 
 const round = (v) => Math.round((v + Number.EPSILON) * 100) / 100;
+const cents = (v) => Math.round(Number(v) * 100);
+/** How long a PENDING Stripe refund counts as in flight (see _refundApplicationOrder). */
+const IN_FLIGHT_MS = 2 * 60 * 1000;
 
 class RefundService {
   /**
@@ -100,7 +105,14 @@ class RefundService {
           order.stripePaymentIntentId,
           refundAmount,
           reason,
-          { connected: Boolean(order.stripeAccountId) }
+          {
+            connected: Boolean(order.stripeAccountId),
+            // Scoped to the order, not to the PENDING Refund row above: if this
+            // transaction rolls back after Stripe succeeded, that row is gone
+            // and a retry would mint a fresh id. "Refund the rest of this
+            // order" happens at most once, so the order id is the operation.
+            idempotencyKey: refundIdempotencyKey(`order:${orderId}:full`),
+          }
         );
       } catch (err) {
         // Stripe failed — transaction rolls back, PENDING record disappears
@@ -121,18 +133,8 @@ class RefundService {
         });
       }
 
-      // Restore inventory with FOR UPDATE lock on each tier
-      const tierQuantities = {};
-      for (const ticket of refundableTickets) {
-        tierQuantities[ticket.priceTierId] = (tierQuantities[ticket.priceTierId] || 0) + 1;
-      }
-      for (const [tierId, qty] of Object.entries(tierQuantities)) {
-        await tx.$executeRaw`
-          UPDATE "PriceTier"
-          SET "quantitySold" = "quantitySold" - ${qty}
-          WHERE "id" = ${tierId}
-        `;
-      }
+      // Restore inventory (row lock via the UPDATE)
+      await returnTicketsToSale(tx, refundableTickets);
 
       // Add-on lines (spec 012): the full refund covers them; release their quantity
       const openAddOnLines = await tx.orderAddOn.findMany({ where: { orderId, refundedAt: null } });
@@ -214,15 +216,29 @@ class RefundService {
         });
         return { refund: manual, order, done: true };
       }
+      // A refund already on its way to Stripe (double-click, two admins) would
+      // read the same refunded total, get the same key below, and record Stripe's
+      // one refund twice. Rows older than the window are a crashed attempt, not
+      // a live one, and must not block the order forever.
+      const inFlight = await tx.refund.findFirst({
+        where: {
+          orderId,
+          status: 'PENDING',
+          manual: false,
+          stripeRefundId: null,
+          createdAt: { gt: new Date(Date.now() - IN_FLIGHT_MS) },
+        },
+      });
+      if (inFlight) throw new ConflictError('A refund for this order is already in progress');
       const pending = await tx.refund.create({
         data: { orderId, amount: value, reason, status: 'PENDING', initiatedBy },
       });
-      return { refund: pending, order, done: false, value };
+      return { refund: pending, order, done: false, value, alreadyRefunded: Number(alreadyRaw) };
     });
     if (prepared.done) return this._formatRefund(prepared.refund, prepared.order);
 
     // Stripe outside the lock, like ApplicationPaymentService.refund did (spec 011).
-    const { refund, order, value } = prepared;
+    const { refund, order, value, alreadyRefunded } = prepared;
     let stripeRefund;
     try {
       stripeRefund = await createStripeRefund({
@@ -231,6 +247,16 @@ class RefundService {
         reason,
         connected: Boolean(order.stripeAccountId),
         metadata: { orderId, applicationId: order.applicationId },
+        // Not the Refund row id: an admin retrying after a lost response gets a
+        // new row, so a row key would be fresh and Stripe would refund twice.
+        // The amount plus the total already refunded is the same on that retry
+        // (a lost refund never counts as SUCCEEDED), and different for a genuine
+        // second partial of the same amount.
+        // ponytail: Stripe keeps keys 24 h; a retry after that relies on the
+        // remaining-amount guard and Stripe's own over-refund refusal.
+        idempotencyKey: refundIdempotencyKey(
+          `application-order:${orderId}:${cents(value)}:${cents(alreadyRefunded)}`
+        ),
       });
     } catch (error) {
       await prisma.refund.update({ where: { id: refund.id }, data: { status: 'FAILED' } });
@@ -300,10 +326,12 @@ class RefundService {
    * @returns {Promise<Object>} Refund record
    */
   /**
-   * Refund one ticket. Staff callers pass nothing and the full `pricePaid`
-   * goes back. A self-serve refund (spec 031) passes the policy's `feeAmount`:
-   * the buyer gets `pricePaid − feeAmount`, the organization keeps the fee,
-   * and the ticket is voided either way.
+   * Refund one ticket. Staff callers pass nothing and everything the buyer
+   * paid for that ticket goes back — the listed price plus its share of the
+   * platform fee, the processing fee and tax (`ticketAmountPaid`), not the
+   * listed price alone. A self-serve refund (spec 031) passes the policy's
+   * `feeAmount`: the buyer gets the rest, the organization keeps the fee, and
+   * the ticket is voided either way.
    */
   async refundTicket(ticketId, { reason = null, initiatedBy = null, feeAmount = 0 } = {}) {
     const fee = round(Number(feeAmount) || 0);
@@ -317,6 +345,11 @@ class RefundService {
             include: {
               payment: true,
               tickets: true,
+              // Per-line fees and tax: what this ticket actually cost the buyer.
+              // Add-on lines too: the order total is read against all lines
+              // to tell tax-inclusive orders apart (ticketAmounts.taxOnTop).
+              items: true,
+              addOns: true,
             },
           },
           priceTier: { select: { isRefundable: true, name: true } },
@@ -344,7 +377,7 @@ class RefundService {
         throw new ValidationError('No successful payment found');
       }
 
-      const pricePaid = Number(ticket.pricePaid);
+      const pricePaid = ticketAmountPaid(ticket);
       if (fee > pricePaid) throw new ValidationError('feeAmount cannot exceed the ticket price');
       const refundAmount = round(pricePaid - fee);
       if (refundAmount <= 0) {
@@ -383,7 +416,12 @@ class RefundService {
           order.payment.stripePaymentIntentId,
           refundAmount,
           reason,
-          { connected: Boolean(order.payment.stripeAccountId) }
+          {
+            connected: Boolean(order.payment.stripeAccountId),
+            // A ticket is refunded at most once (it is VOIDED below), so the
+            // ticket is the operation and survives a rolled-back retry.
+            idempotencyKey: refundIdempotencyKey(`ticket:${ticket.id}`),
+          }
         );
       } catch (err) {
         throw err;
@@ -401,12 +439,8 @@ class RefundService {
         data: { status: 'VOIDED' },
       });
 
-      // Restore inventory with row-level lock
-      await tx.$executeRaw`
-        UPDATE "PriceTier"
-        SET "quantitySold" = "quantitySold" - 1
-        WHERE "id" = ${ticket.priceTierId}
-      `;
+      // Restore inventory (row lock via the UPDATE)
+      await returnTicketsToSale(tx, [ticket]);
 
       // Determine new order status from fresh DB state
       const activeTicketsAfter = await tx.ticket.count({
@@ -416,15 +450,17 @@ class RefundService {
         },
       });
       const openAddOnLines = await tx.orderAddOn.count({ where: { orderId: order.id, refundedAt: null } });
-      // Spec 031: a retained fee is money still on the order, so the order stays
-      // PARTIALLY_REFUNDED and staff can return the remainder with refundOrder.
-      const [{ total: feesRetainedRaw }] = await tx.$queryRaw`
-        SELECT COALESCE(SUM("feeAmount"), 0) AS total
+      // REFUNDED must mean the buyer has their money back, not merely that no
+      // line is open. A retained fee (spec 031) or an unreturned fee/tax share
+      // leaves the order PARTIALLY_REFUNDED so refundOrder can still finish it.
+      const [{ total: refundedSoFarRaw }] = await tx.$queryRaw`
+        SELECT COALESCE(SUM("amount"), 0) AS total
         FROM "Refund"
         WHERE "orderId" = ${order.id} AND "status" = 'SUCCEEDED'::"RefundStatus"
       `;
       const allLinesClosed = activeTicketsAfter === 0 && openAddOnLines === 0;
-      const newOrderStatus = allLinesClosed && Number(feesRetainedRaw) <= 0 ? 'REFUNDED' : 'PARTIALLY_REFUNDED';
+      const fullyRepaid = Number(refundedSoFarRaw) + 0.005 >= Number(order.totalAmount);
+      const newOrderStatus = allLinesClosed && fullyRepaid ? 'REFUNDED' : 'PARTIALLY_REFUNDED';
 
       await tx.order.update({
         where: { id: order.id },
@@ -494,6 +530,8 @@ class RefundService {
 
       const stripeRefund = await this._createStripeRefund(order.payment.stripePaymentIntentId, refundAmount, reason, {
         connected: Boolean(order.payment.stripeAccountId),
+        // An add-on line is refunded at most once (refundedAt is stamped below).
+        idempotencyKey: refundIdempotencyKey(`order-add-on:${line.id}`),
       });
 
       await tx.$executeRaw`
@@ -505,7 +543,19 @@ class RefundService {
 
       const activeTickets = await tx.ticket.count({ where: { orderId: order.id, status: { in: ['VALID', 'REDEEMED'] } } });
       const openAddOnLines = await tx.orderAddOn.count({ where: { orderId: order.id, refundedAt: null } });
-      const newOrderStatus = activeTickets === 0 && openAddOnLines === 0 ? 'REFUNDED' : 'PARTIALLY_REFUNDED';
+      // Same rule as refundTicket: REFUNDED means the money is back, not just
+      // that every line is closed.
+      const [{ total: refundedSoFarRaw }] = await tx.$queryRaw`
+        SELECT COALESCE(SUM("amount"), 0) AS total
+        FROM "Refund"
+        WHERE "orderId" = ${order.id} AND "status" = 'SUCCEEDED'::"RefundStatus"
+      `;
+      const newOrderStatus =
+        activeTickets === 0 &&
+        openAddOnLines === 0 &&
+        Number(refundedSoFarRaw) + 0.005 >= Number(order.totalAmount)
+          ? 'REFUNDED'
+          : 'PARTIALLY_REFUNDED';
       await tx.order.update({ where: { id: order.id }, data: { status: newOrderStatus } });
 
       return { refund: { ...refundRecord, stripeRefundId: stripeRefund.id, status: 'SUCCEEDED' }, order, refundAmount, newOrderStatus };
@@ -633,18 +683,8 @@ class RefundService {
         });
       }
 
-      // Restore inventory with row-level lock
-      const tierQuantities = {};
-      for (const ticket of ticketsToVoid) {
-        tierQuantities[ticket.priceTierId] = (tierQuantities[ticket.priceTierId] || 0) + 1;
-      }
-      for (const [tierId, qty] of Object.entries(tierQuantities)) {
-        await tx.$executeRaw`
-          UPDATE "PriceTier"
-          SET "quantitySold" = "quantitySold" - ${qty}
-          WHERE "id" = ${tierId}
-        `;
-      }
+      // Restore inventory (row lock via the UPDATE)
+      await returnTicketsToSale(tx, ticketsToVoid);
 
       const newStatus = isFullRefund ? 'REFUNDED' : 'PARTIALLY_REFUNDED';
       await tx.order.update({
@@ -674,6 +714,7 @@ class RefundService {
           select: { id: true, barcode: true, ticketNumber: true },
         },
         orderAddOn: { include: { addOn: { select: { name: true } } } },
+        dispute: { select: { state: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -692,9 +733,11 @@ class RefundService {
             ticketNumber: r.ticket.ticketNumber,
           }
         : null,
-      addOn: r.orderAddOn ? { id: r.orderAddOn.id, name: r.orderAddOn.addOn?.name ?? null, quantity: r.orderAddOn.quantity } : null,
+      addOn: r.orderAddOn ? { id: r.orderAddOn.id, name: r.orderAddOn.name ?? r.orderAddOn.addOn?.name ?? null, quantity: r.orderAddOn.quantity } : null,
       initiatedBy: r.initiatedBy,
       manual: r.manual === true,
+      // Spec 037: money Stripe pulled back for a chargeback, not a refund Jump issued.
+      dispute: r.disputeId ? { id: r.disputeId, state: r.dispute?.state ?? null } : null,
       createdAt: r.createdAt,
     }));
   }
@@ -708,8 +751,8 @@ class RefundService {
    *   (`refund_application_fee`), both pro rata for partial amounts, so the
    *   buyer is made whole and the platform eats only Stripe's processing cost.
    */
-  async _createStripeRefund(paymentIntentId, amount, reason, { connected = false } = {}) {
-    return createStripeRefund({ paymentIntentId, amount, reason, connected });
+  async _createStripeRefund(paymentIntentId, amount, reason, { connected = false, idempotencyKey } = {}) {
+    return createStripeRefund({ paymentIntentId, amount, reason, connected, idempotencyKey });
   }
 
   _formatRefund(refund, order) {

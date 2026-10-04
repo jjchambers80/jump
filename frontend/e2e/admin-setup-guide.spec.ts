@@ -29,7 +29,7 @@ const freshGuide = (): Guide => ({
     { id: 'payments', done: false, href: '/admin/settings/payments', state: 'connect', shown: true },
     { id: 'business', done: false, href: '/admin/settings', shown: true },
     { id: 'domain', done: false, href: '/admin/settings/domains', shown: true },
-    { id: 'applications', done: false, href: '/admin/participants/applications', shown: false },
+    { id: 'applications', done: false, href: '/admin/events', shown: false },
   ],
   onboarding: { goals: ['sell_online'] },
 });

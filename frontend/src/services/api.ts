@@ -301,6 +301,8 @@ export interface OnlineStorePage {
   /** Search engine listing overrides; null falls back to the title / no description */
   seoTitle: string | null;
   seoDescription: string | null;
+  /** Spec 042: name of the page template laying the page out; null = default */
+  template: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -314,6 +316,46 @@ export interface OnlineStorePageInput {
   slug: string;
   seoTitle: string | null;
   seoDescription: string | null;
+  template: string | null;
+}
+
+// ===== Page templates (spec 042) =====
+
+export type PageTemplateSection =
+  | { type: 'page_content' }
+  | { type: 'rich_text'; settings: { html: string } }
+  | { type: 'contact_form'; settings: ContactFormSettings };
+
+export interface ContactFormSettings {
+  heading?: string;
+  intro?: string;
+  submitLabel: string;
+  successMessage: string;
+  showPhone: boolean;
+  showSubject: boolean;
+}
+
+/** GET /admin/page-templates — uploaded by a developer (SYSTEM_ADMIN) to one organization. */
+export interface PageTemplate {
+  id: string;
+  name: string;
+  label: string;
+  description: string | null;
+  sections: PageTemplateSection[];
+  /** Pages of the organization using it */
+  pageCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Body for POST /organizations/:id/public/pages/:slug/contact. `website` is the honeypot. */
+export interface ContactInquiryInput {
+  name: string;
+  email: string;
+  phone?: string;
+  subject?: string;
+  message: string;
+  website?: string;
 }
 
 // ===== Online Store Preferences =====
@@ -386,6 +428,8 @@ export interface MapBooth {
   rotation: number;
   tierId: string | null;
   status: BoothStatus;
+  /** Spec 039: the booth's own price in dollars; null uses the tier's. */
+  price?: number | null;
   applicationId: string | null;
   assignedById: string | null;
   createdAt: string;
@@ -438,6 +482,8 @@ export interface LayoutBoothInput {
   h: number;
   rotation: number;
   tierId: string | null;
+  /** Spec 039: the booth's own price in dollars; null uses the tier's. Omitted keeps what is stored. */
+  price?: number | null;
 }
 
 export interface LayoutInput {
@@ -460,6 +506,9 @@ export interface PublicMapLegendTier {
   tierId: string;
   name: string;
   price: number; // all-in price in dollars (FeeService units)
+  /** Spec 039: all-in range across the tier's booths (booth prices override the tier's). */
+  priceFrom?: number;
+  priceTo?: number;
   swatch: number; // 0-5
 }
 
@@ -473,6 +522,10 @@ export interface PublicMapBooth {
   h: number;
   rotation: number;
   status: BoothStatus;
+  /** Spec 039: what this booth costs the vendor, all in; null when it has no tier. */
+  price?: number | null;
+  /** Spec 039: the same before fees and tax, for totals with extras (`estimateSpaceTotal`). */
+  listedPrice?: number | null;
   tier: { id: string; name: string; price: number } | null;
   vendorName: string | null;
 }
@@ -588,6 +641,19 @@ export const checkInApi = {
     api.delete<{ alreadyCheckedIn: boolean; vendor: DoorVendor }>(`/admin/events/${eventId}/check-in/${applicationId}`),
 };
 
+export interface FloorPlanSummary {
+  id: string;
+  name: string;
+  width: number | null;
+  height: number | null;
+  boothCount: number;
+  zoneCount: number;
+  elementCount: number;
+  sourceMapId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export const mapsApi = {
   list: () => api.get<AdminMap[]>('/admin/maps'),
   create: (data: { eventId: string; name?: string; width?: number; height?: number; unit?: string }) =>
@@ -610,6 +676,13 @@ export const mapsApi = {
     api.post<{ fromBooth: string; toBooth: string; label: string }>(`/admin/maps/${mapId}/booths/${boothId}/move`, { targetBoothId }),
   setBoothStatus: (mapId: string, boothId: string, status: 'AVAILABLE' | 'RESERVED' | 'BLOCKED') =>
     api.post<{ boothId: string; label: string; status: string }>(`/admin/maps/${mapId}/booths/${boothId}/status`, { status }),
+  // Floor plans (spec 037 D1): FloorMapTemplate snapshots, reused by copying.
+  floorPlans: () => api.get<FloorPlanSummary[]>('/admin/maps/templates'),
+  removeFloorPlan: (templateId: string) => api.delete<void>(`/admin/maps/templates/${templateId}`),
+  saveAsFloorPlan: (mapId: string, name: string) =>
+    api.post<FloorPlanSummary>(`/admin/maps/${mapId}/templates`, { name }),
+  createFromFloorPlan: (eventId: string, templateId: string, name?: string) =>
+    api.post<AdminMapDetail>('/admin/maps', { eventId, templateId, ...(name ? { name } : {}) }),
   getEventMapId: (eventId: string) =>
     api.get<{ mapId: string } | null>(`/admin/events/${eventId}/map`),
   // Public map

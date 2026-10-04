@@ -59,8 +59,14 @@ describe('Online Store pages', () => {
         isVisible: true,
         seoTitle: null,
         seoDescription: null,
+        template: null,
       },
     });
+  });
+
+  it('rejects a template name with invalid characters', () => {
+    expect(validate({ title: 'Contact', content: 'x', template: '../x' })).toMatchObject({ statusCode: 400 });
+    expect(validate({ title: 'Contact', content: 'x', template: null })).toBeUndefined();
   });
 
   it('rejects a custom slug that clashes within the organization', async () => {

@@ -8,6 +8,7 @@ import legalAcceptanceService from './LegalAcceptanceService.js';
 import { checkoutAcceptanceRequired } from '../config/legal.js';
 import emailService from './EmailService.js';
 import { cancelUrlFor, rsvpIdFromCancelToken } from './rsvpLinks.js';
+import { upsertContactFillBlanks } from './contactRecord.js';
 
 function coded(ErrorType, code, message, details = {}) {
   const error = new ErrorType(message, details);
@@ -65,25 +66,12 @@ class RsvpService {
         });
 
       const organizationId = event.venue.organizationId;
-      let contact = await tx.contact.findUnique({
-        where: { organizationId_email: { organizationId, email: data.email } },
+      const contact = await upsertContactFillBlanks(tx, {
+        organizationId,
+        email: data.email,
+        firstName: data.firstName,
+        lastName: data.lastName,
       });
-      if (!contact) {
-        contact = await tx.contact.create({
-          data: {
-            organizationId,
-            email: data.email,
-            firstName: data.firstName,
-            lastName: data.lastName,
-          },
-        });
-      } else {
-        const nameData = {};
-        if (!contact.firstName?.trim()) nameData.firstName = data.firstName;
-        if (!contact.lastName?.trim()) nameData.lastName = data.lastName;
-        if (Object.keys(nameData).length)
-          contact = await tx.contact.update({ where: { id: contact.id }, data: nameData });
-      }
 
       const existing = await tx.eventRsvp.findUnique({
         where: { eventId_contactId: { eventId, contactId: contact.id } },
@@ -149,6 +137,19 @@ class RsvpService {
     if (existing.status === 'GOING') {
       await prisma.eventRsvp.update({
         where: { id },
+        data: { status: 'CANCELLED', cancelledAt: new Date() },
+      });
+    }
+    return { status: 'ok' };
+  }
+
+  /** Cancel from the buyer account (spec 040): same effect as the emailed token, keyed by id + owner. */
+  async cancelForContact(contactId, rsvpId) {
+    const existing = await prisma.eventRsvp.findFirst({ where: { id: rsvpId, contactId } });
+    if (!existing) throw new NotFoundError('RSVP not found');
+    if (existing.status === 'GOING') {
+      await prisma.eventRsvp.update({
+        where: { id: rsvpId },
         data: { status: 'CANCELLED', cancelledAt: new Date() },
       });
     }

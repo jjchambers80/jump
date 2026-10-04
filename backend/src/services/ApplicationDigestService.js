@@ -7,6 +7,7 @@
 // `applicationDigestEnabled`; nothing is sent for a window with no
 // submissions, but the window still advances.
 
+import { hasLiveOrder } from './applicationOrderStatus.js';
 import { prisma } from '@jump/db';
 import emailService from './EmailService.js';
 import { platformBaseUrl } from '../utils/storefrontUrl.js';
@@ -71,9 +72,10 @@ class ApplicationDigestService {
         contact: { select: { firstName: true, lastName: true } },
         order: {
           select: {
+            status: true,
             totalAmount: true,
             addOns: {
-              select: { quantity: true, addOn: { select: { name: true, displayOrder: true } } },
+              select: { quantity: true, name: true, addOn: { select: { name: true, displayOrder: true } } },
               orderBy: { addOn: { displayOrder: 'asc' } },
             },
           },
@@ -82,17 +84,19 @@ class ApplicationDigestService {
       orderBy: [{ eventId: 'asc' }, { formId: 'asc' }, { submittedAt: 'asc' }],
     });
     if (rows.length === 0) return false;
+    // Spec 037 phase 5: only a live order is what the vendor chose (an expired selection gave its lines back).
+    for (const a of rows) if (!hasLiveOrder(a)) a.order = null;
 
     const recipients = await this.recipients(org.id);
     if (recipients.length === 0) return false;
 
-    // Spec 014 phase 2: approved vendors on a map-bound tier who have not
-    // bought a booth yet (a HELD booth is still unpaid, so it counts).
-    const boothNotChosen = await prisma.application.count({
-      where: { organizationId: org.id, status: 'APPROVED', paymentStatus: 'PAYMENT_DUE', tier: { mapBound: true }, booth: null },
+    // Spec 037 phase 5: approved vendors who have not chosen and paid for a
+    // space yet (holding one while paying still counts: it is not theirs yet).
+    const awaitingSpace = await prisma.application.count({
+      where: { organizationId: org.id, status: 'APPROVED', paymentStatus: { in: ['AWAITING_SELECTION', 'PAYMENT_DUE', 'PROCESSING'] }, form: { kind: 'PAID' } },
     });
 
-    const { subject, body } = this.compose(org, rows, since, now, { boothNotChosen });
+    const { subject, body } = this.compose(org, rows, since, now, { awaitingSpace });
     for (const to of recipients) {
       try {
         await emailService.sendApplicationMessage({ to, subject, body, organization: { name: org.name, logoUrl: org.logoUrl } });
@@ -118,7 +122,7 @@ class ApplicationDigestService {
    * branded shell by EmailService.sendApplicationMessage, which escapes
    * every line and turns the review URL into a button.
    */
-  compose(org, rows, since, now, { boothNotChosen = 0 } = {}) {
+  compose(org, rows, since, now, { awaitingSpace = 0 } = {}) {
     const base = platformBaseUrl();
     const byEvent = new Map();
     for (const a of rows) {
@@ -132,11 +136,11 @@ class ApplicationDigestService {
     const count = rows.length;
     const subject = `${count} new application${count === 1 ? '' : 's'} — ${org.name}`;
     const parts = [`${count} new application${count === 1 ? '' : 's'} came in between ${since.toUTCString()} and ${now.toUTCString()}.`];
-    // Spec 019: links open the Participants list (one table for every event);
-    // the per-event line links inline, the button at the end is org-wide.
+    // Spec 037 D3: applications are reviewed per event — each event links to
+    // its own queue; the button at the end opens the events list.
     for (const { event, forms } of byEvent.values()) {
       parts.push(event
-        ? `${event.name}\n${base}/admin/participants?event=${event.id}&status=SUBMITTED`
+        ? `${event.name}\n${base}/admin/events/${event.id}/applications?status=SUBMITTED`
         : `Standing forms\n${base}/admin/content/forms`);
       for (const { form, rows: list } of forms.values()) {
         const lines = [`${form.name}: ${list.length}`];
@@ -144,9 +148,10 @@ class ApplicationDigestService {
         const addOnTotals = new Map();
         for (const a of list) {
           for (const l of a.order?.addOns || []) {
-            const t = addOnTotals.get(l.addOn.name) ?? { quantity: 0, order: l.addOn.displayOrder };
+            const name = l.name ?? l.addOn.name; // spec 037: the line's snapshot
+            const t = addOnTotals.get(name) ?? { quantity: 0, order: l.addOn.displayOrder };
             t.quantity += l.quantity;
-            addOnTotals.set(l.addOn.name, t);
+            addOnTotals.set(name, t);
           }
         }
         if (addOnTotals.size) {
@@ -156,7 +161,7 @@ class ApplicationDigestService {
         for (const a of list.slice(0, MAX_ROWS_PER_FORM)) {
           const who = `${a.contact.firstName} ${a.contact.lastName}`.trim();
           const addOns = (a.order?.addOns || [])
-            .map((l) => `${l.addOn.name} ×${l.quantity}`)
+            .map((l) => `${l.name ?? l.addOn.name} ×${l.quantity}`)
             .join(', ');
           const extra = [
             a.tier?.name,
@@ -173,10 +178,10 @@ class ApplicationDigestService {
         parts.push(lines.join('\n'));
       }
     }
-    if (boothNotChosen > 0) {
-      parts.push(`Approved, booth not chosen: ${boothNotChosen} vendor${boothNotChosen === 1 ? '' : 's'} still need${boothNotChosen === 1 ? 's' : ''} to pick and pay for a booth.\n${base}/admin/participants?booth=none`);
+    if (awaitingSpace > 0) {
+      parts.push(`Approved, awaiting space: ${awaitingSpace} vendor${awaitingSpace === 1 ? '' : 's'} still need${awaitingSpace === 1 ? 's' : ''} to choose and pay for a space.\n${base}/admin/events`);
     }
-    parts.push(`${base}/admin/participants?status=SUBMITTED`);
+    parts.push(`${base}/admin/events`);
     parts.push(`You get this daily summary because you are a member of ${org.name}. Turn it off under Settings › Applications.`);
     return { subject, body: parts.join('\n\n') };
   }

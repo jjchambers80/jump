@@ -5,6 +5,7 @@
 // Also supports direct order fetch via GET /orders/:orderId with session params
 // Per FR-043, T083
 
+import type { StorefrontLogo } from '@/components/OrganizationHeader';
 import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -14,6 +15,8 @@ import BrandScope from '../../components/BrandScope';
 import OrganizationHeader from '../../components/OrganizationHeader';
 import type { ThemeMode } from '../../lib/theme';
 import { formatEventDate, formatEventTime } from '@/lib/eventTime';
+import { storefrontHref } from '@/lib/storefrontPath';
+import { clearCheckoutDraft } from '@/lib/checkoutDraft';
 
 interface TicketInfo {
   id: string;
@@ -48,6 +51,7 @@ interface OrderDetail {
     organizationId?: string | null;
     organizationName?: string | null;
     organizationLogoUrl?: string | null;
+    organizationStorefrontLogo?: StorefrontLogo | null;
     organizationBrandColor?: string | null;
     organizationThemeMode?: ThemeMode | null;
     venue: {
@@ -108,6 +112,8 @@ function ConfirmationContent() {
         data = await api.get<OrderDetail>(`/orders/${id}`);
       }
       setOrder(data);
+      // Paid: the cart kept for Stripe's cancel path is no longer needed.
+      if (data.status !== 'FAILED') clearCheckoutDraft(data.event.id);
 
       // If still PENDING, poll verify-payment a few times
       // (Stripe webhook / session retrieval may take a moment)
@@ -165,10 +171,11 @@ function ConfirmationContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center" role="status">
         <div className="text-center">
           <svg
-            className="animate-spin h-12 w-12 text-blue-600 dark:text-indigo-400 mx-auto mb-4"
+            aria-hidden="true"
+            className="animate-spin motion-reduce:animate-none h-12 w-12 text-gray-400 dark:text-slate-500 mx-auto mb-4"
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
             viewBox="0 0 24 24"
@@ -196,9 +203,10 @@ function ConfirmationContent() {
   if (error || !order) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center p-4">
-        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md dark:shadow-lg dark:shadow-black/20 p-8 max-w-md w-full text-center">
+        <div role="alert" className="bg-white dark:bg-slate-800 rounded-lg shadow-md dark:shadow-lg dark:shadow-black/20 p-8 max-w-md w-full text-center">
           <div className="text-red-600 dark:text-red-400 mb-4">
             <svg
+              aria-hidden="true"
               className="w-16 h-16 mx-auto"
               fill="none"
               stroke="currentColor"
@@ -212,17 +220,17 @@ function ConfirmationContent() {
               />
             </svg>
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-slate-100 mb-2">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100 mb-2">
             Unable to Retrieve Order
-          </h2>
+          </h1>
           <p className="text-gray-600 dark:text-slate-400 mb-6">
             {error || 'Something went wrong'}
           </p>
           <Link
-            href="/events"
-            className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded transition-colors duration-200"
+            href="/orders/lookup"
+            className="inline-block bg-gray-900 hover:bg-gray-800 text-white dark:bg-slate-100 dark:text-slate-900 font-bold py-3 px-6 rounded-lg transition-colors duration-200"
           >
-            Back to Events
+            Look up an order
           </Link>
         </div>
       </div>
@@ -236,6 +244,9 @@ function ConfirmationContent() {
 
   const isCompleted = order.status === 'COMPLETED';
   const isPending = order.status === 'PENDING';
+  const tierNames = Array.from(new Set((order.tickets ?? []).map((ticket) => ticket.priceTierName).filter(Boolean))).join(', ');
+  const organizationId = order.event.organizationId;
+  const moreEventsHref = organizationId ? storefrontHref(`/organizations/${organizationId}`, organizationId) : '/events';
 
   return (
     <BrandScope
@@ -249,17 +260,19 @@ function ConfirmationContent() {
             id: order.event.organizationId,
             name: order.event.organizationName,
             logoUrl: order.event.organizationLogoUrl,
+            storefrontLogo: order.event.organizationStorefrontLogo,
           }}
         />
       )}
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg dark:shadow-lg dark:shadow-black/20 p-8 mb-8">
-          {/* Success / Pending Header */}
-          <div className="text-center mb-8">
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-12">
+        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg dark:shadow-lg dark:shadow-black/20 p-5 sm:p-8 mb-8">
+          {/* Success / Pending Header — polite live region: polling flips PENDING to COMPLETED */}
+          <div className="text-center mb-8" aria-live="polite" data-testid="confirmation-status">
             {isCompleted ? (
               <>
                 <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full mb-4">
                   <svg
+                    aria-hidden="true"
                     className="w-8 h-8 text-green-600"
                     fill="none"
                     stroke="currentColor"
@@ -274,17 +287,18 @@ function ConfirmationContent() {
                   </svg>
                 </div>
                 <h1 className="text-3xl font-bold text-gray-900 dark:text-slate-100 mb-2">
-                  Purchase Successful!
+                  You&apos;re going!
                 </h1>
                 <p className="text-gray-600 dark:text-slate-400 text-lg">
-                  A confirmation email has been sent to{' '}
-                  <span className="font-semibold">{order.contact.email}</span>
+                  Your tickets are on their way to{' '}
+                  <span className="font-semibold break-all">{order.contact.email}</span>
                 </p>
               </>
             ) : isPending ? (
               <>
                 <div className="inline-flex items-center justify-center w-16 h-16 bg-yellow-100 dark:bg-yellow-900/30 rounded-full mb-4">
                   <svg
+                    aria-hidden="true"
                     className="w-8 h-8 text-yellow-600"
                     fill="none"
                     stroke="currentColor"
@@ -309,6 +323,7 @@ function ConfirmationContent() {
               <>
                 <div className="inline-flex items-center justify-center w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full mb-4">
                   <svg
+                    aria-hidden="true"
                     className="w-8 h-8 text-red-600"
                     fill="none"
                     stroke="currentColor"
@@ -377,10 +392,10 @@ function ConfirmationContent() {
                     </span>
                   </div>
                 )}
-                <div className="flex justify-between">
+                <div className="flex justify-between gap-4">
                   <span className="text-gray-600 dark:text-slate-400">Tier</span>
                   <span className="text-gray-900 dark:text-slate-100">
-                    {order.tickets?.[0]?.priceTierName || '—'}
+                    {tierNames || '—'}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -419,6 +434,7 @@ function ConfirmationContent() {
               <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
                 <div className="flex items-start">
                   <svg
+                    aria-hidden="true"
                     className="w-5 h-5 text-yellow-600 dark:text-yellow-500 mr-3 mt-0.5"
                     fill="none"
                     stroke="currentColor"
@@ -452,6 +468,7 @@ function ConfirmationContent() {
               <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-slate-600 rounded-lg p-4 mb-6">
                 <div className="flex items-start">
                   <svg
+                    aria-hidden="true"
                     className="w-5 h-5 text-brand-link mt-0.5 mr-3"
                     fill="none"
                     stroke="currentColor"
@@ -472,7 +489,7 @@ function ConfirmationContent() {
                         receive your email in the next 10 minutes, please search your spam or junk
                         folder.
                       </li>
-                      <li>View your tickets by clicking the "View Tickets" button in your email</li>
+                      <li>View your tickets by clicking the &ldquo;View Tickets&rdquo; button in your email</li>
                       <li>
                         Look up your order anytime with reference: <strong>{order.orderRef}</strong>
                       </li>
@@ -488,14 +505,14 @@ function ConfirmationContent() {
           {/* Actions */}
           <div className="text-center mt-6">
             <Link
-              href="/events"
-              className="inline-block bg-brand hover:bg-brand-hover text-brand-fg font-bold py-3 px-8 rounded-lg transition-colors duration-200"
+              href={moreEventsHref}
+              className="inline-block bg-brand hover:bg-brand-hover text-brand-fg font-bold py-3 px-8 rounded-lg transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2"
             >
-              Browse More Events
+              {order.event.organizationName ? `More events from ${order.event.organizationName}` : 'Browse more events'}
             </Link>
           </div>
         </div>
-      </div>
+      </main>
     </BrandScope>
   );
 }

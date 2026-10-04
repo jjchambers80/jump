@@ -33,6 +33,15 @@
   --brand-link: var(--brand-link-dark, #818cf8);
 }
 
+/*
+ * Theme layout widths (spec 038): inside a theme section the shared 7xl
+ * container follows the section's width (sectionWidthStyle), else the page
+ * width (settings.layout.pageWidth or the template's root pageWidth).
+ */
+.brand-scope [data-section] .max-w-7xl {
+  max-width: var(--theme-section-width, var(--theme-page-width, 80rem));
+}
+
 body {
   color: var(--foreground);
   background-color: var(--background);
@@ -145,6 +154,35 @@ body {
   }
 }
 
+/* Storefront event cards (EventCard): the poster and the stub meet at a
+   perforation with a round notch bitten out of each edge. */
+.ticket-notch-bottom,
+.ticket-notch-top {
+  --notch: 10px;
+}
+
+.ticket-notch-bottom {
+  -webkit-mask:
+    radial-gradient(circle var(--notch) at left bottom, transparent 97%, #000 100%),
+    radial-gradient(circle var(--notch) at right bottom, transparent 97%, #000 100%);
+  -webkit-mask-composite: source-in;
+  mask:
+    radial-gradient(circle var(--notch) at left bottom, transparent 97%, #000 100%),
+    radial-gradient(circle var(--notch) at right bottom, transparent 97%, #000 100%);
+  mask-composite: intersect;
+}
+
+.ticket-notch-top {
+  -webkit-mask:
+    radial-gradient(circle var(--notch) at left top, transparent 97%, #000 100%),
+    radial-gradient(circle var(--notch) at right top, transparent 97%, #000 100%);
+  -webkit-mask-composite: source-in;
+  mask:
+    radial-gradient(circle var(--notch) at left top, transparent 97%, #000 100%),
+    radial-gradient(circle var(--notch) at right top, transparent 97%, #000 100%);
+  mask-composite: intersect;
+}
+
 .event-stub-shadow {
   filter: drop-shadow(0 1px 1px rgb(15 23 42 / 0.06)) drop-shadow(0 2px 6px rgb(15 23 42 / 0.05));
   transition: filter 200ms ease, transform 200ms ease;
@@ -202,5 +240,53 @@ body {
   }
   100% {
     opacity: 0;
+  }
+}
+
+/* Theme Hero carousel (spec 041): the active dot fills over the rotation
+   interval (its animationend advances the slide, so the timer keeps running
+   under reduced motion only if rotation does, which it never starts), and the
+   active slide's copy settles in. */
+.hero-carousel-progress {
+  transform-origin: left center;
+  animation-name: hero-carousel-progress;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+@keyframes hero-carousel-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .hero-carousel-track > [data-active] [data-slide-copy] {
+    animation: hero-slide-copy 480ms cubic-bezier(0.2, 0.7, 0.2, 1) 120ms backwards;
+  }
+  /* Theme FAQ (spec 041): an answer eases in when its question opens. */
+  .faq-list details[open] > [data-faq-answer] {
+    animation: faq-answer 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+}
+@keyframes hero-slide-copy {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes faq-answer {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }

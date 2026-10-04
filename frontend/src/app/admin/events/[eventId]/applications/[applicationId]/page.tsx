@@ -58,6 +58,8 @@ function withAddOns(a: AdminApplication): AdminApplication {
 }
 
 const PAYMENT_HINT: Partial<Record<AdminApplication['paymentStatus'], string>> = {
+  NOT_DUE: 'Nothing is owed while you review. Approving assigns a category; the vendor then chooses their space and pays.',
+  AWAITING_SELECTION: 'Approved: the vendor chooses their space (list or map) and pays. You can record a payment taken outside Jump or waive the category price; staff can place them on the map.',
   AWAITING_CARD: 'The applicant has not finished saving a card; they cannot be approved yet.',
   CARD_ON_FILE: 'Approving charges this card off-session.',
   PROCESSING: 'Charge in flight — confirming with Stripe.',
@@ -337,13 +339,29 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
                     Price changed since submission. {app.tier?.name ?? 'This tier'}{app.addOns.length > 0 ? ' with these add-ons' : ''} now costs {money(app.pricing.currentApplicantPays)} to the applicant (you receive {money(app.pricing.currentOrgReceives)}); this application keeps the {money(app.amounts.applicantPays)} quoted when it was submitted.
                   </p>
                 )}
+                {app.status === 'APPROVED' && app.paymentStatus === 'AWAITING_SELECTION' && (
+                  <p className="mt-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-900 dark:border-violet-800 dark:bg-violet-900/20 dark:text-violet-200" data-testid="application-awaiting-space">
+                    Awaiting space{app.payment.paymentDueAt ? ` · choose and pay by ${formatDate(app.payment.paymentDueAt)}` : ''}
+                    {app.capacitySlot === 'RESERVED' ? ' · a space in this category is reserved for them' : ' · first come, first served'}
+                    {app.payment.overdue ? ' · overdue' : ''}
+                  </p>
+                )}
+                {app.selectionHeldUntil && ['PAYMENT_DUE', 'PROCESSING'].includes(app.paymentStatus) && (
+                  <p className="mt-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs text-orange-900 dark:border-orange-800 dark:bg-orange-900/20 dark:text-orange-200" data-testid="application-space-held">
+                    The vendor is holding their chosen space while they pay · hold ends {formatDate(app.selectionHeldUntil, true)}
+                  </p>
+                )}
                 <dl className="mt-2 space-y-1 text-sm">
-                  {app.tier && (
+                  {(app.tier || app.tierEditable?.allowed) && (
                     <div className="flex items-center justify-between gap-2">
-                      <dt className="text-gray-600 dark:text-slate-400">Tier</dt>
-                      <dd className="flex items-center gap-2 text-gray-900 dark:text-white">
-                        {app.tier.name}
-                        {app.amountEditable.allowed ? (
+                      <dt className="text-gray-600 dark:text-slate-400">Category</dt>
+                      <dd className="flex items-center gap-2 text-gray-900 dark:text-white" data-testid="application-category">
+                        {app.tier?.name ?? (
+                          <span className="text-gray-500 dark:text-slate-400">
+                            {app.status === 'APPROVED' && app.paymentStatus === 'AWAITING_SELECTION' ? 'Vendor choosing' : 'Assigned on approval'}
+                          </span>
+                        )}
+                        {(app.tierEditable?.allowed ?? app.amountEditable.allowed) ? (
                           <button
                             type="button"
                             ref={correction === 'tier' ? correctionBtnRef : undefined}
@@ -357,7 +375,7 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
                             Change
                           </button>
                         ) : (
-                          <span className="text-xs text-gray-500 dark:text-slate-400" title={app.amountEditable.reason ?? undefined}>
+                          <span className="text-xs text-gray-500 dark:text-slate-400" title={(app.tierEditable?.reason ?? app.amountEditable.reason) ?? undefined}>
                             Locked
                           </span>
                         )}
@@ -621,9 +639,9 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
                   )}
                 </div>
               )}
-              {!app.booth && app.tier?.mapBound && app.status === 'APPROVED' && app.paymentStatus === 'PAYMENT_DUE' && (
+              {!app.booth && app.tier?.mapBound && app.status === 'APPROVED' && ['AWAITING_SELECTION', 'PAYMENT_DUE'].includes(app.paymentStatus) && (
                 <p className="mt-3 text-xs text-gray-500 dark:text-slate-400" data-testid="application-booth-not-chosen">
-                  Booth not chosen yet — the vendor picks one on the floor map when they pay.
+                  Booth not chosen yet — the vendor picks one on the floor map (or any open space from the list) when they pay.
                 </p>
               )}
 
@@ -776,7 +794,7 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
           onSaved={(next) => {
             setApp(next);
             setCorrection(null);
-            setNotice(`Moved to ${next.tier?.name}. New total ${money(next.amounts.applicantPays)}.`);
+            setNotice(['NOT_DUE', 'AWAITING_SELECTION'].includes(next.paymentStatus) ? `Category set to ${next.tier?.name}.` : `Moved to ${next.tier?.name}. New total ${money(next.amounts.applicantPays)}.`);
           }}
         />
       )}

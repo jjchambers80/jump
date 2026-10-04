@@ -16,7 +16,7 @@ import {
 import organizationService from '../../services/OrganizationService.js';
 import { NotFoundError } from '../../middleware/errorHandler.js';
 import { uploadImage } from '../../middleware/imageUpload.js';
-import imageService from '../../services/ImageService.js';
+import imageService, { dimensionQuery } from '../../services/ImageService.js';
 import storefrontPreferencesService from '../../services/StorefrontPreferencesService.js';
 import { validateStorefrontUnlock } from '../validators/storefrontPreferencesValidators.js';
 import { gateByOrgParam } from '../../middleware/storefrontGate.js';
@@ -25,8 +25,16 @@ import pageService from '../../services/PageService.js';
 import menuService from '../../services/MenuService.js';
 import urlRedirectService from '../../services/UrlRedirectService.js';
 import { findByPublicIdentifier } from '../../utils/publicIdentifier.js';
+import { clientIpForRateLimit } from '../../utils/clientIp.js';
+import themeService, { themesEnabledFor } from '../../services/ThemeService.js';
+import themePreviewService from '../../services/ThemePreviewService.js';
+import contactInquiryService from '../../services/ContactInquiryService.js';
+import { validateContactInquiry } from '../validators/contactInquiryValidators.js';
+import { LIMITS, makeLimiter } from '../../middleware/rateLimit.js';
 
 const router = Router();
+
+const contactLimiter = makeLimiter('CONTACT_SUBMIT', LIMITS.CONTACT_SUBMIT);
 
 const verifyOrgOwnership = requireOrgMembership('id');
 
@@ -37,7 +45,9 @@ const unlockLimiter = rateLimit({
   limit: 10,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
-  keyGenerator: (req) => `${ipKeyGenerator(req.ip)}:${req.params.id}`,
+  // Themed storefronts unlock through the Next route handler (spec 038), so
+  // count the signed visitor IP, not the frontend server's (spec 020).
+  keyGenerator: (req) => `${ipKeyGenerator(clientIpForRateLimit(req))}:${req.params.id}`,
   message: { message: 'Too many attempts. Try again later.' },
 });
 
@@ -236,6 +246,54 @@ router.get('/:id/public/redirect', async (req, res, next) => {
   }
 });
 
+/**
+ * GET /organizations/:id/public/storefront/render?page=home|events (spec 038,
+ * contracts C1). Everything a server-rendered themed page needs, in one call.
+ * Organizations outside the rollout get `{ renderer: 'legacy' }` and nothing
+ * else. The parameter MUST be `:id`: gateByOrgParam reads req.params.id, and
+ * under any other name the private-store gate would silently pass.
+ */
+router.get(
+  '/:id/public/storefront/render',
+  (req, res, next) => {
+    // Per-visitor answer (access token, gate): never shared by a cache.
+    res.set('Cache-Control', 'private, no-store');
+    next();
+  },
+  async (req, res, next) => {
+    try {
+      const organization = await findByPublicIdentifier(prisma.organization, req.params.id, {
+        where: { status: 'ACTIVE' },
+        select: { id: true, themesEnabled: true },
+      });
+      if (!organization) throw new NotFoundError('Organization not found');
+      if (!themesEnabledFor(organization)) return res.json({ renderer: 'legacy' });
+      req.themeOrganizationId = organization.id;
+      // Draft preview (D11): null = none sent, false = sent but not valid here.
+      const previewToken = req.get('X-Theme-Preview');
+      if (previewToken) req.themePreview = themePreviewService.verify(previewToken, organization.id) ?? false;
+      next();
+    } catch (error) {
+      next(error);
+    }
+  },
+  // A staff preview renders past the store password; a share link does not (contracts C7).
+  (req, res, next) => (req.themePreview && !req.themePreview.share ? next() : gateByOrgParam(req, res, next)),
+  async (req, res, next) => {
+    try {
+      const result = await themeService.renderPublic(req.themeOrganizationId, String(req.query.page || 'home'), {
+        preview: req.themePreview || null,
+      });
+      if (result.preview) res.set('X-Robots-Tag', 'noindex');
+      // Tells the Next server to clear the cookie (Server Components cannot).
+      else if (req.themePreview !== undefined) result.previewInvalid = true;
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 /** GET /organizations/:id/public/menus — main + footer navigation (spec 027). */
 router.get('/:id/public/menus', gateByOrgParam, async (req, res, next) => {
   try {
@@ -256,6 +314,30 @@ router.get('/:id/public/pages/:slug', gateByOrgParam, async (req, res, next) => 
     next(error);
   }
 });
+
+/**
+ * POST /organizations/:id/public/pages/:slug/contact
+ * Contact-form message from a page whose template has a contact_form (spec
+ * 042). Emailed to the store email with reply-to = visitor; nothing is
+ * stored. 202 once sent, 502 CONTACT_SEND_FAILED when the email fails; a
+ * filled honeypot gets the same 202 with nothing sent.
+ */
+router.post(
+  '/:id/public/pages/:slug/contact',
+  contactLimiter,
+  gateByOrgParam,
+  validateContactInquiry,
+  async (req, res, next) => {
+    try {
+      const organization = await publicOrganizationIdentity(req.params.id);
+      if (req.contactHoneypot) return res.status(202).json({ ok: true });
+      await contactInquiryService.submit(organization.id, req.params.slug, req.body);
+      res.status(202).json({ ok: true });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 /**
  * POST /organizations/:id/storefront-access
@@ -286,7 +368,8 @@ router.post('/:id/logo', requireAuth, requireAdmin, verifyOrgOwnership, uploadIm
     );
     const { organization, previousLogoImageId } = await organizationService.setOrganizationLogo(
       req.params.id,
-      image.urls.original,
+      // The logo URL carries its pixel size so storefront headers reserve its box (no layout shift).
+      `${image.urls.original}${dimensionQuery(image)}`,
       image.id
     );
     if (previousLogoImageId && previousLogoImageId !== image.id) {

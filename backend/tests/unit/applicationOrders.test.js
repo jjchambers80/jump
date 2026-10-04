@@ -12,7 +12,7 @@ jest.unstable_mockModule('../../src/utils/logger.js', () => ({
 
 const { orderStatusFor, MONEY_MOVED } =
   await import('../../src/services/applicationOrderStatus.js');
-const { adjustmentTotal, adjustmentItems, buyerLineTotal, tierItem } =
+const { adjustmentTotal, adjustmentItems, buyerLineTotal, spacePriceFor, tierItem } =
   await import('../../src/services/orderLines.js');
 const { default: orderLineService } = await import('../../src/services/OrderLineService.js');
 const { moneyOf } = await import('../../src/services/applicationMoney.js');
@@ -32,6 +32,10 @@ describe('orderStatusFor', () => {
     ['WITHDRAWN', 'AWAITING_CARD', 'CANCELLED'],
     ['WITHDRAWN', 'PAID', 'COMPLETED'], // money moved: the review outcome does not cancel the order
     ['REJECTED', 'PARTIALLY_REFUNDED', 'PARTIALLY_REFUNDED'],
+    // Spec 037 phase 5: nothing owed yet → any order still on the row is not live.
+    ['SUBMITTED', 'NOT_DUE', 'CANCELLED'],
+    ['WAITLISTED', 'NOT_DUE', 'CANCELLED'],
+    ['APPROVED', 'AWAITING_SELECTION', 'CANCELLED'],
   ])('%s + %s → %s', (status, paymentStatus, expected) => {
     expect(orderStatusFor({ status, paymentStatus })).toBe(expected);
   });
@@ -126,6 +130,21 @@ describe('OrderLineService.applicationOrderData', () => {
       orgReceives: 255,
       feeMode: 'PASS',
     });
+  });
+
+  test('spec 039: a booth with its own price replaces the tier price and is named on the line', () => {
+    const { amounts, items } = orderLineService.applicationOrderData(tier, { feeMode: 'ABSORB', taxable: false }, [], [], event, org, {
+      booth: { label: 'A1', price: '400.00' },
+    });
+    expect(items[0]).toMatchObject({ kind: 'APPLICATION_TIER', applicationTierId: 't1', description: '10x10 · A1', unitPrice: 400 });
+    expect(amounts.subtotal).toBe(400);
+  });
+
+  test('spec 039: a booth without a price keeps the tier price', () => {
+    const { items } = orderLineService.applicationOrderData(tier, { feeMode: 'ABSORB', taxable: false }, [], [], event, org, {
+      booth: { label: 'A2', price: null },
+    });
+    expect(items[0]).toMatchObject({ description: '10x10 · A2', unitPrice: 250 });
   });
 
   test('ABSORB: orgReceives is the subtotal less fees and the buyer pays the listed prices plus tax', () => {
@@ -287,5 +306,18 @@ describe('moneyOf', () => {
         },
       })
     ).toMatchObject({ paymentSource: 'OFFLINE', offlinePayment: null });
+  });
+});
+
+describe('spacePriceFor (spec 039)', () => {
+  const tier = { price: '250.00' };
+  test('tier price without a booth or a booth price', () => {
+    expect(spacePriceFor({ tier })).toBe(250);
+    expect(spacePriceFor({ tier, booth: { price: null } })).toBe(250);
+    expect(spacePriceFor({ tier, booth: {} })).toBe(250);
+  });
+  test("the booth's own price, zero included", () => {
+    expect(spacePriceFor({ tier, booth: { price: '325.50' } })).toBe(325.5);
+    expect(spacePriceFor({ tier, booth: { price: 0 } })).toBe(0);
   });
 });

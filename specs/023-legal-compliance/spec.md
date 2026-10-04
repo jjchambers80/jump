@@ -394,7 +394,23 @@ model AuditLog {                       // §11
 
 ### 8.3 Must be retained (never hard-deleted while the ledger exists)
 
-`Order`, `OrderItem`, `OrderAddOn`, `PaymentTransaction`, `Refund`, `Application` money fields, `ApplicationRefund`, `ApplicationAdjustment`, `ApplicationDecision`, `LegalAcceptance`, `ContentReport*`, `PrivacyRequest`, `AuditLog`, `OrganizationStatusEvent`, tax report inputs (`Order.taxAmount`, `TaxRegion` history). Retention period: business decision with counsel (§12 Q11); default proposal 7 years from the transaction for financial rows, 3 years for content reports after closure, life of the account plus 1 year for acceptances tied to a live account.
+`Order`, `OrderItem`, `OrderAddOn`, `PaymentTransaction`, `Refund`, `Application` money fields, `ApplicationRefund`, `ApplicationAdjustment`, `ApplicationDecision`, `LegalAcceptance`, `ContentReport*`, `PrivacyRequest`, `AuditLog`, `OrganizationStatusEvent`, tax report inputs (`Order.taxAmount`, `TaxRegion` history). Retention period: business decision with counsel (§12 Q11). Default proposal (2026-09-29, spec 040), to send to counsel as the answer to Q11:
+
+| Record | Keep | Then |
+|---|---|---|
+| Money rows: `Order`, `OrderItem`, `OrderAddOn`, `PaymentTransaction`, `Refund`, `Application` money fields, `ApplicationRefund`, `ApplicationAdjustment`, tax report inputs | **7 years** after the end of the calendar year of the transaction | Hard delete, or detach from the anonymized `Contact` |
+| `LegalAcceptance` | **Life of the related order or account, plus 7 years**, whichever is later | Delete |
+| `Contact` personal data (name, email, phone, applicant profile, answers, photos) | Until an erasure request (spec 040), or **3 years** with no order, application, RSVP or sign-in (`CONTACT_RETENTION_MONTHS = 36`, LR-13) | Anonymize per §8.4 |
+| `Ticket.qrCodeJwt` | **90 days** after the event | Null it (the barcode is kept) |
+| `BuyerLoginToken`, `VerificationToken` | **Expiry + 7 days** | Delete (LR-13) |
+| `ErasureSuppression` hashes (spec 040) | **Indefinitely** | Keep: a salted hash only, it stops a removed address from being re-added |
+| `AuditLog` | **2 years** (SR-01) | Delete |
+| `ContentReport*` | **3 years** after closure | Delete |
+| Staff `UserSession` | 30 days idle (spec 030, built) | Delete |
+
+Why 7 years: it covers the longest common US federal rule (IRS bad-debt claims), every state sales-tax audit window, card-network chargeback windows and typical contract limitation periods, and counting from year end lets the purge run once a year. Some EU countries require longer (Germany, France: 10 years); if an EU organizer signs up, make the financial period a per-organization setting that only SYSTEM_ADMIN can change. Until then one platform value. The purge job itself is LR-13 work, not spec 040.
+
+Privacy-policy wording to match: "We keep order and payment records for 7 years to meet tax and accounting obligations. Other personal information is deleted when you delete your account, or after 3 years without activity."
 
 ### 8.4 Anonymization (what "delete" means)
 
@@ -470,7 +486,7 @@ Answers change the documents or the build. Owner in brackets; **bold** = blocks 
 8. **Subscription renewal rules** — does NC § 75-41 (automatic renewal) or any FTC negative-option rule apply to Jump's organizer subscription given organizers may be sole proprietors (verify current status of the FTC rule, which was vacated in 2025)? Determines the subscribe-step disclosure and reminder emails. [counsel]
 9. **White-label disclosure** — must "Powered by Jump" / Jump as merchant be visible on custom domains, or may organizers suppress it if the Terms disclose the platform? Card-network descriptor rules may force the merchant identity anyway. [counsel]
 10. **Infrastructure facts** — Railway region (data location), backup cadence, log drain and retention, bucket provider / region, whether Redis holds any PII. [engineering]
-11. **Retention periods** — financial rows, contacts with no activity, images, logs, audit log, content reports. [owner + counsel + accountant]
+11. **Retention periods** — financial rows, contacts with no activity, images, logs, audit log, content reports. [owner + counsel + accountant] Proposal in §8.3 (7 years financial from year end, 3 years inactive contacts, 2 years audit log).
 12. **Field necessity** — EIN, representative DOB, onboarding survey, `Contact.location`: still required for any purpose now that Stripe collects KYC? [owner]
 13. **Marketing plans** — will organizers send marketing through Jump (spec 013) and from whose domain? Determines CAN-SPAM roles and consent provenance rules. [owner]
 14. **Tax / seller of record** — already open in spec 009 §5.4; affects the Organizer Terms tax clause and the 1099-K statement. [accountant + counsel]

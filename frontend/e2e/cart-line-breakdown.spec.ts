@@ -269,7 +269,7 @@ test.describe('cart line-item price breakdown', () => {
 
       const shown = await page.getByTestId('line-breakdown-total').allTextContents();
       const sum = Math.round(shown.map(dollars).reduce((s, n) => s + n, 0) * 100) / 100;
-      const totalText = await page.getByText('Total:', { exact: true }).locator('..').locator('span').last().textContent();
+      const totalText = await page.getByTestId('checkout-total').textContent();
       expect(sum).toBe(dollars(totalText));
     });
   });

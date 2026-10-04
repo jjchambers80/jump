@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useState } from 'react';
 import { useOrg } from '@/components/OrgContext';
 import api, { type OnlineStorePage } from '@/services/api';
@@ -18,6 +19,8 @@ export default function PagesPage() {
   const [pages, setPages] = useState<OnlineStorePage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { data: session } = useSession();
+  const isSystemAdmin = (session?.user as { role?: string } | undefined)?.role === 'SYSTEM_ADMIN';
 
   const loadPages = useCallback(async () => {
     if (!selectedOrgId) {
@@ -58,7 +61,18 @@ export default function PagesPage() {
           <p className="text-sm font-medium text-indigo-600 dark:text-indigo-300">Online store</p>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Pages</h1>
         </div>
-        {!loading && pages.length > 0 && createAction}
+        <div className="flex items-center gap-3">
+          {/* Spec 042: developers upload page templates per organization */}
+          {isSystemAdmin && (
+            <Link
+              href="/admin/online-store/page-templates"
+              className="rounded-md border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+            >
+              Page templates
+            </Link>
+          )}
+          {!loading && pages.length > 0 && createAction}
+        </div>
       </div>
 
       {error && (

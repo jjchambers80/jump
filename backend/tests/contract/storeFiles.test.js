@@ -323,4 +323,40 @@ describe('Content › Files contract', () => {
       .set(...auth(organizerToken));
     expect(empty.body.total).toBe(0);
   });
+
+  it('stores an MP4 as a video and serves byte ranges', async () => {
+    // ftyp box only: enough for the MIME sniff; the bytes are never decoded.
+    const MP4 = Buffer.concat([
+      Buffer.from('000000186674797069736f6d0000020069736f6d6d703431', 'hex'),
+      Buffer.from(`${TAG} video bytes`),
+    ]);
+    const response = await request(app)
+      .post('/admin/files')
+      .set(...auth(organizerToken))
+      .attach('files', MP4, { filename: 'hero-loop.mp4', contentType: 'video/mp4' });
+    expect(response.status).toBe(201);
+    const [video] = response.body.files;
+    expect(video).toMatchObject({ kind: 'video', extension: 'mp4', mimeType: 'video/mp4', thumbUrl: null });
+
+    const listed = await request(app).get('/admin/files?type=video').set(...auth(organizerToken));
+    expect(listed.body.files.map((f) => f.id)).toEqual([video.id]);
+
+    const pathname = new URL(video.url).pathname;
+    const whole = await request(app).get(pathname);
+    expect(whole.status).toBe(200);
+    expect(whole.headers['accept-ranges']).toBe('bytes');
+    expect(whole.headers['content-type']).toBe('video/mp4');
+
+    const part = await request(app).get(pathname).set('Range', 'bytes=4-7');
+    expect(part.status).toBe(206);
+    expect(part.headers['content-range']).toBe(`bytes 4-7/${MP4.length}`);
+    expect(part.body.equals(MP4.subarray(4, 8))).toBe(true);
+
+    const tail = await request(app).get(pathname).set('Range', 'bytes=-3');
+    expect(tail.status).toBe(206);
+    expect(tail.body.equals(MP4.subarray(-3))).toBe(true);
+
+    const beyond = await request(app).get(pathname).set('Range', `bytes=${MP4.length}-`);
+    expect(beyond.status).toBe(416);
+  });
 });

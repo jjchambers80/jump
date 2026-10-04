@@ -2,9 +2,15 @@
 // Covers: PATCH partial validator, email change collision, marketing provenance,
 // GET response extension, send-sign-in-link, ?tag= filter.
 
+import { jest } from '@jest/globals';
 import request from 'supertest';
 import { staffToken, joinOrgByToken, cleanupStaff } from '../helpers/staff.js';
 import { platformBaseUrl } from '../../src/utils/storefrontUrl.js';
+
+// No network under test: Resend refusals now surface as errors (EmailService.deliver).
+jest.unstable_mockModule('../../src/config/resend.js', () => ({
+  default: { emails: { send: jest.fn(async () => ({ data: { id: 'mock' }, error: null })) } },
+}));
 
 const { default: app } = await import('../../src/api/server.js');
 const { prisma } = await import('@jump/db');

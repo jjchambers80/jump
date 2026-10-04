@@ -32,6 +32,8 @@ interface BoothProps {
   tierSwatchIndex?: number;
   onSelect?: (id: string, e?: React.MouseEvent | React.KeyboardEvent) => void;
   onClick?: (booth: MapBooth) => void;
+  /** A click on a `disabled` booth (the picker explains why it cannot be chosen). */
+  onDisabledClick?: (booth: MapBooth, e: React.MouseEvent) => void;
   highlight?: boolean;
   /** Faded out: another tier than the viewer's (spec 014 phase 2 picker). */
   dimmed?: boolean;
@@ -41,6 +43,8 @@ interface BoothProps {
   handles?: boolean;
   /** Checkmark on a selected booth without handles (default). The builder draws its own chrome. */
   checkmark?: boolean;
+  /** Spec 039: mark a booth that carries its own price (builder). */
+  priceBadge?: boolean;
 }
 
 export default function Booth({
@@ -51,11 +55,13 @@ export default function Booth({
   tierSwatchIndex,
   onSelect,
   onClick,
+  onDisabledClick,
   highlight,
   dimmed = false,
   disabled = false,
   handles = true,
   checkmark = !handles,
+  priceBadge = false,
 }: BoothProps) {
   const x = booth.x * gridSize;
   const y = booth.y * gridSize;
@@ -88,7 +94,10 @@ export default function Booth({
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (disabled) return;
+    if (disabled) {
+      onDisabledClick?.(booth, e);
+      return;
+    }
     if (onSelect) onSelect(booth.id, e);
     if (onClick) onClick(booth);
   };
@@ -105,7 +114,9 @@ export default function Booth({
   return (
     <g
       role="button"
-      tabIndex={0}
+      // A spot that cannot be chosen is announced but skipped by Tab, so the
+      // picker's keyboard path only visits spots the viewer can take.
+      tabIndex={disabled ? -1 : 0}
       data-testid={`booth-${booth.label}`}
       aria-label={`Booth ${booth.label}, ${booth.w} by ${booth.h}, ${
         booth.tierId ? 'tier assigned' : 'no tier'
@@ -230,6 +241,15 @@ export default function Booth({
         >
           {vendorName.slice(0, Math.floor(w / 6))}
         </text>
+      )}
+
+      {priceBadge && typeof booth.price === 'number' && (
+        <g aria-hidden="true" pointerEvents="none" data-testid={`booth-price-badge-${booth.label}`}>
+          <circle cx={x + w - 5} cy={y + 5} r={4} fill={dark ? '#fbbf24' : '#b45309'} />
+          <text x={x + w - 5} y={y + 5.3} textAnchor="middle" dominantBaseline="central" fontSize={6} fontWeight={700} fill={dark ? '#0f172a' : '#ffffff'}>
+            $
+          </text>
+        </g>
       )}
 
       {selected && handles && (

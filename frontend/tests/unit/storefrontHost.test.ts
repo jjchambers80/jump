@@ -78,6 +78,14 @@ describe('routeForTenantHost', () => {
     expect(route('/blogs')).toEqual({ kind: 'rewrite', pathname: '/organizations/org_1/blogs' });
   });
 
+  it('maps exactly /events to the Events page and keeps /events/:id as event detail (spec 038, test 8)', () => {
+    expect(route('/events')).toEqual({ kind: 'rewrite', pathname: '/organizations/org_1/events' });
+    expect(route('/events/')).toEqual({ kind: 'rewrite', pathname: '/organizations/org_1/events' });
+    expect(route('/events/e1')).toEqual({ kind: 'pass' });
+    expect(route('/events/e1/map')).toEqual({ kind: 'pass' });
+    expect(route('/organizations/org_1/events')).toEqual({ kind: 'pass' });
+  });
+
   it('passes the organization own paths and public storefront paths', () => {
     expect(route('/organizations/org_1')).toEqual({ kind: 'pass' });
     expect(route('/organizations/org_1/account')).toEqual({ kind: 'pass' });

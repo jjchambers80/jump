@@ -11,9 +11,9 @@
 
 import { applicationAmounts, applicationLines } from './ApplicationFormService.js';
 
-import { adjustmentItems, adjustmentTotal, buyerLineTotal, tierItem } from './orderLines.js';
+import { adjustmentItems, adjustmentTotal, buyerLineTotal, spacePriceFor, tierItem } from './orderLines.js';
 
-export { adjustmentItems, adjustmentTotal, buyerLineTotal, tierItem };
+export { adjustmentItems, adjustmentTotal, buyerLineTotal, spacePriceFor, tierItem };
 
 class OrderLineService {
   /**
@@ -24,12 +24,15 @@ class OrderLineService {
    * @param {Array<{ kind, unitPrice, quantity?, description, createdById?, createdAt? }>} adjustments existing ADJUSTMENT / WAIVER items to keep
    * @param {object} event (taxRate)
    * @param {object} organization (taxInclusivePricing)
+   * @param {{ booth?: { label, price } | null }} [options] spec 039: the booth the vendor holds or was
+   *   placed on; its own price replaces the tier's and its label is added to the line
    * @returns {{ amounts, items, addOns }} `amounts` is the applicationAmounts shape; `items` / `addOns` are Prisma create rows
    */
-  applicationOrderData(tier, form, addOnLines, adjustments, event, organization) {
+  applicationOrderData(tier, form, addOnLines, adjustments, event, organization, { booth = null } = {}) {
     const total = adjustmentTotal(adjustments);
+    const price = spacePriceFor({ tier, booth });
     const amounts = applicationAmounts(
-      applicationLines(tier, form, addOnLines, total),
+      applicationLines({ ...tier, price }, form, addOnLines, total),
       form,
       event,
       organization
@@ -39,9 +42,9 @@ class OrderLineService {
       {
         kind: 'APPLICATION_TIER',
         applicationTierId: tier.id,
-        description: tier.name,
+        description: booth?.label ? `${tier.name} · ${booth.label}` : tier.name,
         quantity: 1,
-        unitPrice: Number(tier.price),
+        unitPrice: price,
         platformFee: tierLine.platformFee,
         processingFee: tierLine.processingFee,
         tax: tierLine.tax,
@@ -58,6 +61,7 @@ class OrderLineService {
     ];
     const addOns = addOnLines.map((l, i) => ({
       addOnId: l.addOn.id,
+      name: l.addOn.name, // spec 037: receipt snapshot, never the live name
       quantity: l.quantity,
       unitPrice: Number(l.addOn.price),
       platformFee: addOnShares[i].platformFee,
@@ -113,7 +117,7 @@ class OrderLineService {
     }
     const tier = tierItem(order);
     const addOns = (order.addOns || [])
-      .map((l) => `${l.addOn?.name ?? 'Add-on'} ×${l.quantity}`)
+      .map((l) => `${l.name ?? l.addOn?.name ?? 'Add-on'} ×${l.quantity}`)
       .join(', ');
     const adjusted = adjustmentItems(order).length > 0;
     return (

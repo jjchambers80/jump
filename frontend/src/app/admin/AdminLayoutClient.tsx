@@ -5,16 +5,29 @@
 
 import { Search } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import AdminRoute from '@/components/AdminRoute';
 import AdminSearch from '@/components/AdminSearch';
 import AdminSidebar from '@/components/AdminSidebar';
 import OrgSwitcher from '@/components/OrgSwitcher';
 import { OrgProvider } from '@/components/OrgContext';
 
+// Full-screen admin tools that bring their own chrome (spec 038 theme editor).
+const FULL_SCREEN = /^\/admin\/online-store\/themes\/[^/]+\/(editor|code)\/?$/;
+
 export default function AdminLayoutClient({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const mobileSearchButtonRef = useRef<HTMLButtonElement>(null);
+
+  if (pathname && FULL_SCREEN.test(pathname)) {
+    return (
+      <AdminRoute>
+        <OrgProvider>{children}</OrgProvider>
+      </AdminRoute>
+    );
+  }
 
   return (
     <AdminRoute>

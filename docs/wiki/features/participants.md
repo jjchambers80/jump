@@ -1,7 +1,9 @@
 # Participants
 
 **Status**: Implemented — all three phases 2026-09-18 (organization-wide submissions list and shared table; Applications tab with forms across events and form templates; tags and on-site check-in). Spec: `specs/019-participants/`.
-**Last Updated**: 2026-09-18
+**Last Updated**: 2026-09-26
+
+> **Spec 037 (2026-09-26) changed this.** There is no Participants page any more: `/admin/participants*` 308 to `/admin/events`, and each event's **Applications** tab (inside the event workspace) is the only review list. An applicant's history across events lives on their Customer detail page. Templates are picked, edited and deleted from a form's **New form › Start from** picker; the template editor moved to `/admin/events/templates/:templateId`. The org-wide API routes (`/admin/applications*`, `/admin/application-forms`, `/admin/application-templates*`) stay — admin search and the template picker use them. The rest of this page describes the shared table and templates as built in spec 019; read "`/admin/participants`" below as history.
 
 ## Overview
 
@@ -24,16 +26,15 @@ Why this exists when the spec 018 Transactions list was removed: submissions had
 | `frontend/src/components/applications/SubmissionsTable.tsx` | The shared table: URL query state, summary chips, filters (Event on the org mount, Form, Payment, Add-on, Sort), search, saved views, bulk bar, sortable Status header, `⋯` menu, `DecisionDialog` mount, pagination |
 | `frontend/src/components/applications/BusinessCell.tsx`, `RowActionsMenu.tsx` | Logo / initial + name + contact + `ID: XXXXXXXX`; `role="menu"` with View · decisions for the row's status · Copy status link |
 | `frontend/src/lib/savedViews.ts` | `readSavedViews` / `writeSavedViews` / `viewKey` generic over a `localStorage` key (`jump.applications.views.<eventId>` per event, `jump.participants.views.org` org-wide) |
-| `frontend/src/app/admin/participants/page.tsx`, `ParticipantsHeader.tsx`, `useParticipantsApi.ts` | Submissions page; header with Submissions / Applications tabs; org-wide API client |
+| `frontend/src/components/applications/useParticipantsApi.ts` | Org-wide API client (moved from the removed Participants page by spec 037) |
 | `packages/db/prisma/migrations/20260923000000_application_form_templates` | Phase 2: `ApplicationFormTemplate` (JSON `definition`, unique `(organizationId, name)`), `ApplicationForm.createdFromTemplateId` |
 | `backend/src/services/ApplicationFormTemplateService.js` | Phase 2: `list / get / create / update / remove / saveFrom / requireInScope / validateDefinition` — validation delegates to `ApplicationFormService._validateFormFields / _validateTier / _validateQuestion`; `MAX_TEMPLATE_TIERS` (50) / `MAX_TEMPLATE_QUESTIONS` (100) in `config/applications.js`. Not the decision-email `ApplicationTemplateService` |
 | `backend/src/services/ApplicationFormService.js` (`createForm` + `templateId`, `_materialise`, `snapshotForm`, `_templateSettings`) | Phase 2: `_materialise(tx, formId, definition)` creates tiers + questions from a plain definition and is shared by `copyForms` (event duplication) and create-from-template; `snapshotForm` is the inverse (non-archived questions, tiers without add-ons, no status / window / slug) |
 | `backend/src/api/validators/applicationValidators.js` (`validateFormTemplateBody`, `validateSaveAsTemplateBody`, `templateId` on `validateFormBody`) | Phase 2 shapes |
 | `frontend/src/components/applications/FormEditorCards.tsx` | `SettingsCard` / `TiersCard` / `QuestionsCard` extracted from the form editor; `mode="template"` hides slug / status / window / fee columns / add-on picker / per-card Save and reports changes through `onChange` |
-| `frontend/src/components/applications/TemplateDialogs.tsx` | `NewApplicationDialog` (event picker: upcoming, not cancelled, drafts included; grouped by organization for SYSTEM_ADMIN; same-kind templates), `NewTemplateDialog`, `SaveAsTemplateDialog` (new name or replace) |
-| `frontend/src/app/admin/participants/applications/page.tsx` | Applications tab: forms across events (Event, Form, Kind, Status, Submissions link, Edit) + Templates cards with Delete; New application / New template (ADMIN) |
-| `frontend/src/app/admin/participants/templates/[templateId]/page.tsx` | Template editor: cards on a local definition with synthetic `t0…` / `q0…` ids, one Save (`PUT`), `beforeunload` guard while dirty |
-| `frontend/src/app/admin/events/[eventId]/applications/forms/[formId]/page.tsx`, `forms/page.tsx` | **Save as template** button + "Created from the … template" note; New form gains a Start-from-template select |
+| `frontend/src/components/applications/TemplateDialogs.tsx` | `SaveAsTemplateDialog` (new name or replace). The New application / New template dialogs went with the Participants page (spec 037) |
+| `frontend/src/app/admin/events/templates/[templateId]/page.tsx` | Template editor (moved by spec 037; **← Back** returns to the form that opened it): cards on a local definition with synthetic `t0…` / `q0…` ids, one Save (`PUT`), `beforeunload` guard while dirty |
+| `frontend/src/app/admin/events/[eventId]/applications/forms/[formId]/page.tsx`, `forms/page.tsx` | **Save as template** button + "Created from the … template" note; New form's **Start from** picker lists Blank + same-kind templates as radio cards, each with Edit and Delete (spec 037 D2) |
 | `packages/db/prisma/migrations/20260924000000_application_tags_checkin` | Phase 3: `Application.tags String[]` (GIN index), `checkedInAt`, `checkedOutAt` |
 | `backend/src/services/ApplicationService.js` (`updateMeta`, `_normaliseTags`, `distinctTags`) | Phase 3: `updateNotes` is an alias of `updateMeta({ boothLabel, internalNote, tags, checkedIn, checkedOut })`; `MAX_TAGS` (20) / `MAX_TAG_LENGTH` (40) in `config/applications.js`; `tag` filter and `q` on tags in `_listWhere`; CSV `tags`, `checkedInAt`, `checkedOutAt` |
 | `backend/src/api/validators/applicationValidators.js` (`validateMetaBody`) | Phase 3: PATCH shape |
@@ -72,7 +73,7 @@ Same builder as the per-event export. Org-wide adds `event`, `eventDate` (and `o
 
 ### Templates (phase 2)
 
-A template is a **snapshot**, not a live form: `ApplicationFormTemplate.definition` holds `{ intro, chargeTiming, feeMode, taxable, paymentDueDays, overduePolicy, tiers[], questions[] }` (PAID settings are `null` on FREE). Every write runs the definition through the form validators, so a template can never hold a value the editor would refuse; unknown keys are 400s. `kind` is fixed at creation. Names are unique per organization (409).
+A template is a **snapshot**, not a live form: `ApplicationFormTemplate.definition` holds `{ intro, chargeTiming, feeMode, taxable, paymentDueDays, overduePolicy, reserveOnApproval, tiers[], questions[] }` (`reserveOnApproval` since spec 037 phase 5; older templates read as `true`; `chargeTiming` is legacy) (PAID settings are `null` on FREE). Every write runs the definition through the form validators, so a template can never hold a value the editor would refuse; unknown keys are 400s. `kind` is fixed at creation. Names are unique per organization (409).
 
 - **Save as template** (`POST …/application-forms/:formId/save-as-template`, ADMIN): `snapshotForm` — non-archived questions, tiers without add-on attachments, no status / window / slug. `replaceTemplateId` overwrites an existing same-kind template's definition instead of creating one.
 - **Create from template** (`POST …/application-forms { name, kind, templateId }`, ADMIN): `kind` must match (400), the template must be in scope (404), `tiers` / `questions` in the body are refused; explicit body settings win over the template's. The form is created and `_materialise`d in one transaction — DRAFT, no window, tiers at full quantity — with `createdFromTemplateId` set (informational; survives template deletion).

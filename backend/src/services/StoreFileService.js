@@ -15,6 +15,7 @@ import {
   ALLOWED_MIME_TO_EXT,
   FILE_NAME_MAX,
   MAX_FILE_BYTES,
+  VIDEO_EXTENSIONS,
   isImageMime,
 } from '../utils/fileLimits.js';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
@@ -75,6 +76,7 @@ class StoreFileService {
     const where = { organizationId };
     if (query.type === 'image') where.image = { isNot: null };
     if (query.type === 'pdf') where.extension = 'pdf';
+    if (query.type === 'video') where.extension = { in: VIDEO_EXTENSIONS };
     const q = typeof query.q === 'string' ? query.q.trim() : '';
     if (q) {
       where.OR = [
@@ -125,7 +127,7 @@ class StoreFileService {
     const mimeType = await imageService.sniffMimeType(buffer);
     const extension = ALLOWED_MIME_TO_EXT[mimeType];
     if (!extension) {
-      throw new ValidationError('Only JPG, PNG, GIF, WebP images and PDF files are supported');
+      throw new ValidationError('Only JPG, PNG, GIF, WebP images, MP4 and WebM videos and PDF files are supported');
     }
     if (claimedMimeType && claimedMimeType !== mimeType) {
       logger.warn('Store file MIME mismatch', { claimed: claimedMimeType, actual: mimeType });
@@ -248,18 +250,32 @@ class StoreFileService {
 
   /**
    * Rebuild the references of one content record. `fields` maps a field name
-   * to either an HTML string (ids are extracted) or an explicit file id.
+   * to an HTML string (ids are extracted), an explicit file id, or an array
+   * of file ids (theme JSON, spec 038).
+   *
+   * Options (contracts C6):
+   * - `tx`: run on the caller's transaction client so the references commit
+   *   or roll back with the save that wrote them. Without it the rebuild is
+   *   its own transaction, as before.
+   * - `onlyFields`: replace only these fields' rows; references of other
+   *   fields of the same record are kept. Without it every row of the record
+   *   is replaced, as before.
    */
-  async syncReferences(kind, targetId, fields, organizationId = null) {
+  async syncReferences(kind, targetId, fields, organizationId = null, { tx = null, onlyFields = null } = {}) {
     const wanted = [];
     for (const [field, value] of Object.entries(fields)) {
       if (!value) continue;
-      const ids = typeof value === 'string' && /[<>]/.test(value) ? fileIdsInHtml(value) : [value];
-      for (const fileId of ids) wanted.push({ fileId, field });
+      const ids = Array.isArray(value)
+        ? value.filter((id) => typeof id === 'string' && id)
+        : typeof value === 'string' && /[<>]/.test(value)
+          ? fileIdsInHtml(value)
+          : [value];
+      for (const fileId of new Set(ids)) wanted.push({ fileId, field });
     }
+    const db = tx || prisma;
     const candidateIds = [...new Set(wanted.map((w) => w.fileId))];
     const known = candidateIds.length
-      ? await prisma.storeFile.findMany({
+      ? await db.storeFile.findMany({
           where: { id: { in: candidateIds }, ...(organizationId ? { organizationId } : {}) },
           select: { id: true },
         })
@@ -268,17 +284,21 @@ class StoreFileService {
     const rows = wanted
       .filter((w) => knownIds.has(w.fileId))
       .map((w) => ({ ...w, kind, targetId }));
-    await prisma.$transaction([
-      prisma.storeFileReference.deleteMany({ where: { kind, targetId } }),
-      ...(rows.length
-        ? [prisma.storeFileReference.createMany({ data: rows, skipDuplicates: true })]
-        : []),
-    ]);
+    const where = onlyFields ? { kind, targetId, field: { in: onlyFields } } : { kind, targetId };
+    if (tx) {
+      await tx.storeFileReference.deleteMany({ where });
+      if (rows.length) await tx.storeFileReference.createMany({ data: rows, skipDuplicates: true });
+    } else {
+      await prisma.$transaction([
+        prisma.storeFileReference.deleteMany({ where }),
+        ...(rows.length ? [prisma.storeFileReference.createMany({ data: rows, skipDuplicates: true })] : []),
+      ]);
+    }
     return rows.length;
   }
 
-  async clearReferences(kind, targetId) {
-    await prisma.storeFileReference.deleteMany({ where: { kind, targetId } });
+  async clearReferences(kind, targetId, { tx = null } = {}) {
+    await (tx || prisma).storeFileReference.deleteMany({ where: { kind, targetId } });
   }
 
   /** Bytes + headers for the public route. */
@@ -312,7 +332,7 @@ class StoreFileService {
       organizationId: row.organizationId,
       name: row.name,
       extension: row.extension,
-      kind: row.image ? 'image' : 'document',
+      kind: row.image ? 'image' : VIDEO_EXTENSIONS.includes(row.extension) ? 'video' : 'document',
       mimeType: row.file.mimeType,
       sizeBytes: row.file.sizeBytes,
       width: row.width,
@@ -373,6 +393,17 @@ class StoreFileService {
         titles.set(`BLOG_POST:${post.id}`, {
           title: post.title,
           href: `/admin/content/blog-posts/${post.id}`,
+        });
+    }
+    if (byKind.has('THEME')) {
+      const themes = await prisma.theme.findMany({
+        where: { id: { in: [...byKind.get('THEME')] } },
+        select: { id: true, name: true },
+      });
+      for (const theme of themes)
+        titles.set(`THEME:${theme.id}`, {
+          title: `Theme ${theme.name}`,
+          href: `/admin/online-store/themes/${theme.id}/editor`,
         });
     }
     const seen = new Set();

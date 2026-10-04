@@ -4,6 +4,7 @@ export default {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
     '^@jump/db$': '<rootDir>/../packages/db/src/index.js',
+    '^@jump/theme$': '<rootDir>/../packages/theme/src/index.js',
   },
   testMatch: ['**/*.test.js'],
   // Suites share one database; unique fixture emails/tags keep them independent

@@ -1,4 +1,5 @@
-// Unit tests for approved-vendor booth purchase state transitions (spec 014 phase 2).
+// Unit tests for approved-vendor booth purchase state transitions (spec 014
+// phase 2; a booth is a space selection since spec 037 phase 5).
 
 import { jest } from '@jest/globals';
 
@@ -13,10 +14,8 @@ const { default: service } = await import('../../src/services/BoothService.js');
 const application = (overrides = {}) => ({
   id: 'app_1',
   status: 'APPROVED',
-  paymentStatus: 'PAYMENT_DUE',
+  paymentStatus: 'AWAITING_SELECTION',
   tierId: 'tier_1',
-  boothLabel: null,
-  tier: { id: 'tier_1', mapBound: true },
   ...overrides,
 });
 
@@ -44,19 +43,19 @@ describe('BoothService vendor purchase flow', () => {
     mockPrisma.$transaction = jest.fn(async (fn) => fn(chooseTx()));
   });
 
-  it('holds an available booth for an approved vendor with payment due', async () => {
+  it('holds an available booth for an approved vendor choosing a space, until the selection hold', async () => {
     const tx = chooseTx();
-    const before = Date.now();
+    const holdExpiresAt = new Date(Date.now() + 900_000);
 
-    const result = await service.chooseBooth('app_1', 'booth_1', { tx });
+    const result = await service.chooseBooth('app_1', 'booth_1', { tx, holdExpiresAt });
 
-    expect(result).toMatchObject({ boothId: 'booth_1', status: 'HELD' });
-    expect(result.holdExpiresAt.getTime()).toBeGreaterThan(before);
+    expect(result).toMatchObject({ boothId: 'booth_1', label: 'A1', status: 'HELD', holdExpiresAt });
     expect(tx.booth.update).toHaveBeenCalledWith({
       where: { id: 'booth_1' },
       data: expect.objectContaining({
         status: 'HELD',
         holdApplicationId: 'app_1',
+        holdExpiresAt,
         applicationId: null,
         assignedById: null,
       }),
@@ -64,16 +63,13 @@ describe('BoothService vendor purchase flow', () => {
   });
 
   it.each([
-    ['not approved', application({ status: 'SUBMITTED' }), 'APPLICATION_NOT_APPROVED'],
-    ['not awaiting payment', application({ paymentStatus: 'PAID' }), 'NOT_PAYMENT_DUE'],
-    ['no tier', application({ tierId: null, tier: null }), 'NO_TIER'],
-    ['non-map tier', application({ tier: { id: 'tier_1', mapBound: false } }), 'FORM_NOT_MAP_BOUND'],
-  ])('rejects %s', async (_label, app, code) => {
+    ['not approved', application({ status: 'SUBMITTED' }), 'APPLICATION_NOT_APPROVED', 400],
+    ['not choosing a space', application({ paymentStatus: 'PAYMENT_DUE' }), 'NOT_AWAITING_SELECTION', 409],
+    ['already paid', application({ paymentStatus: 'PAID' }), 'NOT_AWAITING_SELECTION', 409],
+    ['no category', application({ tierId: null }), 'NO_TIER', 400],
+  ])('rejects %s', async (_label, app, code, statusCode) => {
     const tx = chooseTx({ app });
-    await expect(service.chooseBooth(app.id, 'booth_1', { tx })).rejects.toMatchObject({
-      code,
-      statusCode: 400,
-    });
+    await expect(service.chooseBooth(app.id, 'booth_1', { tx })).rejects.toMatchObject({ code, statusCode });
   });
 
   it('returns BOOTH_TAKEN after the row lock sees a competing hold', async () => {
@@ -163,6 +159,20 @@ describe('BoothService vendor purchase flow', () => {
 
     await expect(service.beginPayment('app_1', { tx })).rejects.toMatchObject({ code: 'BOOTH_HOLD_EXPIRED' });
     expect(tx.application.update).not.toHaveBeenCalled();
+  });
+
+  it('leaves an expired space selection to the selection sweep', async () => {
+    const booth = { id: 'booth_1', holdApplicationId: 'app_1' };
+    const update = jest.fn();
+    mockPrisma.booth = { findMany: jest.fn().mockResolvedValue([booth]) };
+    mockPrisma.$transaction = jest.fn(async (fn) => fn({
+      $queryRawUnsafe: jest.fn().mockResolvedValue([{ ...booth, status: 'HELD', holdExpiresAt: new Date(0) }]),
+      application: { findUnique: jest.fn().mockResolvedValue({ paymentStatus: 'PAYMENT_DUE', selectionHeldUntil: new Date(0) }) },
+      booth: { update },
+    }));
+
+    await expect(service.sweepExpiredHolds(new Date())).resolves.toEqual({ released: 0, protected: 0 });
+    expect(update).not.toHaveBeenCalled();
   });
 
   it('releases an expired hold when payment is no longer processing', async () => {

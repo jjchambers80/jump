@@ -5,7 +5,7 @@
 
 ## Overview
 
-Every public storefront page opens with a full-width organization header: the organization logo (square box; 56px on mobile and 64px from `sm` on the organization page, 40px / 48px elsewhere) next to the organization name. Layout, menu and accessibility details live in [Storefront Header and Footer](storefront-header-footer.md). On `/organizations/[orgId]` the name is the page `<h1>`; on event, apply, checkout and confirmation pages the whole header links back to the organization page. Logos of any aspect ratio fit the box with `object-contain` over a flat background — no blurred backdrop.
+Every public storefront page opens with a full-width organization header: the organization logo (the theme's Logo widths, default 90px on mobile and 120px from `sm`, the same on every page; in the header the box is `fit="width"`: its height follows the logo, capped at the width, so a landscape wordmark is not letterboxed into a square). The organization name is not painted beside a logo; it stays `sr-only` for screen readers and is shown only when there is no logo. Layout, menu and accessibility details live in [Storefront Header and Footer](storefront-header-footer.md). On `/organizations/[orgId]` the name is the page `<h1>`; on event, apply, checkout and confirmation pages the whole header links back to the organization page. Logos of any aspect ratio fit the box with `object-contain` — no blurred backdrop. In the header the box is `bare`: no background, no rounding, so the logo sits directly on the header surface.
 
 ## Key Files
 
@@ -40,7 +40,7 @@ The header renders only when `organizationName` is present; the logo box renders
 
 ### Aspect-ratio fitting (`LogoBox`)
 
-`<div class="relative aspect-square overflow-hidden bg-gray-100 dark:bg-slate-800">` with the logo as `<img class="h-full w-full object-contain">`. Square logos fill the box; landscape logos are letterboxed, portrait logos pillarboxed, and the bands show the flat container background. There is no aspect-ratio measurement and no second image.
+`<div class="relative aspect-square overflow-hidden bg-gray-100 dark:bg-slate-800">` with the logo as `<img class="h-full w-full object-contain">`. Square logos fill the box; landscape logos are letterboxed, portrait logos pillarboxed, and the bands show the flat container background. `OrganizationHeader` passes `bare`, which drops the background classes; the password gate and theme footer keep the flat box. There is no aspect-ratio measurement and no second image.
 
 ## API Endpoints
 
@@ -57,7 +57,7 @@ Reads `Organization.logoUrl` and `Organization.coverUrl` (see [Organization Bran
 
 - **One header component.** Add new public storefront routes through `OrganizationHeader`; do not hand-roll a logo `<img>` so only one accessible logo image exists per page.
 - **Only one `<h1>` per page.** Use `as="h1"` only on the organization page; event and checkout pages already have their own `<h1>`.
-- **Header spacing is coupled to the responsive logo widths.** If the `w-14 sm:w-16` / `w-10 sm:w-12` sizes change, verify the header's padding, long-name wrapping, and cover position at both mobile and desktop widths.
+- **Header spacing is coupled to the responsive logo widths.** If the `--theme-logo-width(-mobile)` defaults (90 / 120 px) change, verify the header's padding, long-name wrapping, and cover position at both mobile and desktop widths.
 
 ## Related Features
 
@@ -65,3 +65,10 @@ Reads `Organization.logoUrl` and `Organization.coverUrl` (see [Organization Bran
 - [Organization Branding](organization-branding.md) — logo/cover upload endpoints and `ImageService`
 - [Organization Theme Mode](organization-theme-mode.md) — `BrandScope` wrapper on the same pages
 - [Theme System](theme-system.md) — `dark:` classes on the box background
+
+## No layout shift while the logo loads
+
+The header's height follows the logo, so the logo's shape must be known before its bytes arrive. `File.width` / `File.height` store every image's intrinsic size (read with sharp on upload, EXIF rotation applied), and the organization logo upload stores the logo URL with it as `?w=&h=` (`dimensionQuery` / `ImageService.sizedOriginalUrl`; the serving route ignores the query). Only organization logos carry it: other image URLs (CSV exports, emails, event images) stay clean. `LogoBox` reads it with `imageDimensions` (`lib/assets.ts`) and sets the `<img>` `width` / `height` attributes, so the browser reserves the exact box before load. Theme logo files carry their size through `withImageDimensions` in `HeaderSection`. `imageVariantUrl` drops the query for resized variants. The header row also has `min-h-11`, the height of the menu and sign-in controls, so their arrival after hydration does not change it either.
+
+Existing files and stored organization logo URLs are updated by `npm run db:backfill:image-dimensions` (backend; dry run unless `DRY_RUN=false`, idempotent). A logo URL without a size still works; it just shifts once, as before.
+

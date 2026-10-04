@@ -1,6 +1,6 @@
 # Public vendor directory
 
-The public floor-map route (`/events/:slug/map`) includes an event-scoped vendor directory below the map. It is part of spec 014 phase 3 and uses the same uncached public map response as booth geometry.
+The public floor-map route (`/events/:slug/map`) includes an event-scoped vendor directory below the map. It is part of spec 014 phase 3 and uses the same uncached public map response as booth geometry. The page itself (header, map viewport, booth dialog) is documented in [Public Floor Map Page](public-floor-map.md).
 
 ## Visibility
 

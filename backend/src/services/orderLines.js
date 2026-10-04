@@ -19,6 +19,16 @@ export function adjustmentItems(order) {
 }
 
 /** The single APPLICATION_TIER item of an application order. */
+/**
+ * Spec 039: what the vendor's space costs before fees and tax — the booth's
+ * own price when the organizer set one, otherwise its tier's. The one place
+ * that decision is made; once an order exists its tier line is the record.
+ */
+export function spacePriceFor({ tier, booth = null }) {
+  if (booth && booth.price !== null && booth.price !== undefined) return Number(booth.price);
+  return Number(tier.price);
+}
+
 export function tierItem(order) {
   return (order?.items || []).find((i) => i.kind === 'APPLICATION_TIER') || null;
 }

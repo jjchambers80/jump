@@ -26,6 +26,20 @@ function orgLogoHtml(logoUrl, orgName) {
   return `<img src="${src}" alt="${escapeHtml(orgName || 'Organizer')}" style="display: block; margin: 0 auto 16px; max-height: 60px; max-width: 240px; width: auto; height: auto;" />`;
 }
 
+/**
+ * Send through Resend. The SDK resolves `{ data, error }` instead of throwing
+ * when Resend refuses a message (unverified sender domain, sandbox sender to
+ * a foreign address, bad key), so a refusal is turned into a throw here;
+ * otherwise every caller would log "sent" for an email that never left.
+ */
+async function deliver(msg) {
+  const result = await resend.emails.send(msg);
+  if (result?.error) {
+    throw new Error(`Resend refused the email (${result.error.name || 'error'}): ${result.error.message}`);
+  }
+  return result?.data ?? null;
+}
+
 function icsText(value) {
   return String(value || '').replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;');
 }
@@ -116,7 +130,7 @@ ${manageTicketsHtml}
           `,
         };
 
-        await resend.emails.send(msg);
+        await deliver(msg);
 
         logger.info('Order confirmation email sent', {
           orderId: order.id,
@@ -191,12 +205,110 @@ ${manageTicketsHtml}
       `,
     };
 
-    await resend.emails.send(msg);
+    await deliver(msg);
     logger.info('Buyer login email sent', {
       event: 'buyer_login_email_sent',
       contactId: contact.id,
       organizationId: contact.organizationId,
     });
+  }
+
+  /**
+   * Plain organization-branded notice to a buyer (spec 040 card D: erasure
+   * code, scheduled, postponed, done). `code` renders the six digits large;
+   * `link` renders one button.
+   * @param {{ to: string, organization: { name?: string, logoUrl?: string|null }, subject: string, title: string, paragraphs: string[], code?: string|null, link?: { url: string, label: string }|null }} params
+   */
+  async sendBuyerNotice({ to, organization = {}, subject, title, paragraphs, code = null, link = null }) {
+    const orgName = organization.name || 'Jump';
+    const msg = {
+      to: [to],
+      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      subject,
+      html: `
+        <html>
+          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+            <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
+              ${orgLogoHtml(organization.logoUrl, orgName)}
+              <h1 style="color: #333; font-size: 22px;">${escapeHtml(title)}</h1>
+            </div>
+            <div style="padding: 20px;">
+              ${paragraphs.map((p) => `<p>${escapeHtml(p)}</p>`).join('\n              ')}
+              ${code ? `<p style="text-align: center; margin: 24px 0; font-size: 32px; font-weight: bold; letter-spacing: 8px; font-family: 'SF Mono', Menlo, Consolas, monospace;">${escapeHtml(code.slice(0, 3))} ${escapeHtml(code.slice(3))}</p>` : ''}
+              ${link ? `<div style="text-align: center; margin: 32px 0;"><a href="${link.url}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 16px; font-weight: bold; padding: 14px 32px; border-radius: 8px; text-decoration: none;">${escapeHtml(link.label)}</a></div>` : ''}
+            </div>
+          </body>
+        </html>
+      `,
+    };
+    await deliver(msg);
+    logger.info('Buyer notice sent', { event: 'buyer_notice_sent', subject });
+  }
+
+  /**
+   * Buyer email change (spec 040): confirmation link to the NEW address.
+   * Nothing changes until the link is used.
+   * @param {{ to: string, currentEmail: string, confirmUrl: string, organization: { name?: string, logoUrl?: string|null } }} params
+   */
+  async sendBuyerEmailChangeConfirmation({ to, currentEmail, confirmUrl, organization = {} }) {
+    const orgName = organization.name || 'Jump';
+    const msg = {
+      to: [to],
+      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      subject: `Confirm your new email address for ${orgName}`,
+      html: `
+        <html>
+          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+            <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
+              ${orgLogoHtml(organization.logoUrl, orgName)}
+              <h1 style="color: #333; font-size: 22px;">Confirm your new email</h1>
+            </div>
+            <div style="padding: 20px;">
+              <p>You asked to change the email address on your ${escapeHtml(orgName)} account from <strong>${escapeHtml(currentEmail)}</strong> to <strong>${escapeHtml(to)}</strong>.</p>
+              <div style="text-align: center; margin: 32px 0;">
+                <a href="${confirmUrl}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 16px; font-weight: bold; padding: 14px 32px; border-radius: 8px; text-decoration: none;">Confirm email address</a>
+              </div>
+              <p style="color: #666; font-size: 13px;">This link works once and expires in 1 hour. If you did not request this change, you can ignore this email — your email address stays the same until the link is used.</p>
+            </div>
+          </body>
+        </html>
+      `,
+    };
+    await deliver(msg);
+    logger.info('Buyer email change confirmation sent', { event: 'buyer_email_change_sent' });
+  }
+
+  /**
+   * Buyer email change (spec 040): notice to the OLD address. Sent when the
+   * change is requested and again when it completes.
+   * @param {{ to: string, newEmail: string, completed: boolean, organization: { name?: string, logoUrl?: string|null } }} params
+   */
+  async sendBuyerEmailChangeNotice({ to, newEmail, completed, organization = {} }) {
+    const orgName = organization.name || 'Jump';
+    const body = completed
+      ? `The email address on your ${escapeHtml(orgName)} account was changed from <strong>${escapeHtml(to)}</strong> to <strong>${escapeHtml(newEmail)}</strong>. Sign-in links and ticket emails now go to the new address.`
+      : `Someone signed in to your ${escapeHtml(orgName)} account asked to change its email address to <strong>${escapeHtml(newEmail)}</strong>. Nothing changes unless that address confirms.`;
+    const msg = {
+      to: [to],
+      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      subject: completed ? `Your ${orgName} email address was changed` : `Email change requested for your ${orgName} account`,
+      html: `
+        <html>
+          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+            <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
+              ${orgLogoHtml(organization.logoUrl, orgName)}
+              <h1 style="color: #333; font-size: 22px;">${completed ? 'Email address changed' : 'Email change requested'}</h1>
+            </div>
+            <div style="padding: 20px;">
+              <p>${body}</p>
+              <p style="color: #666; font-size: 13px;">If this was not you, contact ${escapeHtml(orgName)} right away.</p>
+            </div>
+          </body>
+        </html>
+      `,
+    };
+    await deliver(msg);
+    logger.info('Buyer email change notice sent', { event: 'buyer_email_change_notice_sent', completed });
   }
 
   /**
@@ -227,7 +339,7 @@ ${manageTicketsHtml}
       `,
     };
 
-    await resend.emails.send(msg);
+    await deliver(msg);
     logger.info('Email change confirmation sent', { event: 'account_email_change_sent' });
   }
 
@@ -255,7 +367,7 @@ ${manageTicketsHtml}
       `,
     };
 
-    await resend.emails.send(msg);
+    await deliver(msg);
     logger.info('Email changed notice sent', { event: 'account_email_changed_notice_sent' });
   }
 
@@ -285,7 +397,7 @@ ${manageTicketsHtml}
         </html>
       `,
     };
-    await resend.emails.send(msg);
+    await deliver(msg);
     logger.info('Security notice sent', { event: 'security_notice_sent', title });
   }
 
@@ -310,7 +422,7 @@ ${manageTicketsHtml}
         </html>
       `,
     };
-    await resend.emails.send(msg);
+    await deliver(msg);
     logger.info('Reauth code sent', { event: 'reauth_code_sent' });
   }
 
@@ -337,7 +449,7 @@ ${manageTicketsHtml}
         </html>
       `,
     };
-    await resend.emails.send(msg);
+    await deliver(msg);
     logger.info('Secondary email verification sent', { event: 'secondary_email_verification_sent' });
   }
 
@@ -364,7 +476,7 @@ ${manageTicketsHtml}
         </html>
       `,
     };
-    await resend.emails.send(msg);
+    await deliver(msg);
     logger.info('Recovery link sent', { event: 'recovery_link_sent' });
   }
 
@@ -374,7 +486,8 @@ ${manageTicketsHtml}
    * split on blank lines and every line is escaped, so organizer text can
    * never inject markup. URLs on their own line become buttons.
    *
-   * @param {{ to: string, subject: string, body: string, organization?: { name?: string, logoUrl?: string } }} params
+   * @param {{ to: string, subject: string, body: string, organization?: { name?: string, logoUrl?: string, email?: string } }} params
+   *   Replies go to `organization.email` when the organization has one.
    */
   async sendApplicationMessage({ to, subject, body, organization = {} }) {
     const orgName = organization.name || 'the organizer';
@@ -399,6 +512,7 @@ ${manageTicketsHtml}
       from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
       subject,
       text: body,
+      ...(organization.email && { reply_to: organization.email }),
       html: `
         <html>
           <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
@@ -413,7 +527,71 @@ ${manageTicketsHtml}
         </html>
       `,
     };
-    await resend.emails.send(msg);
+    await deliver(msg);
+  }
+
+  /**
+   * Storefront contact-form message (spec 042) to the store email. Every
+   * visitor value is escaped; replies go straight to the visitor. Nothing is
+   * sent to the visitor, so the form can never relay mail to a third party.
+   *
+   * @param {{ to: string, inquiry: { name: string, email: string, phone?: string|null, subject?: string|null, message: string }, organization?: { name?: string, logoUrl?: string }, pageTitle?: string }} params
+   */
+  async sendContactInquiry({ to, inquiry, organization = {}, pageTitle }) {
+    const orgName = organization.name || 'your store';
+    const oneLine = (value) => String(value || '').replace(/[\r\n]+/g, ' ').trim();
+    const subject = oneLine(
+      inquiry.subject
+        ? `${inquiry.subject} — message from ${inquiry.name}`
+        : `New message from ${inquiry.name} via ${orgName}`
+    ).slice(0, 200);
+    const rows = [
+      ['Name', inquiry.name],
+      ['Email', inquiry.email],
+      ['Phone', inquiry.phone],
+      ['Subject', inquiry.subject],
+      ['Page', pageTitle],
+    ].filter(([, value]) => value);
+    const text = [
+      `New message from the ${orgName} contact form.`,
+      '',
+      ...rows.map(([label, value]) => `${label}: ${oneLine(value)}`),
+      '',
+      inquiry.message,
+      '',
+      'Reply to this email to answer the sender.',
+    ].join('\n');
+    const messageHtml = escapeHtml(inquiry.message).replace(/\r?\n/g, '<br />');
+    const msg = {
+      to: [to],
+      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      subject,
+      reply_to: inquiry.email,
+      text,
+      html: `
+        <html>
+          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+            <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
+              ${orgLogoHtml(organization.logoUrl, orgName)}
+              <h1 style="color: #333; font-size: 20px; margin: 0;">New contact form message</h1>
+            </div>
+            <div style="padding: 24px; color: #111827; font-size: 15px;">
+              <table style="border-collapse: collapse; margin-bottom: 16px;">
+                ${rows
+                  .map(
+                    ([label, value]) =>
+                      `<tr><td style="padding: 4px 16px 4px 0; color: #6b7280;">${label}</td><td style="padding: 4px 0;">${escapeHtml(oneLine(value))}</td></tr>`
+                  )
+                  .join('')}
+              </table>
+              <p style="margin: 0 0 14px; line-height: 1.5; white-space: normal;">${messageHtml}</p>
+              <p style="color: #6b7280; font-size: 13px;">Reply to this email to answer ${escapeHtml(oneLine(inquiry.name))}.</p>
+            </div>
+          </body>
+        </html>
+      `,
+    };
+    await deliver(msg);
   }
 
   /**
@@ -462,7 +640,7 @@ ${manageTicketsHtml}
           `,
         };
 
-        await resend.emails.send(msg);
+        await deliver(msg);
 
         logger.info('Cancellation notification sent', {
           eventId: event.id,
@@ -549,7 +727,7 @@ ${manageTicketsHtml}
           ...(organization.email && { reply_to: organization.email }),
         };
 
-        await resend.emails.send(msg);
+        await deliver(msg);
 
         logger.info('RSVP reminder sent', {
           event: 'rsvp_reminder_sent',
@@ -632,7 +810,7 @@ ${manageTicketsHtml}
       ...(organization.email && { reply_to: organization.email }),
     };
     try {
-      await resend.emails.send(msg);
+      await deliver(msg);
       logger.info('RSVP confirmation sent', { event: 'rsvp_confirmation_sent', rsvpId: rsvp.id });
       return true;
     } catch (error) {
@@ -722,7 +900,7 @@ ${manageTicketsHtml}
       ...(organization.email && { reply_to: organization.email }),
     };
     try {
-      await resend.emails.send(msg);
+      await deliver(msg);
       logger.info('Application receipt sent', { event: 'application_receipt_sent', orderId: order.id, orderRef: order.orderRef, applicationId: application.id });
       return true;
     } catch (error) {

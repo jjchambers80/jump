@@ -22,6 +22,15 @@ interface DialogProps {
 
 const selectClass = `${fieldClass}`;
 
+/**
+ * What settling now would cover. Before the vendor chose a space (spec 037
+ * phase 5) there is no order: the category's price today is the balance.
+ */
+function owedNow(application: AdminApplication): number {
+  if (!application.orderId && application.paymentStatus === 'AWAITING_SELECTION') return application.pricing?.currentApplicantPays ?? 0;
+  return application.amounts.applicantPays;
+}
+
 export function ChangeTierDialog({ eventId, application, returnFocusRef, onClose, onSaved }: DialogProps) {
   const api = useApplicationsApi(eventId);
   const [tiers, setTiers] = useState<AdminTier[] | null>(null);
@@ -80,7 +89,16 @@ export function ChangeTierDialog({ eventId, application, returnFocusRef, onClose
           </div>
         )}
         <p className="text-sm text-gray-700 dark:text-slate-300">
-          <strong>{application.profile.businessName}</strong> is on <strong>{application.tier?.name}</strong> at {money(application.amounts.applicantPays)}. The amount is recomputed at today&apos;s prices with any adjustments, and the applicant is emailed the new total.
+          {application.orderId ? (
+            <>
+              <strong>{application.profile.businessName}</strong> is on <strong>{application.tier?.name}</strong> at {money(application.amounts.applicantPays)}. The amount is recomputed at today&apos;s prices with any adjustments, and the applicant is emailed the new total.
+            </>
+          ) : (
+            <>
+              {/* Spec 037 phase 5: no order until the vendor chooses a space. */}
+              <strong>{application.profile.businessName}</strong> is {application.tier ? <>in <strong>{application.tier.name}</strong></> : 'not in a category yet'}. A space reserved on approval moves with the category; the vendor pays the new category&apos;s price when they choose their space.
+            </>
+          )}
         </p>
         <div>
           <label htmlFor="change-tier-select" className={labelClass}>
@@ -226,7 +244,7 @@ export function WaiveDialog({ eventId, application, returnFocusRef, onClose, onS
       dirty={reason.trim() !== ''}
       saving={saving}
       saveDisabled={!valid}
-      submitLabel={`Waive ${money(application.amounts.applicantPays)}`}
+      submitLabel={`Waive ${money(owedNow(application))}`}
       savingLabel="Waiving…"
       initialFocusRef={reasonRef}
       returnFocusRef={returnFocusRef}
@@ -240,7 +258,7 @@ export function WaiveDialog({ eventId, application, returnFocusRef, onClose, onS
           </div>
         )}
         <p className="text-sm text-gray-700 dark:text-slate-300">
-          <strong>{application.profile.businessName}</strong> owes {money(application.amounts.applicantPays)}. Waiving sets it to nothing owed, confirms their spot, and emails them. The waived amount stays on record; this cannot be undone.
+          <strong>{application.profile.businessName}</strong> owes {money(owedNow(application))}. Waiving sets it to nothing owed, confirms their spot, and emails them. The waived amount stays on record; this cannot be undone.
         </p>
         <div>
           <label htmlFor="waive-reason" className={labelClass}>
@@ -263,7 +281,7 @@ export function OfflinePaymentDialog({ eventId, application, returnFocusRef, onC
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const methodRef = useRef<HTMLSelectElement>(null);
-  const due = application.amounts.applicantPays;
+  const due = owedNow(application);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();

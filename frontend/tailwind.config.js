@@ -5,6 +5,7 @@ module.exports = {
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
     './src/app/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/theme/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
     extend: {
@@ -27,11 +28,21 @@ module.exports = {
           '0%': { transform: 'translateX(100%)' },
           '100%': { transform: 'translateX(0)' },
         },
+        slideInLeft: {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(0)' },
+        },
         // Section cards settle in on first paint. `backwards` fill only: a
         // lingering transform would trap the fixed-position dialogs inside.
         cardIn: {
           '0%': { opacity: '0', transform: 'translateY(6px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        // Full-screen overlays (FloorMapButton): opacity only, so no transform
+        // turns the overlay into a containing block for its own fixed sheets.
+        fadeIn: {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
         },
         // RSVP confirmation stamp (RsvpPass): lands once, settles at its tilt.
         stampIn: {
@@ -43,8 +54,10 @@ module.exports = {
       animation: {
         'slide-up': 'slideUp 0.3s ease-out',
         'slide-in-right': 'slideInRight 0.2s ease-out',
+        'slide-in-left': 'slideInLeft 0.2s ease-out',
         'card-in': 'cardIn 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) backwards',
         'stamp-in': 'stampIn 0.36s cubic-bezier(0.2, 0.8, 0.2, 1) backwards',
+        'fade-in': 'fadeIn 0.18s ease-out',
       },
     },
   },

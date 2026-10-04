@@ -16,12 +16,14 @@ import { createHash, randomBytes, randomInt, timingSafeEqual } from 'crypto';
 import jwt from 'jsonwebtoken';
 import { prisma } from '@jump/db';
 import logger from '../utils/logger.js';
+import { normalizeEmail } from '../utils/normalizeEmail.js';
 import { AuthenticationError } from '../middleware/errorHandler.js';
 
 const TOKEN_TTL_MS = {
   LOGIN: 15 * 60 * 1000,
   WELCOME: 7 * 24 * 60 * 60 * 1000,
   CODE: 10 * 60 * 1000,
+  DELETE_CONFIRM: 10 * 60 * 1000, // spec 040 card D
 };
 
 export const CODE_LENGTH = 6;
@@ -40,7 +42,7 @@ function hashToken(rawToken) {
 
 /** A code is bound to the organization and address it was sent to. */
 function hashCode(organizationId, email, code) {
-  return hashToken(`code:${organizationId}:${email.toLowerCase()}:${code}`);
+  return hashToken(`code:${organizationId}:${normalizeEmail(email)}:${code}`);
 }
 
 function isCodeShaped(value) {
@@ -94,6 +96,59 @@ class BuyerAuthService {
   }
 
   /**
+   * Six-digit code that confirms an action on a signed-in account (spec 040:
+   * DELETE_CONFIRM). Bound to the contact and purpose; issuing one retires the
+   * previous live code for the same purpose.
+   * @returns {Promise<{ rawCode: string, expiresAt: Date }>}
+   */
+  async issueContactCode(contact, purpose) {
+    const ttl = TOKEN_TTL_MS[purpose];
+    if (!ttl) throw new Error(`Unknown buyer token purpose: ${purpose}`);
+    const rawCode = String(randomInt(0, 10 ** CODE_LENGTH)).padStart(CODE_LENGTH, '0');
+    const expiresAt = new Date(Date.now() + ttl);
+    await prisma.$transaction([
+      prisma.buyerLoginToken.updateMany({ where: { contactId: contact.id, purpose, usedAt: null }, data: { usedAt: new Date() } }),
+      prisma.buyerLoginToken.create({
+        data: {
+          contactId: contact.id,
+          organizationId: contact.organizationId,
+          tokenHash: hashToken(`${purpose}:${contact.id}:${rawCode}`),
+          purpose,
+          expiresAt,
+        },
+      }),
+    ]);
+    return { rawCode, expiresAt };
+  }
+
+  /**
+   * Check and spend a code from `issueContactCode`. Same lockout as sign-in
+   * codes: five wrong guesses kill it. Returns false on any failure.
+   */
+  async consumeContactCode(contactId, purpose, code) {
+    if (!isCodeShaped(code)) return false;
+    const now = new Date();
+    const token = await prisma.buyerLoginToken.findFirst({
+      where: { contactId, purpose, usedAt: null, expiresAt: { gt: now } },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, tokenHash: true, attempts: true },
+    });
+    if (!token) return false;
+    const expected = Buffer.from(token.tokenHash, 'hex');
+    const actual = Buffer.from(hashToken(`${purpose}:${contactId}:${code}`), 'hex');
+    if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
+      const attempts = token.attempts + 1;
+      await prisma.buyerLoginToken.update({
+        where: { id: token.id },
+        data: { attempts, ...(attempts >= CODE_MAX_ATTEMPTS ? { usedAt: now } : {}) },
+      });
+      return false;
+    }
+    const claimed = await prisma.buyerLoginToken.updateMany({ where: { id: token.id, usedAt: null }, data: { usedAt: now } });
+    return claimed.count === 1;
+  }
+
+  /**
    * Whether a contact has hit the LOGIN token issuance cap.
    * @param {string} contactId
    */
@@ -119,7 +174,7 @@ class BuyerAuthService {
    */
   async requestLogin(organizationId, email) {
     const contact = await prisma.contact.findUnique({
-      where: { organizationId_email: { organizationId, email: email.toLowerCase() } },
+      where: { organizationId_email: { organizationId, email: normalizeEmail(email) } },
       select: {
         id: true,
         organizationId: true,
@@ -155,7 +210,7 @@ class BuyerAuthService {
     if (!organizationId || typeof email !== 'string' || !isCodeShaped(code)) throw invalid();
 
     const now = new Date();
-    const normalizedEmail = email.toLowerCase();
+    const normalizedEmail = normalizeEmail(email);
     const token = await prisma.buyerLoginToken.findFirst({
       where: {
         organizationId,
@@ -240,13 +295,16 @@ class BuyerAuthService {
    * Mint a buyer session JWT.
    * @param {{ contactId: string, organizationId: string, email: string }} buyer
    */
-  signSession(buyer) {
+  signSession(buyer, { issuedAt = null } = {}) {
     return jwt.sign(
       {
         sub: buyer.contactId,
         org: buyer.organizationId,
         email: buyer.email,
         typ: BUYER_SESSION_TYP,
+        // Spec 040: a session minted right after "sign out of all devices" must
+        // not fall in the same second as the cut-off, so round `iat` up past it.
+        ...(issuedAt && { iat: Math.ceil(issuedAt.getTime() / 1000) }),
       },
       process.env.AUTH_SECRET,
       { algorithm: 'HS256', expiresIn: SESSION_TTL }
@@ -268,7 +326,26 @@ class BuyerAuthService {
     if (decoded.typ !== BUYER_SESSION_TYP || !decoded.sub || !decoded.org) {
       throw new AuthenticationError('Not a buyer session');
     }
-    return { contactId: decoded.sub, organizationId: decoded.org, email: decoded.email };
+    return { contactId: decoded.sub, organizationId: decoded.org, email: decoded.email, issuedAt: decoded.iat ?? null };
+  }
+
+  /**
+   * Refuse a session issued before the buyer's "sign out of all devices"
+   * (spec 040). One indexed read per buyer request.
+   * @param {{ contactId: string, issuedAt: number|null }} buyer
+   */
+  async assertSessionCurrent(buyer) {
+    const contact = await prisma.contact.findUnique({
+      where: { id: buyer.contactId },
+      select: { buyerSessionsValidAfter: true },
+    });
+    if (!contact) throw new AuthenticationError('Account not found');
+    const cutoff = contact.buyerSessionsValidAfter?.getTime();
+    if (cutoff && (!buyer.issuedAt || buyer.issuedAt * 1000 < cutoff)) {
+      const error = new AuthenticationError('This session was signed out');
+      error.code = 'SESSION_REVOKED';
+      throw error;
+    }
   }
 
   /**

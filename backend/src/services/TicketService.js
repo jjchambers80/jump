@@ -8,6 +8,7 @@ import qrService from './QRService.js';
 import logger from '../utils/logger.js';
 import { NotFoundError, ConflictError, ValidationError } from '../middleware/errorHandler.js';
 import { evaluateRefundPolicy, REFUND_POLICY_SELECT } from './RefundPolicyService.js';
+import { TICKET_AMOUNT_INCLUDE } from './ticketAmounts.js';
 
 class TicketService {
   /**
@@ -183,7 +184,15 @@ class TicketService {
           },
         },
         priceTier: { select: { name: true, price: true, description: true, saleStartDate: true, saleEndDate: true, isRefundable: true } },
-        order: { select: { orderRef: true, createdAt: true } },
+        order: {
+          select: {
+            orderRef: true,
+            createdAt: true,
+            // Spec 031: the quoted refund is the all-in amount paid, which
+            // lives on the order's lines, not on Ticket.pricePaid.
+            ...(refundPolicy ? TICKET_AMOUNT_INCLUDE.order.select : {}),
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -311,7 +320,7 @@ class TicketService {
         priceTier: { select: { name: true } },
         contact: { select: { firstName: true, lastName: true, email: true } },
         // Add-ons bought with the order (spec 012) so staff can hand them over at the door
-        order: { select: { addOns: { where: { refundedAt: null }, include: { addOn: { select: { name: true } } } } } },
+        order: { select: { addOns: { where: { refundedAt: null }, select: { name: true, quantity: true } } } },
       },
     });
 
@@ -349,8 +358,70 @@ class TicketService {
       eventName: ticket.event.name,
       eventDate: ticket.event.date,
       redeemedAt: ticket.redeemedAt,
-      addOns: (ticket.order?.addOns || []).map((line) => ({ name: line.addOn?.name ?? 'Add-on', quantity: line.quantity })),
+      addOns: (ticket.order?.addOns || []).map((line) => ({ name: line.name ?? 'Add-on', quantity: line.quantity })),
     };
+  }
+
+  /**
+   * Claim a ticket for redemption. The write is conditional on the row still
+   * being VALID, so two scanners reading the same barcode in the same moment
+   * cannot both succeed: Postgres serialises the two UPDATEs and the loser
+   * matches zero rows. Same shape as `VendorCheckInService.checkIn`.
+   *
+   * @param {string} ticketId
+   * @param {Date} at - Redemption timestamp
+   * @returns {Promise<boolean>} true when this caller is the one that redeemed it
+   */
+  async _claimForRedemption(ticketId, at) {
+    const { count } = await prisma.ticket.updateMany({
+      where: { id: ticketId, status: 'VALID' },
+      data: { status: 'REDEEMED', redeemedAt: at },
+    });
+    return count === 1;
+  }
+
+  /**
+   * Build the rejection for a ticket whose status changed between the checks
+   * above and the conditional write. Re-reads the row so the door is told what
+   * actually happened — nearly always a second scanner a moment earlier.
+   *
+   * @param {string} ticketId
+   * @returns {Promise<Error>} The error to throw
+   */
+  async _redemptionRaceError(ticketId) {
+    const fresh = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      select: { status: true, redeemedAt: true },
+    });
+
+    if (!fresh) {
+      const error = new ValidationError('Ticket not found');
+      error.redemptionStatus = 'INVALID';
+      error.ticketId = ticketId;
+      error.statusCode = 400;
+      return error;
+    }
+
+    if (fresh.status === 'REDEEMED') {
+      const error = new ConflictError('Ticket has already been redeemed');
+      error.redemptionStatus = 'ALREADY_REDEEMED';
+      error.ticketId = ticketId;
+      error.originalRedemptionTime = fresh.redeemedAt;
+      return error;
+    }
+
+    if (fresh.status === 'VOIDED') {
+      const error = new ConflictError('Ticket has been voided');
+      error.redemptionStatus = 'VOIDED';
+      error.ticketId = ticketId;
+      return error;
+    }
+
+    const error = new ConflictError('Ticket has expired');
+    error.redemptionStatus = 'EXPIRED';
+    error.ticketId = ticketId;
+    error.statusCode = 410;
+    return error;
   }
 
   /**
@@ -369,7 +440,7 @@ class TicketService {
         event: { select: { id: true, name: true, date: true, venue: { select: { organizationId: true, timezone: true } } } },
         priceTier: { select: { name: true } },
         contact: { select: { firstName: true, lastName: true } },
-        order: { select: { addOns: { where: { refundedAt: null }, include: { addOn: { select: { name: true } } } } } },
+        order: { select: { addOns: { where: { refundedAt: null }, select: { name: true, quantity: true } } } },
       },
     });
 
@@ -424,10 +495,9 @@ class TicketService {
     }
 
     const now = new Date();
-    await prisma.ticket.update({
-      where: { id: ticket.id },
-      data: { status: 'REDEEMED', redeemedAt: now },
-    });
+    if (!(await this._claimForRedemption(ticket.id, now))) {
+      throw await this._redemptionRaceError(ticket.id);
+    }
 
     logger.info('Ticket redeemed by barcode', {
       ticketId: ticket.id,
@@ -442,7 +512,7 @@ class TicketService {
       priceTierName: ticket.priceTier.name,
       contactName: `${ticket.contact.firstName} ${ticket.contact.lastName}`,
       redeemedAt: now,
-      addOns: (ticket.order?.addOns || []).map((line) => ({ name: line.addOn?.name ?? 'Add-on', quantity: line.quantity })),
+      addOns: (ticket.order?.addOns || []).map((line) => ({ name: line.name ?? 'Add-on', quantity: line.quantity })),
     };
   }
 
@@ -544,15 +614,11 @@ class TicketService {
       throw voidedError;
     }
 
-    // 6. Redeem
+    // 6. Redeem — conditional on the row still being VALID (see _claimForRedemption)
     const now = new Date();
-    await prisma.ticket.update({
-      where: { id: ticketId },
-      data: {
-        status: 'REDEEMED',
-        redeemedAt: now,
-      },
-    });
+    if (!(await this._claimForRedemption(ticketId, now))) {
+      throw await this._redemptionRaceError(ticketId);
+    }
 
     logger.info('Ticket redeemed', {
       ticketId,
@@ -684,42 +750,47 @@ class TicketService {
   }
 
   /**
-   * Update attendee (contact) info on a ticket.
+   * Update the name on a ticket (spec 037 D13 / C1).
+   *
+   * There are no attendee fields on `Ticket` yet (named tickets are deferred),
+   * so the name lives on the buyer's Contact. The edit is therefore allowed
+   * only when the ticket's order holds exactly one ticket, where the ticket
+   * holder and the buyer are the same person. The email is never changed here:
+   * it is the Contact's identity at the organization (spec 007) and changes
+   * only through the customer page.
    *
    * @param {string} ticketId
-   * @param {{ firstName?: string, lastName?: string, email?: string }} updates
+   * @param {{ firstName?: string, lastName?: string }} updates
    * @returns {Promise<Object>} Updated contact
    */
-  async updateTicketAttendee(ticketId, { firstName, lastName, email }) {
+  async updateTicketAttendee(ticketId, { firstName, lastName } = {}) {
     const ticket = await prisma.ticket.findUnique({
       where: { id: ticketId },
-      select: { contactId: true },
+      select: { contactId: true, orderId: true },
     });
 
     if (!ticket) {
       throw new NotFoundError('Ticket not found');
     }
 
+    const ticketsInOrder = await prisma.ticket.count({ where: { orderId: ticket.orderId } });
+    if (ticketsInOrder !== 1) {
+      const error = new ValidationError(
+        'This order has several tickets. Changing the name would rename the buyer on all of them; edit the buyer on the customer page instead.'
+      );
+      error.code = 'ATTENDEE_EDIT_MULTI_TICKET_ORDER';
+      throw error;
+    }
+
     const data = {};
     if (firstName !== undefined) data.firstName = firstName;
     if (lastName !== undefined) data.lastName = lastName;
-    // Contact email is the buyer's sign-in identity at this org (spec 007):
-    // normalize like checkout does, and surface a per-org collision as 409.
-    if (email !== undefined) data.email = String(email).trim().toLowerCase();
 
-    let updated;
-    try {
-      updated = await prisma.contact.update({
-        where: { id: ticket.contactId },
-        data,
-        select: { id: true, firstName: true, lastName: true, email: true },
-      });
-    } catch (error) {
-      if (error.code === 'P2002') {
-        throw new ConflictError('Another customer at this organization already uses that email');
-      }
-      throw error;
-    }
+    const updated = await prisma.contact.update({
+      where: { id: ticket.contactId },
+      data,
+      select: { id: true, firstName: true, lastName: true, email: true },
+    });
 
     logger.info('Ticket attendee updated', { ticketId, contactId: updated.id });
     return updated;
@@ -743,13 +814,14 @@ class TicketService {
     if (ticket.status === 'EXPIRED') throw new ConflictError('Cannot check in an expired ticket');
 
     const now = new Date();
-    const updated = await prisma.ticket.update({
-      where: { id: ticketId },
-      data: { status: 'REDEEMED', redeemedAt: now },
-    });
+    // Conditional write: two staff tapping the same row at once must not both
+    // report a clean check-in (see _claimForRedemption).
+    if (!(await this._claimForRedemption(ticketId, now))) {
+      throw new ConflictError('Ticket already checked in');
+    }
 
     logger.info('Admin check-in', { ticketId });
-    return { status: updated.status, redeemedAt: updated.redeemedAt };
+    return { status: 'REDEEMED', redeemedAt: now };
   }
 
   /**
@@ -793,7 +865,7 @@ class TicketService {
             id: true,
             orderRef: true,
             // Add-ons on the order (spec 012) — staff hands these over at the door
-            addOns: { where: { refundedAt: null }, include: { addOn: { select: { name: true } } } },
+            addOns: { where: { refundedAt: null }, select: { name: true, quantity: true } },
           },
         },
       },
@@ -833,7 +905,7 @@ class TicketService {
       eventDate: ticket.event.date,
       eventId: ticket.event.id,
       totalTickets: allTickets.length,
-      addOns: ticket.order.addOns.map((line) => ({ name: line.addOn?.name ?? 'Add-on', quantity: line.quantity })),
+      addOns: ticket.order.addOns.map((line) => ({ name: line.name ?? 'Add-on', quantity: line.quantity })),
       tickets: allTickets.map((t) => ({
         ticketId: t.id,
         barcode: t.barcode,

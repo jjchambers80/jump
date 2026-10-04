@@ -61,6 +61,9 @@ const MAP = {
     { id: 'b-1', label: 'A1', kind: 'BOOTH', x: 0, y: 0, w: 10, h: 10, rotation: 0, status: 'SOLD', tier: { id: 't-1', name: '10×10 booth', price: 275 }, vendorName: 'Acme Crafts' },
     { id: 'b-2', label: 'A2', kind: 'BOOTH', x: 12, y: 0, w: 10, h: 10, rotation: 0, status: 'AVAILABLE', tier: { id: 't-1', name: '10×10 booth', price: 275 }, vendorName: null },
     { id: 'b-3', label: 'A3', kind: 'BOOTH', x: 24, y: 0, w: 10, h: 10, rotation: 0, status: 'BLOCKED', tier: null, vendorName: null },
+    // A vendor is mid-checkout on A4. Taken to every other visitor, but not
+    // sold — so the map must not name a holder for it. See spec 014 phase 2.
+    { id: 'b-4', label: 'A4', kind: 'BOOTH', x: 12, y: 11, w: 8, h: 8, rotation: 0, status: 'HELD', tier: { id: 't-1', name: '10×10 booth', price: 275 }, vendorName: null },
   ],
   brandColor: '#b91c1c',
   themeMode: 'SYSTEM',
@@ -111,6 +114,33 @@ test.describe('public floor map', () => {
     await expect(dialog).toBeVisible();
     // Sheet (mobile) and popover (desktop) both mount; only the viewport's copy is visible.
     await expect(page.getByText('Sold to Acme Crafts').locator('visible=true')).toHaveCount(1);
+  });
+
+  test('tells open booths apart from taken ones, and never names a holder mid-checkout', async ({ page }) => {
+    await mockEvent(page);
+    await page.goto('/events/ev-map/map');
+
+    // Open vs. taken has to be legible at a glance, so each state carries its
+    // own word in the accessible name — not just a fill colour.
+    await expect(page.getByTestId('booth-A2')).toHaveAttribute('aria-label', /Available$/);
+    await expect(page.getByTestId('booth-A1')).toHaveAttribute('aria-label', /Sold$/);
+    await expect(page.getByTestId('booth-A4')).toHaveAttribute('aria-label', /Held$/);
+    await expect(page.getByTestId('booth-A3')).toHaveAttribute('aria-label', /Blocked$/);
+
+    // Every state on the map has to be named in the legend, Held included —
+    // an amber booth with a clock on it is meaningless otherwise.
+    for (const state of ['Available', 'Held', 'Sold', 'Reserved', 'Blocked']) {
+      await expect(page.getByText(state, { exact: true }).locator('visible=true').first()).toBeVisible();
+    }
+
+    // test-results/ is gitignored; this is the open-vs-taken evidence shot,
+    // taken before any selection so the whole floor is in frame.
+    await page.screenshot({ path: 'test-results/public-map-booth-states.png', fullPage: true });
+
+    await page.getByTestId('booth-A4').click();
+    await expect(page.getByRole('dialog').getByRole('heading', { name: 'Booth A4' })).toBeVisible();
+    // A hold is not a sale: whoever is checking out stays anonymous until they pay.
+    await expect(page.getByText(/Sold to/).locator('visible=true')).toHaveCount(0);
   });
 
   test('?booth= accepts stable booth ids and legacy labels', async ({ page }) => {
@@ -169,6 +199,53 @@ test.describe('public floor map', () => {
     await expect(page.getByText('Vendor directory coming soon')).toBeVisible();
   });
 
+  test('phones: header, full-width fitted map, then the directory', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await mockEvent(page);
+    await page.goto('/events/ev-map/map');
+    const heading = page.getByRole('heading', { level: 1, name: /Floor map/ });
+    const map = page.getByTestId('public-map');
+    const directory = page.getByTestId('vendor-directory');
+    await expect(heading).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Back to Map Expo' })).toHaveAttribute('href', '/events/ev-map');
+    await expect(page.getByTestId('booth-A1')).toBeVisible();
+
+    const [h, m, d] = await Promise.all([heading.boundingBox(), map.boundingBox(), directory.boundingBox()]);
+    expect(h!.y).toBeLessThan(m!.y);
+    expect(m!.y).toBeLessThan(d!.y);
+    // Edge to edge on a phone, and no sideways scroll.
+    expect(Math.round(m!.x)).toBe(0);
+    expect(Math.round(m!.width)).toBe(375);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+    // Fitted to the floor: the 40-unit-wide map spans most of the viewport, not a thumbnail.
+    await expect.poll(async () => (await page.getByTestId('booth-A1').boundingBox())!.width).toBeGreaterThan(60);
+  });
+
+  test('desktop: the map stays inside the content column', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await mockEvent(page);
+    await page.goto('/events/ev-map/map');
+    await expect(page.getByTestId('booth-A1')).toBeVisible();
+    const m = (await page.getByTestId('public-map').boundingBox())!;
+    expect(m.x).toBeGreaterThan(0);
+    expect(m.x + m.width).toBeLessThan(1440);
+    await expect.poll(async () => (await page.getByTestId('booth-A1').boundingBox())!.width).toBeGreaterThan(150);
+  });
+
+  test('the booth dialog takes focus and gives it back', async ({ page }) => {
+    await mockEvent(page);
+    await page.goto('/events/ev-map/map');
+    await page.getByTestId('booth-A2').focus();
+    await page.keyboard.press('Enter');
+    const dialog = page.getByRole('dialog', { name: 'Booth A2' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Close' })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByTestId('booth-A2')).toBeFocused();
+    await expect(page).toHaveURL(/\/events\/ev-map\/map$/);
+  });
+
   test('an unpublished map is not available', async ({ page }) => {
     await mockEvent(page, { published: false });
     await page.goto('/events/ev-map/map');
@@ -176,15 +253,143 @@ test.describe('public floor map', () => {
     await expect(page.getByTestId('booth-A1')).toHaveCount(0);
   });
 
-  test('the event page shows a floor map preview only when published', async ({ page }) => {
+  test('the event page opens the floor map full screen from the header, only when published', async ({ page }) => {
     await mockEvent(page);
     await page.goto('/events/ev-map');
-    await expect(page.getByRole('heading', { name: 'Floor map' })).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByRole('link', { name: /Open map/ })).toHaveAttribute('href', '/events/ev-map/map');
+    const button = page.getByRole('button', { name: 'Floor map' });
+    await expect(button).toBeVisible({ timeout: 10_000 });
+    // The old preview section at the bottom of the page is gone.
+    await expect(page.getByRole('heading', { name: 'Floor map' })).toHaveCount(0);
+
+    await button.click();
+    const dialog = page.getByRole('dialog', { name: 'Map Expo' });
+    await expect(dialog).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Close the floor map' })).toBeFocused();
+    // Full screen: the dialog covers the whole viewport.
+    const box = await dialog.boundingBox();
+    const viewport = page.viewportSize()!;
+    expect(box).not.toBeNull();
+    expect(Math.round(box!.width)).toBe(viewport.width);
+    expect(Math.round(box!.height)).toBe(viewport.height);
+    await expect(dialog.getByTestId('floor-map-dialog-count')).toContainText('1 of 3 booths open');
+    await expect(dialog.getByTestId('map-legend')).toContainText('10×10 booth');
+    await expect(dialog.getByRole('link', { name: /Vendor directory/ }).locator('visible=true')).toHaveAttribute('href', '/events/ev-map/map');
+
+    // A booth opens its sheet; Escape closes the sheet first, then the map.
+    await dialog.getByTestId('booth-A1').click();
+    await expect(page.getByRole('dialog', { name: 'Booth A1' })).toBeVisible();
+    await expect(page.getByText('Sold to Acme Crafts')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog', { name: 'Booth A1' })).toHaveCount(0);
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(button).toBeFocused();
 
     await page.unrouteAll({ behavior: 'ignoreErrors' });
     await mockEvent(page, { published: false });
     await page.goto('/events/ev-map');
-    await expect(page.getByRole('heading', { name: 'Floor map' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Map Expo' })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('button', { name: 'Floor map' })).toHaveCount(0);
+  });
+
+  test('the full-screen floor map fills a phone screen', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await mockEvent(page);
+    await page.goto('/events/ev-map');
+    await page.getByRole('button', { name: 'Floor map' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Map Expo' });
+    await expect(dialog).toBeVisible();
+    const box = await dialog.boundingBox();
+    expect(box).toMatchObject({ x: 0, y: 0, width: 390, height: 844 });
+    await expect(dialog.getByTestId('booth-A2')).toBeInViewport();
+    await expect(dialog.getByRole('link', { name: /Vendor directory/ }).locator('visible=true')).toHaveCount(1);
+    await page.getByRole('button', { name: 'Close the floor map' }).click();
+    await expect(dialog).toHaveCount(0);
+  });
+});
+
+// Map pages get the slim Ticketmaster-style bar: menu button, logo flush left,
+// sign-in flush right, then the event summary (OrganizationHeader layout="bar").
+test.describe('public floor map header bar', () => {
+  async function mockBar(page: Page) {
+    await mockEvent(page);
+    await page.route(`${API}/organizations/org-map/public/menus`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          main: [
+            { id: 'm1', label: 'Home', href: '/organizations/org-map', newTab: false, children: [] },
+            { id: 'm2', label: 'Events', href: '/organizations/org-map/events', newTab: false, children: [] },
+          ],
+          footer: [],
+        }),
+      })
+    );
+    await page.route('**/api/buyer/me', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: 'null' }));
+  }
+
+  for (const width of [390, 1280]) {
+    test(`${width}px: menu, then the organization, then sign-in at the far right`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await mockBar(page);
+      await page.goto('/events/ev-map/map');
+
+      const header = page.getByTestId('organization-header');
+      await expect(header).toHaveAttribute('data-layout', 'bar');
+      const menu = header.getByRole('button', { name: 'Open menu' });
+      const org = header.getByRole('link', { name: 'Map Org' });
+      const signIn = header.getByTestId('buyer-sign-in-link');
+      await expect(signIn).toBeVisible();
+      // Menus load after hydration: measure only once the menu button is in the row.
+      await expect(menu).toBeVisible();
+      // The inline desktop menu is never rendered in the bar: the menu button is the menu.
+      await expect(header.getByTestId('storefront-nav')).toHaveCount(0);
+
+      const [m, o, s, h] = await Promise.all([menu.boundingBox(), org.boundingBox(), signIn.boundingBox(), header.boundingBox()]);
+      expect(m!.x).toBeLessThan(24);
+      expect(m!.x + m!.width).toBeLessThanOrEqual(o!.x);
+      expect(o!.x + o!.width).toBeLessThanOrEqual(s!.x);
+      expect(width - (s!.x + s!.width)).toBeLessThan(24);
+      expect(Math.round(h!.width)).toBe(width);
+      // 44 px targets.
+      expect(m!.height).toBeGreaterThanOrEqual(44);
+      expect(s!.height).toBeGreaterThanOrEqual(44);
+
+      // Header row and event row share one band (one background), like Ticketmaster.
+      const band = page.getByTestId('event-map-header');
+      const b = (await band.boundingBox())!;
+      expect(h!.y).toBeGreaterThanOrEqual(b.y);
+      const summary = page.getByTestId('map-event-summary');
+      const sb = (await summary.boundingBox())!;
+      expect(sb.y + sb.height).toBeLessThanOrEqual(b.y + b.height);
+      expect(sb.y).toBeGreaterThanOrEqual(o!.y + o!.height - 1);
+      await expect(summary.getByRole('heading', { level: 1, name: /Floor map/ })).toBeVisible();
+      await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+      await expect(summary.getByRole('link', { name: 'Back to Map Expo' })).toHaveAttribute('href', '/events/ev-map');
+      await expect(summary).toContainText(/[AP]M [A-Z]{2,5}/);
+      // Back button sits under the menu button.
+      const back = (await summary.getByRole('link', { name: 'Back to Map Expo' }).boundingBox())!;
+      expect(Math.abs(back.x - m!.x)).toBeLessThanOrEqual(2);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    });
+  }
+
+  test('the menu opens a drawer from the left that traps focus and closes on Escape', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await mockBar(page);
+    await page.goto('/events/ev-map/map');
+    const open = page.getByRole('button', { name: 'Open menu' });
+    await open.click();
+    const drawer = page.getByRole('dialog', { name: 'Menu' });
+    await expect(drawer).toBeVisible();
+    // Slides in from the left edge (200 ms, skipped under reduced motion).
+    await expect.poll(async () => Math.round((await drawer.boundingBox())!.x)).toBe(0);
+    await expect(drawer.getByRole('button', { name: 'Close menu' })).toBeFocused();
+    await expect(drawer.getByRole('link', { name: 'Events' })).toHaveAttribute('href', '/organizations/org-map/events');
+    await page.keyboard.press('Escape');
+    await expect(drawer).toHaveCount(0);
+    await expect(open).toBeFocused();
   });
 });

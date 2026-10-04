@@ -70,6 +70,7 @@ model User {
   platformCustomers PlatformCustomer[]
   // Spec 030: revocable sessions (Devices) and the security audit trail
   sessions          UserSession[]
+  developerTokens   DeveloperToken[]
   securityEvents    SecurityEvent[]
   contactComments   ContactComment[]
 
@@ -208,6 +209,9 @@ model File {
   mimeType     String
   sizeBytes    Int
   originalName String?
+  /// Intrinsic pixel size of an image file (null for PDFs and pre-backfill rows)
+  width        Int?
+  height       Int?
   createdAt    DateTime @default(now())
 
   images     Image[]
@@ -388,6 +392,7 @@ model UrlRedirect {
 enum ContentRefKind {
   PAGE
   BLOG_POST
+  THEME // targetId = Theme.id; field = settings | content | a document key (spec 038)
 }
 
 // Which content records use a file (featured image, or an <img>/<a> inside
@@ -471,6 +476,9 @@ model Organization {
   seoTitle                   String?
   seoDescription             String?
   autoRedirectLanguage       Boolean                @default(false)
+  // Spec 038 per-org rollout of themes (server-rendered storefront + editor).
+  // Changed by SYSTEM_ADMIN only; THEME_EDITOR_ENABLED is the master switch.
+  themesEnabled              Boolean                @default(false)
   // Spec 031 phase 1: Settings › Customer accounts. Show the buyer sign-in
   // link in the storefront header and at checkout.
   buyerSignInLinks           Boolean                @default(true)
@@ -494,6 +502,7 @@ model Organization {
   venues                   Venue[]
   members                  OrganizationMember[]
   contacts                 Contact[]
+  erasureSuppressions      ErasureSuppression[]
   contactComments          ContactComment[]
   domains                  OrganizationDomain[]
   people                   OrganizationPerson[]
@@ -512,6 +521,10 @@ model Organization {
   urlRedirects             UrlRedirect[]
   floorMaps                FloorMap[]
   floorMapTemplates        FloorMapTemplate[]
+  addOnProducts            AddOnProduct[]
+  themes                   Theme[]
+  developerTokens          DeveloperToken[]
+  pageTemplates            PageTemplate[]
 }
 
 // Custom content pages managed under Online Store. Content is stored as the
@@ -529,6 +542,10 @@ model Page {
   // Search engine listing overrides; null falls back to title / no description.
   seoTitle       String?
   seoDescription String?
+  // Spec 042: name of the organization's PageTemplate that lays this page out.
+  // Null renders the default body. No FK on purpose: deleting a template
+  // clears it (PageTemplateService.remove), and an unknown name renders the default.
+  template       String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -536,6 +553,26 @@ model Page {
 
   @@unique([organizationId, slug])
   @@index([organizationId, createdAt])
+}
+
+// Spec 042: a page layout a developer (SYSTEM_ADMIN) uploads to one
+// organization. `definition` is the normalized JSON manifest — an ordered list
+// of whitelisted sections (utils/pageTemplateManifest.js); no code or raw HTML
+// beyond sanitized rich text.
+model PageTemplate {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String // "contact" — what Page.template stores
+  label          String
+  description    String?
+  definition     Json
+  createdById    String? // plain id, no FK
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, name])
 }
 
 // Spec 010 phase 2: the organization's Stripe Connect (Express) account that
@@ -664,12 +701,12 @@ model OrganizationPerson {
 }
 
 model Venue {
-  id             String  @id @default(cuid())
+  id             String              @id @default(cuid())
   organizationId String
   name           String
   // Public namespace is /venues/:slug, so venue slugs are globally unique.
-  slug           String  @unique @default(cuid())
-  slugCustomized Boolean @default(false)
+  slug           String              @unique @default(cuid())
+  slugCustomized Boolean             @default(false)
   address        String
   city           String?
   state          String?
@@ -699,22 +736,28 @@ model Venue {
 // Buyer record, scoped per organization. The same email at two organizations is
 // two rows with separate notes, consent, and order history. Buyers never live in User.
 model Contact {
-  id                    String                 @id @default(cuid())
-  organizationId        String
-  email                 String
-  firstName             String
-  lastName              String
-  location              String?
-  note                  String?
-  emailSubscribed       Boolean                @default(false)
+  id                      String                 @id @default(cuid())
+  organizationId          String
+  email                   String
+  firstName               String
+  lastName                String
+  location                String?
+  note                    String?
+  emailSubscribed         Boolean                @default(false)
   // Marketing consent provenance (spec 023 LR-07, built by spec 024 phase 3)
-  emailSubscribedAt     DateTime?
-  emailSubscribedSource EmailSubscribedSource?
-  emailUnsubscribedAt   DateTime?
-  accountCreatedAt      DateTime? // null = guest checkout; set = login-enabled buyer account
-  phone                 String?
-  tags                  String[]              @default([])
-  stripeCustomerId      String?                @unique // spec 011: platform-account Customer holding the applicant's saved card
+  emailSubscribedAt       DateTime?
+  emailSubscribedSource   EmailSubscribedSource?
+  emailUnsubscribedAt     DateTime?
+  accountCreatedAt        DateTime? // null = guest checkout; set = login-enabled buyer account
+  phone                   String?
+  tags                    String[]               @default([])
+  stripeCustomerId        String?                @unique // spec 011: platform-account Customer holding the applicant's saved card
+  // Spec 040: "Sign out of all devices" — buyer sessions issued before this are refused.
+  buyerSessionsValidAfter DateTime?
+  // Spec 040 card D: "Delete my data" is scheduled for this moment (grace period);
+  // anonymizedAt is set once ContactErasureService has scrubbed the row.
+  erasureScheduledAt      DateTime?
+  anonymizedAt            DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -731,6 +774,21 @@ model Contact {
   @@unique([organizationId, email])
   @@index([email])
   @@index([tags], type: Gin)
+  @@index([erasureScheduledAt])
+}
+
+// Spec 040 card D: an address whose owner deleted their data at this
+// organization. Salted SHA-256 only — the address itself is gone — so
+// imports and marketing can skip it without keeping it.
+model ErasureSuppression {
+  id             String   @id @default(cuid())
+  organizationId String
+  emailHash      String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, emailHash])
 }
 
 // Staff-authored notes and audit entries shown in the customer timeline.
@@ -739,14 +797,14 @@ model ContactComment {
   id             String             @id @default(cuid())
   contactId      String
   organizationId String
-  authorUserId   String
+  authorUserId   String? // null = the customer, from their own account (spec 040)
   kind           ContactCommentKind @default(COMMENT)
   body           String
   createdAt      DateTime           @default(now())
 
   contact      Contact      @relation(fields: [contactId], references: [id], onDelete: Cascade)
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  author       User         @relation(fields: [authorUserId], references: [id])
+  author       User?        @relation(fields: [authorUserId], references: [id], onDelete: Restrict)
 
   @@index([contactId, createdAt])
   @@index([organizationId, createdAt])
@@ -756,6 +814,11 @@ model ContactComment {
 enum ContactCommentKind {
   COMMENT
   EMAIL_CHANGED
+  PROFILE_UPDATED
+  DATA_EXPORTED // spec 040 card C: "Download my data" (null author) or a staff export
+  ERASURE_SCHEDULED // spec 040 card D
+  ERASURE_CANCELLED
+  ANONYMIZED
 }
 
 // Single-use, hashed magic-link token for passwordless buyer sign-in.
@@ -770,6 +833,7 @@ model BuyerLoginToken {
   expiresAt      DateTime
   usedAt         DateTime?
   attempts       Int               @default(0) // failed guesses at a CODE token (spec 031); dead after 5
+  payload        Json? // purpose data, e.g. EMAIL_CHANGE { newEmail } (spec 040)
   createdAt      DateTime          @default(now())
 
   contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
@@ -779,18 +843,18 @@ model BuyerLoginToken {
 }
 
 model Event {
-  id             String      @id @default(cuid())
-  venueId        String
-  name           String
+  id               String        @id @default(cuid())
+  venueId          String
+  name             String
   // Public namespace is /events/:slug, so event slugs are globally unique.
-  slug           String      @unique @default(cuid())
-  slugCustomized Boolean     @default(false)
-  description    String?
-  logoUrl        String?
-  imageId        String?
-  date           DateTime
-  capacity       Int
-  category       String?
+  slug             String        @unique @default(cuid())
+  slugCustomized   Boolean       @default(false)
+  description      String?
+  logoUrl          String?
+  imageId          String?
+  date             DateTime
+  capacity         Int
+  category         String?
   status           EventStatus   @default(DRAFT)
   admissionMode    AdmissionMode @default(TICKETED)
   rsvpLimit        Int?
@@ -963,6 +1027,7 @@ model Order {
   addOns      OrderAddOn[]
   payment     PaymentTransaction?
   refunds     Refund[]
+  disputes    Dispute[]
 
   @@index([eventId])
   @@index([contactId])
@@ -1073,6 +1138,11 @@ model Refund {
   initiatedBy    String? // userId of admin who initiated, null for customer self-service
   manual         Boolean      @default(false) // recorded refund on an offline-paid order, no Stripe call (spec 024)
   feeAmount      Decimal      @default(0) @db.Decimal(10, 2) // kept by the organization on a self-serve refund (spec 031)
+  // Spec 037: the money Stripe pulled back for a chargeback, not a refund we
+  // issued — there is no Stripe Refund object, so `stripeRefundId` stays null.
+  // At most one per dispute (unique), and `status` FAILED once a won dispute
+  // reinstated the funds, so the SUCCEEDED aggregates stop counting it.
+  disputeId      String?      @unique
 
   createdAt DateTime @default(now())
   // NO updatedAt — append-only ledger
@@ -1080,11 +1150,66 @@ model Refund {
   order      Order       @relation(fields: [orderId], references: [id])
   ticket     Ticket?     @relation(fields: [ticketId], references: [id])
   orderAddOn OrderAddOn? @relation(fields: [orderAddOnId], references: [id])
+  dispute    Dispute?    @relation(fields: [disputeId], references: [id])
 
   @@index([orderId])
   @@index([ticketId])
   @@index([orderAddOnId])
   @@index([stripeRefundId])
+}
+
+// ──────────────────────────────────────────────
+// Disputes / chargebacks (spec 037)
+// ──────────────────────────────────────────────
+
+// Projection of a Stripe Dispute. Stripe is the source of truth and every
+// `charge.dispute.*` event carries the whole dispute object, so handlers apply
+// the full derived state rather than a delta — that plus `lastEventAt` (only a
+// strictly newer event may move state) is what makes replays and out-of-order
+// delivery safe. Exactly one row per Stripe dispute, exactly one order per row.
+model Dispute {
+  id                    String       @id @default(cuid())
+  orderId               String
+  stripeDisputeId       String       @unique
+  stripeChargeId        String?
+  stripePaymentIntentId String?
+  amount                Decimal      @db.Decimal(10, 2) // disputed amount, major units
+  currency              String       @default("usd")
+  reason                String? // Stripe dispute.reason, e.g. fraudulent
+  stripeStatus          String // raw Stripe dispute.status
+  state                 DisputeState @default(OPEN)
+  // A `warning_*` status is an inquiry: no funds have moved and the buyer's
+  // tickets are left alone until it becomes a real chargeback.
+  inquiry               Boolean      @default(false)
+  // Net of dispute.balance_transactions: true while Stripe is holding the money.
+  fundsWithdrawn        Boolean      @default(false)
+  evidenceDueBy         DateTime?
+  openedAt              DateTime
+  closedAt              DateTime?
+  // What this dispute voided / closed, so a won dispute restores exactly those
+  // — and their prior status — never a ticket or line that staff refunded for
+  // another reason. `voidedTickets` is [{ id, status }].
+  voidedTickets         Json?
+  closedAddOnIds        String[]
+  // Monotonic guard: `created` of the newest charge.dispute.* event applied.
+  lastEventAt           DateTime
+  lastEventType         String
+  lastEventId           String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order   Order    @relation(fields: [orderId], references: [id])
+  refunds Refund[]
+
+  @@index([orderId])
+  @@index([state])
+}
+
+enum DisputeState {
+  OPEN // needs_response / under_review, or an open inquiry
+  WON
+  LOST
 }
 
 // ──────────────────────────────────────────────
@@ -1116,6 +1241,8 @@ enum BuyerTokenPurpose {
   WELCOME
   LOGIN
   CODE
+  EMAIL_CHANGE // spec 040: link to the new address; payload { newEmail }
+  DELETE_CONFIRM // spec 040 card D: code that confirms "Delete my data"
 }
 
 // Spec 031: buyer sign-in method per organization.
@@ -1235,22 +1362,22 @@ enum BoothStatus {
 }
 
 model FloorMap {
-  id              String         @id @default(cuid())
-  organizationId  String
-  eventId         String         @unique // one map per event in v1
-  name            String
-  status          FloorMapStatus @default(DRAFT)
-  unit            String         @default("ft") // display only
-  gridSize        Int            @default(10) // px per grid unit in the editor
-  width           Int // grid units
-  height          Int
-  underlayFileId  String? // StoreFile
-  underlayOpacity Int            @default(40)
-  layout          Json // { version: 1, elements: [...] }
+  id                    String         @id @default(cuid())
+  organizationId        String
+  eventId               String         @unique // one map per event in v1
+  name                  String
+  status                FloorMapStatus @default(DRAFT)
+  unit                  String         @default("ft") // display only
+  gridSize              Int            @default(10) // px per grid unit in the editor
+  width                 Int // grid units
+  height                Int
+  underlayFileId        String? // StoreFile
+  underlayOpacity       Int            @default(40)
+  layout                Json // { version: 1, elements: [...] }
   createdFromTemplateId String? // informational; templates are snapshots, not parents
-  publishedAt     DateTime?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  publishedAt           DateTime?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   event        Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
@@ -1291,9 +1418,10 @@ model Booth {
   tierId            String? // ApplicationTier that sells this booth
   status            BoothStatus @default(AVAILABLE)
   applicationId     String?     @unique // SOLD / RESERVED holder
-  holdApplicationId String? // HELD by (checkout in flight)
+  holdApplicationId String?     @unique // HELD by (checkout in flight)
   holdExpiresAt     DateTime?
   assignedById      String? // staff who assigned manually
+  price             Decimal?    @db.Decimal(10, 2) // spec 039: overrides the tier's price when set
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1301,7 +1429,15 @@ model Booth {
   map         FloorMap         @relation(fields: [mapId], references: [id], onDelete: Cascade)
   tier        ApplicationTier? @relation(fields: [tierId], references: [id], onDelete: SetNull)
   application Application?     @relation(fields: [applicationId], references: [id], onDelete: SetNull)
-  // holdApplication has no explicit FK — it references the same Application table for HELD state
+  // holdApplication has no explicit FK — it references the same Application table for HELD state.
+  // Uniqueness is the point, not referential integrity: `holdApplicationId @unique` is the
+  // database backstop that stops one application holding two booths, mirroring `applicationId`
+  // for SOLD. A `Booth_hold_state_check` CHECK constraint (migration
+  // 20261022200000_booth_hold_uniqueness, not expressible in Prisma schema) pins
+  // status = 'HELD' ⇔ holdApplicationId AND holdExpiresAt are both set, so the hold slot can
+  // never be parked on a booth in another status to slip past that index. An FK would conflict:
+  // ON DELETE SET NULL would leave a HELD booth with no holder and violate the CHECK. A deleted
+  // application's dangling hold is reclaimed by BoothService.sweepExpiredHolds instead.
 
   @@unique([mapId, label])
   @@index([mapId, status])
@@ -1317,6 +1453,14 @@ model Booth {
 enum ApplicationFormKind {
   PAID
   FREE
+}
+
+// Spec 039: how an approved vendor on a PAID form chooses their space.
+// TIERS: pick one of the form's tiers (or the one the organizer locked);
+// MAP: pick a spot on the event's floor map within the approved category.
+enum SpaceSelectionMode {
+  TIERS
+  MAP
 }
 
 enum ApplicationFormStatus {
@@ -1356,6 +1500,12 @@ enum ApplicationStatus {
 
 enum ApplicationPayment {
   NOT_REQUIRED
+  // Spec 037 phase 5 (apply-then-choose): a PAID-form application under
+  // review. Nothing is owed yet: no order, no card step.
+  NOT_DUE
+  // Spec 037 phase 5: approved, the vendor still has to choose a space (list
+  // or map). Any order the application has is CANCELLED until they select.
+  AWAITING_SELECTION
   AWAITING_CARD
   CARD_ON_FILE
   PROCESSING
@@ -1404,6 +1554,7 @@ enum ApplicationAction {
   WAIVED // spec 018 phase 3: balance waived (ADMIN)
   OFFLINE_PAID // spec 018 phase 3: payment recorded outside Stripe (ADMIN)
   MANUAL_REFUND // spec 018 phase 3: refund recorded on an offline-paid application
+  CHOOSE_SPACE // spec 037 phase 5: approved on a PAID form; the vendor chooses a space and pays
 }
 
 enum EmailSubscribedSource {
@@ -1412,6 +1563,7 @@ enum EmailSubscribedSource {
   RSVP
   ADMIN
   IMPORT
+  ACCOUNT // spec 040: the buyer's own Preferences page
 }
 
 // ─── Legal acceptances (spec 023 §8.1, built by spec 024 phase 3) ───────────
@@ -1502,11 +1654,16 @@ model ApplicationForm {
   taxable               Boolean               @default(false)
   paymentDueDays        Int                   @default(7)
   overduePolicy         OverduePolicy         @default(WITHDRAW)
+  // Spec 037 D5: true = approval takes a slot in the category (refused when
+  // full, so an approved vendor always has a space); false = approval takes
+  // nothing and approved vendors choose first-come.
+  reserveOnApproval     Boolean               @default(true)
   displayOrder          Int                   @default(0)
   createdFromTemplateId String? // spec 019: informational, no relation
   collectBusiness       Boolean               @default(true)
   buttonLabel           String?
   successMessage        String?
+  spaceSelection        SpaceSelectionMode    @default(TIERS) // spec 039; PAID forms only
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1533,7 +1690,8 @@ model ApplicationTier {
   quantityReserved Int     @default(0) // slots held while a charge is in flight or payment is due
   displayOrder     Int     @default(0)
   isActive         Boolean @default(true)
-  mapBound         Boolean @default(false) // spec 014: derived quantityTotal from booths on publish
+  // Spec 014 flag, never settable. Spec 037 phase 5 derives map binding from the
+  // event's published map (booths bound to the tier) instead; dropped in phase 6.
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1610,8 +1768,11 @@ model Application {
   status         ApplicationStatus  @default(DRAFT)
   // Fine-grained payment state machine; the coarse money state is Order.status
   // (spec 024), written in the same transaction through orderStatusFor().
-  paymentStatus  ApplicationPayment @default(NOT_REQUIRED)
-  capacitySlot   CapacitySlot       @default(NONE)
+  paymentStatus      ApplicationPayment @default(NOT_REQUIRED)
+  capacitySlot       CapacitySlot       @default(NONE)
+  // Spec 039 D6: the vendor picked `tierId` at selection (TIERS form, approved
+  // without a category). A release gives it back; an organizer's pick locks it.
+  tierChosenByVendor Boolean            @default(false)
 
   // Money lives on `order` (spec 024): amount snapshot as order lines,
   // PaymentTransaction, Refund. PAID forms only; FREE forms have no order.
@@ -1624,10 +1785,14 @@ model Application {
   optInsAppliedAt DateTime?
 
   // Card on file (spec 011 phase 2)
-  stripeCheckoutSessionId String? @unique
+  stripeCheckoutSessionId String?   @unique
   stripePaymentMethodId   String?
-  chargeAttempts          Int     @default(0)
-  overdue                 Boolean @default(false) // set by the sweep when order.dueAt passes
+  chargeAttempts          Int       @default(0)
+  overdue                 Boolean   @default(false) // set by the sweep when the payment clock passes
+  // Spec 037 phase 5: while set, the vendor holds a space (a booth, or a slot
+  // in the category) and its order is PENDING; the selection sweep releases
+  // it when this passes and no payment is in flight.
+  selectionHeldUntil      DateTime?
 
   // Review
   submittedAt     DateTime?
@@ -1637,15 +1802,15 @@ model Application {
   withdrawnBy     WithdrawnBy?
   withdrawReason  String?
   boothLabel      String?
-  publicProfile   Boolean      @default(true) // spec 014: organizer-controlled public vendor directory opt-in
-  tags            String[]     @default([]) // spec 019 phase 3: free-form organizer tags
+  publicProfile   Boolean        @default(true) // spec 014: organizer-controlled public vendor directory opt-in
+  tags            String[]       @default([]) // spec 019 phase 3: free-form organizer tags
   checkedInAt     DateTime? // spec 019 phase 3: on-site check-in (APPROVED only)
   checkedOutAt    DateTime?
   // Door check-in (spec 036): who recorded the arrival and how. `checkedInById`
   // is null for a stamp made by a hardware reader or an older toggle.
   checkedInById   String?
   checkedInVia    CheckInMethod?
-  statusTokenHash String       @unique // guest status-page token, sha256 of the raw token
+  statusTokenHash String         @unique // guest status-page token, sha256 of the raw token
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1745,9 +1910,36 @@ enum AddOnScope {
   BOTH
 }
 
+// Spec 037 phase 4: a saved add-on — the org-level definition an event's
+// AddOn offering points at. Name / description / scope / taxable are shared
+// (edited once, copied onto the offerings during the transition); price is
+// only a default — each offering keeps its own (D9). Names are unique per
+// organization case-insensitively, enforced in AddOnProductService.
+model AddOnProduct {
+  id             String     @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+  defaultPrice   Decimal    @db.Decimal(10, 2)
+  scope          AddOnScope @default(BOTH)
+  taxable        Boolean    @default(true)
+  isArchived     Boolean    @default(false)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  offerings    AddOn[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, isArchived])
+}
+
 model AddOn {
   id               String     @id @default(cuid())
   eventId          String
+  // Spec 037: the saved add-on this offering sells. Nullable until the dedupe
+  // backfill (db:backfill:037-add-ons) has linked every legacy row.
+  productId        String
   name             String
   description      String?
   price            Decimal    @db.Decimal(10, 2)
@@ -1765,11 +1957,14 @@ model AddOn {
   updatedAt DateTime @updatedAt
 
   event            Event                  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  product          AddOnProduct           @relation(fields: [productId], references: [id], onDelete: Restrict)
   priceTiers       PriceTierAddOn[]
   applicationTiers ApplicationTierAddOn[]
   orderLines       OrderAddOn[]
 
+  @@unique([eventId, productId]) // spec 037 4c: one offering of a saved add-on per event
   @@index([eventId, isActive])
+  @@index([productId])
 }
 
 model PriceTierAddOn {
@@ -1798,6 +1993,9 @@ model OrderAddOn {
   id            String    @id @default(cuid())
   orderId       String
   addOnId       String
+  // Spec 037: the add-on's name at purchase. Receipts, emails, CSVs and
+  // serializers read this, never the live AddOn / AddOnProduct name.
+  name          String
   quantity      Int
   unitPrice     Decimal   @db.Decimal(10, 2) // listed price at purchase, immutable
   platformFee   Decimal   @default(0) @db.Decimal(10, 2)
@@ -1813,4 +2011,161 @@ model OrderAddOn {
 
   @@unique([orderId, addOnId])
   @@index([addOnId])
+}
+
+// ──────────────────────────────────────────────
+// Online store themes (spec 038)
+// ──────────────────────────────────────────────
+
+enum ThemeRole {
+  MAIN
+  UNPUBLISHED
+}
+
+enum ThemeDocumentKind {
+  HEADER_GROUP
+  FOOTER_GROUP
+  TEMPLATE
+  PAGE
+}
+
+// One MAIN theme per organization (partial unique index "Theme_one_main_per_org"
+// in the migration); the rest are draft themes. Sections, settings and
+// documents are validated by @jump/theme; the preset itself is code.
+model Theme {
+  id                 String    @id @default(cuid())
+  organizationId     String
+  name               String // 1-50 chars
+  presetKey          String // "eventimus-default"
+  presetVersion      String // "1.0"
+  role               ThemeRole @default(UNPUBLISHED)
+  settings           Json      @default("{}") // overrides of the preset settings (§6.3)
+  content            Json      @default("{}") // default-content overrides (§6.5)
+  version            Int       @default(1) // optimistic lock: settings, content or name changed
+  publishedAt        DateTime?
+  lastSavedAt        DateTime  @default(now())
+  lastSavedById      String? // plain id, no FK: a deleted user shows as "a former member"
+  importedFrom       String?
+  scheduledPublishAt DateTime? // at most one per org (partial unique index)
+  scheduledById      String?
+  scheduleError      String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  documents    ThemeDocument[]
+  revisions    ThemeRevision[]
+
+  @@index([organizationId, role])
+}
+
+// A stored document; a missing key falls back to the preset default.
+model ThemeDocument {
+  id            String            @id @default(cuid())
+  themeId       String
+  kind          ThemeDocumentKind
+  key           String // header | footer | home | events | …
+  data          Json
+  version       Int               @default(1) // optimistic lock per document
+  schemaVersion Int               @default(1)
+  updatedById   String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  theme Theme @relation(fields: [themeId], references: [id], onDelete: Cascade)
+
+  @@unique([themeId, key])
+}
+
+// One row per committed save on the MAIN theme, holding the FULL theme state
+// after that save (contracts C5). The last 50 per theme are kept.
+model ThemeRevision {
+  id          String   @id @default(cuid())
+  themeId     String
+  snapshot    Json // { settings, content, documents: { key: data } }
+  changedKeys String[]
+  savedById   String?
+  createdAt   DateTime @default(now())
+
+  theme Theme @relation(fields: [themeId], references: [id], onDelete: Cascade)
+
+  @@index([themeId, createdAt])
+}
+
+// Every Stripe webhook delivery, on every endpoint (spec 035 / EVE-3).
+//
+// WHY a table and not just a log line: Stripe delivers the same event more than
+// once and does not guarantee order. Handlers are individually idempotent, but
+// nothing recorded *that* a delivery happened, so a missed or mis-ordered event
+// was undebuggable after the fact. This row is the receipt.
+//
+// `(endpoint, stripeEventId)` is the dedup key — the insert itself is the lock,
+// so two concurrent deliveries of the same event cannot both reach a handler.
+// Append-mostly: a row is written on receipt and updated once with the outcome.
+model StripeWebhookEvent {
+  id              String    @id @default(cuid())
+  // PLATFORM | CONNECT | BILLING — which registered endpoint received it.
+  // Part of the dedup key: the same event id may legitimately arrive on two
+  // endpoints, and each has its own handler.
+  endpoint        String
+  stripeEventId   String
+  type            String
+  // event.account on Connect deliveries, null on the platform account.
+  accountId       String?
+  // event.data.object.id — the Stripe object this delivery is about. Used to
+  // detect out-of-order delivery against the same object.
+  objectId        String?
+  apiVersion      String?
+  // RECEIVED | PROCESSED | IGNORED | FAILED
+  status          String    @default("RECEIVED")
+  // Deliveries seen for this event id, including the first.
+  deliveries      Int       @default(1)
+  error           String?
+  // event.created, Stripe's own ordering clock — not our receipt time.
+  stripeCreatedAt DateTime?
+  receivedAt      DateTime  @default(now())
+  processedAt     DateTime?
+
+  @@unique([endpoint, stripeEventId])
+  @@index([type, receivedAt])
+  @@index([status, receivedAt])
+  @@index([objectId])
+}
+
+// Spec 043: a developer's credential for one organization, minted by the
+// Jump CLI's browser login (loopback + PKCE). Only routers mounted with
+// allowDeveloperToken(scope) accept it; requireAuth refuses it everywhere else.
+model DeveloperToken {
+  id             String    @id @default(cuid())
+  organizationId String
+  userId         String
+  name           String // "Jump CLI on jj-mbp"
+  tokenHash      String    @unique // sha256 of the `jmp_` token; the token itself is never stored
+  prefix         String // first characters, shown in Settings › Developers
+  scopes         String[] // ["themes"]
+  lastUsedAt     DateTime?
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([userId])
+}
+
+// One-time code between the browser consent page and the CLI (5 minutes,
+// single use, bound to the PKCE challenge and the loopback redirect).
+model DeveloperAuthCode {
+  id             String    @id @default(cuid())
+  codeHash       String    @unique
+  codeChallenge  String
+  redirectUri    String
+  userId         String
+  organizationId String
+  name           String
+  expiresAt      DateTime
+  usedAt         DateTime?
+  createdAt      DateTime  @default(now())
 }

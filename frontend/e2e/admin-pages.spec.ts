@@ -12,6 +12,7 @@ interface StorePage {
   isVisible: boolean;
   seoTitle: string | null;
   seoDescription: string | null;
+  template?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -29,9 +30,37 @@ function storePage(overrides: Partial<StorePage> & Pick<StorePage, 'id' | 'title
   };
 }
 
-async function mockPagesApi(page: Page, initial: StorePage[]) {
+const CONTACT_TEMPLATE = {
+  id: 'tpl-contact',
+  name: 'contact',
+  label: 'Contact',
+  description: 'The page content followed by a general contact form.',
+  sections: [
+    { type: 'page_content' },
+    {
+      type: 'contact_form',
+      settings: { submitLabel: 'Send message', successMessage: 'Thanks', showPhone: true, showSubject: true },
+    },
+  ],
+  pageCount: 0,
+  createdAt: '2026-09-18T12:00:00.000Z',
+  updatedAt: '2026-09-18T12:00:00.000Z',
+};
+
+async function mockPagesApi(
+  page: Page,
+  initial: StorePage[],
+  { templates = [] as (typeof CONTACT_TEMPLATE)[], storeEmail = 'store@test.com' as string | null } = {}
+) {
   const pages = [...initial];
   const calls: { method: string; url: string; body?: Record<string, unknown> }[] = [];
+
+  await page.route(`${API}/admin/page-templates`, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ templates }) })
+  );
+  await page.route(`${API}/admin/settings/business-details`, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ email: storeEmail }) })
+  );
 
   await page.route(`${API}/organizations`, (route) =>
     route.fulfill({
@@ -215,7 +244,7 @@ test('empty-state action opens the editor and creates a visible page', async ({ 
   await expect(page).toHaveURL(/\/admin\/online-store\/pages\/new$/);
   await page.getByLabel('Title', { exact: true }).fill('Refund policy');
   await page.getByLabel('Page content').fill('Refunds are available within 30 days.');
-  await page.getByRole('checkbox', { name: 'Visible on the online store' }).check();
+  await page.getByTestId('visibility-card').getByRole('radio', { name: /Visible/ }).check();
   await page.getByRole('button', { name: 'Create Page' }).click();
 
   await expect(page).toHaveURL(/\/admin\/online-store\/pages$/);
@@ -308,7 +337,7 @@ test('editing a page loads its fields and saves a partial update', async ({ page
   await expect(page.getByLabel('Title', { exact: true })).toHaveValue('About us');
   await expect(page.getByLabel('Page content')).toContainText('About our organization');
   await expect(page.getByLabel('Page content').locator('strong')).toHaveText('our');
-  await expect(page.getByRole('checkbox', { name: 'Visible on the online store' })).not.toBeChecked();
+  await expect(page.getByTestId('visibility-card').getByRole('radio', { name: /Hidden/ })).toBeChecked();
   const listing = page.getByTestId('search-engine-listing');
   await expect(listing.getByLabel('Page title')).toHaveValue('About Page Test');
   await expect(listing.getByLabel('Meta description')).toHaveValue('Who we are.');
@@ -317,7 +346,7 @@ test('editing a page loads its fields and saves a partial update', async ({ page
 
   await page.getByLabel('Title', { exact: true }).fill('About our league');
   await listing.getByLabel('Meta description').fill('');
-  await page.getByRole('checkbox', { name: 'Visible on the online store' }).check();
+  await page.getByTestId('visibility-card').getByRole('radio', { name: /Visible/ }).check();
   await page.getByRole('button', { name: 'Save' }).click();
 
   await expect(page).toHaveURL(/\/admin\/online-store\/pages$/);
@@ -344,4 +373,177 @@ test('editing a page that does not exist shows the standard alert', async ({ pag
 
   await expect(page.getByRole('alert').filter({ hasText: 'Page not found' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Save' })).toHaveCount(0);
+});
+
+test('Video toolbar button embeds a YouTube player from its embed snippet', async ({ page }) => {
+  // Keep the suite offline: the player iframe gets a blank page.
+  await page.route('https://www.youtube-nocookie.com/**', (route) =>
+    route.fulfill({ status: 200, contentType: 'text/html', body: '<html></html>' })
+  );
+  const api = await mockPagesApi(page, [
+    storePage({ id: 'page-vendors', title: 'Vendors', content: '<p>Become a vendor</p>' }),
+  ]);
+  await page.goto('/admin/online-store/pages/page-vendors');
+  await expect(page.getByLabel('Page content')).toContainText('Become a vendor');
+
+  const videoButton = page.getByRole('button', { name: 'Video', exact: true });
+  await videoButton.click();
+  const dialog = page.getByRole('dialog', { name: 'Insert video' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByLabel('Insert a video by pasting the embed snippet')).toBeFocused();
+  await expect(dialog.getByRole('button', { name: 'Insert video' })).toBeDisabled();
+
+  await dialog.getByLabel('Insert a video by pasting the embed snippet').fill(
+    '<iframe src="https://example.com/video/1"></iframe>'
+  );
+  await dialog.getByRole('button', { name: 'Insert video' }).click();
+  await expect(dialog.getByRole('alert')).toHaveText(
+    'Paste a YouTube or Vimeo embed snippet or link'
+  );
+
+  await dialog.getByLabel('Insert a video by pasting the embed snippet').fill(
+    '<iframe width="560" height="315" src="https://www.youtube.com/embed/dQw4w9WgXcQ?si=abc" title="Vendor recap" frameborder="0" allowfullscreen></iframe>'
+  );
+  await dialog.getByRole('button', { name: 'Insert video' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByTestId('editor-video').locator('iframe')).toHaveAttribute(
+    'src',
+    'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ'
+  );
+
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page).toHaveURL(/\/admin\/online-store\/pages$/);
+  const content = String(api.calls.find((call) => call.method === 'PUT')?.body?.content);
+  expect(content).toContain('src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ"');
+  expect(content).toContain('title="Vendor recap"');
+  expect(content).toContain('class="jump-video"');
+});
+
+test('Insert video dialog closes on Escape and returns focus', async ({ page }) => {
+  await mockPagesApi(page, [storePage({ id: 'page-a', title: 'A' })]);
+  await page.goto('/admin/online-store/pages/page-a');
+  const videoButton = page.getByRole('button', { name: 'Video', exact: true });
+  await videoButton.click();
+  await expect(page.getByRole('dialog', { name: 'Insert video' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: 'Insert video' })).toHaveCount(0);
+  await expect(videoButton).toBeFocused();
+});
+
+const SAVED_VIDEO =
+  '<p>Recap</p><iframe src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ" title="Vendor recap" class="jump-video" loading="lazy" allowfullscreen></iframe><p>After</p>';
+
+async function blockPlayers(page: Page) {
+  for (const host of ['https://www.youtube-nocookie.com/**', 'https://player.vimeo.com/**']) {
+    await page.route(host, (route) =>
+      route.fulfill({ status: 200, contentType: 'text/html', body: '<html></html>' })
+    );
+  }
+}
+
+test('a selected video can be replaced from the Video button', async ({ page }) => {
+  await blockPlayers(page);
+  const api = await mockPagesApi(page, [
+    storePage({ id: 'page-video', title: 'Video', content: SAVED_VIDEO }),
+  ]);
+  await page.goto('/admin/online-store/pages/page-video');
+
+  await page.getByTestId('editor-video').click();
+  await page.getByRole('button', { name: 'Edit video', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Edit video' });
+  const snippet = dialog.getByLabel('Replace the video by pasting a new embed snippet');
+  await expect(snippet).toHaveValue(
+    '<iframe src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ" title="Vendor recap"></iframe>'
+  );
+
+  await snippet.fill('https://vimeo.com/76979871');
+  await dialog.getByRole('button', { name: 'Save video' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByTestId('editor-video')).toHaveCount(1);
+  await expect(page.getByTestId('editor-video').locator('iframe')).toHaveAttribute(
+    'src',
+    'https://player.vimeo.com/video/76979871'
+  );
+
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page).toHaveURL(/\/admin\/online-store\/pages$/);
+  const content = String(api.calls.find((call) => call.method === 'PUT')?.body?.content);
+  expect(content).toContain('src="https://player.vimeo.com/video/76979871"');
+  expect(content).not.toContain('youtube');
+  expect(content).toContain('<p>Recap</p>');
+  expect(content).toContain('<p>After</p>');
+});
+
+test('double-clicking a video opens Edit video, which can remove it', async ({ page }) => {
+  await blockPlayers(page);
+  await mockPagesApi(page, [storePage({ id: 'page-video', title: 'Video', content: SAVED_VIDEO })]);
+  await page.goto('/admin/online-store/pages/page-video');
+
+  await page.getByTestId('editor-video').dblclick();
+  const dialog = page.getByRole('dialog', { name: 'Edit video' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Remove video' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByTestId('editor-video')).toHaveCount(0);
+  await expect(page.getByLabel('Page content')).toContainText('Recap');
+  await expect(page.getByLabel('Page content')).toContainText('After');
+  // Nothing selected any more: the button inserts again.
+  await expect(page.getByRole('button', { name: 'Video', exact: true })).toBeVisible();
+});
+
+test('desktop editor puts Visibility and Template in a right column and saves the template', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const api = await mockPagesApi(
+    page,
+    [storePage({ id: 'page-contact', title: 'Contact', content: '<p>Write to us</p>' })],
+    { templates: [CONTACT_TEMPLATE] }
+  );
+  await page.goto('/admin/online-store/pages/page-contact');
+
+  const visibility = page.getByTestId('visibility-card');
+  const templateCard = page.getByTestId('template-card');
+  await expect(visibility).toBeVisible();
+  await expect(templateCard).toBeVisible();
+  const titleBox = (await page.getByLabel('Title', { exact: true }).boundingBox())!;
+  const visibilityBox = (await visibility.boundingBox())!;
+  const templateBox = (await templateCard.boundingBox())!;
+  // Right column, Template under Visibility.
+  expect(visibilityBox.x).toBeGreaterThan(titleBox.x + titleBox.width);
+  expect(templateBox.y).toBeGreaterThan(visibilityBox.y + visibilityBox.height - 1);
+
+  const select = templateCard.getByLabel('Template');
+  await expect(select).toHaveValue('');
+  await select.selectOption('contact');
+  await expect(templateCard).toContainText('general contact form');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page).toHaveURL(/\/admin\/online-store\/pages$/);
+  expect(api.calls.find((call) => call.method === 'PUT')?.body).toEqual(
+    expect.objectContaining({ template: 'contact' })
+  );
+});
+
+test('a contact template warns when the store has no email', async ({ page }) => {
+  await mockPagesApi(
+    page,
+    [storePage({ id: 'page-contact', title: 'Contact', template: 'contact' })],
+    { templates: [CONTACT_TEMPLATE], storeEmail: null }
+  );
+  await page.goto('/admin/online-store/pages/page-contact');
+  const templateCard = page.getByTestId('template-card');
+  await expect(templateCard.getByLabel('Template')).toHaveValue('contact');
+  await expect(templateCard.getByRole('status')).toContainText('Add a store email');
+  // Only developers manage templates.
+  await expect(templateCard.getByRole('link', { name: 'Manage templates' })).toHaveCount(0);
+});
+
+test('on a phone the right column stacks under the content', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockPagesApi(page, [storePage({ id: 'page-a', title: 'A' })]);
+  await page.goto('/admin/online-store/pages/page-a');
+  const content = (await page.getByLabel('Title', { exact: true }).boundingBox())!;
+  const visibility = (await page.getByTestId('visibility-card').boundingBox())!;
+  expect(visibility.y).toBeGreaterThan(content.y);
+  expect(Math.abs(visibility.x - content.x)).toBeLessThan(40);
 });

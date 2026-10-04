@@ -24,9 +24,15 @@ interface StorefrontPasswordGateProps {
   organization: GateOrganization;
   message: string | null;
   onUnlocked: () => void | Promise<void>;
+  /**
+   * Server-rendered themed pages (spec 038, contracts C2): exchange the
+   * password through the storefront host's route handler, which also sets the
+   * httpOnly access cookie the server reads. Returns the token.
+   */
+  exchange?: (password: string) => Promise<string>;
 }
 
-export default function StorefrontPasswordGate({ organization, message, onUnlocked }: StorefrontPasswordGateProps) {
+export default function StorefrontPasswordGate({ organization, message, onUnlocked, exchange }: StorefrontPasswordGateProps) {
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,9 +44,9 @@ export default function StorefrontPasswordGate({ organization, message, onUnlock
     setSubmitting(true);
     setError(null);
     try {
-      const { token } = await api.post<{ token: string }>(`/organizations/${organization.id}/storefront-access`, {
-        password,
-      });
+      const token = exchange
+        ? await exchange(password)
+        : (await api.post<{ token: string }>(`/organizations/${organization.id}/storefront-access`, { password })).token;
       writeStorefrontAccess(organization.id, token);
       await onUnlocked();
     } catch (err: any) {

@@ -14,11 +14,26 @@ import {
   ELEMENT_KINDS, EMPTY_LAYOUT, MIN_MAP_NAME_LENGTH, MAX_MAP_NAME_LENGTH,
 } from '../config/maps.js';
 import logger from '../utils/logger.js';
+import { findByPublicIdentifier } from '../utils/publicIdentifier.js';
 import feeService from './FeeService.js';
 import storeFileService from './StoreFileService.js';
 import imageService from './ImageService.js';
 import applicationFormService, { tierAmounts } from './ApplicationFormService.js';
+import { spacePriceFor } from './orderLines.js';
 import floorMapTemplateService from './FloorMapTemplateService.js';
+
+// Spec 039: per-booth price ceiling (the tier validator's range).
+const MAX_BOOTH_PRICE = 100_000;
+
+/** Booth row with its Decimal price as a number, as every map payload sends it. */
+function boothOut(b) {
+  return { ...b, price: b.price === null || b.price === undefined ? null : Number(b.price) };
+}
+
+function samePrice(a, b) {
+  if (a === null || a === undefined || b === null || b === undefined) return (a ?? null) === (b ?? null);
+  return Math.round(Number(a) * 100) === Math.round(Number(b) * 100);
+}
 
 class MapService {
   // ─── Admin CRUD ─────────────────────────────────────────────────────
@@ -158,9 +173,11 @@ class MapService {
 
     const tiers = await prisma.applicationTier.findMany({
       where: { form: { eventId: map.eventId, kind: 'PAID' } },
-      select: { id: true, name: true, price: true, mapBound: true, quantityTotal: true, formId: true, displayOrder: true },
+      select: { id: true, name: true, price: true, quantityTotal: true, formId: true, displayOrder: true },
       orderBy: [{ form: { displayOrder: 'asc' } }, { displayOrder: 'asc' }],
     });
+    // Spec 037 phase 5: a tier is map-bound when this map has booths on it.
+    const boundTierIds = new Set(map.booths.map((b) => b.tierId).filter(Boolean));
 
     const formIds = [...new Set(tiers.map((t) => t.formId))];
     const forms = formIds.length > 0
@@ -187,12 +204,12 @@ class MapService {
       ...this._serialize(map),
       tiers: tiers.map((t) => ({
         id: t.id, name: t.name, price: Number(t.price),
-        mapBound: t.mapBound, quantityTotal: t.quantityTotal,
+        mapBound: boundTierIds.has(t.id), quantityTotal: t.quantityTotal,
         form: formMap[t.formId] ? { id: t.formId, name: formMap[t.formId].name, slug: formMap[t.formId].slug } : null,
         displayOrder: t.displayOrder,
       })),
       booths: map.booths.map((b) => ({
-        ...b,
+        ...boothOut(b),
         holder: b.applicationId && holderMap[b.applicationId]
           ? { id: b.applicationId, status: holderMap[b.applicationId].status, paymentStatus: holderMap[b.applicationId].paymentStatus, businessName: holderMap[b.applicationId].profile?.businessName || null }
           : null,
@@ -302,6 +319,17 @@ class MapService {
       const h = Number.isInteger(b.h) && b.h >= MIN_BOOTH_SIZE && b.h <= MAX_BOOTH_SIZE ? b.h : null;
       const rotation = [0, 90].includes(b.rotation) ? b.rotation : 0;
       const tierId = b.tierId || null;
+      // Spec 039: the booth's own price. Absent keeps what is stored (older
+      // builders never send it); null clears it back to the tier's price.
+      let price;
+      if (b.price === null) price = null;
+      else if (b.price !== undefined) {
+        const value = typeof b.price === 'string' && b.price.trim() !== '' ? Number(b.price) : b.price;
+        if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > MAX_BOOTH_PRICE || Math.abs(Math.round(value * 100) - value * 100) > 1e-6) {
+          throw new ValidationError(`booth ${i + 1} (${b.label}): price must be 0–${MAX_BOOTH_PRICE} with at most 2 decimals, or null`);
+        }
+        price = Math.round(value * 100) / 100;
+      }
 
       if (x === null) throw new ValidationError(`booth ${i + 1}: x must be an integer`);
       if (y === null) throw new ValidationError(`booth ${i + 1}: y must be an integer`);
@@ -311,23 +339,30 @@ class MapService {
       if (x + w > map.width) throw new ValidationError(`booth ${i + 1} (${b.label}) extends beyond right edge`);
       if (y + h > map.height) throw new ValidationError(`booth ${i + 1} (${b.label}) extends beyond bottom edge`);
 
-      validatedBooths.push({ label: b.label, kind, x, y, w, h, rotation, tierId });
+      validatedBooths.push({ label: b.label, kind, x, y, w, h, rotation, tierId, ...(price !== undefined && { price }) });
     }
 
     // Run the upsert transaction
-    return prisma.$transaction(async (tx) => {
+    const full = await prisma.$transaction(async (tx) => {
+      // Lock the map's booths first: a vendor holding one (BoothService
+      // takes the same row lock) must never see its price change between the
+      // hold and the charge (spec 039).
+      await tx.$queryRaw`SELECT "id" FROM "Booth" WHERE "mapId" = ${mapId} FOR UPDATE`;
       const existing = await tx.booth.findMany({ where: { mapId } });
       const existingByLabel = {};
       for (const eb of existing) existingByLabel[eb.label] = eb;
 
       const incomingLabels = new Set(validatedBooths.map((b) => b.label));
       const blockedLabels = [];
+      const priceLocked = [];
 
       for (const input of validatedBooths) {
         const old = existingByLabel[input.label];
         if (old) {
           if (['SOLD', 'HELD', 'RESERVED'].includes(old.status)) {
-            // Only tierId can change on in-use booths
+            // Only tierId can change on in-use booths; the price is what the
+            // vendor holds, owns or was placed at, so it is locked too.
+            if (input.price !== undefined && !samePrice(input.price, old.price)) priceLocked.push(old.label);
             if (input.tierId !== old.tierId) {
               await tx.booth.update({ where: { id: old.id }, data: { tierId: input.tierId } });
             }
@@ -335,13 +370,19 @@ class MapService {
           }
           await tx.booth.update({
             where: { id: old.id },
-            data: { kind: input.kind, x: input.x, y: input.y, w: input.w, h: input.h, rotation: input.rotation, tierId: input.tierId },
+            data: { kind: input.kind, x: input.x, y: input.y, w: input.w, h: input.h, rotation: input.rotation, tierId: input.tierId, ...(input.price !== undefined && { price: input.price }) },
           });
         } else {
           await tx.booth.create({
-            data: { mapId, label: input.label, kind: input.kind, x: input.x, y: input.y, w: input.w, h: input.h, rotation: input.rotation, tierId: input.tierId },
+            data: { mapId, label: input.label, kind: input.kind, x: input.x, y: input.y, w: input.w, h: input.h, rotation: input.rotation, tierId: input.tierId, price: input.price ?? null },
           });
         }
+      }
+
+      if (priceLocked.length > 0) {
+        const error = new ConflictError(`BOOTH_PRICE_LOCKED — a vendor holds or owns: ${priceLocked.join(', ')}`);
+        error.code = 'BOOTH_PRICE_LOCKED';
+        throw error;
       }
 
       const toDelete = existing.filter(
@@ -369,17 +410,22 @@ class MapService {
       }
 
       // Return full map detail
-      const full = await tx.floorMap.findUnique({
+      return tx.floorMap.findUnique({
         where: { id: mapId },
         include: { booths: { orderBy: [{ y: 'asc' }, { x: 'asc' }] } },
       });
-      return full;
     });
+    return { ...full, booths: full.booths.map(boothOut) };
   }
 
   // ─── Publish / Unpublish ────────────────────────────────────────────
 
-  /** Publish: set PUBLISHED, sync mapBound tier quantities, check oversold. */
+  /**
+   * Publish: set PUBLISHED, set every bound tier's quantity to its booth
+   * count, check oversold. Spec 037 phase 5: "bound" is derived — any tier a
+   * booth on this map points at — and every PAID form sells its space after
+   * approval, so the form's legacy `chargeTiming` no longer matters here.
+   */
   async publish(orgId, mapId) {
     const map = await this._requireInOrg(orgId, mapId);
     if (map.status === 'PUBLISHED') return this.get(orgId, mapId);
@@ -408,15 +454,11 @@ class MapService {
       const tiers = tierIds.length > 0
         ? await tx.applicationTier.findMany({
             where: { id: { in: tierIds } },
-            select: { id: true, name: true, quantityApproved: true, quantityReserved: true, form: { select: { chargeTiming: true, name: true } } },
+            select: { id: true, name: true, quantityApproved: true, quantityReserved: true },
           })
         : [];
 
       for (const tier of tiers) {
-        // Booths are bought after approval; a charge-at-submission form has no spot to sell.
-        if (tier.form.chargeTiming !== 'APPROVAL') {
-          throw new ConflictError(`TIER_CHARGE_TIMING — form "${tier.form.name}" charges at submission; set it to charge on approval before binding "${tier.name}" to the map`);
-        }
         const count = tierCounts[tier.id];
         const used = tier.quantityApproved + tier.quantityReserved;
         if (count < used) {
@@ -426,7 +468,7 @@ class MapService {
 
       for (const tierId of tierIds) {
         await tx.applicationTier.updateMany({
-          where: { id: tierId, mapBound: true },
+          where: { id: tierId },
           data: { quantityTotal: tierCounts[tierId] },
         });
       }
@@ -450,14 +492,21 @@ class MapService {
 
   // ─── Public read ─────────────────────────────────────────────────────
 
-  /** GET /events/:eventId/map — published map only, no-cache. */
-  async publicMap(eventId) {
+  /**
+   * GET /events/:eventId/map — published map only, no-cache. `identifier` is
+   * the event's id or its public slug: the storefront map page lives at the
+   * slug URL (resource slugs) and asks for the map with it.
+   */
+  async publicMap(identifier) {
+    const resolved = await findByPublicIdentifier(prisma.event, identifier, { select: { id: true } });
+    if (!resolved) throw new NotFoundError('Map not published for this event');
+    const eventId = resolved.id;
     const map = await prisma.floorMap.findUnique({
       where: { eventId },
       include: {
         booths: {
           orderBy: [{ y: 'asc' }, { x: 'asc' }],
-          select: { id: true, label: true, kind: true, x: true, y: true, w: true, h: true, rotation: true, status: true, tierId: true, applicationId: true, updatedAt: true },
+          select: { id: true, label: true, kind: true, x: true, y: true, w: true, h: true, rotation: true, status: true, tierId: true, price: true, applicationId: true, updatedAt: true },
         },
         underlay: { include: { file: true } },
         event: {
@@ -538,18 +587,29 @@ class MapService {
       };
     });
 
-    // Compute legend with all-in prices using the form's fee mode
+    // All-in price of each booth under its form's fee mode (spec 039: the
+    // booth's own price when set, else its tier's).
+    const allIn = (b) => {
+      const tier = tierMap[b.tierId];
+      if (!tier) return null;
+      return tierAmounts(spacePriceFor({ tier, booth: b }), tier.form, map.event, map.event.venue.organization).applicantPays;
+    };
+    const boothPrices = new Map(map.booths.map((b) => [b.id, allIn(b)]));
+
+    // Legend: all-in tier price, plus the range its booths span.
     const legend = [];
     const seenTierIds = new Set();
     for (const b of map.booths) {
       if (b.tierId && tierMap[b.tierId] && !seenTierIds.has(b.tierId)) {
         const tier = tierMap[b.tierId];
-        // Get all-in price for this tier using the form's fee mode
         const amounts = tierAmounts(Number(tier.price), tier.form, map.event, map.event.venue.organization);
+        const prices = map.booths.filter((o) => o.tierId === b.tierId).map((o) => boothPrices.get(o.id));
         legend.push({
           tierId: tier.id,
           name: tier.name,
           price: amounts.applicantPays, // all-in price
+          priceFrom: Math.min(...prices),
+          priceTo: Math.max(...prices),
           swatch: seenTierIds.size % 6,
         });
         seenTierIds.add(b.tierId);
@@ -594,6 +654,10 @@ class MapService {
         h: b.h,
         rotation: b.rotation,
         status: b.status,
+        // Spec 039: what this booth costs the vendor, fees and tax included.
+        price: boothPrices.get(b.id),
+        // Before fees and tax: what the vendor screen totals with its extras.
+        listedPrice: tierMap[b.tierId] ? spacePriceFor({ tier: tierMap[b.tierId], booth: b }) : null,
         tier: b.tierId && tierMap[b.tierId]
           ? { id: b.tierId, name: tierMap[b.tierId].name, price: Number(tierMap[b.tierId].price) }
           : null,
@@ -653,6 +717,7 @@ class MapService {
           h: b.h,
           rotation: b.rotation,
           tierId: remapTier(b.tierId),
+          price: b.price, // spec 039 D11: prices travel with event duplication
           status: 'AVAILABLE',
         })),
       });
@@ -702,7 +767,7 @@ class MapService {
       publishedAt: map.publishedAt,
       createdAt: map.createdAt, updatedAt: map.updatedAt,
     };
-    if (map.booths) result.booths = map.booths;
+    if (map.booths) result.booths = map.booths.map(boothOut);
     if (map._count) result.boothCount = map._count.booths;
     return result;
   }

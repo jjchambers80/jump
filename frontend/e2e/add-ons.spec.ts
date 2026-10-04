@@ -156,7 +156,7 @@ test.describe('storefront add-ons', () => {
     await expect(lines).toHaveCount(3);
     await expect(page.getByTestId('cart-lines-checkout')).toContainText('VIP lounge');
     // 100 + 80 + 15 = 195 listed; tax on 115 = 11.50; platform 9.75; processing (204.75 × 2.9% + 0.30) = 6.24; total 222.49
-    await expect(page.getByRole('button', { name: 'Proceed to Payment — $222.49' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Continue to payment — $222.49' })).toBeVisible();
 
     // The legal pages are dark: the sentence names them without linking to a 404 (spec 024 phase 3)
     await expect(page.getByTestId('checkout-terms')).toContainText('Terms of Service');
@@ -165,7 +165,7 @@ test.describe('storefront add-ons', () => {
     await page.getByLabel('First Name').fill('Ada');
     await page.getByLabel('Last Name').fill('Buyer');
     await page.getByLabel('Email Address').fill('ada@example.com');
-    await page.getByRole('button', { name: /Proceed to Payment/ }).click();
+    await page.getByRole('button', { name: /Continue to payment/ }).click();
 
     await expect.poll(() => orderBody).not.toBeNull();
     expect(orderBody).toMatchObject({
@@ -222,7 +222,7 @@ function adminAddOn(overrides: Record<string, unknown> = {}) {
 test.describe('admin add-ons section', () => {
   test.use({ viewport: DESKTOP });
 
-  test('ADMIN lists add-ons, creates one from a preset, and sees sales counts', async ({ page, baseURL }) => {
+  test('ADMIN lists add-ons, creates one through the saved add-on picker, and sees sales counts', async ({ page, baseURL }) => {
     await signInAsStaff(page, { id: 'addons-admin', email: 'addons-admin@test.com', role: 'ADMIN' }, baseURL!);
     const future = new Date();
     future.setFullYear(future.getFullYear() + 1);
@@ -246,9 +246,12 @@ test.describe('admin add-ons section', () => {
 
     const addOns = [adminAddOn()];
     let created: Record<string, unknown> | null = null;
-    await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/add-ons/presets`, (route) =>
-      route.fulfill(json({ presets: [{ key: 'vip', name: 'VIP lounge', description: 'Lounge access for one attendee', price: 50, scope: 'TICKET' }] }))
-    );
+    await page.route(`${API}/organizations/${ORG_ID}/saved-add-ons?**`, (route) => {
+      const q = new URL(route.request().url()).searchParams.get('q') ?? '';
+      const saved = [{ id: 'sa-parking', name: 'Parking pass', description: null, defaultPrice: 15, scope: 'TICKET', taxable: true, isArchived: false, eventCount: 2, onEvent: 'addon-parking' }]
+        .filter((s) => s.name.toLowerCase().includes(q.toLowerCase()));
+      return route.fulfill(json({ savedAddOns: saved, suggestions: q ? [] : [{ key: 'vip', name: 'VIP lounge', price: 50, scope: 'TICKET' }], ...(q ? { exactMatch: null, canCreate: !saved.some((s) => s.name.toLowerCase() === q.toLowerCase()) } : {}) }));
+    });
     await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/add-ons`, async (route) => {
       if (route.request().method() === 'POST') {
         created = route.request().postDataJSON();
@@ -258,18 +261,29 @@ test.describe('admin add-ons section', () => {
       return route.fulfill(json({ addOns }));
     });
 
-    await page.goto(`/admin/events/${EVENT_ID}/edit?orgId=${ORG_ID}`);
+    await page.goto(`/admin/events/${EVENT_ID}/edit/sales?orgId=${ORG_ID}`);
     const section = page.getByTestId('add-ons-section');
     await expect(section).toBeVisible();
     await expect(section.getByTestId('admin-add-on-addon-parking')).toContainText('Sold 3');
     await expect(section.getByTestId('admin-add-on-addon-parking')).toContainText('reserved 1');
     await expect(section.getByTestId('admin-add-on-addon-parking')).toContainText('buyer pays $18.01');
 
-    await section.getByRole('button', { name: 'Add from Preset' }).click();
-    await section.getByRole('button', { name: /VIP lounge/ }).click();
+    // Spec 037 D2: the saved add-on already on the event is shown but not offered twice;
+    // a new name offers Create "<name>".
+    const picker = section.getByRole('combobox', { name: 'Add an add-on' });
+    await picker.click();
+    const list = page.getByRole('listbox', { name: 'Saved add-ons' });
+    await expect(list.getByRole('option', { name: /Parking pass/ })).toHaveAttribute('aria-disabled', 'true');
+    await expect(list.getByRole('option', { name: /VIP lounge/ })).toBeVisible();
+    await picker.fill('parking PASS');
+    await expect(list.getByRole('option', { name: /Create/ })).toHaveCount(0);
+    await picker.fill('VIP lounge');
+    await list.getByRole('option', { name: 'Create “VIP lounge”' }).click();
     const dialog = page.getByTestId('add-on-dialog');
     await expect(dialog).toBeVisible();
     await expect(dialog.getByLabel('Name')).toHaveValue('VIP lounge');
+    await dialog.getByLabel('Price ($)').fill('50');
+    await dialog.getByLabel('Sold with').selectOption('TICKET');
     await dialog.getByLabel('Only these tiers').check();
     await dialog.getByLabel('VIP', { exact: true }).check();
     await dialog.getByLabel('Max per order').fill('2');
@@ -289,13 +303,12 @@ test.describe('admin add-ons section', () => {
     await page.route(`${API}/organizations/${ORG_ID}/events?limit=100`, (route) => route.fulfill(json({ events: [event] })));
     await page.route(`${API}/organizations/${ORG_ID}/venues`, (route) => route.fulfill(json([event.venue])));
     await page.route(`${API}/organizations/${ORG_ID}/tier-presets`, (route) => route.fulfill(json({ tierPresets: [] })));
-    await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/add-ons/presets`, (route) => route.fulfill(json({ presets: [] })));
     await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/add-ons`, (route) => route.fulfill(json({ addOns: [adminAddOn()] })));
 
-    await page.goto(`/admin/events/${EVENT_ID}/edit?orgId=${ORG_ID}`);
+    await page.goto(`/admin/events/${EVENT_ID}/edit/sales?orgId=${ORG_ID}`);
     const section = page.getByTestId('add-ons-section');
     await expect(section.getByTestId('admin-add-on-addon-parking')).toBeVisible();
-    await expect(section.getByRole('button', { name: '+ Add Add-on' })).toHaveCount(0);
+    await expect(section.getByRole('combobox', { name: 'Add an add-on' })).toHaveCount(0);
     await expect(section.getByRole('button', { name: 'Edit' })).toHaveCount(0);
   });
 });

@@ -1,7 +1,9 @@
 'use client';
 
 // Event card for the admin events list (spec 035 D4–D6, D8, D9).
-// Cards are <article aria-labelledby> with an <h2> title linking to Edit.
+// Cards are <article aria-labelledby> with an <h2> title linking to the event's
+// read-only Details page (spec 037); the link is stretched over the whole card,
+// and the action buttons sit above it.
 // Layout: left accent bar · date tile · image tile · content · actions.
 // The square image tile hides below sm so a phone keeps room for the title.
 
@@ -121,6 +123,7 @@ export default function EventListCard({
   const rsvpPct = hasRsvpLimit ? Math.round((rsvpGoing / rsvpLimitNum!) * 100) : 0;
 
   const headingId = `event-card-${event.id}-title`;
+  const detailsHref = `/admin/events/${event.id}${selectedOrgId ? `?orgId=${selectedOrgId}` : ''}`;
   const accentColor = statusAccentColors[event.status] || 'bg-gray-400 dark:bg-slate-500';
 
   // Date tile in the venue's zone
@@ -143,7 +146,7 @@ export default function EventListCard({
   return (
     <article
       aria-labelledby={headingId}
-      className={`relative rounded-lg border ${
+      className={`group relative rounded-lg border transition-colors hover:border-indigo-300 dark:hover:border-indigo-500/50 ${
         isPast && event.status !== 'CANCELLED'
           ? 'border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60'
           : 'border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800'
@@ -213,8 +216,8 @@ export default function EventListCard({
             <div className="flex flex-wrap items-center gap-2">
               <h2 id={headingId} className="text-base font-semibold text-gray-900 dark:text-white truncate">
                 <Link
-                  href={`/admin/events/${event.id}/edit?orgId=${selectedOrgId}`}
-                  className="hover:text-indigo-600 dark:hover:text-indigo-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded"
+                  href={detailsHref}
+                  className="rounded hover:text-indigo-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:hover:text-indigo-400 after:absolute after:inset-0 after:rounded-lg after:content-['']"
                 >
                   {event.name}
                 </Link>
@@ -307,17 +310,9 @@ export default function EventListCard({
           </div>
 
           {/* Actions column */}
-          <div className="flex items-start gap-2 col-span-2 sm:col-span-3 xl:col-span-1 xl:col-start-auto">
+          <div className="relative flex items-start gap-2 col-span-2 sm:col-span-3 xl:col-span-1 xl:col-start-auto">
             <div className="flex flex-wrap items-center gap-2">
-              {/* Primary actions */}
-              {event.status !== 'CANCELLED' && (
-                <Link
-                  href={`/admin/events/${event.id}/edit?orgId=${selectedOrgId}`}
-                  className="inline-flex min-h-9 items-center rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-                >
-                  Edit
-                </Link>
-              )}
+              {/* Primary actions. The card itself opens the Details page. */}
               {event.status === 'CANCELLED' && (
                 <button
                   type="button"
@@ -392,7 +387,7 @@ export default function EventListCard({
         <div
           id={`event-tiers-${event.id}`}
           role="region"
-          className="border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900/50 px-4 sm:px-5 py-3"
+          className="relative border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900/50 px-4 sm:px-5 py-3"
         >
           {event.priceTiers.length === 0 ? (
             <p className="text-sm text-gray-500 dark:text-slate-400">No price tiers</p>

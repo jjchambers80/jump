@@ -45,14 +45,16 @@ const GROUP_LIST_PATH: Record<AdminSearchType, string> = {
   CUSTOMER: '/admin/customers',
   ORDER: '/admin/orders',
   TICKET: '/admin/orders',
-  APPLICATION: '/admin/participants',
+  // Spec 037 D3: no org-wide applications list; an applicant's history across
+  // events is on their customer record.
+  APPLICATION: '/admin/customers',
   PAGE: '/admin/online-store/pages',
   BLOG_POST: '/admin/content/blog-posts',
   FILE: '/admin/content/files',
 };
 
 const SEARCH_PARAM: Partial<Record<AdminSearchType, 'search' | 'q'>> = {
-  APPLICATION: 'q',
+  APPLICATION: 'search',
 };
 
 export function viewAllHref(type: AdminSearchType, query: string): string {

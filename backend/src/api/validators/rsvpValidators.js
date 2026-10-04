@@ -1,6 +1,7 @@
 // Request validation for public RSVP creation and cancellation.
 
 import { ValidationError } from '../../middleware/errorHandler.js';
+import { normalizeEmail } from '../../utils/normalizeEmail.js';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -22,7 +23,7 @@ export function validateCreateRsvp(req, res, next) {
   if (errors.length) return next(new ValidationError('Validation failed', errors));
   req.body.firstName = firstName.trim();
   req.body.lastName = lastName.trim();
-  req.body.email = email.trim().toLowerCase();
+  req.body.email = normalizeEmail(email);
   req.body.partySize = partySize ?? 1;
   req.body.marketing = marketing === true;
   next();

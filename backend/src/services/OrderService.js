@@ -3,6 +3,7 @@
 // Per FR-023, FR-024, FR-052, FR-053, FR-054, contracts/api.yaml
 
 import { prisma } from '@jump/db';
+import { storefrontLogoFor } from './storefrontLogo.js';
 import { randomBytes } from 'crypto';
 import stripe from '../config/stripe.js';
 import logger from '../utils/logger.js';
@@ -15,6 +16,9 @@ import { confirmationUrl, eventUrl } from '../utils/storefrontUrl.js';
 import orderLineService, { ORDER_INCLUDE } from './OrderLineService.js';
 import legalAcceptanceService from './LegalAcceptanceService.js';
 import { checkoutAcceptanceRequired } from '../config/legal.js';
+import { normalizeEmail } from '../utils/normalizeEmail.js';
+import { upsertContactFillBlanks } from './contactRecord.js';
+import { PAID_ORDER_STATUSES } from './paidStatuses.js';
 
 /** Include for org-wide order rows (spec 024 phase 2): enough to describe either kind without a second query. */
 const LIST_INCLUDE = {
@@ -22,8 +26,11 @@ const LIST_INCLUDE = {
   contact: { select: { id: true, firstName: true, lastName: true, email: true } },
   payment: { select: { source: true, stripePaymentIntentId: true, stripeAccountId: true, status: true } },
   items: { select: { kind: true, quantity: true, description: true, unitPrice: true, priceTier: { select: { name: true } } }, orderBy: { createdAt: 'asc' } },
-  addOns: { select: { quantity: true, addOn: { select: { name: true } } } },
-  refunds: { where: { status: 'SUCCEEDED' }, select: { id: true, amount: true, stripeRefundId: true, manual: true, createdAt: true } },
+  addOns: { select: { quantity: true, name: true } },
+  refunds: { where: { status: 'SUCCEEDED' }, select: { id: true, amount: true, stripeRefundId: true, manual: true, disputeId: true, createdAt: true } },
+  // Spec 037: a chargeback's money-out is a Refund row, so `refunded` / `net`
+  // are already right — this is what tells the row apart from a refund.
+  disputes: { select: { id: true, state: true, amount: true, reason: true, fundsWithdrawn: true, inquiry: true, openedAt: true }, orderBy: { openedAt: 'desc' } },
   application: {
     select: {
       id: true,
@@ -43,6 +50,8 @@ const APPLICATION_PAYMENT_LABEL = {
   PROCESSING: 'Processing',
   PAYMENT_DUE: 'Payment due',
   NOT_REQUIRED: 'Waived',
+  NOT_DUE: 'Under review',
+  AWAITING_SELECTION: 'Awaiting space',
 };
 
 function csvCell(value) {
@@ -212,7 +221,7 @@ class OrderService {
       // 1b. Per-buyer hold cap (spec 020): open (PENDING) checkouts for this
       // email on this event, before anything is reserved. Abandoned holds are
       // released by the sweep and by Stripe's session expiry.
-      const holdEmail = String(contact.email || '').toLowerCase();
+      const holdEmail = normalizeEmail(contact.email);
       const [{ open }] = await tx.$queryRaw`
         SELECT COUNT(*)::int AS open FROM "Order" o
         JOIN "Contact" c ON c."id" = o."contactId"
@@ -283,23 +292,18 @@ class OrderService {
       // 3. Upsert contact — scoped to the event's organization (spec 007).
       // The same email buying from two organizations is two Contact rows.
       const organizationId = event.venue.organizationId;
-      const email = contact.email.toLowerCase();
+      const email = normalizeEmail(contact.email);
       // Opt-ins are recorded on the Order (below) and applied to the Contact
       // by PaymentService once the payment completes, never here.
       // Buyers are never linked to User (spec 007 D1); a staff session in the
       // browser must not attach itself to the buyer record.
-      const contactRecord = await tx.contact.upsert({
-        where: { organizationId_email: { organizationId, email } },
-        update: {
-          firstName: contact.firstName,
-          lastName: contact.lastName,
-        },
-        create: {
-          organizationId,
-          email,
-          firstName: contact.firstName,
-          lastName: contact.lastName,
-        },
+      // A missing name is filled in; an existing one is never overwritten
+      // (spec 037 D12): last buyer on a shared email must not win.
+      const contactRecord = await upsertContactFillBlanks(tx, {
+        organizationId,
+        email,
+        firstName: contact.firstName,
+        lastName: contact.lastName,
       });
 
       // 4. Calculate total with fee breakdown (FTC all-in pricing)
@@ -360,6 +364,7 @@ class OrderService {
               const breakdown = fees.itemBreakdowns[items.length + i];
               return {
                 addOnId: line.addOn.id,
+                name: line.addOn.name, // spec 037: receipt snapshot
                 quantity: line.quantity,
                 unitPrice: line.addOn.price,
                 platformFee: breakdown.platformFee,
@@ -533,7 +538,7 @@ class OrderService {
                 name: true,
                 address: true,
                 timezone: true,
-                organization: { select: { id: true, name: true, logoUrl: true, brandColor: true, themeMode: true } },
+                organization: { select: { id: true, name: true, logoUrl: true, brandColor: true, themeMode: true, themesEnabled: true } },
               },
             },
           },
@@ -594,6 +599,92 @@ class OrderService {
   }
 
   /**
+   * Printable receipt for one of the buyer's own paid orders (spec 040 PA-06).
+   * Amounts only — no Stripe ids, no QR codes. 404 for anyone else's order or
+   * an order that never took money, so ids cannot be probed.
+   * @param {string} contactId
+   * @param {string} orderId
+   */
+  async getReceiptForContact(contactId, orderId) {
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, contactId, status: { in: PAID_ORDER_STATUSES } },
+      include: {
+        event: {
+          select: {
+            name: true,
+            date: true,
+            venue: {
+              select: {
+                name: true,
+                address: true,
+                city: true,
+                state: true,
+                timezone: true,
+                organization: { select: { name: true, logoUrl: true } },
+              },
+            },
+          },
+        },
+        contact: { select: { firstName: true, lastName: true, email: true } },
+        items: { include: { priceTier: { select: { name: true } }, applicationTier: { select: { name: true } } }, orderBy: { createdAt: 'asc' } },
+        addOns: { include: { addOn: { select: { name: true } } }, orderBy: { createdAt: 'asc' } },
+        refunds: { where: { status: 'SUCCEEDED' }, select: { amount: true, feeAmount: true, createdAt: true }, orderBy: { createdAt: 'asc' } },
+        payment: { select: { source: true, offlineMethod: true, createdAt: true } },
+      },
+    });
+    if (!order) throw new NotFoundError('Order not found');
+
+    const venue = order.event?.venue;
+    const subtotal = Number(order.subtotalAmount);
+    const tax = Number(order.taxAmount);
+    const total = Number(order.totalAmount);
+    return {
+      id: order.id,
+      orderRef: order.orderRef,
+      kind: order.kind,
+      status: order.status,
+      organization: { name: venue?.organization?.name ?? null, logoUrl: venue?.organization?.logoUrl ?? null },
+      event: {
+        name: order.event?.name ?? null,
+        date: order.event?.date ?? null,
+        // Spec 033: the venue's zone travels with the event date.
+        timezone: venue?.timezone ?? null,
+        venue: venue ? { name: venue.name, address: venue.address, city: venue.city, state: venue.state } : null,
+      },
+      billedTo: order.contact,
+      createdAt: order.createdAt,
+      paidAt: order.paidAt ?? order.payment?.createdAt ?? null,
+      paymentSource: order.payment?.source ?? null,
+      offlineMethod: order.payment?.offlineMethod ?? null,
+      lines: [
+        ...order.items.map((item) => ({
+          description: item.description || item.priceTier?.name || item.applicationTier?.name || 'Item',
+          quantity: item.quantity,
+          unitPrice: Number(item.unitPrice),
+          amount: Number(item.unitPrice) * item.quantity,
+        })),
+        ...order.addOns.map((line) => ({
+          description: line.name ?? line.addOn?.name ?? 'Add-on',
+          quantity: line.quantity,
+          unitPrice: Number(line.unitPrice),
+          amount: Number(line.unitPrice) * line.quantity,
+        })),
+      ],
+      subtotal,
+      // Whatever the buyer paid beyond the lines and tax: service and processing fees on PASS orders, 0 on ABSORB.
+      fees: Math.max(0, Math.round((total - subtotal - tax) * 100) / 100),
+      tax,
+      total,
+      currency: order.currency,
+      refunds: order.refunds.map((refund) => ({
+        amount: Number(refund.amount),
+        feeRetained: Number(refund.feeAmount),
+        createdAt: refund.createdAt,
+      })),
+    };
+  }
+
+  /**
    * Shared paginated order summary listing.
    * @param {Object} where - Prisma Order where clause
    * @param {Object} pagination - { page, limit }
@@ -632,7 +723,7 @@ class OrderService {
     const order = await prisma.order.findFirst({
       where: {
         orderRef: orderRef.toUpperCase(),
-        contact: { email: email.toLowerCase() },
+        contact: { email: normalizeEmail(email) },
       },
       include: {
         event: {
@@ -643,7 +734,7 @@ class OrderService {
                 name: true,
                 address: true,
                 timezone: true,
-                organization: { select: { id: true, name: true, logoUrl: true, brandColor: true, themeMode: true } },
+                organization: { select: { id: true, name: true, logoUrl: true, brandColor: true, themeMode: true, themesEnabled: true } },
               },
             },
           },
@@ -1122,6 +1213,8 @@ class OrderService {
         organizationId: order.event.venue?.organization?.id || null,
         organizationName: order.event.venue?.organization?.name || null,
         organizationLogoUrl: order.event.venue?.organization?.logoUrl || null,
+        // Theme logo image + widths: the confirmation header matches the themed pages.
+        organizationStorefrontLogo: await storefrontLogoFor(order.event.venue?.organization),
         organizationBrandColor: order.event.venue?.organization?.brandColor || null,
         organizationThemeMode: order.event.venue?.organization?.themeMode || 'SYSTEM',
         venue: order.event.venue
@@ -1230,6 +1323,14 @@ class OrderService {
       paymentSource: order.payment?.source === 'OFFLINE' || waived ? 'offline' : 'stripe',
       refunded: Math.round(refunded * 100) / 100,
       net: Math.round((total - refunded) * 100) / 100,
+      // Spec 037: null unless the order has a dispute. The money already shows
+      // in `refunded` / `net`; this says a chargeback took it, not a refund.
+      dispute: (order.disputes || []).length
+        ? (() => {
+            const d = order.disputes[0];
+            return { id: d.id, state: d.state, amount: Number(d.amount), reason: d.reason, fundsWithdrawn: d.fundsWithdrawn, inquiry: d.inquiry, openedAt: d.openedAt };
+          })()
+        : null,
       application: application ? { id: application.id, status: application.status, paymentStatus: application.paymentStatus, formName: application.form?.name ?? null, tierName: application.tier?.name ?? null } : null,
       ...(unscoped && order.event?.venue?.organization ? { organization: order.event.venue.organization } : {}),
     };

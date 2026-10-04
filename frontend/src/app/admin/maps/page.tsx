@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useOrg } from '@/components/OrgContext';
 import api, { mapsApi } from '@/services/api';
 import { useAccountFormat } from '@/lib/accountFormat';
-import type { AdminMap } from '@/services/api';
+import type { AdminMap, FloorPlanSummary } from '@/services/api';
 import {
   Plus,
   Map,
@@ -15,6 +15,7 @@ import {
   Loader2,
   AlertTriangle,
   Eye,
+  LayoutTemplate,
 } from 'lucide-react';
 import { formatEventDate } from '@/lib/eventTime';
 
@@ -33,14 +34,18 @@ function MapsListContent() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [deleteMapId, setDeleteMapId] = useState<string | null>(null);
+  // Saved floor plans (spec 037 D1): layouts reused by copying onto an event.
+  const [plans, setPlans] = useState<FloorPlanSummary[]>([]);
+  const [createPlanId, setCreatePlanId] = useState('');
 
   const loadMaps = useCallback(async () => {
     if (!selectedOrgId) return;
     setLoading(true);
     setError(null);
     try {
-      const data = await mapsApi.list();
+      const [data, floorPlans] = await Promise.all([mapsApi.list(), mapsApi.floorPlans().catch(() => [])]);
       setMaps(data);
+      setPlans(floorPlans);
     } catch (err: any) {
       setError(err?.message || 'Failed to load maps');
     } finally {
@@ -52,7 +57,8 @@ function MapsListContent() {
     if (selectedOrgId) loadMaps();
   }, [selectedOrgId, loadMaps]);
 
-  const openCreateDialog = useCallback(async () => {
+  const openCreateDialog = useCallback(async (planId: string = '') => {
+    setCreatePlanId(planId);
     setShowCreateDialog(true);
     setCreateEventId('');
     setCreateName('');
@@ -77,7 +83,9 @@ function MapsListContent() {
     setCreating(true);
     setCreateError(null);
     try {
-      const result = await mapsApi.create({ eventId: createEventId, name: createName || undefined });
+      const result = createPlanId
+        ? await mapsApi.createFromFloorPlan(createEventId, createPlanId, createName || undefined)
+        : await mapsApi.create({ eventId: createEventId, name: createName || undefined });
       setShowCreateDialog(false);
       router.push(`/admin/maps/${result.id}`);
     } catch (err: any) {
@@ -85,7 +93,7 @@ function MapsListContent() {
     } finally {
       setCreating(false);
     }
-  }, [createEventId, createName, router]);
+  }, [createEventId, createName, createPlanId, router]);
 
   const handleDelete = useCallback(
     async (mapId: string) => {
@@ -143,11 +151,11 @@ function MapsListContent() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Maps</h1>
           <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
-            Floor maps for your events. Create a map, add booths, assign tiers, then publish.
+            One floor map per event. Save a layout as a floor plan to reuse it on another event.
           </p>
         </div>
         <button
-          onClick={openCreateDialog}
+          onClick={() => openCreateDialog()}
           className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
         >
           <Plus className="w-4 h-4" />
@@ -166,7 +174,7 @@ function MapsListContent() {
             and tables, assign them to tiers, then publish so applicants can see them.
           </p>
           <button
-            onClick={openCreateDialog}
+            onClick={() => openCreateDialog()}
             className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
           >
             Create your first map
@@ -257,12 +265,74 @@ function MapsListContent() {
         </div>
       )}
 
+      {/* Floor plans */}
+      <section aria-labelledby="floor-plans-title" className="mt-10">
+        <div className="mb-3 flex items-end justify-between gap-3">
+          <div>
+            <h2 id="floor-plans-title" className="text-lg font-semibold text-gray-900 dark:text-white">Floor plans</h2>
+            <p className="text-sm text-gray-500 dark:text-slate-400">
+              Saved layouts. Using one copies it onto an event; changing the copy never changes the plan.
+            </p>
+          </div>
+        </div>
+        {plans.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-gray-300 px-4 py-6 text-center text-sm text-gray-500 dark:border-slate-600 dark:text-slate-400">
+            No floor plans yet. Open a map and choose <span className="font-medium">Save as floor plan</span>.
+          </p>
+        ) : (
+          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="floor-plans">
+            {plans.map((plan) => (
+              <li key={plan.id} className="flex flex-col rounded-lg border border-gray-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-gray-100 text-gray-600 dark:bg-slate-700 dark:text-slate-300">
+                    <LayoutTemplate className="h-4 w-4" aria-hidden />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{plan.name}</p>
+                    <p className="text-xs tabular-nums text-gray-500 dark:text-slate-400">
+                      {plan.boothCount} booth{plan.boothCount === 1 ? '' : 's'}
+                      {plan.width && plan.height ? ` · ${plan.width}×${plan.height}` : ''} · updated{' '}
+                      {formatDateTime(plan.updatedAt, { dateStyle: 'medium' })}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4 flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openCreateDialog(plan.id)}
+                    className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500"
+                  >
+                    Use on an event
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Delete floor plan ${plan.name}`}
+                    onClick={async () => {
+                      if (!window.confirm(`Delete the floor plan "${plan.name}"? Maps already made from it are kept.`)) return;
+                      try {
+                        await mapsApi.removeFloorPlan(plan.id);
+                        setPlans((prev) => prev.filter((p) => p.id !== plan.id));
+                      } catch (err: any) {
+                        setError(err?.message || 'Failed to delete the floor plan');
+                      }
+                    }}
+                    className="rounded p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
       {/* Create map dialog */}
       {showCreateDialog && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
           <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              Create floor map
+              {createPlanId ? `Use "${plans.find((p) => p.id === createPlanId)?.name ?? 'floor plan'}" on an event` : 'Create floor map'}
             </h2>
 
             <div className="space-y-4">

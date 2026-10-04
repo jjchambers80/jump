@@ -6,6 +6,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { requireAuth } from '../../middleware/auth.js';
+import { allowDeveloperToken } from '../../middleware/developerToken.js';
 import { requireOrganizer } from '../../middleware/rbac.js';
 import { NotFoundError, ValidationError } from '../../middleware/errorHandler.js';
 import { activeOrgFor } from './adminScope.js';
@@ -46,7 +47,14 @@ const fromUrlLimiter = rateLimit({
 });
 
 export const adminFilesRouter = Router();
-adminFilesRouter.use(requireAuth);
+// Spec 043: the Jump CLI's theme token may list and upload files (theme
+// images and videos reference them by id) — never rename, delete or fetch
+// from a URL. Everything else goes through requireAuth, which refuses it.
+const cliToken = allowDeveloperToken('themes');
+adminFilesRouter.use((req, res, next) =>
+  req.path === '/' && (req.method === 'GET' || req.method === 'POST') ? cliToken(req, res, next) : next()
+);
+adminFilesRouter.use((req, res, next) => (req.user?.developerTokenId ? next() : requireAuth(req, res, next)));
 adminFilesRouter.use(requireOrganizer);
 
 /** GET /admin/files — list (q, type, sort, page). */
@@ -159,12 +167,42 @@ publicFilesRouter.get('/:id/:hash/:filename', async (req, res, next) => {
       'Content-Length': String(data.buffer.length),
       'Cache-Control': 'public, max-age=31536000, immutable',
       'Content-Disposition': `${disposition}; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      'Accept-Ranges': 'bytes',
       ETag: etag,
       'X-Content-Type-Options': 'nosniff',
     });
     if (req.headers['if-none-match'] === etag) return res.status(304).end();
+    // Byte ranges for <video> (Safari requires them). One range only.
+    const range = req.headers.range ? parseRange(data.buffer.length, req.headers.range) : null;
+    if (range === -1) {
+      res.set({ 'Content-Range': `bytes */${data.buffer.length}`, 'Content-Length': '0' });
+      return res.status(416).end();
+    }
+    if (range) {
+      res.set({
+        'Content-Range': `bytes ${range.start}-${range.end}/${data.buffer.length}`,
+        'Content-Length': String(range.end - range.start + 1),
+      });
+      return res.status(206).end(data.buffer.subarray(range.start, range.end + 1));
+    }
     res.send(data.buffer);
   } catch (error) {
     next(error);
   }
 });
+
+/** `bytes=a-b`, `bytes=a-` or `bytes=-n` → { start, end }; -1 unsatisfiable; null to send it all. */
+export function parseRange(size, header) {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(String(header).trim());
+  if (!match || (match[1] === '' && match[2] === '')) return null;
+  let start;
+  let end;
+  if (match[1] === '') {
+    start = Math.max(0, size - Number(match[2]));
+    end = size - 1;
+  } else {
+    start = Number(match[1]);
+    end = match[2] === '' ? size - 1 : Math.min(Number(match[2]), size - 1);
+  }
+  return start > end || start >= size ? -1 : { start, end };
+}

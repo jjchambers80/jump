@@ -1,11 +1,13 @@
 # Application orders — one ledger under Orders
 
 **Status**: Shipped to prod 2026-09-19 (PRs #92 / #93 / #95; backfill verified — 4 application orders, 8 payments, 2 refunds). Phase 1 implemented 2026-09-19 (ledger migration, services, reporting over one ledger). Phase 2 implemented 2026-09-19 (order-level Orders page with a Tickets toggle, CSV export, order detail for application orders with amount-based refunds, order number on every application surface and template, buyer order list, receipt email). Phase 3 implemented 2026-09-19 (apply-form account and marketing opt-ins applied at SUBMITTED, required data-collection consent and card-on-file authorization, `LegalAcceptance` trail on apply and checkout, marketing provenance, welcome sign-in link in the RECEIVED email). Spec: `specs/024-application-orders/`.
-**Last Updated**: 2026-09-19
+**Last Updated**: 2026-09-26
+
+> **Spec 037 phase 5 (apply-then-choose, 2026-09-26):** the order no longer opens at submission. It is created when the approved vendor **chooses a space** (`ApplicationService.select`, with the category and the add-ons chosen there), and cancelled again if that 15-minute hold lapses; the next choice reopens the same order (same number, organizer adjustments kept). `orderStatusFor` maps the new payment states `NOT_DUE` (under review) and `AWAITING_SELECTION` (approved, choosing) to `CANCELLED`, and `moneyOf` / lists / CSV / digest / add-on reports treat a cancelled order on an application still in play as not live (`hasLiveOrder`). Everything else on this page — one ledger, `_transition`, `moneyOf`, one payment row per order, refunds — is unchanged. See [Applications › Apply-then-choose](applications.md#apply-then-choose-spec-037-phase-5).
 
 ## Overview
 
-A PAID-form application is an **Order** from the moment it is submitted. The order (`kind: APPLICATION`, `applicationId`, a `JMP-XXXXXX` reference) carries the amount snapshot as real lines, the Stripe payment (`PaymentTransaction`) and every refund (`Refund`); the `Application` keeps what is about review — form, answers, profile, status, capacity slot, card on file, decision log, tags, check-in. FREE forms create no order. The separate application ledger of specs 011/012/018 (`Application` money columns, `ApplicationRefund`, `ApplicationAdjustment`, `ApplicationAddOn`) was migrated into the order tables and dropped, so Customers, event analytics, the dashboard and the tax report each run one query family over `Order`.
+A PAID-form application is an **Order** from the moment it is submitted (since spec 037 phase 5: from the moment the approved vendor chooses a space). The order (`kind: APPLICATION`, `applicationId`, a `JMP-XXXXXX` reference) carries the amount snapshot as real lines, the Stripe payment (`PaymentTransaction`) and every refund (`Refund`); the `Application` keeps what is about review — form, answers, profile, status, capacity slot, card on file, decision log, tags, check-in. FREE forms create no order. The separate application ledger of specs 011/012/018 (`Application` money columns, `ApplicationRefund`, `ApplicationAdjustment`, `ApplicationAddOn`) was migrated into the order tables and dropped, so Customers, event analytics, the dashboard and the tax report each run one query family over `Order`.
 
 ## Key Files
 
@@ -62,7 +64,9 @@ Application (status, paymentStatus, capacitySlot, stripeCheckoutSessionId, strip
 
 | Moment | Writes |
 |---|---|
-| Submission (PAID form) | `Order PENDING` + tier line (+ add-on lines); Stripe session metadata gains `orderId`, `orderRef` |
+| Submission (PAID form) | Spec 037 phase 5: nothing (`NOT_DUE`). Before it: `Order PENDING` + tier line (+ add-on lines) |
+| Space chosen (spec 037 phase 5) | `Order PENDING` created or reopened: tier line + add-on lines, `dueAt` = approval + `paymentDueDays`; Stripe session metadata carries `orderId`, `orderRef` |
+| Hold lapses / decline / expired Checkout (spec 037 phase 5) | `Order CANCELLED`; a declined attempt stays on the payment row as `FAILED` |
 | Payment-mode session (charge at submission, pay-now) | `PaymentTransaction PENDING` (routing recorded) |
 | Approval charge succeeds | `PaymentTransaction SUCCEEDED` + intent id; `Order COMPLETED`, `paidAt` |
 | Approval charge declined | `PaymentTransaction FAILED` + failed intent id + `failureReason`; `Order.dueAt` = due date; `Order` stays `PENDING` |
@@ -97,7 +101,7 @@ Checkout keeps its sentence under the pay button (no checkbox, plan decision 7.9
 
 ## Testing
 
-- `backend/tests/contract/applicationOrders.test.js` — order at submission (PAID) and none (FREE), every status transition incl. CANCELLED, payment rows on charge / decline / pay-now / offline, refunds through `/admin/orders/:id/refund` and the application route, admin order list + detail, customers / dashboard / analytics over the ledger.
+- `backend/tests/contract/applicationOrders.test.js` — order at selection (spec 037 phase 5; none at submission or approval, none on FREE forms), reopened with the same number after a decline, every status transition incl. CANCELLED, payment rows on charge / decline / pay-now / offline, refunds through `/admin/orders/:id/refund` and the application route, admin order list + detail, customers / dashboard / analytics over the ledger.
 - `backend/tests/contract/applicationOrdersBackfill.test.js` — replays every migration before the cutover on a scratch database, seeds every pre-024 money shape, applies the two 024 migrations and asserts orders, lines, payments, refunds, the ticket-side backfill and the dropped tables (~70 s: it runs 49 migration files).
 - `backend/tests/contract/applicationOrdersReporting.test.js` (was `transactionsReporting`) — customers, analytics, dashboard, tax report fixtures written as orders.
 - `backend/tests/unit/applicationOrders.test.js` — `orderStatusFor` table, line math, `applicationOrderData` sums, `moneyOf`.

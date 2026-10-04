@@ -5,11 +5,13 @@
 // Loaded with next/dynamic (ssr: false) by RichTextEditorField so it never
 // renders on the server.
 
-import { EditorContent, useEditor, type Editor } from '@tiptap/react';
+import { EditorContent, useEditor, useEditorState, type Editor } from '@tiptap/react';
+import { NodeSelection } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import {
   Bold,
+  CirclePlay,
   Heading2,
   Heading3,
   Image as ImageIcon,
@@ -25,7 +27,9 @@ import {
   Underline,
   Undo2,
 } from 'lucide-react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type Ref } from 'react';
+import InsertVideoDialog, { type VideoAttrs } from './InsertVideoDialog';
+import VideoEmbed from './VideoEmbed';
 
 export interface RichTextEditorProps {
   value: string;
@@ -51,21 +55,33 @@ function isAllowedHref(href: string) {
   }
 }
 
+/** The video under a node selection, or null. */
+function selectedVideo(editor: Editor | null): VideoAttrs | null {
+  const selection = editor?.state.selection;
+  if (!(selection instanceof NodeSelection) || selection.node.type.name !== 'videoEmbed') {
+    return null;
+  }
+  return { src: selection.node.attrs.src, title: selection.node.attrs.title };
+}
+
 function ToolbarButton({
   label,
   active,
   disabled,
   onClick,
+  buttonRef,
   children,
 }: {
   label: string;
   active?: boolean;
   disabled?: boolean;
   onClick: () => void;
+  buttonRef?: Ref<HTMLButtonElement>;
   children: ReactNode;
 }) {
   return (
     <button
+      ref={buttonRef}
       type="button"
       aria-label={label}
       title={label}
@@ -194,6 +210,9 @@ export default function RichTextEditor({
   ...aria
 }: RichTextEditorProps) {
   const [linkOpen, setLinkOpen] = useState(false);
+  // null = closed; `editing` = the selected video's attributes (Edit video).
+  const [videoDialog, setVideoDialog] = useState<{ editing: VideoAttrs | null } | null>(null);
+  const videoButtonRef = useRef<HTMLButtonElement>(null);
   const lastEmitted = useRef(value);
 
   const editor = useEditor({
@@ -218,11 +237,19 @@ export default function RichTextEditor({
               allowBase64: false,
               HTMLAttributes: { loading: 'lazy' },
             }),
+            VideoEmbed,
           ]
         : []),
     ],
     content: value,
     editorProps: {
+      // Double-clicking a video opens it for editing.
+      handleDoubleClickOn: (view, pos, node) => {
+        if (node.type.name !== 'videoEmbed') return false;
+        view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos)));
+        setVideoDialog({ editing: { src: node.attrs.src, title: node.attrs.title } });
+        return true;
+      },
       attributes: {
         class: 'px-3 py-2 text-sm text-gray-900 dark:text-white',
         'aria-multiline': 'true',
@@ -265,6 +292,13 @@ export default function RichTextEditor({
       editor.off('update', sync);
     };
   }, [editor, placeholder]);
+
+  // The editor does not re-render on selection changes; this does, so the
+  // Video button shows when it will edit the selected video.
+  const videoSelected = useEditorState({
+    editor,
+    selector: ({ editor: current }) => selectedVideo(current) !== null,
+  });
 
   if (!editor) {
     return (
@@ -388,6 +422,16 @@ export default function RichTextEditor({
         )}
         {full && (
           <ToolbarButton
+            label={videoSelected ? 'Edit video' : 'Video'}
+            buttonRef={videoButtonRef}
+            active={videoSelected || videoDialog !== null}
+            onClick={() => setVideoDialog({ editing: selectedVideo(editor) })}
+          >
+            <CirclePlay className="h-4 w-4" aria-hidden />
+          </ToolbarButton>
+        )}
+        {full && (
+          <ToolbarButton
             label="Divider"
             onClick={() => editor.chain().focus().setHorizontalRule().run()}
           >
@@ -414,6 +458,22 @@ export default function RichTextEditor({
         editor={editor}
         className="rounded-b-md border border-gray-300 bg-white focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/30 dark:border-slate-600 dark:bg-slate-900"
       />
+      {videoDialog && (
+        <InsertVideoDialog
+          editing={videoDialog.editing}
+          returnFocusRef={videoButtonRef}
+          onClose={() => setVideoDialog(null)}
+          onSubmit={(video) => {
+            setVideoDialog(null);
+            if (videoDialog.editing) editor.chain().focus().updateAttributes('videoEmbed', video).run();
+            else editor.chain().focus().setVideoEmbed(video).run();
+          }}
+          onRemove={() => {
+            setVideoDialog(null);
+            editor.chain().focus().deleteSelection().run();
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -11,14 +11,20 @@ Generated and maintained by running `/doc-feature` after completing feature work
 - [Event Management](features/event-management.md) — CRUD, lifecycle (draft/published/cancelled), capacity
 - [Price Tiers](features/price-tiers.md) — Multi-tier pricing, inventory tracking, display ordering
 - [Guest Checkout](features/guest-checkout.md) — Stripe Checkout flow, contact creation, order management
+- [Checkout Conversion & Accessibility](features/checkout-conversion-ux.md) — Pay button always on screen (sticky summary / fixed mobile bar), accessible form + email typo fix, cart restored after Stripe cancel
 - [Tenant Identity](features/tenant-identity.md) — Per-organization buyers (`Contact` unique on org + email), staff memberships (`OrganizationMember`), membership-based scoping
 - [Buyer Accounts](features/buyer-accounts.md) — Checkout account opt-in (pre-checked) + marketing consent (unchecked), passwordless magic-link sign-in, org-scoped account page with self-service refunds
+- [Patron Account](features/patron-account.md) — Spec 040 storefront "My account": sections (tickets, orders + receipts, RSVPs, applications, profile, email preferences, privacy), verified email change, one-click unsubscribe, sign out everywhere, Download my data, Delete my data (grace period, anonymization, staff erase)
 - [Customer Accounts Settings](features/customer-accounts-settings.md) — Settings › Customer accounts (spec 031): sign-in links toggle (storefront header + checkout, signed-in prefill, `?next=` return), account URL card, self-serve refund policy (cutoff + fee), email-code sign-in
 - [Custom Domains](features/custom-domains.md) — White-label storefront on an organization's own subdomain: CNAME + TXT verification, tenant-host middleware, per-org email/Stripe links
 
 - [Applications](features/applications.md) — Per-event vendor / sponsor (PAID tiers, capacity on approval) and press / panel (FREE) forms: applicant profiles + photos, questions, approve / reject / waitlist / withdraw with templated emails, bulk, CSV; card on file at submission, off-session charge at approval, pay-now, refunds, overdue sweep behind `APPLICATIONS_PAYMENTS_ENABLED`; saved views, CSV photo URLs, applicant profile self-service, price-changed note, organizer daily digest, event duplicate (spec 011)
 - [Add-ons](features/add-ons.md) — Optional products on ticket tiers (parking, VIP lounge) and application tiers (booth power, badges, tables): event-scoped `AddOn` with scope + tier attachments, per-item taxable fee math, PriceTier-style capacity, lines on `OrderAddOn` / `ApplicationAddOn`, approval reservation with sold-out 409, pre-payment line edits with `ADD_ONS_CHANGED` email, per-line refunds, scan hand-over, sales report + purchasers CSV on analytics (spec 012)
 - [Application orders](features/application-orders.md) — A PAID-form application is an Order: one ledger (lines, payment, refunds) for tickets and applications, the order-level Orders page with a Tickets toggle, CSV, receipts, `orderStatusFor` mapping, SQL backfill (spec 024)
+- [Vendor Space Selection](features/vendor-space-selection.md) — Per paid form: approved vendors pick a spot of their category on the floor map (each spot can carry its own price), or a tier (the organizer's, or their own pick). Includes the builder spot price, the Approve dialog's "Let the vendor choose", and the vendor screen (spec 039)
+- [Spot Chooser](features/spot-chooser.md) — MAP-form vendor workspace: full-width floor map beside a synced list of open spots (other categories greyed), compact hero, mobile-first square map, extras and how-to-pay as a conditional step 2 (PR #240)
+- [Public Floor Map Page](features/public-floor-map.md) — `/events/:slug/map`: event header, the spot chooser's fitted map (full width on phones), inline legend, one accessible booth dialog, `?booth=` deep links, then the vendor directory (PR #244)
+- [Disputes and chargebacks](features/disputes-chargebacks.md) — `charge.dispute.*` projected onto the ledger: one `Dispute` row per Stripe dispute, the withdrawn money as a `Refund` row (`disputeId`), tickets voided and restored on a won dispute, organizer notified, `npm run report:disputes` reconciling both directions. Full-state handlers + monotonic `lastEventAt` make replays and out-of-order delivery safe (spec 037)
 - [Floor Maps and Vendor Booth Purchases](features/floor-maps.md) — SVG floor-map builder and public map; map-bound approved vendors choose a row-locked booth and pay by saved card or hosted Checkout, with webhook-authoritative sold state (spec 014 phases 1–2)
 - [Abuse protection](features/abuse-protection.md) — Per-IP limiter factory on every money path, per-buyer hold cap, abandoned-checkout sweep (spec 020 phase 1)
 - [Application payments — reporting and corrections](features/application-payments-reporting.md) — Customers, event analytics, dashboard and the collected-tax report include application money (`PAID_ORDER_STATUSES` / `PAID_APPLICATION_STATUSES` in `backend/src/services/paidStatuses.js`); pre-payment corrections on applications — tier change, signed adjustments folded into the tier line, ADMIN waive / offline payment (`paymentSource: OFFLINE`), recorded refunds; order refund routes ADMIN. The org-wide Transactions list (spec 018 phase 1) was removed 2026-09-18
@@ -45,11 +51,13 @@ Generated and maintained by running `/doc-feature` after completing feature work
 ### Admin & Organizer
 - [Admin Dashboard](features/admin-dashboard.md) — Stats, event management, analytics
 - [Events List](features/events-list.md) — Full-width admin events list: KPI strip, filter toolbar, URL-driven search/sort/filter, responsive cards with sell-through bars, pagination (spec 035)
+- [Event Details](features/event-details.md) — Read-only event home the list card opens: ticket-stub hero with headline numbers, workspace tabs, Sales / RSVPs, Applications pipeline, booth matrix, one Edit link per section; one `overview` request (spec 037 phase 1)
 - [Event Editor](features/event-editor.md) — Create / edit event pages: shared two-column shell, run-sheet header titled by the event, numbered sections, ticket-stub summary with a per-tier capacity meter, bottom-pinned save card with unsaved-changes guard, section links that scroll only `<main>` (PR #196)
 - [Administration Search](features/admin-search.md) — Authenticated, organization-scoped launcher across events, venues, customers, orders, tickets, applications and content (spec 029; all three cards complete)
 - [Organization Settings](features/organization-settings.md) — Settings › General: read-only summary cards with edit dialogs (store contact, address, business details), people (OrganizationPerson)
 - [Tax Settings](features/tax-settings.md) — Settings › Tax: Stripe Tax status, per-state tax regions (collect / not, Stripe Tax or manual rate, Recalculate now), collected tax report, tax-inclusive pricing
 - [Payments Settings](features/payments-settings.md) — Settings › Payments: Stripe status + test-mode badge, statement descriptor suffix (`PREFIX* ORG`), optional payment methods allowlist, rates, Radar (spec 010 phase 1)
+- [Webhook Reliability](features/webhook-reliability.md) — Stripe webhooks fail closed in production; the `StripeWebhookEvent` delivery ledger (dedup, replay safety, out-of-order and stale-delivery logging); refund idempotency keys; the test-mode verification scripts
 - [Connect Payouts](features/connect-payouts.md) — Stripe Connect Express per organization: destination charges (org receives the subtotal, platform keeps fees + tax), Settings › Payments › Payout bank account (connect / last four / change bank / schedule), Finance › Payouts (live balance + history), Connect webhook, bank-connection options research; dark behind `STRIPE_CONNECT_ENABLED` (spec 010 phase 2)
 - [Organization Branding](features/organization-branding.md) — Logo, cover image, brand color with WCAG AA contrast checker
 - [Organization Theme Mode](features/organization-theme-mode.md) — Per-org light/dark/system enforcement on public org pages
@@ -73,10 +81,14 @@ Generated and maintained by running `/doc-feature` after completing feature work
 
 ### Frontend
 - [Theme System](features/theme-system.md) — Light/dark/auto modes, localStorage persistence
+- [Storefront Theme Sections](features/theme-sections.md) — Section registry, Hero carousel and FAQ (spec 041), how to add a section
+- [Theme Code Editor](features/theme-code-editor.md) — Online Store › Edit code: the CLI's theme files in Monaco, server checks in the browser, same save path
+- [Theme Developer CLI](features/theme-developer-cli.md) — `npx jump` sign-in (loopback + PKCE, `jmp_` developer tokens, deny-by-default), theme pull/check/dev/push/publish, draft themes + preview links, Settings › Developers (spec 043, 038J2/K)
 - [Account Settings › General](features/account-settings.md) — `/admin/account` from the org menu: photo, name, verified email change, phone, language, time zone; `locale`/`timeZone`/`picture` JWT claims (spec 030 A)
 - [Account Security — sign-in methods](features/account-security.md) — Account › Security: step-up proof, passkeys, password (scrypt + HIBP), Google connect/disconnect, secondary email + recovery, `token-bridge` provider (spec 030 B)
 - [Two-step Authentication](features/two-step-authentication.md) — authenticator app / security key / recovery codes, `mfa` claim gate in middleware + `requireAuth`, `/auth/two-step`, trusted devices (spec 030 C)
 - [Devices & Sessions](features/devices-sessions.md) — Account › Security › Devices: `UserSession` rows + JWT `sid`, immediate API revocation, log out one / all others, `SecurityEvent` trail (spec 030 D)
+- [Page Templates](features/page-templates.md) — Developer-uploaded JSON page templates per organization (SYSTEM_ADMIN), two-column page editor with Visibility + Template, contact form template emailing the store email (spec 042)
 - [Org Switcher](features/org-switcher.md) — Global organization context in the admin header; `X-Jump-Org` header, backend `activeOrgFor(req)`, JWT claim refresh
 - [Organization Onboarding](features/organization-onboarding.md) — Shopify-style `/signup` flow from the org switcher (name → survey → done, new tab), `PlatformCustomer` per organization, pending orgs hidden until complete, `UNASSIGNED` promoted to ADMIN, dashboard setup guide cards; scopes check-in scan/redeem to the staff caller's organization (phase 1); Jump subscriptions on Jump's own Stripe account — subscribe step with embedded Checkout + trial, Settings › Plan, customer portal, `POST /webhooks/stripe/billing`, dark behind `BILLING_ENABLED` (phase 2); survey-tailored starter templates + check-in card, abandoned-signup sweep, SYSTEM_ADMIN funnel + survey summary (phase 3)
 
@@ -88,6 +100,7 @@ Generated and maintained by running `/doc-feature` after completing feature work
 ## Configuration Reference
 - [Environment Variables](config/environment-variables.md)
 - [Stripe Setup](config/stripe-setup.md)
+- [Stripe Live Activation](config/stripe-live-activation.md) — The founder's ordered runbook for the live-mode changes only they can make: account activation, live webhook endpoint + signing secret, statement descriptor, Stripe Tax, Connect, subscription billing, and how to undo each
 - [Production Launch Checklist](config/production-launch-checklist.md) — Human steps before taking real money: Stripe Tax activation/registrations, tax backfill review, open tax decisions, live Stripe keys
 - [Database Setup](config/database-setup.md)
 

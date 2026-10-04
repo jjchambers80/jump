@@ -1,0 +1,12 @@
+{
+  "name": "@jump/theme",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Online store themes (spec 038): section registry, validation, presets and the default content catalog, shared by the backend and the frontend",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "sideEffects": false
+}

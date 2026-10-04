@@ -18,10 +18,17 @@
     "db:studio": "prisma studio",
     "db:backfill:024": "node src/scripts/backfill-application-orders.js",
     "db:backfill:event-descriptions": "node src/scripts/backfill-event-descriptions.js",
+    "db:backfill:037-applications": "node src/scripts/backfill-037-applications.js",
+    "db:backfill:039-space-selection": "node src/scripts/backfill-039-space-selection.js",
     "db:backfill:033": "node src/scripts/backfill-venue-time-zones.js",
+    "db:backfill:image-dimensions": "node src/scripts/backfill-image-dimensions.js",
     "report:033": "node src/scripts/reconcile-venue-time-zones.js",
+    "report:refunds": "node src/scripts/audit-refund-completeness.js",
+    "report:disputes": "node src/scripts/reconcile-disputes.js",
     "lint": "eslint src tests --ext .js",
-    "format": "prettier --write \"src/**/*.js\" \"tests/**/*.js\""
+    "format": "prettier --write \"src/**/*.js\" \"tests/**/*.js\"",
+    "verify:stripe": "node src/scripts/verify-stripe-testmode.js",
+    "verify:checkout-tax": "node src/scripts/verify-checkout-tax.js"
   },
   "keywords": [
     "ticketing",
@@ -38,6 +45,7 @@
     "@aws-sdk/client-s3": "^3.1128.0",
     "@aws-sdk/s3-request-presigner": "^3.1128.0",
     "@jump/db": "*",
+    "@jump/theme": "*",
     "@simplewebauthn/server": "^13.3.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",

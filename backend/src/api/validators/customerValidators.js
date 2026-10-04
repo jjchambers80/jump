@@ -2,6 +2,7 @@
 // PATCH /admin/customers/:id — partial update; every present field must be valid.
 
 import { ValidationError } from '../../middleware/errorHandler.js';
+import { normalizeEmail } from '../../utils/normalizeEmail.js';
 
 const ALLOWED_FIELDS = new Set([
   'firstName',
@@ -112,7 +113,7 @@ export function validateUpdateCustomer(req, res, next) {
   // Normalise strings before they reach the service
   if (body.firstName !== undefined) body.firstName = body.firstName.trim();
   if (body.lastName !== undefined) body.lastName = body.lastName.trim();
-  if (body.email !== undefined) body.email = body.email.trim().toLowerCase();
+  if (body.email !== undefined) body.email = normalizeEmail(body.email);
   if (body.phone !== undefined && body.phone !== null) body.phone = body.phone.trim();
   if (body.tags !== undefined) body.tags = body.tags.map((t) => t.trim());
 

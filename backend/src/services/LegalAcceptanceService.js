@@ -8,6 +8,7 @@ import { prisma } from '@jump/db';
 import { ValidationError } from '../middleware/errorHandler.js';
 import { DOCUMENT_FOR_KEY, KEY_FOR_DOCUMENT, LEGAL_VERSIONS } from '../config/legal.js';
 import { clientIpForRateLimit } from '../utils/clientIp.js';
+import { normalizeEmail } from '../utils/normalizeEmail.js';
 
 const MAX_ACCEPTANCES = 10;
 
@@ -109,7 +110,7 @@ class LegalAcceptanceService {
       data: acceptances.map((a) => ({
         subjectType,
         subjectId,
-        email: String(email || '').toLowerCase(),
+        email: normalizeEmail(email),
         organizationId,
         document: a.document,
         version: a.version,

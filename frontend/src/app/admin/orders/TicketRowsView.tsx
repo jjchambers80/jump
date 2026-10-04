@@ -131,7 +131,9 @@ function TicketDetailModal({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingAttendee, setEditingAttendee] = useState(false);
-  const [attendeeForm, setAttendeeForm] = useState({ firstName: '', lastName: '', email: '' });
+  // Name only (spec 037 D13): the buyer email is their customer identity and
+  // changes on the customer page, never from a ticket.
+  const [attendeeForm, setAttendeeForm] = useState({ firstName: '', lastName: '' });
   const [saving, setSaving] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const backdropRef = useRef<HTMLDivElement>(null);
@@ -146,7 +148,6 @@ function TicketDetailModal({
         setAttendeeForm({
           firstName: data.attendee.firstName,
           lastName: data.attendee.lastName,
-          email: data.attendee.email,
         });
       }
     } catch (err: any) {
@@ -309,13 +310,6 @@ function TicketDetailModal({
                                   className="w-full px-2 py-1.5 text-sm rounded border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
                                 />
                               </div>
-                              <input
-                                type="email"
-                                value={attendeeForm.email}
-                                onChange={(e) => setAttendeeForm({ ...attendeeForm, email: e.target.value })}
-                                placeholder="Email"
-                                className="w-full px-2 py-1.5 text-sm rounded border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
-                              />
                               <div className="flex gap-2">
                                 <button
                                   onClick={handleSaveAttendee}
@@ -331,7 +325,6 @@ function TicketDetailModal({
                                       setAttendeeForm({
                                         firstName: detail.attendee.firstName,
                                         lastName: detail.attendee.lastName,
-                                        email: detail.attendee.email,
                                       });
                                     }
                                   }}
@@ -355,6 +348,9 @@ function TicketDetailModal({
                               ) : (
                                 <p className="text-sm text-gray-400">No attendee info</p>
                               )}
+                              {/* A multi-ticket order shares one buyer: renaming it
+                                  from one ticket would rename all of them (spec 037 C1). */}
+                              {detail.siblingTickets.length === 0 && (
                               <button
                                 onClick={() => setEditingAttendee(true)}
                                 className="mt-1 inline-flex items-center gap-1 text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
@@ -362,8 +358,9 @@ function TicketDetailModal({
                                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                                 </svg>
-                                edit
+                                edit name
                               </button>
+                              )}
                             </>
                           )}
                         </div>
@@ -509,13 +506,20 @@ function TicketDetailModal({
   );
 }
 
-export default function TicketRowsView({ initialSearch = '' }: { initialSearch?: string }) {
+export default function TicketRowsView({
+  initialSearch = '',
+  eventId,
+}: {
+  initialSearch?: string;
+  /** Locks the list to one event (the event's Attendees tab, spec 037). */
+  eventId?: string;
+}) {
   const { selectedOrgId } = useOrg();
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('');
-  const [eventFilter, setEventFilter] = useState('');
+  const [eventFilter, setEventFilter] = useState(eventId ?? '');
   const [search, setSearch] = useState(initialSearch);
   const [searchInput, setSearchInput] = useState(initialSearch);
   const [page, setPage] = useState(1);
@@ -546,14 +550,14 @@ export default function TicketRowsView({ initialSearch = '' }: { initialSearch?:
     }
   };
 
-  // Load events for filter dropdown
+  // Load events for filter dropdown (not needed when locked to one event)
   useEffect(() => {
-    if (!selectedOrgId) return;
+    if (!selectedOrgId || eventId) return;
     api
       .get<{ events: EventOption[] }>(`/admin/events`)
       .then((data) => setEvents(data.events || []))
       .catch(() => {});
-  }, [selectedOrgId]);
+  }, [selectedOrgId, eventId]);
 
   const fetchTickets = useCallback(async () => {
     if (!selectedOrgId) return;
@@ -629,7 +633,7 @@ export default function TicketRowsView({ initialSearch = '' }: { initialSearch?:
         <button
           onClick={() => setShowFilters(!showFilters)}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
-            showFilters || statusFilter || eventFilter
+            showFilters || statusFilter || (eventFilter && !eventId)
               ? 'border-indigo-300 dark:border-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300'
               : 'border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700'
           }`}
@@ -679,9 +683,9 @@ export default function TicketRowsView({ initialSearch = '' }: { initialSearch?:
             </div>
           )}
 
-          {(statusFilter || eventFilter) && (
+          {(statusFilter || (eventFilter && !eventId)) && (
             <button
-              onClick={() => { setStatusFilter(''); setEventFilter(''); }}
+              onClick={() => { setStatusFilter(''); setEventFilter(eventId ?? ''); }}
               className="px-3 py-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
             >
               Clear filters
@@ -713,7 +717,7 @@ export default function TicketRowsView({ initialSearch = '' }: { initialSearch?:
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
           </svg>
           <p className="text-gray-500 dark:text-slate-400">
-            {search || statusFilter || eventFilter
+            {search || statusFilter || (eventFilter && !eventId)
               ? 'No tickets match your filters.'
               : 'No tickets yet.'}
           </p>

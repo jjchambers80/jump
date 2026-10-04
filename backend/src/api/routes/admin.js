@@ -4,7 +4,7 @@
 import express from 'express';
 import { prisma } from '@jump/db';
 import { requireAuth } from '../../middleware/auth.js';
-import { requireOrganizer, requireAdmin } from '../../middleware/rbac.js';
+import { requireOrganizer, requireAdmin, requireSystemAdmin } from '../../middleware/rbac.js';
 import { NotFoundError, ValidationError, ForbiddenError } from '../../middleware/errorHandler.js';
 import { resolveOrgScope, isUnscoped } from '../../middleware/orgScope.js';
 import {
@@ -31,6 +31,9 @@ import orderService from '../../services/OrderService.js';
 import ticketService from '../../services/TicketService.js';
 import refundService from '../../services/RefundService.js';
 import customerService from '../../services/CustomerService.js';
+import buyerDataExportService from '../../services/BuyerDataExportService.js';
+import contactErasureService from '../../services/ContactErasureService.js';
+import { requireRecentAuth } from '../../middleware/recentAuth.js';
 import domainService from '../../services/DomainService.js';
 import taxService from '../../services/TaxService.js';
 import paymentSettingsService from '../../services/PaymentSettingsService.js';
@@ -48,6 +51,7 @@ import setupGuideService from '../../services/SetupGuideService.js';
 import customerAccountSettingsService from '../../services/CustomerAccountSettingsService.js';
 import billingService from '../../services/BillingService.js';
 import pageService from '../../services/PageService.js';
+import pageTemplateService from '../../services/PageTemplateService.js';
 import storefrontPreferencesService from '../../services/StorefrontPreferencesService.js';
 import adminSearchService from '../../services/AdminSearchService.js';
 import customerTimelineService from '../../services/CustomerTimelineService.js';
@@ -143,6 +147,47 @@ router.get('/pages/:pageId', async (req, res, next) => {
 router.put('/pages/:pageId', validateUpdatePage, async (req, res, next) => {
   try {
     res.json(await pageService.update(await activeOrgFor(req), req.params.pageId, req.body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** GET /admin/page-templates — the active organization's page templates (spec 042). */
+router.get('/page-templates', async (req, res, next) => {
+  try {
+    res.json({ templates: await pageTemplateService.list(await activeOrgFor(req)) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /admin/page-templates — upload a template manifest (JSON body). A
+ * template with the same name is replaced. Developers only (SYSTEM_ADMIN).
+ */
+router.post('/page-templates', requireSystemAdmin, async (req, res, next) => {
+  try {
+    res
+      .status(201)
+      .json(await pageTemplateService.upsert(await activeOrgFor(req), req.body, req.user.id));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** GET /admin/page-templates/:id/manifest — the stored manifest, for download. */
+router.get('/page-templates/:id/manifest', requireSystemAdmin, async (req, res, next) => {
+  try {
+    res.json(await pageTemplateService.manifest(await activeOrgFor(req), req.params.id));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** DELETE /admin/page-templates/:id — pages using it fall back to the default layout. */
+router.delete('/page-templates/:id', requireSystemAdmin, async (req, res, next) => {
+  try {
+    res.json(await pageTemplateService.remove(await activeOrgFor(req), req.params.id));
   } catch (error) {
     next(error);
   }
@@ -773,7 +818,7 @@ router.patch('/events/:eventId/applications/:applicationId', validateMetaBody, w
   res.json(await applicationService.updateMeta(req.params.eventId, req.params.applicationId, await scopedOrgFor(req), req.body, { byUserId: req.user.id }));
 }));
 router.post('/events/:eventId/applications/:applicationId/preview', wrap(async (req, res) => {
-  res.json(await applicationService.previewMessage(req.params.eventId, req.params.applicationId, await scopedOrgFor(req), req.body?.decision));
+  res.json(await applicationService.previewMessage(req.params.eventId, req.params.applicationId, await scopedOrgFor(req), req.body?.decision, { tierId: req.body?.tierId === null || typeof req.body?.tierId === 'string' ? req.body.tierId : undefined }));
 }));
 router.post('/events/:eventId/applications/:applicationId/decision', validateDecisionBody, wrap(async (req, res) => {
   res.json(await applicationService.decide(req.params.eventId, req.params.applicationId, await scopedOrgFor(req), { ...req.body, byUserId: req.user.id }));
@@ -1199,11 +1244,10 @@ router.patch('/tickets/:ticketId/attendee', validateUpdateAttendee, async (req, 
       }
     }
 
-    const { firstName, lastName, email } = req.body;
+    const { firstName, lastName } = req.body;
     const updated = await ticketService.updateTicketAttendee(req.params.ticketId, {
       firstName,
       lastName,
-      email,
     });
 
     res.json(updated);
@@ -1706,6 +1750,62 @@ router.patch(
     }
   }
 );
+
+/**
+ * GET /admin/customers/:contactId/export — the customer's data as one JSON file,
+ * staff notes included, for an access request that arrived by email (spec 040 PA-11).
+ */
+router.get('/customers/:contactId/export', requireAdmin, async (req, res, next) => {
+  try {
+    const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
+    if (!isUnscoped(scope) && !scope.organizationId) throw new NotFoundError('Customer not found');
+    const contact = await prisma.contact.findFirst({
+      where: { id: req.params.contactId, ...(scope.organizationId && { organizationId: scope.organizationId }) },
+      select: { id: true, organizationId: true },
+    });
+    if (!contact) throw new NotFoundError('Customer not found');
+    const data = await buyerDataExportService.exportForStaff(contact.organizationId, contact.id, req.user.id);
+    res.set('Content-Disposition', `attachment; filename="${buyerDataExportService.filename(data).replace('-my-data-', '-customer-data-')}"`);
+    res.set('Cache-Control', 'no-store');
+    res.json(data);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET  /admin/customers/:contactId/erasure — preview (what would be voided, what blocks it).
+ * POST /admin/customers/:contactId/anonymize — erase now, no grace period (spec 040 PA-18):
+ * ADMIN and a fresh step-up proof, for requests that arrive by email.
+ */
+async function contactInScope(req) {
+  const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
+  if (!isUnscoped(scope) && !scope.organizationId) throw new NotFoundError('Customer not found');
+  const contact = await prisma.contact.findFirst({
+    where: { id: req.params.contactId, ...(scope.organizationId && { organizationId: scope.organizationId }) },
+    select: { id: true, organizationId: true },
+  });
+  if (!contact) throw new NotFoundError('Customer not found');
+  return contact;
+}
+
+router.get('/customers/:contactId/erasure', requireAdmin, async (req, res, next) => {
+  try {
+    const contact = await contactInScope(req);
+    res.json(await contactErasureService.preview(contact.organizationId, contact.id));
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/customers/:contactId/anonymize', requireAdmin, requireRecentAuth, async (req, res, next) => {
+  try {
+    const contact = await contactInScope(req);
+    res.json(await contactErasureService.erase(contact.id, { organizationId: contact.organizationId, actorUserId: req.user.id }));
+  } catch (error) {
+    next(error);
+  }
+});
 
 /** POST /admin/customers/:contactId/send-sign-in-link — issue and email a passwordless sign-in link (spec 032 phase 1). */
 const sendSignInLinkLimiter = makeLimiter('BUYER_AUTH_REQUEST', LIMITS.BUYER_AUTH_REQUEST);

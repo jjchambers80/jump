@@ -307,7 +307,7 @@ describe('Administration search contract', () => {
           type: 'EVENT',
           id: event.id,
           title: `${TERM} Festival`,
-          href: `/admin/events/${event.id}/edit?orgId=${organization.id}`,
+          href: `/admin/events/${event.id}?orgId=${organization.id}`,
         }),
         expect.objectContaining({
           type: 'CUSTOMER',

@@ -23,7 +23,8 @@ At checkout a buyer can tick "Create an account with `<Org>` to manage your tick
 | `backend/src/api/validators/orderValidators.js` | `createAccount` / `emailSubscribed` must be booleans when present |
 | `frontend/src/lib/buyerSession.ts` | Server-only: `jump_buyer` cookie helpers, `backendBuyerFetch`, `clientIpFrom` |
 | `frontend/src/app/api/buyer/{request,verify,logout,me,me/orders,me/tickets}/route.ts` | Same-origin proxies; the only place the buyer bearer token exists in the browser tier (inside the httpOnly cookie) |
-| `frontend/src/app/organizations/[orgId]/account/page.tsx` | Email form ↔ this org's orders and tickets |
+| `frontend/src/app/organizations/[orgId]/account/(member)/layout.tsx` | Account shell (spec 040): sign-in gate (`components/account/SignInForm.tsx`), section nav (`AccountNav`), `AccountContext` (org, buyer, applications) |
+| `frontend/src/app/organizations/[orgId]/account/(member)/{page,orders/page,applications/page}.tsx` | Sections: tickets (applications waiting on the buyer, upcoming / past ticket stubs via `components/account/TicketStubs.tsx`), orders, applications + business profile |
 | `frontend/src/app/organizations/[orgId]/account/verify/page.tsx` | Consumes `?token=` once (ref-guarded), redirects to the account page |
 | `frontend/src/app/checkout/[eventId]/page.tsx` | The two checkboxes; posts `createAccount`, `emailSubscribed` |
 | `backend/tests/unit/buyerAuthService.test.js`, `tests/unit/buyerRateLimitKey.test.js`, `tests/contract/buyerAuth.test.js` | 35 tests: token hashing/TTL/single-use, rate caps, opt-ins on completion, welcome link through the real webhook path, org scoping, principal separation |
@@ -79,7 +80,7 @@ See [Database Architecture](database-architecture.md).
 - **Sign-in links (spec 031).** The storefront header and checkout show a sign-in link when `Organization.buyerSignInLinks` is on (Settings › Customer accounts); a signed-in buyer at checkout is prefilled and sends `createAccount: false`. See [Customer Accounts Settings](customer-accounts-settings.md).
 
 - **Never set `accountCreatedAt` or `emailSubscribed` from an unpaid checkout.** Anyone can start and abandon a checkout with someone else's email; the opt-ins are honored only when the Stripe webhook completes the order.
-- **Opt-ins only turn on.** A later guest checkout never revokes an account and never flips marketing consent off; unsubscribe is a separate flow (admin customers PATCH today).
+- **Opt-ins only turn on.** A later guest checkout never revokes an account and never flips marketing consent off; unsubscribe is a separate flow: the buyer's Email preferences page, the one-click `/account/unsubscribe?t=` link (spec 040), or staff on the customer page.
 - **Confirmation email is fire-and-forget and retried 3×; the sign-in email is single-attempt.** A lost sign-in email is solved by requesting another, subject to the 3-per-15-min cap.
 - **Rate-limit key.** Anything that adds a proxy in front of `/buyer/auth/request` must forward the signed client IP or the limit collapses to one bucket. Do not switch to `X-Forwarded-For` without re-examining the trusted hop count.
 - **Buyer cookie is per host, session is per org.** On the shared Jump domain, signing in at org B replaces org A's session; the account page for org A then shows the email form. Expected until custom domains (phase 3).
@@ -87,6 +88,10 @@ See [Database Architecture](database-architecture.md).
 - **Stripe webhook is the trigger.** Locally there is no `stripe listen` by default, so orders stay PENDING and no confirmation/welcome email fires. Contract tests call `PaymentService.handleCheckoutCompleted` directly.
 - **The Auth.js buyer surface is gone** (phase 4): `/my-tickets`, `/tickets/[ticketId]`, the `/orders` list page, `GET /orders/my`, `GET /tickets/my`, `GET /tickets/:id`, `POST /tickets/:id/request-refund`, and `Contact.userId`. Staff who buy tickets use the organization's `/account` page like any buyer. `/orders/:id` accepts a buyer session and falls back to the staff gate.
 - **Refunds from the account page** go through `/api/buyer/me/tickets/:id/refund`; the button shows only for `isRefundable && status === 'VALID'`.
+- **Patron self-service (spec 040 card B).** Profile (name, phone, city; email through a link sent to the new address), Email preferences (marketing switch; the label is server text and becomes the `MARKETING` acceptance), RSVPs, printable receipts for paid orders, and *Sign out of all other devices* (`Contact.buyerSessionsValidAfter`). Unsubscribe links in marketing mail must come from `utils/unsubscribeToken.js`.
+- **Download my data (spec 040 card C).** Account › Privacy downloads one JSON file (`BuyerDataExportService`: contact, marketing history, orders with payments and refunds, tickets, RSVPs, applicant profile, applications with answers, legal acceptances) for this organization only. The buyer's copy leaves out staff notes and tags; the staff **Export customer data** action on the customer page includes them for requests that arrive by email. Both are logged on the customer timeline (`DATA_EXPORTED`).
+- **Delete my data (spec 040 card D)** — see [Patron Account](patron-account.md).
+- **Account sections (spec 040).** Pages under `account/(member)/` get the sign-in gate from the layout and read `useAccount()`; pages a signed-out visitor must reach (token links) go outside the group, next to `verify`. Build account links with `href(section)` from the context so custom domains get `/account/...`. The Applications tab shows only when the buyer has applications; the tickets overview lists the ones waiting on the buyer (space to choose, payment due) and links to that tab, so the emailed account link still leads there.
 
 ## Related Features
 

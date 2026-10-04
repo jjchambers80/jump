@@ -9,9 +9,10 @@ import MapLegend from '../MapLegend';
 import { STATUS_BADGE_COLORS, STATUS_LABELS, tierSwatch } from '../mapTheme';
 import { elementName, unitLabel } from './catalog';
 import { MAX_ITEM_SIZE } from './placement';
+import { isPriceLocked, parsePriceDraft, priceDraft } from './pricing';
 import { fieldClass, labelClass } from './BuilderDialog';
 
-type BoothPatch = Partial<Pick<MapBooth, 'label' | 'kind' | 'w' | 'h' | 'tierId'>>;
+type BoothPatch = Partial<Pick<MapBooth, 'label' | 'kind' | 'w' | 'h' | 'tierId' | 'price'>>;
 type ElementPatch = Partial<Pick<MapElement, 'caption' | 'text' | 'size' | 'w' | 'h' | 'orientation'>>;
 
 interface InspectorPanelProps {
@@ -250,6 +251,13 @@ function BoothSection(props: InspectorPanelProps & { booth: MapBooth }) {
             value={booth.tierId}
             onChange={(tierId) => onBoothChange([booth.id], { tierId })}
           />
+          <PriceField
+            id="booth-price"
+            value={typeof booth.price === 'number' ? booth.price : null}
+            tierPrice={tiers.find((t) => t.id === booth.tierId)?.price ?? null}
+            locked={isPriceLocked(booth.status)}
+            onCommit={(price) => onBoothChange([booth.id], { price })}
+          />
           <ItemActions {...props} canTurn />
         </div>
       </section>
@@ -393,6 +401,7 @@ function MultiSection(props: InspectorPanelProps & { booths: MapBooth[]; count: 
             value={sharedTier === undefined ? '__mixed' : sharedTier}
             onChange={(tierId) => onBoothChange(ids, { tierId })}
           />
+          <MultiPriceField booths={booths} tiers={tiers} onCommit={(editable, price) => onBoothChange(editable, { price })} />
           <fieldset>
             <legend className={labelClass}>Type</legend>
             <Segmented
@@ -489,6 +498,137 @@ function TierSelect({
       <p id={hintId} className="mt-1 text-xs text-gray-500 dark:text-slate-400">
         Vendors who applied on this tier can pick this spot.
       </p>
+    </div>
+  );
+}
+
+// ─── Spec 039: a booth's own price ─────────────────────────────────────
+
+function PriceField({
+  id,
+  label = 'Spot price',
+  value,
+  mixed = false,
+  tierPrice,
+  locked,
+  lockedNote,
+  onCommit,
+}: {
+  id: string;
+  label?: string;
+  value: number | null;
+  mixed?: boolean;
+  tierPrice: number | null;
+  locked: boolean;
+  lockedNote?: string;
+  onCommit: (price: number | null) => void;
+}) {
+  const [draft, setDraft] = useState(priceDraft(value));
+  const [error, setError] = useState('');
+  useEffect(() => {
+    setDraft(priceDraft(value));
+    setError('');
+  }, [value, mixed]);
+  const hintId = `${id}-hint`;
+  const commit = () => {
+    const parsed = parsePriceDraft(draft);
+    if (parsed === undefined) {
+      setError('Enter a price like 250 or 249.99, up to $100,000.');
+      return;
+    }
+    setError('');
+    setDraft(priceDraft(parsed));
+    if (mixed ? draft.trim() !== '' : parsed !== value) onCommit(parsed);
+  };
+  const placeholder = mixed ? 'Mixed' : tierPrice !== null ? `Tier price ${formatPrice(tierPrice)}` : 'No tier';
+  return (
+    <div>
+      <label htmlFor={id} className={labelClass}>
+        {label}
+      </label>
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-gray-500 dark:text-slate-400" aria-hidden="true">
+            $
+          </span>
+          <input
+            id={id}
+            type="text"
+            inputMode="decimal"
+            value={draft}
+            placeholder={placeholder}
+            disabled={locked}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={hintId}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                commit();
+              }
+              if (e.key === 'Escape') {
+                setDraft(priceDraft(value));
+                setError('');
+              }
+            }}
+            data-testid={`${id}-input`}
+            className={`${fieldClass} pl-6 disabled:opacity-60`}
+          />
+        </div>
+        {!locked && !mixed && value !== null && (
+          <button
+            type="button"
+            onClick={() => onCommit(null)}
+            data-testid={`${id}-reset`}
+            className="text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+          >
+            Use tier price
+          </button>
+        )}
+      </div>
+      <p id={hintId} className={`mt-1 text-xs ${error ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-slate-400'}`}>
+        {error ||
+          (locked
+            ? lockedNote ?? 'A vendor holds, owns or was placed on this spot, so its price is locked.'
+            : 'Leave empty to use the tier price. Before fees; vendors see the all-in price.')}
+      </p>
+    </div>
+  );
+}
+
+function MultiPriceField({
+  booths,
+  tiers,
+  onCommit,
+}: {
+  booths: MapBooth[];
+  tiers: MapTier[];
+  onCommit: (ids: string[], price: number | null) => void;
+}) {
+  const editable = booths.filter((b) => !isPriceLocked(b.status));
+  const prices = new Set(editable.map((b) => (typeof b.price === 'number' ? b.price : null)));
+  const shared = prices.size === 1 ? [...prices][0] : undefined;
+  const tierIds = new Set(editable.map((b) => b.tierId));
+  const tierPrice = tierIds.size === 1 ? tiers.find((t) => t.id === [...tierIds][0])?.price ?? null : null;
+  const lockedCount = booths.length - editable.length;
+  return (
+    <div data-testid="multi-price">
+      <PriceField
+        id="multi-price"
+        label={`Spot price for ${editable.length} booth${editable.length === 1 ? '' : 's'}`}
+        value={shared ?? null}
+        mixed={shared === undefined}
+        tierPrice={tierPrice}
+        locked={editable.length === 0}
+        lockedNote="Every selected spot is held, sold or placed, so their prices are locked."
+        onCommit={(price) => onCommit(editable.map((b) => b.id), price)}
+      />
+      {lockedCount > 0 && editable.length > 0 && (
+        <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+          {lockedCount} held, sold or placed spot{lockedCount === 1 ? '' : 's'} keep{lockedCount === 1 ? 's' : ''} its price.
+        </p>
+      )}
     </div>
   );
 }

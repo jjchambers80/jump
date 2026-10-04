@@ -19,6 +19,7 @@ import { orgEventsRouter } from './routes/events.js';
 import priceTiersRouter from './routes/priceTiers.js';
 import tierPresetsRouter from './routes/tierPresets.js';
 import addOnsRouter from './routes/addOns.js';
+import savedAddOnsRouter from './routes/savedAddOns.js';
 import ticketsRouter from './routes/tickets.js';
 import webhooksRouter from './routes/webhooks.js';
 import { eventApplicationsRouter, applicationStatusRouter, standingApplicationsRouter } from './routes/applications.js';
@@ -27,6 +28,7 @@ import organizationsRouter from './routes/organizations.js';
 import signupRouter from './routes/signup.js';
 import { billingEnabled } from '../config/billing.js';
 import onboardingService from '../services/OnboardingService.js';
+import contactErasureService from '../services/ContactErasureService.js';
 import sessionService from '../services/SessionService.js';
 import venuesRouter, { orgVenuesRouter } from './routes/venues.js';
 import ordersRouter, { eventOrdersRouter } from './routes/orders.js';
@@ -46,6 +48,8 @@ import redirectsRouter from './routes/redirects.js';
 import mapsRouter from './routes/maps.js';
 import mapExportRouter from './routes/mapExport.js';
 import rsvpsRouter, { adminRsvpsRouter, eventRsvpsRouter } from './routes/rsvps.js';
+import themesRouter from './routes/themes.js';
+import developerRouter from './routes/developer.js';
 import domainService from '../services/DomainService.js';
 import applicationPaymentService from '../services/ApplicationPaymentService.js';
 import applicationDigestService from '../services/ApplicationDigestService.js';
@@ -158,6 +162,8 @@ app.use('/admin/menus', menusRouter);
 app.use('/admin/redirects', redirectsRouter);
 app.use('/admin/maps', mapsRouter);
 app.use('/admin/maps', mapExportRouter);
+app.use('/admin/themes', themesRouter);
+app.use(developerRouter);
 app.use('/admin', adminRsvpsRouter);
 app.use('/admin', blogsRouter);
 app.use('/admin', adminRouter);
@@ -174,6 +180,7 @@ app.use('/organizations/:orgId/events', orgEventsRouter);
 app.use('/organizations/:orgId/events/:eventId/price-tiers', priceTiersRouter);
 app.use('/organizations/:orgId/tier-presets', tierPresetsRouter);
 app.use('/organizations/:orgId/events/:eventId/add-ons', addOnsRouter);
+app.use('/organizations/:orgId/saved-add-ons', savedAddOnsRouter);
 app.use('/orders', ordersRouter);
 app.use('/rsvps', rsvpsRouter);
 app.use('/legal', legalRouter);
@@ -231,10 +238,16 @@ if (process.env.NODE_ENV !== 'test') {
   setTimeout(applicationSweep, 30 * 1000).unref();
   setInterval(applicationSweep, APPLICATION_SWEEP_MS).unref();
 
-  // Self-serve booth holds (spec 014 phase 2): release expired inventory, but
-  // BoothService preserves holds whose payment is still PROCESSING.
-  setTimeout(() => boothService.sweepExpiredHolds().catch(() => {}), BOOTH_SWEEP_INTERVAL_MS).unref();
-  setInterval(() => boothService.sweepExpiredHolds().catch(() => {}), BOOTH_SWEEP_INTERVAL_MS).unref();
+  // Self-serve holds (spec 014 phase 2, spec 037 phase 5): a vendor's chosen
+  // space (booth or category slot, add-ons, order) lapses as a whole after 15
+  // minutes; then stray booth holds. Holds whose payment is still PROCESSING
+  // are left to their Checkout session.
+  const holdSweep = async () => {
+    await applicationPaymentService.sweepExpiredSelections().catch(() => {});
+    await boothService.sweepExpiredHolds().catch(() => {});
+  };
+  setTimeout(holdSweep, BOOTH_SWEEP_INTERVAL_MS).unref();
+  setInterval(holdSweep, BOOTH_SWEEP_INTERVAL_MS).unref();
 
   // Abandoned-checkout sweep (spec 020): PENDING ticket orders past the
   // Checkout session lifetime + grace are settled against Stripe (hold
@@ -249,6 +262,12 @@ if (process.env.NODE_ENV !== 'test') {
   const ONBOARDING_SWEEP_MS = Number(process.env.ONBOARDING_SWEEP_INTERVAL_MS) || 60 * 60 * 1000;
   setTimeout(() => onboardingService.sweepAbandoned().catch(() => {}), 45 * 1000).unref();
   setInterval(() => onboardingService.sweepAbandoned().catch(() => {}), ONBOARDING_SWEEP_MS).unref();
+
+  // Erasure sweep (spec 040 card D): contacts whose "Delete my data" grace
+  // period ended are anonymized; sign-in tokens a week past expiry are purged.
+  const ERASURE_SWEEP_MS = Number(process.env.ERASURE_SWEEP_INTERVAL_MS) || 60 * 60 * 1000;
+  setTimeout(() => contactErasureService.sweep().catch(() => {}), 75 * 1000).unref();
+  setInterval(() => contactErasureService.sweep().catch(() => {}), ERASURE_SWEEP_MS).unref();
 
   // Session sweep (spec 030 D): rows revoked or idle past the JWT lifetime
   // can never authenticate again and are deleted daily.

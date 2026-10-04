@@ -2,6 +2,7 @@
 // CRUD operations for organizations per FR-048
 
 import { prisma } from '@jump/db';
+import { storefrontLogoFor } from './storefrontLogo.js';
 import logger from '../utils/logger.js';
 import storefrontPreferencesService from './StorefrontPreferencesService.js';
 import { NotFoundError } from '../middleware/errorHandler.js';
@@ -26,6 +27,38 @@ const withUserCount = ({ _count, ...org }) => ({
   ...org,
   _count: { venues: _count.venues, users: _count.members },
 });
+
+/** Published events of an organization, as the storefront lists them. */
+export const PUBLIC_EVENTS_QUERY = {
+  where: { status: 'PUBLISHED' },
+  orderBy: { date: 'asc' },
+  select: {
+    id: true,
+    slug: true,
+    name: true,
+    date: true,
+    category: true,
+    logoUrl: true,
+    status: true,
+    admissionMode: true,
+    rsvpLimit: true,
+    rsvpMaxPartySize: true,
+    venue: { select: { id: true, slug: true, name: true, address: true, timezone: true } },
+    priceTiers: {
+      where: { isActive: true },
+      select: { price: true, quantityTotal: true, quantitySold: true, quantityReserved: true },
+    },
+  },
+};
+
+/** Storefront event summaries of an organization, soonest first. */
+export async function publicEventSummaries(organizationId) {
+  const events = await prisma.event.findMany({
+    ...PUBLIC_EVENTS_QUERY,
+    where: { ...PUBLIC_EVENTS_QUERY.where, venue: { organizationId } },
+  });
+  return events.map(formatEventSummary);
+}
 
 class OrganizationService {
   /**
@@ -258,36 +291,8 @@ class OrganizationService {
         storefrontMessage: true,
         buyerSignInLinks: true,
         buyerSignInMethod: true,
-        venues: {
-          select: {
-            events: {
-              where: { status: 'PUBLISHED' },
-              orderBy: { date: 'asc' },
-              select: {
-                id: true,
-                slug: true,
-                name: true,
-                slug: true,
-                date: true,
-                category: true,
-                status: true,
-                admissionMode: true,
-                rsvpLimit: true,
-                rsvpMaxPartySize: true,
-venue: { select: { id: true, slug: true, name: true, address: true, timezone: true } },
-                priceTiers: {
-                  where: { isActive: true },
-                  select: {
-                    price: true,
-                    quantityTotal: true,
-                    quantitySold: true,
-                    quantityReserved: true,
-                  },
-                },
-              },
-            },
-          },
-        },
+        themesEnabled: true,
+        venues: { select: { events: PUBLIC_EVENTS_QUERY } },
       },
     });
 
@@ -300,6 +305,8 @@ venue: { select: { id: true, slug: true, name: true, address: true, timezone: tr
       name: org.name,
       slug: org.slug,
       logoUrl: org.logoUrl,
+      // Theme logo image + widths (account pages, legacy views): header matches the themed pages.
+      storefrontLogo: await storefrontLogoFor(org),
       coverUrl: org.coverUrl,
       brandColor: org.brandColor,
       themeMode: org.themeMode,

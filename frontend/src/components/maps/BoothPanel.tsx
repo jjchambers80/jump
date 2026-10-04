@@ -218,6 +218,13 @@ export default function BoothPanel({
           <div className="fixed inset-0 bg-black/40" onClick={() => setAssignOpen(false)} />
           <div className="relative z-10 w-full max-w-md rounded-xl border border-gray-200 bg-white p-5 shadow-xl dark:border-slate-700 dark:bg-slate-800">
             <h3 id={`assign-title-${booth.id}`} className="text-sm font-semibold text-gray-900 dark:text-white">Assign to {booth.label}</h3>
+            {typeof booth.price === 'number' && (
+              // Spec 039 D10: a placed vendor who has not paid yet pays the spot's own price.
+              <p className="mt-1 text-xs text-gray-600 dark:text-slate-400" data-testid={`assign-spot-price-${booth.label}`}>
+                This spot costs {formatPrice(booth.price)} before fees. A vendor who has not paid yet pays this instead of their tier&apos;s price;
+                one who already paid keeps what they paid.
+              </p>
+            )}
 
             <div className="mt-3">
               <input
@@ -257,6 +264,9 @@ export default function BoothPanel({
                         <p className="truncate text-xs text-gray-500 dark:text-slate-400">
                           {c.contactName} · {c.email}
                           {c.tier && <span> · {c.tier.name} ({formatPrice(c.tier.price)})</span>}
+                          {c.tier && typeof booth.price === 'number' && booth.price !== c.tier.price && (
+                            <span className="ml-1 text-gray-600 dark:text-slate-400">→ {formatPrice(booth.price)} if unpaid</span>
+                          )}
                           {!c.tierMatch && (
                             <span className="ml-1 text-amber-600 dark:text-amber-400">(tier mismatch)</span>
                           )}

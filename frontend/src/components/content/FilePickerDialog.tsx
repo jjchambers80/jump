@@ -1,7 +1,7 @@
 'use client';
 
-// Pick an image from Content › Files (or upload one) — featured image and
-// editor image insert. Resolves with the chosen file.
+// Pick an image (or, with kind="video", a video) from Content › Files, or
+// upload one — featured image, editor image insert, theme Hero video.
 
 import { Search } from 'lucide-react';
 import { RefObject, useCallback, useEffect, useRef, useState } from 'react';
@@ -12,13 +12,15 @@ import UploadFilesDialog from './UploadFilesDialog';
 
 interface FilePickerDialogProps {
   title?: string;
+  kind?: 'image' | 'video';
   returnFocusRef?: RefObject<HTMLElement>;
   onClose: () => void;
   onPick: (file: StoreFile) => void;
 }
 
 export default function FilePickerDialog({
-  title = 'Choose an image',
+  kind = 'image',
+  title = kind === 'video' ? 'Choose a video' : 'Choose an image',
   returnFocusRef,
   onClose,
   onPick,
@@ -36,14 +38,14 @@ export default function FilePickerDialog({
     setLoading(true);
     setError(null);
     try {
-      const result = await filesApi.list({ type: 'image', q: q.trim(), sort: 'created_desc' });
+      const result = await filesApi.list({ type: kind, q: q.trim(), sort: 'created_desc' });
       setFiles(result.files);
     } catch (err: any) {
       setError(err?.message || 'Failed to load files');
     } finally {
       setLoading(false);
     }
-  }, [filesApi, q]);
+  }, [filesApi, q, kind]);
 
   useEffect(() => {
     const timer = setTimeout(() => void load(), q ? 250 : 0);
@@ -105,8 +107,8 @@ export default function FilePickerDialog({
           <input
             ref={searchRef}
             type="search"
-            aria-label="Search images"
-            placeholder="Search images"
+            aria-label={`Search ${kind}s`}
+            placeholder={`Search ${kind}s`}
             value={q}
             onChange={(event) => setQ(event.target.value)}
             className="w-full rounded-md border border-gray-300 bg-white py-1.5 pl-8 pr-3 text-sm text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
@@ -129,7 +131,7 @@ export default function FilePickerDialog({
             </div>
           ) : files.length === 0 ? (
             <p className="py-10 text-center text-sm text-gray-500 dark:text-slate-400">
-              {q ? 'No images match.' : 'No images yet — upload one.'}
+              {q ? `No ${kind}s match.` : `No ${kind}s yet — upload one.`}
             </p>
           ) : (
             <ul
@@ -143,12 +145,22 @@ export default function FilePickerDialog({
                     onClick={() => onPick(file)}
                     className="group block w-full overflow-hidden rounded-md border border-gray-200 text-left focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-600"
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={resolveAssetUrl(file.previewUrl ?? file.thumbUrl) || undefined}
-                      alt={file.altText ?? file.name}
-                      className="aspect-square w-full object-cover transition-transform duration-150 group-hover:scale-[1.02] motion-reduce:transition-none"
-                    />
+                    {kind === 'video' ? (
+                      <video
+                        src={resolveAssetUrl(file.url) || undefined}
+                        muted
+                        preload="metadata"
+                        aria-hidden
+                        className="aspect-square w-full bg-black object-cover"
+                      />
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={resolveAssetUrl(file.previewUrl ?? file.thumbUrl) || undefined}
+                        alt={file.altText ?? file.name}
+                        className="aspect-square w-full object-cover transition-transform duration-150 group-hover:scale-[1.02] motion-reduce:transition-none"
+                      />
+                    )}
                     <span className="block truncate px-2 py-1 text-xs text-gray-700 dark:text-slate-300">
                       {file.name}
                     </span>
@@ -174,8 +186,8 @@ export default function FilePickerDialog({
           returnFocusRef={uploadRef}
           onClose={() => setUploadOpen(false)}
           onUploaded={(result) => {
-            const image = result.files.find((file) => file.kind === 'image');
-            if (image) onPick(image);
+            const picked = result.files.find((file) => file.kind === kind);
+            if (picked) onPick(picked);
             else void load();
           }}
         />

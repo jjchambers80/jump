@@ -30,6 +30,8 @@ interface MapCanvasProps {
   selectedIds?: Set<string>;
   onSelect?: (id: string, e?: React.MouseEvent | React.KeyboardEvent) => void;
   onBoothClick?: (booth: MapBooth) => void;
+  /** Picker: a click on a booth in `disabledIds`, to say why it cannot be chosen. */
+  onDisabledBoothClick?: (booth: MapBooth, e: React.MouseEvent) => void;
   onPointerDown?: (e: React.PointerEvent) => void;
   onPointerMove?: (e: React.PointerEvent) => void;
   onPointerUp?: (e: React.PointerEvent) => void;
@@ -46,6 +48,14 @@ interface MapCanvasProps {
   disabledIds?: Set<string>;
   /** Editor resize handles on selected booths (default); the picker shows a checkmark instead. */
   selectionHandles?: boolean;
+  /** Accessible name of the map; defaults to the editor's. */
+  ariaLabel?: string;
+  /**
+   * Let the zoom library fit the content on init (default). Pages that fit the
+   * floor themselves (with a margin) turn it off: the library re-applies its own
+   * fit on every size change for its first seconds and would undo theirs.
+   */
+  fitOnInit?: boolean;
 }
 
 export default function MapCanvas({
@@ -61,6 +71,7 @@ export default function MapCanvas({
   selectedIds = new Set<string>(),
   onSelect,
   onBoothClick,
+  onDisabledBoothClick,
   onPointerDown,
   onPointerMove,
   onPointerUp,
@@ -74,6 +85,8 @@ export default function MapCanvas({
   dimmedIds,
   disabledIds,
   selectionHandles = true,
+  ariaLabel,
+  fitOnInit = true,
 }: MapCanvasProps) {
   const { resolvedTheme } = useTheme();
   const dark = resolvedTheme === 'dark';
@@ -107,7 +120,7 @@ export default function MapCanvas({
       height={svgHeight}
       style={{ minWidth: svgWidth, minHeight: svgHeight }}
       role={interactive ? 'application' : 'img'}
-      aria-label={interactive ? 'Floor map editor' : 'Floor map'}
+      aria-label={ariaLabel ?? (interactive ? 'Floor map editor' : 'Floor map')}
     >
       {underlayUrl && (
         <image
@@ -157,6 +170,7 @@ export default function MapCanvas({
             tierSwatchIndex={tierIdx >= 0 ? tierIdx : undefined}
             onSelect={onSelect}
             onClick={onBoothClick}
+            onDisabledClick={onDisabledBoothClick}
             highlight={booth.id === highlightBooth}
             dimmed={dimmedIds?.has(booth.id)}
             disabled={disabledIds?.has(booth.id)}
@@ -197,7 +211,7 @@ export default function MapCanvas({
       maxScale={5}
       limitToBounds={false}
       centerOnInit={false}
-      fitOnInit
+      fitOnInit={fitOnInit}
       panning={{ disabled: false }}
       pinch={{ disabled: false }}
       wheel={{ disabled: false, step: 0.1 }}

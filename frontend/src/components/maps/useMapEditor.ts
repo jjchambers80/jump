@@ -130,6 +130,7 @@ export function useMapEditor(mapId: string) {
           h: b.h,
           rotation: b.rotation,
           tierId: b.tierId,
+          price: typeof b.price === 'number' ? b.price : null,
         })) as LayoutBoothInput[],
       });
       // The server keys booths by label: adopt its ids and states so the
@@ -166,9 +167,14 @@ export function useMapEditor(mapId: string) {
       return true;
     } catch (err: any) {
       const message: string = err?.message || 'Could not save';
-      if (/BOOTH_IN_USE/.test(message) || err?.code === 'BOOTH_IN_USE') {
+      const inUse = /BOOTH_IN_USE/.test(message) || err?.code === 'BOOTH_IN_USE';
+      // Spec 039: a vendor took the spot while its price was being edited.
+      const priceLocked = /BOOTH_PRICE_LOCKED/.test(message) || err?.code === 'BOOTH_PRICE_LOCKED';
+      if (inUse || priceLocked) {
         setSaveError(
-          'A booth that is sold, held or reserved can’t be removed. It has been put back — unassign it first.'
+          inUse
+            ? 'A booth that is sold, held or reserved can’t be removed. It has been put back — unassign it first.'
+            : 'A vendor holds, owns or was placed on a spot whose price you changed, so its price is locked. The map was reloaded.'
         );
         try {
           const fresh = await mapsApi.get(mapId);

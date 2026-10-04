@@ -216,7 +216,7 @@ export function EventEditSummary({
  * anchor or scrollIntoView would also scroll the overflow-hidden app frame and
  * push the sidebar off screen. Focus follows for keyboard users.
  */
-function jumpTo(id: string) {
+export function jumpTo(id: string) {
   const target = document.getElementById(id);
   if (!target) return;
   let scroller = target.parentElement;
@@ -254,7 +254,7 @@ export function EventSaveCard({ dirty, children }: { dirty: boolean; children: R
 }
 
 /** Dashed tear line with half-circle notches punched out of both edges. */
-function Perforation() {
+export function Perforation() {
   const notch =
     'absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border border-gray-200 bg-gray-50 dark:border-slate-700/80 dark:bg-slate-900';
   return (
@@ -286,7 +286,7 @@ function SaveState({ dirty }: { dirty: boolean }) {
  * One bar for the whole event: each tier's allocation as a segment (sold part
  * solid, the rest tinted), then any capacity no tier holds yet, hatched.
  */
-function CapacityMeter({ capacity, tiers }: { capacity: number; tiers: SummaryTier[] }) {
+export function CapacityMeter({ capacity, tiers }: { capacity: number; tiers: SummaryTier[] }) {
   const allocated = tiers.reduce((sum, t) => sum + t.quantityTotal, 0);
   const sold = tiers.reduce((sum, t) => sum + t.quantitySold, 0);
   const scale = Math.max(capacity, allocated, 1);

@@ -1,0 +1,19 @@
+{
+  "name": "@jump/cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Jump CLI (spec 043): sign in to a store, pull its theme as JSON files, edit them (by hand or with an AI assistant), push to a draft theme, preview and publish",
+  "type": "module",
+  "bin": {
+    "jump": "./bin/jump.js"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@jump/theme": "*"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

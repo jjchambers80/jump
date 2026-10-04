@@ -14,6 +14,8 @@ export function formatEventSummary(event) {
     date: event.date,
     venue: event.venue,
     category: event.category,
+    // Event image (Media section), the `original` serving URL; storefront cards.
+    imageUrl: event.logoUrl ?? null,
     status: event.status,
     admissionMode: event.admissionMode || 'TICKETED',
     rsvpLimit: event.rsvpLimit ?? null,

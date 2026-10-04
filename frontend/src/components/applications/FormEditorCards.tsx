@@ -40,6 +40,10 @@ export interface EditorForm {
   taxable: boolean;
   paymentDueDays: number;
   overduePolicy: AdminForm['overduePolicy'];
+  /** Spec 037 D5: approval guarantees a space (takes a slot in the category). */
+  reserveOnApproval?: boolean;
+  /** Spec 039: vendors choose a tier, or a spot on the floor map. */
+  spaceSelection?: 'TIERS' | 'MAP' | null;
   paymentsEnabled?: boolean;
   tiers: EditorTier[];
   questions: Question[];
@@ -83,6 +87,8 @@ export function SettingsCard({
     taxable: form.taxable,
     paymentDueDays: form.paymentDueDays,
     overduePolicy: form.overduePolicy,
+    reserveOnApproval: form.reserveOnApproval !== false,
+    spaceSelection: (form.spaceSelection === 'MAP' ? 'MAP' : 'TIERS') as 'TIERS' | 'MAP',
   });
   const [saving, setSaving] = useState(false);
 
@@ -99,12 +105,15 @@ export function SettingsCard({
       taxable: form.taxable,
       paymentDueDays: form.paymentDueDays,
       overduePolicy: form.overduePolicy,
+      reserveOnApproval: form.reserveOnApproval !== false,
+      spaceSelection: form.spaceSelection === 'MAP' ? 'MAP' : 'TIERS',
     });
   }, [form]);
 
   const paidSettings = (s: typeof state) =>
     form.kind === 'PAID'
-      ? { chargeTiming: s.chargeTiming, feeMode: s.feeMode, taxable: s.taxable, paymentDueDays: Number(s.paymentDueDays), overduePolicy: s.overduePolicy }
+      ? // chargeTiming is legacy (spec 037 phase 5): not shown, sent back unchanged.
+        { chargeTiming: s.chargeTiming, feeMode: s.feeMode, taxable: s.taxable, paymentDueDays: Number(s.paymentDueDays), overduePolicy: s.overduePolicy, reserveOnApproval: s.reserveOnApproval, spaceSelection: s.spaceSelection }
       : {};
   const update = (patch: Partial<typeof state>) => {
     const next = { ...state, ...patch };
@@ -178,12 +187,82 @@ export function SettingsCard({
         )}
         {form.kind === 'PAID' && (
           <>
-            <div>
-              <label htmlFor="f-timing" className={labelClass}>Charge the card</label>
-              <select id="f-timing" value={state.chargeTiming} disabled={!canEdit} onChange={(e) => update({ chargeTiming: e.target.value as AdminForm['chargeTiming'] })} className={field}>
-                <option value="APPROVAL">When I approve (card saved at submission)</option>
-                <option value="SUBMIT">When they submit</option>
-              </select>
+            {/* Spec 037 phase 5: vendors apply for free; after approval they choose a space and pay. */}
+            <p className="text-sm text-gray-600 dark:text-slate-400 sm:col-span-2">
+              Vendors apply without paying. After you approve one, they choose their space and pay.
+            </p>
+            {/* Spec 039 D1: what an approved vendor chooses. */}
+            <div className="sm:col-span-2">
+              <span className={labelClass} id="f-space-label">How vendors choose their space</span>
+              <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-labelledby="f-space-label">
+                {(
+                  [
+                    ['TIERS', 'Choose a tier', 'Vendors pay for one of your tiers: the one you approve them as, or their own pick. You place them on the floor later.'],
+                    ['MAP', 'Choose a spot on the floor map', 'Vendors pick a spot within the category you approve them for. Spots can have their own price.'],
+                  ] as const
+                ).map(([value, title, detail]) => (
+                  <label key={value} className="flex cursor-pointer items-start gap-2 rounded-md border border-gray-200 p-3 text-sm has-[:checked]:border-indigo-500 dark:border-slate-700">
+                    <input
+                      type="radio"
+                      name="f-space"
+                      checked={state.spaceSelection === value}
+                      disabled={!canEdit}
+                      onChange={() => update({ spaceSelection: value })}
+                      data-testid={`form-space-${value.toLowerCase()}`}
+                      className="mt-0.5"
+                    />
+                    <span>
+                      <span className="block font-medium text-gray-900 dark:text-white">{title}</span>
+                      <span className="block text-gray-600 dark:text-slate-400">{detail}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              {state.spaceSelection === 'MAP' && (
+                <p className="mt-2 text-xs text-gray-600 dark:text-slate-400" data-testid="form-space-map-hint">
+                  Before this form opens, publish the event&apos;s floor map with at least one spot for every active tier.
+                  {!template && form.eventId && (
+                    <>
+                      {' '}
+                      <Link href={`/admin/events/${form.eventId}/map`} className="font-medium text-indigo-600 hover:underline dark:text-indigo-400">
+                        Open the floor map
+                      </Link>
+                    </>
+                  )}
+                </p>
+              )}
+            </div>
+            <div className="sm:col-span-2">
+              <span className={labelClass} id="f-reserve-label">When you approve a vendor</span>
+              <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-labelledby="f-reserve-label">
+                {(
+                  [
+                    [true, 'Reserve a space in their category', 'Approval is refused when the category is full, so an approved vendor always has a space.'],
+                    [false, 'First come, first served', 'Approval reserves nothing; approved vendors take spaces in the order they pay.'],
+                  ] as const
+                ).map(([value, title, detail]) => (
+                  <label key={String(value)} className="flex cursor-pointer items-start gap-2 rounded-md border border-gray-200 p-3 text-sm has-[:checked]:border-indigo-500 dark:border-slate-700">
+                    <input
+                      type="radio"
+                      name="f-reserve"
+                      checked={state.reserveOnApproval === value}
+                      disabled={!canEdit}
+                      onChange={() => update({ reserveOnApproval: value })}
+                      data-testid={`form-reserve-${value ? 'on' : 'off'}`}
+                      className="mt-0.5"
+                    />
+                    <span>
+                      <span className="block font-medium text-gray-900 dark:text-white">{title}</span>
+                      <span className="block text-gray-600 dark:text-slate-400">{detail}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              {state.spaceSelection === 'TIERS' && state.reserveOnApproval && (
+                <p className="mt-2 text-xs text-gray-600 dark:text-slate-400">
+                  A space is reserved only when you approve a vendor into a tier. When you let the vendor choose, their space is taken when they pay.
+                </p>
+              )}
             </div>
             <div>
               <label htmlFor="f-fee" className={labelClass}>Fees</label>
@@ -193,7 +272,7 @@ export function SettingsCard({
               </select>
             </div>
             <div>
-              <label htmlFor="f-due" className={labelClass}>Payment due (days after a failed charge)</label>
+              <label htmlFor="f-due" className={labelClass}>Days to choose a space and pay, after approval</label>
               <input id="f-due" type="number" min={1} max={30} value={state.paymentDueDays} disabled={!canEdit} onChange={(e) => update({ paymentDueDays: Number(e.target.value) })} className={field} />
             </div>
             <div>

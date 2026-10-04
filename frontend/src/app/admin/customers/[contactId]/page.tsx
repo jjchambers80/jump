@@ -10,6 +10,8 @@ import { fieldClass, formAlertClass, hintClass } from '@/app/admin/settings/form
 import { ChevronRightIcon, EllipsisIcon } from '@/app/admin/settings/icons';
 import SettingsDialog from '@/app/admin/settings/SettingsDialog';
 import CustomerTimeline from './CustomerTimeline';
+import EraseCustomerDialog from './EraseCustomerDialog';
+import { ReauthProvider } from '@/app/admin/account/useReauth';
 import UpcomingTickets, { type UpcomingTicket } from './UpcomingTickets';
 import { guestAccountNote, segmentBadgeClass, type CustomerSegment } from '@/lib/customers';
 import { formatEventDateTime } from '@/lib/eventTime';
@@ -46,7 +48,8 @@ interface CustomerApplication {
   businessName: string | null;
   status: string;
   paymentStatus: string;
-  paymentSource: 'stripe' | 'offline';
+  // FREE forms have no order (spec 037 C2): no payment source, nothing paid.
+  paymentSource: 'stripe' | 'offline' | null;
   applicantPays: number;
   refunded: number;
   paidAt: string | null;
@@ -54,8 +57,9 @@ interface CustomerApplication {
   createdAt: string;
   event: OrderEvent;
   detailUrl: string;
-  orderId?: string;
-  orderRef?: string;
+  orderId: string | null;
+  orderRef: string | null;
+  orderStatus: string | null;
 }
 
 interface CustomerRsvp {
@@ -199,6 +203,7 @@ function CustomerDetailPageContent() {
 
   // Actions menu state
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+  const [eraseOpen, setEraseOpen] = useState(false);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
 
   const fetchCustomer = useCallback(async () => {
@@ -358,6 +363,30 @@ function CustomerDetailPageContent() {
     } catch (err: any) {
       setTagError(err.message || 'Could not save tags');
       setTagSaving(false);
+    }
+  };
+
+  // ── Export customer data (spec 040 PA-11) ──────────────────────────────
+
+  const exportData = async () => {
+    if (!customer) return;
+    setSignInLinkResult(null);
+    try {
+      const data = await api.get<Record<string, unknown>>(`/admin/customers/${customer.id}/export`);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const name = `${customer.firstName}-${customer.lastName}`.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'customer';
+      link.href = url;
+      link.download = `${name}-customer-data-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setSignInLinkResult({ ok: true, message: 'Customer data downloaded.' });
+    } catch (err: any) {
+      setSignInLinkResult({
+        ok: false,
+        message: err.status === 403 ? 'Only administrators can export customer data.' : err.message || 'Could not export customer data.',
+      });
     }
   };
 
@@ -606,21 +635,37 @@ function CustomerDetailPageContent() {
                   Copy account URL
                 </button>
               )}
+              <button
+                onClick={() => { setActionsMenuOpen(false); exportData(); }}
+                className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700/50"
+              >
+                Export customer data
+              </button>
               <hr className="my-1 border-gray-200 dark:border-slate-700" />
               <button
-                disabled
-                title="Customer erasure will be available in a future update (spec 023)."
-                className="w-full text-left px-4 py-2 text-sm text-gray-400 dark:text-slate-500 cursor-not-allowed flex items-center gap-2"
+                onClick={() => { setActionsMenuOpen(false); setEraseOpen(true); }}
+                className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                 </svg>
                 Erase customer data
-                <span className="text-xs text-gray-400 dark:text-slate-500">(coming soon)</span>
               </button>
             </div>
           )}
         </div>
+        {eraseOpen && (
+          <EraseCustomerDialog
+            contactId={customer.id}
+            customerName={`${customer.firstName} ${customer.lastName}`.trim() || customer.email}
+            onClose={() => setEraseOpen(false)}
+            onErased={() => {
+              setEraseOpen(false);
+              setSignInLinkResult({ ok: true, message: 'Customer data erased.' });
+              fetchCustomer();
+            }}
+          />
+        )}
         <nav aria-label="Customer navigation" className="flex items-center gap-2 mr-2">
           {customer.prevId ? (
             <Link href={customerHref(customer.prevId)} aria-label="Previous customer" className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700">
@@ -772,7 +817,7 @@ function CustomerDetailPageContent() {
                         <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
                           {application.businessName || application.form.name}
                         </span>
-                        <StatusBadge status={application.paymentStatus} />
+                        <StatusBadge status={application.form.kind === 'FREE' ? application.status : application.paymentStatus} />
                       </div>
                       <p className="text-xs text-gray-500 dark:text-slate-400 truncate">
                         {application.event.name} &middot; {application.form.name}
@@ -780,7 +825,7 @@ function CustomerDetailPageContent() {
                       </p>
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">{formatCurrency(application.applicantPays)}</p>
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">{application.form.kind === 'FREE' ? 'Free' : formatCurrency(application.applicantPays)}</p>
                       <p className="text-xs text-gray-500 dark:text-slate-400">
                         {application.refunded > 0 ? `${formatCurrency(application.refunded)} refunded` : application.paidAt ? `Paid ${formatDate(application.paidAt)}` : application.status.toLowerCase()}
                       </p>
@@ -1106,8 +1151,10 @@ function CustomerDetailPageContent() {
 
 export default function CustomerDetailPage() {
   return (
-    <Suspense fallback={<div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">Loading customer…</div>}>
-      <CustomerDetailPageContent />
-    </Suspense>
+    <ReauthProvider>
+      <Suspense fallback={<div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">Loading customer…</div>}>
+        <CustomerDetailPageContent />
+      </Suspense>
+    </ReauthProvider>
   );
 }

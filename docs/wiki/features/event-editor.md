@@ -1,5 +1,7 @@
 # Event Editor (Admin)
 
+> **Spec 037 phase 3:** the edit page is now two section editors over one component (`edit/EventEditor.tsx`, `scope` prop): `/admin/events/:id/edit/details` (Details, Media, Date & venue, Listing) and `/admin/events/:id/edit/sales` (Admission, Price tiers, Add-ons). Each saves only its fields and returns to the event's Details page; `/edit` redirects by hash. Small edits (one tier, admission, listing, form settings) happen in flyouts on the Details page — see [Event Details](event-details.md).
+
 **Status**: Implemented
 **Last Updated**: 2026-09-25
 

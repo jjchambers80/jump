@@ -7,11 +7,11 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useOrg } from '@/components/OrgContext';
 import api from '@/services/api';
+import EventWorkspaceHeader from '@/components/events/EventWorkspace';
 import type { AddOnSales } from '@/lib/addOns';
 import { formatEventDateTime } from '@/lib/eventTime';
 import { rsvpAnalyticsCards, type RsvpAnalyticsSummary } from '@/lib/eventAnalytics';
@@ -170,16 +170,8 @@ export default function EventAnalyticsPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
-      {/* Back link */}
-      <Link
-        href="/admin/events"
-        className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 mb-6 inline-block"
-      >
-        ← Back to Events
-      </Link>
-
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Event Analytics</h1>
+    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+      <EventWorkspaceHeader eventId={eventId} current="analytics" title="Analytics" />
 
       {/* Error */}
       {error && (

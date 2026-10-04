@@ -1,17 +1,24 @@
 // Public application status page (spec 011): reached from the confirmation
 // email, right after submitting, or back from Stripe Checkout, with a signed
-// token in the URL. Paid applications can resume an abandoned Checkout or pay
-// an outstanding balance from here (phase 2); add-on lines (spec 012) are
-// itemised under the amount. Approved vendors on a map-bound tier choose and
-// buy their booth here (spec 014 phase 2).
+// token in the URL. Spec 037 phase 5 (apply-then-choose): an approved vendor
+// on a PAID form chooses their space here — from the list or on the floor
+// map — and pays (ChooseSpace). A MAP form's spot choice takes the whole
+// screen (compact hero, map beside the list from lg; `usesSpotWorkspace`),
+// with this application's summary in the list column. Otherwise the page is two
+// columns from lg (status and the space steps, then the vendor's answers in a
+// sticky aside) and stacks on phones. Extras are their own step before paying,
+// only when the space type offers any (ChooseSpace). Add-on lines (spec 012)
+// are itemised under the amount once a space is chosen. Rows from before the change can still resume
+// an abandoned Checkout or pay an outstanding balance.
 'use client';
 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import api, { mapsApi } from '@/services/api';
-import { formatDate, money, PAYMENT_LABEL, STATUS_LABEL, STATUS_STYLE, needsBoothPicker, type ApplicantApplication } from '@/lib/applications';
-import BoothPicker from '@/components/maps/BoothPicker';
+import { CalendarClock } from 'lucide-react';
+import api, { type ChooseBoothResult } from '@/services/api';
+import { formatDate, money, PAYMENT_LABEL, STATUS_LABEL, STATUS_STYLE, needsSpaceChoice, type AddOnLineInput, type ApplicantApplication } from '@/lib/applications';
+import ChooseSpace, { usesSpotWorkspace } from '@/components/applications/ChooseSpace';
 import ApplyShell from '../../ApplyShell';
 
 const STATUS_COPY: Record<ApplicantApplication['status'], string> = {
@@ -31,6 +38,7 @@ const CHECKOUT_NOTICE: Record<string, string> = {
 };
 
 const PAYMENT_COPY: Partial<Record<ApplicantApplication['paymentStatus'], string>> = {
+  NOT_DUE: 'Nothing to pay now. If you are approved, you will choose your space and pay then.',
   AWAITING_CARD: 'No card saved yet.',
   CARD_ON_FILE: 'Your card is on file and will only be charged if you are accepted.',
   PROCESSING: 'Your payment is being confirmed.',
@@ -103,133 +111,209 @@ function StatusContent({ params }: { params: { eventId: string; applicationId: s
     }
   };
 
+  // The spot chooser gets the full width and a compact hero.
+  const workspace = Boolean(app && token && usesSpotWorkspace(app));
+
   return (
-    <ApplyShell eventId={params.eventId} title="Your application">
+    <ApplyShell eventId={params.eventId} title="Your application" width={workspace ? 'full' : 'wide'} hero={workspace ? 'compact' : 'full'}>
       {(event) => {
         if (error) return <p role="alert" data-testid="apply-status-error" className="text-red-700 dark:text-red-300">{error}</p>;
         if (!app) return <p className="text-gray-600 dark:text-slate-400">Loading…</p>;
         const accountHref = event.organizationId ? `/organizations/${event.organizationId}/account` : null;
-        // Spec 014 phase 2: the picker owns paying while a booth is chosen or held;
-        // a booth placed by staff keeps the plain Pay button.
-        const pickBooth = needsBoothPicker(app);
-        return (
-          <div className="space-y-6" data-testid="apply-status">
-            {checkout && CHECKOUT_NOTICE[checkout] && (
-              <p role="status" data-testid="apply-checkout-notice" className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-800 dark:bg-green-900/20 dark:text-green-300">
-                {CHECKOUT_NOTICE[checkout]}
+        // Spec 037 phase 5: choosing (and paying for) the space owns the payment step.
+        const choosing = needsSpaceChoice(app);
+        const guest = token ? encodeURIComponent(token) : '';
+        const spaceApi = {
+          select: (body: { boothId?: string | null; addOns: AddOnLineInput[]; useSavedCard?: boolean }) =>
+            api.post<ChooseBoothResult & { orderRef?: string | null }>(`/applications/${app.id}/select?token=${guest}`, body),
+          pay: () => api.post<{ url: string }>(`/applications/${app.id}/pay?token=${guest}`, {}),
+          release: () => api.post(`/applications/${app.id}/release?token=${guest}`, {}),
+        };
+        const checkoutNotice = checkout && CHECKOUT_NOTICE[checkout] && (
+          <p role="status" data-testid="apply-checkout-notice" className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-800 dark:bg-green-900/20 dark:text-green-300">
+            {CHECKOUT_NOTICE[checkout]}
+          </p>
+        );
+        const answerRows = (
+          <dl className="space-y-3">
+            {app.answers.map((a) => (
+              <div key={a.questionId}>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">{a.label}</dt>
+                <dd className="text-sm text-gray-800 dark:text-slate-200">
+                  {a.image ? <img src={a.image.urls.thumb} alt={a.label} className="mt-1 h-24 w-24 rounded object-cover" /> : Array.isArray(a.value) ? a.value.join(', ') : a.value === 'true' ? 'Yes' : a.value === 'false' ? 'No' : a.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        );
+        const accountLink = accountHref && (
+          <p className="text-sm text-gray-600 dark:text-slate-400">
+            Want to see all your applications, withdraw, or update your card?{' '}
+            <Link href={accountHref} className="text-brand-link font-semibold hover:underline">Sign in to your account</Link> with {app.profile ? 'the email you applied with' : 'your email'}.
+          </p>
+        );
+        const dates = (
+          <p className="text-xs text-gray-500 dark:text-slate-400">
+            Submitted {formatDate(app.submittedAt, true)}{app.decidedAt ? ` · decided ${formatDate(app.decidedAt, true)}` : ''}
+          </p>
+        );
+
+        // Workspace: one compact card instead of three repeats of "choose your space and pay".
+        const summary = (
+          <div className="space-y-3" data-testid="apply-status">
+            {checkoutNotice}
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs text-gray-600 dark:text-slate-400">
+                  {app.form.name}
+                  {app.tier ? ` · ${app.tier.name}` : ''}
+                </p>
+                <p className="truncate text-lg font-semibold leading-snug text-gray-900 dark:text-slate-100" title={app.profile.businessName}>
+                  {app.profile.businessName}
+                </p>
+              </div>
+              <span data-testid="apply-status-pill" className={`shrink-0 rounded-full px-3 py-1 text-sm font-semibold ${STATUS_STYLE[app.status]}`}>{STATUS_LABEL[app.status]}</span>
+            </div>
+            {app.paymentDueAt && (
+              <p className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900 ring-1 ring-inset ring-amber-200 dark:bg-amber-900/20 dark:text-amber-200 dark:ring-amber-800" data-testid="apply-payment">
+                <CalendarClock className="h-3.5 w-3.5" aria-hidden />
+                Choose and pay by {formatDate(app.paymentDueAt)}
               </p>
             )}
-            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-5 sm:p-6">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-slate-400">
-                    {app.form.name}{app.tier ? ` · ${app.tier.name}` : ''}
-                    {app.orderRef ? <span className="font-mono" data-testid="apply-order-ref"> · Order {app.orderRef}</span> : null}
-                  </p>
-                  <h2 className="text-xl font-semibold text-gray-900 dark:text-slate-100">{app.profile.businessName}</h2>
-                </div>
-                <span data-testid="apply-status-pill" className={`rounded-full px-3 py-1 text-sm font-semibold ${STATUS_STYLE[app.status]}`}>{STATUS_LABEL[app.status]}</span>
-              </div>
-              <p className="mt-4 text-gray-800 dark:text-slate-200">{STATUS_COPY[app.status]}</p>
-              {app.status === 'APPROVED' && (app.booth?.status === 'SOLD' || app.booth?.status === 'RESERVED' || (!app.booth && app.boothLabel)) && (
-                <p className="mt-2 text-sm text-gray-700 dark:text-slate-300" data-testid="apply-placement">
-                  {app.booth ? 'Booth' : 'Placement'}: <strong>{app.booth?.label ?? app.boothLabel}</strong>
-                  {app.booth?.w && app.booth?.h ? ` · ${app.booth.w}×${app.booth.h}` : ''}
-                  {app.booth && (
-                    <>
-                      {' · '}
-                      <Link href={`/events/${app.event.id}/map?booth=${encodeURIComponent(app.booth.label)}`} className="text-brand-link font-semibold hover:underline">
-                        See it on the map
-                      </Link>
-                    </>
-                  )}
-                </p>
-              )}
-              {app.form.kind === 'PAID' && (
-                <div className="mt-3 rounded-lg bg-gray-50 dark:bg-slate-900/40 p-3 text-sm text-gray-700 dark:text-slate-300" data-testid="apply-payment">
-                  <p>
-                    <span className="font-semibold">Payment:</span> {PAYMENT_LABEL[app.paymentStatus]}
-                    {app.amounts.applicantPays > 0 ? ` · ${money(app.amounts.applicantPays)}` : ''}
-                    {app.paymentStatus === 'PAYMENT_DUE' && app.paymentDueAt ? ` · due ${formatDate(app.paymentDueAt)}` : ''}
-                    {app.refundedTotal > 0 ? ` · ${money(app.refundedTotal)} refunded` : ''}
-                  </p>
-                  {(app.addOns?.length > 0 || (app.adjustments?.length ?? 0) > 0) && (
-                    <ul className="mt-2 space-y-0.5 text-xs text-gray-600 dark:text-slate-400" data-testid="apply-add-ons">
-                      <li className="flex justify-between gap-3">
-                        <span>{app.tier?.name ?? app.form.name}</span>
-                        <span>{money(app.amounts.applicantPays - (app.addOns ?? []).reduce((s, l) => s + l.applicantPays, 0))}</span>
-                      </li>
-                      {(app.adjustments?.length ?? 0) > 0 && (
-                        <li className="pl-3 italic text-gray-500 dark:text-slate-500" data-testid="apply-adjustment">
-                          Includes {(app.adjustments ?? []).map((adj) => `${adj.reason} (${adj.amount < 0 ? `−${money(-adj.amount)}` : `+${money(adj.amount)}`})`).join(', ')}
-                        </li>
-                      )}
-                      {(app.addOns ?? []).map((l) => (
-                        <li key={l.id} className="flex justify-between gap-3">
-                          <span>{l.name} ×{l.quantity}</span>
-                          <span>{money(l.applicantPays)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {app.status !== 'DRAFT' && (pickBooth || PAYMENT_COPY[app.paymentStatus]) && (
-                    <p className="mt-1 text-gray-600 dark:text-slate-400">
-                      {pickBooth ? 'Choose your booth below to pay and confirm your spot.' : PAYMENT_COPY[app.paymentStatus]}
+          </div>
+        );
+        const footer = (
+          <div className="space-y-4 border-t border-gray-200 pt-5 dark:border-slate-700">
+            {app.answers.length > 0 && (
+              <details className="group rounded-xl border border-gray-200 dark:border-slate-700">
+                <summary className="cursor-pointer select-none rounded-xl px-4 py-3 text-sm font-semibold text-gray-900 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link dark:text-slate-100 dark:hover:bg-slate-800">
+                  What you told us
+                </summary>
+                <div className="px-4 pb-4">{answerRows}</div>
+              </details>
+            )}
+            {accountLink}
+            {dates}
+          </div>
+        );
+
+        // ChooseSpace keeps one place in the tree in both layouts (only class
+        // names change, and the main column wraps it either way), so a hold
+        // that turns the workspace into the held view never remounts it
+        // mid-charge and loses its poll or notice.
+        //
+        // From lg the page is two columns, like the apply form: the status and
+        // the space steps on the left, what the vendor told us beside them.
+        return (
+          <div
+            className={workspace ? undefined : 'space-y-6 lg:grid lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start lg:gap-10 lg:space-y-0'}
+            data-testid={workspace ? undefined : 'apply-status'}
+          >
+            <div className={workspace ? undefined : 'min-w-0 space-y-6'}>
+            {!workspace && checkoutNotice}
+            {!workspace && (
+              <div className="bg-white dark:bg-slate-800 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm p-5 sm:p-6">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm text-gray-600 dark:text-slate-400">
+                      {app.form.name}{app.tier ? ` · ${app.tier.name}` : ''}
+                      {app.orderRef ? <span className="font-mono" data-testid="apply-order-ref"> · Order {app.orderRef}</span> : null}
                     </p>
-                  )}
-                  {(app.canResume || app.canPay) && !pickBooth && (
-                    <div className="mt-3 flex flex-wrap items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => goToCheckout(app.canResume ? 'resume' : 'pay')}
-                        disabled={busy}
-                        data-testid={app.canResume ? 'apply-resume' : 'apply-pay-now'}
-                        className="rounded-lg bg-brand px-4 py-2 font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-60 transition-colors"
-                      >
-                        {busy ? 'Opening…' : app.canResume ? 'Finish submitting' : `Pay ${money(app.amounts.applicantPays)} now`}
-                      </button>
-                      {actionError && <span role="alert" className="text-red-700 dark:text-red-300">{actionError}</span>}
-                    </div>
-                  )}
+                    <h2 className="text-xl font-semibold text-gray-900 dark:text-slate-100">{app.profile.businessName}</h2>
+                  </div>
+                  <span data-testid="apply-status-pill" className={`rounded-full px-3 py-1 text-sm font-semibold ${STATUS_STYLE[app.status]}`}>{STATUS_LABEL[app.status]}</span>
                 </div>
-              )}
-              {pickBooth && token && (
-                <div className="mt-4 border-t border-gray-200 pt-4 dark:border-slate-700">
-                  <BoothPicker
-                    eventId={app.event.id}
-                    application={app}
-                    chooseBooth={(boothId) => mapsApi.chooseBooth(app.id, boothId, token)}
-                    payNow={() => api.post<{ url: string }>(`/applications/${app.id}/pay?token=${encodeURIComponent(token)}`, {})}
-                    refresh={load}
-                  />
-                </div>
-              )}
-              <p className="mt-4 text-xs text-gray-500 dark:text-slate-400">
-                Submitted {formatDate(app.submittedAt, true)}{app.decidedAt ? ` · decided ${formatDate(app.decidedAt, true)}` : ''}
-              </p>
+                <p className="mt-4 text-gray-800 dark:text-slate-200" data-testid="apply-status-copy">
+                  {choosing ? 'You are approved! Choose your space and pay to confirm your spot.' : STATUS_COPY[app.status]}
+                </p>
+                {app.status === 'APPROVED' && (app.booth?.status === 'SOLD' || app.booth?.status === 'RESERVED' || (!app.booth && app.boothLabel)) && (
+                  <p className="mt-2 text-sm text-gray-700 dark:text-slate-300" data-testid="apply-placement">
+                    {app.booth ? 'Booth' : 'Placement'}: <strong>{app.booth?.label ?? app.boothLabel}</strong>
+                    {app.booth?.w && app.booth?.h ? ` · ${app.booth.w}×${app.booth.h}` : ''}
+                    {app.booth && (
+                      <>
+                        {' · '}
+                        <Link href={`/events/${app.event.id}/map?booth=${encodeURIComponent(app.booth.label)}`} className="text-brand-link font-semibold hover:underline">
+                          See it on the map
+                        </Link>
+                      </>
+                    )}
+                  </p>
+                )}
+                {/* Choosing: the steps below own the payment; one due date here instead of a third "choose and pay". */}
+                {choosing && app.paymentDueAt && (
+                  <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900 ring-1 ring-inset ring-amber-200 dark:bg-amber-900/20 dark:text-amber-200 dark:ring-amber-800" data-testid="apply-payment">
+                    <CalendarClock className="h-3.5 w-3.5" aria-hidden />
+                    Choose and pay by {formatDate(app.paymentDueAt)}
+                  </p>
+                )}
+                {app.form.kind === 'PAID' && !choosing && (
+                  <div className="mt-3 rounded-lg bg-gray-50 dark:bg-slate-900/40 p-3 text-sm text-gray-700 dark:text-slate-300" data-testid="apply-payment">
+                    <p>
+                      <span className="font-semibold">Payment:</span> {PAYMENT_LABEL[app.paymentStatus]}
+                      {app.amounts.applicantPays > 0 ? ` · ${money(app.amounts.applicantPays)}` : ''}
+                      {['PAYMENT_DUE', 'AWAITING_SELECTION'].includes(app.paymentStatus) && app.paymentDueAt ? ` · due ${formatDate(app.paymentDueAt)}` : ''}
+                      {app.refundedTotal > 0 ? ` · ${money(app.refundedTotal)} refunded` : ''}
+                    </p>
+                    {(app.addOns?.length > 0 || (app.adjustments?.length ?? 0) > 0) && (
+                      <ul className="mt-2 space-y-0.5 text-xs text-gray-600 dark:text-slate-400" data-testid="apply-add-ons">
+                        <li className="flex justify-between gap-3">
+                          <span>{app.tier?.name ?? app.form.name}</span>
+                          <span>{money(app.amounts.applicantPays - (app.addOns ?? []).reduce((s, l) => s + l.applicantPays, 0))}</span>
+                        </li>
+                        {(app.adjustments?.length ?? 0) > 0 && (
+                          <li className="pl-3 italic text-gray-500 dark:text-slate-500" data-testid="apply-adjustment">
+                            Includes {(app.adjustments ?? []).map((adj) => `${adj.reason} (${adj.amount < 0 ? `−${money(-adj.amount)}` : `+${money(adj.amount)}`})`).join(', ')}
+                          </li>
+                        )}
+                        {(app.addOns ?? []).map((l) => (
+                          <li key={l.id} className="flex justify-between gap-3">
+                            <span>{l.name} ×{l.quantity}</span>
+                            <span>{money(l.applicantPays)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {app.status !== 'DRAFT' && PAYMENT_COPY[app.paymentStatus] && (
+                      <p className="mt-1 text-gray-600 dark:text-slate-400">{PAYMENT_COPY[app.paymentStatus]}</p>
+                    )}
+                    {(app.canResume || app.canPay) && (
+                      <div className="mt-3 flex flex-wrap items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => goToCheckout(app.canResume ? 'resume' : 'pay')}
+                          disabled={busy}
+                          data-testid={app.canResume ? 'apply-resume' : 'apply-pay-now'}
+                          className="rounded-lg bg-brand px-4 py-2 font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-60 transition-colors"
+                        >
+                          {busy ? 'Opening…' : app.canResume ? 'Finish submitting' : `Pay ${money(app.amounts.applicantPays)} now`}
+                        </button>
+                        {actionError && <span role="alert" className="text-red-700 dark:text-red-300">{actionError}</span>}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <div className="mt-4">{dates}</div>
+              </div>
+            )}
+
+            {choosing && token && (
+              <div className={workspace ? undefined : 'rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-6'}>
+                <ChooseSpace application={app} spaceApi={spaceApi} refresh={load} layout={workspace ? 'page' : 'inline'} summary={summary} footer={footer} />
+              </div>
+            )}
             </div>
 
-            {app.answers.length > 0 && (
-              <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-5 sm:p-6">
-                <h3 className="text-base font-semibold text-gray-900 dark:text-slate-100 mb-3">What you told us</h3>
-                <dl className="space-y-3">
-                  {app.answers.map((a) => (
-                    <div key={a.questionId}>
-                      <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">{a.label}</dt>
-                      <dd className="text-sm text-gray-800 dark:text-slate-200">
-                        {a.image ? <img src={a.image.urls.thumb} alt={a.label} className="mt-1 h-24 w-24 rounded object-cover" /> : Array.isArray(a.value) ? a.value.join(', ') : a.value === 'true' ? 'Yes' : a.value === 'false' ? 'No' : a.value}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-            )}
-
-            {accountHref && (
-              <p className="text-sm text-gray-600 dark:text-slate-400">
-                Want to see all your applications, withdraw, or update your card?{' '}
-                <Link href={accountHref} className="text-brand-link font-semibold hover:underline">Sign in to your account</Link> with {app.profile ? 'the email you applied with' : 'your email'}.
-              </p>
+            {!workspace && (
+              <aside className="space-y-6 lg:sticky lg:top-6" aria-label="Application details" data-testid="apply-status-aside">
+                {app.answers.length > 0 && (
+                  <section aria-labelledby="apply-answers-title" className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-6">
+                    <h2 id="apply-answers-title" className="mb-3 text-base font-semibold text-gray-900 dark:text-slate-100">What you told us</h2>
+                    {answerRows}
+                  </section>
+                )}
+                {accountLink}
+              </aside>
             )}
           </div>
         );

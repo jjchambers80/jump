@@ -93,8 +93,8 @@ export default function DoorCheckInPage({ params }: { params: { eventId: string 
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
-      <Link href={`/admin/events/${eventId}/applications`} className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300">
-        ← Back to Applications
+      <Link href={`/admin/events/${eventId}`} className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300">
+        ← Back to event
       </Link>
 
       <header className="mt-2">

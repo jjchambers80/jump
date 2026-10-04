@@ -5,7 +5,9 @@
 //   POST /events/:eventId/applications               submit (JSON, or multipart with `payload` + photos)
 //   GET  /applications/:id/status?token=             guest status page
 //   POST /applications/:id/resume?token=             new Checkout URL for an unfinished paid application
-//   POST /applications/:id/pay?token=                pay-now Checkout URL (approved, payment due)
+//   POST /applications/:id/pay?token=                pay-now Checkout URL (approved, payment due / space held)
+//   POST /applications/:id/select?token=             choose a space: booth or category + add-ons (spec 037 phase 5)
+//   POST /applications/:id/release?token=            give back a held space
 //
 // Unauthenticated. Submission is rate-limited per client IP (the storefront
 // proxies through Next, so the signed X-Jump-Client-Ip header is honoured).
@@ -19,6 +21,7 @@ import { ValidationError } from '../../middleware/errorHandler.js';
 import { LIMITS, makeLimiter } from '../../middleware/rateLimit.js';
 import { requestMeta } from '../../services/LegalAcceptanceService.js';
 import { gateByEventParam, gateStorefront } from '../../middleware/storefrontGate.js';
+import { validateSelectionBody } from '../validators/applicationValidators.js';
 
 export const eventApplicationsRouter = express.Router({ mergeParams: true });
 export const applicationStatusRouter = express.Router();
@@ -168,6 +171,29 @@ applicationStatusRouter.post('/:id/cancel-checkout', boothLimiter, async (req, r
 applicationStatusRouter.post('/:id/booth', boothLimiter, async (req, res, next) => {
   try {
     res.json(await applicationService.chooseBooth(req.params.id, req.query.token, req.body?.boothId));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Spec 037 phase 5: choose a space — `{ boothId?, addOns?, useSavedCard? }`.
+ * A booth from the published map, or (no boothId) the category from the list.
+ * Holds it for 15 minutes and opens the order; with `useSavedCard` the card
+ * on file is charged at once, otherwise `POST …/pay` opens Checkout.
+ */
+applicationStatusRouter.post('/:id/select', boothLimiter, validateSelectionBody, async (req, res, next) => {
+  try {
+    res.json(await applicationService.selectByToken(req.params.id, req.query.token, req.body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** Spec 037 phase 5: give back a held space to choose another. */
+applicationStatusRouter.post('/:id/release', boothLimiter, async (req, res, next) => {
+  try {
+    res.json(await applicationService.releaseByToken(req.params.id, req.query.token));
   } catch (error) {
     next(error);
   }

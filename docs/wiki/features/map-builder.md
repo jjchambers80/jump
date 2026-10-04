@@ -37,7 +37,7 @@ None. The builder uses the existing `/admin/maps/*` API.
 4. **Turn** swaps width and depth around the centre (walls switch horizontal/vertical). Legacy `rotation: 90` booths are turned back to `rotation: 0`; the builder never creates new rotated booths.
 5. **Saving.** Every change bumps a revision; 1.2 s later `save()` PATCHes the settings and PUTs the whole layout, reading the *latest* state through a ref. Edits made during a save trigger another save when it finishes. The header shows "All changes saved" / "Saving…" / "Unsaved changes" / "Not saved — try again" in a live region; `beforeunload` warns while a revision is unsaved. After a save, booths adopt the server ids and states by label (the backend upserts by label), including ids inside the undo/redo stacks.
 6. **Full screen.** The header's Full screen button (or F) turns on focus mode: the builder root becomes `fixed inset-0` above the admin sidebar and top bar, and the browser's own full screen is requested on `<html>`. It is requested on the document, not on the builder, because the builder's dialogs render inline and would be hidden outside a full-screen element. If the browser refuses (iframe, old Safari), the CSS focus mode alone still hides the admin chrome. Esc exits: in browser full screen the browser handles it and `fullscreenchange` turns focus mode off; otherwise Esc cancels Move-to, then clears the selection, then leaves focus mode. Leaving the page also exits browser full screen. The magnifier-in-corners button next to the zoom level is *Fit floor to screen* (0), a view reset, not full screen.
-7. **Publishing** saves first, then shows each tier's booth count and warns about booths with no tier.
+7. **Publishing** saves first, then shows each tier's booth count and warns about booths with no tier. On publish every tier a booth points at becomes map-bound (spec 037 phase 5: derived from the booths, no flag) and its quantity becomes its booth count; the form's legacy `chargeTiming` is no longer checked. Approved vendors of that category then see the Map tab when they choose their space.
 
 ## API Endpoints
 
@@ -73,6 +73,10 @@ Unchanged; see [floor-maps.md](floor-maps.md).
 - Deleting a SOLD / HELD / RESERVED booth is refused in the UI (the backend would 409 `BOOTH_IN_USE`); the others in the selection are still deleted.
 - `MapElement` draws text labels and walls inside their `x, y, w, h` box (walls as a bar along the box, text centred). Before this change a label's text sat above `y`; no layouts had elements then because the old toolbar never placed anything.
 - The global key handler ignores keys while a field is focused or any `aria-modal` dialog is open.
+
+## Spot prices (spec 039)
+
+The details panel has a **Spot price** field for one booth or a multi-selection. Empty means the tier's price. It is saved with the layout and marked with a `$` badge on the canvas. It is locked on held, sold or placed spots. See [Vendor Space Selection](vendor-space-selection.md).
 
 ## Related Features
 

@@ -53,7 +53,7 @@ test.describe('public organization logo header', () => {
     const coverDims = (await cover.boundingBox())!;
     expect(Math.round(headerDims.x)).toBe(0);
     expect(Math.round(headerDims.width)).toBe(MOBILE.width);
-    expect(Math.round(boxDims.width)).toBe(56);
+    expect(Math.round(boxDims.width)).toBe(90);
     expect(coverDims.y).toBeGreaterThanOrEqual(headerDims.y + headerDims.height - 1);
     await expect(header.getByRole('heading', { name: 'Logo Test Org', level: 1 })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth === document.documentElement.clientWidth)).toBe(true);
@@ -70,7 +70,10 @@ test.describe('public organization logo header', () => {
     const boxDims = (await box.boundingBox())!;
     expect(Math.round(headerDims.x)).toBe(0);
     expect(Math.round(headerDims.width)).toBe(DESKTOP.width);
-    expect(Math.round(boxDims.width)).toBe(64);
+    expect(Math.round(boxDims.width)).toBe(120);
+    await expect(box).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    // Logo only: the name stays in the accessibility tree but is not painted.
+    await expect(header.getByRole('heading', { name: 'Logo Test Org', level: 1 })).toHaveClass(/sr-only/);
     await expect(header.getByRole('img', { name: 'Logo Test Org logo' })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth === document.documentElement.clientWidth)).toBe(true);
   });
@@ -90,6 +93,7 @@ test.describe('public organization logo header', () => {
 
     const header = page.getByTestId('organization-header');
     await expect(header.getByRole('heading', { name: 'Logo Test Org', level: 1 })).toBeVisible();
+    await expect(header.getByRole('heading', { name: 'Logo Test Org', level: 1 })).not.toHaveClass(/sr-only/);
     await expect(header.getByTestId('logo-box')).toHaveCount(0);
   });
 
@@ -130,7 +134,10 @@ test.describe('public organization logo header', () => {
       return { boxW, boxH, w, h };
     });
     expect(Math.round(painted.w)).toBe(Math.round(painted.boxW));
-    expect(painted.h).toBeLessThan(painted.boxH);
+    // No letterbox: the box is as tall as the logo, so a wordmark never pads the header.
+    expect(Math.round(painted.h)).toBe(Math.round(painted.boxH));
+    const dims = (await box.boundingBox())!;
+    expect(Math.round(dims.height)).toBe(Math.round(dims.width / 4));
   });
 
   test('portrait logo spans full height with no blurred backdrop', async ({ page }) => {
@@ -151,6 +158,67 @@ test.describe('public organization logo header', () => {
     });
     expect(Math.round(painted.h)).toBe(Math.round(painted.boxH));
     expect(painted.w).toBeLessThan(painted.boxW);
+  });
+
+  test('the header keeps its height while the logo loads (no layout shift)', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    // A slow 400×100 logo whose URL carries its size, as the backend serves it.
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.route(`${API}/images/logo-1/hash-1/original*`, async (route) => {
+      await held;
+      await route.fulfill({
+        status: 200,
+        contentType: 'image/svg+xml',
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="100"><rect width="400" height="100" fill="teal"/></svg>',
+      });
+    });
+    await mockOrg(page, 'org-slow-logo', `${API}/images/logo-1/hash-1/original?w=400&h=100`);
+    await page.goto('/organizations/org-slow-logo');
+
+    const header = page.getByTestId('organization-header');
+    const box = header.getByTestId('logo-box');
+    await expect(box).toBeAttached();
+    const before = (await header.boundingBox())!.height;
+    // The box is already the logo's shape: 120 px wide, 30 px tall.
+    expect(Math.round((await box.boundingBox())!.height)).toBe(30);
+
+    release();
+    await expect.poll(() => box.locator('img').evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+    expect((await header.boundingBox())!.height).toBe(before);
+  });
+
+  test('pages outside the theme frame use the theme logo widths from their payload', async ({ page }) => {
+    const future = new Date();
+    future.setFullYear(future.getFullYear() + 1);
+    await page.route(`${API}/events/ev-widths`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'ev-widths',
+          name: 'Widths Show',
+          description: '<p>Fixture</p>',
+          date: future.toISOString(),
+          taxRate: 0,
+          organizationId: 'org-widths',
+          organizationName: 'Logo Test Org',
+          organizationLogoUrl: svgLogo(200, 200, 'navy'),
+          organizationStorefrontLogo: { url: null, desktopWidth: 180, mobileWidth: 110 },
+          organizationBrandColor: null,
+          organizationThemeMode: 'LIGHT',
+          organizationSignInLinks: false,
+          venue: { id: 'v1', name: 'Hall', address: '1 St', timezone: 'America/New_York' },
+          priceTiers: [],
+        }),
+      })
+    );
+    await page.goto('/events/ev-widths');
+    const box = page.getByTestId('organization-header').getByTestId('logo-box');
+    await expect(box).toBeVisible();
+    expect(Math.round((await box.boundingBox())!.width)).toBe(110);
+    await page.setViewportSize(DESKTOP);
+    await expect.poll(async () => Math.round((await box.boundingBox())!.width)).toBe(180);
   });
 
   test('only one accessible logo image is exposed', async ({ page }) => {

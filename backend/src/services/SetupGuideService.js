@@ -60,7 +60,7 @@ class SetupGuideService {
       },
       { id: 'business', done: Boolean(org.companyName && org.addressLine1), href: '/admin/settings', shown: true },
       { id: 'domain', done: activeDomainCount > 0, href: '/admin/settings/domains', shown: true },
-      { id: 'applications', done: formCount > 0, href: '/admin/participants/applications', shown: showApplications },
+      { id: 'applications', done: formCount > 0, href: '/admin/events', shown: showApplications },
       // Phase 3: organizers selling at the door get pointed at the scanner
       { id: 'checkin', done: redeemedCount > 0, href: '/admin/orders/scan', shown: showCheckin },
     ];
