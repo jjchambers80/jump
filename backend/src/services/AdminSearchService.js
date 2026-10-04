@@ -142,10 +142,12 @@ class AdminSearchService {
           select: {
             id: true,
             eventId: true,
+            formId: true,
             status: true,
             contact: { select: { firstName: true, lastName: true, email: true } },
             profile: { select: { businessName: true } },
             event: { select: { name: true } },
+            form: { select: { name: true } },
           },
           orderBy: [{ submittedAt: 'desc' }, { id: 'asc' }],
           take: 5,
@@ -221,9 +223,11 @@ class AdminSearchService {
         type: 'APPLICATION',
         id: application.id,
         title: application.profile?.businessName || fullName(application.contact),
-        subtitle: [fullName(application.contact), application.event?.name].filter(Boolean).join(' · '),
-        href: `/admin/events/${application.eventId}/applications/${application.id}`,
-        meta: { eventId: application.eventId, status: application.status },
+        subtitle: [fullName(application.contact), application.event?.name || application.form?.name].filter(Boolean).join(' · '),
+        href: application.eventId
+          ? `/admin/events/${application.eventId}/applications/${application.id}`
+          : `/admin/content/forms/${application.formId}/submissions/${application.id}`,
+        meta: { eventId: application.eventId, formId: application.formId, status: application.status },
       })),
       ...pages.map((page) => ({
         type: 'PAGE',

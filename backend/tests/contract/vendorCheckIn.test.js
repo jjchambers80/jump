@@ -74,9 +74,9 @@ describe('Vendor door check-in (spec 036)', () => {
     sideShow = await prisma.event.create({ data: { venueId: venue.id, name: `${TAG} Side Show`, date: new Date('2027-06-10T15:00:00Z'), status: 'PUBLISHED', capacity: 100 } });
     eventB = await prisma.event.create({ data: { venueId: venueB.id, name: `${TAG} Rival Fest`, date: new Date('2027-05-01T15:00:00Z'), status: 'PUBLISHED', capacity: 100 } });
 
-    form = await prisma.applicationForm.create({ data: { eventId: expo.id, kind: 'FREE', name: 'Vendors', slug: 'vendors' } });
-    formSide = await prisma.applicationForm.create({ data: { eventId: sideShow.id, kind: 'FREE', name: 'Vendors', slug: 'vendors' } });
-    formB = await prisma.applicationForm.create({ data: { eventId: eventB.id, kind: 'FREE', name: 'Vendors', slug: 'vendors' } });
+    form = await prisma.applicationForm.create({ data: { organizationId: org.id, eventId: expo.id, kind: 'FREE', name: 'Vendors', slug: 'vendors' } });
+    formSide = await prisma.applicationForm.create({ data: { organizationId: org.id, eventId: sideShow.id, kind: 'FREE', name: 'Vendors', slug: 'vendors' } });
+    formB = await prisma.applicationForm.create({ data: { organizationId: orgB.id, eventId: eventB.id, kind: 'FREE', name: 'Vendors', slug: 'vendors' } });
 
     apps.clay = await vendor(org.id, expo.id, form.id, { businessName: 'Clay & Co' });
     apps.amps = await vendor(org.id, expo.id, form.id, { businessName: 'Amps Anonymous' });

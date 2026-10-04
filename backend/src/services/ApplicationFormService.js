@@ -104,6 +104,7 @@ export function applicationLines(tier, form, addOnLines = [], adjustmentTotal = 
 }
 
 const FORM_INCLUDE = {
+  organization: { select: { id: true, name: true, taxInclusivePricing: true, logoUrl: true } },
   tiers: { orderBy: { displayOrder: 'asc' }, include: { addOns: { select: { addOnId: true } } } },
   questions: { where: { archivedAt: null }, orderBy: { displayOrder: 'asc' } },
   _count: { select: { applications: true } },
@@ -126,6 +127,15 @@ class ApplicationFormService {
     return event;
   }
 
+  async requireOrganization(organizationId) {
+    const organization = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { id: true, name: true, taxInclusivePricing: true, logoUrl: true },
+    });
+    if (!organization) throw new NotFoundError('Organization not found');
+    return organization;
+  }
+
   // ---------------------------------------------------------------------------
   // Forms (admin)
   // ---------------------------------------------------------------------------
@@ -138,15 +148,16 @@ class ApplicationFormService {
    */
   async listFormsInScope(organizationId) {
     const forms = await prisma.applicationForm.findMany({
-      where: organizationId ? { event: { venue: { organizationId } } } : {},
+      where: { eventId: { not: null }, ...(organizationId ? { organizationId } : {}) },
       include: {
+        organization: { select: { id: true, name: true } },
         _count: { select: { applications: { where: { status: { not: 'DRAFT' } } } } },
         event: { select: { id: true, name: true, date: true, status: true, venue: { select: { timezone: true, organization: { select: { id: true, name: true } } } } } },
         questions: { where: { pinned: true, archivedAt: null }, select: { id: true, label: true, type: true }, orderBy: { displayOrder: 'asc' } },
       },
       orderBy: [{ event: { date: 'desc' } }, { displayOrder: 'asc' }, { createdAt: 'asc' }],
     });
-    const eventIds = [...new Set(forms.map((f) => f.eventId))];
+    const eventIds = [...new Set(forms.map((f) => f.eventId).filter(Boolean))];
     const addOns = eventIds.length
       ? await prisma.addOn.findMany({
           where: { eventId: { in: eventIds }, scope: { in: ['APPLICATION', 'BOTH'] }, isActive: true },
@@ -157,8 +168,8 @@ class ApplicationFormService {
     return forms.map((f) => ({
       id: f.id,
       eventId: f.eventId,
-      event: { id: f.event.id, name: f.event.name, date: f.event.date, status: f.event.status, timezone: f.event.venue?.timezone ?? null },
-      ...(organizationId ? {} : { organization: f.event.venue.organization }),
+      event: f.event ? { id: f.event.id, name: f.event.name, date: f.event.date, status: f.event.status, timezone: f.event.venue?.timezone ?? null } : null,
+      ...(organizationId ? {} : { organization: f.organization }),
       kind: f.kind,
       name: f.name,
       slug: f.slug,
@@ -200,6 +211,7 @@ class ApplicationFormService {
   async createForm(eventId, organizationId, body) {
     const event = await this.requireEvent(eventId, organizationId);
     if (!FORM_KINDS.has(body.kind)) throw new ValidationError('kind must be PAID or FREE');
+    if (body.collectBusiness === false) throw new ValidationError('Event application forms must collect business details');
     let template = null;
     if (body.templateId) {
       template = await applicationFormTemplateService.requireInScope(body.templateId, organizationId ?? event.venue.organizationId);
@@ -208,7 +220,7 @@ class ApplicationFormService {
     }
     const { templateId: _templateId, ...fields } = body;
     const settings = template ? { ...this._templateSettings(template.definition, body.kind), ...fields } : fields;
-    const data = { eventId, kind: body.kind, ...this._validateFormFields(settings, body.kind, null) };
+    const data = { eventId, organizationId: event.venue.organizationId, kind: body.kind, ...this._validateFormFields(settings, body.kind, null) };
     data.slug = await this._uniqueSlug(eventId, body.slug || data.name);
     if (body.tiers !== undefined) {
       if (body.kind === 'FREE' && body.tiers.length > 0) throw new ValidationError('FREE forms cannot have tiers');
@@ -308,6 +320,8 @@ class ApplicationFormService {
    * source tier id → copied tier id so add-on attachments can follow (spec 012).
    */
   async copyForms(fromEventId, toEventId, tx = prisma) {
+    const target = await tx.event.findUnique({ where: { id: toEventId }, select: { venue: { select: { organizationId: true } } } });
+    if (!target) throw new NotFoundError('Event not found');
     const forms = await tx.applicationForm.findMany({
       where: { eventId: fromEventId },
       include: {
@@ -322,6 +336,7 @@ class ApplicationFormService {
       const created = await tx.applicationForm.create({
         data: {
           eventId: toEventId,
+          organizationId: target.venue.organizationId,
           kind: f.kind,
           name: f.name,
           slug: f.slug,
@@ -355,6 +370,7 @@ class ApplicationFormService {
     const existing = await prisma.applicationForm.findFirst({ where: { id: formId, eventId }, include: { tiers: true } });
     if (!existing) throw new NotFoundError('Application form not found');
     if (body.kind !== undefined && body.kind !== existing.kind) throw new ValidationError('kind cannot be changed after creation');
+    if (body.collectBusiness === false) throw new ValidationError('Event application forms must collect business details');
     const data = this._validateFormFields(body, existing.kind, existing);
     if (body.slug !== undefined) data.slug = await this._uniqueSlug(eventId, body.slug, formId);
     if (data.status === 'OPEN') this._assertCanOpen({ ...existing, ...data });
@@ -370,6 +386,70 @@ class ApplicationFormService {
   async deleteForm(eventId, formId, organizationId) {
     await this.requireEvent(eventId, organizationId);
     const form = await prisma.applicationForm.findFirst({ where: { id: formId, eventId }, include: { _count: { select: { applications: true } } } });
+    if (!form) throw new NotFoundError('Application form not found');
+    if (form._count.applications > 0) throw new ConflictError('Close the form instead: it already has applications');
+    await prisma.applicationForm.delete({ where: { id: formId } });
+  }
+
+  // Standing forms belong directly to an organization and are always FREE.
+  async listStandingForms(organizationId) {
+    const organization = await this.requireOrganization(organizationId);
+    const forms = await prisma.applicationForm.findMany({
+      where: { organizationId, eventId: null },
+      include: FORM_INCLUDE,
+      orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
+    });
+    return forms.map((form) => this._serializeForm(form, null, [], organization));
+  }
+
+  async getStandingForm(organizationId, formId) {
+    const organization = await this.requireOrganization(organizationId);
+    const form = await prisma.applicationForm.findFirst({ where: { id: formId, organizationId, eventId: null }, include: FORM_INCLUDE });
+    if (!form) throw new NotFoundError('Application form not found');
+    return this._serializeForm(form, null, [], organization);
+  }
+
+  async createStandingForm(organizationId, body) {
+    const organization = await this.requireOrganization(organizationId);
+    if (body.kind !== undefined && body.kind !== 'FREE') throw new ValidationError('Standing forms must be FREE');
+    if (body.tiers?.length) throw new ValidationError('Standing forms cannot have tiers');
+    let template = null;
+    if (body.templateId) {
+      template = await applicationFormTemplateService.requireInScope(body.templateId, organizationId);
+      if (template.kind !== 'FREE') throw new ValidationError('Standing forms require a FREE template');
+      if (body.questions !== undefined) throw new ValidationError('questions come from the template');
+    }
+    const { templateId: _templateId, tiers: _tiers, ...fields } = body;
+    const settings = template ? { ...this._templateSettings(template.definition, 'FREE'), ...fields } : fields;
+    const data = { organizationId, eventId: null, kind: 'FREE', ...this._validateFormFields(settings, 'FREE', null) };
+    data.slug = await this._uniqueSlug({ organizationId, eventId: null }, body.slug || data.name);
+    if (body.questions !== undefined) {
+      data.questions = { create: body.questions.map((q, i) => this._validateQuestion(q, i)) };
+      this._assertPinnedCap(data.questions.create.filter((q) => q.pinned).length);
+    }
+    if (template) data.createdFromTemplateId = template.id;
+    const form = await prisma.$transaction(async (tx) => {
+      const created = await tx.applicationForm.create({ data, select: { id: true } });
+      if (template) await this._materialise(tx, created.id, { ...template.definition, tiers: [] });
+      return tx.applicationForm.findUnique({ where: { id: created.id }, include: FORM_INCLUDE });
+    });
+    return this._serializeForm(form, null, [], organization);
+  }
+
+  async updateStandingForm(organizationId, formId, body) {
+    const organization = await this.requireOrganization(organizationId);
+    const existing = await prisma.applicationForm.findFirst({ where: { id: formId, organizationId, eventId: null }, include: { tiers: true } });
+    if (!existing) throw new NotFoundError('Application form not found');
+    if (body.kind !== undefined && body.kind !== 'FREE') throw new ValidationError('Standing forms must be FREE');
+    if (body.tiers !== undefined || body.templateId !== undefined) throw new ValidationError('Standing forms cannot have tiers or change template');
+    const data = this._validateFormFields(body, 'FREE', existing);
+    if (body.slug !== undefined) data.slug = await this._uniqueSlug({ organizationId, eventId: null }, body.slug, formId);
+    const form = await prisma.applicationForm.update({ where: { id: formId }, data, include: FORM_INCLUDE });
+    return this._serializeForm(form, null, [], organization);
+  }
+
+  async deleteStandingForm(organizationId, formId) {
+    const form = await prisma.applicationForm.findFirst({ where: { id: formId, organizationId, eventId: null }, include: { _count: { select: { applications: true } } } });
     if (!form) throw new NotFoundError('Application form not found');
     if (form._count.applications > 0) throw new ConflictError('Close the form instead: it already has applications');
     await prisma.applicationForm.delete({ where: { id: formId } });
@@ -489,6 +569,51 @@ class ApplicationFormService {
     return prisma.applicationQuestion.findMany({ where: { formId, archivedAt: null }, orderBy: { displayOrder: 'asc' } });
   }
 
+  async _requireStandingForm(organizationId, formId) {
+    const form = await prisma.applicationForm.findFirst({ where: { id: formId, organizationId, eventId: null } });
+    if (!form) throw new NotFoundError('Application form not found');
+    return form;
+  }
+
+  async addStandingQuestion(organizationId, formId, body) {
+    await this._requireStandingForm(organizationId, formId);
+    const count = await prisma.applicationQuestion.count({ where: { formId, archivedAt: null } });
+    const data = this._validateQuestion(body, count);
+    if (data.pinned) this._assertPinnedCap((await prisma.applicationQuestion.count({ where: { formId, archivedAt: null, pinned: true } })) + 1);
+    return prisma.applicationQuestion.create({ data: { formId, ...data } });
+  }
+
+  async updateStandingQuestion(organizationId, formId, questionId, body) {
+    await this._requireStandingForm(organizationId, formId);
+    const existing = await prisma.applicationQuestion.findFirst({ where: { id: questionId, formId, archivedAt: null } });
+    if (!existing) throw new NotFoundError('Question not found');
+    const answered = await prisma.applicationAnswer.count({ where: { questionId } });
+    if (answered > 0 && body.type !== undefined && body.type !== existing.type) throw new ConflictError('Type cannot change once the question has answers; archive it and add a new one');
+    const data = this._validateQuestion({ ...existing, ...body }, existing.displayOrder);
+    if (data.pinned && !existing.pinned) this._assertPinnedCap((await prisma.applicationQuestion.count({ where: { formId, archivedAt: null, pinned: true } })) + 1);
+    return prisma.applicationQuestion.update({ where: { id: questionId }, data });
+  }
+
+  async removeStandingQuestion(organizationId, formId, questionId) {
+    await this._requireStandingForm(organizationId, formId);
+    const existing = await prisma.applicationQuestion.findFirst({ where: { id: questionId, formId, archivedAt: null } });
+    if (!existing) throw new NotFoundError('Question not found');
+    const answered = await prisma.applicationAnswer.count({ where: { questionId } });
+    if (answered > 0) {
+      await prisma.applicationQuestion.update({ where: { id: questionId }, data: { archivedAt: new Date() } });
+      return { archived: true };
+    }
+    await prisma.applicationQuestion.delete({ where: { id: questionId } });
+    return { archived: false };
+  }
+
+  async reorderStandingQuestions(organizationId, formId, ids) {
+    await this._requireStandingForm(organizationId, formId);
+    if (!Array.isArray(ids)) throw new ValidationError('ids must be an array');
+    await prisma.$transaction(ids.map((id, i) => prisma.applicationQuestion.updateMany({ where: { id, formId }, data: { displayOrder: i } })));
+    return prisma.applicationQuestion.findMany({ where: { formId, archivedAt: null }, orderBy: { displayOrder: 'asc' } });
+  }
+
   // ---------------------------------------------------------------------------
   // Public
   // ---------------------------------------------------------------------------
@@ -512,6 +637,16 @@ class ApplicationFormService {
     const form = await prisma.applicationForm.findFirst({ where: { eventId, slug, status: { in: ['OPEN', 'CLOSED'] } }, include: FORM_INCLUDE });
     if (!form) throw new NotFoundError('Application form not found');
     return this._serializePublicForm(form, event, await this._addOnsForEvent(eventId, { activeOnly: true }));
+  }
+
+  async publicStandingForm(organizationId, slug) {
+    const organization = await this.requireOrganization(organizationId);
+    const form = await prisma.applicationForm.findFirst({
+      where: { organizationId, eventId: null, slug, status: { in: ['OPEN', 'CLOSED'] } },
+      include: FORM_INCLUDE,
+    });
+    if (!form) throw new NotFoundError('Application form not found');
+    return this._serializePublicForm(form, null, [], organization);
   }
 
   /** Whether the form accepts submissions right now; reason when not. */
@@ -547,9 +682,9 @@ class ApplicationFormService {
     return form;
   }
 
-  async _uniqueSlug(eventId, raw, exceptFormId = null) {
+  async _uniqueSlug(scope, raw, exceptFormId = null) {
     return uniqueSlug(prisma.applicationForm, {
-      scope: { eventId },
+      scope: typeof scope === 'string' ? { eventId: scope } : scope,
       raw,
       exceptId: exceptFormId,
     });
@@ -587,6 +722,17 @@ class ApplicationFormService {
     if (body.displayOrder !== undefined) {
       if (!Number.isInteger(body.displayOrder) || body.displayOrder < 0) throw new ValidationError('displayOrder must be a non-negative integer');
       data.displayOrder = body.displayOrder;
+    }
+    if (body.collectBusiness !== undefined) {
+      if (typeof body.collectBusiness !== 'boolean') throw new ValidationError('collectBusiness must be a boolean');
+      data.collectBusiness = body.collectBusiness;
+    }
+    for (const [key, max] of [['buttonLabel', 80], ['successMessage', 2000]]) {
+      if (body[key] !== undefined) {
+        if (body[key] !== null && typeof body[key] !== 'string') throw new ValidationError(`${key} must be a string`);
+        if (body[key] && body[key].length > max) throw new ValidationError(`${key} must be ${max} characters or fewer`);
+        data[key] = body[key]?.trim() || null;
+      }
     }
     if (kind === 'PAID') {
       if (body.chargeTiming !== undefined) {
@@ -701,14 +847,18 @@ class ApplicationFormService {
     };
   }
 
-  _serializeForm(form, event, addOns = []) {
+  _serializeForm(form, event, addOns = [], organization = event?.venue?.organization || form.organization) {
     return {
       id: form.id,
       eventId: form.eventId,
+      organizationId: form.organizationId,
       kind: form.kind,
       name: form.name,
       slug: form.slug,
       intro: form.intro,
+      collectBusiness: form.collectBusiness,
+      buttonLabel: form.buttonLabel,
+      successMessage: form.successMessage,
       status: form.status,
       opensAt: form.opensAt,
       closesAt: form.closesAt,
@@ -722,7 +872,7 @@ class ApplicationFormService {
       acceptance: this.acceptance(form),
       paymentsEnabled: paymentsEnabled(),
       applicationCount: form._count?.applications ?? 0,
-      tiers: (form.tiers || []).map((t) => this._serializeTier(t, form, event, addOns)),
+      tiers: event ? (form.tiers || []).map((t) => this._serializeTier(t, form, event, addOns)) : [],
       questions: (form.questions || []).map((q) => this._serializeQuestion(q)),
       // Spec 012: every application add-on of the event, so the tier dialog can offer restricted ones.
       addOns: addOns.map((a) => ({ id: a.id, name: a.name, price: Number(a.price), allTiers: a.allTiers, isActive: a.isActive, scope: a.scope })),
@@ -732,21 +882,23 @@ class ApplicationFormService {
   }
 
   /** Applicant-facing: no internal counters, only the applicant price and availability. */
-  _serializePublicForm(form, event, addOns = []) {
-    const organization = event.venue.organization;
+  _serializePublicForm(form, event, addOns = [], organization = event?.venue?.organization || form.organization) {
     return {
       id: form.id,
       kind: form.kind,
       name: form.name,
       slug: form.slug,
       intro: form.intro,
+      collectBusiness: form.collectBusiness,
+      buttonLabel: form.buttonLabel,
+      successMessage: form.successMessage,
       acceptance: this.acceptance(form),
       chargeTiming: form.kind === 'PAID' ? form.chargeTiming : null,
       feeMode: form.kind === 'PAID' ? form.feeMode : null,
       // Spec 024 phase 3: the card-authorization label names the pay-now window.
       paymentDueDays: form.kind === 'PAID' ? form.paymentDueDays : null,
       organizationName: organization?.name ?? null,
-      tiers: (form.tiers || [])
+      tiers: event ? (form.tiers || [])
         .filter((t) => t.isActive)
         .map((t) => {
           const amounts = tierAmounts(t.price, form, event, organization);
@@ -762,7 +914,7 @@ class ApplicationFormService {
             // Spec 012: optional extras with the per-unit applicant price under this form's fee mode.
             addOns: this._offeredOnTier(t, addOns).map((a) => this._serializePublicAddOn(a, form, event, organization)),
           };
-        }),
+        }) : [],
       questions: (form.questions || []).map((q) => this._serializeQuestion(q)),
     };
   }

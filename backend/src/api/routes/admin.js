@@ -535,21 +535,21 @@ async function participantsScopeFor(req) {
 router.get('/applications', wrap(async (req, res) => {
   const scope = await participantsScopeFor(req);
   if (scope.empty) return res.json({ data: [], total: 0, page: 1, pageSize: 0, summary: {} });
-  res.json(await applicationService.listInScope({ organizationId: scope.organizationId }, req.query));
+  res.json(await applicationService.listInScope({ organizationId: scope.organizationId, eventOnly: true }, req.query));
 }));
 router.get('/applications/summary', wrap(async (req, res) => {
   const scope = await participantsScopeFor(req);
   if (scope.empty) return res.json({});
-  res.json(await applicationService.summaryInScope({ organizationId: scope.organizationId }));
+  res.json(await applicationService.summaryInScope({ organizationId: scope.organizationId, eventOnly: true }));
 }));
 router.get('/applications/tags', wrap(async (req, res) => {
   const scope = await participantsScopeFor(req);
   if (scope.empty) return res.json({ data: [] });
-  res.json({ data: await applicationService.distinctTags({ organizationId: scope.organizationId }) });
+  res.json({ data: await applicationService.distinctTags({ organizationId: scope.organizationId, eventOnly: true }) });
 }));
 router.get('/applications/export.csv', wrap(async (req, res) => {
   const scope = await participantsScopeFor(req);
-  const csv = scope.empty ? '' : await applicationService.exportCsvInScope({ organizationId: scope.organizationId }, req.query);
+  const csv = scope.empty ? '' : await applicationService.exportCsvInScope({ organizationId: scope.organizationId, eventOnly: true }, req.query);
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="participants-${new Date().toISOString().slice(0, 10)}.csv"`);
   res.send(csv);
@@ -557,12 +557,96 @@ router.get('/applications/export.csv', wrap(async (req, res) => {
 router.post('/applications/bulk', validateBulkBody, wrap(async (req, res) => {
   const scope = await participantsScopeFor(req);
   if (scope.empty) return res.json({ results: req.body.ids.map((id) => ({ id, ok: false, error: 'Application not found' })), succeeded: 0, failed: req.body.ids.length });
-  res.json(await applicationService.bulkDecideInScope(scope.organizationId, { ...req.body, byUserId: req.user.id }));
+  res.json(await applicationService.bulkDecideInScope({ organizationId: scope.organizationId, eventOnly: true }, { ...req.body, byUserId: req.user.id }));
 }));
 router.get('/application-forms', wrap(async (req, res) => {
   const scope = await participantsScopeFor(req);
   if (scope.empty) return res.json({ data: [] });
   res.json({ data: await applicationFormService.listFormsInScope(scope.organizationId) });
+}));
+
+// Standing application forms (spec 044): organization content with no event.
+router.get('/standing-application-forms', wrap(async (req, res) => {
+  res.json({ data: await applicationFormService.listStandingForms(await activeOrgFor(req)) });
+}));
+router.post('/standing-application-forms', requireAdmin, validateFormBody, wrap(async (req, res) => {
+  res.status(201).json(await applicationFormService.createStandingForm(await activeOrgFor(req), req.body));
+}));
+router.get('/standing-application-forms/:formId', wrap(async (req, res) => {
+  res.json(await applicationFormService.getStandingForm(await activeOrgFor(req), req.params.formId));
+}));
+router.patch('/standing-application-forms/:formId', requireAdmin, validateFormBody, wrap(async (req, res) => {
+  res.json(await applicationFormService.updateStandingForm(await activeOrgFor(req), req.params.formId, req.body));
+}));
+router.delete('/standing-application-forms/:formId', requireAdmin, wrap(async (req, res) => {
+  await applicationFormService.deleteStandingForm(await activeOrgFor(req), req.params.formId);
+  res.status(204).end();
+}));
+router.post('/standing-application-forms/:formId/save-as-template', requireAdmin, validateSaveAsTemplateBody, wrap(async (req, res) => {
+  const organizationId = await activeOrgFor(req);
+  await applicationFormService.getStandingForm(organizationId, req.params.formId);
+  const form = await prisma.applicationForm.findUnique({
+    where: { id: req.params.formId },
+    include: { tiers: { orderBy: { displayOrder: 'asc' } }, questions: { where: { archivedAt: null }, orderBy: { displayOrder: 'asc' } } },
+  });
+  const status = req.body.replaceTemplateId ? 200 : 201;
+  res.status(status).json(await applicationFormTemplateService.saveFrom(form, organizationId, req.body, { byUserId: req.user.id }));
+}));
+router.post('/standing-application-forms/:formId/questions', requireAdmin, validateQuestionBody, wrap(async (req, res) => {
+  res.status(201).json(await applicationFormService.addStandingQuestion(await activeOrgFor(req), req.params.formId, req.body));
+}));
+router.patch('/standing-application-forms/:formId/questions/reorder', requireAdmin, wrap(async (req, res) => {
+  res.json({ data: await applicationFormService.reorderStandingQuestions(await activeOrgFor(req), req.params.formId, req.body?.ids) });
+}));
+router.patch('/standing-application-forms/:formId/questions/:questionId', requireAdmin, validateQuestionBody, wrap(async (req, res) => {
+  res.json(await applicationFormService.updateStandingQuestion(await activeOrgFor(req), req.params.formId, req.params.questionId, req.body));
+}));
+router.delete('/standing-application-forms/:formId/questions/:questionId', requireAdmin, wrap(async (req, res) => {
+  res.json(await applicationFormService.removeStandingQuestion(await activeOrgFor(req), req.params.formId, req.params.questionId));
+}));
+router.get('/standing-application-forms/:formId/submissions', wrap(async (req, res) => {
+  const organizationId = await activeOrgFor(req);
+  await applicationFormService.getStandingForm(organizationId, req.params.formId);
+  res.json(await applicationService.listInScope({ organizationId, formId: req.params.formId }, req.query));
+}));
+router.get('/standing-application-forms/:formId/submissions/summary', wrap(async (req, res) => {
+  const organizationId = await activeOrgFor(req);
+  await applicationFormService.getStandingForm(organizationId, req.params.formId);
+  res.json(await applicationService.summaryInScope({ organizationId, formId: req.params.formId }));
+}));
+router.get('/standing-application-forms/:formId/submissions/tags', wrap(async (req, res) => {
+  const organizationId = await activeOrgFor(req);
+  await applicationFormService.getStandingForm(organizationId, req.params.formId);
+  res.json({ data: await applicationService.distinctTags({ organizationId, formId: req.params.formId }) });
+}));
+router.get('/standing-application-forms/:formId/submissions/export.csv', wrap(async (req, res) => {
+  const organizationId = await activeOrgFor(req);
+  await applicationFormService.getStandingForm(organizationId, req.params.formId);
+  const csv = await applicationService.exportCsvInScope({ organizationId, formId: req.params.formId }, req.query);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="applications-${req.params.formId}.csv"`);
+  res.send(csv);
+}));
+router.post('/standing-application-forms/:formId/submissions/bulk', validateBulkBody, wrap(async (req, res) => {
+  const organizationId = await activeOrgFor(req);
+  await applicationFormService.getStandingForm(organizationId, req.params.formId);
+  res.json(await applicationService.bulkDecideInScope({ organizationId, formId: req.params.formId }, { ...req.body, byUserId: req.user.id }));
+}));
+router.get('/standing-application-forms/:formId/submissions/:applicationId', wrap(async (req, res) => {
+  const organizationId = await activeOrgFor(req);
+  res.json(await applicationService.getInScope({ organizationId, formId: req.params.formId }, req.params.applicationId));
+}));
+router.post('/standing-application-forms/:formId/submissions/:applicationId/preview', wrap(async (req, res) => {
+  const organizationId = await activeOrgFor(req);
+  res.json(await applicationService.previewMessageInScope({ organizationId, formId: req.params.formId }, req.params.applicationId, req.body?.decision));
+}));
+router.post('/standing-application-forms/:formId/submissions/:applicationId/decision', validateDecisionBody, wrap(async (req, res) => {
+  const organizationId = await activeOrgFor(req);
+  res.json(await applicationService.decideInScope(
+    { organizationId, formId: req.params.formId },
+    req.params.applicationId,
+    { ...req.body, sendEmail: true, byUserId: req.user.id }
+  ));
 }));
 
 // Form templates (spec 019 phase 2). Reads follow the Participants scope;
@@ -751,13 +835,16 @@ router.delete('/events/:eventId/check-in/:applicationId', wrap(async (req, res) 
 // Templates (Settings › Applications)
 router.get('/settings/application-templates', wrap(async (req, res) => {
   const organizationId = await activeOrgFor(req);
-  res.json({ data: await applicationTemplateService.listTemplates(organizationId), mergeFields: applicationTemplateService.mergeFields() });
+  const scope = req.query.scope === 'STANDING' ? 'STANDING' : 'EVENT';
+  res.json({ data: await applicationTemplateService.listTemplates(organizationId, scope), mergeFields: applicationTemplateService.mergeFields() });
 }));
 router.put('/settings/application-templates/:action', requireAdmin, validateTemplateBody, wrap(async (req, res) => {
-  res.json(await applicationTemplateService.updateTemplate(await activeOrgFor(req), req.params.action, req.body));
+  const scope = req.query.scope === 'STANDING' ? 'STANDING' : 'EVENT';
+  res.json(await applicationTemplateService.updateTemplate(await activeOrgFor(req), req.params.action, req.body, scope));
 }));
 router.delete('/settings/application-templates/:action', requireAdmin, wrap(async (req, res) => {
-  res.json(await applicationTemplateService.resetTemplate(await activeOrgFor(req), req.params.action));
+  const scope = req.query.scope === 'STANDING' ? 'STANDING' : 'EVENT';
+  res.json(await applicationTemplateService.resetTemplate(await activeOrgFor(req), req.params.action, scope));
 }));
 
 // Daily digest of new submissions (spec 011 phase 3)

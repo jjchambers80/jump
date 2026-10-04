@@ -122,8 +122,9 @@ class ApplicationDigestService {
     const base = platformBaseUrl();
     const byEvent = new Map();
     for (const a of rows) {
-      if (!byEvent.has(a.event.id)) byEvent.set(a.event.id, { event: a.event, forms: new Map() });
-      const forms = byEvent.get(a.event.id).forms;
+      const key = a.event?.id ?? 'standing';
+      if (!byEvent.has(key)) byEvent.set(key, { event: a.event, forms: new Map() });
+      const forms = byEvent.get(key).forms;
       if (!forms.has(a.form.id)) forms.set(a.form.id, { form: a.form, rows: [] });
       forms.get(a.form.id).rows.push(a);
     }
@@ -134,7 +135,9 @@ class ApplicationDigestService {
     // Spec 019: links open the Participants list (one table for every event);
     // the per-event line links inline, the button at the end is org-wide.
     for (const { event, forms } of byEvent.values()) {
-      parts.push(`${event.name}\n${base}/admin/participants?event=${event.id}&status=SUBMITTED`);
+      parts.push(event
+        ? `${event.name}\n${base}/admin/participants?event=${event.id}&status=SUBMITTED`
+        : `Standing forms\n${base}/admin/content/forms`);
       for (const { form, rows: list } of forms.values()) {
         const lines = [`${form.name}: ${list.length}`];
         // Add-on counts across the form's new applications (spec 012 phase 3)
@@ -164,7 +167,7 @@ class ApplicationDigestService {
           ]
             .filter(Boolean)
             .join(', ');
-          lines.push(`- ${a.profile.businessName} (${who})${extra ? ` — ${extra}` : ''}`);
+          lines.push(`- ${a.profile?.businessName || who} (${who})${extra ? ` — ${extra}` : ''}`);
         }
         if (list.length > MAX_ROWS_PER_FORM) lines.push(`…and ${list.length - MAX_ROWS_PER_FORM} more`);
         parts.push(lines.join('\n'));

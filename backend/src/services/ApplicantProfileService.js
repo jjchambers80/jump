@@ -124,6 +124,7 @@ class ApplicantProfileService {
   }
 
   serialize(profile) {
+    if (!profile) return null;
     return {
       id: profile.id,
       businessName: profile.businessName,

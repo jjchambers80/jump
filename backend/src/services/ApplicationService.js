@@ -70,7 +70,7 @@ const LIST_INCLUDE = {
   contact: { select: { email: true, firstName: true, lastName: true } },
   profile: { select: { businessName: true, images: { take: 1, orderBy: { displayOrder: 'asc' }, include: { image: { include: { file: true } } } } } },
   tier: { select: { id: true, name: true, mapBound: true } },
-  form: { select: { id: true, name: true, kind: true } },
+  form: { select: { id: true, name: true, kind: true, organization: { select: { id: true, name: true } } } },
   event: {
     select: {
       id: true,
@@ -128,7 +128,7 @@ const DETAIL_INCLUDE = {
   contact: { select: { id: true, organizationId: true, email: true, firstName: true, lastName: true, accountCreatedAt: true, stripeCustomerId: true } },
   profile: { include: { images: { include: { image: { include: { file: true } } }, orderBy: { displayOrder: 'asc' } } } },
   tier: true,
-  form: { select: { id: true, name: true, slug: true, kind: true, chargeTiming: true, feeMode: true, taxable: true, paymentDueDays: true, overduePolicy: true } },
+  form: { select: { id: true, name: true, slug: true, kind: true, chargeTiming: true, feeMode: true, taxable: true, paymentDueDays: true, overduePolicy: true, organization: { select: { id: true, name: true, logoUrl: true, taxInclusivePricing: true } } } },
   event: {
     select: {
       id: true,
@@ -240,11 +240,15 @@ class ApplicationService {
    * @param {{ requestMeta?: { ipHash: string|null, userAgent: string|null } }} [options]
    * @returns {Promise<{ applicationId: string, orderRef: string|null, statusUrl: string, next: 'done'|'checkout', checkoutUrl?: string }>}
    */
-  async submit(eventId, body, files = { profilePhotos: [], answerPhotos: {} }, { requestMeta = { ipHash: null, userAgent: null } } = {}) {
-    const event = await applicationFormService.requireEvent(eventId);
-    if (event.status !== 'PUBLISHED') throw new NotFoundError('Event not found');
+  async submit(eventId, body, files = { profilePhotos: [], answerPhotos: {} }, { requestMeta = { ipHash: null, userAgent: null }, organizationId: standingOrganizationId = null } = {}) {
+    const event = eventId ? await applicationFormService.requireEvent(eventId) : null;
+    if (event && event.status !== 'PUBLISHED') throw new NotFoundError('Event not found');
+    const organization = event?.venue?.organization || (standingOrganizationId ? await applicationFormService.requireOrganization(standingOrganizationId) : null);
+    if (!organization) throw new NotFoundError('Organization not found');
     const form = await prisma.applicationForm.findFirst({
-      where: { eventId, slug: String(body.formSlug || '') },
+      where: eventId
+        ? { eventId, slug: String(body.formSlug || '') }
+        : { organizationId: organization.id, eventId: null, slug: String(body.formSlug || '') },
       include: { tiers: true, questions: { where: { archivedAt: null }, orderBy: { displayOrder: 'asc' } } },
     });
     if (!form) throw new NotFoundError('Application form not found');
@@ -253,7 +257,7 @@ class ApplicationService {
     if (form.kind === 'PAID' && !paymentsEnabled()) throw new ConflictError('Paid applications are not available yet');
 
     const contact = this._validateContact(body.contact);
-    const organizationId = event.venue.organizationId;
+    const organizationId = organization.id;
 
     let tier = null;
     if (form.kind === 'PAID') {
@@ -264,7 +268,8 @@ class ApplicationService {
       throw new ValidationError('This form has no tiers');
     }
 
-    const profileData = applicantProfileService.validate(body.profile || {});
+    const profileData = form.collectBusiness ? applicantProfileService.validate(body.profile || {}) : null;
+    if (!form.collectBusiness && (files.profilePhotos || []).length) throw new ValidationError('This form does not collect business details');
     if ((files.profilePhotos || []).length > MAX_PROFILE_PHOTOS) throw new ValidationError(`At most ${MAX_PROFILE_PHOTOS} profile photos`);
     const answers = this._validateAnswers(form.questions, body.answers || {}, files.answerPhotos || {});
 
@@ -292,7 +297,7 @@ class ApplicationService {
     const optInMarketing = body.optInMarketing === true;
     const cardAuthorization = form.kind === 'PAID' && form.chargeTiming === 'APPROVAL';
     const acceptances = legalAcceptanceService.assertCurrent(body.acceptances, ['TERMS', 'PRIVACY', ...(cardAuthorization ? ['CARD_AUTHORIZATION'] : [])]);
-    const organizationName = event.venue.organization?.name;
+    const organizationName = organization.name;
     const presentedText = {
       PRIVACY: applyConsentText({ organizationName }),
       ...(cardAuthorization && { CARD_AUTHORIZATION: cardAuthorizationText({ amount: orderData.amounts.applicantPays, paymentDueDays: form.paymentDueDays, organizationName }) }),
@@ -332,8 +337,10 @@ class ApplicationService {
         );
       }
 
-      const profile = await applicantProfileService.upsert(organizationId, contactRecord.id, profileData, tx);
-      await applicantProfileService.addPhotos(profile.id, files.profilePhotos, tx);
+      const profile = form.collectBusiness
+        ? await applicantProfileService.upsert(organizationId, contactRecord.id, profileData, tx)
+        : null;
+      if (profile) await applicantProfileService.addPhotos(profile.id, files.profilePhotos, tx);
 
       const answerRows = [];
       for (const a of answers) {
@@ -352,7 +359,7 @@ class ApplicationService {
           eventId,
           organizationId,
           contactId: contactRecord.id,
-          profileId: profile.id,
+          profileId: profile?.id ?? null,
           tierId: tier?.id ?? null,
           status: isFree ? 'SUBMITTED' : 'DRAFT',
           paymentStatus: isFree ? 'NOT_REQUIRED' : form.chargeTiming === 'APPROVAL' ? 'AWAITING_CARD' : 'NOT_REQUIRED',
@@ -412,6 +419,13 @@ class ApplicationService {
   /** Guest status page: token must match; returns the applicant-facing view. */
   async statusView(applicationId, rawToken) {
     const application = await this._requireByToken(applicationId, rawToken);
+    await attachBooths([application]);
+    return this._serializeApplicant(application);
+  }
+
+  async standingStatusView(organizationId, applicationId, rawToken) {
+    const application = await this._requireByToken(applicationId, rawToken);
+    if (application.organizationId !== organizationId || application.eventId !== null) throw new NotFoundError('Application not found');
     await attachBooths([application]);
     return this._serializeApplicant(application);
   }
@@ -654,10 +668,12 @@ class ApplicationService {
     return new Map(ids.map((id, i) => [id, bases[i]]));
   }
 
-  _scopeWhere({ eventId = null, organizationId = null }) {
+  _scopeWhere({ eventId = null, organizationId = null, formId = null, eventOnly = false }) {
     const where = { status: { not: 'DRAFT' } };
     if (eventId) where.eventId = eventId;
+    else if (eventOnly) where.eventId = { not: null };
     if (organizationId) where.organizationId = organizationId;
+    if (formId) where.formId = formId;
     return where;
   }
 
@@ -675,6 +691,13 @@ class ApplicationService {
     await applicationFormService.requireEvent(eventId, organizationId);
     const application = await prisma.application.findFirst({ where: { id: applicationId, eventId }, include: DETAIL_INCLUDE });
     if (!application || application.status === 'DRAFT') throw new NotFoundError('Application not found');
+    await attachBooths([application]);
+    return this._serializeAdmin(application);
+  }
+
+  async getInScope(scope, applicationId) {
+    const application = await prisma.application.findFirst({ where: { id: applicationId, ...this._scopeWhere(scope) }, include: DETAIL_INCLUDE });
+    if (!application) throw new NotFoundError('Application not found');
     await attachBooths([application]);
     return this._serializeAdmin(application);
   }
@@ -767,7 +790,7 @@ class ApplicationService {
   }
 
   /** Distinct tags used in a scope (spec 019 phase 3), for autocomplete and the filter. */
-  async distinctTags({ eventId = null, organizationId = null } = {}) {
+  async distinctTags({ eventId = null, organizationId = null, formId = null, eventOnly = false } = {}) {
     const clauses = [`status <> 'DRAFT'`];
     const params = [];
     if (organizationId) {
@@ -777,6 +800,12 @@ class ApplicationService {
     if (eventId) {
       params.push(eventId);
       clauses.push(`"eventId" = $${params.length}`);
+    } else if (eventOnly) {
+      clauses.push(`"eventId" IS NOT NULL`);
+    }
+    if (formId) {
+      params.push(formId);
+      clauses.push(`"formId" = $${params.length}`);
     }
     const rows = await prisma.$queryRawUnsafe(
       `SELECT DISTINCT ON (lower(tag)) tag FROM "Application", unnest(tags) AS tag WHERE ${clauses.join(' AND ')} ORDER BY lower(tag), tag`,
@@ -794,6 +823,15 @@ class ApplicationService {
     return applicationTemplateService.render(organizationId, spec.action, application);
   }
 
+  async previewMessageInScope(scope, applicationId, decision) {
+    const spec = DECISIONS[decision];
+    if (!spec) throw new ValidationError('decision must be APPROVE, REJECT, WAITLIST or WITHDRAW');
+    if (scope.formId && decision === 'WITHDRAW') throw new ValidationError('Standing applications can be approved, rejected, or waitlisted');
+    const application = await prisma.application.findFirst({ where: { id: applicationId, ...this._scopeWhere(scope) }, include: DETAIL_INCLUDE });
+    if (!application) throw new NotFoundError('Application not found');
+    return applicationTemplateService.render(scope.organizationId, spec.action, application);
+  }
+
   /**
    * Organizer decision. Approving a tiered application takes a capacity slot
    * atomically; a full tier returns 409 with a Waitlist suggestion. Approving
@@ -804,16 +842,17 @@ class ApplicationService {
    * @param {{ decision: 'APPROVE'|'REJECT'|'WAITLIST'|'WITHDRAW', note?: string, message?: { subject: string, body: string }|null, sendEmail?: boolean, byUserId: string }} input
    */
   async decide(eventId, applicationId, organizationId, input) {
-    await applicationFormService.requireEvent(eventId, organizationId);
+    if (eventId) await applicationFormService.requireEvent(eventId, organizationId);
     const spec = DECISIONS[input.decision];
     if (!spec) throw new ValidationError('decision must be APPROVE, REJECT, WAITLIST or WITHDRAW');
+    if (!eventId && input.decision === 'WITHDRAW') throw new ValidationError('Standing applications can be approved, rejected, or waitlisted');
     const note = input.note ? String(input.note).slice(0, 5000) : null;
     const override = this._validateMessage(input.message);
 
     const { updated, charge } = await prisma.$transaction(async (tx) => {
-      const rows = await tx.$queryRaw`SELECT * FROM "Application" WHERE "id" = ${applicationId} AND "eventId" = ${eventId} FOR UPDATE`;
+      const rows = await tx.$queryRaw`SELECT * FROM "Application" WHERE "id" = ${applicationId} FOR UPDATE`;
       const application = rows[0];
-      if (!application || application.status === 'DRAFT') throw new NotFoundError('Application not found');
+      if (!application || application.status === 'DRAFT' || application.eventId !== eventId || (organizationId && application.organizationId !== organizationId)) throw new NotFoundError('Application not found');
       if (!spec.from.includes(application.status)) {
         throw new ConflictError(`Cannot ${input.decision.toLowerCase()} an application that is ${application.status.toLowerCase()}`);
       }
@@ -898,7 +937,15 @@ class ApplicationService {
         await prisma.applicationDecision.update({ where: { id: decision.id }, data: { emailSubject: sent.subject, emailBody: sent.body } }).catch(() => {});
       }
     }
-    return this.get(eventId, applicationId, organizationId);
+    return eventId
+      ? this.get(eventId, applicationId, organizationId)
+      : this.getInScope({ organizationId, formId: updated.formId }, applicationId);
+  }
+
+  async decideInScope(scope, applicationId, input) {
+    const application = await prisma.application.findFirst({ where: { id: applicationId, ...this._scopeWhere(scope) }, select: { eventId: true } });
+    if (!application) throw new NotFoundError('Application not found');
+    return this.decide(application.eventId, applicationId, scope.organizationId, input);
   }
 
   /**
@@ -1473,10 +1520,13 @@ class ApplicationService {
    * through the per-event path so every rule (PAID approve refused, state
    * machine, capacity) is the same. Ids outside the scope come back not found.
    */
-  async bulkDecideInScope(organizationId, { ids, decision, note, byUserId }) {
+  async bulkDecideInScope(scopeOrOrganizationId, { ids, decision, note, byUserId }) {
+    const scope = typeof scopeOrOrganizationId === 'object'
+      ? scopeOrOrganizationId
+      : { organizationId: scopeOrOrganizationId };
     this._validateBulk(ids, decision);
     const rows = await prisma.application.findMany({
-      where: { id: { in: ids }, ...(organizationId ? { organizationId } : {}) },
+      where: { id: { in: ids }, ...this._scopeWhere(scope) },
       select: { id: true, eventId: true, organizationId: true },
     });
     const byEvent = new Map();
@@ -1548,7 +1598,7 @@ class ApplicationService {
         contact: { select: { email: true, firstName: true, lastName: true } },
         profile: { select: { businessName: true, website: true, description: true, socials: true, images: { include: { image: { include: { file: true } } }, orderBy: { displayOrder: 'asc' } } } },
         tier: { select: { name: true } },
-        form: { select: { name: true, kind: true } },
+        form: { select: { name: true, kind: true, organization: { select: { name: true } } } },
         event: {
           select: {
             id: true,
@@ -1583,7 +1633,7 @@ class ApplicationService {
     // One column per add-on that is active for applications on any event in
     // the export or appears on any row (spec 012).
     const addOns = new Map();
-    const eventIds = scope.eventId ? [scope.eventId] : [...new Set(rows.map((a) => a.eventId))];
+    const eventIds = scope.eventId ? [scope.eventId] : [...new Set(rows.map((a) => a.eventId).filter(Boolean))];
     const active = eventIds.length
       ? await prisma.addOn.findMany({ where: { eventId: { in: eventIds }, isActive: true, scope: { in: ['APPLICATION', 'BOTH'] } }, select: { id: true, name: true, displayOrder: true } })
       : [];
@@ -1627,8 +1677,8 @@ class ApplicationService {
       const byQ = new Map(a.answers.map((ans) => [ans.question.id, ans]));
       const byAddOn = new Map((a.order?.addOns || []).map((l) => [l.addOnId, l.quantity]));
       const cells = [
-        ...(unscoped ? [a.event.venue.organization.name] : []),
-        ...(orgWide ? [a.event.name, a.event.date?.toISOString() ?? ''] : []),
+        ...(unscoped ? [a.event?.venue?.organization?.name ?? a.form.organization?.name ?? ''] : []),
+        ...(orgWide ? [a.event?.name ?? '', a.event?.date?.toISOString() ?? ''] : []),
         a.id,
         a.form.name,
         a.status,
@@ -1637,18 +1687,18 @@ class ApplicationService {
         a.submittedAt?.toISOString() ?? '',
         a.decidedAt?.toISOString() ?? '',
         a.tier?.name ?? '',
-        a.profile.businessName,
+        a.profile?.businessName ?? '',
         a.contact.firstName,
         a.contact.lastName,
         a.contact.email,
-        a.profile.website ?? '',
-        a.profile.description ?? '',
-        a.profile.socials
+        a.profile?.website ?? '',
+        a.profile?.description ?? '',
+        a.profile?.socials
           ? Object.entries(a.profile.socials)
               .map(([k, v]) => `${k}: ${v}`)
               .join('; ')
           : '',
-        (a.profile.images || [])
+        (a.profile?.images || [])
           .map((pi) => absoluteAssetUrl(imageService.formatImageResponse(pi.image).urls.original))
           .join('; '),
         Number(a.order?.totalAmount ?? 0).toFixed(2),
@@ -1974,7 +2024,9 @@ class ApplicationService {
       shortId: shortId(a.id),
       eventId: a.eventId,
       event: a.event ? { id: a.event.id, name: a.event.name, date: a.event.date, timezone: a.event.venue?.timezone ?? null } : null,
-      ...(unscoped && a.event?.venue?.organization ? { organization: { id: a.event.venue.organization.id, name: a.event.venue.organization.name } } : {}),
+      ...(unscoped && (a.event?.venue?.organization || a.form?.organization)
+        ? { organization: { id: a.event?.venue?.organization?.id ?? a.form.organization.id, name: a.event?.venue?.organization?.name ?? a.form.organization.name } }
+        : {}),
       formId: a.formId,
       formName: a.form?.name,
       formKind: a.form?.kind,
@@ -2025,7 +2077,7 @@ class ApplicationService {
       orderId: m.orderId,
       orderRef: m.orderRef,
       form: a.form,
-      event: { id: a.event.id, name: a.event.name, date: a.event.date, timezone: a.event.venue?.timezone ?? null },
+      event: a.event ? { id: a.event.id, name: a.event.name, date: a.event.date, timezone: a.event.venue?.timezone ?? null } : null,
       status: a.status,
       paymentStatus: a.paymentStatus,
       capacitySlot: a.capacitySlot,
@@ -2107,8 +2159,10 @@ class ApplicationService {
       id: a.id,
       orderRef: m.orderRef,
       form: { id: a.form.id, name: a.form.name, kind: a.form.kind },
-      event: { id: a.event.id, name: a.event.name, date: a.event.date, timezone: a.event.venue?.timezone ?? null },
-      organization: a.event.venue?.organization ? { id: a.event.venue.organization.id, name: a.event.venue.organization.name } : null,
+      event: a.event ? { id: a.event.id, name: a.event.name, date: a.event.date, timezone: a.event.venue?.timezone ?? null } : null,
+      organization: a.event?.venue?.organization
+        ? { id: a.event.venue.organization.id, name: a.event.venue.organization.name }
+        : a.form.organization ? { id: a.form.organization.id, name: a.form.organization.name } : null,
       status: a.status,
       paymentStatus: a.paymentStatus,
       tier: a.tier ? { id: a.tier.id, name: a.tier.name, mapBound: a.tier.mapBound } : null,

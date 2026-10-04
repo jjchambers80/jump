@@ -26,7 +26,10 @@ export function verifyStatusToken(applicationId, raw) {
 
 /** Status URL under a known storefront base (list rows: one base lookup per organization). */
 export function statusUrlWithBase(base, application) {
-  return `${base}/events/${application.eventId}/apply/status/${application.id}?token=${statusToken(application.id)}`;
+  const path = application.eventId
+    ? `/events/${application.eventId}/apply/status/${application.id}`
+    : `/organizations/${application.organizationId}/apply/status/${application.id}`;
+  return `${base}${path}?token=${statusToken(application.id)}`;
 }
 
 /** Absolute storefront status URL (custom domain when active), token included. */

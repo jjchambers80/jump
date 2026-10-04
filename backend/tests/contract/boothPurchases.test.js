@@ -52,7 +52,7 @@ describe('Approved vendor booth purchase API', () => {
       data: { venueId: venue.id, name: `${TAG} Expo`, date: new Date(Date.now() + 86_400_000), status: 'PUBLISHED', capacity: 100 },
     });
     form = await prisma.applicationForm.create({
-      data: { eventId: event.id, kind: 'PAID', name: 'Vendors', slug: `${TAG}-vendors`, chargeTiming: 'APPROVAL', feeMode: 'ABSORB' },
+      data: { organizationId: organization.id, eventId: event.id, kind: 'PAID', name: 'Vendors', slug: `${TAG}-vendors`, chargeTiming: 'APPROVAL', feeMode: 'ABSORB' },
     });
     tier = await prisma.applicationTier.create({
       data: { formId: form.id, name: '10x10', price: 275, quantityTotal: 5, quantityReserved: 5, mapBound: true },

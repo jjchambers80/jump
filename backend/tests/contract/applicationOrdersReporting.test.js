@@ -132,8 +132,8 @@ describe('Application orders reporting contract (spec 024)', () => {
       pending: await mk(`pending@${TAG}.test`, 'Pat', 'Pending'), // PAYMENT_DUE only: not a customer
     };
 
-    taxableForm = await prisma.applicationForm.create({ data: { eventId: event.id, kind: 'PAID', name: 'Vendors', slug: 'vendors', status: 'OPEN', taxable: true, tiers: { create: { name: '10x10', price: 200, quantityTotal: 10 } } }, include: { tiers: true } });
-    untaxedForm = await prisma.applicationForm.create({ data: { eventId: event.id, kind: 'PAID', name: 'Sponsors', slug: 'sponsors', status: 'OPEN', taxable: false, tiers: { create: { name: 'Gold', price: 500, quantityTotal: 5 } } }, include: { tiers: true } });
+    taxableForm = await prisma.applicationForm.create({ data: { organizationId: org.id, eventId: event.id, kind: 'PAID', name: 'Vendors', slug: 'vendors', status: 'OPEN', taxable: true, tiers: { create: { name: '10x10', price: 200, quantityTotal: 10 } } }, include: { tiers: true } });
+    untaxedForm = await prisma.applicationForm.create({ data: { organizationId: org.id, eventId: event.id, kind: 'PAID', name: 'Sponsors', slug: 'sponsors', status: 'OPEN', taxable: false, tiers: { create: { name: 'Gold', price: 500, quantityTotal: 5 } } }, include: { tiers: true } });
     const profiles = {};
     for (const [key, c] of Object.entries(contacts)) {
       profiles[key] = await prisma.applicantProfile.create({ data: { organizationId: org.id, contactId: c.id, businessName: `${c.firstName} Co` } });

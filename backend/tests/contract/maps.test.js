@@ -67,6 +67,7 @@ describe('Maps contract', () => {
     // Create an application form with a PAID tier for booth tests
     form = await prisma.applicationForm.create({
       data: {
+        organizationId: organization.id,
         eventId: event.id,
         name: `${TAG} Vendor Form`,
         slug: `${TAG}-vendor`,
@@ -135,6 +136,7 @@ describe('Maps contract', () => {
     // it into this event even though the organization/profile are shared.
     const otherForm = await prisma.applicationForm.create({
       data: {
+        organizationId: organization.id,
         eventId: otherEvent.id,
         name: `${TAG} Other Vendor Form`,
         slug: `${TAG}-other-vendor`,
