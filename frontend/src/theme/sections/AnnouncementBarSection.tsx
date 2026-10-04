@@ -9,7 +9,7 @@ import type { ThemeItem } from '../types';
 
 export interface AnnouncementBarProps {
   id: string;
-  rotate?: 'off' | '5s' | '8s';
+  rotate?: 'off' | '5s' | '8s' | 'marquee';
   dismissible?: boolean;
   colorScheme?: string;
   sectionWidth?: string;
@@ -32,6 +32,7 @@ export default function AnnouncementBarSection({ id, rotate = 'off', dismissible
         barId={id}
         announcements={announcements}
         intervalMs={rotate === '5s' ? 5000 : rotate === '8s' ? 8000 : 0}
+        marquee={rotate === 'marquee'}
         dismissible={dismissible}
         labels={{ pause: t(ctx, 'announcement.pause'), close: t(ctx, 'announcement.close') }}
       />

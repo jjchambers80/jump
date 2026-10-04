@@ -20,6 +20,11 @@ module.exports = {
         },
       },
       keyframes: {
+        // Announcement bar marquee: the track holds two copies, so -50% loops seamlessly.
+        marquee: {
+          '0%': { transform: 'translateX(0)' },
+          '100%': { transform: 'translateX(-50%)' },
+        },
         slideUp: {
           '0%': { transform: 'translateY(100%)' },
           '100%': { transform: 'translateY(0)' },
@@ -52,6 +57,7 @@ module.exports = {
         },
       },
       animation: {
+        marquee: 'marquee 30s linear infinite',
         'slide-up': 'slideUp 0.3s ease-out',
         'slide-in-right': 'slideInRight 0.2s ease-out',
         'slide-in-left': 'slideInLeft 0.2s ease-out',
