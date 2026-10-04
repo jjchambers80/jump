@@ -1612,7 +1612,7 @@ router.get('/customers', async (req, res, next) => {
       // Staff with no membership see no customers rather than every org's
       return res.json({ data: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } });
     }
-    const { page, limit, search, tag, segment, rsvp, eventId, sort, direction, scope: customerScope = 'customers' } = req.query;
+    const { page, limit, search, tag, segment, rsvp, eventId, sort, direction, scope: customerScope = 'customers', source, formId } = req.query;
     if (!['customers', 'all'].includes(customerScope)) {
       throw new ValidationError('scope must be customers or all');
     }
@@ -1622,15 +1622,28 @@ router.get('/customers', async (req, res, next) => {
     if (eventId && rsvp !== 'going') {
       throw new ValidationError('eventId requires the RSVP filter');
     }
+    if (source !== undefined) {
+      const validSources = ['tickets', 'rsvp', 'subscribed', 'form'];
+      if (!validSources.includes(source)) {
+        throw new ValidationError('source must be tickets, rsvp, subscribed, or form');
+      }
+    }
+    if (formId && source !== 'form') {
+      throw new ValidationError('formId requires source=form');
+    }
+    // source=form flips to all contacts (a form submitter may not have a paid order)
+    const effectiveScope = source === 'form' ? 'all' : customerScope;
     const result = await customerService.getCustomersByOrganization(scope.organizationId, {
       page,
       limit,
       search,
       tag,
-      scope: customerScope,
+      scope: effectiveScope,
       segment,
       rsvp,
       eventId,
+      source,
+      formId,
       sort,
       direction,
     });
@@ -1647,7 +1660,7 @@ router.get('/customers/:contactId', async (req, res, next) => {
     if (!isUnscoped(scope) && !scope.organizationId) {
       throw new NotFoundError('Customer not found');
     }
-    const { search, tag, segment, rsvp, eventId, sort, direction, scope: customerScope = 'customers' } = req.query;
+    const { search, tag, segment, rsvp, eventId, sort, direction, scope: customerScope = 'customers', source, formId } = req.query;
     if (!['customers', 'all'].includes(customerScope)) {
       throw new ValidationError('scope must be customers or all');
     }
@@ -1658,6 +1671,8 @@ router.get('/customers/:contactId', async (req, res, next) => {
       segment,
       rsvp,
       eventId,
+      source,
+      formId,
       sort,
       direction,
     });
