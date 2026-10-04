@@ -95,7 +95,7 @@ export const SECTIONS = {
     groups: ['header'],
     limit: 1,
     settings: {
-      rotate: select('Rotate announcements', ['off', '5s', '8s']),
+      rotate: select('Rotate announcements', ['off', '5s', '8s', 'marquee']),
       dismissible: toggle('Visitors can close it', false),
     },
     blocks: { types: ['Announcement'], max: 5 },

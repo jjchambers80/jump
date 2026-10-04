@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { Render } from '@puckeditor/core';
 import { getPreset } from '@jump/theme';
+import AnnouncementBarSection from '@/theme/sections/AnnouncementBarSection';
 import ButtonBlock from '@/theme/sections/ButtonBlock';
 import CallToActionSection from '@/theme/sections/CallToActionSection';
 import HeroSection from '@/theme/sections/HeroSection';
@@ -108,6 +109,25 @@ describe('section width', () => {
     const html = renderToStaticMarkup(<UpcomingEventsSection id="U" heading="Upcoming" count={3} sectionWidth="full" ctx={ctx()} />);
     expect(html).toMatch(/data-section="UpcomingEvents"[^>]*style="--theme-section-width:none/);
     expect(html).toContain('max-w-7xl');
+  });
+});
+
+describe('AnnouncementBarSection', () => {
+  const blocks = [{ type: 'Announcement', props: { id: 'a1', text: 'Next show Oct 24', link: { type: 'EXTERNAL', url: 'https://example.com' } } }];
+
+  it('marquee scrolls two copies, the second hidden and unfocusable, with a pause control', () => {
+    const html = renderToStaticMarkup(<AnnouncementBarSection id="bar" rotate="marquee" blocks={blocks as any} ctx={ctx()} />);
+    expect(html).toContain('animate-marquee');
+    expect(html.match(/Next show Oct 24/g)).toHaveLength(2);
+    expect(html).toContain('aria-hidden="true"');
+    expect(html).toContain('tabindex="-1"');
+    expect(html).toContain('aria-pressed="false"');
+  });
+
+  it('off renders the static bar', () => {
+    const html = renderToStaticMarkup(<AnnouncementBarSection id="bar" blocks={blocks as any} ctx={ctx()} />);
+    expect(html).not.toContain('animate-marquee');
+    expect(html.match(/Next show Oct 24/g)).toHaveLength(1);
   });
 });
 
