@@ -216,3 +216,48 @@ Your application: {{links.status}}
 {{organization.name}}`,
   },
 };
+
+export const STANDING_TEMPLATE_ACTIONS = ['RECEIVED', 'APPROVED', 'WAITLISTED', 'REJECTED'];
+
+export const STANDING_DEFAULT_TEMPLATES = {
+  RECEIVED: {
+    subject: 'We received your {{form.name}} application',
+    body: `Hi {{applicant.firstName}},
+
+Thanks for applying through {{form.name}}. {{organization.name}} has received your application and will review it soon.
+
+Check its status any time: {{links.status}}
+
+{{organization.name}}`,
+  },
+  APPROVED: {
+    subject: 'Your {{form.name}} application was approved',
+    body: `Hi {{applicant.firstName}},
+
+Good news — your {{form.name}} application was approved.
+
+View your application: {{links.status}}
+
+{{organization.name}}`,
+  },
+  WAITLISTED: {
+    subject: 'An update on your {{form.name}} application',
+    body: `Hi {{applicant.firstName}},
+
+Your {{form.name}} application is on the waitlist. We will let you know when there is another update.
+
+View your application: {{links.status}}
+
+{{organization.name}}`,
+  },
+  REJECTED: {
+    subject: 'An update on your {{form.name}} application',
+    body: `Hi {{applicant.firstName}},
+
+Thank you for applying through {{form.name}}. We are not able to approve your application at this time.
+
+View your application: {{links.status}}
+
+{{organization.name}}`,
+  },
+};

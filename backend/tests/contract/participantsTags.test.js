@@ -48,9 +48,9 @@ describe('Participants tags and check-in (spec 019 phase 3)', () => {
     expo = await prisma.event.create({ data: { venueId: venue.id, name: `${TAG} Expo`, date: new Date('2027-09-18T15:00:00Z'), status: 'PUBLISHED', capacity: 100 } });
     con = await prisma.event.create({ data: { venueId: venue.id, name: `${TAG} Con`, date: new Date('2027-01-10T15:00:00Z'), status: 'PUBLISHED', capacity: 100 } });
     const eventB = await prisma.event.create({ data: { venueId: venueB.id, name: `${TAG} B Fest`, date: new Date('2027-05-01T15:00:00Z'), status: 'PUBLISHED', capacity: 100 } });
-    form = await prisma.applicationForm.create({ data: { eventId: expo.id, kind: 'FREE', name: 'Press', slug: 'press' } });
-    formC = await prisma.applicationForm.create({ data: { eventId: con.id, kind: 'FREE', name: 'Panels', slug: 'panels' } });
-    const formB = await prisma.applicationForm.create({ data: { eventId: eventB.id, kind: 'FREE', name: 'Press', slug: 'press' } });
+    form = await prisma.applicationForm.create({ data: { organizationId: org.id, eventId: expo.id, kind: 'FREE', name: 'Press', slug: 'press' } });
+    formC = await prisma.applicationForm.create({ data: { organizationId: org.id, eventId: con.id, kind: 'FREE', name: 'Panels', slug: 'panels' } });
+    const formB = await prisma.applicationForm.create({ data: { organizationId: orgB.id, eventId: eventB.id, kind: 'FREE', name: 'Press', slug: 'press' } });
 
     apps.retro = await submission(org.id, expo.id, form.id, { businessName: 'Retro Weekly', status: 'APPROVED', tags: ['Media row 3', 'Press'] });
     apps.pixel = await submission(org.id, expo.id, form.id, { businessName: 'Pixel Pins', tags: ['Sponsor', 'Returning'] });

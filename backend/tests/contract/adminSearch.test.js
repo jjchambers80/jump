@@ -120,6 +120,7 @@ describe('Administration search contract', () => {
 
     const form = await prisma.applicationForm.create({
       data: {
+        organizationId: organization.id,
         eventId: event.id,
         kind: 'FREE',
         name: 'Vendors',

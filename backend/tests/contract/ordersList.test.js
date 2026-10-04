@@ -262,6 +262,7 @@ describe('Org-wide order list contract (spec 024 phase 2)', () => {
     });
     form = await prisma.applicationForm.create({
       data: {
+        organizationId: org.id,
         eventId: event.id,
         kind: 'PAID',
         name: 'Vendors',

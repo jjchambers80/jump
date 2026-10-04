@@ -509,6 +509,7 @@ model Organization {
   tierPresets              TierPreset[]
   taxRegions               TaxRegion[]
   applicantProfiles        ApplicantProfile[]
+  applicationForms         ApplicationForm[]
   applicationTemplates     ApplicationMessageTemplate[]
   applicationFormTemplates ApplicationFormTemplate[]
   stripeAccounts           OrganizationStripeAccount[]
@@ -1468,6 +1469,11 @@ enum ApplicationFormStatus {
   CLOSED
 }
 
+enum ApplicationMessageScope {
+  EVENT
+  STANDING
+}
+
 enum ChargeTiming {
   SUBMIT
   APPROVAL
@@ -1634,7 +1640,8 @@ enum WithdrawnBy {
 
 model ApplicationForm {
   id                    String                @id @default(cuid())
-  eventId               String
+  organizationId        String
+  eventId               String?
   kind                  ApplicationFormKind
   name                  String
   slug                  String
@@ -1653,17 +1660,22 @@ model ApplicationForm {
   reserveOnApproval     Boolean               @default(true)
   displayOrder          Int                   @default(0)
   createdFromTemplateId String? // spec 019: informational, no relation
+  collectBusiness       Boolean               @default(true)
+  buttonLabel           String?
+  successMessage        String?
   spaceSelection        SpaceSelectionMode    @default(TIERS) // spec 039; PAID forms only
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  event        Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  event        Event?                @relation(fields: [eventId], references: [id], onDelete: Cascade)
   tiers        ApplicationTier[]
   questions    ApplicationQuestion[]
   applications Application[]
 
   @@unique([eventId, slug])
+  @@index([organizationId, status])
   @@index([eventId, status])
 }
 
@@ -1746,14 +1758,14 @@ model ApplicantProfileImage {
 }
 
 model Application {
-  id                 String             @id @default(cuid())
-  formId             String
-  eventId            String
-  organizationId     String
-  contactId          String
-  profileId          String
-  tierId             String?
-  status             ApplicationStatus  @default(DRAFT)
+  id             String             @id @default(cuid())
+  formId         String
+  eventId        String?
+  organizationId String
+  contactId      String
+  profileId      String?
+  tierId         String?
+  status         ApplicationStatus  @default(DRAFT)
   // Fine-grained payment state machine; the coarse money state is Order.status
   // (spec 024), written in the same transaction through orderStatusFor().
   paymentStatus      ApplicationPayment @default(NOT_REQUIRED)
@@ -1804,9 +1816,9 @@ model Application {
   updatedAt DateTime @updatedAt
 
   form      ApplicationForm       @relation(fields: [formId], references: [id])
-  event     Event                 @relation(fields: [eventId], references: [id])
+  event     Event?                @relation(fields: [eventId], references: [id], onDelete: Restrict)
   contact   Contact               @relation(fields: [contactId], references: [id])
-  profile   ApplicantProfile      @relation(fields: [profileId], references: [id])
+  profile   ApplicantProfile?     @relation(fields: [profileId], references: [id], onDelete: Restrict)
   tier      ApplicationTier?      @relation(fields: [tierId], references: [id])
   answers   ApplicationAnswer[]
   decisions ApplicationDecision[]
@@ -1876,13 +1888,14 @@ model ApplicationMessageTemplate {
   id             String            @id @default(cuid())
   organizationId String
   action         ApplicationAction
+  scope          ApplicationMessageScope @default(EVENT)
   subject        String
   body           String // plain text with {{merge.fields}}; rendered into the branded email shell
   updatedAt      DateTime          @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  @@unique([organizationId, action])
+  @@unique([organizationId, scope, action])
 }
 
 // ---------------------------------------------------------------------------

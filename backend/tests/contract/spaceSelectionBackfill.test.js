@@ -18,7 +18,7 @@ describe('Space selection backfill (spec 039)', () => {
     const venue = await prisma.venue.create({ data: { organizationId: org.id, name: `${TAG} ${key}`, address: '1 Main', city: 'Raleigh', state: 'NC' } });
     const event = await prisma.event.create({ data: { venueId: venue.id, name: `${TAG} ${key}`, date: new Date('2027-09-18T15:00:00Z'), status: 'PUBLISHED', capacity: 100 } });
     events.push(event);
-    const form = await prisma.applicationForm.create({ data: { eventId: event.id, kind, name: key, slug: `${TAG}-${key}`, status: 'OPEN' } });
+    const form = await prisma.applicationForm.create({ data: { organizationId: org.id, eventId: event.id, kind, name: key, slug: `${TAG}-${key}`, status: 'OPEN' } });
     const tier = await prisma.applicationTier.create({ data: { formId: form.id, name: 'Booth', price: 200, quantityTotal: 5 } });
     if (mapStatus) {
       const map = await prisma.floorMap.create({

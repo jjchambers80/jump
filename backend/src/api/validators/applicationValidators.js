@@ -3,7 +3,7 @@
 
 import { ValidationError } from '../../middleware/errorHandler.js';
 
-const FORM_FIELDS = new Set(['kind', 'name', 'slug', 'intro', 'status', 'opensAt', 'closesAt', 'chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy', 'reserveOnApproval', 'spaceSelection', 'displayOrder', 'tiers', 'questions', 'templateId']);
+const FORM_FIELDS = new Set(['kind', 'name', 'slug', 'intro', 'status', 'opensAt', 'closesAt', 'chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy', 'reserveOnApproval', 'spaceSelection', 'displayOrder', 'tiers', 'questions', 'templateId', 'collectBusiness', 'buttonLabel', 'successMessage']);
 const TIER_FIELDS = new Set(['name', 'description', 'price', 'quantityTotal', 'displayOrder', 'isActive']);
 const QUESTION_FIELDS = new Set(['label', 'helpText', 'type', 'required', 'options', 'displayOrder', 'pinned']);
 const DECISIONS = new Set(['APPROVE', 'REJECT', 'WAITLIST', 'WITHDRAW']);
@@ -17,7 +17,7 @@ export const validateFormBody = (req, res, next) => {
   try {
     const body = req.body || {};
     onlyFields(body, FORM_FIELDS, 'form');
-    if (req.method === 'POST' && !body.kind) throw new ValidationError('kind is required');
+    if (req.method === 'POST' && req.params?.eventId && !body.kind) throw new ValidationError('kind is required');
     if (body.tiers !== undefined && !Array.isArray(body.tiers)) throw new ValidationError('tiers must be an array');
     if (body.questions !== undefined && !Array.isArray(body.questions)) throw new ValidationError('questions must be an array');
     for (const t of body.tiers || []) onlyFields(t, TIER_FIELDS, 'tier');

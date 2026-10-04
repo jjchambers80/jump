@@ -78,7 +78,7 @@ describe('Event overview API', () => {
     await prisma.refund.create({ data: { orderId: order.id, amount: 10, status: 'SUCCEEDED' } });
 
     form = await prisma.applicationForm.create({
-      data: { eventId: event.id, kind: 'PAID', name: 'Vendors', slug: `${TAG}-vendors`, status: 'OPEN' },
+      data: { organizationId: organization.id, eventId: event.id, kind: 'PAID', name: 'Vendors', slug: `${TAG}-vendors`, status: 'OPEN' },
     });
     appTier = await prisma.applicationTier.create({
       data: { formId: form.id, name: '10x10', price: 100, quantityTotal: 4, quantityApproved: 1 },

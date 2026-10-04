@@ -85,11 +85,11 @@ describe('Vendor space selection modes (spec 039)', () => {
     event = await prisma.event.create({ data: { venueId: venue.id, name: `${TAG} Expo`, date: new Date(Date.now() + 30 * 86_400_000), status: 'PUBLISHED', capacity: 100 } });
     copyEvent = await prisma.event.create({ data: { venueId: venue.id, name: `${TAG} Copy`, date: new Date(Date.now() + 60 * 86_400_000), status: 'DRAFT', capacity: 100 } });
 
-    mapForm = await prisma.applicationForm.create({ data: { eventId: event.id, kind: 'PAID', name: 'Map vendors', slug: `${TAG}-map`, feeMode: 'ABSORB' } });
+    mapForm = await prisma.applicationForm.create({ data: { organizationId: organization.id, eventId: event.id, kind: 'PAID', name: 'Map vendors', slug: `${TAG}-map`, feeMode: 'ABSORB' } });
     truck = await prisma.applicationTier.create({ data: { formId: mapForm.id, name: 'Food truck', price: 300, quantityTotal: 5, displayOrder: 0 } });
     table = await prisma.applicationTier.create({ data: { formId: mapForm.id, name: 'Table', price: 100, quantityTotal: 5, displayOrder: 1 } });
 
-    tiersForm = await prisma.applicationForm.create({ data: { eventId: event.id, kind: 'PAID', name: 'Tier vendors', slug: `${TAG}-tiers`, feeMode: 'ABSORB', status: 'OPEN' } });
+    tiersForm = await prisma.applicationForm.create({ data: { organizationId: organization.id, eventId: event.id, kind: 'PAID', name: 'Tier vendors', slug: `${TAG}-tiers`, feeMode: 'ABSORB', status: 'OPEN' } });
     booth10 = await prisma.applicationTier.create({ data: { formId: tiersForm.id, name: '10x10', price: 200, quantityTotal: 3, displayOrder: 0 } });
     corner = await prisma.applicationTier.create({ data: { formId: tiersForm.id, name: 'Corner', price: 350, quantityTotal: 1, displayOrder: 1 } });
     big = await prisma.applicationTier.create({ data: { formId: tiersForm.id, name: '20x20', price: 500, quantityTotal: 1, displayOrder: 2, isActive: false } });
@@ -121,7 +121,7 @@ describe('Vendor space selection modes (spec 039)', () => {
       expect(read.status).toBe(200);
       expect(read.body.data.find((f) => f.id === mapForm.id).spaceSelection).toBe('TIERS');
       expect((await patchForm(mapForm, { spaceSelection: 'BOTH' })).status).toBe(400);
-      const free = await prisma.applicationForm.create({ data: { eventId: event.id, kind: 'FREE', name: 'Press', slug: `${TAG}-press` } });
+      const free = await prisma.applicationForm.create({ data: { organizationId: organization.id, eventId: event.id, kind: 'FREE', name: 'Press', slug: `${TAG}-press` } });
       expect((await patchForm(free, { spaceSelection: 'MAP' })).status).toBe(400);
     });
 

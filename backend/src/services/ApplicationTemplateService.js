@@ -11,12 +11,13 @@ import { prisma } from '@jump/db';
 import { moneyOf } from './applicationMoney.js';
 import { selectionDueAt } from './applicationSelection.js';
 import orderLineService from './OrderLineService.js';
-import { DEFAULT_TEMPLATES, MERGE_FIELDS, TEMPLATE_ACTIONS } from '../config/applications.js';
+import { DEFAULT_TEMPLATES, MERGE_FIELDS, STANDING_DEFAULT_TEMPLATES, STANDING_TEMPLATE_ACTIONS, TEMPLATE_ACTIONS } from '../config/applications.js';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import emailService from './EmailService.js';
 import boothService from './BoothService.js';
-import { buyerAccountUrl, eventUrl, storefrontFor } from '../utils/storefrontUrl.js';
+import { buyerAccountUrl, eventUrl } from '../utils/storefrontUrl.js';
 import logger from '../utils/logger.js';
+import { statusUrlFor } from './applicationLinks.js';
 
 const ACTIONS = new Set(TEMPLATE_ACTIONS);
 
@@ -48,20 +49,21 @@ function formatDate(value) {
 
 class ApplicationTemplateService {
   /** All templates for an organization, defaults filled in for missing actions. */
-  async listTemplates(organizationId) {
-    const rows = await prisma.applicationMessageTemplate.findMany({ where: { organizationId } });
+  async listTemplates(organizationId, scope = 'EVENT') {
+    const actions = scope === 'STANDING' ? STANDING_TEMPLATE_ACTIONS : TEMPLATE_ACTIONS;
+    const rows = await prisma.applicationMessageTemplate.findMany({ where: { organizationId, scope } });
     const byAction = new Map(rows.map((r) => [r.action, r]));
-    return TEMPLATE_ACTIONS.map((action) => this._serialize(action, byAction.get(action)));
+    return actions.map((action) => this._serialize(action, byAction.get(action), scope));
   }
 
-  async getTemplate(organizationId, action) {
-    this._assertAction(action);
-    const row = await prisma.applicationMessageTemplate.findUnique({ where: { organizationId_action: { organizationId, action } } });
-    return this._serialize(action, row);
+  async getTemplate(organizationId, action, scope = 'EVENT') {
+    this._assertAction(action, scope);
+    const row = await prisma.applicationMessageTemplate.findUnique({ where: { organizationId_scope_action: { organizationId, scope, action } } });
+    return this._serialize(action, row, scope);
   }
 
-  async updateTemplate(organizationId, action, { subject, body }) {
-    this._assertAction(action);
+  async updateTemplate(organizationId, action, { subject, body }, scope = 'EVENT') {
+    this._assertAction(action, scope);
     const cleanSubject = String(subject ?? '').trim();
     const cleanBody = String(body ?? '').trim();
     if (cleanSubject.length < 1 || cleanSubject.length > 200) throw new ValidationError('subject must be 1-200 characters');
@@ -69,18 +71,18 @@ class ApplicationTemplateService {
     this._assertBalancedSections(cleanBody);
     this._assertBalancedSections(cleanSubject);
     const row = await prisma.applicationMessageTemplate.upsert({
-      where: { organizationId_action: { organizationId, action } },
+      where: { organizationId_scope_action: { organizationId, scope, action } },
       update: { subject: cleanSubject, body: cleanBody },
-      create: { organizationId, action, subject: cleanSubject, body: cleanBody },
+      create: { organizationId, scope, action, subject: cleanSubject, body: cleanBody },
     });
     logger.info('Application template updated', { event: 'application_template_updated', organizationId, action });
-    return this._serialize(action, row);
+    return this._serialize(action, row, scope);
   }
 
-  async resetTemplate(organizationId, action) {
-    this._assertAction(action);
-    await prisma.applicationMessageTemplate.deleteMany({ where: { organizationId, action } });
-    return this._serialize(action, null);
+  async resetTemplate(organizationId, action, scope = 'EVENT') {
+    this._assertAction(action, scope);
+    await prisma.applicationMessageTemplate.deleteMany({ where: { organizationId, scope, action } });
+    return this._serialize(action, null, scope);
   }
 
   mergeFields() {
@@ -92,11 +94,9 @@ class ApplicationTemplateService {
    * profile, event (with venue.organization), form, tier.
    */
   async contextFor(application, { payNowUrl = null, accountUrl = null, accountCreated = false } = {}) {
-    const organization = application.event?.venue?.organization || {};
-    const { base } = await storefrontFor(organization.id || application.organizationId);
+    const organization = application.event?.venue?.organization || application.form?.organization || {};
     const statusUrl =
-      application.statusUrl ||
-      `${base}/events/${application.eventId}/apply/status/${application.id}`;
+      application.statusUrl || await statusUrlFor(application);
     const money = moneyOf(application, { taxInclusive: organization.taxInclusivePricing === true });
     const booth = await this._boothContext(application);
     const space = await this._spaceContext(application);
@@ -204,8 +204,9 @@ class ApplicationTemplateService {
    */
   async render(organizationId, action, application, options = {}) {
     const orgId = organizationId || application.organizationId || application.event?.venue?.organizationId || application.event?.venue?.organization?.id || null;
-    this._assertAction(action);
-    const template = orgId ? await this.getTemplate(orgId, action) : this._serialize(action, null);
+    const scope = application.eventId ? 'EVENT' : 'STANDING';
+    this._assertAction(action, scope);
+    const template = orgId ? await this.getTemplate(orgId, action, scope) : this._serialize(action, null, scope);
     const context = await this.contextFor(application, options);
     return {
       subject: renderTemplate(template.subject, context),
@@ -226,7 +227,7 @@ class ApplicationTemplateService {
         to: application.contact.email,
         subject: message.subject,
         body: message.body,
-        organization: application.event?.venue?.organization || {},
+        organization: application.event?.venue?.organization || application.form?.organization || {},
       });
       logger.info('Application email sent', { event: 'application_email_sent', applicationId: application.id, action });
     } catch (error) {
@@ -235,8 +236,9 @@ class ApplicationTemplateService {
     return message || null;
   }
 
-  _assertAction(action) {
-    if (!ACTIONS.has(action)) throw new NotFoundError('Unknown template action');
+  _assertAction(action, scope = 'EVENT') {
+    const actions = scope === 'STANDING' ? new Set(STANDING_TEMPLATE_ACTIONS) : ACTIONS;
+    if (!actions.has(action)) throw new NotFoundError('Unknown template action');
   }
 
   _assertBalancedSections(text) {
@@ -247,10 +249,11 @@ class ApplicationTemplateService {
     }
   }
 
-  _serialize(action, row) {
-    const def = DEFAULT_TEMPLATES[action];
+  _serialize(action, row, scope = 'EVENT') {
+    const def = (scope === 'STANDING' ? STANDING_DEFAULT_TEMPLATES : DEFAULT_TEMPLATES)[action];
     return {
       action,
+      scope,
       subject: row?.subject ?? def.subject,
       body: row?.body ?? def.body,
       isDefault: !row,
