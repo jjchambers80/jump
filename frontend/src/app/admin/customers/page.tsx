@@ -56,6 +56,29 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
 }
 
+const SOURCE_LABEL: Record<string, string> = { tickets: 'Tickets', rsvp: 'RSVP', subscribed: 'Subscribed' };
+
+/** How a contact came in (spec 044C): one chip per source, one per standing form submitted. */
+function SourceChips({ customer }: { customer: Customer }) {
+  if (!customer.sources?.length && !customer.formSources?.length) {
+    return <span className="text-xs text-gray-400 dark:text-slate-500">—</span>;
+  }
+  return (
+    <ul className="flex flex-wrap gap-1" aria-label="Sources">
+      {customer.sources?.map((source) => (
+        <li key={source} className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 dark:bg-slate-700 dark:text-slate-200">
+          {SOURCE_LABEL[source] ?? source}
+        </li>
+      ))}
+      {customer.formSources?.map((form) => (
+        <li key={form.id} className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800 dark:bg-sky-900/40 dark:text-sky-200">
+          Form: {form.name}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function CustomersPageContent() {
   const { selectedOrgId } = useOrg();
   const router = useRouter();
@@ -67,8 +90,10 @@ function CustomersPageContent() {
   const [source, setSource] = useState<CustomerSource | ''>(initialSource);
   const [formId, setFormId] = useState<string>(initialFormId);
 
-  // When source=form, scope must be 'all' (spec 044C: form submitters may not have paid orders)
-  // rsvp=going is kept as an alias; reading it from URL if no source is set
+  // Standing forms (spec 044) for the Source › form picker; loaded only once it is chosen.
+  const [standingForms, setStandingForms] = useState<{ id: string; name: string }[]>([]);
+
+  // source=form lists contacts with no paid order too, so it always runs on All contacts.
   const [scope, setScope] = useState<CustomerScope>(() => {
     if (initialSource === 'form') return 'all';
     return customerScopeFrom(searchParams);
@@ -128,10 +153,18 @@ function CustomersPageContent() {
     fetchCustomers();
   }, [fetchCustomers]);
 
+  useEffect(() => {
+    if (!selectedOrgId || source !== 'form') return;
+    api
+      .get<{ data: { id: string; name: string }[] }>('/admin/standing-application-forms')
+      .then((result) => setStandingForms(result.data))
+      .catch(() => setStandingForms([]));
+  }, [selectedOrgId, source]);
+
   // Reset page when search changes
   useEffect(() => {
     setPage(1);
-  }, [search, segment, rsvp, sort, direction, scope]);
+  }, [search, segment, rsvp, source, formId, sort, direction, scope]);
 
   const listQuery = customerListQuery({ page, search, segment, rsvp, eventId, source, formId, sort, direction });
   if (scope === 'all') listQuery.set('scope', 'all');
@@ -187,12 +220,10 @@ function CustomersPageContent() {
 
   const handleSourceChange = (nextSource: CustomerSource | '') => {
     setSource(nextSource);
+    setFormId('');
     setPage(1);
-    // When selecting a form source, we need to pick a form first
-    // For now, clear formId when source changes (user will pick form from submenu)
-    if (nextSource !== 'form') {
-      setFormId('');
-    }
+    // A form submitter usually has no paid order, so the Customers predicate would hide them.
+    if (nextSource === 'form') setScope('all');
     const nextParams = new URLSearchParams(searchParams.toString());
     nextParams.delete('page');
     if (search) nextParams.set('search', search);
@@ -201,7 +232,7 @@ function CustomersPageContent() {
     else nextParams.delete('segment');
     if (nextSource) nextParams.set('source', nextSource);
     else nextParams.delete('source');
-    nextParams.delete('formId'); // formId is handled by form submenu
+    nextParams.delete('formId');
     nextParams.set('sort', sort);
     nextParams.set('direction', direction);
     // source=form flips to all contacts
@@ -215,6 +246,17 @@ function CustomersPageContent() {
       nextParams.delete('eventId');
     }
 
+    const query = nextParams.toString();
+    router.replace(`/admin/customers${query ? `?${query}` : ''}`, { scroll: false });
+  };
+
+  const handleFormChange = (nextFormId: string) => {
+    setFormId(nextFormId);
+    setPage(1);
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete('page');
+    if (nextFormId) nextParams.set('formId', nextFormId);
+    else nextParams.delete('formId');
     const query = nextParams.toString();
     router.replace(`/admin/customers${query ? `?${query}` : ''}`, { scroll: false });
   };
@@ -370,6 +412,26 @@ function CustomersPageContent() {
           <option value="subscribed">Subscribed (email opt-in)</option>
           <option value="form">Submitted a form</option>
         </select>
+        {source === 'form' && (
+          <>
+            <label className="sr-only" htmlFor="customer-form">
+              Form
+            </label>
+            <select
+              id="customer-form"
+              value={formId}
+              onChange={(event) => handleFormChange(event.target.value)}
+              className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+            >
+              <option value="">Any form</option>
+              {standingForms.map((form) => (
+                <option key={form.id} value={form.id}>
+                  {form.name}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
         <label className="ml-auto text-xs font-medium text-gray-600 dark:text-slate-300" htmlFor="customer-sort">
           Sort
         </label>
@@ -487,29 +549,8 @@ function CustomersPageContent() {
                     </button>
                   </div>
 
-                  {/* Source chips */}
                   <div className="min-w-0">
-                    <div className="flex flex-wrap gap-1">
-                      {customer.sources?.map((s) => (
-                        <span
-                          key={s}
-                          className="inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-300"
-                        >
-                          {s === 'tickets' ? 'Tickets' : s === 'rsvp' ? 'RSVP' : s === 'subscribed' ? 'Subscribed' : 'Form'}
-                        </span>
-                      ))}
-                      {customer.formSources?.map((fs) => (
-                        <span
-                          key={fs.id}
-                          className="inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300"
-                        >
-                          Form: {fs.name}
-                        </span>
-                      ))}
-                      {(!customer.sources?.length && !customer.formSources?.length) && (
-                        <span className="text-[10px] text-gray-400 dark:text-slate-500">—</span>
-                      )}
-                    </div>
+                    <SourceChips customer={customer} />
                   </div>
 
                   {/* Location */}
@@ -617,28 +658,7 @@ function CustomersPageContent() {
                       </button>
                     </div>
                   </div>
-                  {/* Source chips (mobile) */}
-                  <div className="flex flex-wrap gap-1">
-                    {customer.sources?.map((s) => (
-                      <span
-                        key={s}
-                        className="inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-300"
-                      >
-                        {s === 'tickets' ? 'Tickets' : s === 'rsvp' ? 'RSVP' : s === 'subscribed' ? 'Subscribed' : 'Form'}
-                      </span>
-                    ))}
-                    {customer.formSources?.map((fs) => (
-                      <span
-                        key={fs.id}
-                        className="inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300"
-                      >
-                        Form: {fs.name}
-                      </span>
-                    ))}
-                    {(!customer.sources?.length && !customer.formSources?.length) && (
-                      <span className="text-[10px] text-gray-400 dark:text-slate-500">—</span>
-                    )}
-                  </div>
+                  <SourceChips customer={customer} />
                   <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-slate-400">
                     <span>{customer.transactionCount} transaction{customer.transactionCount !== 1 ? 's' : ''}</span>
                     <span>{formatCurrency(customer.totalSpent)}</span>
