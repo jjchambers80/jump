@@ -120,7 +120,7 @@ describe('Booth holds under concurrency', () => {
       data: { venueId: venue.id, name: `${prefix} Expo`, date: new Date(Date.now() + 86_400_000), status: 'PUBLISHED', capacity: 100 },
     });
     const seededForm = await prisma.applicationForm.create({
-      data: { eventId: seededEvent.id, kind: 'PAID', name: 'Vendors', slug: `${prefix}-vendors`, chargeTiming: 'APPROVAL', feeMode: 'ABSORB', spaceSelection: 'MAP' },
+      data: { organizationId: org.id, eventId: seededEvent.id, kind: 'PAID', name: 'Vendors', slug: `${prefix}-vendors`, chargeTiming: 'APPROVAL', feeMode: 'ABSORB', spaceSelection: 'MAP' },
     });
     const seededTier = await prisma.applicationTier.create({
       data: { formId: seededForm.id, name: '10x10', price: 275, quantityTotal: 20, quantityReserved: 20 },

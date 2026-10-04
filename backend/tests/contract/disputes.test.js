@@ -438,7 +438,7 @@ describe('Stripe disputes contract (spec 037)', () => {
     // must move Application.paymentStatus and Order.status in one write — and
     // put both back when the dispute is won.
     const form = await prisma.applicationForm.create({
-      data: { eventId: event.id, kind: 'PAID', name: `${TAG} Vendors`, slug: `${TAG}-vendors`, status: 'OPEN' },
+      data: { organizationId: org.id, eventId: event.id, kind: 'PAID', name: `${TAG} Vendors`, slug: `${TAG}-vendors`, status: 'OPEN' },
     });
     const appTier = await prisma.applicationTier.create({ data: { formId: form.id, name: 'Booth', price: 100, quantityTotal: 10, quantityApproved: 1 } });
     const profile = await prisma.applicantProfile.create({ data: { organizationId: org.id, contactId: contact.id, businessName: `${TAG} Hot Sauce` } });
