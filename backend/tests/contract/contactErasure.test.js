@@ -38,7 +38,7 @@ async function createOrg(name) {
   const past = await prisma.event.create({ data: { venueId: venue.id, name: `${name} Past`, date: new Date(Date.now() - 10 * DAY), capacity: 100, status: 'PUBLISHED' } });
   const tier = await prisma.priceTier.create({ data: { eventId: upcoming.id, name: 'GA', price: 20, quantityTotal: 50, quantitySold: 5 } });
   const pastTier = await prisma.priceTier.create({ data: { eventId: past.id, name: 'GA', price: 20, quantityTotal: 50, quantitySold: 5 } });
-  const form = await prisma.applicationForm.create({ data: { eventId: upcoming.id, kind: 'FREE', name: 'Press', slug: `press-${Date.now()}-${seq++}` } });
+  const form = await prisma.applicationForm.create({ data: { organizationId: org.id, eventId: upcoming.id, kind: 'FREE', name: 'Press', slug: `press-${Date.now()}-${seq++}` } });
   return { org, venue, upcoming, past, tier, pastTier, form };
 }
 
