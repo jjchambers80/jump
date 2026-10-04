@@ -54,7 +54,6 @@ export default function ThemeFrame({
       css={schemeCss(data.settings)}
       className="min-h-screen bg-gray-50 dark:bg-slate-900"
     >
-      {data.preview && <PreviewBar name={data.preview.name} path={path} />}
       {data.previewInvalid && <ClearPreviewCookie />}
       <div data-theme-frame={data.theme.id ?? 'preset'} style={pageWidthVars(data.documents.template?.root) as CSSProperties | undefined}>
         {renderDocument(data.documents.header, ctx)}
@@ -66,6 +65,7 @@ export default function ThemeFrame({
           ))}
         {renderDocument(data.documents.footer, ctx)}
       </div>
+      {data.preview && <PreviewBar name={data.preview.name} path={path} />}
     </ThemeScope>
   );
 }
