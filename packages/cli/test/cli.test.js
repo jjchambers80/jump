@@ -208,6 +208,24 @@ describe('jump CLI', () => {
     assert.match(logs, /documents\.home/);
   });
 
+  it('check accepts a full-width page document and still refuses an unknown key', async () => {
+    const page = join(dir, 'documents/page:cmuojj83h000lp91w4s9uf8ay.json');
+    const bogus = join(dir, 'documents/sidebar.json');
+    await writeFile(join(dir, 'documents/home.json'), JSON.stringify(home('Edited')));
+    await writeFile(page, JSON.stringify({ root: { props: {} }, content: [{ type: 'PageContent', props: { id: 'P1' } }] }));
+    try {
+      assert.match((await quiet(() => main(['theme', 'check', '--dir', dir]))).logs, /No errors/);
+      await writeFile(bogus, JSON.stringify({ root: { props: {} }, content: [] }));
+      const { code, logs } = await quiet(() => main(['theme', 'check', '--dir', dir]));
+      assert.equal(code, 1);
+      assert.match(logs, /documents\.sidebar/);
+      assert.doesNotMatch(logs, /documents\.page:/);
+    } finally {
+      await rm(page, { force: true });
+      await rm(bogus, { force: true });
+    }
+  });
+
   it("writes the server's schema and guide; a stale CLI leaves validation to the server", async () => {
     api.state.kit = { version: 'newer', schema: { sections: { Marquee: {} } }, guide: '# Server guide\n' };
     try {

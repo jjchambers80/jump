@@ -3,7 +3,7 @@
 // the same schema of everything the server accepts.
 
 import { CATALOG, validateContent } from './content.js';
-import { DOCUMENTS, validateDocument } from './documents.js';
+import { DOCUMENTS, documentDef, validateDocument } from './documents.js';
 import { COLOR_SCHEMES_MAX, CONTENT_MAX_BYTES, DOCUMENT_MAX_BYTES, SECTIONS_PER_DOCUMENT, SETTINGS_MAX_BYTES } from './limits.js';
 import { getPreset } from './presets/index.js';
 import { BLOCKS, COMMON_SECTION_FIELDS, SECTIONS } from './registry.js';
@@ -19,7 +19,8 @@ export function checkTheme(local, presetKey) {
   const schemes = local.settings?.colors?.schemes ?? getPreset(presetKey)?.settings?.colors?.schemes ?? [];
   const schemeIds = new Set(schemes.map((s) => s.id));
   for (const [key, data] of Object.entries(local.documents)) {
-    if (!DOCUMENTS[key]) {
+    // documentDef, like the server: fixed keys plus `page:<id>` (full-width pages).
+    if (!documentDef(key)) {
       errors[`documents.${key}`] = 'is not a theme document';
       continue;
     }
