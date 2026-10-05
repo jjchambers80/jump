@@ -7,7 +7,7 @@
 import { FormEvent, RefObject, useRef, useState } from 'react';
 import SettingsDialog from '@/app/admin/settings/SettingsDialog';
 import { fieldClass, formAlertClass, hintClass, labelClass } from '@/app/admin/settings/formShared';
-import { money, type AdminApplication } from '@/lib/applications';
+import { applicantName, money, type AdminApplication } from '@/lib/applications';
 import { describeError, useApplicationsApi } from './useApplicationsApi';
 
 interface RefundDialogProps {
@@ -67,7 +67,7 @@ export default function RefundDialog({ eventId, application, returnFocusRef, onC
           </div>
         )}
         <p className="text-sm text-gray-700 dark:text-slate-300">
-          <strong>{application.profile.businessName}</strong> paid {money(application.amounts.applicantPays)}
+          <strong>{applicantName(application)}</strong> paid {money(application.amounts.applicantPays)}
           {application.payment.refundedTotal > 0 ? `; ${money(application.payment.refundedTotal)} already refunded` : ''}. Up to {money(max)} can be {application.payment.manualRefund ? 'recorded as refunded' : 'returned to their card'}.
         </p>
         <div>

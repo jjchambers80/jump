@@ -9,7 +9,7 @@
 import { FormEvent, RefObject, useEffect, useMemo, useRef, useState } from 'react';
 import SettingsDialog from '@/app/admin/settings/SettingsDialog';
 import { fieldClass, formAlertClass, hintClass, labelClass } from '@/app/admin/settings/formShared';
-import { money, OFFLINE_METHOD_LABEL, type AdminApplication, type AdminTier, type OfflinePaymentMethod } from '@/lib/applications';
+import { applicantName, money, OFFLINE_METHOD_LABEL, type AdminApplication, type AdminTier, type OfflinePaymentMethod } from '@/lib/applications';
 import { describeError, useApplicationsApi } from './useApplicationsApi';
 
 interface DialogProps {
@@ -91,12 +91,12 @@ export function ChangeTierDialog({ eventId, application, returnFocusRef, onClose
         <p className="text-sm text-gray-700 dark:text-slate-300">
           {application.orderId ? (
             <>
-              <strong>{application.profile.businessName}</strong> is on <strong>{application.tier?.name}</strong> at {money(application.amounts.applicantPays)}. The amount is recomputed at today&apos;s prices with any adjustments, and the applicant is emailed the new total.
+              <strong>{applicantName(application)}</strong> is on <strong>{application.tier?.name}</strong> at {money(application.amounts.applicantPays)}. The amount is recomputed at today&apos;s prices with any adjustments, and the applicant is emailed the new total.
             </>
           ) : (
             <>
               {/* Spec 037 phase 5: no order until the vendor chooses a space. */}
-              <strong>{application.profile.businessName}</strong> is {application.tier ? <>in <strong>{application.tier.name}</strong></> : 'not in a category yet'}. A space reserved on approval moves with the category; the vendor pays the new category&apos;s price when they choose their space.
+              <strong>{applicantName(application)}</strong> is {application.tier ? <>in <strong>{application.tier.name}</strong></> : 'not in a category yet'}. A space reserved on approval moves with the category; the vendor pays the new category&apos;s price when they choose their space.
             </>
           )}
         </p>
@@ -258,7 +258,7 @@ export function WaiveDialog({ eventId, application, returnFocusRef, onClose, onS
           </div>
         )}
         <p className="text-sm text-gray-700 dark:text-slate-300">
-          <strong>{application.profile.businessName}</strong> owes {money(owedNow(application))}. Waiving sets it to nothing owed, confirms their spot, and emails them. The waived amount stays on record; this cannot be undone.
+          <strong>{applicantName(application)}</strong> owes {money(owedNow(application))}. Waiving sets it to nothing owed, confirms their spot, and emails them. The waived amount stays on record; this cannot be undone.
         </p>
         <div>
           <label htmlFor="waive-reason" className={labelClass}>
@@ -317,7 +317,7 @@ export function OfflinePaymentDialog({ eventId, application, returnFocusRef, onC
           </div>
         )}
         <p className="text-sm text-gray-700 dark:text-slate-300">
-          Records that <strong>{application.profile.businessName}</strong> paid {money(due)} outside Jump. Their spot is confirmed and they are emailed; nothing is charged in Stripe. The amount must match what is owed — add an adjustment first to change it.
+          Records that <strong>{applicantName(application)}</strong> paid {money(due)} outside Jump. Their spot is confirmed and they are emailed; nothing is charged in Stripe. The amount must match what is owed — add an adjustment first to change it.
         </p>
         <div>
           <label htmlFor="offline-method" className={labelClass}>

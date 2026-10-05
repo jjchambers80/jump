@@ -3,6 +3,9 @@
 // adds the payment timeline, retry charge, refunds and the Stripe link;
 // spec 012 the add-on lines and their pre-payment edit; spec 018 tier change,
 // adjustments, waive and offline payment.
+// Spec 044: one component for both detail routes — an event's application and
+// a standing form's submission (`standingFormId`), which has no event, money,
+// booth, directory or check-in, and may have no business profile.
 'use client';
 
 import Link from 'next/link';
@@ -10,6 +13,7 @@ import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ACTION_LABEL,
+  applicantName,
   decisionsFor,
   DECISION_LABEL,
   formatDate,
@@ -22,13 +26,13 @@ import {
   type AdminApplication,
   type Decision,
 } from '@/lib/applications';
-import ApplicationsHeader from '../ApplicationsHeader';
-import DecisionDialog from '../DecisionDialog';
-import EditAddOnsDialog from '../EditAddOnsDialog';
-import { AdjustmentDialog, ChangeTierDialog, OfflinePaymentDialog, WaiveDialog } from '../CorrectionDialogs';
-import RefundDialog from '../RefundDialog';
+import ApplicationsHeader from '@/app/admin/events/[eventId]/applications/ApplicationsHeader';
+import DecisionDialog from '@/app/admin/events/[eventId]/applications/DecisionDialog';
+import EditAddOnsDialog from '@/app/admin/events/[eventId]/applications/EditAddOnsDialog';
+import { AdjustmentDialog, ChangeTierDialog, OfflinePaymentDialog, WaiveDialog } from '@/app/admin/events/[eventId]/applications/CorrectionDialogs';
+import RefundDialog from '@/app/admin/events/[eventId]/applications/RefundDialog';
 import EditTagsDialog from '@/components/applications/EditTagsDialog';
-import { describeError, useApplicationsApi } from '../useApplicationsApi';
+import { describeError, useApplicationsApi } from '@/app/admin/events/[eventId]/applications/useApplicationsApi';
 
 const card = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
 const btn = 'rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
@@ -66,8 +70,10 @@ const PAYMENT_HINT: Partial<Record<AdminApplication['paymentStatus'], string>> =
   PAYMENT_DUE: 'The card on file was declined. The applicant has a pay-now link; you can retry the card after they update it, record a payment taken outside Jump, or waive the balance.',
 };
 
-export default function ApplicationDetailPage({ params }: { params: { eventId: string; applicationId: string } }) {
-  const api = useApplicationsApi(params.eventId);
+export default function ApplicationDetail({ eventId = '', standingFormId, applicationId }: { eventId?: string; standingFormId?: string; applicationId: string }) {
+  const standing = Boolean(standingFormId);
+  const params = { eventId, applicationId };
+  const api = useApplicationsApi(eventId, standingFormId);
   const { data: session } = useSession();
   const role = (session?.user as { role?: string } | undefined)?.role;
   const isAdmin = role === 'ADMIN' || role === 'SYSTEM_ADMIN';
@@ -178,7 +184,7 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
     setSavingNotes(true);
     setNotice(null);
     try {
-      const next = await api.updateNotes(app.id, { boothLabel: booth.trim() || null, internalNote: note.trim() || null });
+      const next = await api.updateNotes(app.id, standing ? { internalNote: note.trim() || null } : { boothLabel: booth.trim() || null, internalNote: note.trim() || null });
       setApp(next);
       setNotice('Notes saved.');
     } catch (err) {
@@ -188,13 +194,22 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
     }
   };
 
-  const decisions = app ? decisionsFor(app.status) : [];
+  // Standing submissions have no withdraw email, so no Withdraw (spec 044).
+  const decisions = app ? decisionsFor(app.status).filter((d) => !standing || d !== 'WITHDRAW') : [];
+  const name = app ? applicantName(app) : null;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-      <ApplicationsHeader eventId={params.eventId} title={app?.profile.businessName ?? 'Application'} subtitle={app ? `${app.form.name}${app.tier ? ` · ${app.tier.name}` : ''}` : undefined} />
-      <Link href={`/admin/events/${params.eventId}/applications`} className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300">
-        ← All applications
+      {standing ? (
+        <header className="mb-4">
+          <p className="text-sm font-medium text-indigo-600 dark:text-indigo-300">{app?.form.name ?? 'Form'}</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{name ?? 'Submission'}</h1>
+        </header>
+      ) : (
+        <ApplicationsHeader eventId={params.eventId} title={name ?? 'Application'} subtitle={app ? `${app.form.name}${app.tier ? ` · ${app.tier.name}` : ''}` : undefined} />
+      )}
+      <Link href={standing ? `/admin/content/forms/${standingFormId}` : `/admin/events/${params.eventId}/applications`} className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300">
+        ← All {standing ? 'submissions' : 'applications'}
       </Link>
 
       {error && (
@@ -259,33 +274,33 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
 
             {/* Profile */}
             <div className={card} data-testid="application-profile">
-              <h3 className="text-base font-semibold text-gray-900 dark:text-white">{app.profile.businessName}</h3>
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white">{name}</h3>
               <p className="mt-1 text-sm text-gray-700 dark:text-slate-300">
                 {app.contact.firstName} {app.contact.lastName} ·{' '}
                 <a href={`mailto:${app.contact.email}`} className="text-indigo-600 hover:underline dark:text-indigo-300">
                   {app.contact.email}
                 </a>
               </p>
-              {app.profile.description && <p className="mt-3 whitespace-pre-line text-sm text-gray-800 dark:text-slate-200">{app.profile.description}</p>}
+              {app.profile?.description && <p className="mt-3 whitespace-pre-line text-sm text-gray-800 dark:text-slate-200">{app.profile.description}</p>}
               <dl className="mt-3 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
-                {app.profile.website && (
+                {app.profile?.website && (
                   <div>
                     <dt className="text-xs uppercase tracking-wide text-gray-500 dark:text-slate-400">Website</dt>
                     <dd>
-                      <a href={app.profile.website} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline dark:text-indigo-300">
-                        {app.profile.website}
+                      <a href={app.profile?.website ?? undefined} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline dark:text-indigo-300">
+                        {app.profile?.website}
                       </a>
                     </dd>
                   </div>
                 )}
-                {Object.entries(app.profile.socials || {}).map(([k, v]) => (
+                {Object.entries(app.profile?.socials || {}).map(([k, v]) => (
                   <div key={k}>
                     <dt className="text-xs uppercase tracking-wide text-gray-500 dark:text-slate-400">{k}</dt>
                     <dd className="text-gray-800 dark:text-slate-200">{v}</dd>
                   </div>
                 ))}
               </dl>
-              {app.profile.photos.length > 0 && (
+              {app.profile && app.profile.photos.length > 0 && (
                 <ul className="mt-4 flex flex-wrap gap-2" data-testid="application-photos">
                   {app.profile.photos.map((p) => (
                     <li key={p.imageId}>
@@ -618,7 +633,7 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
               <h3 className="text-base font-semibold text-gray-900 dark:text-white">Notes</h3>
 
               {/* Booth assignment (spec 014) */}
-              {app.booth && (
+              {!standing && app.booth && (
                 <div className="mt-3" data-testid="application-booth">
                   <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Booth</p>
                   <Link
@@ -645,6 +660,8 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
                 </p>
               )}
 
+              {!standing && (
+              <>
               <label htmlFor="booth-label" className="mt-3 block text-sm font-medium text-gray-700 dark:text-slate-300">
                 Booth / placement
               </label>
@@ -660,7 +677,9 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
               {app.booth && (
                 <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Managed by the map — edit on the map builder.</p>
               )}
-              {app.status === 'APPROVED' && (
+              </>
+              )}
+              {!standing && app.status === 'APPROVED' && (
                 <label className="mt-4 flex items-start gap-2 border-t border-gray-200 pt-4 text-sm text-gray-700 dark:border-slate-700 dark:text-slate-300">
                   <input
                     type="checkbox"
@@ -712,7 +731,7 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
               </div>
 
               {/* Check-in (spec 019 phase 3) */}
-              {app.status === 'APPROVED' && (
+              {!standing && app.status === 'APPROVED' && (
                 <div className="mt-4 border-t border-gray-200 pt-4 dark:border-slate-700" data-testid="application-checkin">
                   <p className="text-sm font-medium text-gray-700 dark:text-slate-300">On site</p>
                   <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-800 dark:text-slate-200">
@@ -841,8 +860,9 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
       {editingTags && app && (
         <EditTagsDialog
           eventId={params.eventId}
+          standingFormId={standingFormId}
           applicationId={app.id}
-          businessName={app.profile.businessName}
+          businessName={applicantName(app)}
           tags={app.tags ?? []}
           suggestions={tagOptions}
           returnFocusRef={tagsBtnRef}
@@ -858,6 +878,7 @@ export default function ApplicationDetailPage({ params }: { params: { eventId: s
       {decision && app && (
         <DecisionDialog
           eventId={params.eventId}
+          standingFormId={standingFormId}
           application={app}
           decision={decision}
           returnFocusRef={decisionBtnRef}

@@ -13,7 +13,7 @@
 import { FormEvent, RefObject, useEffect, useRef, useState } from 'react';
 import SettingsDialog from '@/app/admin/settings/SettingsDialog';
 import { errorClass, fieldClass, formAlertClass, hintClass, labelClass } from '@/app/admin/settings/formShared';
-import { DECISION_LABEL, money, type AdminApplication, type Decision } from '@/lib/applications';
+import { applicantName, DECISION_LABEL, money, type AdminApplication, type Decision } from '@/lib/applications';
 
 /** Select value for "Let the vendor choose" (spec 039 D6). */
 const VENDOR_CHOOSES = '__vendor';
@@ -21,6 +21,8 @@ import { describeError, useApplicationsApi } from './useApplicationsApi';
 
 interface DecisionDialogProps {
   eventId: string;
+  /** Spec 044: decide on a standing-form submission; it is always emailed. */
+  standingFormId?: string;
   application: AdminApplication;
   decision: Decision;
   returnFocusRef: RefObject<HTMLButtonElement>;
@@ -35,8 +37,8 @@ const TITLE: Record<Decision, string> = {
   WITHDRAW: 'Withdraw application',
 };
 
-export default function DecisionDialog({ eventId, application, decision, returnFocusRef, onClose, onDecided }: DecisionDialogProps) {
-  const api = useApplicationsApi(eventId);
+export default function DecisionDialog({ eventId, standingFormId, application, decision, returnFocusRef, onClose, onDecided }: DecisionDialogProps) {
+  const api = useApplicationsApi(eventId, standingFormId);
   const [template, setTemplate] = useState<{ subject: string; body: string } | null>(null);
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
@@ -136,7 +138,7 @@ export default function DecisionDialog({ eventId, application, decision, returnF
           </div>
         )}
         <p className="text-sm text-gray-700 dark:text-slate-300">
-          <strong>{application.profile.businessName}</strong> · {application.contact.firstName} {application.contact.lastName} · {application.form.name}
+          <strong>{applicantName(application)}</strong> · {application.contact.firstName} {application.contact.lastName} · {application.form.name}
           {application.tier ? ` · ${application.tier.name}` : ''}
         </p>
         {assignsCategory && (
@@ -180,10 +182,12 @@ export default function DecisionDialog({ eventId, application, decision, returnF
           <p className={hintClass}>Only your team sees this.</p>
         </div>
 
-        <label className="flex items-center gap-2 text-sm text-gray-800 dark:text-slate-200">
-          <input type="checkbox" checked={sendEmail} onChange={(e) => setSendEmail(e.target.checked)} />
-          Email the applicant
-        </label>
+        {!standingFormId && (
+          <label className="flex items-center gap-2 text-sm text-gray-800 dark:text-slate-200">
+            <input type="checkbox" checked={sendEmail} onChange={(e) => setSendEmail(e.target.checked)} />
+            Email the applicant
+          </label>
+        )}
 
         {sendEmail && (
           <div className="space-y-3" data-testid="decision-email">

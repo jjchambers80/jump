@@ -6,7 +6,7 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { DECISION_LABEL, decisionsFor, type ApplicationRow, type Decision } from '@/lib/applications';
+import { applicantName, DECISION_LABEL, decisionsFor, type ApplicationRow, type Decision } from '@/lib/applications';
 
 interface RowActionsMenuProps {
   row: ApplicationRow;
@@ -23,7 +23,8 @@ export default function RowActionsMenu({ row, detailHref, onDecision, onEditTags
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const decisions = decisionsFor(row.status);
+  // Standing-form submissions (no event, spec 044) have no withdraw email, so no Withdraw.
+  const decisions = decisionsFor(row.status).filter((d) => row.eventId || d !== 'WITHDRAW');
 
   useEffect(() => {
     if (!open) return;
@@ -73,7 +74,7 @@ export default function RowActionsMenu({ row, detailHref, onDecision, onEditTags
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={`Actions for ${row.businessName}`}
+        aria-label={`Actions for ${applicantName(row)}`}
         onClick={() => setOpen((o) => !o)}
         className="rounded-md px-2 py-1 text-lg leading-none text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-700"
         data-testid={`application-actions-${row.id}`}
@@ -84,7 +85,7 @@ export default function RowActionsMenu({ row, detailHref, onDecision, onEditTags
         <div
           ref={menuRef}
           role="menu"
-          aria-label={`Actions for ${row.businessName}`}
+          aria-label={`Actions for ${applicantName(row)}`}
           onKeyDown={onMenuKey}
           className="absolute right-0 z-20 mt-1 w-44 overflow-hidden rounded-md border border-gray-200 bg-white py-1 shadow-lg dark:border-slate-600 dark:bg-slate-800"
         >

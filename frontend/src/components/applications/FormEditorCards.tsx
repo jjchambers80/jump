@@ -5,6 +5,8 @@
 // editor (cards edit local state; the page saves the whole definition).
 // `mode="template"` hides what belongs to an event: slug, status, window,
 // the fee preview columns, the add-on picker, and the per-card Save button.
+// A standing form (spec 044, `eventId: null`) adds the storefront button label
+// and the thank-you message; it is FREE, so it never shows tiers or money.
 
 import Link from 'next/link';
 import { FormEvent, useEffect, useState } from 'react';
@@ -27,7 +29,11 @@ export type EditorTier = Pick<AdminTier, 'id' | 'name' | 'description' | 'price'
 /** What the cards read; `AdminForm` satisfies it, the template editor builds one from a definition. */
 export interface EditorForm {
   id: string;
-  eventId?: string;
+  /** Null on a standing form (spec 044); absent in the template editor. */
+  eventId?: string | null;
+  collectBusiness?: boolean;
+  buttonLabel?: string | null;
+  successMessage?: string | null;
   kind: AdminForm['kind'];
   name: string;
   slug?: string;
@@ -75,8 +81,11 @@ export function SettingsCard({
   onChange?: (settings: Record<string, unknown>) => void;
 }) {
   const template = mode === 'template';
+  const standing = !template && form.eventId === null;
   const [state, setState] = useState({
     name: form.name,
+    buttonLabel: form.buttonLabel ?? '',
+    successMessage: form.successMessage ?? '',
     slug: form.slug ?? '',
     intro: form.intro ?? '',
     status: form.status ?? 'DRAFT',
@@ -95,6 +104,8 @@ export function SettingsCard({
   useEffect(() => {
     setState({
       name: form.name,
+      buttonLabel: form.buttonLabel ?? '',
+      successMessage: form.successMessage ?? '',
       slug: form.slug ?? '',
       intro: form.intro ?? '',
       status: form.status ?? 'DRAFT',
@@ -133,6 +144,7 @@ export function SettingsCard({
       opensAt: state.opensAt ? new Date(state.opensAt).toISOString() : null,
       closesAt: state.closesAt ? new Date(state.closesAt).toISOString() : null,
       ...paidSettings(state),
+      ...(standing && { buttonLabel: state.buttonLabel.trim() || null, successMessage: state.successMessage.trim() || null }),
     };
     await onSave(body);
     setSaving(false);
@@ -184,6 +196,19 @@ export function SettingsCard({
           </div>
         </div>
         </>
+        )}
+        {standing && (
+          <>
+            <div>
+              <label htmlFor="f-button" className={labelClass}>Button label</label>
+              <input id="f-button" value={state.buttonLabel} maxLength={80} placeholder="Apply" disabled={!canEdit} onChange={(e) => update({ buttonLabel: e.target.value })} aria-describedby="f-button-hint" className={field} />
+              <p id="f-button-hint" className="mt-1 text-xs text-gray-500 dark:text-slate-400">The call to action on the pages that show this form.</p>
+            </div>
+            <div className="sm:col-span-2">
+              <label htmlFor="f-success" className={labelClass}>Thank-you message</label>
+              <textarea id="f-success" rows={3} value={state.successMessage} maxLength={2000} placeholder="Thanks — we'll review your application and email you." disabled={!canEdit} onChange={(e) => update({ successMessage: e.target.value })} className={field} />
+            </div>
+          </>
         )}
         {form.kind === 'PAID' && (
           <>
@@ -570,7 +595,9 @@ export function QuestionsCard({
   return (
     <div className={card} data-testid="form-questions">
       <h2 className="text-base font-semibold text-gray-900 dark:text-white">Questions</h2>
-      <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">Name, email and business profile are always asked. Add anything else you need to decide.</p>
+      <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">
+        {form.collectBusiness === false ? 'Name and email are always asked.' : 'Name, email and business profile are always asked.'} Add anything else you need to decide.
+      </p>
       <ol className="mt-3 divide-y divide-gray-200 dark:divide-slate-700">
         {form.questions.map((q, i) => (
           <li key={q.id} className="py-3" data-testid={`question-row-${q.id}`}>
