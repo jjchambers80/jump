@@ -26,6 +26,7 @@ The Hero takes a background **video** (`video`, optional `videoWebm`: `{ fileId 
 
 - `HeroVideo` (client island) starts the video from script, muted and looping. It never starts under `prefers-reduced-motion` or in the editor; the poster stays. A pause / play button (`hero.pauseVideo` content key, `aria-pressed` = paused) is always shown (WCAG 2.2.2).
 - `height: 'screen'` fills the window below the header: `HeroScreenOffset` measures the bottom of `[data-section="Header"]` into `--hero-offset`, and the section is `min-h-[calc(100svh-var(--hero-offset))]`.
+- `mobileLayout: 'button-bottom'` (full-bleed with an image or video, phones only): the heading and subheading center in the space above the buttons, which stack full width at the bottom of the hero (`pb-20` clears the video pause button). `stacked` (default) keeps the desktop layout.
 - `sectionWidth: 'full'` is edge to edge: no gutters, square corners, and the image is cropped to fill (`HeroMedia cover`) instead of fitted over a blurred copy. Set `paddingTop: 0` to sit flush under the header.
 
 ## Hero carousel (spec 041)
