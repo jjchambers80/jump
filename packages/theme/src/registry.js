@@ -18,8 +18,11 @@ import {
   video,
 } from './fields.js';
 
-/** Groups a section can be placed in (Shopify `enabled_on.groups`). */
-export const GROUPS = ['header', 'footer', 'template'];
+/**
+ * Groups a section can be placed in (Shopify `enabled_on.groups`). `page`
+ * sections exist only in a Content page's own document (`page:<id>`).
+ */
+export const GROUPS = ['header', 'footer', 'template', 'page'];
 
 /** Every section and block may be hidden (D9) and has these (sections only). */
 export const COMMON_SECTION_FIELDS = {
@@ -242,6 +245,15 @@ export const SECTIONS = {
       width: select('Width', ['narrow', 'normal', 'wide'], 'normal'),
     },
     blocks: { types: ['FaqItem'], max: 30 },
+  },
+  // The Content page's own title, text, template sections and Apply button
+  // (StorefrontPageBody), placed among the theme sections of a full-width page.
+  PageContent: {
+    label: 'Page content',
+    category: 'Text',
+    groups: ['page'],
+    limit: 1,
+    settings: {},
   },
 };
 

@@ -14,8 +14,9 @@ const pageRoot = {
 };
 
 /**
- * Document keys available so far. Cards 038G/H add `page:<id>`, `blog`,
- * `blog_post` and `event`.
+ * Fixed document keys. Content pages with the full-width template add one
+ * `page:<pageId>` document each (see pageDocumentDef); cards 038G/H add
+ * `blog`, `blog_post` and `event`.
  */
 export const DOCUMENTS = {
   header: { kind: 'HEADER_GROUP', group: 'header', required: ['Header'], root: {} },
@@ -27,8 +28,29 @@ export const DOCUMENTS = {
 /** Template keys a storefront page can render (header/footer frame them). */
 export const PAGE_KEYS = ['home', 'events'];
 
+/** Page.template value that hands a Content page's body to the theme. */
+export const FULL_WIDTH_TEMPLATE = 'full-width';
+
+const PAGE_KEY_RE = /^page:([a-z0-9]{20,32})$/;
+// Template sections plus PageContent (group `page`), which only a page has.
+const PAGE_DOCUMENT = { kind: 'PAGE', group: 'template', extraGroups: ['page'], required: [], root: pageRoot };
+
+/** `page:<pageId>` → the page id, else null. */
+export function pageIdOfKey(key) {
+  return typeof key === 'string' ? (PAGE_KEY_RE.exec(key)?.[1] ?? null) : null;
+}
+
 export function documentDef(key) {
-  return Object.prototype.hasOwnProperty.call(DOCUMENTS, key) ? DOCUMENTS[key] : null;
+  if (Object.prototype.hasOwnProperty.call(DOCUMENTS, key)) return DOCUMENTS[key];
+  return pageIdOfKey(key) ? PAGE_DOCUMENT : null;
+}
+
+/** Section types a document may hold (Puck slot `allow` for its template slot). */
+export function sectionsForDocument(key) {
+  const def = documentDef(key);
+  if (!def) return [];
+  const groups = [def.group, ...(def.extraGroups ?? [])];
+  return Object.keys(SECTIONS).filter((type) => SECTIONS[type].groups.some((g) => groups.includes(g)));
 }
 
 const ITEM_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
@@ -120,7 +142,7 @@ export function validateDocument(key, data, ctx = {}) {
   }
   if (content.length > SECTIONS_PER_DOCUMENT) errors.content = `at most ${SECTIONS_PER_DOCUMENT} sections`;
 
-  const allowed = Object.keys(SECTIONS).filter((type) => SECTIONS[type].groups.includes(def.group));
+  const allowed = sectionsForDocument(key);
   const ids = new Set();
   const counts = {};
   const out = [];

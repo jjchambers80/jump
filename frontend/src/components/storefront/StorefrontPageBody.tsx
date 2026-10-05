@@ -37,16 +37,19 @@ const reopens = (iso: string) => new Date(iso).toLocaleDateString(undefined, { m
 export default function StorefrontPageBody({
   page,
   organizationId,
+  as: Wrapper = 'main',
 }: {
   page: PublicPage;
   organizationId: string;
+  /** `div` inside a full-width page, whose frame already renders the `main`. */
+  as?: 'main' | 'div';
 }) {
   const sections = page.template?.sections;
   const apply = page.applyForm ?? null;
   const applyHref = apply ? `/organizations/${organizationId}/apply/${apply.slug}` : '';
   const isOpen = apply?.status === 'OPEN';
   return (
-    <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
+    <Wrapper className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
       <article data-testid="storefront-page" data-template={page.template?.name}>
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white sm:text-4xl">{page.title}</h1>
         {apply && (
@@ -107,6 +110,6 @@ export default function StorefrontPageBody({
         {isOpen && <ApplyInline organizationId={organizationId} formSlug={apply!.slug} title={apply!.name} />}
       </article>
       {isOpen && <ApplyDrawer organizationId={organizationId} formSlug={apply!.slug} />}
-    </main>
+    </Wrapper>
   );
 }

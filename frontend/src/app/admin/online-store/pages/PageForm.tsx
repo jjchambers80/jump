@@ -14,6 +14,8 @@ import SeoListingCard, {
 import RichTextEditorField from '@/components/editor/RichTextEditorField';
 import { htmlToText } from '@/lib/html';
 import api, { type OnlineStorePage, type OnlineStorePageInput, type PageTemplate, type ApplicationFormSummary } from '@/services/api';
+import { FULL_WIDTH_TEMPLATE } from '@jump/theme';
+import { editorHref, themesApi } from '@/lib/themes';
 
 // Limits and the handle preview now live in the shared SEO card (spec 026).
 export { SEO_DESCRIPTION_MAX, SEO_TITLE_MAX, previewHandle };
@@ -50,6 +52,9 @@ export default function PageForm({
   // whether a contact form could deliver (store email set).
   const [templates, setTemplates] = useState<PageTemplate[] | null>(null);
   const [storeEmail, setStoreEmail] = useState<string | null | undefined>(undefined);
+  // Full width (built in): the page's body is laid out in the theme editor, so
+  // it is offered only when the store renders through themes. Value: the live theme's id.
+  const [mainThemeId, setMainThemeId] = useState<string | null>(null);
   // Spec 044D: standing application forms for the Apply button
   const [standingForms, setStandingForms] = useState<ApplicationFormSummary[] | null>(null);
   const { data: session } = useSession();
@@ -85,6 +90,16 @@ export default function PageForm({
       .catch(() => {
         if (!cancelled) setStoreEmail(undefined);
       });
+    themesApi
+      .status()
+      .then(async (status) => {
+        if (!status.enabled) return;
+        const { themes } = await themesApi.list();
+        if (!cancelled) setMainThemeId(themes.find((t) => t.role === 'MAIN')?.id ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setMainThemeId(null);
+      });
     // Spec 044D: fetch standing application forms for this org
     api
       .get<{ data: ApplicationFormSummary[] }>(`/admin/standing-application-forms`)
@@ -100,8 +115,9 @@ export default function PageForm({
   }, [selectedOrgId]);
 
   const chosen = templates?.find((item) => item.name === template) ?? null;
+  const fullWidth = template === FULL_WIDTH_TEMPLATE;
   // A saved name with no matching template still shows, so the select never misreports it.
-  const missingTemplate = template !== null && !chosen;
+  const missingTemplate = template !== null && !chosen && !fullWidth;
   const needsStoreEmail =
     chosen?.sections.some((section) => section.type === 'contact_form') && storeEmail === null;
   const liveUrl = initial
@@ -253,6 +269,7 @@ export default function PageForm({
               className={field}
             >
               <option value="">Default page</option>
+              {(mainThemeId || fullWidth) && <option value={FULL_WIDTH_TEMPLATE}>Full width</option>}
               {(templates ?? []).map((item) => (
                 <option key={item.id} value={item.name}>
                   {item.label}
@@ -261,7 +278,11 @@ export default function PageForm({
               {missingTemplate && <option value={template ?? ''}>{template} (missing)</option>}
             </select>
             <p className={hint}>
-              {chosen?.description ||
+              {(fullWidth &&
+                (mainThemeId
+                  ? 'Edge-to-edge sections around your page content, laid out in the theme editor.'
+                  : 'Needs the theme editor, which is off for this store. The page shows its default layout.')) ||
+                chosen?.description ||
                 (templates?.length
                   ? 'Choose how this page is laid out on your online store.'
                   : 'No custom templates yet. Pages use the default layout.')}
@@ -277,6 +298,19 @@ export default function PageForm({
                 </Link>{' '}
                 so messages can be delivered.
               </p>
+            )}
+            {fullWidth && mainThemeId && (
+              initial?.template === FULL_WIDTH_TEMPLATE ? (
+                <Link
+                  href={`${editorHref(mainThemeId)}?page=${encodeURIComponent(`page:${initial.id}`)}`}
+                  data-testid="customize-page"
+                  className="mt-3 inline-flex items-center rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+                >
+                  Customize
+                </Link>
+              ) : (
+                <p className={hint}>Save the page, then customize its layout.</p>
+              )
             )}
             {isSystemAdmin && (
               <Link

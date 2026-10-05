@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
-import { getPreset, validateDocument } from '@jump/theme';
+import { FULL_WIDTH_TEMPLATE, getPreset, presetDocument, validateDocument } from '@jump/theme';
 import { describeDocumentError, describeSaveError } from './errors';
 import ActionsMenu from '@/components/ActionsMenu';
 import { useThemeMode } from '@/components/ThemeProvider';
@@ -16,6 +16,8 @@ import { useOrg } from '@/components/OrgContext';
 import { useMenusApi } from '@/app/admin/content/menus/useMenusApi';
 import type { StoreFile } from '@/lib/content';
 import { codeHref, themesApi, type ThemeDetail, type ThemeDocumentData } from '@/lib/themes';
+import api, { type OnlineStorePage } from '@/services/api';
+import type { PublicPage } from '@/components/storefront/StorefrontPageBody';
 import type { SectionContext } from '../sections/context';
 import type { ResolvedData } from '../types';
 import { Puck, blocksPlugin, usePuck, type Data, type Plugin } from './puck';
@@ -25,11 +27,13 @@ import { EditorServicesContext } from './EditorServices';
 import RevisionsDialog from './RevisionsDialog';
 import SectionsOutline from './SectionsOutline';
 
-type DocKey = 'header' | 'footer' | TemplateKey;
+// Fixed documents, plus `page:<id>` for each full-width Content page once opened.
+type DocKey = string;
 const DOC_KEYS: DocKey[] = ['header', 'footer', 'home', 'events'];
 type Docs = Record<DocKey, ThemeDocumentData>;
 
-const DOC_LABELS: Record<DocKey, string> = { header: 'Header', footer: 'Footer', home: 'Home page', events: 'Events page' };
+const DOC_LABELS: Record<string, string> = { header: 'Header', footer: 'Footer', home: 'Home page', events: 'Events page' };
+const isPageKey = (key: string) => key.startsWith('page:');
 const LIVE_NOTE_KEY = 'jump.theme-editor.live-note.';
 const BACKUP_KEY = 'jump.theme-editor.backup.';
 
@@ -45,20 +49,28 @@ interface Loaded {
   resolved: ResolvedData;
 }
 
-async function loadEditor(themeId: string): Promise<Loaded> {
+/** The fixed documents, plus `pageKey` when the editor opens on a Content page. */
+async function loadEditor(themeId: string, pageKey: string): Promise<Loaded> {
+  const keys = isPageKey(pageKey) ? [...DOC_KEYS, pageKey] : DOC_KEYS;
   const [theme, content, preview, ...documents] = await Promise.all([
     themesApi.get(themeId),
     themesApi.content(themeId),
-    themesApi.previewData(themeId, 'events'),
-    ...DOC_KEYS.map((key) => themesApi.document(themeId, key)),
+    themesApi.previewData(themeId, isPageKey(pageKey) ? pageKey : 'events'),
+    ...keys.map((key) => themesApi.document(themeId, key)),
   ]);
   const docs = {} as Docs;
   const versions = {} as Record<DocKey, number>;
-  DOC_KEYS.forEach((key, i) => {
+  keys.forEach((key, i) => {
     docs[key] = documents[i].data;
     versions[key] = documents[i].version;
   });
   return { theme, docs, versions, content: content.resolved, organization: preview.organization, resolved: preview.resolved };
+}
+
+/** `?page=page:<id>` opens the editor on that Content page (PageForm's Customize). */
+function initialPage() {
+  const page = new URLSearchParams(window.location.search).get('page');
+  return page && (TEMPLATE_KEYS.includes(page) || isPageKey(page)) ? page : 'home';
 }
 
 function InspectorToggle() {
@@ -123,7 +135,10 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
   const [saved, setSaved] = useState<Docs | null>(null);
   const [versions, setVersions] = useState<Record<DocKey, number> | null>(null);
   const [themeVersion, setThemeVersion] = useState(1);
-  const [page, setPage] = useState<TemplateKey>('home');
+  const [page, setPage] = useState<TemplateKey>(initialPage);
+  // Full-width Content pages (picker options) and each opened page's payload (Page content section).
+  const [contentPages, setContentPages] = useState<{ key: string; title: string }[]>([]);
+  const [pagePayloads, setPagePayloads] = useState<Record<string, PublicPage>>({});
   const [mountKey, setMountKey] = useState(0);
   const [menus, setMenus] = useState<{ id: string; title: string }[]>([]);
   const [files, setFiles] = useState<Record<string, { url: string; width: number | null; height: number | null; alt: string | null }>>({});
@@ -136,10 +151,14 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
   const [status, setStatus] = useState<string | null>(null);
   const resetKeys = useRef(new Set<DocKey>());
 
+  const pageRef = useRef(page);
+  pageRef.current = page;
   const reload = useCallback(async () => {
     setLoadError(null);
     try {
-      const next = await loadEditor(themeId);
+      const next = await loadEditor(themeId, pageRef.current);
+      const payload = next.resolved.page;
+      if (payload) setPagePayloads({ [pageRef.current]: payload });
       setLoaded(next);
       setDocs(next.docs);
       setSaved(next.docs);
@@ -156,6 +175,14 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
   useEffect(() => {
     if (orgLoading || !selectedOrgId) return;
     void reload();
+    api
+      .get<{ pages: OnlineStorePage[] }>('/admin/pages')
+      .then((r) =>
+        setContentPages(
+          r.pages.filter((p) => p.template === FULL_WIDTH_TEMPLATE).map((p) => ({ key: `page:${p.id}`, title: p.title })),
+        ),
+      )
+      .catch(() => setContentPages([]));
     menusApi
       .list()
       .then((r) => setMenus(r.menus.map((m) => ({ id: m.id, title: m.title }))))
@@ -169,7 +196,7 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
   }, [themeId, selectedOrgId, orgLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dirtyKeys = useMemo(
-    () => (docs && saved ? DOC_KEYS.filter((key) => resetKeys.current.has(key) || !sameDocument(docs[key], saved[key])) : []),
+    () => (docs && saved ? Object.keys(docs).filter((key) => resetKeys.current.has(key) || !sameDocument(docs[key], saved[key])) : []),
     [docs, saved],
   );
   const dirty = dirtyKeys.length > 0;
@@ -189,13 +216,13 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
       (getPreset(loaded?.theme.presetKey ?? 'eventimus-default')?.settings.colors.schemes ?? [])).map((s: { id: string; name: string }) => ({ id: s.id, name: s.name })),
     [loaded],
   );
-  const config = useMemo(() => buildEditorConfig({ schemes, menus }), [schemes, menus]);
+  const config = useMemo(() => buildEditorConfig({ schemes, menus }, page), [schemes, menus, page]);
 
   const metadata = useMemo(() => {
     if (!loaded) return {};
     const ctx: SectionContext = {
       organization: loaded.organization,
-      resolved: { ...loaded.resolved, files },
+      resolved: { ...loaded.resolved, files, page: pagePayloads[page] },
       settings: { ...loaded.theme.resolvedSettings, colors: { schemes: loaded.theme.resolvedSettings?.colors?.schemes ?? getPreset(loaded.theme.presetKey)?.settings.colors.schemes } },
       content: loaded.content,
       host: null,
@@ -205,7 +232,7 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
       editing: true,
     };
     return { ctx };
-  }, [loaded, files]);
+  }, [loaded, files, pagePayloads, page]);
 
   const services = useMemo(
     () => ({
@@ -224,17 +251,38 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
     [page],
   );
 
-  const switchPage = (next: TemplateKey) => {
+  const [switching, setSwitching] = useState(false);
+  const switchPage = async (next: TemplateKey) => {
     if (next === page) return;
+    // A Content page's document and payload load the first time it is opened.
+    if (docs && !docs[next]) {
+      setSwitching(true);
+      try {
+        const [document, preview] = await Promise.all([themesApi.document(themeId, next), themesApi.previewData(themeId, next)]);
+        setDocs((prev) => (prev ? { ...prev, [next]: document.data } : prev));
+        setSaved((prev) => (prev ? { ...prev, [next]: document.data } : prev));
+        setVersions((prev) => (prev ? { ...prev, [next]: document.version } : prev));
+        if (preview.resolved?.page) setPagePayloads((prev) => ({ ...prev, [next]: preview.resolved.page }));
+        setFiles((prev) => ({ ...(preview.resolved?.files ?? {}), ...prev }));
+      } catch (err: any) {
+        setSaveError({ message: err?.message || 'Could not open that page' });
+        return;
+      } finally {
+        setSwitching(false);
+      }
+    }
     setPage(next);
     setMountKey((k) => k + 1);
   };
 
+  const pageLabel = (key: string) =>
+    TEMPLATE_LABELS[key] ?? DOC_LABELS[key] ?? `Page: ${contentPages.find((p) => p.key === key)?.title ?? pagePayloads[key]?.title ?? 'untitled'}`;
+
   const resetPage = () => {
-    const preset = getPreset(loaded?.theme.presetKey ?? 'eventimus-default');
-    if (!preset || !window.confirm(`Reset the ${TEMPLATE_LABELS[page].toLowerCase()} to the theme default? Save to keep the change.`)) return;
+    const preset = presetDocument(loaded?.theme.presetKey ?? 'eventimus-default', page);
+    if (!preset || !window.confirm(`Reset the ${pageLabel(page).toLowerCase()} to the theme default? Save to keep the change.`)) return;
     resetKeys.current.add(page);
-    setDocs((prev) => (prev ? { ...prev, [page]: structuredClone(preset.documents[page]) } : prev));
+    setDocs((prev) => (prev ? { ...prev, [page]: preset } : prev));
     setMountKey((k) => k + 1);
   };
 
@@ -256,11 +304,10 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
       setSaving(false);
       return;
     }
-    const presetDocs = getPreset(loaded.theme.presetKey)?.documents ?? {};
     const documents = Object.fromEntries(
       dirtyKeys.map((key) => {
         // "Reset to theme default" left untouched deletes the stored row (contracts C5).
-        const untouchedReset = resetKeys.current.has(key) && sameDocument(docs[key], (presetDocs as Record<string, ThemeDocumentData>)[key]);
+        const untouchedReset = resetKeys.current.has(key) && sameDocument(docs[key], presetDocument(loaded.theme.presetKey, key));
         return [key, { data: untouchedReset ? null : docs[key], version: versions[key] }];
       }),
     );
@@ -399,12 +446,13 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
                 <select
                   id="editor-page"
                   value={page}
-                  onChange={(e) => switchPage(e.target.value as TemplateKey)}
-                  className="h-8 rounded-md border border-gray-300 bg-white px-2 text-sm"
+                  disabled={switching}
+                  onChange={(e) => void switchPage(e.target.value)}
+                  className="h-8 max-w-[14rem] rounded-md border border-gray-300 bg-white px-2 text-sm"
                 >
-                  {TEMPLATE_KEYS.map((key) => (
+                  {[...TEMPLATE_KEYS, ...contentPages.map((p) => p.key), ...(isPageKey(page) && !contentPages.some((p) => p.key === page) ? [page] : [])].map((key) => (
                     <option key={key} value={key}>
-                      {TEMPLATE_LABELS[key]}
+                      {pageLabel(key)}
                       {dirtyKeys.includes(key) ? ' •' : ''}
                     </option>
                   ))}
@@ -415,7 +463,7 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
                   label="More editor actions"
                   items={[
                     ...(loaded.theme.role === 'MAIN' ? [{ label: 'Revision history', onSelect: () => setHistoryOpen(true) }] : []),
-                    { label: `Reset ${TEMPLATE_LABELS[page].toLowerCase()} to theme default`, onSelect: resetPage },
+                    { label: `Reset ${pageLabel(page).toLowerCase()} to theme default`, onSelect: resetPage },
                     {
                       label: 'Edit code',
                       onSelect: () => {
@@ -436,7 +484,7 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
                 </button>
                 {dirty && (
                   <span id="unsaved-summary" className="sr-only">
-                    Unsaved changes: {dirtyKeys.map((k) => DOC_LABELS[k]).join(', ')}
+                    Unsaved changes: {dirtyKeys.map(pageLabel).join(', ')}
                   </span>
                 )}
               </div>

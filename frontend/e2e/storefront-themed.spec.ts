@@ -90,6 +90,19 @@ test.describe('themed storefront (server-rendered)', () => {
     await expect(page.locator('[data-theme-frame]')).toHaveCount(1);
   });
 
+  test('full-width page: theme sections edge to edge around the page content', async ({ page }) => {
+    await page.goto('/organizations/theme-light/pages/vendors');
+    const main = page.locator('main#storefront-main');
+    await expect(main.getByRole('heading', { name: 'Book your table' })).toBeVisible();
+    await expect(main.getByTestId('storefront-page').getByRole('heading', { name: 'Sell at the market' })).toBeVisible();
+    await expect(main.getByText('Tables from $40.')).toBeVisible();
+    await expect(main.getByRole('heading', { name: 'Questions before you apply?' })).toBeVisible();
+    // One landmark: the page body renders as a div inside the frame's main.
+    await expect(page.locator('main')).toHaveCount(1);
+    const order = await main.locator('[data-section]').evaluateAll((els) => els.map((el) => el.getAttribute('data-section')));
+    expect(order).toEqual(['Hero', 'PageContent', 'CallToAction']);
+  });
+
   test('rollback: an organization outside the rollout gets the legacy client storefront (test 17)', async ({ page }) => {
     let clientFetches = 0;
     await page.route('**/organizations/theme-legacy/public', (route) => {

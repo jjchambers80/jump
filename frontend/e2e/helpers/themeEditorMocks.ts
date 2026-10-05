@@ -37,6 +37,10 @@ const events = [1, 2, 3].map((i) => ({
   availableTickets: 30,
 }));
 
+/** A full-width Content page the editor can open (`?page=page:<id>`). */
+export const fullWidthPage = { id: 'cmpagefullwidth000000001', title: 'Vendors', slug: 'vendors' };
+export const fullWidthPageKey = `page:${fullWidthPage.id}`;
+
 export interface EditorMockOptions {
   conflictOnSave?: boolean;
   invalidOnSave?: boolean;
@@ -51,8 +55,9 @@ export async function mockThemeEditorApi(page: Page, options: EditorMockOptions 
     footer: preset.documents.footer,
     home: preset.documents.home,
     events: preset.documents.events,
+    [fullWidthPageKey]: { root: { props: {} }, content: [{ type: 'PageContent', props: { id: 'PageContent-1' } }] },
   };
-  const versions: Record<string, number> = { header: 0, footer: 0, home: 0, events: 0 };
+  const versions: Record<string, number> = { header: 0, footer: 0, home: 0, events: 0, [fullWidthPageKey]: 0 };
   let themeVersion = 1;
   const revisions = [
     { id: 'rev-2', changedKeys: ['home'], savedBy: { id: 'u1', name: 'Sam Organizer' }, createdAt: '2027-03-02T15:00:00.000Z' },
@@ -88,16 +93,26 @@ export async function mockThemeEditorApi(page: Page, options: EditorMockOptions 
   await page.route(`${API}/admin/themes/theme-main/content`, (route) =>
     route.fulfill({ json: { overrides: {}, resolved: { 'events.upcoming': 'Upcoming events', 'events.viewAll': 'View all events', 'events.empty': 'No upcoming events', 'event.getTickets': 'Get tickets', 'event.rsvp': 'RSVP', 'event.soldOut': 'Sold out', 'announcement.pause': 'Pause announcements', 'announcement.close': 'Close', 'carousel.label': 'Featured', 'carousel.previous': 'Previous slide', 'carousel.next': 'Next slide', 'carousel.pause': 'Pause slides', 'carousel.slide': 'Slide {n} of {total}' } } }),
   );
-  await page.route(`${API}/admin/themes/theme-main/preview-data**`, (route) =>
-    route.fulfill({
+  await page.route(`${API}/admin/pages`, (route) =>
+    route.fulfill({ json: { pages: [{ ...fullWidthPage, content: '', isVisible: true, template: 'full-width' }, { id: 'page-about', title: 'About us', slug: 'about', content: '', isVisible: true, template: null }] } }),
+  );
+  await page.route(`${API}/admin/themes/theme-main/preview-data**`, (route) => {
+    const isPage = new URL(route.request().url()).searchParams.get('page') === fullWidthPageKey;
+    return route.fulfill({
       json: {
         organization: { ...editorOrg, buyerSignInLinks: false },
-        resolved: { events, menus: { main: [], footer: [] }, links: { 'EVENTS:': '/organizations/riverside-presents/events' }, files: {} },
+        resolved: {
+          events,
+          menus: { main: [], footer: [] },
+          links: { 'EVENTS:': '/organizations/riverside-presents/events' },
+          files: {},
+          ...(isPage && { page: { ...fullWidthPage, content: '<p>Tables from $40.</p>', template: { name: 'full-width', sections: [{ type: 'page_content' }] } } }),
+        },
       },
-    }),
-  );
+    });
+  });
   await page.route(`${API}/admin/themes/theme-main/documents/*`, (route) => {
-    const key = new URL(route.request().url()).pathname.split('/').pop()!;
+    const key = decodeURIComponent(new URL(route.request().url()).pathname.split('/').pop()!);
     return route.fulfill({ json: { key, kind: 'TEMPLATE', data: docs[key], version: versions[key], isDefault: versions[key] === 0 } });
   });
   await page.route(`${API}/admin/themes/theme-main/save`, async (route) => {
@@ -111,7 +126,7 @@ export async function mockThemeEditorApi(page: Page, options: EditorMockOptions 
     }
     const out: Record<string, number> = {};
     for (const [key, entry] of Object.entries<any>(body.documents ?? {})) {
-      docs[key] = entry.data ?? preset.documents[key];
+      docs[key] = entry.data ?? (preset.documents as Record<string, any>)[key];
       versions[key] = entry.data === null ? 0 : versions[key] + 1;
       out[key] = versions[key];
     }

@@ -79,6 +79,15 @@ createServer(async (req, res) => {
     if (locked(fixture, req)) return send(res, 403, gateBody(fixture));
     const page = url.searchParams.get('page');
     const withTemplate = (template, extra) => ({ ...fixture.render, ...extra, documents: { ...fixture.render.documents, template } });
+    // Content pages (`page:<slug>`): the frame plus `resolved.page`, and a
+    // full-width page's own document as the template.
+    if (page?.startsWith('page:')) {
+      const route = fixture.routes[`/public/pages/${page.slice(5)}`];
+      if (!route) return send(res, 404, { error: 'NotFoundError', message: 'Page not found' });
+      const resolved = { ...fixture.render.resolved, page: route.page };
+      const doc = route.page.template?.name === 'full-width' ? fixture.pageDocuments?.[route.page.id] : null;
+      return send(res, 200, doc ? withTemplate(doc, { page: `page:${route.page.id}`, resolved }) : withTemplate(null, { page: 'frame', resolved }));
+    }
     const body =
       page === 'frame'
         ? withTemplate(null, { page: 'frame' })

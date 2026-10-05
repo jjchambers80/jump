@@ -247,7 +247,7 @@ router.get('/:id/public/redirect', async (req, res, next) => {
 });
 
 /**
- * GET /organizations/:id/public/storefront/render?page=home|events (spec 038,
+ * GET /organizations/:id/public/storefront/render?page=home|events|frame|page:<id or slug> (spec 038,
  * contracts C1). Everything a server-rendered themed page needs, in one call.
  * Organizations outside the rollout get `{ renderer: 'legacy' }` and nothing
  * else. The parameter MUST be `:id`: gateByOrgParam reads req.params.id, and

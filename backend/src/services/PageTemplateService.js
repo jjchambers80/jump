@@ -3,6 +3,7 @@
 // the page out from the stored, normalized manifest.
 
 import { prisma } from '@jump/db';
+import { FULL_WIDTH_TEMPLATE } from '@jump/theme';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import { parsePageTemplateManifest } from '../utils/pageTemplateManifest.js';
 
@@ -49,6 +50,11 @@ class PageTemplateService {
   async upsert(organizationId, input, userId = null) {
     const { manifest, errors } = parsePageTemplateManifest(input);
     if (!manifest) throw new ValidationError('The template is not valid', errors);
+    if (manifest.name === FULL_WIDTH_TEMPLATE) {
+      throw new ValidationError('The template is not valid', [
+        { field: 'name', message: `${FULL_WIDTH_TEMPLATE} is a built-in template name` },
+      ]);
+    }
     const data = {
       label: manifest.label,
       description: manifest.description ?? null,
@@ -85,9 +91,9 @@ class PageTemplateService {
     });
   }
 
-  /** 400 unless `name` is null or one of the organization's templates. */
+  /** 400 unless `name` is null, the built-in full-width template, or one of the organization's templates. */
   async assertAssignable(organizationId, name) {
-    if (name === null || name === undefined) return;
+    if (name === null || name === undefined || name === FULL_WIDTH_TEMPLATE) return;
     if (!(await this.resolve(organizationId, name))) {
       const error = new ValidationError('That page template does not exist', [
         { field: 'template', message: 'Choose one of the store’s page templates' },

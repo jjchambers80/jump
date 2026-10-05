@@ -49,6 +49,16 @@ Under the hood, `followSelection` (`theme/editor/config.tsx`) passes `editorSele
 
 Heading, intro and up to 30 **Question** blocks (question + rich-text answer). Each question is a native `<details>` disclosure. "Open one answer at a time" (default on) and "Open the first answer" are applied by the `FaqBehavior` island.
 
+## Full-width pages
+
+A Content page (Online store › Pages) whose **Template** is **Full width** (built in, `Page.template = 'full-width'`, offered only when themes are on for the store) hands its body to the theme. Each such page has its own theme document `page:<pageId>`, edited in the theme editor like Home and Events: **Customize** on the page form opens `…/editor?page=page:<id>`, and the editor's page picker lists every full-width page as "Page: <title>".
+
+- The document holds any template section plus **Page content** (`PageContent`, group `page`, at most one): the page's own title, text, contact form and Apply button (`StorefrontPageBody`, rendered as a `div` because the frame owns `main`). New documents start as just Page content, so switching a page to Full width changes nothing until sections are added. Remove it to build the page from sections alone.
+- Give sections `sectionWidth: full` for edge-to-edge bands; a Hero with `paddingTop: 0` sits flush under the header.
+- Storefront: the page route makes one render call, `page=page:<slug>`. The backend resolves the page through `PageService.getPublic` (hidden = 404), returns it as `resolved.page`, and adds the `page:<id>` document only for full-width pages; other pages get the frame and keep the fixed body. Orgs without themes render the default body (the template reads as `page_content` only).
+- Saves of a `page:` key are refused (400) unless the page belongs to the organization; the editor's preview data includes hidden pages.
+- Not yet: theme export/import of page documents, and a blog equivalent (rest of 038G).
+
 ## Layout widths
 
 - **Theme page width**: `settings.layout.pageWidth` (1000-1600 px, default 1280 = the old `max-w-7xl`) sets `--theme-page-width` on the frame.

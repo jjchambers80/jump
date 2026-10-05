@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect as baseExpect, test, type Page } from '@playwright/test';
 import { signInAsStaff } from './helpers/session';
-import { API, editorOrg, mockThemeEditorApi } from './helpers/themeEditorMocks';
+import { API, editorOrg, fullWidthPageKey, mockThemeEditorApi } from './helpers/themeEditorMocks';
 
 // Spec 038D: the theme editor against a mocked API (documents from the real
 // preset). Covers §16 editor tests and acceptance tests 11 (axe) and 16 (restore).
@@ -322,7 +322,30 @@ test.describe('theme editor (038D)', () => {
       .analyze();
     expect(results.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
   });
+
+  test('Customize opens a full-width page: sections go around its content and save to page:<id>', async ({ page }) => {
+    const api = await mockThemeEditorApi(page);
+    await page.goto(`${EDITOR}?page=${encodeURIComponent(fullWidthPageKey)}`);
+    await expect(canvas(page).getByText('Tables from $40.').first()).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByLabel('Page being edited')).toHaveValue(fullWidthPageKey);
+    await expect(page.getByLabel('Page being edited').locator('option', { hasText: 'Page: Vendors' })).toHaveCount(1);
+
+    const template = outline(page).getByRole('region', { name: 'Template' });
+    const addable = template.getByRole('list', { name: /Sections you can add to the template/ });
+    await template.getByRole('button', { name: 'Add section' }).click();
+    // One Page content per page, and it is already there.
+    await expect(addable.getByRole('button', { name: 'Page content' })).toHaveCount(0);
+    await addable.getByRole('button', { name: 'Call to action' }).click();
+    await template.getByRole('button', { name: 'More actions for Call to action' }).click();
+    await page.getByRole('menuitem', { name: 'Move up' }).click();
+
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect.poll(() => api.saves.length).toBe(1);
+    expect(Object.keys(api.saves[0].documents)).toEqual([fullWidthPageKey]);
+    expect(api.saves[0].documents[fullWidthPageKey].data.content.map((s: any) => s.type)).toEqual(['CallToAction', 'PageContent']);
+  });
 });
+
 
 test.describe('theme editor as a system administrator', () => {
   test.describe.configure({ timeout: 120_000 });
