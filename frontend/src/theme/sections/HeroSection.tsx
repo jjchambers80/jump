@@ -18,6 +18,7 @@ export interface HeroProps {
   overlay?: number;
   alignment?: 'center' | 'left';
   height?: 'small' | 'medium' | 'large' | 'screen';
+  mobileLayout?: 'stacked' | 'button-bottom';
   colorScheme?: string;
   paddingTop?: number;
   sectionWidth?: string;
@@ -93,6 +94,7 @@ export default function HeroSection({
   overlay = 40,
   alignment = 'center',
   height = 'medium',
+  mobileLayout = 'stacked',
   Buttons,
   ctx,
   ...common
@@ -107,8 +109,12 @@ export default function HeroSection({
   const alt = image?.decorative ? '' : (image?.alt ?? file?.alt ?? '');
   const headingId = `hero-${id}`;
   const centered = alignment === 'center';
+  // Phones: text centered in the space above full-width buttons pinned to the
+  // bottom. Full-bleed only; sm and up keep the stacked layout.
+  const bottom = mobileLayout === 'button-bottom' && (file || videos.length) && layout === 'full-bleed';
   const text = (onImage: boolean) => (
-    <div className={`${centered ? 'mx-auto text-center' : ''} max-w-2xl`}>
+    <div className={`${centered ? 'mx-auto text-center' : ''} max-w-2xl ${bottom ? 'max-sm:flex max-sm:w-full max-sm:flex-1 max-sm:flex-col' : ''}`}>
+      <div className={bottom ? 'max-sm:my-auto' : undefined}>
       {heading && (
         <h2 id={headingId} className={`text-4xl font-bold tracking-tight sm:text-5xl ${onImage ? 'text-white' : 'text-gray-900 dark:text-slate-100'}`}>
           {heading}
@@ -117,7 +123,12 @@ export default function HeroSection({
       {subheading && (
         <p className={`mt-4 text-lg ${onImage ? 'text-white/90' : 'text-gray-600 dark:text-slate-300'}`}>{subheading}</p>
       )}
-      <Buttons className={`mt-8 flex flex-wrap gap-3 ${centered ? 'justify-center' : ''}`} />
+      </div>
+      <Buttons
+        className={`mt-8 flex flex-wrap gap-3 ${centered ? 'justify-center' : ''} ${
+          bottom ? 'max-sm:flex-col max-sm:flex-nowrap max-sm:[&_a]:flex max-sm:[&_a]:w-full max-sm:[&_a]:justify-center' : ''
+        }`}
+      />
     </div>
   );
 
@@ -131,7 +142,7 @@ export default function HeroSection({
         <div className={full ? 'w-full' : 'mx-auto w-full max-w-7xl px-4 pt-4 sm:px-6 sm:pt-6 lg:px-8'}>
           <section
             aria-labelledby={heading ? headingId : undefined}
-            className={`relative isolate flex items-center overflow-hidden bg-slate-900 ${full ? '' : 'rounded-[32px]'} ${minHeight}`}
+            className={`relative isolate flex items-center overflow-hidden bg-slate-900 ${full ? '' : 'rounded-[32px]'} ${minHeight} ${bottom ? 'max-sm:items-stretch' : ''}`}
           >
             {screenOffset}
             {videos.length ? (
@@ -151,7 +162,8 @@ export default function HeroSection({
               file && <HeroMedia url={file.url} alt={alt} overlay={opacity} cover={full} />
             )}
             {!full && <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[32px] ring-1 ring-inset ring-white/10" />}
-            <div className="w-full px-6 py-16 sm:px-10 lg:px-12">{text(true)}</div>
+            {/* button-bottom: pb-20 keeps the buttons clear of the video's pause button. */}
+            <div className={`w-full px-6 py-16 sm:px-10 lg:px-12 ${bottom ? 'max-sm:flex max-sm:flex-col max-sm:pb-20' : ''}`}>{text(true)}</div>
           </section>
         </div>
       </SectionShell>

@@ -183,6 +183,9 @@ export const SECTIONS = {
       alignment: radio('Text alignment', ['center', 'left']),
       // screen = the window's height minus whatever sits above the hero (header).
       height: select('Height', [...HEIGHTS, 'screen'], 'medium'),
+      // Phones only, full-bleed only: button-bottom centers the text and pins
+      // the buttons full width to the bottom of the hero.
+      mobileLayout: select('Layout on mobile', ['stacked', 'button-bottom']),
     },
     blocks: buttons,
   },

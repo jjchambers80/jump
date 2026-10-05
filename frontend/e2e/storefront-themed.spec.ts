@@ -360,6 +360,31 @@ test.describe('starter homepage sections (038S)', () => {
     expect(Math.round(box.y)).toBe(Math.round(header.y + header.height));
   });
 
+  test('hero mobileLayout button-bottom: full-width button at the bottom on phones only', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/organizations/theme-video');
+    const hero = page.locator('[data-section="Hero"] section');
+    const button = hero.getByRole('link', { name: 'See all events' });
+    const heading = hero.getByRole('heading', { name: 'Become a vendor' });
+    await expect(button).toBeVisible();
+    const heroBox = (await hero.boundingBox())!;
+    const btn = (await button.boundingBox())!;
+    expect(Math.round(btn.width)).toBe(390 - 48);
+    const gap = heroBox.y + heroBox.height - (btn.y + btn.height);
+    expect(gap).toBeGreaterThan(64);
+    expect(gap).toBeLessThan(100);
+    await page.screenshot({ path: test.info().outputPath('hero-mobile.png') });
+    const h = (await heading.boundingBox())!;
+    expect(btn.y - (h.y + h.height)).toBeGreaterThan(200);
+
+    await page.setViewportSize({ width: 1024, height: 800 });
+    const wide = (await button.boundingBox())!;
+    expect(wide.width).toBeLessThan(400);
+    const wideHeading = (await heading.boundingBox())!;
+    expect(wide.y - (wideHeading.y + wideHeading.height)).toBeLessThan(100);
+  });
+
   test('FAQ: native disclosures, one answer open at a time (spec 041)', async ({ page }) => {
     await page.goto('/organizations/theme-blocks');
     const faq = page.getByRole('region', { name: 'Good to know' });
