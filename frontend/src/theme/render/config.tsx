@@ -19,6 +19,9 @@ import SlideBlock from '../sections/SlideBlock';
 import RichTextSection from '../sections/RichTextSection';
 import UpcomingEventsSection from '../sections/UpcomingEventsSection';
 import PageContentSection from '../sections/PageContentSection';
+import ImageWithTextSection from '../sections/ImageWithTextSection';
+import FeatureGridSection from '../sections/FeatureGridSection';
+import FeatureBlock from '../sections/FeatureBlock';
 import { sectionContext } from '../sections/context';
 
 // Puck hands every component its props plus `puck` (metadata) and, for slot
@@ -83,6 +86,21 @@ export const renderConfig: Config = {
     },
     UpcomingEvents: {
       render: ({ puck, ...props }: PuckProps) => <UpcomingEventsSection {...(props as any)} ctx={sectionContext(puck.metadata)} />,
+    },
+    ImageWithText: {
+      fields: { blocks: buttonsSlot },
+      render: ({ puck, blocks, ...props }: PuckProps) => (
+        <ImageWithTextSection {...(props as any)} Buttons={slotWrapper(blocks)} ctx={sectionContext(puck.metadata)} />
+      ),
+    },
+    FeatureGrid: {
+      fields: { blocks: { type: 'slot', allow: ['Feature'] } },
+      render: ({ puck, blocks, ...props }: PuckProps) => (
+        <FeatureGridSection {...(props as any)} Items={slotRender(blocks)} ctx={sectionContext(puck.metadata)} />
+      ),
+    },
+    Feature: {
+      render: ({ puck, ...props }: PuckProps) => <FeatureBlock {...(props as any)} ctx={sectionContext(puck.metadata)} />,
     },
     PageContent: {
       render: ({ puck, ...props }: PuckProps) => <PageContentSection {...(props as any)} ctx={sectionContext(puck.metadata)} />,

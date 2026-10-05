@@ -6,7 +6,7 @@
 
 ## Overview
 
-Storefront pages are built from **sections** (Announcement bar, Header, Hero, Hero carousel, Rich text, FAQ, Upcoming events, Call to action, Events hero, Event list, Footer). A section can hold **blocks** (buttons, announcements, slides, questions, footer columns). Organizers add, order, hide and edit them in the theme editor (Online store › Themes › Customize), which runs [Puck](https://puckeditor.com) over the same render functions the storefront uses, so the canvas is the store.
+Storefront pages are built from **sections** (Announcement bar, Header, Hero, Hero carousel, Rich text, Image with text, Feature grid, FAQ, Upcoming events, Call to action, Events hero, Event list, Footer, and Page content on full-width pages). A section can hold **blocks** (buttons, announcements, slides, features, questions, footer columns). Organizers add, order, hide and edit them in the theme editor (Online store › Themes › Customize), which runs [Puck](https://puckeditor.com) over the same render functions the storefront uses, so the canvas is the store.
 
 ## Key Files
 
@@ -48,6 +48,13 @@ Under the hood, `followSelection` (`theme/editor/config.tsx`) passes `editorSele
 ## FAQ (spec 041)
 
 Heading, intro and up to 30 **Question** blocks (question + rich-text answer). Each question is a native `<details>` disclosure. "Open one answer at a time" (default on) and "Open the first answer" are applied by the `FaqBehavior` island.
+
+## Landing sections
+
+Two sections for pages that sell:
+
+- **Image with text**: an image (alt text or decorative) beside a heading, rich text and up to two buttons. **Image position** left or right; side by side from `lg`, image first on phones. Without a resolved image the text stands alone, centered in a 3xl column.
+- **Feature grid**: heading, intro and up to 12 **Feature** blocks (image, title, short text) in 2, 3 or 4 columns (one column on phones, two from `sm`), centered or left aligned. The grid is the Puck slot (`slotRender`), so the column count is a class on the slot. A new grid starts with three features; **+ Add feature** adds more.
 
 ## Full-width pages
 

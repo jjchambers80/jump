@@ -16,6 +16,8 @@ import RichTextSection from '@/theme/sections/RichTextSection';
 import UpcomingEventsSection from '@/theme/sections/UpcomingEventsSection';
 import EventsHeroSection from '@/theme/sections/EventsHeroSection';
 import EventListSection from '@/theme/sections/EventListSection';
+import ImageWithTextSection from '@/theme/sections/ImageWithTextSection';
+import FeatureBlock from '@/theme/sections/FeatureBlock';
 import type { SectionContext } from '@/theme/sections/context';
 import { renderConfig, renderable } from '@/theme/render/config';
 
@@ -229,6 +231,60 @@ describe('FaqSection and FaqItemBlock', () => {
     const html = renderToStaticMarkup(<Render config={renderConfig} data={data as any} metadata={{ ctx: ctx() }} />);
     expect(html).toMatch(/class="faq-list /);
     expect(html.match(/<details/g)).toHaveLength(2);
+  });
+});
+
+describe('ImageWithTextSection', () => {
+  it('puts the image beside the text, on the right when asked, with its alt text', () => {
+    const html = renderToStaticMarkup(
+      <ImageWithTextSection id="it" image={{ fileId: 'f1', alt: 'Market floor' }} imagePosition="right" heading="Sell with us" body="<p>Tables from $40.</p>" Buttons={buttons('<a>Apply</a>')} ctx={ctx()} />,
+    );
+    expect(html).toContain('data-section="ImageWithText"');
+    expect(html).toContain('alt="Market floor"');
+    expect(html).toContain('lg:order-2');
+    expect(html).toContain('aria-labelledby="image-text-it"');
+    expect(html).toContain('Tables from $40.');
+    expect(html).toContain('Apply');
+  });
+
+  it('without a resolved image, the text stands alone', () => {
+    const html = renderToStaticMarkup(<ImageWithTextSection id="it" image={{ fileId: 'gone', alt: 'x' }} heading="Hi" Buttons={noButtons} ctx={ctx()} />);
+    expect(html).not.toContain('<img');
+    expect(html).not.toContain('lg:grid-cols-2');
+  });
+});
+
+describe('FeatureGrid', () => {
+  it('renders its features through the Puck slot in the chosen columns', () => {
+    const doc = {
+      root: { props: {} },
+      content: [
+        {
+          type: 'FeatureGrid',
+          props: {
+            id: 'fg',
+            heading: 'Why come',
+            columns: '4',
+            blocks: [
+              { type: 'Feature', props: { id: 'f-a', title: 'Free parking', text: 'Right by the door.' } },
+              { type: 'Feature', props: { id: 'f-b', title: 'Step-free', image: { fileId: 'f1', decorative: true } } },
+            ],
+          },
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(<Render config={renderConfig} data={{ ...renderable(doc), zones: {} } as any} metadata={{ ctx: ctx() }} />);
+    expect(html).toContain('data-section="FeatureGrid"');
+    expect(html).toContain('lg:grid-cols-4');
+    expect(html).toContain('Free parking');
+    expect(html).toContain('<h3');
+    expect(html).toContain('alt=""');
+  });
+
+  it('a feature whose image belongs elsewhere drops the image, not the card', () => {
+    const html = renderToStaticMarkup(<FeatureBlock id="f" title="Parking" image={{ fileId: 'gone', alt: 'Lot' }} ctx={ctx()} />);
+    expect(html).toContain('Parking');
+    expect(html).not.toContain('<img');
   });
 });
 
