@@ -3,6 +3,7 @@
 // with it. One fixture set per organization id: tests pick one by URL.
 
 import { getPreset, resolveContent, resolveSettings } from '@jump/theme';
+import { vendorLandingDocument } from './vendorLanding.mjs';
 
 const preset = getPreset('eventimus-default');
 /** The Events template every fixture serves for `page=events`. */
@@ -271,6 +272,21 @@ export const FIXTURES = {
       },
     },
   },
+  // The Vendors landing page (vendorLanding.mjs) on a store with an indigo brand.
+  'theme-vendors': (() => {
+    const base = render('theme-vendors', { organization: { name: 'Raleigh Retro Gamers', brandColor: '#4338ca', themeMode: 'SYSTEM' } });
+    const link = '/organizations/theme-vendors/pages/vendor-application';
+    return {
+      render: { ...base, resolved: { ...base.resolved, links: { ...base.resolved.links, 'PAGE:p-apply': link } } },
+      routes: {
+        '/public/pages/vendors': {
+          organization: base.organization,
+          page: { id: 'p-vendors', title: 'Vendors', slug: 'vendors', content: '', template: { name: 'full-width', sections: [{ type: 'page_content' }] } },
+        },
+      },
+      pageDocuments: { 'p-vendors': vendorLandingDocument('p-apply') },
+    };
+  })(),
   'theme-dark': { render: render('theme-dark', { organization: { themeMode: 'DARK', brandColor: '#be185d' } }), routes: {} },
   'theme-system': { render: render('theme-system', { organization: { themeMode: 'SYSTEM' } }), routes: {} },
   'theme-private': {

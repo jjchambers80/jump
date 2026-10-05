@@ -6,7 +6,7 @@
 
 ## Overview
 
-Storefront pages are built from **sections** (Announcement bar, Header, Hero, Hero carousel, Rich text, Image with text, Feature grid, FAQ, Upcoming events, Call to action, Events hero, Event list, Footer, and Page content on full-width pages). A section can hold **blocks** (buttons, announcements, slides, features, questions, footer columns). Organizers add, order, hide and edit them in the theme editor (Online store › Themes › Customize), which runs [Puck](https://puckeditor.com) over the same render functions the storefront uses, so the canvas is the store.
+Storefront pages are built from **sections** (Announcement bar, Header, Hero, Hero carousel, Rich text, Image with text, Feature grid, Stats, Checklist, Steps, FAQ, Upcoming events, Call to action, Events hero, Event list, Footer, and Page content on full-width pages). A section can hold **blocks** (buttons, announcements, slides, features, stats, list items, steps, questions, footer columns). Organizers add, order, hide and edit them in the theme editor (Online store › Themes › Customize), which runs [Puck](https://puckeditor.com) over the same render functions the storefront uses, so the canvas is the store.
 
 ## Key Files
 
@@ -55,6 +55,12 @@ Two sections for pages that sell:
 
 - **Image with text**: an image (alt text or decorative) beside a heading, rich text and up to two buttons. **Image position** left or right; side by side from `lg`, image first on phones. Without a resolved image the text stands alone, centered in a 3xl column.
 - **Feature grid**: heading, intro and up to 12 **Feature** blocks (image, title, short text) in 2, 3 or 4 columns (one column on phones, two from `sm`), centered or left aligned. The grid is the Puck slot (`slotRender`), so the column count is a class on the slot. A new grid starts with three features; **+ Add feature** adds more.
+- **Image with text: video**: a YouTube or Vimeo link (`videoUrl`, hosts checked by `httpsUrl`) puts a player in the image's place; the src is rebuilt by `videoEmbedSrc` (`lib/videoEmbed.ts`), so only the no-cookie YouTube or Vimeo player is ever embedded, and **Video title** is its iframe title. A link it cannot parse falls back to the image. **Heading level** `h1` makes the section the page's main heading, for a full-width page that leaves out Page content (use it once).
+- **Stats**: heading, intro and up to 6 **Stat** blocks (number, label) as one `<dl>` (label first in the markup, number shown on top in the brand color); columns fit the width (`auto-fit`, two on phones). Values over 8 characters render a size smaller.
+- **Checklist**: heading, intro, 1-3 columns and up to 30 **List item** blocks with a check (wanted) or cross (not allowed) marker. Every item carries both icons and the section hides one, so blocks need no section props; the icons are decorative and the heading carries the meaning. The slot is a `<ul role="list">` (a `forwardRef` element passed as the slot's `as`, because Puck forwards only `className`/`style`/`ref`).
+- **Steps**: heading, intro and up to 6 **Step** blocks (title, rich text) as an `<ol role="list">`; the large `01`-style numbers are a CSS counter, so reordering never desyncs them.
+
+The Raleigh Retro Gamers Vendors page is the reference composition: `frontend/e2e/fixtures/vendorLanding.mjs` (served as `theme-vendors` in the SSR fixture, checked by `e2e/storefront-vendor-landing.spec.ts` with axe on phone and desktop).
 
 ## Full-width pages
 

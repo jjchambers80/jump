@@ -288,6 +288,50 @@ describe('FeatureGrid', () => {
   });
 });
 
+describe('ImageWithText video', () => {
+  it('a YouTube link becomes a titled no-cookie player in the image\'s place', () => {
+    const html = renderToStaticMarkup(
+      <ImageWithTextSection id="v" image={{ fileId: 'f1', alt: 'Market floor' }} videoUrl="https://www.youtube.com/watch?v=UavsDmOhMys" videoTitle="Vendor reel" heading="Sell with us" Buttons={noButtons} ctx={ctx()} />,
+    );
+    expect(html).toContain('src="https://www.youtube-nocookie.com/embed/UavsDmOhMys"');
+    expect(html).toContain('title="Vendor reel"');
+    expect(html).toContain('lg:grid-cols-2');
+    expect(html).not.toContain('<img');
+  });
+
+  it('a link it cannot turn into a player falls back to the image', () => {
+    const html = renderToStaticMarkup(<ImageWithTextSection id="v" image={{ fileId: 'f1', alt: 'Market floor' }} videoUrl="https://www.youtube.com/about" Buttons={noButtons} ctx={ctx()} />);
+    expect(html).not.toContain('<iframe');
+    expect(html).toContain('alt="Market floor"');
+  });
+});
+
+describe('Stats, Checklist and Steps', () => {
+  const render = (content: unknown[]) =>
+    renderToStaticMarkup(<Render config={renderConfig} data={{ ...renderable({ root: { props: {} }, content } as any), zones: {} } as any} metadata={{ ctx: ctx() }} />);
+
+  it('stats are one description list, label before number', () => {
+    const html = render([{ type: 'Stats', props: { id: 'st', heading: 'By the numbers', blocks: [{ type: 'Stat', props: { id: 's1', value: '25,000+', label: 'Attendees a year' } }] } }]);
+    expect(html).toContain('data-section="Stats"');
+    expect(html).toMatch(/<dl[^>]*>.*<dt[^>]*>Attendees a year<\/dt><dd[^>]*>25,000\+<\/dd>/);
+    expect(html).toContain('aria-labelledby="stats-st"');
+  });
+
+  it('a checklist is a real list and shows only the chosen mark', () => {
+    const html = render([{ type: 'Checklist', props: { id: 'cl', heading: 'Not allowed', marker: 'cross', columns: '3', blocks: [{ type: 'ChecklistItem', props: { id: 'c1', text: 'MLM vendors' } }] } }]);
+    expect(html).toMatch(/<ul[^>]*role="list"[^>]*>.*<li/);
+    expect(html).toContain('[&amp;_[data-mark=check]]:hidden');
+    expect(html).toContain('lg:grid-cols-3');
+    expect(html).toContain('MLM vendors');
+  });
+
+  it('steps are an ordered list with sanitised-HTML text', () => {
+    const html = render([{ type: 'Steps', props: { id: 'sp', heading: 'How to apply', blocks: [{ type: 'Step', props: { id: 'p1', title: 'Apply', text: '<p>Pick an <a href="/e">event</a>.</p>' } }] } }]);
+    expect(html).toMatch(/<ol[^>]*>.*<li[^>]*>.*<h3[^>]*>Apply<\/h3>/);
+    expect(html).toContain('<a href="/e">event</a>');
+  });
+});
+
 describe('Puck render config', () => {
   it('renders the preset homepage with its buttons through the slot', () => {
     const home = getPreset('eventimus-default').documents.home;

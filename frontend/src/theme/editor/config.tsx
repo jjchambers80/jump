@@ -84,6 +84,9 @@ export const STARTER_BLOCK_PROPS: Record<string, Record<string, unknown>> = {
   Slide: { heading: 'New slide' },
   FaqItem: { question: 'New question' },
   Feature: { title: 'New feature' },
+  Stat: { value: '100+', label: 'New stat' },
+  ChecklistItem: { text: 'New item' },
+  Step: { title: 'New step' },
   Button: { label: 'Get tickets', link: { type: 'EVENTS' } },
 };
 
@@ -97,6 +100,20 @@ const STARTER_BLOCKS: Record<string, { type: string; props: Record<string, unkno
     { type: 'Feature', props: { title: 'Great shows', text: 'Something on every weekend.' } },
     { type: 'Feature', props: { title: 'Easy tickets', text: 'Buy in a minute, scan at the door.' } },
     { type: 'Feature', props: { title: 'Friendly venue', text: 'Free parking and step-free access.' } },
+  ],
+  Stats: [
+    { type: 'Stat', props: { value: '25,000+', label: 'Guests a year' } },
+    { type: 'Stat', props: { value: '40', label: 'Shows a year' } },
+    { type: 'Stat', props: { value: '10', label: 'Years running' } },
+  ],
+  Checklist: [
+    { type: 'ChecklistItem', props: { text: 'A photo ID' } },
+    { type: 'ChecklistItem', props: { text: 'Your ticket, on your phone or printed' } },
+  ],
+  Steps: [
+    { type: 'Step', props: { title: 'Apply', text: '<p>Fill in the form for the event you want.</p>' } },
+    { type: 'Step', props: { title: 'Get approved', text: '<p>We review every application by hand.</p>' } },
+    { type: 'Step', props: { title: 'Show up', text: '<p>Load in, set up and meet the crowd.</p>' } },
   ],
   Faq: [
     { type: 'FaqItem', props: { question: 'When do doors open?', answer: '<p>Doors open one hour before the show.</p>' } },

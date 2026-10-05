@@ -5,6 +5,7 @@
 import {
   colorScheme,
   datetime,
+  httpsUrl,
   image,
   link,
   radio,
@@ -95,9 +96,30 @@ export const BLOCKS = {
       text: textarea('Text', { max: 300, default: '' }),
     },
   },
+  Stat: {
+    label: 'Stat',
+    settings: {
+      value: text('Number', { max: 24, default: '100+' }),
+      label: text('Label', { max: 100, default: 'Happy guests' }),
+    },
+  },
+  ChecklistItem: {
+    label: 'List item',
+    settings: {
+      text: text('Text', { max: 200, default: 'List item' }),
+    },
+  },
+  Step: {
+    label: 'Step',
+    settings: {
+      title: text('Title', { max: 80, default: 'Step' }),
+      text: richtext('Text', { max: 2000 }),
+    },
+  },
 };
 
 const buttons = { types: ['Button'], max: 2 };
+const VIDEO_HOSTS = ['youtube.com', 'youtu.be', 'youtube-nocookie.com', 'vimeo.com'];
 
 export const SECTIONS = {
   AnnouncementBar: {
@@ -262,8 +284,13 @@ export const SECTIONS = {
     groups: ['template'],
     settings: {
       image: image('Image'),
-      imagePosition: radio('Image position', ['left', 'right']),
+      // A YouTube or Vimeo player in the image's place (the image is then unused).
+      videoUrl: httpsUrl('Video link (YouTube or Vimeo)', VIDEO_HOSTS),
+      videoTitle: text('Video title (read by screen readers)', { max: 120, default: 'Video' }),
+      imagePosition: radio('Media position', ['left', 'right']),
       heading: text('Heading', { max: 120, default: 'Tell your story' }),
+      // h1 when this section opens a full-width page that has no Page content.
+      headingLevel: radio('Heading level', ['h2', 'h1']),
       body: richtext('Text'),
     },
     blocks: buttons,
@@ -279,6 +306,41 @@ export const SECTIONS = {
       alignment: radio('Text alignment', ['center', 'left']),
     },
     blocks: { types: ['Feature'], max: 12 },
+  },
+  // Big numbers with a label each (attendance, years running, vendors).
+  Stats: {
+    label: 'Stats',
+    category: 'Text',
+    groups: ['template'],
+    settings: {
+      heading: text('Heading', { max: 120, default: '' }),
+      intro: textarea('Intro', { max: 300, default: '' }),
+    },
+    blocks: { types: ['Stat'], max: 6 },
+  },
+  // A list of short lines with a check (who we want) or a cross (who we don't).
+  Checklist: {
+    label: 'Checklist',
+    category: 'Text',
+    groups: ['template'],
+    settings: {
+      heading: text('Heading', { max: 120, default: 'What to bring' }),
+      intro: textarea('Intro', { max: 300, default: '' }),
+      marker: radio('Marker', ['check', 'cross']),
+      columns: select('Columns', ['1', '2', '3'], '2'),
+    },
+    blocks: { types: ['ChecklistItem'], max: 30 },
+  },
+  // Numbered steps (how to apply, how the day runs).
+  Steps: {
+    label: 'Steps',
+    category: 'Text',
+    groups: ['template'],
+    settings: {
+      heading: text('Heading', { max: 120, default: 'How it works' }),
+      intro: textarea('Intro', { max: 300, default: '' }),
+    },
+    blocks: { types: ['Step'], max: 6 },
   },
   // The Content page's own title, text, template sections and Apply button
   // (StorefrontPageBody), placed among the theme sections of a full-width page.
