@@ -4,7 +4,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { Render } from '@puckeditor/core';
-import { getPreset } from '@jump/theme';
+import { getPreset, presetDocument } from '@jump/theme';
 import ButtonBlock from '@/theme/sections/ButtonBlock';
 import CallToActionSection from '@/theme/sections/CallToActionSection';
 import HeroSection from '@/theme/sections/HeroSection';
@@ -243,6 +243,24 @@ describe('Puck render config', () => {
     expect(html).toContain('href="/organizations/riverside/events"');
     expect(html).toContain('data-section="UpcomingEvents"');
     expect(html).toContain('data-section="CallToAction"');
+  });
+
+  it('renders a full-width page: its starter is the page body, without a second main', () => {
+    const page = { id: 'p1', title: 'Become a vendor', slug: 'vendors', content: '<p>Join the show floor.</p>', template: { name: 'full-width', sections: [{ type: 'page_content' as const }] } };
+    const doc = presetDocument('eventimus-default', 'page:cmuulvdk90001r04dfmipxu2e');
+    const base = ctx();
+    const html = renderToStaticMarkup(
+      <Render
+        config={renderConfig}
+        data={{ ...renderable({ ...doc, content: [{ type: 'Hero', props: { id: 'h', heading: 'Sell with us', sectionWidth: 'full' } }, ...doc.content] }), zones: {} } as any}
+        metadata={{ ctx: { ...base, resolved: { ...base.resolved, page } } }}
+      />,
+    );
+    expect(html).toContain('data-section="PageContent"');
+    expect(html).toContain('Become a vendor');
+    expect(html).toContain('Join the show floor.');
+    expect(html.indexOf('Sell with us')).toBeLessThan(html.indexOf('Become a vendor'));
+    expect(html).not.toContain('<main');
   });
 
   it('drops section types it has no component for', () => {

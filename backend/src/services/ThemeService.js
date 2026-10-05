@@ -29,12 +29,15 @@ import {
   validateDocument,
   validateSettings,
   DEFAULT_PRESET_KEY,
+  FULL_WIDTH_TEMPLATE,
+  pageIdOfKey,
 } from '@jump/theme';
 import { ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import { sanitizeContentHtml } from '../utils/sanitizeHtml.js';
 import logger from '../utils/logger.js';
 import storeFileService from './StoreFileService.js';
 import menuService from './MenuService.js';
+import pageService from './PageService.js';
 import { publicEventSummaries } from './OrganizationService.js';
 
 import { themesEnabledFor, themesMasterSwitch } from './storefrontLogo.js';
@@ -206,8 +209,18 @@ class ThemeService {
   async getDocument(organizationId, themeId, key) {
     if (!documentDef(key)) throw new NotFoundError('Theme document not found');
     const theme = await this._theme(organizationId, themeId);
+    if ((await this._missingPages(organizationId, [key])).length) throw new NotFoundError('Theme document not found');
     const row = await prisma.themeDocument.findUnique({ where: { themeId_key: { themeId, key } } });
-    return { key, kind: DOCUMENTS[key].kind, ...this._readDocument(theme, key, row) };
+    return { key, kind: documentDef(key).kind, ...this._readDocument(theme, key, row) };
+  }
+
+  /** `page:<id>` keys whose page is not one of the organization's. */
+  async _missingPages(organizationId, keys, db = prisma) {
+    const ids = keys.map(pageIdOfKey).filter(Boolean);
+    if (!ids.length) return [];
+    const found = await db.page.findMany({ where: { id: { in: ids }, organizationId }, select: { id: true } });
+    const known = new Set(found.map((p) => p.id));
+    return keys.filter((key) => pageIdOfKey(key) && !known.has(pageIdOfKey(key)));
   }
 
   async getContent(organizationId, themeId) {
@@ -263,6 +276,7 @@ class ThemeService {
         content = checked.value;
       }
       const schemeIds = this._schemeIds(settings ?? locked.settings, locked.presetKey);
+      for (const key of await this._missingPages(organizationId, sentKeys, tx)) errors[`documents.${key}`] = 'is not a page of this store';
       const documents = {};
       for (const key of sentKeys) {
         const def = documentDef(key);
@@ -313,7 +327,7 @@ class ThemeService {
               data: { data, version: { increment: 1 }, schemaVersion: SCHEMA_VERSION, updatedById: userId ?? null },
             })
           : await tx.themeDocument.create({
-              data: { themeId, kind: DOCUMENTS[key].kind, key, data, schemaVersion: SCHEMA_VERSION, updatedById: userId ?? null },
+              data: { themeId, kind: documentDef(key).kind, key, data, schemaVersion: SCHEMA_VERSION, updatedById: userId ?? null },
             });
         byKey.set(key, written);
         versions[key] = written.version;
@@ -546,8 +560,13 @@ class ThemeService {
    */
   async renderPublic(organizationId, page = 'home', { now = Date.now(), preview = null } = {}) {
     // `frame`: header and footer only, for pages whose body the theme does not
-    // own yet (Content pages, blog; 038G turns them into templates).
-    if (page !== 'frame' && !PAGE_KEYS.includes(page)) throw new NotFoundError('Page not found');
+    // own yet (blog; 038G turns them into templates).
+    // `page:<id or slug>`: a Content page. Its payload comes back as
+    // `resolved.page`; a full-width page also gets its `page:<id>` document,
+    // any other page is a frame around the fixed body.
+    const pageIdentifier = page.startsWith('page:') ? page.slice(5) : null;
+    if (page !== 'frame' && !pageIdentifier && !PAGE_KEYS.includes(page)) throw new NotFoundError('Page not found');
+    const contentPage = pageIdentifier ? await pageService.getPublic(organizationId, pageIdentifier) : null;
     const organization = await prisma.organization.findUnique({ where: { id: organizationId }, select: ORGANIZATION_IDENTITY });
     if (!organization) throw new NotFoundError('Organization not found');
     // A valid preview token renders that draft instead (D11); a published or
@@ -566,24 +585,28 @@ class ThemeService {
       };
     const rows = theme.id ? await prisma.themeDocument.findMany({ where: { themeId: theme.id } }) : [];
     const byKey = new Map(rows.map((r) => [r.key, r]));
-    const templateKey = page === 'home' && !byKey.has('home') ? 'events' : page;
+    let templateKey = page === 'home' && !byKey.has('home') ? 'events' : page;
+    if (contentPage) templateKey = contentPage.template?.name === FULL_WIDTH_TEMPLATE ? `page:${contentPage.id}` : 'frame';
     const read = (key) => this._visible(this._readDocument(theme, key, byKey.get(key)).data, now);
     const documents = {
       header: read('header'),
-      template: page === 'frame' ? null : read(templateKey),
+      template: templateKey === 'frame' ? null : read(templateKey),
       footer: read('footer'),
     };
     const settings = resolveSettings(theme.settings, getPreset(theme.presetKey)?.settings);
     return {
       renderer: 'theme',
       page: templateKey,
-      fallback: templateKey !== page,
+      fallback: page === 'home' && templateKey !== page,
       theme: { id: theme.id, name: theme.name },
       organization,
       settings,
       content: resolveContent(theme.content),
       documents,
-      resolved: await this._resolve(organizationId, { settings, documents }, { events: page !== 'frame' }),
+      resolved: {
+        ...(await this._resolve(organizationId, { settings, documents }, { events: templateKey !== 'frame' })),
+        ...(contentPage && { page: contentPage }),
+      },
       ...(draft && { preview: { themeId: draft.id, name: draft.name, expiresAt: preview.expiresAt, share: preview.share } }),
     };
   }
@@ -599,9 +622,16 @@ class ThemeService {
     const theme = await this._theme(organizationId, themeId);
     const rows = await prisma.themeDocument.findMany({ where: { themeId } });
     const byKey = new Map(rows.map((r) => [r.key, r]));
-    const values = Object.keys(DOCUMENTS).map((key) => this._readDocument(theme, key, byKey.get(key)).data);
-    const organization = await prisma.organization.findUnique({ where: { id: organizationId }, select: ORGANIZATION_IDENTITY });
-    return { organization, resolved: await this._resolve(organizationId, { settings: theme.settings, values }) };
+    // Every fixed document plus every stored page document.
+    const keys = [...new Set([...Object.keys(DOCUMENTS), ...rows.map((r) => r.key).filter(pageIdOfKey)])];
+    const values = keys.map((key) => this._readDocument(theme, key, byKey.get(key)).data);
+    const pageId = pageIdOfKey(page);
+    const [organization, resolved, contentPage] = await Promise.all([
+      prisma.organization.findUnique({ where: { id: organizationId }, select: ORGANIZATION_IDENTITY }),
+      this._resolve(organizationId, { settings: theme.settings, values }),
+      pageId ? pageService.getPublic(organizationId, pageId, { includeHidden: true }) : null,
+    ]);
+    return { organization, resolved: { ...resolved, ...(contentPage && { page: contentPage }) } };
   }
 }
 

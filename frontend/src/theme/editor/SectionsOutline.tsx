@@ -132,11 +132,13 @@ function AddBlock({ item, count }: { item: Item; count: number }) {
 }
 
 function AddSection({ slot, items }: { slot: string; items: Item[] }) {
-  const { dispatch } = usePuck();
+  const { dispatch, config } = usePuck();
+  // The root slot's own allow list: the template slot of a Content page also takes Page content.
+  const allow = ((config.root?.fields as Record<string, { allow?: string[] }> | undefined)?.[slot]?.allow ?? sectionsForGroup(slot)) as string[];
   const [open, setOpen] = useState(false);
   const counts: Record<string, number> = {};
   for (const item of items) counts[item.type] = (counts[item.type] ?? 0) + 1;
-  const choices = (sectionsForGroup(slot) as string[]).filter((type) => {
+  const choices = allow.filter((type) => {
     const def = (SECTIONS as any)[type];
     return !def.locked && (!def.limit || (counts[type] ?? 0) < def.limit);
   });

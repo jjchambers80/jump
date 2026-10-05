@@ -30,6 +30,10 @@ Developer guide (manifest format, section reference): `docs/development/page-tem
 | `frontend/src/components/storefront/formStyles.ts` | Storefront input styles shared with the apply form |
 | `backend/tests/unit/pageTemplateManifest.test.js`, `backend/tests/contract/pageTemplates.test.js`, `frontend/e2e/{admin-pages,admin-page-templates,public-contact-page}.spec.ts` | Tests |
 
+## Full width (built in)
+
+`full-width` is a reserved, built-in template name: every organization can pick **Full width** when its store renders through themes, and an upload with that name is refused. The page is laid out in the theme editor; see [Theme Sections › Full-width pages](theme-sections.md#full-width-pages).
+
 ## Rules
 
 - Templates are data, never code: no scripts, CSS or unsanitized HTML. Extend by adding a section type to the validator, the frontend union and `StorefrontPageBody`.

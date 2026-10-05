@@ -6,6 +6,7 @@ import { sanitizeContentHtml } from '../utils/sanitizeHtml.js';
 import { findByPublicIdentifier } from '../utils/publicIdentifier.js';
 import pageTemplateService from './PageTemplateService.js';
 import { contactFormSection } from '../utils/pageTemplateManifest.js';
+import { FULL_WIDTH_TEMPLATE } from '@jump/theme';
 
 /** Optional text field: trims, and stores an empty string as null. */
 function optionalText(value) {
@@ -67,11 +68,16 @@ class PageService {
    * Storefront: a visible page by handle; hidden pages are 404. A page with a
    * template carries its sections (spec 042); `contactFormAvailable` says
    * whether a contact form can deliver — the store email itself never leaves
-   * the backend.
+   * the backend. A full-width page lays out around its content in the theme
+   * (`page:<id>` document); without the theme renderer it is the default body.
+   * `includeHidden` is for the theme editor only.
    */
-  async getPublic(organizationId, identifier) {
-    const { template: templateName, applicationFormId, applyLabel, ...row } = await this._findPublic(organizationId, identifier);
+  async getPublic(organizationId, identifier, { includeHidden = false } = {}) {
+    const { template: templateName, applicationFormId, applyLabel, ...row } = await this._findPublic(organizationId, identifier, { includeHidden });
     const page = { ...row, applyForm: await publicApplyForm(organizationId, applicationFormId, applyLabel) };
+    if (templateName === FULL_WIDTH_TEMPLATE) {
+      return { ...page, template: { name: FULL_WIDTH_TEMPLATE, sections: [{ type: 'page_content' }] } };
+    }
     const template = await pageTemplateService.resolve(organizationId, templateName);
     if (!template) return { ...page, template: null };
     const sections = template.definition?.sections ?? [];
@@ -87,9 +93,9 @@ class PageService {
   }
 
   /** The visible page row the storefront reads (with its template name). */
-  async _findPublic(organizationId, identifier) {
+  async _findPublic(organizationId, identifier, { includeHidden = false } = {}) {
     const page = await findByPublicIdentifier(prisma.page, identifier, {
-      where: { organizationId, isVisible: true },
+      where: { organizationId, ...(!includeHidden && { isVisible: true }) },
       select: {
         id: true,
         title: true,

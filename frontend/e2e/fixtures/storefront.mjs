@@ -96,6 +96,17 @@ const contentRoutes = (orgId) => ({
     organization: org(orgId),
     page: { id: 'p1', title: 'About the series', slug: 'about', content: '<p>Since 2009 by the river.</p>' },
   },
+  // Full-width page: the render route answers its `page:<id>` document (pageDocuments).
+  '/public/pages/vendors': {
+    organization: org(orgId),
+    page: {
+      id: 'p2',
+      title: 'Sell at the market',
+      slug: 'vendors',
+      content: '<p>Tables from $40.</p>',
+      template: { name: 'full-width', sections: [{ type: 'page_content' }] },
+    },
+  },
   '/public/blogs/news': {
     organization: org(orgId),
     blog: { id: 'b1', title: 'News', handle: 'news' },
@@ -246,7 +257,20 @@ export const FIXTURES = {
     render: { ...render('theme-parity', { organization: { coverUrl: PARITY_COVER, themeMode: 'DARK' } }), organization: org('theme-parity-dark', { coverUrl: PARITY_COVER, themeMode: 'DARK' }) },
     routes: {},
   },
-  'theme-light': { render: render('theme-light', { header: announcementHeader }), routes: contentRoutes('theme-light') },
+  'theme-light': {
+    render: render('theme-light', { header: announcementHeader }),
+    routes: contentRoutes('theme-light'),
+    pageDocuments: {
+      p2: {
+        root: { props: {} },
+        content: [
+          { type: 'Hero', props: { id: 'Hero-v', heading: 'Book your table', sectionWidth: 'full', paddingTop: 0 } },
+          { type: 'PageContent', props: { id: 'PageContent-1' } },
+          { type: 'CallToAction', props: { id: 'Cta-v', heading: 'Questions before you apply?', sectionWidth: 'full' } },
+        ],
+      },
+    },
+  },
   'theme-dark': { render: render('theme-dark', { organization: { themeMode: 'DARK', brandColor: '#be185d' } }), routes: {} },
   'theme-system': { render: render('theme-system', { organization: { themeMode: 'SYSTEM' } }), routes: {} },
   'theme-private': {

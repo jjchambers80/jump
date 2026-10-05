@@ -6,7 +6,7 @@
 // array fields). Render functions are the storefront's own, so the canvas
 // shows exactly what the store will.
 
-import { BLOCKS, COMMON_SECTION_FIELDS, DOCUMENTS, SECTIONS, fieldDefaults, sectionsForGroup } from '@jump/theme';
+import { BLOCKS, COMMON_SECTION_FIELDS, DOCUMENTS, SECTIONS, fieldDefaults, sectionsForDocument, sectionsForGroup } from '@jump/theme';
 import { EyeOff } from 'lucide-react';
 import { renderConfig } from '../render/config';
 import ThemeScope from '../ThemeScope';
@@ -98,7 +98,8 @@ const STARTER_BLOCKS: Record<string, { type: string; props: Record<string, unkno
   ],
 };
 
-export function buildEditorConfig(ctx: FieldContext): Config {
+/** `page`: the template document being edited; a Content page also takes Page content. */
+export function buildEditorConfig(ctx: FieldContext, page = 'home'): Config {
   const components: Config['components'] = {};
   for (const [type, base] of Object.entries(renderConfig.components)) {
     const section = (SECTIONS as Record<string, any>)[type];
@@ -147,7 +148,7 @@ export function buildEditorConfig(ctx: FieldContext): Config {
         seoDescription: { type: 'textarea', label: 'SEO description' },
         pageWidth: puckField((DOCUMENTS as any).home.root.pageWidth, ctx),
         header: { type: 'slot', allow: sectionsForGroup('header') },
-        template: { type: 'slot', allow: sectionsForGroup('template') },
+        template: { type: 'slot', allow: sectionsForDocument(page) },
         footer: { type: 'slot', allow: sectionsForGroup('footer') },
       } as Fields,
       render: ({ header: Header, template: Template, footer: Footer, pageWidth, puck }: any) => {

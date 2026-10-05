@@ -18,6 +18,7 @@ import HeroSection from '../sections/HeroSection';
 import SlideBlock from '../sections/SlideBlock';
 import RichTextSection from '../sections/RichTextSection';
 import UpcomingEventsSection from '../sections/UpcomingEventsSection';
+import PageContentSection from '../sections/PageContentSection';
 import { sectionContext } from '../sections/context';
 
 // Puck hands every component its props plus `puck` (metadata) and, for slot
@@ -82,6 +83,9 @@ export const renderConfig: Config = {
     },
     UpcomingEvents: {
       render: ({ puck, ...props }: PuckProps) => <UpcomingEventsSection {...(props as any)} ctx={sectionContext(puck.metadata)} />,
+    },
+    PageContent: {
+      render: ({ puck, ...props }: PuckProps) => <PageContentSection {...(props as any)} ctx={sectionContext(puck.metadata)} />,
     },
     Button: {
       render: ({ puck, ...props }: PuckProps) => <ButtonBlock {...(props as any)} ctx={sectionContext(puck.metadata)} />,

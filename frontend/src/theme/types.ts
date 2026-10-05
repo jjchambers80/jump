@@ -3,6 +3,7 @@
 import type { EventSummary } from '@/components/EventCard';
 import type { PublicMenus } from '@/lib/menus';
 import type { ThemeMode } from '@/lib/theme';
+import type { PublicPage } from '@/components/storefront/StorefrontPageBody';
 
 export interface ThemeItem {
   type: string;
@@ -47,6 +48,8 @@ export interface ResolvedData {
   menus: PublicMenus;
   links: Record<string, string>;
   files: Record<string, { url: string; width: number | null; height: number | null; alt: string | null; mimeType?: string }>;
+  /** The Content page being rendered (`page=page:<id or slug>`). */
+  page?: PublicPage;
 }
 
 export interface ThemeRender {

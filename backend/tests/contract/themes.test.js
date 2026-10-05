@@ -558,4 +558,92 @@ describe('Online store themes contract', () => {
       expect(Object.keys(res.body.resolved.files)).toContain(files[1].id);
     });
   });
+
+  describe('full-width Content pages', () => {
+    let page;
+    let token;
+    const render = (identifier) =>
+      request(app)
+        .get(`/organizations/${organization.slug}/public/storefront/render?page=${encodeURIComponent(`page:${identifier}`)}`)
+        .set('X-Storefront-Access', token);
+
+    beforeAll(async () => {
+      token = (await request(app).post(`/organizations/${organization.id}/storefront-access`).send({ password: 'themes-1985' })).body.token;
+      page = await prisma.page.create({
+        data: { organizationId: organization.id, title: 'Sell with us', slug: 'vendors-themes-ct', content: '<p>Tables</p>' },
+      });
+    });
+
+    it('the page picks the built-in template through the pages API', async () => {
+      const res = await request(app).put(`/admin/pages/${page.id}`).set(...auth(adminToken)).send({ template: 'full-width' });
+      expect(res.status).toBe(200);
+      expect(res.body.template).toBe('full-width');
+    });
+
+    it('renders its page:<id> document, starting with the page content', async () => {
+      const res = await render(page.slug);
+      expect(res.status).toBe(200);
+      expect(res.body.page).toBe(`page:${page.id}`);
+      expect(res.body.documents.template.content.map((s) => s.type)).toEqual(['PageContent']);
+      expect(res.body.resolved.page).toMatchObject({ id: page.id, title: 'Sell with us', template: { name: 'full-width' } });
+    });
+
+    it('saves sections around the page content and renders them', async () => {
+      const key = `page:${page.id}`;
+      const data = {
+        root: { props: {} },
+        content: [
+          { type: 'Hero', props: { id: 'Hero-1', heading: 'Book a table', sectionWidth: 'full' } },
+          { type: 'PageContent', props: { id: 'PageContent-1' } },
+        ],
+      };
+      const saved = await save({ themeVersion: (await current()).version, documents: { [key]: { data, version: await docVersion(key) } } });
+      expect(saved.status).toBe(200);
+      const res = await render(page.id);
+      expect(res.body.documents.template.content.map((s) => s.type)).toEqual(['Hero', 'PageContent']);
+      const preview = await request(app).get(`/admin/themes/${theme.id}/preview-data?page=${encodeURIComponent(key)}`).set(...auth(adminToken));
+      expect(preview.body.resolved.page.id).toBe(page.id);
+    });
+
+    it('a page on the default layout gets the frame and its payload', async () => {
+      const plain = await prisma.page.create({ data: { organizationId: organization.id, title: 'FAQ', slug: 'faq-themes-ct', content: '<p>Q</p>' } });
+      const res = await render(plain.slug);
+      expect(res.body.page).toBe('frame');
+      expect(res.body.documents.template).toBeNull();
+      expect(res.body.resolved.page.title).toBe('FAQ');
+    });
+
+    it('a hidden page is 404 on the store but opens in the editor', async () => {
+      const hidden = await prisma.page.create({
+        data: { organizationId: organization.id, title: 'Soon', slug: 'soon-themes-ct', content: '<p>x</p>', isVisible: false, template: 'full-width' },
+      });
+      expect((await render(hidden.slug)).status).toBe(404);
+      const preview = await request(app).get(`/admin/themes/${theme.id}/preview-data?page=page:${hidden.id}`).set(...auth(adminToken));
+      expect(preview.status).toBe(200);
+      expect(preview.body.resolved.page.title).toBe('Soon');
+    });
+
+    it("refuses another organization's page", async () => {
+      const foreign = await prisma.page.create({ data: { organizationId: other.id, title: 'Theirs', slug: 'theirs-themes-ct', content: '<p>x</p>' } });
+      const key = `page:${foreign.id}`;
+      const doc = await request(app).get(`/admin/themes/${theme.id}/documents/${key}`).set(...auth(adminToken));
+      expect(doc.status).toBe(404);
+      const res = await save({
+        themeVersion: (await current()).version,
+        documents: { [key]: { data: { root: { props: {} }, content: [] }, version: 0 } },
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.details.errors[`documents.${key}`]).toBe('is not a page of this store');
+    });
+
+    it('the template name is reserved for uploads', async () => {
+      const res = await request(app)
+        .post('/admin/page-templates')
+        .set(...auth(systemToken))
+        .set('X-Jump-Org', organization.id)
+        .send({ schemaVersion: 1, name: 'full-width', label: 'Mine', sections: [{ type: 'page_content' }] });
+      expect(JSON.stringify(res.body)).toContain('built-in template name');
+      expect(res.status).toBe(400);
+    });
+  });
 });

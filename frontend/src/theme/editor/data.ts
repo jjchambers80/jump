@@ -8,9 +8,10 @@
 
 import type { ThemeDocumentData } from '@/lib/themes';
 
-export type TemplateKey = 'home' | 'events';
+/** `home`, `events`, or `page:<pageId>` for a full-width Content page. */
+export type TemplateKey = string;
 export const TEMPLATE_KEYS: TemplateKey[] = ['home', 'events'];
-export const TEMPLATE_LABELS: Record<TemplateKey, string> = { home: 'Home page', events: 'Events page' };
+export const TEMPLATE_LABELS: Record<string, string> = { home: 'Home page', events: 'Events page' };
 
 type Item = { type: string; props: Record<string, any> };
 

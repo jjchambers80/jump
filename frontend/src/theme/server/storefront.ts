@@ -81,10 +81,11 @@ export type StorefrontFrame =
  * today's client-rendered page, which handles its own errors: the renderer
  * switch must never be the reason a storefront is down.
  */
-export async function loadStorefrontFrame(orgId: string, page: 'home' | 'events' | 'frame'): Promise<StorefrontFrame> {
+/** `page`: home, events, frame, or `page:<id or slug>` for a Content page. */
+export async function loadStorefrontFrame(orgId: string, page: string): Promise<StorefrontFrame> {
   if (!themesOn()) return { kind: 'legacy' };
   const response = await storefrontGet<ThemeRender | { renderer: 'legacy' }>(
-    `/organizations/${encodeURIComponent(orgId)}/public/storefront/render?page=${page}`,
+    `/organizations/${encodeURIComponent(orgId)}/public/storefront/render?page=${encodeURIComponent(page)}`,
   );
   const lock = lockFrom(response);
   if (lock) return { kind: 'locked', lock, hadAccessCookie: Boolean(accessHeader()) };

@@ -31,6 +31,7 @@ These are the rules every 038 implementation card builds on. A card that needs t
 - **(038C) Menu `EVENTS` links** now point at `/organizations/:slug/events` (tenant `/events`), for every organization: the route exists for legacy organizations too and renders today's storefront. The old `#events` anchor on the home still works.
 - **(038C) Section padding** applies only when the organizer set it, so preset sections keep their own spacing and the default theme matches today's page (screenshot parity, test 10). `EventList` settings are all implemented except `imageRatio`, which has no effect until event summaries carry an image.
 - **(038B) `resolved.links`** maps `linkKey(link)` (`TYPE:targetId|url`) to an href, resolved through `MenuService.resolveLinks` exactly like menu items; a missing or hidden target is absent and the section drops the link.
+- **(full-width pages) `page=page:<id or slug>`** renders a Content page: `resolved.page` is the `PageService.getPublic` payload (hidden page = 404); a page with `template: 'full-width'` also gets its `page:<pageId>` document as `documents.template` (`page: 'page:<id>'`), any other page answers the frame shape (`page: 'frame'`). Page documents are `kind: PAGE`, keyed by the page **id**; saves refuse keys whose page is not the organization's.
 - The org behind `:id` may be addressed by slug. The response always carries `organization.id`; the frontend uses it for cookie names and unlock calls.
 
 ## C2. Private store access on the server
