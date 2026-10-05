@@ -323,6 +323,27 @@ test.describe('theme editor (038D)', () => {
     expect(results.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
   });
 
+  test('image with text and a feature grid are added from the Sections panel and saved (landing sections)', async ({ page }) => {
+    const api = await mockThemeEditorApi(page);
+    await openEditor(page);
+    const template = outline(page).getByRole('region', { name: 'Template' });
+    const addable = template.getByRole('list', { name: /Sections you can add to the template/ });
+    await template.getByRole('button', { name: 'Add section' }).click();
+    await addable.getByRole('button', { name: 'Image with text' }).click();
+    await expect(canvas(page).getByText('Tell your story').first()).toBeVisible();
+    await template.getByRole('button', { name: 'Add section' }).click();
+    await addable.getByRole('button', { name: 'Feature grid' }).click();
+    await expect(canvas(page).getByText('Easy tickets').first()).toBeVisible();
+    await template.getByRole('button', { name: 'Add feature to Feature grid' }).click();
+
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect.poll(() => api.saves.length).toBe(1);
+    const content = api.saves[0].documents.home.data.content;
+    expect(content.find((s: any) => s.type === 'ImageWithText')).toBeTruthy();
+    const grid = content.find((s: any) => s.type === 'FeatureGrid');
+    expect(grid.props.blocks.map((b: any) => b.props.title)).toEqual(['Great shows', 'Easy tickets', 'Friendly venue', 'New feature']);
+  });
+
   test('Customize opens a full-width page: sections go around its content and save to page:<id>', async ({ page }) => {
     const api = await mockThemeEditorApi(page);
     await page.goto(`${EDITOR}?page=${encodeURIComponent(fullWidthPageKey)}`);

@@ -87,6 +87,14 @@ export const BLOCKS = {
     },
   },
   SocialLinks: { label: 'Social media', settings: {} },
+  Feature: {
+    label: 'Feature',
+    settings: {
+      image: image('Image'),
+      title: text('Title', { max: 80, default: 'Feature' }),
+      text: textarea('Text', { max: 300, default: '' }),
+    },
+  },
 };
 
 const buttons = { types: ['Button'], max: 2 };
@@ -245,6 +253,32 @@ export const SECTIONS = {
       width: select('Width', ['narrow', 'normal', 'wide'], 'normal'),
     },
     blocks: { types: ['FaqItem'], max: 30 },
+  },
+  // Landing-page sections: an image beside text and buttons, and a grid of
+  // short benefit cards.
+  ImageWithText: {
+    label: 'Image with text',
+    category: 'Text',
+    groups: ['template'],
+    settings: {
+      image: image('Image'),
+      imagePosition: radio('Image position', ['left', 'right']),
+      heading: text('Heading', { max: 120, default: 'Tell your story' }),
+      body: richtext('Text'),
+    },
+    blocks: buttons,
+  },
+  FeatureGrid: {
+    label: 'Feature grid',
+    category: 'Text',
+    groups: ['template'],
+    settings: {
+      heading: text('Heading', { max: 120, default: 'Why come' }),
+      intro: textarea('Intro', { max: 300, default: '' }),
+      columns: select('Columns', ['2', '3', '4'], '3'),
+      alignment: radio('Text alignment', ['center', 'left']),
+    },
+    blocks: { types: ['Feature'], max: 12 },
   },
   // The Content page's own title, text, template sections and Apply button
   // (StorefrontPageBody), placed among the theme sections of a full-width page.

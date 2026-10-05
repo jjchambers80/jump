@@ -83,6 +83,7 @@ function followSelection(render: (props: any) => JSX.Element) {
 export const STARTER_BLOCK_PROPS: Record<string, Record<string, unknown>> = {
   Slide: { heading: 'New slide' },
   FaqItem: { question: 'New question' },
+  Feature: { title: 'New feature' },
   Button: { label: 'Get tickets', link: { type: 'EVENTS' } },
 };
 
@@ -91,6 +92,11 @@ const STARTER_BLOCKS: Record<string, { type: string; props: Record<string, unkno
   HeroCarousel: [
     { type: 'Slide', props: { heading: 'Your next big show', subheading: 'Add an image, a line of text and a button.' } },
     { type: 'Slide', props: { heading: 'Another highlight' } },
+  ],
+  FeatureGrid: [
+    { type: 'Feature', props: { title: 'Great shows', text: 'Something on every weekend.' } },
+    { type: 'Feature', props: { title: 'Easy tickets', text: 'Buy in a minute, scan at the door.' } },
+    { type: 'Feature', props: { title: 'Friendly venue', text: 'Free parking and step-free access.' } },
   ],
   Faq: [
     { type: 'FaqItem', props: { question: 'When do doors open?', answer: '<p>Doors open one hour before the show.</p>' } },
