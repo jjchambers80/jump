@@ -188,6 +188,17 @@ describe('Standing applications contract (spec 044A)', () => {
     expect(row.contact.email).toBe(`person-general@${TAG}.test`);
   });
 
+  it('edits notes and tags on a standing submission and nothing event-only', async () => {
+    const application = await prisma.application.findFirst({ where: { formId: generalForm.id }, select: { id: true } });
+    const path = `/admin/standing-application-forms/${generalForm.id}/submissions/${application.id}`;
+    const saved = await request(app).patch(path).set(...auth(adminToken)).send({ internalNote: ' Great fit ', tags: ['retro', 'Retro', 'cards'] });
+    expect(saved.status).toBe(200);
+    expect(saved.body).toMatchObject({ internalNote: 'Great fit', tags: ['retro', 'cards'] });
+    expect((await request(app).patch(path).set(...auth(adminToken)).send({ boothLabel: 'A1' })).status).toBe(400);
+    const otherForm = `/admin/standing-application-forms/${businessForm.id}/submissions/${application.id}`;
+    expect((await request(app).patch(otherForm).set(...auth(adminToken)).send({ tags: [] })).status).toBe(404);
+  });
+
   it('exposes the four standing email templates', async () => {
     const response = await request(app)
       .get('/admin/settings/application-templates?scope=STANDING')

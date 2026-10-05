@@ -5,6 +5,8 @@
 // Applications tab (`eventId` given — no Event filter or column, everything
 // else identical). Filters live in the URL so a view can be shared and the
 // browser back button works; search / filter / sort are server-side.
+// Spec 044: `standingFormId` mounts it on one standing form's submissions
+// (Content › Forms) — no event, so no payment, add-on, booth or check-in.
 
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -13,6 +15,7 @@ import { useSession } from 'next-auth/react';
 import api from '@/services/api';
 import {
   addOnSummary,
+  applicantName,
   DECISION_LABEL,
   formatDate,
   money,
@@ -79,12 +82,13 @@ function submittedLines(value: string | null) {
   return [d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }), d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).toLowerCase()];
 }
 
-export default function SubmissionsTable({ eventId }: { eventId?: string }) {
-  const orgWide = !eventId;
+export default function SubmissionsTable({ eventId, standingFormId }: { eventId?: string; standingFormId?: string }) {
+  const standing = Boolean(standingFormId);
+  const orgWide = !eventId && !standing;
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const eventApi = useApplicationsApi(eventId ?? '');
+  const eventApi = useApplicationsApi(eventId ?? '', standingFormId);
   const orgApi = useParticipantsApi();
   const { data: session } = useSession();
   const accessToken = (session as { accessToken?: string } | null)?.accessToken;
@@ -135,7 +139,7 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
   );
 
   // Saved views: per event as before (spec 011), one set for the org list.
-  const viewsKey = orgWide ? 'jump.participants.views.org' : `jump.applications.views.${eventId}`;
+  const viewsKey = standing ? `jump.forms.views.${standingFormId}` : orgWide ? 'jump.participants.views.org' : `jump.applications.views.${eventId}`;
   const keyOf = (q: Filters) => viewKey(q, orgWide ? FILTER_KEYS : FILTER_KEYS.filter((k) => k !== 'event'));
   const [views, setViews] = useState<SavedView<Filters>[]>([]);
   useEffect(() => {
@@ -211,7 +215,7 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
     setCheckBusy((prev) => new Set(prev).add(row.id));
     setError(null);
     try {
-      patchRow(await patchApplicationMeta(row.eventId ?? eventId ?? '', row.id, { [field]: value }));
+      patchRow(await patchApplicationMeta(row.eventId ?? eventId, row.id, { [field]: value }));
     } catch (err) {
       setList((prev) => (prev ? { ...prev, data: prev.data.map((r) => (r.id === row.id ? { ...r, [column]: before } : r)) } : prev));
       setError(describeError(err, 'Could not update check-in'));
@@ -271,7 +275,7 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
     const blob = await res.blob();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = orgWide ? `participants-${new Date().toISOString().slice(0, 10)}.csv` : `applications-${eventId}.csv`;
+    a.download = orgWide ? `participants-${new Date().toISOString().slice(0, 10)}.csv` : `applications-${standingFormId ?? eventId}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
   };
@@ -280,7 +284,7 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
     (decisionTriggerRef as { current: HTMLButtonElement | null }).current = trigger;
     setError(null);
     try {
-      const application = await api.get<AdminApplication>(`/admin/events/${row.eventId ?? eventId}/applications/${row.id}`);
+      const application = standing ? await eventApi.get(row.id) : await api.get<AdminApplication>(`/admin/events/${row.eventId ?? eventId}/applications/${row.id}`);
       setDecision({ row, application, decision: d });
     } catch (err) {
       setError(describeError(err, 'Could not load the application'));
@@ -290,7 +294,7 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
   const onDecided = (next: AdminApplication) => {
     patchRow(next);
     setDecision(null);
-    setNotice(`${next.profile?.businessName ?? 'Application'}: ${STATUS_LABEL[next.status].toLowerCase()}.`);
+    setNotice(`${applicantName(next)}: ${STATUS_LABEL[next.status].toLowerCase()}.`);
     refreshSummary();
   };
 
@@ -325,8 +329,9 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
   // Spec 014 phase 2: a Booth column once any row in view sells from a map or carries a placement.
   const showBooth = (list?.data ?? []).some((r) => r.mapBound || r.booth || r.boothLabel);
   const awaitingSpaceActive = query.status === 'APPROVED' && query.payment === 'AWAITING_SELECTION';
-  const columns = 10 + (showOrganization ? 1 : 0) + pinnedColumns.length + (showAnswers ? 1 : 0) + (showBooth ? 1 : 0);
-  const detailHref = (row: ApplicationRow) => `/admin/events/${row.eventId ?? eventId}/applications/${row.id}`;
+  const columns = (standing ? 8 : 10) + (showOrganization ? 1 : 0) + pinnedColumns.length + (showAnswers ? 1 : 0) + (showBooth ? 1 : 0);
+  const detailHref = (row: ApplicationRow) =>
+    standing ? `/admin/content/forms/${standingFormId}/submissions/${row.id}` : `/admin/events/${row.eventId ?? eventId}/applications/${row.id}`;
 
   return (
     <>
@@ -371,6 +376,7 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
             ))}
           </select>
         )}
+        {!standing && (
         <select aria-label="Form" value={query.form || ''} onChange={(e) => setQuery({ form: e.target.value || undefined })} className={select}>
           <option value="">All forms</option>
           {formOptions.map((f) => (
@@ -379,6 +385,8 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
             </option>
           ))}
         </select>
+        )}
+        {!standing && (
         <select aria-label="Payment" value={query.payment || ''} onChange={(e) => setQuery({ payment: e.target.value || undefined })} className={select}>
           <option value="">Any payment</option>
           {Object.entries(PAYMENT_LABEL).map(([k, v]) => (
@@ -387,6 +395,7 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
             </option>
           ))}
         </select>
+        )}
         {addOnOptions.length > 0 && (
           <select aria-label="Add-on" value={query.addOn || ''} onChange={(e) => setQuery({ addOn: e.target.value || undefined })} className={select} data-testid="applications-add-on-filter">
             <option value="">Any add-ons</option>
@@ -397,11 +406,13 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
             ))}
           </select>
         )}
+        {!standing && (
         <select aria-label="Booth" value={query.booth || ''} onChange={(e) => setQuery({ booth: (e.target.value || undefined) as 'none' | 'chosen' | undefined })} className={select} data-testid="applications-booth-filter">
           <option value="">Any booth</option>
           <option value="none">Booth not chosen</option>
           <option value="chosen">Booth chosen</option>
         </select>
+        )}
         {tagOptions.length > 0 && (
           <select aria-label="Tag" value={query.tag || ''} onChange={(e) => setQuery({ tag: e.target.value || undefined })} className={select} data-testid="applications-tag-filter">
             <option value="">Any tag</option>
@@ -508,8 +519,8 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
                   <span aria-hidden="true">{statusSort === 'ascending' ? '↑' : statusSort === 'descending' ? '↓' : '↕'}</span>
                 </button>
               </th>
-              <th className="px-3 py-2">Payment</th>
-              <th className="px-3 py-2">Add-ons</th>
+              {!standing && <th className="px-3 py-2">Payment</th>}
+              {!standing && <th className="px-3 py-2">Add-ons</th>}
               <th className="px-3 py-2">Submitted</th>
               <th className="px-3 py-2">
                 <span className="sr-only">Actions</span>
@@ -521,7 +532,7 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
               <tr>
                 <td colSpan={columns} className="px-3 py-8 text-center text-gray-600 dark:text-slate-400">
                   No applications match.{' '}
-                  {forms.length === 0 &&
+                  {forms.length === 0 && !standing &&
                     (orgWide ? (
                       <Link href="/admin/events" className="text-indigo-600 hover:underline dark:text-indigo-300">
                         Create a form on an event
@@ -539,10 +550,10 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
               return (
                 <tr key={row.id} className="hover:bg-gray-50 dark:hover:bg-slate-700/40" data-testid={`application-row-${row.id}`}>
                   <td className="px-3 py-2 align-top">
-                    <input type="checkbox" aria-label={`Select ${row.businessName}`} checked={selected.has(row.id)} onChange={() => toggle(row.id)} />
+                    <input type="checkbox" aria-label={`Select ${applicantName(row)}`} checked={selected.has(row.id)} onChange={() => toggle(row.id)} />
                   </td>
                   <td className="px-3 py-2 align-top">
-                    <BusinessCell row={row} eventId={row.eventId ?? eventId ?? ''} onCheck={(field, value) => toggleCheck(row, field, value)} checkBusy={checkBusy.has(row.id)} />
+                    <BusinessCell row={row} href={detailHref(row)} onCheck={standing ? undefined : (field, value) => toggleCheck(row, field, value)} checkBusy={checkBusy.has(row.id)} />
                   </td>
                   <td className="px-3 py-2 align-top" data-testid={`application-tags-${row.id}`}>
                     {!(showBooth ? false : row.boothLabel) && !(row.tags ?? []).length ? (
@@ -604,6 +615,7 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
                   <td className="px-3 py-2 align-top">
                     <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_STYLE[row.status]}`}>{STATUS_LABEL[row.status]}</span>
                   </td>
+                  {!standing && (
                   <td className="px-3 py-2 align-top">
                     {row.formKind === 'PAID' ? (
                       <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${row.overdue ? 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300' : PAYMENT_STYLE[row.paymentStatus]}`}>
@@ -621,9 +633,12 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
                       </div>
                     )}
                   </td>
+                  )}
+                  {!standing && (
                   <td className="px-3 py-2 align-top text-xs text-gray-700 dark:text-slate-300" data-testid={`application-add-ons-${row.id}`}>
                     {addOnSummary(row.addOns) || <span className="text-gray-400 dark:text-slate-500">—</span>}
                   </td>
+                  )}
                   <td className="px-3 py-2 align-top text-gray-700 dark:text-slate-300">
                     <div>{day}</div>
                     <div className="text-xs text-gray-500 dark:text-slate-400">{time}</div>
@@ -665,9 +680,10 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
 
       {editingTags && (
         <EditTagsDialog
-          eventId={editingTags.eventId ?? eventId ?? ''}
+          eventId={editingTags.eventId ?? eventId ?? null}
+          standingFormId={standingFormId}
           applicationId={editingTags.id}
-          businessName={editingTags.businessName}
+          businessName={applicantName(editingTags)}
           tags={editingTags.tags ?? []}
           suggestions={tagOptions}
           returnFocusRef={tagsTriggerRef}
@@ -684,6 +700,7 @@ export default function SubmissionsTable({ eventId }: { eventId?: string }) {
       {decision && (
         <DecisionDialog
           eventId={decision.row.eventId ?? eventId ?? ''}
+          standingFormId={standingFormId}
           application={decision.application}
           decision={decision.decision}
           returnFocusRef={decisionTriggerRef}

@@ -13,7 +13,7 @@ const card = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:bord
 const btn = 'rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
 const primary = 'rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50';
 
-const ACTION_LABEL: Record<TemplateAction, string> = {
+const EVENT_ACTION_LABEL: Record<TemplateAction, string> = {
   RECEIVED: 'Application received',
   APPROVED: 'Approved (free forms; paid forms once the space is paid)',
   CHOOSE_SPACE: 'Approved: choose your space (paid forms)',
@@ -27,13 +27,26 @@ const ACTION_LABEL: Record<TemplateAction, string> = {
   OFFLINE_PAID: 'Payment recorded offline (paid forms)',
 };
 
+// Spec 044: standing forms (no event) have only these four emails.
+const STANDING_ACTION_LABEL: Partial<Record<TemplateAction, string>> = {
+  RECEIVED: 'Application received',
+  APPROVED: 'Approved',
+  WAITLISTED: 'Waitlisted',
+  REJECTED: 'Rejected',
+};
+type Scope = 'EVENT' | 'STANDING';
+/** Drafts and in-flight saves are per scope: both scopes have a RECEIVED template. */
+const keyOf = (scope: Scope, action: TemplateAction) => `${scope}:${action}`;
+
 export default function ApplicationTemplatesPage() {
   const api = useTemplatesApi();
   const { data: session } = useSession();
   const role = (session?.user as { role?: string } | undefined)?.role;
   const canEdit = role === 'ADMIN' || role === 'SYSTEM_ADMIN';
-  const [templates, setTemplates] = useState<MessageTemplate[]>([]);
-  const [mergeFields, setMergeFields] = useState<{ key: string; description: string }[]>([]);
+  const [eventTemplates, setEventTemplates] = useState<MessageTemplate[]>([]);
+  const [standingTemplates, setStandingTemplates] = useState<MessageTemplate[]>([]);
+  const [eventMergeFields, setEventMergeFields] = useState<{ key: string; description: string }[]>([]);
+  const [standingMergeFields, setStandingMergeFields] = useState<{ key: string; description: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, { subject: string; body: string }>>({});
@@ -43,10 +56,23 @@ export default function ApplicationTemplatesPage() {
   const load = useCallback(async () => {
     try {
       // Digest settings are additive (phase 3): a failure there must not hide the templates.
-      const [res, d] = await Promise.all([api.list(), api.digest().catch(() => null)]);
-      setTemplates(res.data);
-      setMergeFields(res.mergeFields);
-      setDrafts(Object.fromEntries(res.data.map((t) => [t.action, { subject: t.subject, body: t.body }])));
+      const [eventRes, standingRes, d] = await Promise.all([
+        api.list(),
+        api.list('STANDING'),
+        api.digest().catch(() => null),
+      ]);
+      setEventTemplates(eventRes.data);
+      setEventMergeFields(eventRes.mergeFields);
+      setStandingTemplates(standingRes.data);
+      setStandingMergeFields(standingRes.mergeFields);
+      setDrafts(
+        Object.fromEntries(
+          [
+            ...eventRes.data.map((t) => [keyOf('EVENT', t.action), { subject: t.subject, body: t.body }]),
+            ...standingRes.data.map((t) => [keyOf('STANDING', t.action), { subject: t.subject, body: t.body }]),
+          ]
+        )
+      );
       setDigest(d);
     } catch (err) {
       setError(describeError(err, 'Could not load templates'));
@@ -74,14 +100,18 @@ export default function ApplicationTemplatesPage() {
     load();
   }, [load]);
 
-  const save = async (action: TemplateAction) => {
-    setSaving(action);
+  const save = async (action: TemplateAction, scope: Scope) => {
+    setSaving(keyOf(scope, action));
     setError(null);
     setNotice(null);
     try {
-      const t = await api.update(action, drafts[action]);
-      setTemplates((prev) => prev.map((x) => (x.action === action ? t : x)));
-      setNotice(`${ACTION_LABEL[action]} template saved.`);
+      const t = await api.update(action, drafts[keyOf(scope, action)], scope === 'STANDING' ? scope : undefined);
+      if (scope === 'EVENT') {
+        setEventTemplates((prev) => prev.map((x) => (x.action === action ? t : x)));
+      } else {
+        setStandingTemplates((prev) => prev.map((x) => (x.action === action ? t : x)));
+      }
+      setNotice(`${(scope === 'EVENT' ? EVENT_ACTION_LABEL : STANDING_ACTION_LABEL)[action]} template saved.`);
     } catch (err) {
       setError(describeError(err, 'Could not save the template'));
     } finally {
@@ -89,20 +119,101 @@ export default function ApplicationTemplatesPage() {
     }
   };
 
-  const reset = async (action: TemplateAction) => {
-    if (!window.confirm(`Reset the ${ACTION_LABEL[action]} template to the default?`)) return;
-    setSaving(action);
+  const reset = async (action: TemplateAction, scope: Scope) => {
+    const labelMap = scope === 'EVENT' ? EVENT_ACTION_LABEL : STANDING_ACTION_LABEL;
+    if (!window.confirm(`Reset the ${labelMap[action]} template to the default?`)) return;
+    setSaving(keyOf(scope, action));
     try {
-      const t = await api.reset(action);
-      setTemplates((prev) => prev.map((x) => (x.action === action ? t : x)));
-      setDrafts((prev) => ({ ...prev, [action]: { subject: t.subject, body: t.body } }));
-      setNotice(`${ACTION_LABEL[action]} template reset.`);
+      const t = await api.reset(action, scope === 'STANDING' ? scope : undefined);
+      if (scope === 'EVENT') {
+        setEventTemplates((prev) => prev.map((x) => (x.action === action ? t : x)));
+      } else {
+        setStandingTemplates((prev) => prev.map((x) => (x.action === action ? t : x)));
+      }
+      setDrafts((prev) => ({ ...prev, [keyOf(scope, action)]: { subject: t.subject, body: t.body } }));
+      setNotice(`${labelMap[action]} template reset.`);
     } catch (err) {
       setError(describeError(err, 'Could not reset the template'));
     } finally {
       setSaving(null);
     }
   };
+
+  const renderTemplates = (
+    templates: MessageTemplate[],
+    mergeFields: { key: string; description: string }[],
+    actionLabel: Partial<Record<TemplateAction, string>>,
+    scope: Scope,
+    title: string,
+    mergeFieldTitle: string
+  ) => (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-base font-semibold text-gray-900 dark:text-white">{title}</h3>
+        <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">
+          {mergeFieldTitle}{' '}
+          {mergeFields.map((m) => (
+            <code key={m.key} title={m.description} className="mr-1 rounded bg-gray-100 px-1 py-0.5 text-xs dark:bg-slate-700">
+              {`{{${m.key}}}`}
+            </code>
+          ))}
+        </p>
+      </div>
+      {templates.map((t) => {
+        const key = keyOf(scope, t.action);
+        const d = drafts[key] ?? { subject: t.subject, body: t.body };
+        // Event testids stay `template-<ACTION>` (existing specs); standing ones are prefixed.
+        const testId = scope === 'EVENT' ? `template-${t.action}` : `template-standing-${t.action}`;
+        const dirty = d.subject !== t.subject || d.body !== t.body;
+        return (
+          <div key={`${scope}-${t.action}`} className={card} data-testid={testId}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h4 className="text-base font-semibold text-gray-900 dark:text-white">{actionLabel[t.action]}</h4>
+              <span className="text-xs text-gray-500 dark:text-slate-400">{t.isDefault ? 'Default' : 'Customised'}</span>
+            </div>
+            <label htmlFor={`subject-${scope}-${t.action}`} className={`${labelClass} mt-3`}>
+              Subject
+            </label>
+            <input
+              id={`subject-${scope}-${t.action}`}
+              value={d.subject}
+              disabled={!canEdit}
+              onChange={(e) => setDrafts({ ...drafts, [key]: { ...d, subject: e.target.value } })}
+              className={fieldClass}
+            />
+            <label htmlFor={`body-${scope}-${t.action}`} className={`${labelClass} mt-3`}>
+              Message
+            </label>
+            <textarea
+              id={`body-${scope}-${t.action}`}
+              rows={8}
+              value={d.body}
+              disabled={!canEdit}
+              onChange={(e) => setDrafts({ ...drafts, [key]: { ...d, body: e.target.value } })}
+              className={`${fieldClass} font-mono text-xs`}
+            />
+            {canEdit && (
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  className={primary}
+                  disabled={!dirty || saving === key}
+                  onClick={() => save(t.action, scope)}
+                >
+                  {saving === key ? 'Saving…' : 'Save'}
+                </button>
+                {!t.isDefault && (
+                  <button type="button" className={btn} disabled={saving === key} onClick={() => reset(t.action, scope)}>
+                    Reset to default
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
@@ -112,14 +223,11 @@ export default function ApplicationTemplatesPage() {
         <SettingsNav />
         <section aria-labelledby="applications-heading" className="min-w-0 flex-1 space-y-6">
           <div>
-            <h2 id="applications-heading" className="text-lg font-semibold text-gray-900 dark:text-white">Application emails</h2>
+            <h2 id="applications-heading" className="text-lg font-semibold text-gray-900 dark:text-white">
+              Application emails
+            </h2>
             <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">
-              Sent when you decide on an application. You can still edit any message before it goes out. Merge fields:{' '}
-              {mergeFields.map((m) => (
-                <code key={m.key} title={m.description} className="mr-1 rounded bg-gray-100 px-1 py-0.5 text-xs dark:bg-slate-700">
-                  {`{{${m.key}}}`}
-                </code>
-              ))}
+              Sent when you decide on an application. You can still edit any message before it goes out.
             </p>
           </div>
           {error && (
@@ -149,34 +257,8 @@ export default function ApplicationTemplatesPage() {
               </div>
             </div>
           )}
-          {templates.map((t) => {
-            const d = drafts[t.action] ?? { subject: t.subject, body: t.body };
-            const dirty = d.subject !== t.subject || d.body !== t.body;
-            return (
-              <div key={t.action} className={card} data-testid={`template-${t.action}`}>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="text-base font-semibold text-gray-900 dark:text-white">{ACTION_LABEL[t.action]}</h3>
-                  <span className="text-xs text-gray-500 dark:text-slate-400">{t.isDefault ? 'Default' : 'Customised'}</span>
-                </div>
-                <label htmlFor={`subject-${t.action}`} className={`${labelClass} mt-3`}>Subject</label>
-                <input id={`subject-${t.action}`} value={d.subject} disabled={!canEdit} onChange={(e) => setDrafts({ ...drafts, [t.action]: { ...d, subject: e.target.value } })} className={fieldClass} />
-                <label htmlFor={`body-${t.action}`} className={`${labelClass} mt-3`}>Message</label>
-                <textarea id={`body-${t.action}`} rows={8} value={d.body} disabled={!canEdit} onChange={(e) => setDrafts({ ...drafts, [t.action]: { ...d, body: e.target.value } })} className={`${fieldClass} font-mono text-xs`} />
-                {canEdit && (
-                  <div className="mt-3 flex gap-2">
-                    <button type="button" className={primary} disabled={!dirty || saving === t.action} onClick={() => save(t.action)}>
-                      {saving === t.action ? 'Saving…' : 'Save'}
-                    </button>
-                    {!t.isDefault && (
-                      <button type="button" className={btn} disabled={saving === t.action} onClick={() => reset(t.action)}>
-                        Reset to default
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {renderTemplates(eventTemplates, eventMergeFields, EVENT_ACTION_LABEL, 'EVENT', 'Event application forms', 'Merge fields:')}
+          {renderTemplates(standingTemplates, standingMergeFields, STANDING_ACTION_LABEL, 'STANDING', 'Content › Forms', 'For forms that are not part of an event. Merge fields:')}
         </section>
       </div>
     </div>

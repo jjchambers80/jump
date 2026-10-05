@@ -75,6 +75,7 @@ const navItems: NavItem[] = [
     icon: FileText,
     children: [
       { label: 'Files', href: '/admin/content/files' },
+      { label: 'Forms', href: '/admin/content/forms' },
       { label: 'Menus', href: '/admin/content/menus' },
       { label: 'Blog posts', href: '/admin/content/blog-posts' },
     ],

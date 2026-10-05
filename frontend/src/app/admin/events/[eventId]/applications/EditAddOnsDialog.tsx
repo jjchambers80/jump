@@ -9,7 +9,7 @@ import { FormEvent, RefObject, useEffect, useMemo, useState } from 'react';
 import SettingsDialog from '@/app/admin/settings/SettingsDialog';
 import { formAlertClass } from '@/app/admin/settings/formShared';
 import AddOnPicker from '@/components/AddOnPicker';
-import { money, type AdminApplication, type TierAddOnOption } from '@/lib/applications';
+import { applicantName, money, type AdminApplication, type TierAddOnOption } from '@/lib/applications';
 import { describeError, useApplicationsApi } from './useApplicationsApi';
 
 interface EditAddOnsDialogProps {
@@ -98,7 +98,7 @@ export default function EditAddOnsDialog({ eventId, application, returnFocusRef,
           </div>
         )}
         <p className="text-sm text-gray-700 dark:text-slate-300">
-          <strong>{application.profile.businessName}</strong> · {application.tier?.name}. Prices are today&apos;s; the new total replaces the {money(application.amounts.applicantPays)} quoted at submission.
+          <strong>{applicantName(application)}</strong> · {application.tier?.name}. Prices are today&apos;s; the new total replaces the {money(application.amounts.applicantPays)} quoted at submission.
           {application.paymentStatus === 'PAYMENT_DUE' ? ' Their pay-now link will show the new amount.' : ''}
         </p>
         {!offered && !error && <p className="text-sm text-gray-500 dark:text-slate-400">Loading…</p>}

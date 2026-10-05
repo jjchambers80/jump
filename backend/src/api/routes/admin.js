@@ -681,6 +681,10 @@ router.get('/standing-application-forms/:formId/submissions/:applicationId', wra
   const organizationId = await activeOrgFor(req);
   res.json(await applicationService.getInScope({ organizationId, formId: req.params.formId }, req.params.applicationId));
 }));
+router.patch('/standing-application-forms/:formId/submissions/:applicationId', validateMetaBody, wrap(async (req, res) => {
+  const organizationId = await activeOrgFor(req);
+  res.json(await applicationService.updateMetaInScope({ organizationId, formId: req.params.formId }, req.params.applicationId, req.body));
+}));
 router.post('/standing-application-forms/:formId/submissions/:applicationId/preview', wrap(async (req, res) => {
   const organizationId = await activeOrgFor(req);
   res.json(await applicationService.previewMessageInScope({ organizationId, formId: req.params.formId }, req.params.applicationId, req.body?.decision));

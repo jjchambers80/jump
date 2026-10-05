@@ -14,7 +14,9 @@ export const MAX_TAGS = 20;
 export const MAX_TAG_LENGTH = 40;
 
 interface EditTagsDialogProps {
-  eventId: string;
+  eventId: string | null;
+  /** Spec 044: tags on a standing-form submission. */
+  standingFormId?: string;
   applicationId: string;
   businessName: string;
   tags: string[];
@@ -33,7 +35,7 @@ export function addTag(list: string[], raw: string): string[] {
   return [...list, tag];
 }
 
-export default function EditTagsDialog({ eventId, applicationId, businessName, tags: initial, suggestions, returnFocusRef, onClose, onSaved }: EditTagsDialogProps) {
+export default function EditTagsDialog({ eventId, standingFormId, applicationId, businessName, tags: initial, suggestions, returnFocusRef, onClose, onSaved }: EditTagsDialogProps) {
   const [tags, setTags] = useState<string[]>(initial);
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
@@ -79,7 +81,7 @@ export default function EditTagsDialog({ eventId, applicationId, businessName, t
     setSaving(true);
     setError(null);
     try {
-      onSaved(await patchApplicationMeta(eventId, applicationId, { tags: next }));
+      onSaved(await patchApplicationMeta(eventId, applicationId, { tags: next }, standingFormId));
     } catch (err) {
       setError(describeError(err, 'Could not save tags'));
       setSaving(false);

@@ -110,7 +110,12 @@ export interface AdminTier {
 
 export interface AdminForm {
   id: string;
-  eventId: string;
+  /** Null on a standing form (spec 044): organization-level, FREE, no tiers. */
+  eventId: string | null;
+  /** Spec 044 standing forms: ask for the business profile, the storefront button label, the thank-you text. */
+  collectBusiness?: boolean;
+  buttonLabel?: string | null;
+  successMessage?: string | null;
   kind: FormKind;
   name: string;
   slug: string;
@@ -137,6 +142,7 @@ export interface AdminForm {
   questions: Question[];
   /** Every application add-on of the event (spec 012), for the tier dialog. */
   addOns: { id: string; name: string; price: number; allTiers: boolean; isActive: boolean; scope: 'TICKET' | 'APPLICATION' | 'BOTH' }[];
+  updatedAt?: string;
 }
 
 /** Public shape. */
@@ -339,7 +345,8 @@ export interface ApplicationRow {
   /** The application's order (spec 024); null on FREE forms. */
   orderId: string | null;
   orderRef: string | null;
-  eventId: string;
+  /** Null on a standing-form submission (spec 044). */
+  eventId: string | null;
   event: { id: string; name: string; date: string; timezone?: string | null } | null;
   /** Unscoped (SYSTEM_ADMIN) callers only. */
   organization?: { id: string; name: string };
@@ -348,7 +355,8 @@ export interface ApplicationRow {
   formKind: FormKind;
   status: ApplicationStatus;
   paymentStatus: PaymentStatus;
-  businessName: string;
+  /** Null when a standing form did not collect business details (spec 044). */
+  businessName: string | null;
   /** First profile photo, thumb variant (spec 019). */
   logoUrl: string | null;
   contact: { email: string; firstName: string; lastName: string };
@@ -507,12 +515,14 @@ export interface AdminApplication {
   selectionHeldUntil?: string | null;
   /** Whether the organizer may change the category (freely before a space is chosen). */
   tierEditable?: { allowed: boolean; reason: string | null };
-  event: { id: string; name: string; date: string; timezone?: string | null };
+  /** Null on a standing-form submission (spec 044). */
+  event: { id: string; name: string; date: string; timezone?: string | null } | null;
   status: ApplicationStatus;
   paymentStatus: PaymentStatus;
   capacitySlot: 'NONE' | 'RESERVED' | 'APPROVED';
   contact: { id: string; email: string; firstName: string; lastName: string; accountCreatedAt: string | null };
-  profile: ApplicantProfile;
+  /** Null when a standing form did not collect business details (spec 044). */
+  profile: ApplicantProfile | null;
   tier: { id: string; name: string; price: number; mapBound?: boolean } | null;
   amounts: TierAmounts & { currency: string };
   /** What the tier + add-ons cost today vs the snapshot quoted at submission (PAID only; phase 3). */
@@ -710,4 +720,9 @@ export function acceptanceLine(a: Acceptance): string | null {
   if (a.reason === 'not_yet_open') return a.opensAt ? `Opens ${formatDate(a.opensAt)}` : 'Not open yet';
   if (a.reason === 'closed') return 'Closed';
   return 'Not available';
+}
+
+/** Who applied: the business, or the person when a standing form asked for no business (spec 044). */
+export function applicantName(a: { businessName?: string | null; profile?: { businessName: string } | null; contact: { firstName: string; lastName: string } }): string {
+  return a.businessName ?? a.profile?.businessName ?? `${a.contact.firstName} ${a.contact.lastName}`.trim();
 }
