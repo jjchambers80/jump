@@ -530,26 +530,30 @@ model Organization {
 // Custom content pages managed under Online Store. Content is stored as the
 // editor's HTML snapshot; rendering/sanitization belongs to the storefront.
 model Page {
-  id             String   @id @default(cuid())
-  organizationId String
-  title          String
+  id                 String   @id @default(cuid())
+  organizationId     String
+  title              String
   // URL handle, unique per organization: /organizations/:orgId/pages/:slug.
   // Derived from the title unless the organizer sets one (search engine listing).
-  slug           String
-  slugCustomized Boolean  @default(false)
-  content        String
-  isVisible      Boolean  @default(true)
+  slug               String
+  slugCustomized     Boolean  @default(false)
+  content            String
+  isVisible          Boolean  @default(true)
   // Search engine listing overrides; null falls back to title / no description.
-  seoTitle       String?
-  seoDescription String?
+  seoTitle           String?
+  seoDescription     String?
   // Spec 042: name of the organization's PageTemplate that lays this page out.
   // Null renders the default body. No FK on purpose: deleting a template
   // clears it (PageTemplateService.remove), and an unknown name renders the default.
-  template       String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  template           String?
+  // Spec 044D: optional standing application form attached to this page.
+  applicationFormId  String?
+  applyLabel         String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  applicationForm    ApplicationForm?    @relation(fields: [applicationFormId], references: [id], onDelete: SetNull)
 
   @@unique([organizationId, slug])
   @@index([organizationId, createdAt])
@@ -1673,6 +1677,7 @@ model ApplicationForm {
   tiers        ApplicationTier[]
   questions    ApplicationQuestion[]
   applications Application[]
+  pages        Page[]               // spec 044D: pages using this standing form
 
   @@unique([eventId, slug])
   @@index([organizationId, status])

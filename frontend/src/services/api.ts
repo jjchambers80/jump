@@ -303,6 +303,10 @@ export interface OnlineStorePage {
   seoDescription: string | null;
   /** Spec 042: name of the page template laying the page out; null = default */
   template: string | null;
+  /** Spec 044D: optional standing application form attached to this page */
+  applicationFormId: string | null;
+  /** Spec 044D: custom button label for the apply CTA */
+  applyLabel: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -317,6 +321,10 @@ export interface OnlineStorePageInput {
   seoTitle: string | null;
   seoDescription: string | null;
   template: string | null;
+  /** Spec 044D: optional standing application form ID */
+  applicationFormId: string | null;
+  /** Spec 044D: custom button label for the apply CTA */
+  applyLabel: string | null;
 }
 
 // ===== Page templates (spec 042) =====
@@ -346,6 +354,16 @@ export interface PageTemplate {
   pageCount: number;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Spec 044D: a standing application form (no event) for the Page editor Apply button card. */
+export interface ApplicationFormSummary {
+  id: string;
+  name: string;
+  slug: string;
+  status: 'DRAFT' | 'OPEN' | 'CLOSED';
+  buttonLabel: string | null;
+  intro: string | null;
 }
 
 /** Body for POST /organizations/:id/public/pages/:slug/contact. `website` is the honeypot. */

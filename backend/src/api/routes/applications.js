@@ -13,6 +13,7 @@
 // proxies through Next, so the signed X-Jump-Client-Ip header is honoured).
 
 import express from 'express';
+import { prisma } from '@jump/db';
 import multer from 'multer';
 import applicationFormService from '../../services/ApplicationFormService.js';
 import applicationService from '../../services/ApplicationService.js';
@@ -110,9 +111,20 @@ async function resolveStandingOrg(req, res, next) {
 }
 const gateByStandingOrg = [resolveStandingOrg, gateStorefront((req) => ({ organizationId: req.organizationId }))];
 
+// The storefront shell (logo, brand, theme) for the standalone apply and status pages.
+const storefrontIdentity = (id) =>
+  prisma.organization.findUnique({
+    where: { id },
+    select: { id: true, slug: true, name: true, logoUrl: true, brandColor: true, themeMode: true, buyerSignInLinks: true },
+  });
+
 standingApplicationsRouter.get('/status/:applicationId', gateByStandingOrg, async (req, res, next) => {
   try {
-    res.json(await applicationService.standingStatusView(req.organizationId, req.params.applicationId, req.query.token));
+    const [view, organization] = await Promise.all([
+      applicationService.standingStatusView(req.organizationId, req.params.applicationId, req.query.token),
+      storefrontIdentity(req.organizationId),
+    ]);
+    res.json({ ...view, organization });
   } catch (error) {
     next(error);
   }
@@ -120,7 +132,11 @@ standingApplicationsRouter.get('/status/:applicationId', gateByStandingOrg, asyn
 
 standingApplicationsRouter.get('/:formSlug', gateByStandingOrg, async (req, res, next) => {
   try {
-    res.json(await applicationFormService.publicStandingForm(req.organizationId, req.params.formSlug));
+    const [form, organization] = await Promise.all([
+      applicationFormService.publicStandingForm(req.organizationId, req.params.formSlug),
+      storefrontIdentity(req.organizationId),
+    ]);
+    res.json({ ...form, organization });
   } catch (error) {
     next(error);
   }
