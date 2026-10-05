@@ -166,6 +166,11 @@ export interface PublicForm {
   organizationName?: string | null;
   tiers: PublicTier[];
   questions: Question[];
+  /** Spec 044: standing forms may skip the business step; event forms always collect it. */
+  collectBusiness?: boolean;
+  /** Spec 044: standing forms' own button label and thank-you line. */
+  buttonLabel?: string | null;
+  successMessage?: string | null;
 }
 
 export interface ProfilePhoto {

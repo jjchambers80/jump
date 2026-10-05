@@ -13,7 +13,7 @@ import SeoListingCard, {
 } from '@/components/content/SeoListingCard';
 import RichTextEditorField from '@/components/editor/RichTextEditorField';
 import { htmlToText } from '@/lib/html';
-import api, { type OnlineStorePage, type OnlineStorePageInput, type PageTemplate } from '@/services/api';
+import api, { type OnlineStorePage, type OnlineStorePageInput, type PageTemplate, type ApplicationFormSummary } from '@/services/api';
 
 // Limits and the handle preview now live in the shared SEO card (spec 026).
 export { SEO_DESCRIPTION_MAX, SEO_TITLE_MAX, previewHandle };
@@ -50,12 +50,17 @@ export default function PageForm({
   // whether a contact form could deliver (store email set).
   const [templates, setTemplates] = useState<PageTemplate[] | null>(null);
   const [storeEmail, setStoreEmail] = useState<string | null | undefined>(undefined);
+  // Spec 044D: standing application forms for the Apply button
+  const [standingForms, setStandingForms] = useState<ApplicationFormSummary[] | null>(null);
   const { data: session } = useSession();
   const isSystemAdmin = (session?.user as { role?: string } | undefined)?.role === 'SYSTEM_ADMIN';
   const [seoTitle, setSeoTitle] = useState(initial?.seoTitle ?? '');
   const [seoDescription, setSeoDescription] = useState(initial?.seoDescription ?? '');
   // The handle is only stored once the organizer types one; blank follows the title.
   const [slug, setSlug] = useState(initial?.slug ?? '');
+  // Spec 044D: Apply button settings
+  const [applicationFormId, setApplicationFormId] = useState<string | null>(initial?.applicationFormId ?? null);
+  const [applyLabel, setApplyLabel] = useState<string | null>(initial?.applyLabel ?? null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -80,6 +85,15 @@ export default function PageForm({
       .catch(() => {
         if (!cancelled) setStoreEmail(undefined);
       });
+    // Spec 044D: fetch standing application forms for this org
+    api
+      .get<{ data: ApplicationFormSummary[] }>(`/admin/standing-application-forms`)
+      .then((result) => {
+        if (!cancelled) setStandingForms(result.data);
+      })
+      .catch(() => {
+        if (!cancelled) setStandingForms([]);
+      });
     return () => {
       cancelled = true;
     };
@@ -93,6 +107,7 @@ export default function PageForm({
   const liveUrl = initial
     ? `/organizations/${selectedOrgId ?? ''}/pages/${initial.slug}`
     : null;
+  const chosenForm = standingForms?.find((f) => f.id === applicationFormId) ?? null;
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -109,6 +124,8 @@ export default function PageForm({
         seoTitle: seoTitle.trim() || null,
         seoDescription: seoDescription.trim() || null,
         template,
+        applicationFormId,
+        applyLabel: applyLabel?.trim() || null,
       });
     } catch (err: any) {
       setError(err.message || 'Failed to save page');
@@ -268,6 +285,50 @@ export default function PageForm({
               >
                 Manage templates
               </Link>
+            )}
+          </section>
+
+          {/* Spec 044D: a standing form opened from a button on this page */}
+          <section className={card} data-testid="apply-button-card">
+            <label htmlFor="page-apply-form" className="text-base font-semibold text-gray-900 dark:text-white">
+              Apply button
+            </label>
+            <p className={hint}>Opens one of your standing forms (Content › Forms) in a panel over the page.</p>
+            <select
+              id="page-apply-form"
+              value={applicationFormId ?? ''}
+              onChange={(event) => setApplicationFormId(event.target.value || null)}
+              className={`${field} mt-3`}
+            >
+              <option value="">No button</option>
+              {(standingForms ?? []).map((form) => (
+                <option key={form.id} value={form.id}>
+                  {form.status === 'OPEN' ? form.name : `${form.name} (${form.status.toLowerCase()})`}
+                </option>
+              ))}
+            </select>
+            {chosenForm && chosenForm.status !== 'OPEN' && (
+              <p className={hint}>
+                {chosenForm.status === 'DRAFT'
+                  ? 'Visitors see the button once you open the form.'
+                  : 'Visitors see that applications are closed.'}
+              </p>
+            )}
+            {applicationFormId && (
+              <div className="mt-3">
+                <label htmlFor="page-apply-label" className={label}>
+                  Button label
+                </label>
+                <input
+                  id="page-apply-label"
+                  type="text"
+                  maxLength={40}
+                  value={applyLabel ?? ''}
+                  onChange={(event) => setApplyLabel(event.target.value)}
+                  placeholder={chosenForm?.buttonLabel || 'Apply now'}
+                  className={field}
+                />
+              </div>
             )}
           </section>
         </aside>
