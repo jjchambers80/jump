@@ -1161,6 +1161,26 @@ class ApplicationService {
     return this._serializeAdmin(application);
   }
 
+  /**
+   * Spec 044: notes and tags on a standing-form submission. Booth, check-in and
+   * the public directory belong to events, so only these two fields exist here.
+   */
+  async updateMetaInScope(scope, applicationId, { internalNote, tags, ...rest }) {
+    if (Object.values(rest).some((value) => value !== undefined)) throw new ValidationError('Only internalNote and tags can change on this application');
+    const data = {};
+    if (internalNote !== undefined) {
+      if (internalNote !== null && (typeof internalNote !== 'string' || internalNote.length > 5000)) throw new ValidationError('internalNote must be 5000 characters or fewer');
+      data.internalNote = internalNote ? internalNote.trim() : null;
+    }
+    if (tags !== undefined) data.tags = this._normaliseTags(tags);
+    if (!Object.keys(data).length) throw new ValidationError('Nothing to update');
+    const existing = await prisma.application.findFirst({ where: { id: applicationId, ...this._scopeWhere(scope) }, select: { id: true } });
+    if (!existing) throw new NotFoundError('Application not found');
+    const application = await prisma.application.update({ where: { id: applicationId }, data, include: DETAIL_INCLUDE });
+    await attachBooths([application]);
+    return this._serializeAdmin(application);
+  }
+
   _normaliseTags(tags) {
     if (!Array.isArray(tags)) throw new ValidationError('tags must be an array of strings');
     const seen = new Set();
