@@ -22,6 +22,12 @@ import PageContentSection from '../sections/PageContentSection';
 import ImageWithTextSection from '../sections/ImageWithTextSection';
 import FeatureGridSection from '../sections/FeatureGridSection';
 import FeatureBlock from '../sections/FeatureBlock';
+import StatsSection from '../sections/StatsSection';
+import StatBlock from '../sections/StatBlock';
+import ChecklistSection from '../sections/ChecklistSection';
+import ChecklistItemBlock from '../sections/ChecklistItemBlock';
+import StepsSection from '../sections/StepsSection';
+import StepBlock from '../sections/StepBlock';
 import { sectionContext } from '../sections/context';
 
 // Puck hands every component its props plus `puck` (metadata) and, for slot
@@ -101,6 +107,33 @@ export const renderConfig: Config = {
     },
     Feature: {
       render: ({ puck, ...props }: PuckProps) => <FeatureBlock {...(props as any)} ctx={sectionContext(puck.metadata)} />,
+    },
+    Stats: {
+      fields: { blocks: { type: 'slot', allow: ['Stat'] } },
+      render: ({ puck, blocks, ...props }: PuckProps) => (
+        <StatsSection {...(props as any)} Items={slotRender(blocks)} ctx={sectionContext(puck.metadata)} />
+      ),
+    },
+    Stat: {
+      render: ({ puck, ...props }: PuckProps) => <StatBlock {...(props as any)} ctx={sectionContext(puck.metadata)} />,
+    },
+    Checklist: {
+      fields: { blocks: { type: 'slot', allow: ['ChecklistItem'] } },
+      render: ({ puck, blocks, ...props }: PuckProps) => (
+        <ChecklistSection {...(props as any)} Items={slotRender(blocks)} ctx={sectionContext(puck.metadata)} />
+      ),
+    },
+    ChecklistItem: {
+      render: ({ puck, ...props }: PuckProps) => <ChecklistItemBlock {...(props as any)} ctx={sectionContext(puck.metadata)} />,
+    },
+    Steps: {
+      fields: { blocks: { type: 'slot', allow: ['Step'] } },
+      render: ({ puck, blocks, ...props }: PuckProps) => (
+        <StepsSection {...(props as any)} Items={slotRender(blocks)} ctx={sectionContext(puck.metadata)} />
+      ),
+    },
+    Step: {
+      render: ({ puck, ...props }: PuckProps) => <StepBlock {...(props as any)} ctx={sectionContext(puck.metadata)} />,
     },
     PageContent: {
       render: ({ puck, ...props }: PuckProps) => <PageContentSection {...(props as any)} ctx={sectionContext(puck.metadata)} />,
