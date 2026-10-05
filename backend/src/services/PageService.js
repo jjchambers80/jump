@@ -1,6 +1,6 @@
 import { prisma } from '@jump/db';
 import { rethrowSlugConflict, resolveUniqueSlug, uniqueSlug } from '../utils/slug.js';
-import { NotFoundError } from '../middleware/errorHandler.js';
+import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import storeFileService from './StoreFileService.js';
 import { sanitizeContentHtml } from '../utils/sanitizeHtml.js';
 import { findByPublicIdentifier } from '../utils/publicIdentifier.js';
@@ -13,6 +13,39 @@ function optionalText(value) {
   if (value === null) return null;
   const trimmed = String(value).trim();
   return trimmed.length ? trimmed : null;
+}
+
+/** Spec 044D: a page may only point at a standing form (no event) of its own organization. */
+async function assertStandingForm(organizationId, formId) {
+  if (formId === undefined || formId === null) return;
+  const form = await prisma.applicationForm.findFirst({
+    where: { id: formId, organizationId, eventId: null },
+    select: { id: true },
+  });
+  if (!form) throw new ValidationError('Validation failed', [{ field: 'applicationFormId', message: 'Choose one of your standing forms' }]);
+}
+
+/**
+ * Spec 044D: the page's Apply button. DRAFT forms stay invisible; an OPEN form
+ * outside its window reads as CLOSED (with the reopen date when it has one).
+ */
+async function publicApplyForm(organizationId, formId, applyLabel) {
+  if (!formId) return null;
+  const form = await prisma.applicationForm.findFirst({
+    where: { id: formId, organizationId, eventId: null, status: { in: ['OPEN', 'CLOSED'] } },
+    select: { slug: true, name: true, intro: true, status: true, buttonLabel: true, opensAt: true, closesAt: true },
+  });
+  if (!form) return null;
+  const now = new Date();
+  const open = form.status === 'OPEN' && !(form.opensAt && now < form.opensAt) && !(form.closesAt && now > form.closesAt);
+  return {
+    slug: form.slug,
+    name: form.name,
+    intro: form.intro,
+    label: applyLabel || form.buttonLabel || 'Apply now',
+    status: open ? 'OPEN' : 'CLOSED',
+    opensAt: !open && form.opensAt && form.opensAt > now ? form.opensAt : null,
+  };
 }
 
 class PageService {
@@ -37,7 +70,8 @@ class PageService {
    * the backend.
    */
   async getPublic(organizationId, identifier) {
-    const { template: templateName, ...page } = await this._findPublic(organizationId, identifier);
+    const { template: templateName, applicationFormId, applyLabel, ...row } = await this._findPublic(organizationId, identifier);
+    const page = { ...row, applyForm: await publicApplyForm(organizationId, applicationFormId, applyLabel) };
     const template = await pageTemplateService.resolve(organizationId, templateName);
     if (!template) return { ...page, template: null };
     const sections = template.definition?.sections ?? [];
@@ -64,6 +98,8 @@ class PageService {
         seoTitle: true,
         seoDescription: true,
         template: true,
+        applicationFormId: true,
+        applyLabel: true,
         updatedAt: true,
       },
     });
@@ -73,6 +109,7 @@ class PageService {
 
   async create(organizationId, data) {
     await pageTemplateService.assertAssignable(organizationId, data.template);
+    await assertStandingForm(organizationId, data.applicationFormId);
     const title = data.title.trim();
     const slugState = await resolveUniqueSlug(prisma.page, {
       scope: { organizationId },
@@ -91,6 +128,8 @@ class PageService {
           seoTitle: optionalText(data.seoTitle) ?? null,
           seoDescription: optionalText(data.seoDescription) ?? null,
           template: data.template ?? null,
+          applicationFormId: data.applicationFormId ?? null,
+          applyLabel: optionalText(data.applyLabel) ?? null,
         },
       });
     } catch (error) {
@@ -118,6 +157,18 @@ class PageService {
     if (data.template !== undefined) {
       await pageTemplateService.assertAssignable(organizationId, data.template);
       patch.template = data.template;
+    }
+    if (data.applicationFormId !== undefined) {
+      if (data.applicationFormId === null) {
+        patch.applicationFormId = null;
+        patch.applyLabel = null; // Clear label when form is removed
+      } else {
+        await assertStandingForm(organizationId, data.applicationFormId);
+        patch.applicationFormId = data.applicationFormId;
+      }
+    }
+    if (data.applyLabel !== undefined && data.applicationFormId !== null) {
+      patch.applyLabel = optionalText(data.applyLabel) ?? null;
     }
     if (data.title !== undefined || data.slug !== undefined) {
       Object.assign(

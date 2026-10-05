@@ -61,6 +61,7 @@ const PUBLIC_PASS = [
   /^\/venues(\/|$)/,
   /^\/legal(\/|$)/,
   /^\/rsvp(\/|$)/,
+  /^\/apply(\/|$)/,
 ];
 const PLATFORM_ONLY = [
   /^\/admin(\/|$)/,
@@ -88,6 +89,11 @@ export function routeForTenantHost(pathname: string, orgId: string): StorefrontR
   const account = path.match(/^\/account(\/.*)?$/);
   if (account)
     return { kind: 'rewrite', pathname: `/organizations/${orgId}/account${account[1] || ''}` };
+
+  // Spec 044D: /apply/:formSlug and /apply/status/:id are org-relative.
+  const apply = path.match(/^\/apply(\/.*)?$/);
+  if (apply)
+    return { kind: 'rewrite', pathname: `/organizations/${orgId}/apply${apply[1] || ''}` };
 
   // Content (specs 015 / 026): /pages/:slug and /blogs/:blog[/:post] are org-relative.
   const content = path.match(/^\/(pages|blogs)(\/.*)?$/);

@@ -60,6 +60,8 @@ describe('Online Store pages', () => {
         seoTitle: null,
         seoDescription: null,
         template: null,
+        applicationFormId: null,
+        applyLabel: null,
       },
     });
   });

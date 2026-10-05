@@ -9,7 +9,7 @@ import { TEMPLATE_NAME_RE } from '../../utils/pageTemplateManifest.js';
  */
 function collectErrors(body, { partial }) {
   const errors = [];
-  const { title, content, isVisible, slug, seoTitle, seoDescription, template } = body;
+  const { title, content, isVisible, slug, seoTitle, seoDescription, template, applicationFormId, applyLabel } = body;
 
   if (title !== undefined || !partial) {
     if (typeof title !== 'string' || title.trim().length === 0) {
@@ -35,6 +35,15 @@ function collectErrors(body, { partial }) {
     if (typeof template !== 'string' || !TEMPLATE_NAME_RE.test(template)) {
       errors.push({ field: 'template', message: 'template must be a page template name or null' });
     }
+  }
+
+  // Spec 044D: the Apply button. PageService checks the form is a standing form of this organization.
+  if (applicationFormId !== undefined && applicationFormId !== null && typeof applicationFormId !== 'string') {
+    errors.push({ field: 'applicationFormId', message: 'applicationFormId must be a string' });
+  }
+  if (applyLabel !== undefined && applyLabel !== null) {
+    if (typeof applyLabel !== 'string') errors.push({ field: 'applyLabel', message: 'applyLabel must be a string' });
+    else if (applyLabel.trim().length > 40) errors.push({ field: 'applyLabel', message: 'Button label must be 40 characters or less' });
   }
 
   if (slug !== undefined && slug !== null) {
