@@ -13,6 +13,9 @@ import api from '@/services/api';
 import { acceptanceLine, type PublicForm } from '@/lib/applications';
 import { ApplySteps, useApplyForm, type SubmitResult } from './ApplySteps';
 
+/** Where the page shows the form inline instead of behind a button (Tailwind `lg`). */
+export const INLINE_FROM = '(min-width: 1024px)';
+
 export default function ApplyDrawer({ organizationId, formSlug }: { organizationId: string; formSlug: string }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
@@ -48,8 +51,9 @@ export default function ApplyDrawer({ organizationId, formSlug }: { organization
       (link as HTMLElement).focus();
       show();
     };
+    // From `lg` the form is inline (ApplyInline, id="apply"): the browser scrolls there.
     const onHash = () => {
-      if (window.location.hash === '#apply') show();
+      if (window.location.hash === '#apply' && !window.matchMedia(INLINE_FROM).matches) show();
     };
     document.addEventListener('click', onClick);
     window.addEventListener('hashchange', onHash);
@@ -184,5 +188,94 @@ export default function ApplyDrawer({ organizationId, formSlug }: { organization
         </footer>
       </form>
     </dialog>
+  );
+}
+
+/**
+ * The same form laid out in the page from `lg` (the reference layout: copy,
+ * then the form). Phones and tablets get the one Apply button and the drawer.
+ */
+export function ApplyInline({ organizationId, formSlug, title }: { organizationId: string; formSlug: string; title: string }) {
+  const successRef = useRef<HTMLHeadingElement>(null);
+  const [form, setForm] = useState<PublicForm | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [done, setDone] = useState<SubmitResult | null>(null);
+  const apply = useApplyForm(form, {
+    submitUrl: `/organizations/${encodeURIComponent(organizationId)}/public/apply/${encodeURIComponent(formSlug)}`,
+    draftKey: `jump.apply.${organizationId}.${formSlug}`,
+  });
+
+  // Fetch only where the inline form is visible, so phones load it once, in the drawer.
+  useEffect(() => {
+    if (!window.matchMedia(INLINE_FROM).matches) return;
+    api
+      .get<PublicForm>(`/organizations/${encodeURIComponent(organizationId)}/public/apply/${encodeURIComponent(formSlug)}`)
+      .then(setForm)
+      .catch((err) => setLoadError(err?.message || 'This form is not available right now.'));
+  }, [organizationId, formSlug]);
+
+  useEffect(() => {
+    if (done) successRef.current?.focus();
+  }, [done]);
+
+  const closedLine = form ? acceptanceLine(form.acceptance) : null;
+  const statusPath = done ? new URL(done.statusUrl, window.location.origin) : null;
+
+  return (
+    <section id="apply" aria-labelledby="apply-inline-title" data-testid="apply-inline" className="mt-14 hidden scroll-mt-24 lg:block">
+      <h2 id="apply-inline-title" className="text-2xl font-bold text-gray-900 dark:text-white">{title}</h2>
+      {done ? (
+        <div className="mt-6 flex flex-col items-center rounded-2xl border border-gray-200 bg-white px-6 py-12 text-center dark:border-slate-700 dark:bg-slate-800" data-testid="apply-inline-success">
+          <CheckCircle2 className="h-12 w-12 text-brand-link motion-safe:animate-stamp-in" aria-hidden />
+          <h3 ref={successRef} tabIndex={-1} className="mt-4 text-2xl font-bold text-gray-900 focus:outline-none dark:text-white">
+            Application sent
+          </h3>
+          <p role="status" className="mt-2 max-w-md text-gray-600 dark:text-slate-300">
+            {form?.successMessage || `Thanks for applying. ${form?.organizationName || 'The organizer'} will review it and email you their decision.`}
+          </p>
+          {statusPath && (
+            <Link
+              href={statusPath.pathname + statusPath.search}
+              className="mt-6 flex h-12 items-center justify-center rounded-xl border border-gray-300 px-6 font-semibold text-gray-900 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link dark:border-slate-600 dark:text-white dark:hover:bg-slate-700"
+            >
+              View your application
+            </Link>
+          )}
+        </div>
+      ) : loadError ? (
+        <p role="alert" className="mt-4 text-red-700 dark:text-red-300">{loadError}</p>
+      ) : !form ? (
+        <p className="mt-4 text-gray-600 dark:text-slate-400">Loading the form…</p>
+      ) : closedLine ? (
+        <div className="mt-6 flex items-start gap-4 rounded-2xl border border-gray-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-800">
+          <Lock className="h-5 w-5 shrink-0 text-gray-500" aria-hidden />
+          <p className="font-semibold text-gray-900 dark:text-slate-100">This form is {closedLine.toLowerCase()}.</p>
+        </div>
+      ) : (
+        <form
+          className="mt-6"
+          onSubmit={async (event) => {
+            const result = await apply.submit(event);
+            if (result) setDone(result);
+          }}
+        >
+          <ApplySteps form={form} apply={apply} idPrefix="inline-" />
+          <div className="mt-6 space-y-3">
+            {apply.error && (
+              <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+                {apply.error}
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={apply.submitting}
+              className="h-12 rounded-xl bg-brand px-8 font-semibold text-brand-fg transition-colors hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2 disabled:opacity-60 dark:focus-visible:ring-offset-slate-900"
+            >
+              {apply.submitting ? 'Submitting…' : 'Submit application'}
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
   );
 }

@@ -2,14 +2,14 @@
 // (legacy) and the themed server route render the same markup. A page with a
 // template (spec 042) renders the template's sections in order; the contact
 // form is the only client island.
-// Spec 044D: a page with a standing form adds an Apply band under the title,
-// a second button after the content and a phone bar; the ApplyDrawer island
-// turns all three links into a panel over the page.
+// Spec 044D: a page with a standing form shows one Apply button under the
+// title below `lg` (the ApplyDrawer island turns it into a panel over the
+// page) and the form itself inline after the content from `lg`.
 
 import type { PageTemplateSection } from '@/services/api';
 import ContactFormSection from './ContactFormSection';
 import ContentHtml from './ContentHtml';
-import ApplyDrawer from '@/components/applications/ApplyDrawer';
+import ApplyDrawer, { ApplyInline } from '@/components/applications/ApplyDrawer';
 
 export interface PublicPage {
   id: string;
@@ -46,14 +46,14 @@ export default function StorefrontPageBody({
   const applyHref = apply ? `/organizations/${organizationId}/apply/${apply.slug}` : '';
   const isOpen = apply?.status === 'OPEN';
   return (
-    <main className={`mx-auto max-w-3xl px-4 py-10 sm:px-6 ${isOpen ? 'pb-28 sm:pb-10' : ''}`}>
+    <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
       <article data-testid="storefront-page" data-template={page.template?.name}>
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white sm:text-4xl">{page.title}</h1>
         {apply && (
           <aside
             aria-label={apply.name}
             data-testid="apply-cta-band"
-            className="relative mt-6 overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-800 sm:flex sm:items-stretch"
+            className={`relative mt-6 overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-800 sm:flex sm:items-stretch ${isOpen ? 'lg:hidden' : ''}`}
           >
             <span aria-hidden className="absolute inset-y-0 left-0 w-1 bg-brand" />
             <div className="min-w-0 flex-1 py-4 pl-6 pr-5">
@@ -104,35 +104,9 @@ export default function StorefrontPageBody({
             }
           })
         )}
-        {isOpen && (
-          <p className="mt-12 flex justify-center">
-            <a
-              href={applyHref}
-              data-apply-cta
-              data-testid="apply-end-button"
-              className="flex h-12 items-center justify-center rounded-xl border-2 border-brand-link px-6 font-semibold text-brand-link hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2 dark:hover:bg-slate-800 dark:focus-visible:ring-offset-slate-900"
-            >
-              {apply!.label}
-            </a>
-          </p>
-        )}
+        {isOpen && <ApplyInline organizationId={organizationId} formSlug={apply!.slug} title={apply!.name} />}
       </article>
-      {isOpen && (
-        <>
-          {/* Phones: the button stays in reach while reading (the band scrolls away). */}
-          <div className="fixed inset-x-0 bottom-0 z-30 border-t border-gray-200 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur dark:border-slate-700 dark:bg-slate-900/95 sm:hidden">
-            <a
-              href={applyHref}
-              data-apply-cta
-              data-testid="apply-sticky-bar"
-              className="flex h-12 w-full items-center justify-center rounded-xl bg-brand font-semibold text-brand-fg hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2"
-            >
-              {apply!.label}
-            </a>
-          </div>
-          <ApplyDrawer organizationId={organizationId} formSlug={apply!.slug} />
-        </>
-      )}
+      {isOpen && <ApplyDrawer organizationId={organizationId} formSlug={apply!.slug} />}
     </main>
   );
 }

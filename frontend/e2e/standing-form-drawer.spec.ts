@@ -1,5 +1,6 @@
-// Spec 044D: a page with a standing form shows an Apply band; the button opens
-// the form in a panel (sheet on phones). Backend mocked.
+// Spec 044D: below `lg` a page with a standing form shows one Apply button
+// that opens the form in a panel (sheet on phones); from `lg` the form sits
+// inline after the copy. Backend mocked.
 
 import { expect, test, type Page } from '@playwright/test';
 
@@ -52,9 +53,11 @@ async function mockPage(page: Page, status: 'OPEN' | 'CLOSED' = 'OPEN') {
   return { posts };
 }
 
+const PHONE = { width: 390, height: 844 };
+
 for (const viewport of [
-  { name: 'phone', width: 390, height: 844 },
-  { name: 'desktop', width: 1280, height: 900 },
+  { name: 'phone', ...PHONE },
+  { name: 'tablet', width: 820, height: 1180 },
 ]) {
   test(`${viewport.name}: Apply opens the panel, validates, submits and thanks`, async ({ page }) => {
     await page.setViewportSize(viewport);
@@ -92,7 +95,29 @@ for (const viewport of [
   });
 }
 
+test('desktop: the form is inline after the copy, with no Apply button', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const api = await mockPage(page);
+  await page.goto('/organizations/org-apply/pages/vendors');
+
+  await expect(page.getByTestId('apply-cta-button')).toBeHidden();
+  const inline = page.getByRole('region', { name: 'Become a vendor' });
+  await expect(inline).toBeVisible();
+  await inline.getByLabel('First name').fill('Vera');
+  await inline.getByLabel('Last name').fill('Vendor');
+  await inline.getByLabel('Email', { exact: true }).fill('vera@example.com');
+  await inline.getByLabel('Business or outlet name').fill('Vera Retro');
+  await inline.getByLabel(/What do you sell/).fill('Cartridges');
+  await inline.getByTestId('apply-consent').check();
+  await inline.getByRole('button', { name: 'Submit application' }).click();
+
+  await expect(inline.getByRole('heading', { name: 'Application sent' })).toBeFocused();
+  expect(api.posts).toHaveLength(1);
+  await expect(page.getByRole('dialog')).toBeHidden();
+});
+
 test('keyboard: Escape closes the panel and returns focus to the button; #apply opens it', async ({ page }) => {
+  await page.setViewportSize(PHONE);
   await mockPage(page);
   await page.goto('/organizations/org-apply/pages/vendors');
   const cta = page.getByTestId('apply-cta-button');
@@ -113,5 +138,5 @@ test('a closed form shows the band without a button', async ({ page }) => {
   await page.goto('/organizations/org-apply/pages/vendors');
   await expect(page.getByTestId('apply-cta-closed')).toContainText('Applications are closed right now');
   await expect(page.getByTestId('apply-cta-button')).toHaveCount(0);
-  await expect(page.getByTestId('apply-sticky-bar')).toHaveCount(0);
+  await expect(page.getByTestId('apply-inline')).toHaveCount(0);
 });
