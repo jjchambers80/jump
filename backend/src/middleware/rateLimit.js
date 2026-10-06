@@ -135,6 +135,17 @@ export const LIMITS = Object.freeze({
     limit: 20,
     message: 'Too many sign-in attempts from this address. Try again later.',
   },
+  // Spec 045: public OAuth client registration and token exchanges.
+  OAUTH_REGISTER: {
+    windowMs: 60 * 60 * 1000,
+    limit: 20,
+    message: 'Too many OAuth client registrations. Try again later.',
+  },
+  OAUTH_TOKEN: {
+    windowMs: 15 * 60 * 1000,
+    limit: 120,
+    message: 'Too many OAuth token requests. Try again later.',
+  },
   // Spec 042: storefront contact-form messages per IP
   CONTACT_SUBMIT: {
     windowMs: 60 * 60 * 1000,
