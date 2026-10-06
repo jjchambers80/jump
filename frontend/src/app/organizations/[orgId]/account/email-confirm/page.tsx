@@ -56,7 +56,7 @@ function ConfirmInner({ orgId }: { orgId: string }) {
           state.message
         )}
       </p>
-      <Link href={ok ? accountHref : profileHref} className="inline-block rounded-lg bg-brand px-5 py-2.5 font-semibold text-brand-fg hover:bg-brand-hover">
+      <Link href={ok ? accountHref : profileHref} className="inline-block rounded-[var(--theme-button-radius,8px)] bg-brand px-5 py-2.5 font-semibold text-brand-fg hover:bg-brand-hover">
         {ok ? 'Go to your account' : 'Try again from your profile'}
       </Link>
     </>

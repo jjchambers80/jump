@@ -148,7 +148,7 @@ export default function AccountLayout({ children, params }: { children: React.Re
   }
 
   return (
-    <BrandScope color={org.brandColor} themeMode={org.themeMode} className="min-h-screen bg-gray-50 dark:bg-slate-900 print:bg-white">
+    <BrandScope color={org.brandColor} themeMode={org.themeMode} buttonRadius={org.storefrontLogo?.buttonRadius} className="min-h-screen bg-gray-50 dark:bg-slate-900 print:bg-white">
       {/* Receipts print on their own: header, greeting and nav are screen-only. */}
       <div className="print:hidden">
         <OrganizationHeader organization={{ id: org.id, name: org.name, logoUrl: org.logoUrl, storefrontLogo: org.storefrontLogo }} />

@@ -9,6 +9,8 @@ interface BrandScopeProps {
   color: string | null | undefined;
   /** Organization theme mode. LIGHT/DARK/SYSTEM force the page theme; undefined leaves the visitor's choice. */
   themeMode?: ThemeMode | null;
+  /** The theme's button corner radius (storefrontLogo.buttonRadius). Unset keeps each button's own radius. */
+  buttonRadius?: number | null;
   className?: string;
   children: ReactNode;
 }
@@ -24,9 +26,15 @@ interface BrandScopeProps {
  * Client-rendered pages (checkout, apply, account) learn the mode only after their fetch, so
  * they get no blocking script: ThemeScope without it, plus ThemeModeSync (spec 038 §9a.6).
  */
-export default function BrandScope({ color, themeMode, className, children }: BrandScopeProps) {
+export default function BrandScope({ color, themeMode, buttonRadius, className, children }: BrandScopeProps) {
   return (
-    <ThemeScope brandColor={color} themeMode={themeMode} script={false} className={className}>
+    <ThemeScope
+      brandColor={color}
+      themeMode={themeMode}
+      vars={typeof buttonRadius === 'number' ? { '--theme-button-radius': `${buttonRadius}px` } : undefined}
+      script={false}
+      className={className}
+    >
       {children}
     </ThemeScope>
   );

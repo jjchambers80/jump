@@ -20,6 +20,8 @@ export interface StorefrontLogo {
   url: string | null;
   desktopWidth: number;
   mobileWidth: number;
+  /** The theme's button corner radius in px (9999 = pill). */
+  buttonRadius?: number;
 }
 
 export interface OrganizationHeaderProps {

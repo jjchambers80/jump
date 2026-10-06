@@ -2,6 +2,7 @@
 // settings): the logo image override and the header widths. Pages rendered
 // outside the theme frame (checkout, confirmation, apply, map, account) read
 // it from their payloads so their header matches the themed pages exactly.
+// It also carries the theme's button corner radius so their buttons match.
 // Null when the organization is not on themes: those pages use the defaults.
 
 import { prisma } from '@jump/db';
@@ -21,7 +22,7 @@ const num = (value, fallback) => (typeof value === 'number' && Number.isFinite(v
 
 /**
  * @param {{ id: string, themesEnabled?: boolean } | null | undefined} organization
- * @returns {Promise<{ url: string | null, desktopWidth: number, mobileWidth: number } | null>}
+ * @returns {Promise<{ url: string | null, desktopWidth: number, mobileWidth: number, buttonRadius: number } | null>}
  *   `url`: the theme's logo image (with `?w=&h=`), or null for the organization logo.
  */
 export async function storefrontLogoFor(organization) {
@@ -31,7 +32,9 @@ export async function storefrontLogoFor(organization) {
     select: { presetKey: true, settings: true },
   });
   const preset = getPreset(theme?.presetKey ?? DEFAULT_PRESET_KEY)?.settings;
-  const logo = resolveSettings(theme?.settings ?? {}, preset)?.logo ?? {};
+  const settings = resolveSettings(theme?.settings ?? {}, preset) ?? {};
+  const logo = settings.logo ?? {};
+  const buttons = settings.buttons ?? {};
   const fileId = logo.image?.fileId;
   const row = fileId
     ? await prisma.storeFile.findFirst({
@@ -44,5 +47,7 @@ export async function storefrontLogoFor(organization) {
     url: url && row.width && row.height ? `${url}${url.includes('?') ? '&' : '?'}w=${row.width}&h=${row.height}` : url,
     desktopWidth: num(logo.desktopWidth, 120),
     mobileWidth: num(logo.mobileWidth, 90),
+    // Same rule as the theme frame's --theme-button-radius (frontend theme/settingsCss.ts).
+    buttonRadius: buttons.shape === 'pill' ? 9999 : buttons.shape === 'square' ? 0 : num(buttons.radius, 8),
   };
 }

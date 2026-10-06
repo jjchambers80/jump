@@ -49,7 +49,7 @@ describe('storefront logo in payloads', () => {
         presetKey: 'eventimus-default',
         presetVersion: '1.0',
         role: 'MAIN',
-        settings: { logo: { desktopWidth: 180, mobileWidth: 110, image: { fileId: logoFile.id } } },
+        settings: { logo: { desktopWidth: 180, mobileWidth: 110, image: { fileId: logoFile.id } }, buttons: { shape: 'pill' } },
       },
     });
   });
@@ -59,13 +59,14 @@ describe('storefront logo in payloads', () => {
     await prisma.file.deleteMany({ where: { hash: sha(TAG) } }).catch(() => {});
   });
 
-  it('GET /events/:id carries the theme logo image and widths', async () => {
+  it('GET /events/:id carries the theme logo image, widths and button radius', async () => {
     const res = await request(app).get(`/events/${themedEvent.slug}`);
     expect(res.status).toBe(200);
     expect(res.body.organizationStorefrontLogo).toEqual({
       url: expect.stringMatching(/\?w=300&h=100$/),
       desktopWidth: 180,
       mobileWidth: 110,
+      buttonRadius: 9999,
     });
   });
 

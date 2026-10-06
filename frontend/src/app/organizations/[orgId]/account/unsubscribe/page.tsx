@@ -76,7 +76,7 @@ function UnsubscribeInner({ orgId }: { orgId: string }) {
             type="button"
             onClick={unsubscribe}
             disabled={busy}
-            className="w-full rounded-lg bg-brand px-5 py-3 font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-60"
+            className="w-full rounded-[var(--theme-button-radius,8px)] bg-brand px-5 py-3 font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-60"
           >
             {busy ? 'Unsubscribing…' : 'Unsubscribe'}
           </button>

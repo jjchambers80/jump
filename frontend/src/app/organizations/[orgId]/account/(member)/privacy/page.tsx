@@ -60,7 +60,7 @@ function DownloadCard() {
           type="button"
           onClick={download}
           disabled={busy}
-          className="inline-flex items-center gap-2 rounded-lg bg-brand px-5 py-2.5 font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-[var(--theme-button-radius,8px)] bg-brand px-5 py-2.5 font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-60"
         >
           <Download aria-hidden className="h-4 w-4" />
           {busy ? 'Preparing…' : 'Download my data'}

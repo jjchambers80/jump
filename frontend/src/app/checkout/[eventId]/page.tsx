@@ -378,11 +378,11 @@ function CheckoutContent({ params }: { params: { eventId: string } }) {
             <button
               type="button"
               onClick={fetchEventDetails}
-              className="rounded-lg bg-gray-900 px-6 py-3 font-semibold text-white hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2 dark:bg-slate-100 dark:text-slate-900"
+              className="rounded-[var(--theme-button-radius,8px)] bg-gray-900 px-6 py-3 font-semibold text-white hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2 dark:bg-slate-100 dark:text-slate-900"
             >
               Try again
             </button>
-            <Link href={eventHref} className="rounded-lg px-6 py-3 font-semibold text-gray-700 underline-offset-2 hover:underline dark:text-slate-300">
+            <Link href={eventHref} className="rounded-[var(--theme-button-radius,8px)] px-6 py-3 font-semibold text-gray-700 underline-offset-2 hover:underline dark:text-slate-300">
               Back to event
             </Link>
           </div>
@@ -395,6 +395,7 @@ function CheckoutContent({ params }: { params: { eventId: string } }) {
     <BrandScope
       color={event.organizationBrandColor}
       themeMode={event.organizationThemeMode}
+      buttonRadius={event.organizationStorefrontLogo?.buttonRadius}
       className="min-h-screen bg-gray-50 dark:bg-slate-900"
     >
       {event.organizationName && (
@@ -418,7 +419,7 @@ function CheckoutContent({ params }: { params: { eventId: string } }) {
           </p>
           <Link
             href={eventHref}
-            className="inline-flex items-center justify-center rounded-lg bg-brand px-6 py-3 font-bold text-brand-fg hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2"
+            className="inline-flex items-center justify-center rounded-[var(--theme-button-radius,8px)] bg-brand px-6 py-3 font-bold text-brand-fg hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2"
           >
             Choose tickets
           </Link>
@@ -464,7 +465,7 @@ function CheckoutContent({ params }: { params: { eventId: string } }) {
       type="submit"
       form="checkout-form"
       disabled={processing}
-      className={`flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-6 py-3.5 text-base font-bold text-brand-fg shadow-sm transition-colors duration-200 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-80 dark:focus-visible:ring-offset-slate-900 sm:text-lg ${extra}`}
+      className={`flex w-full items-center justify-center gap-2 rounded-[var(--theme-button-radius,0.75rem)] bg-brand px-6 py-3.5 text-base font-bold text-brand-fg shadow-sm transition-colors duration-200 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-80 dark:focus-visible:ring-offset-slate-900 sm:text-lg ${extra}`}
     >
       {processing ? (
         <>

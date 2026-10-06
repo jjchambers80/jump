@@ -154,10 +154,10 @@ export default function ApplicantProfileSection() {
               ))}
             </div>
             <div className="flex gap-2">
-              <button type="submit" disabled={busy} className="rounded-md bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-60" data-testid="applicant-profile-save">
+              <button type="submit" disabled={busy} className="rounded-[var(--theme-button-radius,6px)] bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-60" data-testid="applicant-profile-save">
                 {busy ? 'Saving…' : 'Save'}
               </button>
-              <button type="button" disabled={busy} onClick={() => setEditing(false)} className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700">
+              <button type="button" disabled={busy} onClick={() => setEditing(false)} className="rounded-[var(--theme-button-radius,6px)] border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700">
                 Cancel
               </button>
             </div>
