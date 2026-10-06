@@ -43,6 +43,7 @@ export const BLOCKS = {
       label: text('Label', { max: 40, default: 'Get tickets' }),
       link: link('Link', { type: 'EVENTS' }),
       style: select('Style', ['primary', 'secondary']),
+      size: select('Size', ['medium', 'large']),
     },
   },
   Announcement: {
@@ -78,6 +79,8 @@ export const BLOCKS = {
       buttonLabel: text('Button label', { max: 40, default: '' }),
       link: link('Button link'),
       alignment: radio('Text alignment', ['center', 'left']),
+      // retro = monospace uppercase heading, larger subheading, both with a drop shadow.
+      textStyle: select('Text style', ['default', 'retro']),
     },
   },
   FaqItem: {
