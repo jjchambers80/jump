@@ -142,10 +142,18 @@ describe('Organization Contract Tests', () => {
       expect(res.body.name).toBe('Detail Org');
     });
 
-    it('should return 404 for non-existent organization', async () => {
+    it('should return 403 to an admin who is not a member', async () => {
       const res = await request(app)
         .get('/organizations/nonexistent-id')
         .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it('should return 404 for non-existent organization (SYSTEM_ADMIN)', async () => {
+      const res = await request(app)
+        .get('/organizations/nonexistent-id')
+        .set('Authorization', `Bearer ${generateToken({ role: 'SYSTEM_ADMIN', email: 'sysadmin@test.com' })}`);
 
       expect(res.status).toBe(404);
     });

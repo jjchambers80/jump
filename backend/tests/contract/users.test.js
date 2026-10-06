@@ -41,13 +41,14 @@ const { prisma } = await import('@jump/db');
 const { staffToken, cleanupStaff } = await import('../helpers/staff.js');
 
 describe('User Management Contract Tests', () => {
-  let adminToken, customerToken;
+  let adminToken, customerToken, sysToken;
   let testOrgId;
   let testUserId;
 
   beforeAll(async () => {
     // POST /organizations adds the creator as a member (spec 022): real user needed
     adminToken = await staffToken({ role: 'ADMIN', email: 'admin@user-contract.com' });
+    sysToken = generateToken({ id: 'sys-user-test', role: 'SYSTEM_ADMIN', email: 'sys@user-contract.com' });
     customerToken = generateToken({
       id: 'cust-user-test',
       role: 'UNASSIGNED',
@@ -61,15 +62,17 @@ describe('User Management Contract Tests', () => {
       .send({ name: 'User Test Org' });
     testOrgId = orgRes.body.id;
 
-    // Create a test user directly via Prisma
+    // Create a test user directly via Prisma: a member of the admin's org,
+    // since org ADMINs manage only their own organization's users
     const user = await prisma.user.create({
       data: {
         email: `testuser-${Date.now()}@user-contract.com`,
         name: 'Test Subject',
         firstName: 'Test',
         lastName: 'Subject',
-        role: 'UNASSIGNED',
+        role: 'ORGANIZER',
         isActive: true,
+        memberships: { create: { organizationId: testOrgId, role: 'ORGANIZER' } },
       },
     });
     testUserId = user.id;
@@ -131,15 +134,15 @@ describe('User Management Contract Tests', () => {
       const res = await request(app)
         .patch(`/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ role: 'ORGANIZER' });
+        .send({ role: 'ADMIN' });
 
       expect(res.status).toBe(200);
       expect(res.body.id).toBe(testUserId);
-      expect(res.body.role).toBe('ORGANIZER');
+      expect(res.body.role).toBe('ADMIN');
 
       // Verify DB update
       const dbUser = await prisma.user.findUnique({ where: { id: testUserId } });
-      expect(dbUser.role).toBe('ORGANIZER');
+      expect(dbUser.role).toBe('ADMIN');
     });
 
     test('200: admin can deactivate user', async () => {
@@ -152,10 +155,19 @@ describe('User Management Contract Tests', () => {
       expect(res.body.isActive).toBe(false);
     });
 
-    test('200: admin can reactivate and assign to organization', async () => {
+    test('403: org admin cannot reassign organizations', async () => {
       const res = await request(app)
         .patch(`/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
+        .send({ isActive: true, organizationId: testOrgId });
+
+      expect(res.status).toBe(403);
+    });
+
+    test('200: SYSTEM_ADMIN can reactivate and assign to organization', async () => {
+      const res = await request(app)
+        .patch(`/users/${testUserId}`)
+        .set('Authorization', `Bearer ${sysToken}`)
         .send({ isActive: true, organizationId: testOrgId });
 
       expect(res.status).toBe(200);
@@ -182,13 +194,22 @@ describe('User Management Contract Tests', () => {
       expect(res.status).toBe(400);
     });
 
-    test('404: nonexistent user → not found', async () => {
+    test('404: nonexistent user → not found (SYSTEM_ADMIN)', async () => {
+      const res = await request(app)
+        .patch('/users/nonexistent-user-id-12345')
+        .set('Authorization', `Bearer ${sysToken}`)
+        .send({ role: 'ADMIN' });
+
+      expect(res.status).toBe(404);
+    });
+
+    test('403: nonexistent user for an org admin (no enumeration)', async () => {
       const res = await request(app)
         .patch('/users/nonexistent-user-id-12345')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ role: 'ADMIN' });
 
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(403);
     });
 
     test('403: customer cannot update users', async () => {
