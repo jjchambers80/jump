@@ -1,6 +1,6 @@
 # Spec 045: Agent access (connect ChatGPT, Claude and coding agents to a store)
 
-**Status**: Plan, 2026-10-05. Nothing built. Prerequisite PR #303 (cross-tenant route fix) is open.
+**Status**: Plan, 2026-10-05. Nothing built. Prerequisite PR #303 (cross-tenant route fix) merged and verified in prod 2026-10-05.
 **Ask**: an organizer connects their own LLM to their store and manages it by chatting: events, venues, price tiers, pages, blog, menus, redirects, files, theme and store settings. There is no codebase access. It must work for developers (Claude Code, Codex, Cursor, Agent SDK scripts) and for non-developers (ChatGPT, claude.ai on web, desktop and mobile). It must be the most secure design available.
 **Research**: `docs/research/2026-10-05-agent-store-access.md` holds the rationale, citations and threat model. This plan records the decisions and the build.
 **Supersedes**: the parked spec 016 (API tokens + OpenAPI + CLI) and spec 017 (MCP server) ideas. Neither was ever written.
@@ -187,7 +187,7 @@ New workspace `mcp/`: an Express app on its own Railway service at `mcp.eventimu
 
 1. Does the current `@modelcontextprotocol/sdk` auth router support CIMD and an opaque-token provider backed by Prisma? If not, write the endpoints ourselves (they are small) and use the SDK only for the MCP server.
 2. MCP host: a separate Railway service, or a path on the backend (`api…/mcp`)? A separate host is recommended (cookie and CSP isolation, independent limits). The OAuth endpoints can stay on the backend.
-3. Is agent access a paid-plan feature (spec 022 billing)?
+3. Is agent access a paid-plan feature (spec 022 billing)? Owner 2026-10-05: possibly; decide later. Build the switches so a plan check can slot into `agentAuthorize()` step 1.
 4. **Owner sign-off on the human-only list (D6)**, plus the additions from D5.
 5. Should a store's own ORGANIZER members ever get read-only grants (`store:read` only)? D3 says no for now.
 
