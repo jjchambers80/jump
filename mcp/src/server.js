@@ -641,6 +641,12 @@ const handler = createMcpHandler(
       rejectCrossOrg(args, auth.organizationId);
 
       const { organizationId, ...data } = args;
+
+      // RSVP events don't use price tiers — reject if both provided
+      if (data.admissionMode === 'RSVP' && data.priceTiers && data.priceTiers.length > 0) {
+        throw Object.assign(new ValidationError('RSVP events cannot have price tiers'), { code: -32602, statusCode: 400 });
+      }
+
       const result = await createEventDraft(auth.organizationId, data);
 
       await auditCall(auth, {

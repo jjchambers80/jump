@@ -555,7 +555,10 @@ export async function updatePage(orgId, pageId, updates) {
 // Scope: content:write. Creates blog post with isVisible=false (hidden).
 
 export async function createBlogPostDraft(orgId, data, userId) {
-  const post = await blogPostService.create(orgId, data, { id: userId, name: '' });
+  const post = await blogPostService.create(orgId, {
+    ...data,
+    isVisible: false, // forced hidden per plan
+  }, { id: userId, name: '' });
   return { blogPost: post };
 }
 
