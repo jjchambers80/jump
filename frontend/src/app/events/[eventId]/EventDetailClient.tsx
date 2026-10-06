@@ -672,7 +672,7 @@ export default function EventDetailPage({
 
                     <button
                       onClick={handleProceedToCheckout}
-                      className="group flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-6 py-3.5 text-lg font-bold text-brand-fg transition-colors duration-200 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800"
+                      className="group flex w-full items-center justify-center gap-2 rounded-[var(--theme-button-radius,0.75rem)] bg-brand px-6 py-3.5 text-lg font-bold text-brand-fg transition-colors duration-200 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800"
                     >
                       Proceed to Checkout
                       <ChevronRight className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-0.5 motion-reduce:transition-none" aria-hidden />
@@ -704,7 +704,7 @@ export default function EventDetailPage({
               <button
                 type="button"
                 onClick={() => document.getElementById('rsvp-pass')?.scrollIntoView({ behavior: 'smooth' })}
-                className="w-full bg-brand hover:bg-brand-hover text-brand-fg font-bold py-3 px-4 rounded-lg transition-colors duration-200 text-base"
+                className="w-full bg-brand hover:bg-brand-hover text-brand-fg font-bold py-3 px-4 rounded-[var(--theme-button-radius,8px)] transition-colors duration-200 text-base"
               >
                 Reserve my spot · Free
               </button>
@@ -722,7 +722,7 @@ export default function EventDetailPage({
                 }}
                 tabIndex={ticketsInView ? -1 : undefined}
                 data-testid="mobile-get-tickets"
-                className="w-full bg-brand hover:bg-brand-hover text-brand-fg font-bold py-3 px-4 rounded-lg transition-colors duration-200 text-base"
+                className="w-full bg-brand hover:bg-brand-hover text-brand-fg font-bold py-3 px-4 rounded-[var(--theme-button-radius,8px)] transition-colors duration-200 text-base"
               >
                 Get tickets{fromPrice != null ? ` · from ${formatPrice(fromPrice)}` : ''}
               </button>
@@ -734,7 +734,7 @@ export default function EventDetailPage({
                 <button
                   type="button"
                   onClick={() => setShowMobileCart(true)}
-                  className="relative flex items-center justify-center w-12 h-12 rounded-lg bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-200"
+                  className="relative flex items-center justify-center w-12 h-12 rounded-[var(--theme-button-radius,8px)] bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-200"
                   aria-label={`View cart, ${totalQuantity} ${totalQuantity === 1 ? 'ticket' : 'tickets'}`}
                   aria-haspopup="dialog"
                 >
@@ -749,7 +749,7 @@ export default function EventDetailPage({
                 <button
                   onClick={handleProceedToCheckout}
                   disabled={cartItems.length === 0}
-                  className="flex-1 bg-brand hover:bg-brand-hover disabled:bg-gray-400 disabled:cursor-not-allowed text-brand-fg disabled:text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200 text-base flex items-center justify-center gap-2"
+                  className="flex-1 bg-brand hover:bg-brand-hover disabled:bg-gray-400 disabled:cursor-not-allowed text-brand-fg disabled:text-white font-bold py-3 px-4 rounded-[var(--theme-button-radius,8px)] transition-colors duration-200 text-base flex items-center justify-center gap-2"
                 >
                   <span>Checkout {formatPrice(totalAmount)}</span>
                   <ChevronRight className="w-5 h-5" aria-hidden />
@@ -822,7 +822,7 @@ export default function EventDetailPage({
                 <button
                   type="button"
                   onClick={handleProceedToCheckout}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand px-4 py-3 text-base font-bold text-brand-fg transition-colors duration-200 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2"
+                  className="flex w-full items-center justify-center gap-2 rounded-[var(--theme-button-radius,8px)] bg-brand px-4 py-3 text-base font-bold text-brand-fg transition-colors duration-200 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2"
                 >
                   Checkout {formatPrice(totalAmount)}
                   <ChevronRight className="h-5 w-5" aria-hidden />

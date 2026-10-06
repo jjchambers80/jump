@@ -228,7 +228,7 @@ export default function ContactFormSection({
           <button
             type="submit"
             disabled={sending}
-            className="w-full rounded-xl bg-brand px-6 py-3 font-semibold text-brand-fg transition-colors hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2 disabled:opacity-60 dark:focus-visible:ring-offset-slate-800 sm:w-auto"
+            className="w-full rounded-[var(--theme-button-radius,0.75rem)] bg-brand px-6 py-3 font-semibold text-brand-fg transition-colors hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2 disabled:opacity-60 dark:focus-visible:ring-offset-slate-800 sm:w-auto"
           >
             {sending ? 'Sending…' : settings.submitLabel}
           </button>
