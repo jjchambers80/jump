@@ -4,15 +4,18 @@ import { formatEventTime } from '@/lib/eventTime';
 import { dateTile } from '@/lib/dateTile';
 import { formatPrice, type EventSummary } from '@/components/EventCard';
 
-// Prices are text-xl bold (WCAG large text): brand-link-dark is derived against
-// the slate-900 page, and the stub sits on slate-800.
+// One brand fill per card: the CTA. The date tile is a recessed neutral surface
+// with only the month in brand-link, and the price is plain text, so nothing
+// competes with the button. The dark tile is slate-900, the page color
+// brand-link-dark is derived against (color.ts), so the month keeps AA; its
+// inset shadow redraws the card's slate-700 ring, which the tile covers.
 
 /** Scarcity only once it means something: the last 10 tickets. */
 const SCARCE_AT = 10;
 
 /**
  * One event on the organization storefront, drawn as a ticket stub: a
- * brand-colored date tile torn from the details by a notched perforation
+ * date tile torn from the details by a notched perforation
  * (`.event-stub` in globals.css). Same language as the RSVP pass on the
  * event page, so the storefront and the event read as one set.
  */
@@ -51,19 +54,23 @@ export default function EventStub({
         {/* Date tile */}
         {showDateBadge && (
           <div
-            className={`flex w-20 shrink-0 flex-col items-center justify-center px-2 py-4 sm:w-28 ${
-              isSoldOut
-                ? 'bg-gray-100 text-gray-600 dark:bg-slate-700/60 dark:text-slate-300'
-                : 'bg-brand text-brand-fg'
+            className={`flex w-20 shrink-0 flex-col items-center justify-center bg-white px-2 py-4 dark:bg-slate-900 dark:shadow-[inset_1px_0_0_#334155,inset_0_1px_0_#334155,inset_0_-1px_0_#334155] sm:w-28 ${
+              isSoldOut ? 'text-gray-500 dark:text-slate-400' : 'text-gray-900 dark:text-slate-100'
             }`}
           >
             {tile && (
               <>
-                <span className="text-[11px] font-bold uppercase tracking-[0.18em]">{tile.month}</span>
+                <span
+                  className={`text-[11px] font-bold uppercase tracking-[0.18em] ${
+                    isSoldOut ? '' : 'text-brand-link'
+                  }`}
+                >
+                  {tile.month}
+                </span>
                 <span className="text-[34px] font-extrabold leading-none tracking-tight tabular-nums sm:text-[42px]">
                   {tile.day}
                 </span>
-                <span className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em]">
+                <span className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500 dark:text-slate-400">
                   {tile.weekday}
                 </span>
               </>
@@ -107,13 +114,13 @@ export default function EventStub({
           <div className="flex items-center justify-between gap-4 sm:flex-col sm:items-end sm:justify-center sm:gap-2 sm:text-right">
             <div className="leading-tight">
               {!showPrice ? null : isRsvp ? (
-                <span className="text-xl font-bold text-brand-link">Free</span>
+                <span className="text-xl font-bold text-gray-900 dark:text-slate-100">Free</span>
               ) : event.priceRange ? (
                 <span className="whitespace-nowrap">
                   {event.priceRange.min !== event.priceRange.max && (
                     <span className="mr-1 text-xs font-medium text-gray-500 dark:text-slate-400">From</span>
                   )}
-                  <span className="text-xl font-bold tabular-nums text-brand-link">
+                  <span className="text-xl font-bold tabular-nums text-gray-900 dark:text-slate-100">
                     {formatPrice(event.priceRange.min)}
                   </span>
                 </span>
