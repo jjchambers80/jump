@@ -17,6 +17,9 @@ import urlRedirectService from '../../backend/src/services/UrlRedirectService.js
 import storeFileService from '../../backend/src/services/StoreFileService.js';
 import themeService from '../../backend/src/services/ThemeService.js';
 import { PAID_ORDER_STATUSES } from '../../backend/src/services/paidStatuses.js';
+import { NotFoundError, ValidationError, ConflictError } from '../../backend/src/middleware/errorHandler.js';
+import { sanitizeContentHtml } from '../../backend/src/utils/sanitizeHtml.js';
+import { zonedInputToInstant } from '../../backend/src/utils/eventTime.js';
 
 // ── Auth ─────────────────────────────────────────────────────────────
 
@@ -410,4 +413,210 @@ export async function getSalesSummary(orgId) {
     netRevenue: totalRevenue - totalRefunds,
     byEvent,
   };
+}
+
+// ── WRITE SERVICE METHODS ────────────────────────────────────────────
+// Each wraps an existing backend service with org-scoping, sanitization,
+// draft-first logic, and audit-ready summaries.
+
+// Helper: validate that a record is not already public (for preview→apply gate)
+function assertNotPublic(existing, recordType) {
+  if (existing.isVisible === true || existing.status === 'PUBLISHED') {
+    const err = new ConflictError(`${recordType} is already public — use preview → apply`);
+    err.code = 'ALREADY_PUBLIC';
+    throw err;
+  }
+}
+
+// ── create_event_draft ──────────────────────────────────────────────
+// Scope: events:write. Creates event in DRAFT status. Returns formatted event.
+
+export async function createEventDraft(orgId, data) {
+  const { venueId, name, date, priceTiers, ...rest } = data;
+
+  // Validate venue belongs to org
+  const venue = await prisma.venue.findFirst({
+    where: { id: venueId, organizationId: orgId },
+  });
+  if (!venue) throw new ValidationError('Venue not found in this organization');
+
+  // Parse date in venue's timezone
+  const eventDate = zonedInputToInstant(date, venue.timezone);
+  if (!eventDate) throw new ValidationError('Invalid date format');
+  if (eventDate <= new Date()) throw new ValidationError('Event date must be in the future');
+
+  // Delegate to EventService.createEvent (it enforces DRAFT, sanitizes, creates tiers)
+  const event = await eventService.createEvent(orgId, {
+    venueId,
+    name,
+    date: eventDate.toISOString(),
+    ...rest,
+    priceTiers,
+  });
+
+  return { event };
+}
+
+// ── update_event ─────────────────────────────────────────────────────
+// Scope: events:write. Partial update. If event is PUBLISHED, refuse (045F preview→apply).
+
+export async function updateEvent(orgId, eventId, updates) {
+  const existing = await prisma.event.findFirst({
+    where: { id: eventId, venue: { organizationId: orgId } },
+  });
+  if (!existing) throw new NotFoundError('Event not found');
+  if (existing.status === 'PUBLISHED') {
+    throw Object.assign(new ConflictError('Published events must use preview → apply'), { code: 'ALREADY_PUBLIC' });
+  }
+
+  // Convert date if provided
+  if (updates.date) {
+    const venue = await prisma.venue.findUnique({ where: { id: existing.venueId }, select: { timezone: true } });
+    updates.date = zonedInputToInstant(updates.date, venue.timezone).toISOString();
+  }
+
+  // Sanitize description if provided
+  if (updates.description !== undefined) {
+    updates.description = sanitizeContentHtml(updates.description) || null;
+  }
+
+  const event = await eventService.updateEvent(orgId, eventId, updates);
+  return { event };
+}
+
+// ── create_venue ─────────────────────────────────────────────────────
+// Scope: events:write. Creates a venue.
+
+export async function createVenue(orgId, data) {
+  const venue = await venueService.createVenue(orgId, data);
+  return { venue };
+}
+
+// ── update_venue ─────────────────────────────────────────────────────
+// Scope: events:write. Partial update.
+
+export async function updateVenue(orgId, venueId, updates) {
+  const venue = await venueService.updateVenue(orgId, venueId, updates);
+  return { venue };
+}
+
+// ── create_price_tier ────────────────────────────────────────────────
+// Scope: events:write. Adds a tier to an event.
+
+export async function createPriceTier(orgId, eventId, data) {
+  const tier = await priceTierService.createPriceTier(orgId, eventId, data);
+  return { priceTier: tier };
+}
+
+// ── update_price_tier ────────────────────────────────────────────────
+// Scope: events:write. Partial update.
+
+export async function updatePriceTier(orgId, eventId, tierId, data) {
+  const tier = await priceTierService.updatePriceTier(orgId, eventId, tierId, data);
+  return { priceTier: tier };
+}
+
+// ── reorder_price_tiers ──────────────────────────────────────────────
+// Scope: events:write. Reorders tiers by displayOrder.
+
+export async function reorderPriceTiers(orgId, eventId, tierIds) {
+  const result = await priceTierService.reorderPriceTiers(orgId, eventId, tierIds);
+  return result;
+}
+
+// ── create_page_draft ────────────────────────────────────────────────
+// Scope: content:write. Creates page with isVisible=false (draft).
+
+export async function createPageDraft(orgId, data) {
+  const page = await pageService.create(orgId, {
+    ...data,
+    isVisible: false, // forced draft per plan
+  });
+  return { page };
+}
+
+// ── update_page ──────────────────────────────────────────────────────
+// Scope: content:write. Partial update. If page is visible, refuse (045F preview→apply).
+
+export async function updatePage(orgId, pageId, updates) {
+  const existing = await pageService.get(orgId, pageId);
+  if (!existing) throw new NotFoundError('Page not found');
+  assertNotPublic(existing, 'Page');
+
+  if (updates.content !== undefined) {
+    updates.content = sanitizeContentHtml(updates.content);
+  }
+
+  const page = await pageService.update(orgId, pageId, updates);
+  return { page };
+}
+
+// ── create_blog_post_draft ───────────────────────────────────────────
+// Scope: content:write. Creates blog post with isVisible=false (hidden).
+
+export async function createBlogPostDraft(orgId, data, userId) {
+  const post = await blogPostService.create(orgId, data, { id: userId, name: '' });
+  return { blogPost: post };
+}
+
+// ── update_blog_post ─────────────────────────────────────────────────
+// Scope: content:write. Partial update. If post is visible, refuse (045F preview→apply).
+
+export async function updateBlogPost(orgId, postId, updates) {
+  const existing = await prisma.blogPost.findFirst({ where: { id: postId, organizationId: orgId } });
+  if (!existing) throw new NotFoundError('Blog post not found');
+  assertNotPublic(existing, 'Blog post');
+
+  if (updates.content !== undefined) {
+    updates.content = sanitizeContentHtml(updates.content);
+  }
+
+  const post = await blogPostService.update(orgId, postId, updates);
+  return { blogPost: post };
+}
+
+// ── update_menu ──────────────────────────────────────────────────────
+// Scope: content:write. Replaces entire menu tree.
+
+export async function updateMenu(orgId, menuId, data) {
+  const menu = await menuService.replace(orgId, menuId, data);
+  return { menu };
+}
+
+// ── create_redirect ──────────────────────────────────────────────────
+// Scope: content:write. Creates a URL redirect.
+
+export async function createRedirect(orgId, data) {
+  const redirect = await urlRedirectService.create(orgId, data);
+  return { redirect };
+}
+
+// ── upload_file ──────────────────────────────────────────────────────
+// Scope: content:write. Uploads a file from base64 or URL.
+
+export async function uploadFile(orgId, { bufferBase64, originalName, claimedMimeType, url }, userId) {
+  if (bufferBase64) {
+    const buffer = Buffer.from(bufferBase64, 'base64');
+    const file = await storeFileService.createFromBuffer(orgId, {
+      buffer,
+      originalName,
+      claimedMimeType,
+      userId,
+    });
+    return { file };
+  }
+  if (url) {
+    const file = await storeFileService.createFromUrl(orgId, { url, userId });
+    return { file };
+  }
+  throw new ValidationError('Either bufferBase64 or url is required');
+}
+
+// ── theme_save ─────────────────────────────────────────────────────────
+// Scope: themes. Saves theme settings, content, and documents atomically.
+// Mirrors spec 043 ThemeService.save (never changes rollout).
+
+export async function saveTheme(orgId, themeId, body, userId) {
+  const theme = await themeService.save(orgId, themeId, body, userId);
+  return { theme };
 }
