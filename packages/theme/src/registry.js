@@ -79,8 +79,6 @@ export const BLOCKS = {
       buttonLabel: text('Button label', { max: 40, default: '' }),
       link: link('Button link'),
       alignment: radio('Text alignment', ['center', 'left']),
-      // retro = monospace uppercase heading, larger subheading, both with a drop shadow.
-      textStyle: select('Text style', ['default', 'retro']),
     },
   },
   FaqItem: {
@@ -214,6 +212,8 @@ export const SECTIONS = {
       layout: select('Layout', ['full-bleed', 'split-left', 'split-right']),
       overlay: range('Overlay opacity', 0, 80, { step: 10, unit: '%', default: 40 }),
       alignment: radio('Text alignment', ['center', 'left']),
+      // retro = monospace uppercase heading, larger subheading, both with a drop shadow.
+      textStyle: select('Text style', ['default', 'retro']),
       // screen = the window's height minus whatever sits above the hero (header).
       height: select('Height', [...HEIGHTS, 'screen'], 'medium'),
       // Phones only, full-bleed only: button-bottom centers the text and pins
