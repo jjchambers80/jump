@@ -101,7 +101,7 @@ router.get('/onboarding/funnel', requireAuth, requireSystemAdmin, async (req, re
  * GET /organizations/:id
  * Get organization details (admin only)
  */
-router.get('/:id', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/:id', requireAuth, requireAdmin, verifyOrgOwnership, async (req, res, next) => {
   try {
     const organization = await organizationService.getOrganizationById(req.params.id);
     if (!organization) {

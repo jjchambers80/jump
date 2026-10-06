@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import imageService from '../../services/ImageService.js';
 import { requireAuth } from '../../middleware/auth.js';
-import { requireOrganizer } from '../../middleware/rbac.js';
+import { requireSystemAdmin } from '../../middleware/rbac.js';
 import { NotFoundError } from '../../middleware/errorHandler.js';
 
 const router = Router();
@@ -58,9 +58,9 @@ router.get('/:id/:hash/:variant', async (req, res, next) => {
 /**
  * POST /images/cleanup
  * Delete orphaned file records with no image references.
- * Admin only.
+ * Platform-wide, so SYSTEM_ADMIN only.
  */
-router.post('/cleanup', requireAuth, requireOrganizer, async (req, res, next) => {
+router.post('/cleanup', requireAuth, requireSystemAdmin, async (req, res, next) => {
   try {
     const deleted = await imageService.cleanupOrphans();
     res.json({ deleted });

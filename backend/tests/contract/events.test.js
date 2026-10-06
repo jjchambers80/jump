@@ -871,15 +871,12 @@ describe('Events API Contract Tests', () => {
       expect(res.body.categories).toContain('music');
     });
 
-    it('does not count another org events', async () => {
-      const res = await request(app)
+    it("refuses another org's summary", async () => {
+      // organizerToken is not a member of searchOrgId
+      await request(app)
         .get(`/organizations/${searchOrgId}/events/summary`)
         .set('Authorization', `Bearer ${organizerToken}`)
-        .expect(200);
-
-      // searchOrgId has the 035A search events but not the summary events
-      expect(res.body.counts.all).toBeGreaterThanOrEqual(0);
-      expect(res.body.counts.all).toBeLessThan(10);
+        .expect(403);
     });
   });
 
@@ -1105,17 +1102,12 @@ describe('Events API Contract Tests', () => {
       expect(rsvpLine).toBeUndefined();
     });
 
-    it('respects org isolation — another org is empty', async () => {
-      // searchOrgId from 035A has events but not csvOrgId's events
-      const res = await request(app)
+    it("refuses another org's export", async () => {
+      // organizerToken is not a member of searchOrgId
+      await request(app)
         .get(`/organizations/${searchOrgId}/events/export.csv?status=PUBLISHED`)
         .set('Authorization', `Bearer ${organizerToken}`)
-        .expect(200);
-
-      const lines = res.text.split('\r\n').filter(Boolean);
-      // searchOrgId has its own events; they should not show csv org's events
-      const csvConcertLine = lines.find((l) => l.startsWith('CSV Concert'));
-      expect(csvConcertLine).toBeUndefined();
+        .expect(403);
     });
 
     it('requires auth', async () => {

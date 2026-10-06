@@ -7,6 +7,7 @@ import express from 'express';
 import priceTierService from '../../services/PriceTierService.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireOrganizer } from '../../middleware/rbac.js';
+import { requireOrgMembership } from '../../middleware/orgScope.js';
 import {
   validateCreatePriceTier,
   validateUpdatePriceTier,
@@ -35,7 +36,7 @@ router.get('/', async (req, res, next) => {
  * POST /organizations/:orgId/events/:eventId/price-tiers
  * Add a price tier to an event (org-scoped)
  */
-router.post('/', requireAuth, requireOrganizer, validateCreatePriceTier, async (req, res, next) => {
+router.post('/', requireAuth, requireOrganizer, requireOrgMembership(), validateCreatePriceTier, async (req, res, next) => {
   try {
     const { orgId, eventId } = req.params;
     const result = await priceTierService.createPriceTier(orgId, eventId, req.body);
@@ -53,6 +54,7 @@ router.patch(
   '/:priceTierId',
   requireAuth,
   requireOrganizer,
+  requireOrgMembership(),
   validateUpdatePriceTier,
   async (req, res, next) => {
     try {
@@ -69,7 +71,7 @@ router.patch(
  * POST /organizations/:orgId/events/:eventId/price-tiers/:priceTierId/activate
  * Activate a price tier (org-scoped)
  */
-router.post('/:priceTierId/activate', requireAuth, requireOrganizer, async (req, res, next) => {
+router.post('/:priceTierId/activate', requireAuth, requireOrganizer, requireOrgMembership(), async (req, res, next) => {
   try {
     const { orgId, eventId, priceTierId } = req.params;
     const result = await priceTierService.activatePriceTier(orgId, eventId, priceTierId);
@@ -83,7 +85,7 @@ router.post('/:priceTierId/activate', requireAuth, requireOrganizer, async (req,
  * POST /organizations/:orgId/events/:eventId/price-tiers/:priceTierId/deactivate
  * Deactivate a price tier (org-scoped)
  */
-router.post('/:priceTierId/deactivate', requireAuth, requireOrganizer, async (req, res, next) => {
+router.post('/:priceTierId/deactivate', requireAuth, requireOrganizer, requireOrgMembership(), async (req, res, next) => {
   try {
     const { orgId, eventId, priceTierId } = req.params;
     const result = await priceTierService.deactivatePriceTier(orgId, eventId, priceTierId);
@@ -97,7 +99,7 @@ router.post('/:priceTierId/deactivate', requireAuth, requireOrganizer, async (re
  * POST /organizations/:orgId/events/:eventId/price-tiers/reorder
  * Reorder price tiers (org-scoped)
  */
-router.post('/reorder', requireAuth, requireOrganizer, async (req, res, next) => {
+router.post('/reorder', requireAuth, requireOrganizer, requireOrgMembership(), async (req, res, next) => {
   try {
     const { orgId, eventId } = req.params;
     const { tierIds } = req.body;

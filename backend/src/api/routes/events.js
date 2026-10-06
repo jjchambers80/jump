@@ -90,7 +90,7 @@ const orgRouter = express.Router({ mergeParams: true });
  * GET /organizations/:orgId/events/summary
  * Summary stats for org events (spec 035 §6.2)
  */
-orgRouter.get('/summary', requireAuth, requireOrganizer, async (req, res, next) => {
+orgRouter.get('/summary', requireAuth, requireOrganizer, requireOrgMembership(), async (req, res, next) => {
   try {
     const { orgId } = req.params;
     const { q, category } = req.query;
@@ -105,7 +105,7 @@ orgRouter.get('/summary', requireAuth, requireOrganizer, async (req, res, next) 
  * GET /organizations/:orgId/events
  * List all events for an organization (all statuses)
  */
-orgRouter.get('/', requireAuth, requireOrganizer, async (req, res, next) => {
+orgRouter.get('/', requireAuth, requireOrganizer, requireOrgMembership(), async (req, res, next) => {
   try {
     const { orgId } = req.params;
     const { page, limit, status, q, category, sort } = req.query;
@@ -121,7 +121,7 @@ orgRouter.get('/', requireAuth, requireOrganizer, async (req, res, next) => {
  * Export filtered events list as CSV (spec 035 §6.3). Same filters as the
  * list endpoint, no pagination.
  */
-orgRouter.get('/export.csv', requireAuth, requireOrganizer, async (req, res, next) => {
+orgRouter.get('/export.csv', requireAuth, requireOrganizer, requireOrgMembership(), async (req, res, next) => {
   try {
     const { orgId } = req.params;
     const { status, q, category, sort } = req.query;
@@ -140,7 +140,7 @@ orgRouter.get('/export.csv', requireAuth, requireOrganizer, async (req, res, nex
  * POST /organizations/:orgId/events
  * Create a new event with price tiers (org-scoped)
  */
-orgRouter.post('/', requireAuth, requireOrganizer, validateCreateEvent, async (req, res, next) => {
+orgRouter.post('/', requireAuth, requireOrganizer, requireOrgMembership(), validateCreateEvent, async (req, res, next) => {
   try {
     const { orgId } = req.params;
     const result = await eventService.createEvent(orgId, req.body);
@@ -158,6 +158,7 @@ orgRouter.patch(
   '/:eventId',
   requireAuth,
   requireOrganizer,
+  requireOrgMembership(),
   validateUpdateEvent,
   async (req, res, next) => {
     try {
@@ -189,7 +190,7 @@ orgRouter.post('/:eventId/duplicate', requireAuth, requireOrganizer, requireOrgM
  * POST /organizations/:orgId/events/:eventId/publish
  * Publish an event (DRAFT → PUBLISHED)
  */
-orgRouter.post('/:eventId/publish', requireAuth, requireOrganizer, async (req, res, next) => {
+orgRouter.post('/:eventId/publish', requireAuth, requireOrganizer, requireOrgMembership(), async (req, res, next) => {
   try {
     const { orgId, eventId } = req.params;
     const result = await eventService.publishEvent(orgId, eventId);
@@ -203,7 +204,7 @@ orgRouter.post('/:eventId/publish', requireAuth, requireOrganizer, async (req, r
  * POST /organizations/:orgId/events/:eventId/cancel
  * Cancel an event (PUBLISHED → CANCELLED)
  */
-orgRouter.post('/:eventId/cancel', requireAuth, requireOrganizer, async (req, res, next) => {
+orgRouter.post('/:eventId/cancel', requireAuth, requireOrganizer, requireOrgMembership(), async (req, res, next) => {
   try {
     const { orgId, eventId } = req.params;
     const result = await eventService.cancelEvent(orgId, eventId);
@@ -218,7 +219,7 @@ orgRouter.post('/:eventId/cancel', requireAuth, requireOrganizer, async (req, re
  * Get per-tier sales, redemption, and revenue analytics (org-scoped)
  * Per FR-057, contracts/api.yaml
  */
-orgRouter.get('/:eventId/analytics', requireAuth, requireOrganizer, async (req, res, next) => {
+orgRouter.get('/:eventId/analytics', requireAuth, requireOrganizer, requireOrgMembership(), async (req, res, next) => {
   try {
     const { orgId, eventId } = req.params;
     const result = await eventService.getEventAnalytics(orgId, eventId);
@@ -263,6 +264,7 @@ orgRouter.post(
   '/:eventId/logo',
   requireAuth,
   requireOrganizer,
+  requireOrgMembership(),
   uploadImage,
   async (req, res, next) => {
     try {
@@ -297,7 +299,7 @@ orgRouter.post(
  * DELETE /organizations/:orgId/events/:eventId/logo
  * Remove event logo
  */
-orgRouter.delete('/:eventId/logo', requireAuth, requireOrganizer, async (req, res, next) => {
+orgRouter.delete('/:eventId/logo', requireAuth, requireOrganizer, requireOrgMembership(), async (req, res, next) => {
   try {
     const { orgId, eventId } = req.params;
     const existing = await prisma.event.findUnique({ where: { id: eventId }, select: { imageId: true } });

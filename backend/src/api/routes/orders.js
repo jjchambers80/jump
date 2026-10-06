@@ -8,9 +8,12 @@
 // Per FR-052, FR-053, FR-054, contracts/api.yaml
 
 import express from 'express';
+import { prisma } from '@jump/db';
 import orderService from '../../services/OrderService.js';
 import { requireAuth, optionalAuth } from '../../middleware/auth.js';
 import { requireOrganizer } from '../../middleware/rbac.js';
+import { requireOrgMembership } from '../../middleware/orgScope.js';
+import { NotFoundError } from '../../middleware/errorHandler.js';
 import { validateCreateOrder, validateOrderLookup } from '../validators/orderValidators.js';
 import { gateByEventBody } from '../../middleware/storefrontGate.js';
 import { requestMeta } from '../../services/LegalAcceptanceService.js';
@@ -113,9 +116,14 @@ export default router;
  */
 export const eventOrdersRouter = express.Router({ mergeParams: true });
 
-eventOrdersRouter.get('/', requireAuth, requireOrganizer, async (req, res, next) => {
+eventOrdersRouter.get('/', requireAuth, requireOrganizer, requireOrgMembership(), async (req, res, next) => {
   try {
-    const { eventId } = req.params;
+    const { orgId, eventId } = req.params;
+    const event = await prisma.event.findFirst({
+      where: { id: eventId, venue: { organizationId: orgId } },
+      select: { id: true },
+    });
+    if (!event) throw new NotFoundError('Event not found');
     const { page, limit } = req.query;
     const result = await orderService.getOrdersByEvent(eventId, {
       page: page ? parseInt(page) : 1,
