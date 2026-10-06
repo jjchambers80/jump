@@ -9,7 +9,7 @@
 
 import { prisma } from '@jump/db';
 import { moneyOf } from './applicationMoney.js';
-import { selectionDueAt } from './applicationSelection.js';
+import { DUE_ZONE, selectionDueAt } from './applicationSelection.js';
 import orderLineService from './OrderLineService.js';
 import { DEFAULT_TEMPLATES, MERGE_FIELDS, STANDING_DEFAULT_TEMPLATES, STANDING_TEMPLATE_ACTIONS, TEMPLATE_ACTIONS } from '../config/applications.js';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
@@ -36,6 +36,12 @@ export function renderTemplate(text, context) {
     if (typeof value === 'object') return '';
     return String(value);
   });
+}
+
+/** A due date, read on the organization's calendar like the deadline itself. */
+function formatDueDate(value) {
+  if (!value) return '';
+  return new Date(value).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: DUE_ZONE });
 }
 
 function formatMoney(value) {
@@ -139,7 +145,7 @@ class ApplicationTemplateService {
         : null,
       // No order yet (spec 037 phase 5): the amount is the category's price.
       amount: { applicantPays: formatMoney(money.orderId ? money.applicantPays : tierPrice ?? money.applicantPays) },
-      payment: { dueDate: formatDate(money.paymentDueAt || selectionDueAt(application)) },
+      payment: { dueDate: formatDueDate(money.paymentDueAt || selectionDueAt(application)) },
       space,
       order: { ref: money.orderRef || '' },
       // Spec 024 phase 3: `account.created` is true on the RECEIVED email that
@@ -193,7 +199,7 @@ class ApplicationTemplateService {
     const onMap = application.form?.spaceSelection === 'MAP' && Boolean(application.tierId);
     const pickTier = chooseRequired && application.form?.kind === 'PAID' && !application.tierId;
     const due = selectionDueAt(application);
-    return { chooseRequired, onMap, pickTier, dueDate: due ? formatDate(due) : '' };
+    return { chooseRequired, onMap, pickTier, dueDate: formatDueDate(due) };
   }
 
   /**
