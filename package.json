@@ -4,7 +4,8 @@
   "workspaces": [
     "packages/*",
     "backend",
-    "frontend"
+    "frontend",
+    "mcp"
   ],
   "scripts": {
     "db:generate": "npm run generate --workspace=packages/db",
