@@ -38,6 +38,7 @@ Last updated: 2026-09-22.
 | 041 | Hero carousel and FAQ theme sections | **Implemented** | 2026-09-30: `HeroCarousel` + `Slide`, `Faq` + `FaqItem` in the `@jump/theme` registry. See `docs/wiki/features/theme-sections.md`. |
 | 042 | Page templates (developer-uploaded JSON manifests) + contact form template | **Implemented** | 2026-10-01: two-column page editor, `/admin/online-store/page-templates`, `templates/pages/page.contact.json`. See `docs/wiki/features/page-templates.md`. |
 | 044 | Standing application forms — organization-level forms (Content › Forms), Customers source filter, page call-to-action drawer | **Planned** | 2026-10-04: plan only. See `specs/044-standing-application-forms/plan.md`. |
+| 045 | Agent access — remote MCP server + Jump OAuth 2.1 for ChatGPT, Claude and coding agents; store and platform kill switches; no personal data | **Planned** | 2026-10-05: plan only. Prerequisite PR #303. See `specs/045-agent-access/plan.md` and `docs/research/2026-10-05-agent-store-access.md`. |
 
 ## Documents archived as historical
 
