@@ -201,7 +201,7 @@ export default function RsvpPass({ event, isPastEvent, legalVersions, onLegalSta
               <button
                 type="button"
                 onClick={() => downloadIcs(event)}
-                className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white text-sm font-semibold text-gray-800 transition-colors hover:border-brand-link hover:text-brand-link dark:border-slate-600 dark:bg-transparent dark:text-slate-100"
+                className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-[var(--theme-button-radius,8px)] border border-gray-300 bg-white text-sm font-semibold text-gray-800 transition-colors hover:border-brand-link hover:text-brand-link dark:border-slate-600 dark:bg-transparent dark:text-slate-100"
               >
                 <CalendarPlus className="h-4 w-4" aria-hidden />
                 Add to calendar
@@ -325,7 +325,7 @@ export default function RsvpPass({ event, isPastEvent, legalVersions, onLegalSta
               <button
                 type="submit"
                 disabled={submitting || !legalVersions}
-                className="flex h-12 w-full items-center justify-center rounded-lg bg-brand text-base font-bold text-brand-fg transition-colors hover:bg-brand-hover disabled:opacity-50"
+                className="flex h-12 w-full items-center justify-center rounded-[var(--theme-button-radius,8px)] bg-brand text-base font-bold text-brand-fg transition-colors hover:bg-brand-hover disabled:opacity-50"
               >
                 {submitting ? 'Reserving…' : partySize > 1 ? `Reserve ${partySize} spots` : 'Reserve my spot'}
               </button>
