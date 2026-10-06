@@ -71,6 +71,9 @@ model User {
   // Spec 030: revocable sessions (Devices) and the security audit trail
   sessions          UserSession[]
   developerTokens   DeveloperToken[]
+  oauthGrants       OAuthGrant[]
+  oauthAuthCodes    OAuthAuthCode[]
+  agentAuditLogs    AgentAuditLog[]
   securityEvents    SecurityEvent[]
   contactComments   ContactComment[]
 
@@ -492,6 +495,8 @@ model Organization {
   // Spec 031 phase 3: how buyers sign in — the email link alone, or a
   // six-digit code typed on the account page (the email still carries the link).
   buyerSignInMethod          BuyerSignInMethod      @default(LINK)
+  // Spec 045: an ADMIN must explicitly enable agent grants for this store.
+  agentAccessEnabled         Boolean                @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -524,6 +529,9 @@ model Organization {
   addOnProducts            AddOnProduct[]
   themes                   Theme[]
   developerTokens          DeveloperToken[]
+  oauthGrants              OAuthGrant[]
+  oauthAuthCodes           OAuthAuthCode[]
+  agentAuditLogs           AgentAuditLog[]
   pageTemplates            PageTemplate[]
 }
 
@@ -2173,4 +2181,128 @@ model DeveloperAuthCode {
   expiresAt      DateTime
   usedAt         DateTime?
   createdAt      DateTime  @default(now())
+}
+
+// Spec 045: public OAuth clients that can request an agent grant. `clientId`
+// is the external protocol identifier (a CIMD URL, DCR id, or `jump-cli`).
+model OAuthClient {
+  id                String          @id @default(cuid())
+  clientId          String          @unique
+  kind              OAuthClientKind
+  name              String
+  redirectUris      String[]
+  metadataFetchedAt DateTime?
+  createdAt         DateTime        @default(now())
+
+  grants    OAuthGrant[]
+  authCodes OAuthAuthCode[]
+}
+
+// One current consent grant per user, organization and client. Revocation is
+// a timestamp rather than deletion so refresh-token reuse and audits remain attributable.
+model OAuthGrant {
+  id             String    @id @default(cuid())
+  userId         String
+  organizationId String
+  clientId       String
+  scopes         String[]
+  createdAt      DateTime  @default(now())
+  lastUsedAt     DateTime?
+  revokedAt      DateTime?
+  revokedReason  String?
+
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client       OAuthClient     @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  tokens       OAuthToken[]
+  auditLogs    AgentAuditLog[]
+
+  @@unique([userId, organizationId, clientId])
+  @@index([organizationId, revokedAt])
+  @@index([userId, revokedAt])
+}
+
+// Access and refresh tokens share one table. The bearer value is never stored:
+// tokenHash is HMAC-SHA256(raw token, OAUTH_TOKEN_PEPPER).
+model OAuthToken {
+  id        String         @id @default(cuid())
+  grantId   String
+  kind      OAuthTokenKind
+  tokenHash String         @unique
+  audience  String
+  familyId  String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime       @default(now())
+
+  grant OAuthGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
+
+  @@index([grantId])
+}
+
+// Five-minute, single-use PKCE authorization code. It records the complete
+// approved request so the token endpoint never trusts exchange-time additions.
+model OAuthAuthCode {
+  id             String    @id @default(cuid())
+  codeHash       String    @unique
+  codeChallenge  String
+  redirectUri    String
+  userId         String
+  organizationId String
+  clientId       String
+  scopes         String[]
+  resource       String
+  expiresAt      DateTime
+  usedAt         DateTime?
+  createdAt      DateTime  @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client       OAuthClient  @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+
+  @@index([expiresAt])
+}
+
+// Append-only agent call trail. Arguments are represented only by a digest;
+// summary is redacted before insertion by AgentAuditService.
+model AgentAuditLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  grantId        String
+  clientName     String
+  tool           String
+  argsDigest     String
+  summary        String
+  outcome        String
+  targetType     String?
+  targetId       String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  grant        OAuthGrant   @relation(fields: [grantId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([grantId, createdAt])
+}
+
+// Platform-wide feature switches. Values are JSON so later settings do not
+// require one nullable column each.
+model PlatformSetting {
+  key       String   @id
+  value     Json
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+}
+
+enum OAuthClientKind {
+  CIMD
+  DCR
+  FIRST_PARTY
+}
+
+enum OAuthTokenKind {
+  ACCESS
+  REFRESH
 }

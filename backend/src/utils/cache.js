@@ -5,6 +5,7 @@ import redis, { ensureRedisConnecting } from './redis.js';
 import logger from './logger.js';
 
 const DEFAULT_TTL = 300; // 5 minutes in seconds
+const testCounters = new Map();
 
 /**
  * Whether a command can run right now. The client connects lazily on first
@@ -69,4 +70,40 @@ export async function cacheInvalidate(pattern) {
   } catch (error) {
     logger.warn('Cache invalidation error', { pattern, error: error.message });
   }
+}
+
+/**
+ * Atomically increment a fixed-window counter. Agent authorization uses this
+ * instead of an IP limiter because provider traffic shares a small IP range.
+ * Production uses Redis; tests deliberately use an in-memory fallback.
+ * Returns null when the shared store is unavailable so security callers can
+ * fail closed rather than silently disabling abuse protection.
+ */
+export async function cacheIncrement(key, windowMs) {
+  if (process.env.NODE_ENV === 'test') {
+    const now = Date.now();
+    const current = testCounters.get(key);
+    const next = !current || current.expiresAt <= now
+      ? { count: 1, expiresAt: now + windowMs }
+      : { ...current, count: current.count + 1 };
+    testCounters.set(key, next);
+    return next.count;
+  }
+  if (!available()) return null;
+  try {
+    return Number(await redis.eval(
+      "local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('PEXPIRE',KEYS[1],ARGV[1]) end; return n",
+      1,
+      key,
+      windowMs,
+    ));
+  } catch (error) {
+    logger.warn('Cache increment error', { key, error: error.message });
+    return null;
+  }
+}
+
+/** Test isolation for fixed-window counters. */
+export function resetCacheCountersForTests() {
+  if (process.env.NODE_ENV === 'test') testCounters.clear();
 }
