@@ -114,7 +114,7 @@ export default function SignInForm({
                   <button
                     type="submit"
                     disabled={verifying}
-                    className="rounded-lg bg-brand px-5 py-3 font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-60"
+                    className="rounded-[var(--theme-button-radius,8px)] bg-brand px-5 py-3 font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-60"
                   >
                     {verifying ? 'Checking…' : 'Continue'}
                   </button>
@@ -174,7 +174,7 @@ export default function SignInForm({
           <button
             type="submit"
             disabled={sending}
-            className="mt-6 w-full rounded-lg bg-brand py-3 font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-60"
+            className="mt-6 w-full rounded-[var(--theme-button-radius,8px)] bg-brand py-3 font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-60"
           >
             {sending ? 'Sending...' : 'Email me a sign-in link'}
           </button>

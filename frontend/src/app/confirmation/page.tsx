@@ -228,7 +228,7 @@ function ConfirmationContent() {
           </p>
           <Link
             href="/orders/lookup"
-            className="inline-block bg-gray-900 hover:bg-gray-800 text-white dark:bg-slate-100 dark:text-slate-900 font-bold py-3 px-6 rounded-lg transition-colors duration-200"
+            className="inline-block bg-gray-900 hover:bg-gray-800 text-white dark:bg-slate-100 dark:text-slate-900 font-bold py-3 px-6 rounded-[var(--theme-button-radius,8px)] transition-colors duration-200"
           >
             Look up an order
           </Link>
@@ -252,6 +252,7 @@ function ConfirmationContent() {
     <BrandScope
       color={order.event.organizationBrandColor}
       themeMode={order.event.organizationThemeMode}
+      buttonRadius={order.event.organizationStorefrontLogo?.buttonRadius}
       className="min-h-screen bg-gray-50 dark:bg-slate-900"
     >
       {order.event.organizationName && (
@@ -506,7 +507,7 @@ function ConfirmationContent() {
           <div className="text-center mt-6">
             <Link
               href={moreEventsHref}
-              className="inline-block bg-brand hover:bg-brand-hover text-brand-fg font-bold py-3 px-8 rounded-lg transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2"
+              className="inline-block bg-brand hover:bg-brand-hover text-brand-fg font-bold py-3 px-8 rounded-[var(--theme-button-radius,8px)] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2"
             >
               {order.event.organizationName ? `More events from ${order.event.organizationName}` : 'Browse more events'}
             </Link>

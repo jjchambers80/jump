@@ -90,7 +90,7 @@ export default function AccountReceiptPage({ params }: { params: { orderId: stri
         <button
           type="button"
           onClick={() => window.print()}
-          className="inline-flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-brand-fg hover:bg-brand-hover"
+          className="inline-flex items-center gap-2 rounded-[var(--theme-button-radius,8px)] bg-brand px-4 py-2 text-sm font-semibold text-brand-fg hover:bg-brand-hover"
         >
           <Printer aria-hidden className="h-4 w-4" />
           Print or save as PDF

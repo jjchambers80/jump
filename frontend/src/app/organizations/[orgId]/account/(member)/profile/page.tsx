@@ -95,7 +95,7 @@ function DetailsCard() {
         <button
           type="submit"
           disabled={saving || dirty.length === 0}
-          className="rounded-lg bg-brand px-5 py-2.5 font-semibold text-brand-fg hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-[var(--theme-button-radius,8px)] bg-brand px-5 py-2.5 font-semibold text-brand-fg hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {saving ? 'Saving…' : 'Save changes'}
         </button>
@@ -207,10 +207,10 @@ function EmailCard() {
             )}
           </div>
           <div className="flex flex-wrap gap-3">
-            <button type="submit" disabled={busy} className="rounded-lg bg-brand px-5 py-2.5 font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-60">
+            <button type="submit" disabled={busy} className="rounded-[var(--theme-button-radius,8px)] bg-brand px-5 py-2.5 font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-60">
               {busy ? 'Sending…' : 'Send confirmation link'}
             </button>
-            <button type="button" onClick={() => { setEditing(false); setError(null); }} className="rounded-lg px-4 py-2.5 font-semibold text-gray-700 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-700">
+            <button type="button" onClick={() => { setEditing(false); setError(null); }} className="rounded-[var(--theme-button-radius,8px)] px-4 py-2.5 font-semibold text-gray-700 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-700">
               Cancel
             </button>
           </div>
@@ -252,7 +252,7 @@ function DevicesCard() {
           type="button"
           onClick={revoke}
           disabled={busy || done}
-          className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 font-semibold text-gray-800 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-60 dark:text-slate-200 dark:ring-slate-600 dark:hover:bg-slate-700"
+          className="inline-flex items-center gap-2 rounded-[var(--theme-button-radius,8px)] px-4 py-2.5 font-semibold text-gray-800 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-60 dark:text-slate-200 dark:ring-slate-600 dark:hover:bg-slate-700"
         >
           <LogOut aria-hidden className="h-4 w-4" />
           {busy ? 'Signing out…' : 'Sign out of all other devices'}

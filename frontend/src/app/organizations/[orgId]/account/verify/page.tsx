@@ -51,7 +51,7 @@ function VerifyInner({ orgId }: { orgId: string }) {
             <p className="text-gray-600 dark:text-slate-400 mb-6">{error}</p>
             <Link
               href={`/organizations/${orgId}/account`}
-              className="inline-block px-5 py-2 rounded-lg font-semibold bg-gray-900 text-white dark:bg-slate-100 dark:text-slate-900"
+              className="inline-block px-5 py-2 rounded-[var(--theme-button-radius,8px)] font-semibold bg-gray-900 text-white dark:bg-slate-100 dark:text-slate-900"
             >
               Request a new link
             </Link>

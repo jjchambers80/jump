@@ -116,11 +116,11 @@ export default function ApplicationsSection() {
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 sm:shrink-0 sm:flex-nowrap">
               {choosing ? (
-                <button type="button" onClick={() => setPickerId((id) => (id === a.id ? null : a.id))} data-testid="account-application-choose-space" aria-expanded={pickerOpen} className="rounded-md bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-60">
+                <button type="button" onClick={() => setPickerId((id) => (id === a.id ? null : a.id))} data-testid="account-application-choose-space" aria-expanded={pickerOpen} className="rounded-[var(--theme-button-radius,6px)] bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-60">
                   {a.selection?.state === 'HELD' ? 'Finish paying' : pickerOpen ? 'Hide' : 'Choose your space'}
                 </button>
               ) : a.canPay && (
-                <button type="button" onClick={() => checkout(a, 'pay')} disabled={busyId === a.id} data-testid="account-application-pay" className="rounded-md bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-60">
+                <button type="button" onClick={() => checkout(a, 'pay')} disabled={busyId === a.id} data-testid="account-application-pay" className="rounded-[var(--theme-button-radius,6px)] bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-60">
                   {busyId === a.id ? 'Opening…' : `Pay ${money(a.amounts.applicantPays)}`}
                 </button>
               )}
