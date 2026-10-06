@@ -14,7 +14,7 @@
 | D3 | **Only org ADMIN members can connect an agent.** Each grant is one user + one organization + one client. ORGANIZER members cannot create grants. |
 | D4 | **Three switches**: (a) env `AGENT_ACCESS_ENABLED`, so the code deploys dark; (b) SYSTEM_ADMIN **global kill switch** on a new Settings › Platform page; (c) org ADMIN **store switch** on Settings › Agent access. All three are checked on **every** token, consent and tool call. Switching one off blocks the next call without deleting grants. "Revoke all" is a separate, explicit action at both levels. |
 | D5 | **No personal data reaches an agent.** Customers, orders, applications and standing-form submissions, RSVPs, ticket holders, contact-form messages and staff lists are excluded. Card data never comes into it (it stays in Stripe). GDPR does: sending personal data to an LLM vendor makes that vendor a processor (DPA plus privacy-policy disclosure). The owner rule is "if it isn't compliant, absolutely not." Aggregates with no personal data (ticket counts, revenue per event) are allowed. Revisit only after counsel signs off, which is spec 023's gate. |
-| D6 | **Human-only (never an agent tool)**: refunds of any kind, payment settings, Stripe Connect and payouts, billing and plan, custom domains, users / roles / membership, account security, customer export / erasure / anonymize, legal text, tax-provider configuration. *The owner still has to sign off this list (§8 Q4).* |
+| D6 | **Human-only (never an agent tool)**: refunds of any kind, payment settings, Stripe Connect and payouts, billing and plan, custom domains, users / roles / membership, account security, customer export / erasure / anonymize, legal text, tax-provider configuration. **Approved by the owner 2026-10-05.** |
 | D7 | **Writes land as drafts.** Publish, cancel, delete and live-page edits go through a server-side **preview → apply** step. Client confirmation prompts (`destructiveHint`) and elicitation are extra layers, never the only gate. |
 | D8 | **Distribution**: a pasted custom-connector URL at launch. Submit to the Claude and ChatGPT directories after phase 3 (stable writes, public docs, a review test account). |
 
@@ -187,8 +187,8 @@ New workspace `mcp/`: an Express app on its own Railway service at `mcp.eventimu
 
 1. Does the current `@modelcontextprotocol/sdk` auth router support CIMD and an opaque-token provider backed by Prisma? If not, write the endpoints ourselves (they are small) and use the SDK only for the MCP server.
 2. MCP host: a separate Railway service, or a path on the backend (`api…/mcp`)? A separate host is recommended (cookie and CSP isolation, independent limits). The OAuth endpoints can stay on the backend.
-3. Is agent access a paid-plan feature (spec 022 billing)? Owner 2026-10-05: possibly; decide later. Build the switches so a plan check can slot into `agentAuthorize()` step 1.
-4. **Owner sign-off on the human-only list (D6)**, plus the additions from D5.
+3. Is agent access a paid-plan feature (spec 022 billing)? Owner 2026-10-05: **possibly; decide later**. Build the switches so a plan check can slot into `agentAuthorize()` step 1.
+4. **Approved 2026-10-05:** the owner signed off on the human-only list (D6), plus the additions from D5.
 5. Should a store's own ORGANIZER members ever get read-only grants (`store:read` only)? D3 says no for now.
 
 ## 9. Phases and Kanban cards

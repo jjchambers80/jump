@@ -15,11 +15,19 @@ import logger from '../utils/logger.js';
 
 export { clientIpForRateLimit };
 
-function envInt(name, fallback) {
+export function envInt(name, fallback) {
   const raw = process.env[name];
   if (raw === undefined || raw === '') return fallback;
   const n = Number(raw);
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+}
+
+/** Resolve the same NAME_LIMIT / NAME_WINDOW_MS overrides for non-HTTP limiters. */
+export function limiterConfig(name, { windowMs, limit }) {
+  return {
+    windowMs: envInt(`RATE_LIMIT_${name}_WINDOW_MS`, windowMs),
+    limit: envInt(`RATE_LIMIT_${name}_LIMIT`, limit),
+  };
 }
 
 /** True when limiters enforce (always outside tests; in tests only when asked). */
@@ -47,12 +55,13 @@ export function makeLimiter(
 ) {
   if (!limitersEnforced()) return (req, res, next) => next();
   const onlyStatuses = Array.isArray(countStatuses) && countStatuses.length > 0;
+  const configured = limiterConfig(name, { windowMs, limit });
   return rateLimit({
     ...(onlyStatuses && {
       requestWasSuccessful: (req, res) => !countStatuses.includes(res.statusCode),
     }),
-    windowMs: envInt(`RATE_LIMIT_${name}_WINDOW_MS`, windowMs),
-    limit: envInt(`RATE_LIMIT_${name}_LIMIT`, limit),
+    windowMs: configured.windowMs,
+    limit: configured.limit,
     standardHeaders: 'draft-7',
     legacyHeaders: false,
     keyGenerator: (req) => ipKeyGenerator(clientIpForRateLimit(req)),
