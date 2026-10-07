@@ -131,6 +131,8 @@ class AgentAuthService {
       organizationId: row.grant.organizationId,
       grantId: row.grant.id,
       clientName: row.grant.client.name,
+      scopes: row.grant.scopes,
+      expiresAt: row.expiresAt,
     };
   }
 }
