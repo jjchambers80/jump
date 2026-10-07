@@ -28,6 +28,8 @@ import ChecklistSection from '../sections/ChecklistSection';
 import ChecklistItemBlock from '../sections/ChecklistItemBlock';
 import StepsSection from '../sections/StepsSection';
 import StepBlock from '../sections/StepBlock';
+import TiersSection from '../sections/TiersSection';
+import TierBlock from '../sections/TierBlock';
 import { sectionContext } from '../sections/context';
 
 // Puck hands every component its props plus `puck` (metadata) and, for slot
@@ -134,6 +136,15 @@ export const renderConfig: Config = {
     },
     Step: {
       render: ({ puck, ...props }: PuckProps) => <StepBlock {...(props as any)} ctx={sectionContext(puck.metadata)} />,
+    },
+    Tiers: {
+      fields: { blocks: { type: 'slot', allow: ['Tier'] } },
+      render: ({ puck, blocks, ...props }: PuckProps) => (
+        <TiersSection {...(props as any)} Items={slotRender(blocks)} ctx={sectionContext(puck.metadata)} />
+      ),
+    },
+    Tier: {
+      render: ({ puck, ...props }: PuckProps) => <TierBlock {...(props as any)} ctx={sectionContext(puck.metadata)} />,
     },
     PageContent: {
       render: ({ puck, ...props }: PuckProps) => <PageContentSection {...(props as any)} ctx={sectionContext(puck.metadata)} />,

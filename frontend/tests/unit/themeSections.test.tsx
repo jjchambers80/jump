@@ -332,6 +332,39 @@ describe('Stats, Checklist and Steps', () => {
   });
 });
 
+describe('Tiers', () => {
+  const render = (content: unknown[]) =>
+    renderToStaticMarkup(<Render config={renderConfig} data={{ ...renderable({ root: { props: {} }, content } as any), zones: {} } as any} metadata={{ ctx: ctx() }} />);
+
+  it('tiers are a list of named cards, benefits one list item per line', () => {
+    const html = render([
+      {
+        type: 'Tiers',
+        props: {
+          id: 'tr',
+          heading: 'Sponsorship tiers',
+          blocks: [
+            { type: 'Tier', props: { id: 't1', name: 'Pro', tagline: 'For businesses', benefits: 'Logo on the event page\n\n  5 tickets  ', featured: true, badge: 'Most popular' } },
+            { type: 'Tier', props: { id: 't2', name: 'Participating', benefits: 'Eblast' } },
+          ],
+        },
+      },
+    ]);
+    expect(html).toContain('data-section="Tiers"');
+    expect(html).toContain('aria-labelledby="tiers-tr"');
+    expect(html).toMatch(/<ul[^>]*role="list"[^>]*>.*<li[^>]*data-featured="true"[^>]*>.*<h3[^>]*>Pro<\/h3>.*Most popular.*For businesses/);
+    expect(html).toMatch(/<li[^>]*>.*Logo on the event page<\/span><\/li><li[^>]*>.*5 tickets<\/span><\/li><\/ul>/);
+    expect(html.match(/Most popular/g)).toHaveLength(1);
+  });
+});
+
+describe('Hero heading level', () => {
+  it('h1 when the hero opens a full-width page', () => {
+    const html = renderToStaticMarkup(<HeroSection id="h" heading="Sponsor us" headingLevel="h1" Buttons={noButtons} ctx={ctx()} />);
+    expect(html).toMatch(/<h1 id="hero-h"[^>]*>Sponsor us<\/h1>/);
+  });
+});
+
 describe('Puck render config', () => {
   it('renders the preset homepage with its buttons through the slot', () => {
     const home = getPreset('eventimus-default').documents.home;

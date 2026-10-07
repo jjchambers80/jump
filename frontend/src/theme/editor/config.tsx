@@ -87,6 +87,7 @@ export const STARTER_BLOCK_PROPS: Record<string, Record<string, unknown>> = {
   Stat: { value: '100+', label: 'New stat' },
   ChecklistItem: { text: 'New item' },
   Step: { title: 'New step' },
+  Tier: { name: 'New tier' },
   Button: { label: 'Get tickets', link: { type: 'EVENTS' } },
 };
 
@@ -114,6 +115,10 @@ const STARTER_BLOCKS: Record<string, { type: string; props: Record<string, unkno
     { type: 'Step', props: { title: 'Apply', text: '<p>Fill in the form for the event you want.</p>' } },
     { type: 'Step', props: { title: 'Get approved', text: '<p>We review every application by hand.</p>' } },
     { type: 'Step', props: { title: 'Show up', text: '<p>Load in, set up and meet the crowd.</p>' } },
+  ],
+  Tiers: [
+    { type: 'Tier', props: { name: 'Standard', benefits: 'Your logo on the event page\nTwo tickets' } },
+    { type: 'Tier', props: { name: 'Premium', featured: true, badge: 'Most popular', benefits: 'Everything in Standard\nA booth at the event\nSix tickets' } },
   ],
   Faq: [
     { type: 'FaqItem', props: { question: 'When do doors open?', answer: '<p>Doors open one hour before the show.</p>' } },
