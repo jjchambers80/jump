@@ -122,16 +122,17 @@ export default function HeroSection({
   // Phones: text centered in the space above full-width buttons pinned to the
   // bottom. Full-bleed only; sm and up keep the stacked layout.
   const bottom = mobileLayout === 'button-bottom' && (file || videos.length) && layout === 'full-bleed';
+  // Over media, desktop gets a wider 72rem column and larger type.
   const text = (onImage: boolean) => (
-    <div className={`${centered ? 'mx-auto text-center' : ''} max-w-2xl ${bottom ? 'max-sm:flex max-sm:w-full max-sm:flex-1 max-sm:flex-col' : ''}`}>
+    <div className={`${centered ? 'mx-auto text-center' : ''} max-w-2xl ${onImage ? 'lg:max-w-6xl' : ''} ${bottom ? 'max-sm:flex max-sm:w-full max-sm:flex-1 max-sm:flex-col' : ''}`}>
       <div className={bottom ? 'max-sm:my-auto' : undefined}>
       {heading && (
-        <Heading id={headingId} style={retro ? { ...shadow, fontFamily: 'monospace' } : undefined} className={`text-4xl font-bold tracking-tight sm:text-5xl ${retro ? 'uppercase' : ''} ${onImage ? 'text-white' : 'text-gray-900 dark:text-slate-100'}`}>
+        <Heading id={headingId} style={retro ? { ...shadow, fontFamily: 'monospace' } : undefined} className={`text-4xl font-bold tracking-tight sm:text-5xl ${onImage ? 'lg:text-[4rem]' : ''} ${retro ? 'uppercase' : ''} ${onImage ? 'text-white' : 'text-gray-900 dark:text-slate-100'}`}>
           {heading}
         </Heading>
       )}
       {subheading && (
-        <p style={shadow} className={`mt-4 ${retro ? 'text-2xl' : 'text-lg'} ${onImage ? 'text-white/90' : 'text-gray-600 dark:text-slate-300'}`}>{subheading}</p>
+        <p style={shadow} className={`mt-4 ${retro ? 'text-2xl' : 'text-lg'} ${onImage ? 'lg:text-[2rem] lg:leading-[2.75rem]' : ''} ${onImage ? 'text-white/90' : 'text-gray-600 dark:text-slate-300'}`}>{subheading}</p>
       )}
       </div>
       <Buttons
