@@ -108,8 +108,11 @@ export default function HeroSection({
     .map((v) => (v?.fileId ? ctx.resolved.files[v.fileId] : null))
     .filter((f): f is NonNullable<typeof f> => Boolean(f))
     .map((f) => ({ url: f.url, type: f.mimeType }));
-  const minHeight = MIN_HEIGHT[height] ?? MIN_HEIGHT.medium;
-  const screenOffset = height === 'screen' ? <HeroScreenOffset /> : null;
+  // Home page: the header group lies over this Hero, so it starts at the top of
+  // the window ("screen" fills all of it) and its text starts below the header.
+  const underHeader = ctx.heroUnderHeaderId === id;
+  const minHeight = underHeader && height === 'screen' ? 'min-h-[100svh]' : (MIN_HEIGHT[height] ?? MIN_HEIGHT.medium);
+  const screenOffset = height === 'screen' || underHeader ? <HeroScreenOffset /> : null;
   const alt = image?.decorative ? '' : (image?.alt ?? file?.alt ?? '');
   const headingId = `hero-${id}`;
   const centered = alignment === 'center';
@@ -170,7 +173,13 @@ export default function HeroSection({
             )}
             {!full && <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[32px] ring-1 ring-inset ring-white/10" />}
             {/* button-bottom: pb-20 keeps the buttons clear of the video's pause button. */}
-            <div className={`w-full px-6 py-16 sm:px-10 lg:px-12 ${bottom ? 'max-sm:flex max-sm:flex-col max-sm:pb-20' : ''}`}>{text(true)}</div>
+            <div
+              // Before hydration measures the header, 9rem is about its height.
+              style={underHeader ? { paddingTop: 'calc(var(--hero-offset, 9rem) + 2rem)' } : undefined}
+              className={`w-full px-6 py-16 sm:px-10 lg:px-12 ${bottom ? 'max-sm:flex max-sm:flex-col max-sm:pb-20' : ''}`}
+            >
+              {text(true)}
+            </div>
           </section>
         </div>
       </SectionShell>

@@ -14,12 +14,15 @@ export default function ThemedStorefront({
   nameIsHeading,
   path,
   query,
+  overlayHeader,
   children,
 }: {
   frame: Exclude<StorefrontFrame, { kind: 'legacy' }>;
   nameIsHeading?: boolean;
   path: string;
   query?: Record<string, string | undefined>;
+  /** Home page: the header group sits over an opening full-width Hero. */
+  overlayHeader?: boolean;
   /** A fixed body (Content pages, blog). Omitted: the theme's template renders. */
   children?: ReactNode;
 }) {
@@ -32,7 +35,7 @@ export default function ThemedStorefront({
     );
   }
   return (
-    <ThemeFrame data={frame.data} host={tenantHost()} nameIsHeading={nameIsHeading} path={path} query={query}>
+    <ThemeFrame data={frame.data} host={tenantHost()} nameIsHeading={nameIsHeading} path={path} query={query} overlayHeader={overlayHeader}>
       {children === undefined ? undefined : (
         <div id="storefront-main" tabIndex={-1} className="outline-none">
           {children}

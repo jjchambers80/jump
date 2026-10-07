@@ -356,7 +356,7 @@ test.describe('starter homepage sections (038S)', () => {
     await expect(carousel.getByRole('button', { name: 'Pause slides' })).toHaveAttribute('aria-pressed', 'true');
   });
 
-  test('hero video: edge to edge, fills the window below the header, never plays under reduced motion', async ({ page }) => {
+  test('hero video: edge to edge, fills the window behind the header, never plays under reduced motion', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/organizations/theme-video');
@@ -366,11 +366,26 @@ test.describe('starter homepage sections (038S)', () => {
     await expect(hero.getByRole('button', { name: 'Pause background video' })).toHaveAttribute('aria-pressed', 'true');
     expect(await video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
     const box = (await hero.boundingBox())!;
-    const header = (await page.locator('[data-section="Header"]').boundingBox())!;
     expect(box.x).toBe(0);
     expect(box.width).toBe(390);
-    await expect.poll(async () => Math.round((await hero.boundingBox())!.y + (await hero.boundingBox())!.height)).toBe(844);
-    expect(Math.round(box.y)).toBe(Math.round(header.y + header.height));
+    // Home page: the header lies over the hero, which starts at the top of the window.
+    expect(Math.round(box.y)).toBe(0);
+    await expect.poll(async () => Math.round((await hero.boundingBox())!.height)).toBe(844);
+    await expect(page.locator('[data-header-overlay]')).toHaveCount(1);
+    const header = (await page.locator('[data-section="Header"]').boundingBox())!;
+    await expect
+      .poll(async () => (await hero.getByRole('heading', { name: 'Become a vendor' }).boundingBox())!.y)
+      .toBeGreaterThan(header.y + header.height);
+  });
+
+  test('the header overlays the hero on the home page only', async ({ page }) => {
+    await page.goto('/organizations/theme-video/events');
+    await expect(page.getByTestId('organization-header')).toBeVisible();
+    await expect(page.locator('[data-header-overlay]')).toHaveCount(0);
+    // A home page that opens with a plain Hero keeps the header above it.
+    await page.goto('/organizations/theme-home');
+    await expect(page.getByRole('heading', { name: 'Summer Series 2031' })).toBeVisible();
+    await expect(page.locator('[data-header-overlay]')).toHaveCount(0);
   });
 
   test('hero mobileLayout button-bottom: full-width button at the bottom on phones only', async ({ page }) => {

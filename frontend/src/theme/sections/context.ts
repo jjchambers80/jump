@@ -17,6 +17,8 @@ export interface SectionContext {
   query: Record<string, string | undefined>;
   /** Inside the theme editor's canvas (038D): unresolved links still render. */
   editing?: boolean;
+  /** Home page: this Hero opens the page and runs behind the header group (ThemeFrame). */
+  heroUnderHeaderId?: string;
 }
 
 export function sectionContext(metadata: Record<string, unknown> | undefined): SectionContext {

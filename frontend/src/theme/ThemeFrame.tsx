@@ -12,6 +12,15 @@ import { pageWidthVars, schemeCss, settingsVars } from './settingsCss';
 import type { SectionContext } from './sections/context';
 import type { ThemeDocument, ThemeRender } from './types';
 
+// The page opens with an edge-to-edge Hero that has an image or video: the only
+// case where a header laid over it still has something to sit on.
+function heroUnderHeader(data: ThemeRender): string | undefined {
+  const first = data.documents.template && renderable(data.documents.template).content[0];
+  const p = first?.type === 'Hero' ? first.props : null;
+  const media = p && (p.image?.fileId || p.video?.fileId || p.videoWebm?.fileId);
+  return media && (p.layout ?? 'full-bleed') === 'full-bleed' && p.sectionWidth === 'full' ? p.id : undefined;
+}
+
 function renderDocument(doc: ThemeDocument, ctx: SectionContext) {
   // Puck's Data shape; documents never carry drop zones (validated server-side).
   const data = renderable(doc);
@@ -24,6 +33,7 @@ export default function ThemeFrame({
   nameIsHeading = false,
   path,
   query = {},
+  overlayHeader = false,
   children,
 }: {
   data: ThemeRender;
@@ -33,6 +43,11 @@ export default function ThemeFrame({
   /** Current path and query (EventList filter and page links). */
   path: string;
   query?: Record<string, string | undefined>;
+  /**
+   * Home page: lay the header group over an opening full-width Hero (dark,
+   * solid at the top fading to transparent) instead of above it.
+   */
+  overlayHeader?: boolean;
   /** The page body. Omitted: the template document renders as the page's main. */
   children?: ReactNode;
 }) {
@@ -45,7 +60,20 @@ export default function ThemeFrame({
     nameIsHeading,
     path,
     query,
+    heroUnderHeaderId: overlayHeader && !children ? heroUnderHeader(data) : undefined,
   };
+  // `dark` switches the header's own dark: styles on (light text) whatever the
+  // page mode; a scheme background on the Header section would hide the gradient.
+  const header = ctx.heroUnderHeaderId ? (
+    <div
+      data-header-overlay
+      className="dark absolute inset-x-0 top-0 z-30 bg-gradient-to-b from-black via-black/60 to-transparent pb-4 [&_[data-section=Header]]:!bg-transparent"
+    >
+      {renderDocument(data.documents.header, ctx)}
+    </div>
+  ) : (
+    renderDocument(data.documents.header, ctx)
+  );
   return (
     <ThemeScope
       brandColor={data.organization.brandColor}
@@ -55,8 +83,8 @@ export default function ThemeFrame({
       className="min-h-screen bg-gray-50 dark:bg-slate-900"
     >
       {data.previewInvalid && <ClearPreviewCookie />}
-      <div data-theme-frame={data.theme.id ?? 'preset'} style={pageWidthVars(data.documents.template?.root) as CSSProperties | undefined}>
-        {renderDocument(data.documents.header, ctx)}
+      <div data-theme-frame={data.theme.id ?? 'preset'} className="relative" style={pageWidthVars(data.documents.template?.root) as CSSProperties | undefined}>
+        {header}
         {children ??
           (data.documents.template && (
             <main id="storefront-main" tabIndex={-1} className="outline-none">

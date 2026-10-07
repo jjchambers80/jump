@@ -60,5 +60,5 @@ export default async function OrganizationPage({
   // shows the saved homepage, else the Events page (D5, decided by the backend).
   const frame = await loadStorefrontFrame(params.orgId, 'home');
   if (frame.kind === 'legacy') return <OrganizationStorefront orgId={params.orgId} />;
-  return <ThemedStorefront frame={frame} nameIsHeading path={`/organizations/${params.orgId}`} query={searchParams} />;
+  return <ThemedStorefront frame={frame} nameIsHeading overlayHeader path={`/organizations/${params.orgId}`} query={searchParams} />;
 }
