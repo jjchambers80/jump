@@ -35,6 +35,7 @@ import { ORDER_INCLUDE, adjustmentItems, buyerLineTotal, tierItem } from './Orde
 import { orderStatusFor } from './applicationOrderStatus.js';
 import logger from '../utils/logger.js';
 import { createStripeRefund, refundIdempotencyKey } from './stripeRefund.js';
+import { dueAtEndOfDay, selectionDueAt } from './applicationSelection.js';
 
 const SESSION_TTL_SECONDS = 30 * 60;
 /** Saved-card brand / last four by payment method id (a card never changes). */
@@ -509,7 +510,7 @@ class ApplicationPaymentService {
       return 'AWAITING_SELECTION';
     }
     const dueDays = application.form?.paymentDueDays ?? 7;
-    const paymentDueAt = application.order?.dueAt || new Date(Date.now() + dueDays * 86_400_000);
+    const paymentDueAt = application.order?.dueAt || dueAtEndOfDay(new Date(), dueDays);
     await prisma.$transaction(async (tx) => {
       const row = await tx.application.update({
         where: { id: application.id },
@@ -856,7 +857,7 @@ class ApplicationPaymentService {
   // ---------------------------------------------------------------------------
 
   /**
-   * PAYMENT_DUE past its due date: WITHDRAW policy releases the slot and
+   * PAYMENT_DUE (or still choosing) past the end of its due day: WITHDRAW policy releases the slot and
    * withdraws (system); HOLD flags the row for the organizer. Runs hourly.
    * @returns {Promise<{ withdrawn: number, held: number }>}
    */
@@ -865,13 +866,16 @@ class ApplicationPaymentService {
     // `paymentDueDays` after approval (their clock has no order to live on).
     // Prisma stores DateTime as UTC in timestamp columns: compare in UTC, not
     // in the database session's zone.
-    const choosing = await prisma.$queryRaw`
-      SELECT a."id" FROM "Application" a
+    // The SQL bound is the raw approval + days, which the end-of-day clock
+    // never precedes; `selectionDueAt` then applies the real deadline.
+    const candidates = await prisma.$queryRaw`
+      SELECT a."id", a."status", a."paymentStatus", a."decidedAt", f."paymentDueDays" FROM "Application" a
       JOIN "ApplicationForm" f ON f."id" = a."formId"
       WHERE a."status" = 'APPROVED' AND a."paymentStatus" = 'AWAITING_SELECTION' AND a."overdue" = false
         AND a."decidedAt" IS NOT NULL
         AND a."decidedAt" + make_interval(days => f."paymentDueDays") < (${now}::timestamptz AT TIME ZONE 'UTC')
       LIMIT 500`;
+    const choosing = candidates.filter((r) => selectionDueAt({ ...r, form: { paymentDueDays: r.paymentDueDays } }) < now);
     const due = await prisma.application.findMany({
       where: {
         OR: [

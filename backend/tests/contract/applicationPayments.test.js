@@ -283,8 +283,9 @@ describe('Application payments contract (spec 011 phase 2, spec 037 phase 5)', (
     expect(res.body.form.reserveOnApproval).toBe(true);
     expect(res.body.categories.map((c) => c.name)).toEqual(['10x10', 'Single slot']);
     const days = (new Date(res.body.payment.paymentDueAt).getTime() - Date.now()) / 86_400_000;
+    // Five days out, rounded up to the end of that day in the organization zone.
     expect(days).toBeGreaterThan(4.9);
-    expect(days).toBeLessThan(5.1);
+    expect(days).toBeLessThan(6);
     expect(res.body.decisions.at(-1)).toMatchObject({ action: 'APPROVED', emailSubject: expect.stringMatching(/choose your space/) });
 
     expect(mockIntentsCreate).not.toHaveBeenCalled();
@@ -643,9 +644,10 @@ describe('Application payments contract (spec 011 phase 2, spec 037 phase 5)', (
 
     const late = (days) => new Date(Date.now() - days * 86_400_000 - 60_000);
     const withdrawId = await approved('vendor-space', `overdue1@${TAG}.test`, 'Overdue One', tier.id);
-    await prisma.application.update({ where: { id: withdrawId }, data: { decidedAt: late(5) } });
+    // A full day past the due day: the clock runs to the end of that day.
+    await prisma.application.update({ where: { id: withdrawId }, data: { decidedAt: late(6) } });
     const holdId = await approved('hold-vendors', `overdue2@${TAG}.test`, 'Overdue Two');
-    await prisma.application.update({ where: { id: holdId }, data: { decidedAt: late(3) } });
+    await prisma.application.update({ where: { id: holdId }, data: { decidedAt: late(4) } });
     const inTime = await approved('vendor-space', `overdue3@${TAG}.test`, 'Still In Time', tier.id);
     await prisma.application.update({ where: { id: inTime }, data: { decidedAt: late(4) } }); // 4 of 5 days
 

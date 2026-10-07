@@ -6,19 +6,26 @@ import { jest } from '@jest/globals';
 
 jest.unstable_mockModule('@jump/db', () => ({ prisma: {} }));
 
-const { selectionDueAt, holdsSelection } = await import('../../src/services/applicationSelection.js');
+const { dueAtEndOfDay, selectionDueAt, holdsSelection } = await import('../../src/services/applicationSelection.js');
 const { hasLiveOrder } = await import('../../src/services/applicationOrderStatus.js');
 const { moneyOf } = await import('../../src/services/applicationMoney.js');
 const { planApplicationMove } = await import('../../src/scripts/backfill-037-applications.js');
 
-const DAY = 86_400_000;
-
 describe('selectionDueAt (the payment clock starts at approval)', () => {
   const decidedAt = new Date('2026-10-01T12:00:00Z');
 
-  test('choosing: approval + paymentDueDays', () => {
+  test('choosing: end of the day approval + paymentDueDays lands on, in the organization zone', () => {
     const due = selectionDueAt({ status: 'APPROVED', paymentStatus: 'AWAITING_SELECTION', decidedAt, form: { paymentDueDays: 5 } });
-    expect(due.toISOString()).toBe(new Date(decidedAt.getTime() + 5 * DAY).toISOString());
+    // 2026-10-06 23:59:59.999 EDT
+    expect(due.toISOString()).toBe('2026-10-07T03:59:59.999Z');
+  });
+
+  test('an evening approval in New York is due at the end of that New York day, not the UTC one', () => {
+    // 2026-09-29 17:27 EDT is already 09-30 in UTC; the email said "by October 6".
+    const due = selectionDueAt({ status: 'APPROVED', paymentStatus: 'AWAITING_SELECTION', decidedAt: new Date('2026-09-29T21:27:38Z'), form: { paymentDueDays: 7 } });
+    expect(due.toISOString()).toBe('2026-10-07T03:59:59.999Z');
+    // Across the fall-back transition the deadline is still 23:59:59.999 local (EST).
+    expect(dueAtEndOfDay(new Date('2026-10-30T16:00:00Z'), 7).toISOString()).toBe('2026-11-07T04:59:59.999Z');
   });
 
   test('holding or paying: the order carries the same clock', () => {

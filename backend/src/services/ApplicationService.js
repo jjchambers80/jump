@@ -56,7 +56,7 @@ import orderLineService, { ORDER_INCLUDE, adjustmentItems, spacePriceFor } from 
 import refundService from './RefundService.js';
 import { moneyOf } from './applicationMoney.js';
 import { hasLiveOrder, orderStatusFor } from './applicationOrderStatus.js';
-import { selectionDueAt } from './applicationSelection.js';
+import { dueAtEndOfDay, selectionDueAt } from './applicationSelection.js';
 import legalAcceptanceService from './LegalAcceptanceService.js';
 import contactOptInService from './ContactOptInService.js';
 import { applyConsentText } from '../config/legal.js';
@@ -775,7 +775,7 @@ class ApplicationService {
       // The order: created here, or the cancelled one (an expired selection,
       // or one from before apply-then-choose) reopened with the new lines.
       // Organizer adjustments on it are kept; the order number never changes.
-      const dueAt = selectionDueAt(application) ?? new Date(Date.now() + (application.form.paymentDueDays ?? 7) * 86_400_000);
+      const dueAt = selectionDueAt(application) ?? dueAtEndOfDay(new Date(), application.form.paymentDueDays ?? 7);
       const adjustments = application.order ? adjustmentItems(application.order).filter((i) => i.kind === 'ADJUSTMENT') : [];
       const data = orderLineService.applicationOrderData(tier, application.form, lines, adjustments, application.event, application.event.venue.organization, {
         booth: held ?? placed,
