@@ -164,50 +164,33 @@ export default function HeroCarouselFrame({
         if (e.key === 'ArrowRight') byVisitor(index + 1);
       }}
     >
-      {/* Focus on a slide's link holds the rotation; focus on the controls
-          does not, so Play works from the keyboard. A swipe is the visitor
-          taking over, like an arrow press. */}
-      <div
-        className="contents"
-        onFocus={() => setHolding(true)}
-        onBlur={(e) => {
-          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setHolding(false);
-        }}
-        onTouchStart={() => setPaused(true)}
-      >
-        {children}
-      </div>
-      <div aria-hidden className={`pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10 ${corners}`} />
-      <p className="sr-only" aria-live="polite" aria-atomic="true">
-        {announce && many ? slideLabel(labels.slide, index + 1, count) : ''}
-      </p>
-
-      {/* Phones swipe; arrows would sit on the text there. */}
-      {many && showArrows && (
-        <>
-          <button
-            type="button"
-            data-carousel-control="1"
-            className={`${round} absolute left-4 top-1/2 hidden h-11 w-11 -translate-y-1/2 sm:inline-flex`}
-            onClick={() => byVisitor(index - 1)}
-            aria-label={labels.previous}
-          >
-            <ChevronLeft className="h-5 w-5" aria-hidden />
-          </button>
-          <button
-            type="button"
-            data-carousel-control="1"
-            className={`${round} absolute right-4 top-1/2 hidden h-11 w-11 -translate-y-1/2 sm:inline-flex`}
-            onClick={() => byVisitor(index + 1)}
-            aria-label={labels.next}
-          >
-            <ChevronRight className="h-5 w-5" aria-hidden />
-          </button>
-        </>
-      )}
-
-      {many && (showDots || timed) && (
-        <div className="absolute inset-x-0 bottom-4 flex items-center justify-center gap-2">
+      {/* Controls come before the slides in the DOM (WAI-ARIA APG): the
+          rotation control is the first thing Tab reaches in the carousel. */}
+      {many && (showDots || timed || showArrows) && (
+        <div className="absolute inset-x-0 bottom-4 z-10 flex items-center justify-center gap-2">
+          {timed && (
+            <button
+              type="button"
+              data-carousel-control="1"
+              className={`${round} h-8 w-8`}
+              onClick={() => setPaused((p) => !p)}
+              aria-pressed={paused}
+              aria-label={labels.pause}
+            >
+              {paused ? <Play className="h-3.5 w-3.5 translate-x-px" aria-hidden /> : <Pause className="h-3.5 w-3.5" aria-hidden />}
+            </button>
+          )}
+          {showArrows && (
+            <button
+              type="button"
+              data-carousel-control="1"
+              className={`${round} h-8 w-8 sm:hidden`}
+              onClick={() => byVisitor(index - 1)}
+              aria-label={labels.previous}
+            >
+              <ChevronLeft className="h-4 w-4" aria-hidden />
+            </button>
+          )}
           {showDots && (
             <div className="flex items-center rounded-full bg-black/40 px-1.5 py-0.5 backdrop-blur-sm">
               {Array.from({ length: count }, (_, i) => {
@@ -235,20 +218,61 @@ export default function HeroCarouselFrame({
               })}
             </div>
           )}
-          {timed && (
+          {showArrows && (
             <button
               type="button"
               data-carousel-control="1"
-              className={`${round} h-8 w-8`}
-              onClick={() => setPaused((p) => !p)}
-              aria-pressed={paused}
-              aria-label={labels.pause}
+              className={`${round} h-8 w-8 sm:hidden`}
+              onClick={() => byVisitor(index + 1)}
+              aria-label={labels.next}
             >
-              {paused ? <Play className="h-3.5 w-3.5 translate-x-px" aria-hidden /> : <Pause className="h-3.5 w-3.5" aria-hidden />}
+              <ChevronRight className="h-4 w-4" aria-hidden />
             </button>
           )}
         </div>
       )}
+      {/* From sm the arrows sit on the sides; phones get them in the bottom row. */}
+      {many && showArrows && (
+        <>
+          <button
+            type="button"
+            data-carousel-control="1"
+            className={`${round} absolute left-4 top-1/2 z-10 hidden h-11 w-11 -translate-y-1/2 sm:inline-flex`}
+            onClick={() => byVisitor(index - 1)}
+            aria-label={labels.previous}
+          >
+            <ChevronLeft className="h-5 w-5" aria-hidden />
+          </button>
+          <button
+            type="button"
+            data-carousel-control="1"
+            className={`${round} absolute right-4 top-1/2 z-10 hidden h-11 w-11 -translate-y-1/2 sm:inline-flex`}
+            onClick={() => byVisitor(index + 1)}
+            aria-label={labels.next}
+          >
+            <ChevronRight className="h-5 w-5" aria-hidden />
+          </button>
+        </>
+      )}
+
+      {/* Focus on a slide's link holds the rotation; focus on the controls
+          does not, so Play works from the keyboard. A swipe is the visitor
+          taking over, like an arrow press. */}
+      <div
+        className="contents"
+        onFocus={() => setHolding(true)}
+        onBlur={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setHolding(false);
+        }}
+        onTouchStart={() => setPaused(true)}
+      >
+        {children}
+      </div>
+      <div aria-hidden className={`pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10 ${corners}`} />
+      <p className="sr-only" aria-live="polite" aria-atomic="true">
+        {announce && many ? slideLabel(labels.slide, index + 1, count) : ''}
+      </p>
+
       {/* Without dots, the interval shows as a hairline along the bottom edge. */}
       {!showDots && progress('absolute inset-x-0 bottom-0 h-0.5 bg-white/70')}
     </section>
