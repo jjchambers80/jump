@@ -1,9 +1,11 @@
 'use client';
 
 // Pick an image (or, with kind="video", a video) from Content › Files, or
-// upload one — featured image, editor image insert, theme Hero video.
+// upload one — featured image, editor image insert, theme Hero video. With
+// `multiple`, tiles toggle a selection and the footer adds them all at once
+// (galleries, spec 046); uploads join the selection.
 
-import { Search } from 'lucide-react';
+import { Check, Search } from 'lucide-react';
 import { RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import { useFilesApi } from '@/app/admin/content/files/useFilesApi';
 import { resolveAssetUrl } from '@/lib/assets';
@@ -15,7 +17,9 @@ interface FilePickerDialogProps {
   kind?: 'image' | 'video';
   returnFocusRef?: RefObject<HTMLElement>;
   onClose: () => void;
-  onPick: (file: StoreFile) => void;
+  onPick?: (file: StoreFile) => void;
+  multiple?: boolean;
+  onPickMany?: (files: StoreFile[]) => void;
 }
 
 export default function FilePickerDialog({
@@ -24,6 +28,8 @@ export default function FilePickerDialog({
   returnFocusRef,
   onClose,
   onPick,
+  multiple = false,
+  onPickMany,
 }: FilePickerDialogProps) {
   const filesApi = useFilesApi();
   const [files, setFiles] = useState<StoreFile[]>([]);
@@ -31,6 +37,15 @@ export default function FilePickerDialog({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [selected, setSelected] = useState<StoreFile[]>([]);
+  const isSelected = (file: StoreFile) => selected.some((entry) => entry.id === file.id);
+  const toggle = (file: StoreFile) =>
+    setSelected((current) =>
+      current.some((entry) => entry.id === file.id)
+        ? current.filter((entry) => entry.id !== file.id)
+        : [...current, file]
+    );
+  const noun = kind === 'video' ? 'video' : 'photo';
   const uploadRef = useRef<HTMLButtonElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -142,9 +157,24 @@ export default function FilePickerDialog({
                 <li key={file.id}>
                   <button
                     type="button"
-                    onClick={() => onPick(file)}
-                    className="group block w-full overflow-hidden rounded-md border border-gray-200 text-left focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-600"
+                    onClick={() => (multiple ? toggle(file) : onPick?.(file))}
+                    {...(multiple ? { 'aria-pressed': isSelected(file) } : {})}
+                    className={`group relative block w-full overflow-hidden rounded-md border text-left focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                      multiple && isSelected(file)
+                        ? 'border-indigo-600 ring-2 ring-indigo-600 dark:border-indigo-400 dark:ring-indigo-400'
+                        : 'border-gray-200 dark:border-slate-600'
+                    }`}
                   >
+                    {multiple && (
+                      <span
+                        aria-hidden
+                        className={`absolute right-1.5 top-1.5 z-10 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white shadow ${
+                          isSelected(file) ? 'bg-indigo-600 text-white' : 'bg-black/30 text-transparent'
+                        }`}
+                      >
+                        <Check className="h-3.5 w-3.5" />
+                      </span>
+                    )}
                     {kind === 'video' ? (
                       <video
                         src={resolveAssetUrl(file.url) || undefined}
@@ -170,7 +200,12 @@ export default function FilePickerDialog({
             </ul>
           )}
         </div>
-        <div className="mt-4 flex justify-end">
+        <div className="mt-4 flex items-center justify-end gap-2">
+          {multiple && (
+            <p aria-live="polite" className="mr-auto text-sm text-gray-600 dark:text-slate-300">
+              {selected.length ? `${selected.length} selected` : ''}
+            </p>
+          )}
           <button
             type="button"
             onClick={onClose}
@@ -178,6 +213,18 @@ export default function FilePickerDialog({
           >
             Cancel
           </button>
+          {multiple && (
+            <button
+              type="button"
+              disabled={!selected.length}
+              onClick={() => onPickMany?.(selected)}
+              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {selected.length
+                ? `Add ${selected.length} ${noun}${selected.length === 1 ? '' : 's'}`
+                : `Add ${noun}s`}
+            </button>
+          )}
         </div>
       </div>
       {uploadOpen && (
@@ -186,8 +233,14 @@ export default function FilePickerDialog({
           returnFocusRef={uploadRef}
           onClose={() => setUploadOpen(false)}
           onUploaded={(result) => {
+            if (multiple) {
+              const uploaded = result.files.filter((file) => file.kind === kind);
+              setSelected((current) => [...current, ...uploaded.filter((file) => !current.some((c) => c.id === file.id))]);
+              void load();
+              return;
+            }
             const picked = result.files.find((file) => file.kind === kind);
-            if (picked) onPick(picked);
+            if (picked) onPick?.(picked);
             else void load();
           }}
         />

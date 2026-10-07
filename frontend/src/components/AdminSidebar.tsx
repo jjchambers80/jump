@@ -76,6 +76,7 @@ const navItems: NavItem[] = [
     children: [
       { label: 'Files', href: '/admin/content/files' },
       { label: 'Forms', href: '/admin/content/forms' },
+      { label: 'Galleries', href: '/admin/content/galleries' },
       { label: 'Menus', href: '/admin/content/menus' },
       { label: 'Blog posts', href: '/admin/content/blog-posts' },
     ],
