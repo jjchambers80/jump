@@ -114,7 +114,7 @@ class ApiClient {
         handleTwoStepRequired(response.status, data?.code);
         throw {
           status: response.status,
-          message: data?.message || 'Request failed',
+          message: data?.message || data?.error_description || 'Request failed',
           error: data?.error,
           // Machine-readable code from the backend error handler (e.g. EMAIL_TAKEN)
           code: data?.code,

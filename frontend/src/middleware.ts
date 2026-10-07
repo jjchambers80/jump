@@ -32,7 +32,15 @@ const { auth } = NextAuth({
   }),
 });
 
-const STAFF_ONLY_PREFIXES = ['/admin'];
+const STAFF_ONLY_PREFIXES = ['/admin', '/oauth'];
+
+function oauthFrameProtection(response: NextResponse, pathname: string) {
+  if (pathname === '/oauth/consent') {
+    response.headers.set('Content-Security-Policy', "frame-ancestors 'none'");
+    response.headers.set('X-Frame-Options', 'DENY');
+  }
+  return response;
+}
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
 const PLATFORM_HOSTS = platformHostsFromEnv(process.env as Record<string, string | undefined>);
@@ -119,16 +127,16 @@ export default auth(async (req: NextRequest & { auth: unknown }) => {
     if (staffOnly && !req.auth) {
       const signInUrl = new URL('/auth/signin', req.nextUrl);
       signInUrl.searchParams.set('callbackUrl', pathname + req.nextUrl.search);
-      return NextResponse.redirect(signInUrl);
+      return oauthFrameProtection(NextResponse.redirect(signInUrl), pathname);
     }
     // Spec 030 C: the first factor passed but the second step is due — the
     // admin area waits at /auth/two-step (the page itself is public).
     if (staffOnly && (req.auth as { mfaPending?: boolean } | null)?.mfaPending) {
       const twoStepUrl = new URL('/auth/two-step', req.nextUrl);
       twoStepUrl.searchParams.set('callbackUrl', pathname + req.nextUrl.search);
-      return NextResponse.redirect(twoStepUrl);
+      return oauthFrameProtection(NextResponse.redirect(twoStepUrl), pathname);
     }
-    return NextResponse.next();
+    return oauthFrameProtection(NextResponse.next(), pathname);
   }
 
   // Tenant (custom) host: one organization's storefront, no staff surface

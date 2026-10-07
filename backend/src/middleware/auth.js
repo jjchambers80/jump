@@ -42,6 +42,12 @@ export const requireAuth = async (req, res, next) => {
     if (decoded.typ === 'buyer') {
       throw new AuthenticationError('Buyer sessions cannot access staff routes');
     }
+    // Staff sessions carry no `typ`. Every other HS256 token signed with this
+    // secret (reauth / mfa proofs, storefront unlock, OAuth consent CSRF) is a
+    // single-purpose proof and never a session.
+    if (decoded.typ !== undefined) {
+      throw new AuthenticationError('This token is not a staff session');
+    }
 
     // Two-step pending (spec 030 C): the first factor succeeded but the second
     // step has not. Only the two-step router accepts such a token.

@@ -50,6 +50,7 @@ import mapExportRouter from './routes/mapExport.js';
 import rsvpsRouter, { adminRsvpsRouter, eventRsvpsRouter } from './routes/rsvps.js';
 import themesRouter from './routes/themes.js';
 import developerRouter from './routes/developer.js';
+import oauthRouter from './routes/oauth.js';
 import domainService from '../services/DomainService.js';
 import applicationPaymentService from '../services/ApplicationPaymentService.js';
 import applicationDigestService from '../services/ApplicationDigestService.js';
@@ -157,6 +158,7 @@ app.get('/health', (req, res) => {
 app.get('/metrics', metricsHandler);
 
 // API routes
+app.use(oauthRouter);
 app.use('/admin/files', adminFilesRouter);
 app.use('/admin/menus', menusRouter);
 app.use('/admin/redirects', redirectsRouter);
