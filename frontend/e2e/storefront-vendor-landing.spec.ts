@@ -1,5 +1,5 @@
 // A full-width Content page built from the landing sections (Image with
-// text + video, Stats, Feature grid, Checklist, Steps, Call to action),
+// text + video, Stats, Feature grid with photos, Checklist, Steps, Call to action),
 // served by the SSR fixture API (fixtures/vendorLanding.mjs). Checks the
 // structure screen readers get, the apply links and axe, on phone and desktop.
 
@@ -42,6 +42,10 @@ for (const viewport of [
 
     const stats = main.getByRole('region', { name: 'We are always looking for new vendors' });
     await expect(stats.getByRole('definition').first()).toHaveText('25,000+');
+    // The "Why" cards carry the event photos, each with its own description.
+    const photos = main.getByRole('region', { name: 'Why should I become a vendor?' }).getByRole('img');
+    await expect(photos).toHaveCount(3);
+    for (const img of await photos.all()) expect((await img.getAttribute('alt'))?.length).toBeGreaterThan(20);
     const wanted = main.getByRole('region', { name: 'What types of vendors are you looking for?' }).getByRole('listitem');
     await expect(wanted).toHaveCount(13);
     const notAllowed = main.getByRole('region', { name: 'What types of vendors are not allowed?' }).getByRole('listitem');

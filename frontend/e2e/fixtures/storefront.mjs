@@ -3,7 +3,7 @@
 // with it. One fixture set per organization id: tests pick one by URL.
 
 import { getPreset, resolveContent, resolveSettings } from '@jump/theme';
-import { vendorLandingDocument } from './vendorLanding.mjs';
+import { VENDOR_PHOTOS, vendorLandingDocument } from './vendorLanding.mjs';
 
 const preset = getPreset('eventimus-default');
 /** The Events template every fixture serves for `page=events`. */
@@ -277,8 +277,10 @@ export const FIXTURES = {
   'theme-vendors': (() => {
     const base = render('theme-vendors', { organization: { name: 'Raleigh Retro Gamers', brandColor: '#4338ca', themeMode: 'SYSTEM' } });
     const link = '/organizations/theme-vendors/pages/vendor-application';
+    // The "Why" card photos all resolve to the local cover; alt text comes from the document.
+    const files = Object.fromEntries(Object.values(VENDOR_PHOTOS).map((id) => [id, { url: PARITY_COVER, alt: null, width: 1536, height: 1024 }]));
     return {
-      render: { ...base, resolved: { ...base.resolved, links: { ...base.resolved.links, 'PAGE:p-apply': link } } },
+      render: { ...base, resolved: { ...base.resolved, files, links: { ...base.resolved.links, 'PAGE:p-apply': link } } },
       routes: {
         '/public/pages/vendors': {
           organization: base.organization,

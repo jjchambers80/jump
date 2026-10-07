@@ -5,12 +5,17 @@
 
 const p = (text) => `<p>${text}</p>`;
 
+/** Content › Files ids of the event photos on the "Why" cards (3:2, so the
+ *  card's 3:2 frame never crops them). The e2e fixture resolves these keys. */
+export const VENDOR_PHOTOS = { audience: 'vendor-outdoor-sale', marketing: 'vendor-mall-table', partner: 'vendor-expo-badge' };
+
 /** `applyPageId`: the Content page holding the vendor application form. */
-export function vendorLandingDocument(applyPageId) {
+export function vendorLandingDocument(applyPageId, photos = VENDOR_PHOTOS) {
   const apply = { type: 'PAGE', targetId: applyPageId };
   const faq = { type: 'EXTERNAL', url: 'https://raleighretrogamers.com/vendor-faq/' };
   const applyButton = (id) => ({ type: 'Button', props: { id, label: 'Apply to be a vendor', link: apply, style: 'primary' } });
   const faqButton = (id) => ({ type: 'Button', props: { id, label: 'Read the vendor FAQ', link: faq, style: 'secondary' } });
+  const photo = (fileId, alt) => ({ fileId, alt });
   const item = (id, text) => ({ type: 'ChecklistItem', props: { id, text } });
 
   return {
@@ -57,9 +62,33 @@ export function vendorLandingDocument(applyPageId) {
           columns: '3',
           alignment: 'left',
           blocks: [
-            { type: 'Feature', props: { id: 'Why-audience', title: 'A highly targeted audience', text: 'Get in front of a highly targeted audience in person, at events built for gaming and geek culture.' } },
-            { type: 'Feature', props: { id: 'Why-marketing', title: 'Our marketing, your business', text: 'We showcase your business through our marketing efforts to thousands of potential customers.' } },
-            { type: 'Feature', props: { id: 'Why-partner', title: 'A real partner', text: 'We believe in partnering with you to drive real brand awareness and sales.' } },
+            {
+              type: 'Feature',
+              props: {
+                id: 'Why-audience',
+                image: photo(photos.audience, 'A shopper in a Raleigh Retro Gamers cap pays a vendor at a shaded outdoor booth stacked with games, while other attendees browse the tables behind them.'),
+                title: 'A highly targeted audience',
+                text: 'Get in front of a highly targeted audience in person, at events built for gaming and geek culture.',
+              },
+            },
+            {
+              type: 'Feature',
+              props: {
+                id: 'Why-marketing',
+                image: photo(photos.marketing, 'A vendor shows games to a visitor at the Raleigh Retro Gamers table at an indoor mall event, beside a neighboring vendor’s banner.'),
+                title: 'Our marketing, your business',
+                text: 'We showcase your business through our marketing efforts to thousands of potential customers.',
+              },
+            },
+            {
+              type: 'Feature',
+              props: {
+                id: 'Why-partner',
+                image: photo(photos.partner, 'A vendor wearing a Raleigh Retro Gamers Summer Expo vendor badge talks with a customer across a table of boxed games at an outdoor market.'),
+                title: 'A real partner',
+                text: 'We believe in partnering with you to drive real brand awareness and sales.',
+              },
+            },
           ],
         },
       },

@@ -18,7 +18,15 @@ export default function FeatureBlock({ image, title = '', text = '', ctx }: Feat
     <div data-feature>
       {file && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={file.url} alt={alt} loading="lazy" className="mb-5 aspect-[3/2] w-full rounded-[var(--theme-media-radius,1rem)] object-cover" />
+        <img
+          src={file.url}
+          alt={alt}
+          loading="lazy"
+          decoding="async"
+          width={file.width ?? undefined}
+          height={file.height ?? undefined}
+          className="mb-5 aspect-[3/2] w-full rounded-[var(--theme-media-radius,1rem)] object-cover"
+        />
       )}
       {title && <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">{title}</h3>}
       {text && <p className="mt-2 text-pretty text-gray-600 dark:text-slate-300">{text}</p>}
