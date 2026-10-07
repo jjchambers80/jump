@@ -316,7 +316,7 @@ export const FIXTURES = {
     // The "Why" card photos all resolve to the local cover; alt text comes from the document.
     const files = Object.fromEntries(Object.values(VENDOR_PHOTOS).map((id) => [id, { url: PARITY_COVER, alt: null, width: 1536, height: 1024 }]));
     return {
-      render: { ...base, resolved: { ...base.resolved, files, links: { ...base.resolved.links, 'PAGE:p-apply': link } } },
+      render: { ...base, resolved: { ...base.resolved, files, links: { ...base.resolved.links, 'PAGE:p-apply': link, 'PAGE:p-faq': '/organizations/theme-vendors/pages/vendor-faq' } } },
       routes: {
         '/public/pages/vendors': {
           organization: base.organization,

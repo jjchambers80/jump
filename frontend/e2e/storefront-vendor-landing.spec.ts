@@ -39,6 +39,9 @@ for (const viewport of [
     await expect(apply).toHaveCount(2);
     for (const link of await apply.all()) await expect(link).toHaveAttribute('href', APPLY);
     await expect(apply.first()).toBeInViewport();
+    const faq = main.getByRole('link', { name: 'Read the vendor FAQ' });
+    await expect(faq).toHaveCount(2);
+    for (const link of await faq.all()) await expect(link).toHaveAttribute('href', '/organizations/theme-vendors/pages/vendor-faq');
 
     const stats = main.getByRole('region', { name: 'We are always looking for new vendors' });
     await expect(stats.getByRole('definition').first()).toHaveText('25,000+');

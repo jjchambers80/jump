@@ -9,10 +9,10 @@ const p = (text) => `<p>${text}</p>`;
  *  card's 3:2 frame never crops them). The e2e fixture resolves these keys. */
 export const VENDOR_PHOTOS = { audience: 'vendor-outdoor-sale', marketing: 'vendor-mall-table', partner: 'vendor-expo-badge' };
 
-/** `applyPageId`: the Content page holding the vendor application form. */
-export function vendorLandingDocument(applyPageId, photos = VENDOR_PHOTOS) {
+/** `applyPageId`: the Content page holding the vendor application form; `faqPageId`: the Vendor FAQ page. */
+export function vendorLandingDocument(applyPageId, photos = VENDOR_PHOTOS, faqPageId = 'p-faq') {
   const apply = { type: 'PAGE', targetId: applyPageId };
-  const faq = { type: 'EXTERNAL', url: 'https://raleighretrogamers.com/vendor-faq/' };
+  const faq = { type: 'PAGE', targetId: faqPageId };
   const applyButton = (id) => ({ type: 'Button', props: { id, label: 'Apply to be a vendor', link: apply, style: 'primary' } });
   const faqButton = (id) => ({ type: 'Button', props: { id, label: 'Read the vendor FAQ', link: faq, style: 'secondary' } });
   const photo = (fileId, alt) => ({ fileId, alt });
