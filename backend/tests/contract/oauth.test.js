@@ -296,6 +296,21 @@ describe('OAuth authorization server', () => {
     expect(response.body.error).toBe('access_denied');
   });
 
+  it('never accepts a consent CSRF token or another typed proof as a staff session', async () => {
+    const prepared = await request(app)
+      .post('/oauth/authorize/prepare')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send(authRequest());
+    expect(prepared.status).toBe(200);
+    for (const bearer of [prepared.body.csrfToken, issueReauthProof(adminId).reauthToken]) {
+      const response = await request(app)
+        .post('/oauth/authorize/prepare')
+        .set('Authorization', `Bearer ${bearer}`)
+        .send(authRequest());
+      expect(response.status).toBe(401);
+    }
+  });
+
   it('refuses consent when the store or global switch is off', async () => {
     await prisma.organization.update({ where: { id: organization.id }, data: { agentAccessEnabled: false } });
     const orgOff = await request(app)

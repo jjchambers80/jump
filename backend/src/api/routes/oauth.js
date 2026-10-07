@@ -18,6 +18,8 @@ const router = Router();
 const form = express.urlencoded({ extended: false, limit: '32kb' });
 const registrationLimiter = makeLimiter('OAUTH_REGISTER', LIMITS.OAUTH_REGISTER);
 const tokenLimiter = makeLimiter('OAUTH_TOKEN', LIMITS.OAUTH_TOKEN);
+// GET /oauth/authorize can make the server fetch a client metadata document.
+const authorizeLimiter = makeLimiter('OAUTH_AUTHORIZE', LIMITS.OAUTH_AUTHORIZE);
 
 // Deploy dark: when the environment gate is off, the authorization server is
 // indistinguishable from an unmounted feature (including discovery).
@@ -92,7 +94,7 @@ router.post('/oauth/register', registrationLimiter, handle(async (req, res) => {
 
 // The protocol entry point validates before redirecting to the session-bearing
 // frontend. Tokens/codes are never placed in this redirect.
-router.get('/oauth/authorize', async (req, res) => {
+router.get('/oauth/authorize', authorizeLimiter, async (req, res) => {
   try {
     res.redirect(302, await oAuthService.begin(req.query));
   } catch (error) {
@@ -102,7 +104,7 @@ router.get('/oauth/authorize', async (req, res) => {
   }
 });
 
-router.post('/oauth/authorize/prepare', requireAuth, handle(async (req, res) => {
+router.post('/oauth/authorize/prepare', authorizeLimiter, requireAuth, handle(async (req, res) => {
   noStore(res);
   res.json(await oAuthService.prepare(req.user.id, req.body));
 }, { protocolErrors: true }));

@@ -141,6 +141,11 @@ export const LIMITS = Object.freeze({
     limit: 20,
     message: 'Too many OAuth client registrations. Try again later.',
   },
+  OAUTH_AUTHORIZE: {
+    windowMs: 15 * 60 * 1000,
+    limit: 60,
+    message: 'Too many authorization requests. Try again later.',
+  },
   OAUTH_TOKEN: {
     windowMs: 15 * 60 * 1000,
     limit: 120,
