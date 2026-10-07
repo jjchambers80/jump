@@ -2,13 +2,17 @@
   "$schema": "https://schema.railpack.com",
   "steps": {
     "install": {
-      "commands": ["npm install"]
+      "commands": [
+        "npm install"
+      ]
     },
     "build": {
-      "commands": ["cd packages/db && npx prisma generate"]
+      "commands": [
+        "cd packages/db && npx prisma generate"
+      ]
     }
   },
   "deploy": {
-    "startCommand": "node src/server.js"
+    "startCommand": "node mcp/src/server.js"
   }
 }

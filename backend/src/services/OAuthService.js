@@ -54,8 +54,9 @@ export function consentUrl() {
 }
 
 function parseScopes(value) {
-  const requested = typeof value === 'string' && value.trim() ? value.trim().split(/\s+/) : ['store:read'];
-  const scopes = [...new Set(requested)];
+  const requested = typeof value === 'string' && value.trim() ? value.trim().split(/\s+/) : [];
+  // Every grant can read: write tools look a record up before changing it.
+  const scopes = [...new Set(['store:read', ...requested])];
   if (scopes.some((scope) => !Object.hasOwn(OAUTH_SCOPES, scope))) {
     throw new OAuthProtocolError('invalid_scope', 'One or more requested scopes are not supported');
   }

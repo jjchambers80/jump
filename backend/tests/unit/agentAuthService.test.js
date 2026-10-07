@@ -76,6 +76,8 @@ describe('AgentAuthService.agentAuthorize', () => {
       organizationId: 'org_1',
       grantId: 'grant_1',
       clientName: 'Claude',
+      scopes: ['store:read'],
+      expiresAt: expect.any(Date),
     });
   });
 
