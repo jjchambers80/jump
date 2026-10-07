@@ -28,7 +28,7 @@ export default function SpotlightSection({ id, image, eyebrow = '', heading = ''
   return (
     <SectionShell type="Spotlight" props={common}>
       <section aria-labelledby={heading ? headingId : undefined} className="px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mx-auto flex max-w-4xl flex-col gap-5 rounded-[var(--theme-container-radius,1.5rem)] px-5 py-6 ring-1 ring-inset ring-gray-200 dark:ring-slate-700 sm:px-8 md:flex-row md:items-center md:gap-8">
+        <div className="mx-auto flex max-w-4xl flex-col gap-5 rounded-[var(--theme-container-radius,1.5rem)] bg-white px-5 py-6 ring-1 ring-inset ring-gray-200 dark:bg-slate-800 dark:ring-slate-700 sm:px-8 md:flex-row md:items-center md:gap-8">
           <div className="flex flex-1 items-center gap-4 sm:gap-6">
             {file && (
               // eslint-disable-next-line @next/next/no-img-element
