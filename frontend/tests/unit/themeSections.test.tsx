@@ -7,6 +7,7 @@ import { Render } from '@puckeditor/core';
 import { getPreset, presetDocument } from '@jump/theme';
 import ButtonBlock from '@/theme/sections/ButtonBlock';
 import CallToActionSection from '@/theme/sections/CallToActionSection';
+import SpotlightSection from '@/theme/sections/SpotlightSection';
 import HeroSection from '@/theme/sections/HeroSection';
 import HeroCarouselSection from '@/theme/sections/HeroCarouselSection';
 import SlideBlock from '@/theme/sections/SlideBlock';
@@ -355,6 +356,22 @@ describe('Tiers', () => {
     expect(html).toMatch(/<ul[^>]*role="list"[^>]*>.*<li[^>]*data-featured="true"[^>]*>.*<h3[^>]*>Pro<\/h3>.*Most popular.*For businesses/);
     expect(html).toMatch(/<li[^>]*>.*Logo on the event page<\/span><\/li><li[^>]*>.*5 tickets<\/span><\/li><\/ul>/);
     expect(html.match(/Most popular/g)).toHaveLength(1);
+  });
+});
+
+describe('Spotlight', () => {
+  it('a small whole badge beside the heading, text and buttons', () => {
+    const html = renderToStaticMarkup(
+      <SpotlightSection id="s" image={{ fileId: 'f1', alt: 'Proud supporter badge' }} eyebrow="Proud supporter" heading="Give back. Game on." text="We play for kids." Buttons={buttons('<a href="https://example.org">Donate</a>')} ctx={ctx()} />,
+    );
+    expect(html).toContain('data-section="Spotlight"');
+    expect(html).toContain('aria-labelledby="spotlight-s"');
+    expect(html).toMatch(/<img[^>]*alt="Proud supporter badge"[^>]*class="[^"]*object-contain/);
+    expect(html).toMatch(/Proud supporter<\/p><h2 id="spotlight-s"[^>]*>Give back. Game on.<\/h2>.*We play for kids.*Donate/);
+  });
+
+  it('no image tag without a file', () => {
+    expect(renderToStaticMarkup(<SpotlightSection id="s" heading="Hi" Buttons={noButtons} ctx={ctx()} />)).not.toContain('<img');
   });
 });
 

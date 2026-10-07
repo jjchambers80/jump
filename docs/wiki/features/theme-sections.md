@@ -6,7 +6,7 @@
 
 ## Overview
 
-Storefront pages are built from **sections** (Announcement bar, Header, Hero, Hero carousel, Rich text, Image with text, Feature grid, Stats, Checklist, Steps, Tiers, FAQ, Upcoming events, Call to action, Events hero, Event list, Footer, and Page content on full-width pages). A section can hold **blocks** (buttons, announcements, slides, features, stats, list items, steps, tiers, questions, footer columns). Organizers add, order, hide and edit them in the theme editor (Online store › Themes › Customize), which runs [Puck](https://puckeditor.com) over the same render functions the storefront uses, so the canvas is the store.
+Storefront pages are built from **sections** (Announcement bar, Header, Hero, Hero carousel, Rich text, Image with text, Feature grid, Stats, Checklist, Steps, Tiers, FAQ, Upcoming events, Call to action, Spotlight, Events hero, Event list, Footer, and Page content on full-width pages). A section can hold **blocks** (buttons, announcements, slides, features, stats, list items, steps, tiers, questions, footer columns). Organizers add, order, hide and edit them in the theme editor (Online store › Themes › Customize), which runs [Puck](https://puckeditor.com) over the same render functions the storefront uses, so the canvas is the store.
 
 ## Key Files
 
@@ -62,6 +62,7 @@ Two sections for pages that sell:
 - **Steps**: heading, intro and up to 6 **Step** blocks (title, rich text) as an `<ol role="list">`; the large `01`-style numbers are a CSS counter, so reordering never desyncs them.
 
 - **Tiers**: heading, intro and up to 6 **Tier** blocks (name, tagline, benefits one per line, **Highlight this tier** with its label, default "Most popular") as a `<ul role="list">` of cards, one column on phones and two from `md`. Each benefit line becomes a list item with a decorative check; a highlighted tier gets a brand ring and its label on the card's top edge, after the name in reading order.
+- **Spotlight**: a quiet band for a cause, partner or sponsor: a small **Badge or logo** (shown whole at 80/96 px, never cropped), an eyebrow, a short `h2`, one line of text and up to two buttons. Badge beside the text even on phones; buttons stack full width on phones and sit on the right from `md`. Raleigh Retro Gamers uses it on the home page for its Extra Life fundraiser.
 - **Hero: heading level**: `h1` for a hero that opens a full-width page without Page content (use it once), like Image with text.
 
 The Raleigh Retro Gamers Vendors page is the reference composition: `frontend/e2e/fixtures/vendorLanding.mjs` (served as `theme-vendors` in the SSR fixture, checked by `e2e/storefront-vendor-landing.spec.ts` with axe on phone and desktop). The Sponsors page (`sponsorLanding.mjs`, `theme-sponsors`, `e2e/storefront-sponsor-landing.spec.ts`) is the second: Hero, Feature grid, Tiers, Image with text, Steps, Call to action.
