@@ -50,7 +50,10 @@ export interface OrganizationHeaderProps {
    * then renders them at once instead of fetching after hydration.
    */
   menus?: PublicMenus;
-  /** Theme Header section: logo and name on the left (default) or centred above the menu. */
+  /**
+   * Theme Header section. `center` (default): menu flush left, logo centred,
+   * sign-in flush right. `left`: logo on the left, menu and sign-in on the right.
+   */
   logoPosition?: 'left' | 'center';
   /**
    * `bar`: the slim full-width header of map pages. Menu button always (drawer
@@ -76,8 +79,9 @@ function skipToContent(event: MouseEvent<HTMLAnchorElement>) {
 
 /**
  * Organization identity row at the top of every public storefront page:
- * logo (or the name when there is no logo) on the left, main menu and sign-in on the right. Minimal on
- * purpose: no background or border of its own, it sits on the page surface.
+ * main menu on the left, logo (or the name when there is no logo) centred,
+ * sign-in on the right. Minimal on purpose: no background or border of its
+ * own, it sits on the page surface.
  */
 export default function OrganizationHeader({
   organization,
@@ -86,7 +90,7 @@ export default function OrganizationHeader({
   nav = false,
   signIn = false,
   menus: serverMenus,
-  logoPosition = 'left',
+  logoPosition = 'center',
   layout = 'standard',
   subheader,
 }: OrganizationHeaderProps) {
@@ -114,7 +118,7 @@ export default function OrganizationHeader({
   const nameClass = logoSrc
     ? 'sr-only'
     : // Same size whether or not the name is the page's h1: one header on every page.
-      `min-w-0 break-words font-semibold tracking-tight text-gray-900 dark:text-slate-100 ${
+      `min-w-0 break-words text-center font-semibold tracking-tight text-gray-900 dark:text-slate-100 ${
         layout === 'bar' ? 'text-base sm:text-lg' : 'text-xl sm:text-2xl'
       }`;
   // The bar sits on a dark band: a white ring reads on it whatever the brand colour.
@@ -222,19 +226,45 @@ export default function OrganizationHeader({
     );
   }
 
+  if (logoPosition === 'center') {
+    // Equal side columns keep the logo on the page's centre line whatever the
+    // menu and sign-in widths; the negative margins put the menu's first label
+    // and the sign-in text (not their tap padding) on the page gutter.
+    return (
+      <header data-testid="organization-header" data-logo-position="center" className="relative w-full" style={logoVars}>
+        {skipLink}
+        <div className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 px-4 py-3 sm:gap-6 sm:px-6 sm:py-5 lg:px-8">
+          {/* min-h-11: as tall as the controls, which appear after hydration. */}
+          <div className="flex min-h-11 min-w-0 items-center justify-start">
+            {hasNav && (
+              <>
+                <StorefrontNav orgId={organization.id!} items={navItems} side="left" className="hidden md:block" />
+                <StorefrontNav
+                  orgId={organization.id!}
+                  items={navItems}
+                  variant="mobile"
+                  side="left"
+                  className="-ml-2.5 md:hidden"
+                />
+              </>
+            )}
+          </div>
+          <div className="flex min-w-0 justify-center">{identityLink}</div>
+          <div className="flex min-h-11 min-w-0 items-center justify-end">
+            {signInLink && <div className="-mr-3">{signInLink}</div>}
+          </div>
+        </div>
+      </header>
+    );
+  }
+
   return (
     <header data-testid="organization-header" className="relative w-full" style={logoVars}>
       {skipLink}
-      <div
-        className={`mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:gap-6 sm:px-6 sm:py-5 lg:px-8 ${
-          logoPosition === 'center' ? 'md:flex-col md:gap-3' : ''
-        }`}
-      >
+      <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:gap-6 sm:px-6 sm:py-5 lg:px-8">
         {/* min-h-11: as tall as the menu / sign-in controls, which appear after
             hydration, so their arrival never changes the header's height. */}
-        <div className={`flex min-h-11 min-w-0 flex-1 items-center ${logoPosition === 'center' ? 'md:justify-center' : ''}`}>
-          {identityLink}
-        </div>
+        <div className="flex min-h-11 min-w-0 flex-1 items-center">{identityLink}</div>
 
         {hasNav && (
           <StorefrontNav orgId={organization.id!} items={navItems} className="hidden md:block" />

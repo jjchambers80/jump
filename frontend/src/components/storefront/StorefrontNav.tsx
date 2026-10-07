@@ -18,7 +18,10 @@ interface StorefrontNavProps {
   items: PublicMenuItem[];
   /** Which rendering this instance owns; the header mounts one of each. */
   variant?: 'desktop' | 'mobile';
-  /** Mobile variant: which edge the drawer opens from (left beside a leading menu button). */
+  /**
+   * Which edge of the header the menu sits on. Mobile: the edge the drawer
+   * opens from. Desktop: items flush to that edge, dropdowns anchored to it.
+   */
   side?: 'left' | 'right';
   className?: string;
 }
@@ -70,7 +73,7 @@ function NavLink({
   );
 }
 
-function Dropdown({ item, orgId }: { item: PublicMenuItem; orgId: string }) {
+function Dropdown({ item, orgId, side }: { item: PublicMenuItem; orgId: string; side: 'left' | 'right' }) {
   const [open, setOpen] = useState(false);
   // Hover opens transiently; a click pins the panel open until the next click / Escape / outside click.
   const [pinned, setPinned] = useState(false);
@@ -137,7 +140,7 @@ function Dropdown({ item, orgId }: { item: PublicMenuItem; orgId: string }) {
       {open && (
         <div
           id={id}
-          className="absolute right-0 top-full z-30 mt-1 min-w-[14rem] rounded-xl bg-white p-2 shadow-lg ring-1 ring-black/5 dark:bg-slate-800 dark:ring-white/10"
+          className={`absolute ${side === 'left' ? 'left-0' : 'right-0'} top-full z-30 mt-1 min-w-[14rem] rounded-xl bg-white p-2 shadow-lg ring-1 ring-black/5 dark:bg-slate-800 dark:ring-white/10`}
         >
           <ul className="space-y-0.5">
             {item.children.map((child) => (
@@ -284,10 +287,11 @@ export default function StorefrontNav({
     return (
       <CurrentPathContext.Provider value={currentPath}>
         <nav aria-label="Main" className={className} data-testid="storefront-nav">
-          <ul className="flex flex-wrap items-center justify-end gap-x-1">
+          {/* -ml-3 on the left: the first label's text, not its padding, meets the page gutter. */}
+          <ul className={`flex flex-wrap items-center gap-x-1 ${side === 'left' ? '-ml-3 justify-start' : 'justify-end'}`}>
             {items.map((item) =>
               item.children.length ? (
-                <Dropdown key={item.id} item={item} orgId={orgId} />
+                <Dropdown key={item.id} item={item} orgId={orgId} side={side} />
               ) : (
                 <li key={item.id}>
                   <NavLink

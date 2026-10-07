@@ -152,7 +152,7 @@ export const SECTIONS = {
     limit: 1,
     locked: true,
     settings: {
-      logoPosition: select('Logo position', ['left', 'center']),
+      logoPosition: select('Logo position', ['left', 'center'], 'center'),
       menu: reference('Menu', 'menu'),
       sticky: select('Sticky header', ['off', 'always', 'scroll-up']),
       separator: toggle('Show separator line', false),

@@ -18,7 +18,7 @@ export interface HeaderSectionProps {
 }
 
 export default function HeaderSection({
-  logoPosition = 'left',
+  logoPosition = 'center',
   sticky = 'off',
   separator = false,
   showAccountLink = true,
