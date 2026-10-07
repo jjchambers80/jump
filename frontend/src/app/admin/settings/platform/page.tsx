@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useAccountFormat } from '@/lib/accountFormat';
+import { ReauthProvider, isReauthCancelled, useReauth } from '@/app/admin/account/useReauth';
 import { agentAccessApi, type AgentPlatformStats } from '@/services/api';
 import { AlertTriangleIcon, Trash2Icon, ShieldAlertIcon, BarChart2Icon, UsersIcon, ZapIcon } from 'lucide-react';
 
@@ -14,7 +15,8 @@ const switchOn = 'bg-indigo-600';
 const switchOff = 'bg-gray-200 dark:bg-slate-700';
 const thumb = 'block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition-transform';
 
-export default function PlatformSettingsPage() {
+function PlatformSettingsPage() {
+  const { withReauth } = useReauth();
   const { data: session, status } = useSession();
   const router = useRouter();
   const { formatDateTime } = useAccountFormat();
@@ -40,29 +42,35 @@ export default function PlatformSettingsPage() {
     }
   }, []);
 
+  useEffect(() => {
+    void loadAll();
+  }, [loadAll]);
+
   const handleToggle = useCallback(async () => {
     if (!settings) return;
     if (!window.confirm(settings?.agentAccessEnabled 
       ? 'Disable global agent access? This will immediately block ALL agent calls across the platform.' 
       : 'Enable global agent access? Organizations with their own switches on can connect AI agents.')) return;
     try {
-      await agentAccessApi.setPlatformSettings(!settings.agentAccessEnabled);
+      await withReauth(() => agentAccessApi.setPlatformSettings(!settings.agentAccessEnabled));
       setSettings({ agentAccessEnabled: !settings.agentAccessEnabled });
     } catch (e: any) {
+      if (isReauthCancelled(e)) return;
       setError(e.message || 'Failed to toggle');
     }
-  }, [settings]);
+  }, [settings, withReauth]);
 
   const handleRevokeAll = useCallback(async () => {
     const confirmation = prompt('Type "REVOKE ALL GRANTS" to confirm:');
     if (confirmation !== 'REVOKE ALL GRANTS') return;
     try {
-      await agentAccessApi.revokeAllPlatformGrants(confirmation);
+      await withReauth(() => agentAccessApi.revokeAllPlatformGrants(confirmation));
       await loadAll();
     } catch (e: any) {
+      if (isReauthCancelled(e)) return;
       setError(e.message || 'Failed to revoke all');
     }
-  }, [loadAll]);
+  }, [loadAll, withReauth]);
 
   // Check SYSTEM_ADMIN access
   const isSystemAdmin = (session?.user as { role?: string } | undefined)?.role === 'SYSTEM_ADMIN';
@@ -194,5 +202,13 @@ export default function PlatformSettingsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function PlatformSettingsPageWithReauth() {
+  return (
+    <ReauthProvider>
+      <PlatformSettingsPage />
+    </ReauthProvider>
   );
 }

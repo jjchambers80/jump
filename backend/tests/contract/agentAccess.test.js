@@ -4,6 +4,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from '@jest/globals';
 import request from 'supertest';
+import jwt from 'jsonwebtoken';
 import { staffToken, joinOrgByToken, cleanupStaff } from '../helpers/staff.js';
 import { issueReauthProof } from '../../src/middleware/recentAuth.js';
 const { default: app } = await import('../../src/api/server.js');
@@ -18,7 +19,8 @@ const emails = [
 ];
 
 const bearer = (token) => ['Authorization', `Bearer ${token}`];
-const reauth = (token) => ['X-Jump-Reauth', issueReauthProof(token).reauthToken];
+// A reauth proof is bound to the user id, not the session token.
+const reauth = (token) => ['X-Jump-Reauth', issueReauthProof(jwt.decode(token).sub).reauthToken];
 
 describe('Agent access contract (045C)', () => {
   let orgA;
@@ -130,12 +132,30 @@ describe('Agent access contract (045C)', () => {
       expect(res.status).toBe(403);
     });
 
-    it('ADMIN of org B cannot access org A settings (404/403)', async () => {
+    it("ADMIN of org B pointing X-Jump-Org at org A only ever reaches org B", async () => {
+      // activeOrgFor honours X-Jump-Org only for real memberships, so the
+      // request falls back to org B and org A is never touched.
+      const before = (await prisma.organization.findUnique({ where: { id: orgA.id } })).agentAccessEnabled;
       const res = await request(app)
-        .get('/admin/agent-access/settings')
+        .patch('/admin/agent-access/settings')
         .set(...bearer(adminTokenB))
+        .set(...reauth(adminTokenB))
+        .set('X-Jump-Org', orgA.id)
+        .send({ enabled: !before });
+      expect(res.status).toBe(200);
+      expect((await prisma.organization.findUnique({ where: { id: orgA.id } })).agentAccessEnabled).toBe(before);
+      await prisma.organization.update({ where: { id: orgB.id }, data: { agentAccessEnabled: false } });
+    });
+
+    it('an account-wide ADMIN who is only an ORGANIZER member of the store is refused', async () => {
+      const dual = await staffToken({ email: `dual@${TAG}.test`, role: 'ADMIN' });
+      await joinOrgByToken(dual, orgA.id, 'ORGANIZER');
+      const res = await request(app)
+        .get('/admin/agent-access/grants')
+        .set(...bearer(dual))
         .set('X-Jump-Org', orgA.id);
-      expect([403, 404]).toContain(res.status);
+      expect(res.status).toBe(403);
+      await cleanupStaff([`dual@${TAG}.test`]);
     });
   });
 
@@ -159,8 +179,7 @@ describe('Agent access contract (045C)', () => {
         .set(...bearer(adminTokenA))
         .set('X-Jump-Org', orgA.id);
       expect(res.status).toBe(200);
-      expect(res.body.grants.length).toBe(2);
-      expect(res.body.grants.every((g) => g.organizationId === orgA.id)).toBe(true);
+      expect(res.body.grants.map((g) => g.id).sort()).toEqual([grantA.id, grantB.id].sort());
     });
 
     it('POST /admin/agent-access/grants/:id/revoke revokes one grant (requires reauth)', async () => {
@@ -284,8 +303,10 @@ describe('Agent access contract (045C)', () => {
         .get('/admin/agent-access/my-grants')
         .set(...bearer(adminTokenA));
       expect(res.status).toBe(200);
-      expect(res.body.grants.length).toBe(2);
-      expect(res.body.grants.every((g) => g.userId === adminA.id)).toBe(true);
+      const ids = res.body.grants.map((g) => g.id);
+      expect(ids).toEqual(expect.arrayContaining([grantA.id, grantB.id]));
+      const others = await prisma.oAuthGrant.findMany({ where: { userId: { not: jwt.decode(adminTokenA).sub } }, select: { id: true } });
+      expect(ids.some((id) => others.some((o) => o.id === id))).toBe(false);
     });
 
     it('POST /admin/agent-access/my-grants/:id/revoke revokes own grant', async () => {
@@ -325,6 +346,7 @@ describe('Agent access contract (045C)', () => {
       const res = await request(app)
         .patch('/admin/platform/settings')
         .set(...bearer(systemToken))
+        .set(...reauth(systemToken))
         .send({ enabled: true });
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ agentAccessEnabled: true });
@@ -353,6 +375,7 @@ describe('Agent access contract (045C)', () => {
       const res = await request(app)
         .post('/admin/platform/revoke-all')
         .set(...bearer(systemToken))
+        .set(...reauth(systemToken))
         .send({ confirmation: 'WRONG' });
       expect(res.status).toBe(400);
       expect(res.body.code).toBe('INVALID_CONFIRMATION');
@@ -362,12 +385,25 @@ describe('Agent access contract (045C)', () => {
       const res = await request(app)
         .post('/admin/platform/revoke-all')
         .set(...bearer(systemToken))
+        .set(...reauth(systemToken))
         .send({ confirmation: 'REVOKE ALL GRANTS' });
       expect(res.status).toBe(200);
-      expect(res.body.count).toBeGreaterThanOrEqual(0);
 
-      const active = await prisma.oAuthGrant.count({ where: { revokedAt: null } });
+      // Other suites may create grants concurrently; check this suite's own.
+      const active = await prisma.oAuthGrant.count({
+        where: { revokedAt: null, organizationId: { in: [orgA.id, orgB.id] } },
+      });
       expect(active).toBe(0);
+    });
+
+    it('the platform switch and revoke-all need a step-up proof', async () => {
+      const toggle = await request(app).patch('/admin/platform/settings').set(...bearer(systemToken)).send({ enabled: false });
+      expect(toggle.status).toBe(401);
+      const revoke = await request(app)
+        .post('/admin/platform/revoke-all')
+        .set(...bearer(systemToken))
+        .send({ confirmation: 'REVOKE ALL GRANTS' });
+      expect(revoke.status).toBe(401);
     });
   });
 });

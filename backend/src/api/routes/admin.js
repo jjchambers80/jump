@@ -1829,65 +1829,84 @@ router.post('/customers/:contactId/anonymize', requireAdmin, requireRecentAuth, 
 
 /** POST /admin/customers/:contactId/send-sign-in-link — issue and email a passwordless sign-in link (spec 032 phase 1). */
 const sendSignInLinkLimiter = makeLimiter('BUYER_AUTH_REQUEST', LIMITS.BUYER_AUTH_REQUEST);
-router.post('/customers/:contactId/send-sign-in-link', sendSignInLinkLimiter, async (req, res, next) => {
-  try {
-    const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
-    if (!isUnscoped(scope) && !scope.organizationId) {
-      throw new NotFoundError('Customer not found');
-    }
+router.post(
+  '/customers/:contactId/send-sign-in-link',
+  sendSignInLinkLimiter,
+  async (req, res, next) => {
+    try {
+      const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
+      if (!isUnscoped(scope) && !scope.organizationId) {
+        throw new NotFoundError('Customer not found');
+      }
 
-    const contact = await prisma.contact.findFirst({
-      where: { id: req.params.contactId, ...(scope.organizationId && { organizationId: scope.organizationId }) },
-      select: {
-        id: true,
-        organizationId: true,
-        email: true,
-        firstName: true,
-        accountCreatedAt: true,
-      },
-    });
-    if (!contact) {
-      throw new NotFoundError('Customer not found');
-    }
-    if (!contact.accountCreatedAt) {
-      return res.status(422).json({
-        error: 'UnprocessableContent',
-        message: 'This customer does not have an account. They checked out as a guest.',
-        code: 'NO_ACCOUNT',
+      const contact = await prisma.contact.findFirst({
+        where: { id: req.params.contactId, ...(scope.organizationId && { organizationId: scope.organizationId }) },
+        select: {
+          id: true,
+          organizationId: true,
+          email: true,
+          firstName: true,
+          accountCreatedAt: true,
+        },
       });
-    }
+      if (!contact) {
+        throw new NotFoundError('Customer not found');
+      }
+      if (!contact.accountCreatedAt) {
+        return res.status(422).json({
+          error: 'UnprocessableContent',
+          message: 'This customer does not have an account. They checked out as a guest.',
+          code: 'NO_ACCOUNT',
+        });
+      }
 
-    const result = await buyerAuthService.requestLogin(contact.organizationId, contact.email);
-    if (!result.issued) {
-      // Rate limited or account not reachable — return 429
-      return res.status(429).json({
-        error: 'TooManyRequests',
-        message: 'This customer has received too many sign-in links recently. Try again later.',
-        code: 'SIGN_IN_LINK_RATE_LIMITED',
+      const result = await buyerAuthService.requestLogin(contact.organizationId, contact.email);
+      if (!result.issued) {
+        // Rate limited or account not reachable — return 429
+        return res.status(429).json({
+          error: 'TooManyRequests',
+          message: 'This customer has received too many sign-in links recently. Try again later.',
+          code: 'SIGN_IN_LINK_RATE_LIMITED',
+        });
+      }
+
+      // Send the email
+      const loginUrl = await buyerVerifyUrl(contact.organizationId, result.rawToken);
+      await emailService.sendBuyerLoginEmail({
+        contact: { email: contact.email, firstName: contact.firstName, organizationId: contact.organizationId },
+        loginUrl,
+        organization: result.contact?.organization || {},
+        code: result.rawCode || null,
       });
+
+      res.json({ sent: true });
+    } catch (error) {
+      next(error);
     }
-
-    // Send the email
-    const loginUrl = await buyerVerifyUrl(contact.organizationId, result.rawToken);
-    await emailService.sendBuyerLoginEmail({
-      contact: { email: contact.email, firstName: contact.firstName, organizationId: contact.organizationId },
-      loginUrl,
-      organization: result.contact?.organization || {},
-      code: result.rawCode || null,
-    });
-
-    res.json({ sent: true });
-  } catch (error) {
-    next(error);
   }
-});
+);
 
 // ── Agent access (spec 045C) ──
+
+// D3: only an ADMIN *member* of the active store manages its agent access.
+// requireAdmin alone checks the account-wide role, which an ADMIN of another
+// store also has.
+async function agentAdminOrg(req) {
+  const organizationId = await activeOrgFor(req);
+  if (req.user.role !== 'SYSTEM_ADMIN') {
+    const membership = await prisma.organizationMember.findUnique({
+      where: { userId_organizationId: { userId: req.user.id, organizationId } },
+      select: { role: true },
+    });
+    if (membership?.role !== 'ADMIN') throw new ForbiddenError('Only an Admin of this store can manage agent access');
+  }
+  return organizationId;
+}
 
 /** GET /admin/agent-access/settings — the store's agent access switch. ADMIN+. */
 router.get('/agent-access/settings', requireAdmin, async (req, res, next) => {
   try {
-    res.json(await agentAccessService.getSettings(await activeOrgFor(req)));
+    res.json(await agentAccessService.getSettings(await agentAdminOrg(req)));
   } catch (error) {
     next(error);
   }
@@ -1896,7 +1915,7 @@ router.get('/agent-access/settings', requireAdmin, async (req, res, next) => {
 /** PATCH /admin/agent-access/settings — ADMIN toggles the switch. Needs step-up proof. */
 router.patch('/agent-access/settings', requireAdmin, requireRecentAuth, async (req, res, next) => {
   try {
-    const orgId = await activeOrgFor(req);
+    const orgId = await agentAdminOrg(req);
     res.json(await agentAccessService.toggleSettings(orgId, !!req.body.enabled, req.user.id));
   } catch (error) {
     next(error);
@@ -1906,7 +1925,7 @@ router.patch('/agent-access/settings', requireAdmin, requireRecentAuth, async (r
 /** GET /admin/agent-access/grants — list every grant for the active org. ADMIN+. */
 router.get('/agent-access/grants', requireAdmin, async (req, res, next) => {
   try {
-    res.json({ grants: await agentAccessService.listGrants(await activeOrgFor(req)) });
+    res.json({ grants: await agentAccessService.listGrants(await agentAdminOrg(req)) });
   } catch (error) {
     next(error);
   }
@@ -1915,7 +1934,7 @@ router.get('/agent-access/grants', requireAdmin, async (req, res, next) => {
 /** POST /admin/agent-access/grants/:id/revoke — revoke one grant. ADMIN+. Needs step-up. */
 router.post('/agent-access/grants/:id/revoke', requireAdmin, requireRecentAuth, async (req, res, next) => {
   try {
-    const result = await agentAccessService.revokeGrant(await activeOrgFor(req), req.params.id);
+    const result = await agentAccessService.revokeGrant(await agentAdminOrg(req), req.params.id);
     if (!result) return res.status(404).json({ message: 'Grant not found' });
     res.json(result);
   } catch (error) {
@@ -1926,7 +1945,7 @@ router.post('/agent-access/grants/:id/revoke', requireAdmin, requireRecentAuth, 
 /** POST /admin/agent-access/grants/revoke-all — ADMIN revokes every grant for the org. Needs step-up. */
 router.post('/agent-access/grants/revoke-all', requireAdmin, requireRecentAuth, async (req, res, next) => {
   try {
-    res.json(await agentAccessService.revokeAllGrants(await activeOrgFor(req)));
+    res.json(await agentAccessService.revokeAllGrants(await agentAdminOrg(req)));
   } catch (error) {
     next(error);
   }
@@ -1935,7 +1954,7 @@ router.post('/agent-access/grants/revoke-all', requireAdmin, requireRecentAuth, 
 /** GET /admin/agent-access/audit-log — filtered audit log for the active org. ADMIN+. */
 router.get('/agent-access/audit-log', requireAdmin, async (req, res, next) => {
   try {
-    res.json(await agentAccessService.listAuditLog(await activeOrgFor(req), {
+    res.json(await agentAccessService.listAuditLog(await agentAdminOrg(req), {
       grantId: req.query.grantId,
       tool: req.query.tool,
       offset: parseInt(req.query.offset, 10) || 0,

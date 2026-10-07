@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useAccountFormat } from '@/lib/accountFormat';
+import { ReauthProvider, isReauthCancelled, useReauth } from '@/app/admin/account/useReauth';
 import { agentAccessApi, type AgentGrant, type AgentAuditLogEntry } from '@/services/api';
 import SettingsNav from '../SettingsNav';
 import SummaryRow from '../SummaryRow';
@@ -14,7 +15,8 @@ const switchOn = 'bg-indigo-600';
 const switchOff = 'bg-gray-200 dark:bg-slate-700';
 const thumb = 'block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition-transform';
 
-export default function AgentAccessSettingsPage() {
+function AgentAccessSettingsPage() {
+  const { withReauth } = useReauth();
   const { formatDateTime } = useAccountFormat();
   const [settings, setSettings] = useState<{ agentAccessEnabled: boolean } | null>(null);
   const [grants, setGrants] = useState<AgentGrant[]>([]);
@@ -47,6 +49,10 @@ export default function AgentAccessSettingsPage() {
     }
   }, [auditLimit]);
 
+  useEffect(() => {
+    void loadAll();
+  }, [loadAll]);
+
   const loadMoreAudit = useCallback(async () => {
     try {
       const a = await agentAccessApi.listAuditLog({
@@ -65,32 +71,35 @@ export default function AgentAccessSettingsPage() {
   const handleToggle = useCallback(async () => {
     if (!settings) return;
     try {
-      await agentAccessApi.toggleSettings(!settings.agentAccessEnabled);
+      await withReauth(() => agentAccessApi.toggleSettings(!settings.agentAccessEnabled));
       setSettings({ agentAccessEnabled: !settings.agentAccessEnabled });
     } catch (e: any) {
+      if (isReauthCancelled(e)) return;
       setError(e.message || 'Failed to toggle');
     }
-  }, [settings]);
+  }, [settings, withReauth]);
 
   const handleRevoke = useCallback(async (id: string) => {
     if (!window.confirm('Revoke this grant? The agent will immediately lose access to this store.')) return;
     try {
-      await agentAccessApi.revokeGrant(id);
+      await withReauth(() => agentAccessApi.revokeGrant(id));
       await loadAll();
     } catch (e: any) {
+      if (isReauthCancelled(e)) return;
       setError(e.message || 'Failed to revoke');
     }
-  }, [loadAll]);
+  }, [loadAll, withReauth]);
 
   const handleRevokeAll = useCallback(async () => {
     if (!window.confirm('Revoke ALL grants for this store? All connected agents will lose access immediately. This cannot be undone.')) return;
     try {
-      await agentAccessApi.revokeAllGrants();
+      await withReauth(() => agentAccessApi.revokeAllGrants());
       await loadAll();
     } catch (e: any) {
+      if (isReauthCancelled(e)) return;
       setError(e.message || 'Failed to revoke all');
     }
-  }, [loadAll]);
+  }, [loadAll, withReauth]);
 
   const handleAuditFilterChange = useCallback(async () => {
     setAuditOffset(0);
@@ -359,5 +368,13 @@ export default function AgentAccessSettingsPage() {
         </section>
       </div>
     </div>
+  );
+}
+
+export default function AgentAccessSettingsPageWithReauth() {
+  return (
+    <ReauthProvider>
+      <AgentAccessSettingsPage />
+    </ReauthProvider>
   );
 }

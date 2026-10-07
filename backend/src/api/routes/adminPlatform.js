@@ -4,6 +4,7 @@
 import express from 'express';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireSystemAdmin } from '../../middleware/rbac.js';
+import { requireRecentAuth } from '../../middleware/recentAuth.js';
 import agentAccessService from '../../services/AgentAccessService.js';
 
 const router = express.Router();
@@ -22,7 +23,7 @@ router.get('/settings', async (req, res, next) => {
 });
 
 /** PATCH /admin/platform/settings — toggle the global switch. Needs step-up. */
-router.patch('/settings', async (req, res, next) => {
+router.patch('/settings', requireRecentAuth, async (req, res, next) => {
   try {
     res.json(await agentAccessService.setPlatformSetting(!!req.body.enabled, req.user.id));
   } catch (error) {
@@ -40,7 +41,7 @@ router.get('/stats', async (req, res, next) => {
 });
 
 /** POST /admin/platform/revoke-all — revoke every grant platform-wide. Needs step-up. */
-router.post('/revoke-all', async (req, res, next) => {
+router.post('/revoke-all', requireRecentAuth, async (req, res, next) => {
   try {
     const { confirmation } = req.body;
     if (confirmation !== 'REVOKE ALL GRANTS') {

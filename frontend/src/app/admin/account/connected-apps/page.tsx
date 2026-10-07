@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useAccountFormat } from '@/lib/accountFormat';
 import { agentAccessApi, type AgentGrant } from '@/services/api';
 import AccountNav from '../AccountNav';
@@ -27,6 +27,10 @@ export default function ConnectedAppsPage() {
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    void loadGrants();
+  }, [loadGrants]);
 
   const handleRevoke = useCallback(async (id: string) => {
     if (!window.confirm('Revoke this grant? The agent will immediately lose access to the organization store.')) return;

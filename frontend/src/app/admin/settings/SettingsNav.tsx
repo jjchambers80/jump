@@ -23,6 +23,7 @@ const SECTIONS: Section[] = [
   { href: '/admin/settings/users', label: 'Users', roles: ['ADMIN', 'SYSTEM_ADMIN'] },
   { href: '/admin/settings/developers', label: 'Developers' },
   { href: '/admin/settings/agent-access', label: 'Agent access', roles: ['ADMIN', 'SYSTEM_ADMIN'] },
+  { href: '/admin/settings/platform', label: 'Platform', roles: ['SYSTEM_ADMIN'] },
 ];
 
 const active = 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300';
