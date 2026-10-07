@@ -22,7 +22,7 @@ export const ACCEPT_ATTRIBUTE =
 export type StoreFileKind = 'image' | 'video' | 'document';
 
 export interface StoreFileReference {
-  kind: 'PAGE' | 'BLOG_POST';
+  kind: 'PAGE' | 'BLOG_POST' | 'THEME' | 'GALLERY';
   targetId: string;
   title: string;
   href: string;
