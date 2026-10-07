@@ -395,7 +395,7 @@ v1 is split across cards 038B/C/S/E/G/H. Card S (MVP) ships the four starter hom
 | **RichText** | template | heading, body, alignment, width | `Button` max 2 | S |
 | **ImageWithText** | template | image, side, heading, body | `Button` max 2 | E |
 | **ImageBanner** | template | image, heading, height, overlay | `Button` max 2 | E |
-| **Gallery** | template | columns, aspect ratio | `GalleryImage` max 24 | E |
+| **Gallery** | template | **Superseded by spec 046** (2026-10-07): a reusable Content › Galleries record placed by reference (`gallery: reference(...)`), masonry + lightbox or carousel. No inline `GalleryImage` blocks | — | 046C |
 | **FAQ** | template | heading | `FAQItem` {question, answer richtext} max 30 | E |
 | **LogoStrip** | template | heading, grayscale | `Logo` {image, link?} max 24 | E |
 | **Testimonials** | template | heading, layout | `Testimonial` max 12 | E |
