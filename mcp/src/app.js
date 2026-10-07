@@ -11,6 +11,7 @@ import agentAuthService, { AGENT_RESOURCE, AgentAuthorizationError } from '../..
 import { OAUTH_SCOPES, oauthIssuer } from '../../backend/src/services/OAuthService.js';
 import logger from '../../backend/src/utils/logger.js';
 import { registerReadTools } from './tools.js';
+import { registerWriteTools } from './writeTools.js';
 
 export const RESOURCE_METADATA_URL = getOAuthProtectedResourceMetadataUrl(new URL(AGENT_RESOURCE));
 
@@ -82,6 +83,7 @@ export function createApp() {
     // authenticate() always sets req.auth; refuse rather than serve without it.
     if (!ctx.authInfo?.extra?.organizationId) throw new Error('Unauthenticated MCP request reached the handler');
     registerReadTools(server, ctx.authInfo.extra);
+    registerWriteTools(server, ctx.authInfo.extra);
     return server;
   }, { onerror: (error) => logger.warn('MCP request error', { error: error.message }) }));
 
