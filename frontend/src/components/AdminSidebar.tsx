@@ -31,6 +31,7 @@ import {
   Users,
   type LucideIcon,
 } from 'lucide-react';
+import EventimusLogo from './EventimusLogo';
 
 interface NavItem {
   label: string;
@@ -170,10 +171,10 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
           <div className="flex items-center justify-between px-4 py-4">
             <Link
               href="/admin/dashboard"
-              className="text-lg font-bold text-gray-900 dark:text-white"
+              className="rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
               onClick={onClose}
             >
-              Eventimus
+              <EventimusLogo />
             </Link>
             {/* Mobile close button */}
             <button

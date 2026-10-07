@@ -5,6 +5,7 @@
 
 import { FormEvent, useState } from 'react';
 import Link from 'next/link';
+import EventimusLogo from '@/components/EventimusLogo';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
 
@@ -36,6 +37,9 @@ export default function RecoverPage() {
   return (
     <div className="min-h-[60vh] flex items-center justify-center px-4">
       <div className="max-w-md w-full bg-white dark:bg-slate-800 rounded-xl shadow-lg p-8">
+        <div className="mb-6 flex justify-center">
+          <EventimusLogo className="h-6" />
+        </div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white text-center mb-2">Restore access</h1>
         {sent ? (
           <p role="status" className="text-sm text-gray-600 dark:text-slate-400 text-center">

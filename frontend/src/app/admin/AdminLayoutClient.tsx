@@ -9,6 +9,7 @@ import { usePathname } from 'next/navigation';
 import AdminRoute from '@/components/AdminRoute';
 import AdminSearch from '@/components/AdminSearch';
 import AdminSidebar from '@/components/AdminSidebar';
+import EventimusLogo from '@/components/EventimusLogo';
 import OrgSwitcher from '@/components/OrgSwitcher';
 import { OrgProvider } from '@/components/OrgContext';
 
@@ -56,8 +57,8 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
                       />
                     </svg>
                   </button>
-                  <span className="truncate text-lg font-bold text-gray-900 dark:text-white md:hidden">
-                    Eventimus
+                  <span className="md:hidden">
+                    <EventimusLogo className="h-4" />
                   </span>
                 </div>
 
