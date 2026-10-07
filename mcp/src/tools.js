@@ -10,12 +10,12 @@ import { PAID_ORDER_STATUSES } from '../../backend/src/services/paidStatuses.js'
 
 const MAX_RESULT_CHARS = 100_000;
 const PAGE_SIZE = 50;
-const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+export const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 
 const untrusted = (text) => (text == null ? null : { untrusted_text: String(text) });
 const money = (value) => (value == null ? null : Number(value));
 
-class ToolError extends Error {}
+export class ToolError extends Error {}
 
 const pageArgs = {
   page: z.number().int().min(1).optional().describe('1-based page number'),
@@ -79,7 +79,7 @@ async function listEvents(orgId, { page, status }) {
   return { events: events.map(eventSummary), total, page: page || 1, pageSize: PAGE_SIZE };
 }
 
-async function getEvent(orgId, { eventId }) {
+export async function getEvent(orgId, { eventId }) {
   const event = await prisma.event.findFirst({
     where: { OR: [{ id: eventId }, { slug: eventId }], venue: { organizationId: orgId } },
     select: {
@@ -103,7 +103,7 @@ async function listVenues(orgId) {
   return { venues };
 }
 
-async function getVenue(orgId, { venueId }) {
+export async function getVenue(orgId, { venueId }) {
   const venue = await prisma.venue.findFirst({
     where: { OR: [{ id: venueId }, { slug: venueId }], organizationId: orgId },
     select: { ...venueSelect, _count: { select: { events: true } } },
@@ -113,7 +113,7 @@ async function getVenue(orgId, { venueId }) {
   return { ...rest, eventCount: _count.events };
 }
 
-async function listPriceTiers(orgId, { eventId }) {
+export async function listPriceTiers(orgId, { eventId }) {
   const event = await prisma.event.findFirst({
     where: { id: eventId, venue: { organizationId: orgId } },
     select: { id: true, priceTiers: { select: tierSelect, orderBy: { displayOrder: 'asc' } } },
@@ -128,7 +128,7 @@ async function listPages(orgId) {
   return { pages: await prisma.page.findMany({ where: { organizationId: orgId }, select: pageSelect, orderBy: { title: 'asc' } }) };
 }
 
-async function getPage(orgId, { pageId }) {
+export async function getPage(orgId, { pageId }) {
   const page = await prisma.page.findFirst({
     where: { OR: [{ id: pageId }, { slug: pageId }], organizationId: orgId },
     select: { ...pageSelect, content: true, seoTitle: true, seoDescription: true },
@@ -152,7 +152,7 @@ async function listBlogPosts(orgId, { page }) {
   return { posts, total, page: page || 1, pageSize: PAGE_SIZE };
 }
 
-async function getBlogPost(orgId, { postId }) {
+export async function getBlogPost(orgId, { postId }) {
   const post = await prisma.blogPost.findFirst({
     where: { id: postId, organizationId: orgId },
     select: { ...postSelect, content: true, excerpt: true, seoTitle: true, seoDescription: true },
@@ -316,34 +316,45 @@ const TOOLS = [
 
 export const TOOL_NAMES = TOOLS.map(([name]) => name);
 
-function textResult(data, isError = false) {
+export function textResult(data, isError = false) {
   return { content: [{ type: 'text', text: JSON.stringify(data) }], ...(isError && { isError: true }) };
 }
 
+// Service errors a caller can act on (validation, not found, conflict) come
+// back as tool errors the agent can read; anything else is a server fault.
+const isCallerError = (error) => error instanceof ToolError || [400, 404, 409, 422].includes(error?.statusCode);
+
 /**
- * Register every read tool on a per-request server. `auth` is the result of
+ * Register one tool on a per-request server. `auth` is the result of
  * agentAuthorize() for this HTTP request; the organization comes only from it.
+ * `scope` is re-checked here even though tools a grant cannot use are never
+ * registered.
  */
+export function registerTool(server, auth, { name, title, description, shape, annotations = READ, scope = 'store:read', run, target }) {
+  server.registerTool(name, { title, description, inputSchema: z.object(shape).strict(), annotations }, async (args) => {
+    const audit = (outcome, summary, data) => agentAuditService.write({
+      authorization: auth, tool: name, args, summary, outcome, ...(data && target ? target(data) : {}),
+    });
+    try {
+      if (!auth.scopes.includes(scope)) throw new ToolError(`This connection does not have the ${scope} permission`);
+      const data = await run(auth.organizationId, args || {}, auth);
+      const text = JSON.stringify(data);
+      if (text.length > MAX_RESULT_CHARS) {
+        await audit('error', 'Result too large');
+        return textResult({ error: 'The result is too large. Ask for a narrower page or a single record.' }, true);
+      }
+      await audit('ok', `${name} ok`, data);
+      return { content: [{ type: 'text', text }] };
+    } catch (error) {
+      if (!isCallerError(error)) throw error;
+      await audit('error', error.message);
+      return textResult({ error: error.message }, true);
+    }
+  });
+}
+
 export function registerReadTools(server, auth) {
   for (const [name, title, description, shape, run] of TOOLS) {
-    server.registerTool(name, { title, description, inputSchema: z.object(shape).strict(), annotations: READ }, async (args) => {
-      const audit = (outcome, summary) => agentAuditService.write({
-        authorization: auth, tool: name, args, summary, outcome,
-      });
-      try {
-        const data = await run(auth.organizationId, args || {});
-        const text = JSON.stringify(data);
-        if (text.length > MAX_RESULT_CHARS) {
-          await audit('error', 'Result too large');
-          return textResult({ error: 'The result is too large. Ask for a narrower page or a single record.' }, true);
-        }
-        await audit('ok', `${name} ok`);
-        return { content: [{ type: 'text', text }] };
-      } catch (error) {
-        if (!(error instanceof ToolError)) throw error;
-        await audit('error', error.message);
-        return textResult({ error: error.message }, true);
-      }
-    });
+    registerTool(server, auth, { name, title, description, shape, run });
   }
 }
