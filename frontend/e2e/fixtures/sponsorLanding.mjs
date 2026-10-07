@@ -5,8 +5,16 @@
 
 const p = (text) => `<p>${text}</p>`;
 
-/** Content › Files ids of the event photos (3:2). The e2e fixture resolves these keys. */
-export const SPONSOR_PHOTOS = { crowd: 'vendor-outdoor-sale', partner: 'vendor-expo-badge' };
+/** Content › Files ids of the event photos. The e2e fixture resolves these keys. */
+export const SPONSOR_PHOTOS = {
+  crowd: 'vendor-outdoor-sale',
+  aerial: 'sponsor-aerial-market',
+  brand: 'vendor-mall-table',
+  partner: 'vendor-expo-badge',
+  esports: 'sponsor-esports',
+};
+
+const photo = (fileId, alt) => ({ fileId, alt });
 
 /** The four standard tiers, benefits verbatim from the original page. */
 export const SPONSOR_TIERS = [
@@ -106,19 +114,30 @@ export function sponsorLandingDocument(applyPageId, contactPageId, photos = SPON
           blocks: [
             {
               type: 'Feature',
-              props: { id: 'Why-crowds', title: 'Thousands at every event', text: 'Our events bring out thousands of dedicated gaming & geek crowds.' },
+              props: {
+                id: 'Why-crowds',
+                image: photo(photos.aerial, 'An aerial view of a Raleigh Retro Gamers outdoor market: rows of colorful vendor tents along park paths, filled with attendees.'),
+                title: 'Thousands at every event',
+                text: 'Our events bring out thousands of dedicated gaming & geek crowds.',
+              },
             },
             {
               type: 'Feature',
               props: {
                 id: 'Why-marketing',
+                image: photo(photos.brand, 'Visitors chat at a table draped in a Raleigh Retro Gamers banner at an indoor mall event, beside a video game artist’s display.'),
                 title: 'Seen long before the doors open',
                 text: 'We reach even more people through our extensive digital marketing in the days and months leading up to an event.',
               },
             },
             {
               type: 'Feature',
-              props: { id: 'Why-term', title: 'One event or the whole year', text: 'Sponsorships can be for single events or for the entire year.' },
+              props: {
+                id: 'Why-term',
+                image: photo(photos.partner, 'A vendor wearing a Raleigh Retro Gamers Summer Expo vendor badge talks with a customer across a table of boxed games at an outdoor market.'),
+                title: 'One event or the whole year',
+                text: 'Sponsorships can be for single events or for the entire year.',
+              },
             },
           ],
         },
@@ -140,10 +159,7 @@ export function sponsorLandingDocument(applyPageId, contactPageId, photos = SPON
           body:
             p('Beyond our standard tiers, we can customize an exclusive partnership catered to your exact needs and goals.') +
             p('Pick <strong>Custom Package</strong> on the sponsor application and tell us what you have in mind.'),
-          image: {
-            fileId: photos.partner,
-            alt: 'A vendor wearing a Raleigh Retro Gamers Summer Expo vendor badge talks with a customer across a table of boxed games at an outdoor market.',
-          },
+          image: photo(photos.esports, 'Esports players in headsets compete at a row of gaming PCs on a convention floor while spectators watch.'),
           imagePosition: 'right',
           blocks: [applyButton('Custom-apply', 'Ask about a custom package')],
         },
