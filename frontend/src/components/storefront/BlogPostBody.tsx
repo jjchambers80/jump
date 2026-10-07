@@ -4,9 +4,14 @@
 import Link from 'next/link';
 import { resolveAssetUrl } from '@/lib/assets';
 import { formatPublished, type PublicBlogPostSummary } from './BlogPostCard';
-import ContentHtml from './ContentHtml';
+import ContentWithGalleries from './ContentWithGalleries';
+import type { PublicGallery } from '@/lib/galleries';
 
-export type PublicBlogPost = PublicBlogPostSummary & { content: string };
+export type PublicBlogPost = PublicBlogPostSummary & {
+  content: string;
+  /** Spec 046D: galleries the post embeds, resolved for the organization. */
+  galleries?: Record<string, PublicGallery>;
+};
 
 export default function BlogPostBody({ post, orgId }: { post: PublicBlogPost; orgId: string }) {
   const image = post.featuredImage;
@@ -37,7 +42,7 @@ export default function BlogPostBody({ post, orgId }: { post: PublicBlogPost; or
             }}
           />
         )}
-        <ContentHtml html={post.content} className="mt-8" />
+        <ContentWithGalleries html={post.content} galleries={post.galleries} className="mt-8" />
         {post.tags.length > 0 && (
           <ul className="mt-8 flex flex-wrap gap-2" aria-label="Tags">
             {post.tags.map((tag) => (

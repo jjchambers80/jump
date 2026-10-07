@@ -5,6 +5,7 @@ import {
   moveBy,
   moveToSection,
   removeSection,
+  splitGalleryEmbeds,
   toInput,
   type DraftItem,
   type DraftSection,
@@ -80,5 +81,24 @@ describe('gallery draft helpers', () => {
         { title: null, items: [{ fileId: 'f-c', altText: null, decorative: false, caption: null }] },
       ],
     });
+  });
+});
+
+describe('splitGalleryEmbeds', () => {
+  const embed = (id: string, layout = 'masonry') => `<figure data-jump-gallery="${id}" data-layout="${layout}"></figure>`;
+
+  it('splits content at each embed, dropping empty text between', () => {
+    expect(splitGalleryEmbeds(`<p>a</p>${embed('g1', 'carousel')}${embed('g2')}<p>b</p>`)).toEqual([
+      { html: '<p>a</p>' },
+      { galleryId: 'g1', layout: 'carousel' },
+      { galleryId: 'g2', layout: 'masonry' },
+      { html: '<p>b</p>' },
+    ]);
+  });
+
+  it('leaves content without embeds whole, and ignores anything not in the sanitised shape', () => {
+    expect(splitGalleryEmbeds('<p>x</p>')).toEqual([{ html: '<p>x</p>' }]);
+    const odd = '<figure data-jump-gallery="g1" data-layout="grid"></figure><figure data-layout="masonry" data-jump-gallery="g1"></figure>';
+    expect(splitGalleryEmbeds(odd)).toEqual([{ html: odd }]);
   });
 });

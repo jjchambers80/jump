@@ -5,6 +5,13 @@
 import sanitize from 'sanitize-html';
 import { VIDEO_EMBED_ALLOW, VIDEO_EMBED_HOSTS, videoEmbedSrc } from './videoEmbed.js';
 
+// Gallery embeds (spec 046, the editor's Insert gallery): an empty figure
+// naming a Content › Galleries record and a layout. The storefront resolves
+// the id for the page's organization and renders the gallery in its place.
+const GALLERY_ID_RE = /^[a-z0-9]{1,64}$/;
+const GALLERY_LAYOUTS = ['masonry', 'carousel'];
+const GALLERY_FIGURE_RE = /(<figure data-jump-gallery="[a-z0-9]+" data-layout="(?:masonry|carousel)">)[\s\S]*?<\/figure>/g;
+
 export const CONTENT_HTML = {
   allowedTags: [
     'p',
@@ -43,6 +50,7 @@ export const CONTENT_HTML = {
     td: ['colspan', 'rowspan'],
     th: ['colspan', 'rowspan'],
     iframe: ['src', 'title', 'class', 'loading', 'allow', 'allowfullscreen', 'referrerpolicy'],
+    figure: ['data-jump-gallery', 'data-layout'],
   },
   allowedClasses: { iframe: ['jump-video'] },
   allowedSchemes: ['http', 'https', 'mailto', 'tel'],
@@ -61,6 +69,13 @@ export const CONTENT_HTML = {
       if (next.target === '_blank') next.rel = 'noopener';
       else delete next.target;
       return { tagName, attribs: next };
+    },
+    // Only a well-formed gallery embed keeps its attributes; any other figure has none.
+    figure: (tagName, attribs) => {
+      const id = attribs['data-jump-gallery'];
+      const layout = attribs['data-layout'];
+      if (!GALLERY_ID_RE.test(id ?? '') || !GALLERY_LAYOUTS.includes(layout)) return { tagName, attribs: {} };
+      return { tagName, attribs: { 'data-jump-gallery': id, 'data-layout': layout } };
     },
     iframe: (tagName, attribs) => {
       const src = videoEmbedSrc(attribs.src);
@@ -88,7 +103,11 @@ export const CONTENT_HTML = {
 
 export function sanitizeContentHtml(html) {
   if (typeof html !== 'string') return '';
-  return sanitize(html, CONTENT_HTML).trim();
+  const clean = sanitize(html, CONTENT_HTML);
+  if (!clean.includes('data-jump-gallery')) return clean.trim();
+  // A gallery embed renders nothing of its own: drop whatever was inside it,
+  // then sanitise again so a cut through nested markup stays balanced.
+  return sanitize(clean.replace(GALLERY_FIGURE_RE, '$1</figure>'), CONTENT_HTML).trim();
 }
 
 /** Plain text of sanitised HTML — for excerpts and meta descriptions. */

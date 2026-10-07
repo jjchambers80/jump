@@ -15,6 +15,7 @@ import {
   Heading2,
   Heading3,
   Image as ImageIcon,
+  Images,
   Italic,
   Link2,
   List,
@@ -30,6 +31,10 @@ import {
 import { useEffect, useRef, useState, type ReactNode, type Ref } from 'react';
 import InsertVideoDialog, { type VideoAttrs } from './InsertVideoDialog';
 import VideoEmbed from './VideoEmbed';
+import GalleryEmbed, { type GalleryAttrs } from './GalleryEmbed';
+import InsertGalleryDialog from './InsertGalleryDialog';
+import GalleryListLoader from './GalleryListLoader';
+import type { GallerySummary } from '@/lib/galleries';
 
 export interface RichTextEditorProps {
   value: string;
@@ -39,6 +44,8 @@ export interface RichTextEditorProps {
   placeholder?: string;
   /** Opens the Files picker; resolves with the image to insert or null. */
   onInsertImage?: () => Promise<{ url: string; alt: string } | null>;
+  /** Offer Insert gallery (spec 046D): pages and blog posts, whose storefront renders embeds. */
+  allowGalleries?: boolean;
   'aria-label'?: string;
   'aria-labelledby'?: string;
   testId?: string;
@@ -53,6 +60,13 @@ function isAllowedHref(href: string) {
   } catch {
     return false;
   }
+}
+
+/** The gallery embed under a node selection, or null. */
+function selectedGallery(editor: Editor | null): GalleryAttrs | null {
+  const selection = editor?.state.selection;
+  if (!(selection instanceof NodeSelection) || selection.node.type.name !== 'galleryEmbed') return null;
+  return { id: selection.node.attrs.id, layout: selection.node.attrs.layout };
 }
 
 /** The video under a node selection, or null. */
@@ -206,6 +220,7 @@ export default function RichTextEditor({
   variant = 'full',
   placeholder,
   onInsertImage,
+  allowGalleries = false,
   testId = 'rich-text-editor',
   ...aria
 }: RichTextEditorProps) {
@@ -213,6 +228,10 @@ export default function RichTextEditor({
   // null = closed; `editing` = the selected video's attributes (Edit video).
   const [videoDialog, setVideoDialog] = useState<{ editing: VideoAttrs | null } | null>(null);
   const videoButtonRef = useRef<HTMLButtonElement>(null);
+  const [galleryDialog, setGalleryDialog] = useState<{ editing: GalleryAttrs | null } | null>(null);
+  const [galleries, setGalleries] = useState<GallerySummary[] | null>(null);
+  const galleryTitles = useRef<Record<string, string>>({});
+  const galleryButtonRef = useRef<HTMLButtonElement>(null);
   const lastEmitted = useRef(value);
 
   const editor = useEditor({
@@ -238,6 +257,7 @@ export default function RichTextEditor({
               HTMLAttributes: { loading: 'lazy' },
             }),
             VideoEmbed,
+            GalleryEmbed.configure({ titles: () => galleryTitles.current }),
           ]
         : []),
     ],
@@ -245,6 +265,11 @@ export default function RichTextEditor({
     editorProps: {
       // Double-clicking a video opens it for editing.
       handleDoubleClickOn: (view, pos, node) => {
+        if (node.type.name === 'galleryEmbed') {
+          view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos)));
+          setGalleryDialog({ editing: { id: node.attrs.id, layout: node.attrs.layout } });
+          return true;
+        }
         if (node.type.name !== 'videoEmbed') return false;
         view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos)));
         setVideoDialog({ editing: { src: node.attrs.src, title: node.attrs.title } });
@@ -292,6 +317,11 @@ export default function RichTextEditor({
       editor.off('update', sync);
     };
   }, [editor, placeholder]);
+
+  const gallerySelected = useEditorState({
+    editor,
+    selector: ({ editor: current }) => selectedGallery(current) !== null,
+  });
 
   // The editor does not re-render on selection changes; this does, so the
   // Video button shows when it will edit the selected video.
@@ -430,6 +460,16 @@ export default function RichTextEditor({
             <CirclePlay className="h-4 w-4" aria-hidden />
           </ToolbarButton>
         )}
+        {full && allowGalleries && (
+          <ToolbarButton
+            label={gallerySelected ? 'Edit gallery' : 'Gallery'}
+            buttonRef={galleryButtonRef}
+            active={gallerySelected || galleryDialog !== null}
+            onClick={() => setGalleryDialog({ editing: selectedGallery(editor) })}
+          >
+            <Images className="h-4 w-4" aria-hidden />
+          </ToolbarButton>
+        )}
         {full && (
           <ToolbarButton
             label="Divider"
@@ -458,6 +498,31 @@ export default function RichTextEditor({
         editor={editor}
         className="rounded-b-md border border-gray-300 bg-white focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/30 dark:border-slate-600 dark:bg-slate-900"
       />
+      {allowGalleries && (
+        <GalleryListLoader
+          onLoad={(list) => {
+            galleryTitles.current = Object.fromEntries(list.map((g) => [g.id, g.title]));
+            setGalleries(list);
+          }}
+        />
+      )}
+      {galleryDialog && (
+        <InsertGalleryDialog
+          galleries={galleries}
+          editing={galleryDialog.editing}
+          returnFocusRef={galleryButtonRef}
+          onClose={() => setGalleryDialog(null)}
+          onSubmit={(gallery) => {
+            setGalleryDialog(null);
+            if (galleryDialog.editing) editor.chain().focus().updateAttributes('galleryEmbed', gallery).run();
+            else editor.chain().focus().setGalleryEmbed(gallery).run();
+          }}
+          onRemove={() => {
+            setGalleryDialog(null);
+            editor.chain().focus().deleteSelection().run();
+          }}
+        />
+      )}
       {videoDialog && (
         <InsertVideoDialog
           editing={videoDialog.editing}

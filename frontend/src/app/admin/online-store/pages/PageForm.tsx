@@ -185,6 +185,7 @@ export default function PageForm({
                   onChange={setContent}
                   aria-label="Page content"
                   placeholder="Write the page content…"
+                  allowGalleries
                   onInsertImage={() =>
                     new Promise((resolve) => {
                       pickImage.current = resolve;

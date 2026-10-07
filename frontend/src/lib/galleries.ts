@@ -243,6 +243,26 @@ export function flattenGallery(gallery: PublicGallery) {
 
 export type FlatGalleryItem = ReturnType<typeof flattenGallery>[number];
 
+export type ContentPart = { html: string } | { galleryId: string; layout: 'masonry' | 'carousel' };
+
+// The exact markup the backend sanitiser keeps (backend/src/utils/sanitizeHtml.js).
+const EMBED_RE = /<figure data-jump-gallery="([a-z0-9]+)" data-layout="(masonry|carousel)"><\/figure>/g;
+
+/** Stored content HTML split at gallery embeds, so each gallery renders in its place. */
+export function splitGalleryEmbeds(html: string): ContentPart[] {
+  const parts: ContentPart[] = [];
+  let last = 0;
+  for (const match of html.matchAll(EMBED_RE)) {
+    const before = html.slice(last, match.index);
+    if (before.trim()) parts.push({ html: before });
+    parts.push({ galleryId: match[1], layout: match[2] as 'masonry' | 'carousel' });
+    last = (match.index ?? 0) + match[0].length;
+  }
+  const rest = html.slice(last);
+  if (rest.trim() || !parts.length) parts.push({ html: rest });
+  return parts;
+}
+
 /** Backend srcsets hold API-relative URLs; make every candidate absolute. */
 export function resolveSrcset(srcset: string | null | undefined): string | undefined {
   if (!srcset) return undefined;

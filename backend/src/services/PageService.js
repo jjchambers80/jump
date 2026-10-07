@@ -7,6 +7,7 @@ import { findByPublicIdentifier } from '../utils/publicIdentifier.js';
 import pageTemplateService from './PageTemplateService.js';
 import { contactFormSection } from '../utils/pageTemplateManifest.js';
 import { FULL_WIDTH_TEMPLATE } from '@jump/theme';
+import galleryService from './GalleryService.js';
 
 /** Optional text field: trims, and stores an empty string as null. */
 function optionalText(value) {
@@ -74,7 +75,11 @@ class PageService {
    */
   async getPublic(organizationId, identifier, { includeHidden = false } = {}) {
     const { template: templateName, applicationFormId, applyLabel, ...row } = await this._findPublic(organizationId, identifier, { includeHidden });
-    const page = { ...row, applyForm: await publicApplyForm(organizationId, applicationFormId, applyLabel) };
+    const page = {
+      ...row,
+      applyForm: await publicApplyForm(organizationId, applicationFormId, applyLabel),
+      galleries: await galleryService.resolveInHtml(organizationId, row.content),
+    };
     if (templateName === FULL_WIDTH_TEMPLATE) {
       return { ...page, template: { name: FULL_WIDTH_TEMPLATE, sections: [{ type: 'page_content' }] } };
     }
