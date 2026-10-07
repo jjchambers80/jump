@@ -101,7 +101,7 @@ export default function EventCard({ event }: { event: EventSummary }) {
           <div aria-hidden className="absolute inset-x-0 top-0 -z-10 h-24 bg-gradient-to-b from-black/45 to-transparent" />
 
           {tile && (
-            <div className="absolute left-4 top-4 flex w-14 flex-col items-center rounded-2xl bg-white/95 py-2 text-gray-900 shadow-lg shadow-black/20 backdrop-blur dark:bg-slate-900/90 dark:text-slate-100">
+            <div className="absolute left-4 top-4 flex w-14 flex-col items-center rounded-2xl bg-white py-2 text-gray-900 shadow-lg shadow-black/20 dark:bg-slate-900 dark:text-slate-100">
               <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-brand-link">{tile.month}</span>
               <span className="text-2xl font-extrabold leading-none tracking-tight tabular-nums">{tile.day}</span>
               <span className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-slate-400">

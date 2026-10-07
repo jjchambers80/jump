@@ -7,6 +7,11 @@ export const WCAG_AA_NORMAL = 4.5;
 /** Page backgrounds from globals.css (--background in :root / .dark). */
 export const LIGHT_PAGE_BG = '#f9fafb';
 export const DARK_PAGE_BG = '#0f172a';
+/**
+ * The lightest dark surface brand links sit on: slate-800 cards (Steps, Tiers,
+ * EventStub) on the dark page. A tint that passes here passes on the page too.
+ */
+export const DARK_SURFACE_BG = '#1e293b';
 
 /** Platform defaults — must match today's bg-blue-600 / text-blue-600 / dark:text-indigo-400. */
 export const BRAND_DEFAULTS = {
@@ -147,13 +152,13 @@ function check(fg: string, bg: string): ContrastCheck {
 /**
  * Evaluate a brand color against the three places it is used:
  * button text on the brand background, link text on the light page, and the
- * derived dark-mode link tint on the dark page. `passesAA` requires all three ≥ 4.5:1.
+ * derived dark-mode link tint on the lightest dark surface (cards). `passesAA` requires all three ≥ 4.5:1.
  */
 export function evaluateBrandColor(input: string): BrandEvaluation {
   const hex = normalizeHex(input) ?? BRAND_DEFAULTS.brand;
   const buttonText = check(bestForeground(hex), hex);
   const linkLight = check(hex, LIGHT_PAGE_BG);
-  const linkDark = check(deriveAccessibleOn(DARK_PAGE_BG, hex), DARK_PAGE_BG);
+  const linkDark = check(deriveAccessibleOn(DARK_SURFACE_BG, hex), DARK_SURFACE_BG);
   return {
     hex,
     buttonText,
@@ -180,7 +185,7 @@ export function brandCssVars(input: string | null | undefined): BrandCssVars | u
     '--brand-hover': shade(hex, 12),
     '--brand-fg': bestForeground(hex),
     '--brand-link-light': hex,
-    '--brand-link-dark': deriveAccessibleOn(DARK_PAGE_BG, hex),
+    '--brand-link-dark': deriveAccessibleOn(DARK_SURFACE_BG, hex),
   };
 }
 
