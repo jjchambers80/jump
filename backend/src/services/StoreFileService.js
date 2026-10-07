@@ -406,6 +406,17 @@ class StoreFileService {
           href: `/admin/online-store/themes/${theme.id}/editor`,
         });
     }
+    if (byKind.has('GALLERY')) {
+      const galleries = await prisma.gallery.findMany({
+        where: { id: { in: [...byKind.get('GALLERY')] } },
+        select: { id: true, title: true },
+      });
+      for (const gallery of galleries)
+        titles.set(`GALLERY:${gallery.id}`, {
+          title: `Gallery ${gallery.title}`,
+          href: `/admin/content/galleries/${gallery.id}`,
+        });
+    }
     const seen = new Set();
     const out = [];
     for (const ref of references) {
