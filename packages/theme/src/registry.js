@@ -117,6 +117,17 @@ export const BLOCKS = {
       text: richtext('Text', { max: 2000 }),
     },
   },
+  Tier: {
+    label: 'Tier',
+    settings: {
+      name: text('Name', { max: 80, default: 'Tier' }),
+      tagline: text('Tagline', { max: 120, default: '' }),
+      // One benefit per line; each line is a list item.
+      benefits: textarea('Benefits (one per line)', { max: 3000, default: '' }),
+      featured: toggle('Highlight this tier', false),
+      badge: text('Highlight label', { max: 30, default: 'Most popular' }),
+    },
+  },
 };
 
 const buttons = { types: ['Button'], max: 2 };
@@ -212,6 +223,8 @@ export const SECTIONS = {
       layout: select('Layout', ['full-bleed', 'split-left', 'split-right']),
       overlay: range('Overlay opacity', 0, 80, { step: 10, unit: '%', default: 40 }),
       alignment: radio('Text alignment', ['center', 'left']),
+      // h1 when this hero opens a full-width page that has no Page content.
+      headingLevel: radio('Heading level', ['h2', 'h1']),
       // retro = monospace uppercase heading, larger subheading, both with a drop shadow.
       textStyle: select('Text style', ['default', 'retro']),
       // screen = the window's height minus whatever sits above the hero (header).
@@ -347,6 +360,18 @@ export const SECTIONS = {
       intro: textarea('Intro', { max: 300, default: '' }),
     },
     blocks: { types: ['Step'], max: 6 },
+  },
+  // Packages side by side (sponsorship levels, booth sizes), each with its
+  // benefits; one can be highlighted.
+  Tiers: {
+    label: 'Tiers',
+    category: 'Text',
+    groups: ['template'],
+    settings: {
+      heading: text('Heading', { max: 120, default: 'Packages' }),
+      intro: textarea('Intro', { max: 300, default: '' }),
+    },
+    blocks: { types: ['Tier'], max: 6 },
   },
   // The Content page's own title, text, template sections and Apply button
   // (StorefrontPageBody), placed among the theme sections of a full-width page.

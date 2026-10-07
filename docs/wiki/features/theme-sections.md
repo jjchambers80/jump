@@ -6,7 +6,7 @@
 
 ## Overview
 
-Storefront pages are built from **sections** (Announcement bar, Header, Hero, Hero carousel, Rich text, Image with text, Feature grid, Stats, Checklist, Steps, FAQ, Upcoming events, Call to action, Events hero, Event list, Footer, and Page content on full-width pages). A section can hold **blocks** (buttons, announcements, slides, features, stats, list items, steps, questions, footer columns). Organizers add, order, hide and edit them in the theme editor (Online store › Themes › Customize), which runs [Puck](https://puckeditor.com) over the same render functions the storefront uses, so the canvas is the store.
+Storefront pages are built from **sections** (Announcement bar, Header, Hero, Hero carousel, Rich text, Image with text, Feature grid, Stats, Checklist, Steps, Tiers, FAQ, Upcoming events, Call to action, Events hero, Event list, Footer, and Page content on full-width pages). A section can hold **blocks** (buttons, announcements, slides, features, stats, list items, steps, tiers, questions, footer columns). Organizers add, order, hide and edit them in the theme editor (Online store › Themes › Customize), which runs [Puck](https://puckeditor.com) over the same render functions the storefront uses, so the canvas is the store.
 
 ## Key Files
 
@@ -61,7 +61,10 @@ Two sections for pages that sell:
 - **Checklist**: heading, intro, 1-3 columns and up to 30 **List item** blocks with a check (wanted) or cross (not allowed) marker. Every item carries both icons and the section hides one, so blocks need no section props; the icons are decorative and the heading carries the meaning. The slot is a `<ul role="list">` (a `forwardRef` element passed as the slot's `as`, because Puck forwards only `className`/`style`/`ref`).
 - **Steps**: heading, intro and up to 6 **Step** blocks (title, rich text) as an `<ol role="list">`; the large `01`-style numbers are a CSS counter, so reordering never desyncs them.
 
-The Raleigh Retro Gamers Vendors page is the reference composition: `frontend/e2e/fixtures/vendorLanding.mjs` (served as `theme-vendors` in the SSR fixture, checked by `e2e/storefront-vendor-landing.spec.ts` with axe on phone and desktop).
+- **Tiers**: heading, intro and up to 6 **Tier** blocks (name, tagline, benefits one per line, **Highlight this tier** with its label, default "Most popular") as a `<ul role="list">` of cards, one column on phones and two from `md`. Each benefit line becomes a list item with a decorative check; a highlighted tier gets a brand ring and its label on the card's top edge, after the name in reading order.
+- **Hero: heading level**: `h1` for a hero that opens a full-width page without Page content (use it once), like Image with text.
+
+The Raleigh Retro Gamers Vendors page is the reference composition: `frontend/e2e/fixtures/vendorLanding.mjs` (served as `theme-vendors` in the SSR fixture, checked by `e2e/storefront-vendor-landing.spec.ts` with axe on phone and desktop). The Sponsors page (`sponsorLanding.mjs`, `theme-sponsors`, `e2e/storefront-sponsor-landing.spec.ts`) is the second: Hero, Feature grid, Tiers, Image with text, Steps, Call to action.
 
 ## Full-width pages
 

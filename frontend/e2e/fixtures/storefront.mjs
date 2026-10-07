@@ -4,6 +4,7 @@
 
 import { getPreset, resolveContent, resolveSettings } from '@jump/theme';
 import { VENDOR_PHOTOS, vendorLandingDocument } from './vendorLanding.mjs';
+import { SPONSOR_PHOTOS, sponsorLandingDocument } from './sponsorLanding.mjs';
 
 const preset = getPreset('eventimus-default');
 /** The Events template every fixture serves for `page=events`. */
@@ -288,6 +289,26 @@ export const FIXTURES = {
         },
       },
       pageDocuments: { 'p-vendors': vendorLandingDocument('p-apply') },
+    };
+  })(),
+  // The Sponsors landing page (sponsorLanding.mjs), same store.
+  'theme-sponsors': (() => {
+    const base = render('theme-sponsors', { organization: { name: 'Raleigh Retro Gamers', brandColor: '#be185d', themeMode: 'SYSTEM' } });
+    const files = Object.fromEntries(Object.values(SPONSOR_PHOTOS).map((id) => [id, { url: PARITY_COVER, alt: null, width: 1536, height: 1024 }]));
+    const links = {
+      ...base.resolved.links,
+      'PAGE:p-apply': '/organizations/theme-sponsors/pages/sponsor-application',
+      'PAGE:p-contact': '/organizations/theme-sponsors/pages/contact',
+    };
+    return {
+      render: { ...base, resolved: { ...base.resolved, files, links } },
+      routes: {
+        '/public/pages/sponsors': {
+          organization: base.organization,
+          page: { id: 'p-sponsors', title: 'Sponsors', slug: 'sponsors', content: '', template: { name: 'full-width', sections: [{ type: 'page_content' }] } },
+        },
+      },
+      pageDocuments: { 'p-sponsors': sponsorLandingDocument('p-apply', 'p-contact') },
     };
   })(),
   'theme-dark': { render: render('theme-dark', { organization: { themeMode: 'DARK', brandColor: '#be185d' } }), routes: {} },

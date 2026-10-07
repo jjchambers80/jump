@@ -18,6 +18,7 @@ export interface HeroProps {
   overlay?: number;
   alignment?: 'center' | 'left';
   textStyle?: 'default' | 'retro';
+  headingLevel?: 'h2' | 'h1';
   height?: 'small' | 'medium' | 'large' | 'screen';
   mobileLayout?: 'stacked' | 'button-bottom';
   colorScheme?: string;
@@ -95,6 +96,7 @@ export default function HeroSection({
   overlay = 40,
   alignment = 'center',
   textStyle = 'default',
+  headingLevel = 'h2',
   height = 'medium',
   mobileLayout = 'stacked',
   Buttons,
@@ -112,6 +114,7 @@ export default function HeroSection({
   const headingId = `hero-${id}`;
   const centered = alignment === 'center';
   const retro = textStyle === 'retro';
+  const Heading = headingLevel === 'h1' ? 'h1' : 'h2';
   const shadow = retro ? { textShadow: '2px 2px 4px rgba(0, 0, 0, 0.5)' } : undefined;
   // Phones: text centered in the space above full-width buttons pinned to the
   // bottom. Full-bleed only; sm and up keep the stacked layout.
@@ -120,9 +123,9 @@ export default function HeroSection({
     <div className={`${centered ? 'mx-auto text-center' : ''} max-w-2xl ${bottom ? 'max-sm:flex max-sm:w-full max-sm:flex-1 max-sm:flex-col' : ''}`}>
       <div className={bottom ? 'max-sm:my-auto' : undefined}>
       {heading && (
-        <h2 id={headingId} style={retro ? { ...shadow, fontFamily: 'monospace' } : undefined} className={`text-4xl font-bold tracking-tight sm:text-5xl ${retro ? 'uppercase' : ''} ${onImage ? 'text-white' : 'text-gray-900 dark:text-slate-100'}`}>
+        <Heading id={headingId} style={retro ? { ...shadow, fontFamily: 'monospace' } : undefined} className={`text-4xl font-bold tracking-tight sm:text-5xl ${retro ? 'uppercase' : ''} ${onImage ? 'text-white' : 'text-gray-900 dark:text-slate-100'}`}>
           {heading}
-        </h2>
+        </Heading>
       )}
       {subheading && (
         <p style={shadow} className={`mt-4 ${retro ? 'text-2xl' : 'text-lg'} ${onImage ? 'text-white/90' : 'text-gray-600 dark:text-slate-300'}`}>{subheading}</p>
