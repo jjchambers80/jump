@@ -278,6 +278,27 @@ describe('Content › Galleries contract', () => {
     expect(await galleryService.resolveForOrg(otherOrganization.id, [gallery.id])).toEqual({});
   });
 
+  it('resolves Gallery sections for themed pages, organization-scoped', async () => {
+    const { default: themeService } = await import('../../src/services/ThemeService.js');
+    const { galleryIdsInThemeJson } = await import('@jump/theme');
+    const documents = {
+      template: {
+        content: [
+          { type: 'Gallery', props: { id: 'G1', gallery: gallery.id } },
+          { type: 'Hero', props: { id: 'H1', gallery: 'not-a-gallery-section' } },
+        ],
+      },
+    };
+    expect(galleryIdsInThemeJson(documents)).toEqual([gallery.id]);
+    const mine = await themeService._resolve(organization.id, { documents }, { events: false });
+    expect(Object.keys(mine.galleries)).toEqual([gallery.id]);
+    const theirs = await themeService._resolve(otherOrganization.id, { documents }, { events: false });
+    expect(theirs.galleries).toEqual({});
+    // The editor preview resolves every gallery of the store, placed or not.
+    const preview = await themeService._resolve(organization.id, { documents: {} }, { events: false, allGalleries: true });
+    expect(Object.keys(preview.galleries)).toContain(gallery.id);
+  });
+
   it('deletes a gallery and clears its file references', async () => {
     const response = await request(app).delete(`/admin/galleries/${gallery.id}`).set(...auth(organizerToken));
     expect(response.status).toBe(204);

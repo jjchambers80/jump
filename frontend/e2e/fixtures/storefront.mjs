@@ -242,6 +242,35 @@ const videoDocument = {
   ],
 };
 
+/** Photo galleries (spec 046): masonry with four sections, then a carousel with autoplay. */
+const galleryPhoto = (id, alt, caption = null, width = 1200, height = 800) => ({
+  id,
+  src: PARITY_COVER,
+  srcset: `${PARITY_COVER} ${width}w`,
+  width,
+  height,
+  alt,
+  caption,
+});
+export const GALLERY = {
+  id: 'gal-expo',
+  title: 'Retro Expo 2031',
+  sections: [
+    { id: 's-floor', title: 'Main floor', items: [galleryPhoto('p1', 'Crowd at the arcade row', 'Saturday noon'), galleryPhoto('p2', 'Pinball tournament', null, 800, 1200)] },
+    { id: 's-cosplay', title: 'Cosplay', items: [galleryPhoto('p3', 'Costume contest winners')] },
+    { id: 's-panels', title: 'Panels', items: [galleryPhoto('p4', '', null, 1200, 1200)] },
+    { id: 's-night', title: 'After dark', items: [galleryPhoto('p5', 'Neon signs at night'), galleryPhoto('p6', 'Closing party')] },
+  ],
+};
+const galleryDocument = {
+  root: { props: { title: 'Photos' } },
+  content: [
+    { type: 'Gallery', props: { id: 'Gallery-masonry', gallery: 'gal-expo', heading: 'Photos from the show', showCaptions: true } },
+    { type: 'Gallery', props: { id: 'Gallery-carousel', gallery: 'gal-expo', heading: 'Highlights', layout: 'carousel', autoplay: '5s' } },
+    { type: 'Gallery', props: { id: 'Gallery-missing', gallery: 'deleted-gallery', heading: 'Gone' } },
+  ],
+};
+
 /** orgId → { render, routes, gate? } */
 export const FIXTURES = {
   'theme-home': { render: render('theme-home', { template: homeDocument }), routes: {} },
@@ -254,6 +283,10 @@ export const FIXTURES = {
     const base = render('theme-video', { template: videoDocument });
     const files = { cover: { url: PARITY_COVER, alt: null }, loop: { url: '/uploads/hero-loop.mp4', alt: null, mimeType: 'video/mp4' } };
     return { render: { ...base, resolved: { ...base.resolved, files } }, routes: {} };
+  })(),
+  'theme-gallery': (() => {
+    const base = render('theme-gallery', { template: galleryDocument });
+    return { render: { ...base, resolved: { ...base.resolved, galleries: { 'gal-expo': GALLERY } } }, routes: {} };
   })(),
   'theme-parity': { render: render('theme-parity', { organization: { coverUrl: PARITY_COVER } }), routes: {} },
   'theme-parity-dark': {

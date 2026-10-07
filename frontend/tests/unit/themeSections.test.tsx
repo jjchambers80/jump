@@ -397,7 +397,7 @@ describe('Puck render config', () => {
   });
 
   it('drops section types it has no component for', () => {
-    const doc = { root: { props: {} }, content: [{ type: 'Gallery', props: { id: 'g' } }, { type: 'Hero', props: { id: 'h', heading: 'Hi' } }] };
+    const doc = { root: { props: {} }, content: [{ type: 'NotASection', props: { id: 'g' } }, { type: 'Hero', props: { id: 'h', heading: 'Hi' } }] };
     expect(renderable(doc).content.map((s) => s.type)).toEqual(['Hero']);
   });
 });

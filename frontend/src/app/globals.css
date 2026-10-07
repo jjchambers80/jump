@@ -290,3 +290,13 @@ body {
     transform: translateY(0);
   }
 }
+
+/* Gallery lightbox (spec 046): the next photo settles in; motion-safe only. */
+@keyframes gallery-fade {
+  from {
+    opacity: 0.4;
+  }
+  to {
+    opacity: 1;
+  }
+}

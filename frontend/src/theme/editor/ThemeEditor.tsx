@@ -14,6 +14,7 @@ import ActionsMenu from '@/components/ActionsMenu';
 import { useThemeMode } from '@/components/ThemeProvider';
 import { useOrg } from '@/components/OrgContext';
 import { useMenusApi } from '@/app/admin/content/menus/useMenusApi';
+import { useGalleriesApi } from '@/app/admin/content/galleries/useGalleriesApi';
 import type { StoreFile } from '@/lib/content';
 import { codeHref, themesApi, type ThemeDetail, type ThemeDocumentData } from '@/lib/themes';
 import api, { type OnlineStorePage } from '@/services/api';
@@ -116,6 +117,7 @@ const sectionsPlugin: Plugin = {
 export default function ThemeEditor({ themeId }: { themeId: string }) {
   const router = useRouter();
   const menusApi = useMenusApi();
+  const galleriesApi = useGalleriesApi();
   // Admin calls are org-scoped through X-Jump-Org, which the org switcher
   // sets once it has loaded: fetching earlier sends none, and a SYSTEM_ADMIN
   // (no memberships) gets 404 "No organization is assigned".
@@ -141,6 +143,7 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
   const [pagePayloads, setPagePayloads] = useState<Record<string, PublicPage>>({});
   const [mountKey, setMountKey] = useState(0);
   const [menus, setMenus] = useState<{ id: string; title: string }[]>([]);
+  const [galleries, setGalleries] = useState<{ id: string; title: string }[]>([]);
   const [files, setFiles] = useState<Record<string, { url: string; width: number | null; height: number | null; alt: string | null }>>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<{ message: string; details?: string[] } | null>(null);
@@ -187,6 +190,10 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
       .list()
       .then((r) => setMenus(r.menus.map((m) => ({ id: m.id, title: m.title }))))
       .catch(() => setMenus([]));
+    galleriesApi
+      .list()
+      .then((r) => setGalleries(r.galleries.map((g) => ({ id: g.id, title: g.title }))))
+      .catch(() => setGalleries([]));
     try {
       const raw = window.sessionStorage.getItem(BACKUP_KEY + themeId);
       if (raw) setBackup(JSON.parse(raw));
@@ -216,7 +223,7 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
       (getPreset(loaded?.theme.presetKey ?? 'eventimus-default')?.settings.colors.schemes ?? [])).map((s: { id: string; name: string }) => ({ id: s.id, name: s.name })),
     [loaded],
   );
-  const config = useMemo(() => buildEditorConfig({ schemes, menus }, page), [schemes, menus, page]);
+  const config = useMemo(() => buildEditorConfig({ schemes, menus, galleries }, page), [schemes, menus, galleries, page]);
 
   const metadata = useMemo(() => {
     if (!loaded) return {};

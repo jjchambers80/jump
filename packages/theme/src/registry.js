@@ -248,6 +248,24 @@ export const SECTIONS = {
     },
     blocks: { types: ['Slide'], max: 6 },
   },
+  // Spec 046: a Content › Galleries record, placed by reference. Display
+  // options live here, so one gallery can be a carousel on one page and
+  // masonry on another.
+  Gallery: {
+    label: 'Photo gallery',
+    category: 'Media',
+    groups: ['template'],
+    settings: {
+      gallery: reference('Gallery', 'gallery'),
+      heading: text('Heading', { max: 120, default: '' }),
+      layout: select('Layout', ['masonry', 'carousel'], 'masonry'),
+      columnsDesktop: range('Columns on desktop', 2, 5, { default: 3 }),
+      columnsMobile: range('Columns on phones', 1, 2, { default: 2 }),
+      showCaptions: toggle('Show captions', false),
+      showSectionTitles: toggle('Show section titles', true),
+      autoplay: select('Autoplay (carousel)', ['off', '5s', '8s'], 'off'),
+    },
+  },
   UpcomingEvents: {
     label: 'Upcoming events',
     category: 'Events',
