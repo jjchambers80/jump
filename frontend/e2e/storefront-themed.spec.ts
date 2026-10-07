@@ -336,6 +336,19 @@ test.describe('starter homepage sections (038S)', () => {
     await expect(carousel.getByRole('link', { name: 'See all events' })).toHaveAttribute('href', '/organizations/theme-blocks/events');
   });
 
+  test('hero carousel: the pause button comes first and phones get arrows (spec 046E)', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto('/organizations/theme-blocks');
+    const carousel = page.getByRole('region', { name: 'Featured' });
+    // APG: the rotation control is the first control in the carousel's tab order.
+    await expect(carousel.getByRole('button').first()).toHaveAccessibleName('Pause slides');
+    const next = carousel.getByRole('button', { name: 'Next slide' });
+    await expect(next).toBeVisible();
+    await next.click();
+    await expect(carousel.getByRole('button', { name: 'Slide 2 of 3' })).toHaveAttribute('aria-current', 'true');
+    await expect(carousel.getByRole('button', { name: 'Previous slide' })).toBeVisible();
+  });
+
   test('hero carousel never rotates on its own under reduced motion (spec 041)', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.goto('/organizations/theme-blocks');
