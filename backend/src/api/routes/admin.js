@@ -61,6 +61,7 @@ import { buyerVerifyUrl } from '../../utils/storefrontUrl.js';
 import mapService from '../../services/MapService.js';
 import { PAID_ORDER_STATUSES } from '../../services/paidStatuses.js';
 import { activeOrgFor } from './adminScope.js';
+import agentAccessService from '../../services/AgentAccessService.js';
 
 const router = express.Router();
 
@@ -1884,5 +1885,106 @@ router.post(
     }
   }
 );
+
+// ── Agent access (spec 045C) ──
+
+// D3: only an ADMIN *member* of the active store manages its agent access.
+// requireAdmin alone checks the account-wide role, which an ADMIN of another
+// store also has.
+async function agentAdminOrg(req) {
+  const organizationId = await activeOrgFor(req);
+  if (req.user.role !== 'SYSTEM_ADMIN') {
+    const membership = await prisma.organizationMember.findUnique({
+      where: { userId_organizationId: { userId: req.user.id, organizationId } },
+      select: { role: true },
+    });
+    if (membership?.role !== 'ADMIN') throw new ForbiddenError('Only an Admin of this store can manage agent access');
+  }
+  return organizationId;
+}
+
+/** GET /admin/agent-access/settings — the store's agent access switch. ADMIN+. */
+router.get('/agent-access/settings', requireAdmin, async (req, res, next) => {
+  try {
+    res.json(await agentAccessService.getSettings(await agentAdminOrg(req)));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** PATCH /admin/agent-access/settings — ADMIN toggles the switch. Needs step-up proof. */
+router.patch('/agent-access/settings', requireAdmin, requireRecentAuth, async (req, res, next) => {
+  try {
+    const orgId = await agentAdminOrg(req);
+    res.json(await agentAccessService.toggleSettings(orgId, !!req.body.enabled, req.user.id));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** GET /admin/agent-access/grants — list every grant for the active org. ADMIN+. */
+router.get('/agent-access/grants', requireAdmin, async (req, res, next) => {
+  try {
+    res.json({ grants: await agentAccessService.listGrants(await agentAdminOrg(req)) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** POST /admin/agent-access/grants/:id/revoke — revoke one grant. ADMIN+. Needs step-up. */
+router.post('/agent-access/grants/:id/revoke', requireAdmin, requireRecentAuth, async (req, res, next) => {
+  try {
+    const result = await agentAccessService.revokeGrant(await agentAdminOrg(req), req.params.id);
+    if (!result) return res.status(404).json({ message: 'Grant not found' });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** POST /admin/agent-access/grants/revoke-all — ADMIN revokes every grant for the org. Needs step-up. */
+router.post('/agent-access/grants/revoke-all', requireAdmin, requireRecentAuth, async (req, res, next) => {
+  try {
+    res.json(await agentAccessService.revokeAllGrants(await agentAdminOrg(req)));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** GET /admin/agent-access/audit-log — filtered audit log for the active org. ADMIN+. */
+router.get('/agent-access/audit-log', requireAdmin, async (req, res, next) => {
+  try {
+    res.json(await agentAccessService.listAuditLog(await agentAdminOrg(req), {
+      grantId: req.query.grantId,
+      tool: req.query.tool,
+      offset: parseInt(req.query.offset, 10) || 0,
+      limit: Math.min(parseInt(req.query.limit, 10) || 50, 200),
+    }));
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── Connected apps (spec 045C) — the calling user's own grants across orgs ──
+
+/** GET /admin/agent-access/my-grants — the authenticated user's grants across all orgs. */
+router.get('/agent-access/my-grants', requireOrganizer, async (req, res, next) => {
+  try {
+    res.json({ grants: await agentAccessService.listMyGrants(req.user.id) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** POST /admin/agent-access/my-grants/:id/revoke — user revokes their own grant. */
+router.post('/agent-access/my-grants/:id/revoke', requireOrganizer, async (req, res, next) => {
+  try {
+    const result = await agentAccessService.revokeMyGrant(req.user.id, req.params.id);
+    if (!result) return res.status(404).json({ message: 'Grant not found' });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
 
 export default router;

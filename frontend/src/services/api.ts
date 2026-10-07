@@ -833,6 +833,95 @@ export interface OrderScanResult {
   tickets: OrderTicketPreview[];
 }
 
+// ===== Agent Access (spec 045C) =====
+
+export interface AgentAccessSettings {
+  agentAccessEnabled: boolean;
+}
+
+export interface AgentGrant {
+  id: string;
+  userId?: string;
+  member?: { name: string; email: string };
+  client: { name: string; clientId: string; kind: string };
+  scopes: string[];
+  createdAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+  revokedReason?: string;
+  organizationId?: string;
+  organizationName?: string;
+}
+
+export interface AgentGrantList {
+  grants: AgentGrant[];
+}
+
+export interface AgentAuditLogEntry {
+  id: string;
+  userId: string;
+  user: { name: string; email: string };
+  grantId: string;
+  clientName: string;
+  tool: string;
+  summary: string;
+  outcome: string;
+  targetType: string | null;
+  targetId: string | null;
+  createdAt: string;
+}
+
+export interface AgentAuditLogResponse {
+  total: number;
+  offset: number;
+  limit: number;
+  rows: AgentAuditLogEntry[];
+}
+
+export interface AgentPlatformSettings {
+  agentAccessEnabled: boolean;
+}
+
+export interface AgentPlatformStats {
+  grantCount: number;
+  callCount: number;
+  currentTokens: number;
+}
+
+// API methods for agent access
+export const agentAccessApi = {
+  // Org-level (admin)
+  getSettings: () => api.get<AgentAccessSettings>('/admin/agent-access/settings'),
+  toggleSettings: (enabled: boolean) =>
+    api.patch<AgentAccessSettings>('/admin/agent-access/settings', { enabled }),
+  listGrants: () => api.get<AgentGrantList>('/admin/agent-access/grants'),
+  revokeGrant: (id: string) =>
+    api.post<{ id: string; revokedAt: string }>(`/admin/agent-access/grants/${id}/revoke`, {}),
+  revokeAllGrants: () =>
+    api.post<{ count: number }>('/admin/agent-access/grants/revoke-all', {}),
+  listAuditLog: (params: { grantId?: string; tool?: string; offset?: number; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params.grantId) qs.set('grantId', params.grantId);
+    if (params.tool) qs.set('tool', params.tool);
+    if (params.offset) qs.set('offset', String(params.offset));
+    if (params.limit) qs.set('limit', String(params.limit));
+    return api.get<AgentAuditLogResponse>(`/admin/agent-access/audit-log?${qs.toString()}`);
+  },
+
+  // User-level (connected apps)
+  listMyGrants: () => api.get<AgentGrantList>('/admin/agent-access/my-grants'),
+  revokeMyGrant: (id: string) =>
+    api.post<{ id: string; revokedAt: string }>(`/admin/agent-access/my-grants/${id}/revoke`, {}),
+
+  // Platform-level (system admin)
+  getPlatformSettings: () => api.get<AgentPlatformSettings>('/admin/platform/settings'),
+  setPlatformSettings: (enabled: boolean) =>
+    api.patch<AgentPlatformSettings>('/admin/platform/settings', { enabled }),
+  getPlatformStats: () => api.get<AgentPlatformStats>('/admin/platform/stats'),
+  revokeAllPlatformGrants: (confirmation: string) =>
+    api.post<{ count: number }>('/admin/platform/revoke-all', { confirmation }),
+};
+
 export const api = new ApiClient();
 export default api;
 

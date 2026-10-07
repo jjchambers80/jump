@@ -51,6 +51,7 @@ import rsvpsRouter, { adminRsvpsRouter, eventRsvpsRouter } from './routes/rsvps.
 import themesRouter from './routes/themes.js';
 import developerRouter from './routes/developer.js';
 import oauthRouter from './routes/oauth.js';
+import adminPlatformRouter from './routes/adminPlatform.js';
 import domainService from '../services/DomainService.js';
 import applicationPaymentService from '../services/ApplicationPaymentService.js';
 import applicationDigestService from '../services/ApplicationDigestService.js';
@@ -169,6 +170,7 @@ app.use(developerRouter);
 app.use('/admin', adminRsvpsRouter);
 app.use('/admin', blogsRouter);
 app.use('/admin', adminRouter);
+app.use('/admin/platform', adminPlatformRouter);
 app.use('/organizations/:orgId/public/apply', standingApplicationsRouter);
 app.use('/events/:eventId/applications', eventApplicationsRouter);
 app.use('/events/:eventId/rsvps', eventRsvpsRouter);
