@@ -8,6 +8,7 @@
 
 import { FormEvent, Suspense, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import EventimusLogo from '@/components/EventimusLogo';
 import { useSearchParams } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import { startAuthentication } from '@simplewebauthn/browser';
@@ -111,6 +112,9 @@ function TwoStepForm() {
   return (
     <div className="min-h-[60vh] flex items-center justify-center px-4">
       <div className="max-w-md w-full bg-white dark:bg-slate-800 rounded-xl shadow-lg p-8">
+        <div className="mb-6 flex justify-center">
+          <EventimusLogo className="h-6" />
+        </div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white text-center mb-2">Verify it’s you</h1>
         <p className="text-sm text-gray-500 dark:text-slate-400 text-center mb-6">
           {mode === 'app' ? 'Enter the 6-digit code from your authenticator app.' : 'Enter one of your recovery codes. Each works once.'}

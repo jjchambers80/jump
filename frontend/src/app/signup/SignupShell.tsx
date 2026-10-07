@@ -5,6 +5,7 @@
 // back circle beside the card, headline + subline above a white card.
 
 import React from 'react';
+import EventimusLogo from '@/components/EventimusLogo';
 
 interface SignupShellProps {
   title: string;
@@ -34,6 +35,9 @@ export default function SignupShell({ title, subtitle, onBack, onSkip, skipLabel
       )}
 
       <div className="max-w-xl mx-auto mt-6 sm:mt-10">
+        <div className="mb-8 flex justify-center">
+          <EventimusLogo className="h-6" />
+        </div>
         <h1 className="text-2xl sm:text-3xl font-semibold text-center">{title}</h1>
         {subtitle && <p className="mt-2 text-center text-sm sm:text-base text-gray-600 dark:text-white/60">{subtitle}</p>}
 

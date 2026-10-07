@@ -5,6 +5,7 @@
 
 import React, { Suspense, useState } from 'react';
 import Link from 'next/link';
+import EventimusLogo from '@/components/EventimusLogo';
 import { useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import { startAuthentication } from '@simplewebauthn/browser';
@@ -132,8 +133,11 @@ function SignInForm() {
   return (
     <div className="min-h-[60vh] flex items-center justify-center px-4">
       <div className="max-w-md w-full bg-white dark:bg-slate-800 rounded-xl shadow-lg p-8">
+        <div className="mb-6 flex justify-center">
+          <EventimusLogo className="h-6" />
+        </div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white text-center mb-2">
-          Sign in to Jump
+          Sign in to Eventimus
         </h1>
         <p className="text-sm text-gray-500 dark:text-slate-400 text-center mb-8">
           Use a passkey, your Google account, an email link or a password
@@ -305,7 +309,7 @@ function SignInForm() {
         </p>
 
         <p className="mt-6 text-center text-xs text-gray-500 dark:text-slate-400">
-          Want to sell tickets on Jump?{' '}
+          Want to sell tickets on Eventimus?{' '}
           <Link href="/signup" className="text-indigo-600 dark:text-indigo-400 hover:underline">
             Create your organization
           </Link>
