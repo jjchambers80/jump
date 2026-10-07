@@ -555,8 +555,8 @@ test('Gallery toolbar button embeds a gallery; saved embeds show as cards', asyn
       contentType: 'application/json',
       body: JSON.stringify({
         galleries: [
-          { id: 'galexpo', title: 'Retro Expo', handle: 'retro-expo', sectionCount: 2, photoCount: 12, coverThumbUrl: null, placementCount: 0, updatedAt: '2026-10-07T00:00:00.000Z' },
-          { id: 'galbooths', title: 'Vendor booths', handle: 'vendor-booths', sectionCount: 1, photoCount: 1, coverThumbUrl: null, placementCount: 0, updatedAt: '2026-10-07T00:00:00.000Z' },
+          { id: 'galexpo', title: 'Retro Expo', handle: 'retro-expo', sectionCount: 2, photoCount: 12, coverThumbUrl: '/images/a/h/thumb', thumbUrls: ['/images/a/h/thumb', '/images/b/h/thumb'], placementCount: 0, updatedAt: '2026-10-07T00:00:00.000Z' },
+          { id: 'galbooths', title: 'Vendor booths', handle: 'vendor-booths', sectionCount: 1, photoCount: 1, coverThumbUrl: null, thumbUrls: [], placementCount: 0, updatedAt: '2026-10-07T00:00:00.000Z' },
         ],
       }),
     })
@@ -565,11 +565,23 @@ test('Gallery toolbar button embeds a gallery; saved embeds show as cards', asyn
     storePage({
       id: 'page-photos',
       title: 'Photos',
-      content: '<p>Intro</p><figure data-jump-gallery="galexpo" data-layout="masonry"></figure>',
+      content:
+        '<p>Intro</p><figure data-jump-gallery="galexpo" data-layout="masonry"></figure><figure data-jump-gallery="galgone" data-layout="carousel"></figure>',
     }),
   ]);
   await page.goto('/admin/online-store/pages/page-photos');
+  // Saved embeds are cover tiles: first photos, title, layout, Edit / Remove; a deleted one says so.
+  await expect(page.getByTestId('editor-gallery')).toHaveCount(2);
+  const expo = page.getByTestId('editor-gallery').filter({ hasText: 'Gallery: Retro Expo' });
+  await expect(expo.locator('img')).toHaveCount(2);
+  await expect(expo).toContainText('Masonry grid');
+  const gone = page.getByTestId('editor-gallery').filter({ hasText: 'Gallery not found' });
+  await gone.getByRole('button', { name: 'Remove gallery' }).click();
   await expect(page.getByTestId('editor-gallery')).toHaveCount(1);
+  await expo.getByRole('button', { name: 'Edit gallery Retro Expo' }).click();
+  const editDialog = page.getByRole('dialog', { name: 'Edit gallery' });
+  await expect(editDialog.getByLabel('Gallery')).toHaveValue('galexpo');
+  await editDialog.getByRole('button', { name: 'Cancel' }).click();
 
   const galleryButton = page.getByRole('button', { name: 'Gallery', exact: true });
   await page.getByLabel('Page content').getByText('Intro').click();
@@ -588,4 +600,5 @@ test('Gallery toolbar button embeds a gallery; saved embeds show as cards', asyn
   const content = String(api.calls.find((call) => call.method === 'PUT')?.body?.content);
   expect(content).toContain('<figure data-jump-gallery="galexpo" data-layout="masonry"></figure>');
   expect(content).toContain('<figure data-jump-gallery="galbooths" data-layout="carousel"></figure>');
+  expect(content).not.toContain('galgone');
 });

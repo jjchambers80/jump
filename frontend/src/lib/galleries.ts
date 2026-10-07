@@ -58,6 +58,8 @@ export interface GallerySummary {
   sectionCount: number;
   photoCount: number;
   coverThumbUrl: string | null;
+  /** First four photos in gallery order (cover tile of a rich-text embed). */
+  thumbUrls: string[];
   placementCount: number;
   updatedAt: string;
 }

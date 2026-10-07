@@ -52,7 +52,7 @@ class GalleryService {
             orderBy: { position: 'asc' },
             select: {
               _count: { select: { items: true } },
-              items: { orderBy: { position: 'asc' }, take: 1, include: ITEM_INCLUDE },
+              items: { orderBy: { position: 'asc' }, take: 4, include: ITEM_INCLUDE },
             },
           },
         },
@@ -60,14 +60,16 @@ class GalleryService {
       this._placementIndex(organizationId),
     ]);
     return galleries.map((gallery) => {
-      const cover = gallery.sections.find((section) => section.items.length)?.items[0];
+      // The first four photos, in gallery order: the cover and the editor's embed tile.
+      const thumbUrls = gallery.sections.flatMap((section) => section.items).slice(0, 4).map((item) => this._thumbUrl(item));
       return {
         id: gallery.id,
         title: gallery.title,
         handle: gallery.handle,
         sectionCount: gallery.sections.length,
         photoCount: gallery.sections.reduce((sum, section) => sum + section._count.items, 0),
-        coverThumbUrl: cover ? this._thumbUrl(cover) : null,
+        coverThumbUrl: thumbUrls[0] ?? null,
+        thumbUrls,
         placementCount: placements.get(gallery.id)?.length || 0,
         updatedAt: gallery.updatedAt,
       };

@@ -6,6 +6,7 @@ import type { CSSProperties } from 'react';
 import { resolveAssetUrl } from '@/lib/assets';
 import { fillCount, resolveSrcset, type GalleryLabels, type PublicGallery } from '@/lib/galleries';
 import { GALLERY_OPEN_ATTR } from '@/theme/sections/islandClasses';
+import GalleryImage from './GalleryImage';
 
 interface GalleryMasonryProps {
   gallery: PublicGallery;
@@ -16,6 +17,8 @@ interface GalleryMasonryProps {
   showSectionTitles: boolean;
   sectionLevel: 2 | 3;
   labels: GalleryLabels;
+  /** The gallery opens the page: its first photo loads first (LCP). */
+  priority: boolean;
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, Math.round(value)));
@@ -29,6 +32,7 @@ export default function GalleryMasonry({
   showSectionTitles,
   sectionLevel,
   labels,
+  priority,
 }: GalleryMasonryProps) {
   const desktop = clamp(columnsDesktop, 2, 5);
   const mobile = clamp(columnsMobile, 1, 2);
@@ -88,15 +92,16 @@ export default function GalleryMasonry({
                       aria-label={`${fillCount(labels.open, n, total)}${item.alt ? `: ${item.alt}` : ''}`}
                       className="group block w-full scroll-mt-24 overflow-hidden rounded-lg bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 dark:bg-slate-800 dark:focus-visible:ring-offset-slate-950"
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
+                      <GalleryImage
+                        fallbackText={item.alt || 'Photo unavailable'}
                         src={resolveAssetUrl(item.src) || undefined}
                         srcSet={resolveSrcset(item.srcset)}
                         sizes={sizes}
                         width={item.width ?? undefined}
                         height={item.height ?? undefined}
                         alt=""
-                        loading="lazy"
+                        loading={priority && n === 1 ? 'eager' : 'lazy'}
+                        fetchPriority={priority && n === 1 ? 'high' : undefined}
                         decoding="async"
                         className="block h-auto w-full motion-safe:transition-transform motion-safe:duration-200 motion-safe:group-hover:scale-[1.02]"
                       />

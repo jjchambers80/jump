@@ -239,6 +239,8 @@ describe('Content › Galleries contract', () => {
     const row = body.galleries.find((g) => g.id === gallery.id);
     expect(row).toMatchObject({ sectionCount: 2, photoCount: 3, placementCount: 1 });
     expect(row.coverThumbUrl).toMatch(/\/thumb$/);
+    expect(row.thumbUrls).toHaveLength(3);
+    expect(row.thumbUrls[0]).toBe(row.coverThumbUrl);
 
     const detail = await request(app).get(`/admin/galleries/${gallery.id}`).set(...auth(organizerToken));
     expect(detail.body.placements).toEqual([

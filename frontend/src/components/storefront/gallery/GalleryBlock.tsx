@@ -24,6 +24,8 @@ export interface GalleryBlockProps {
   showSectionTitles?: boolean;
   autoplayMs?: number;
   labels?: GalleryLabels;
+  /** The gallery is the first thing on the page: load its first photo first. */
+  priority?: boolean;
 }
 
 export default function GalleryBlock({
@@ -37,6 +39,7 @@ export default function GalleryBlock({
   showSectionTitles = true,
   autoplayMs = 0,
   labels = DEFAULT_GALLERY_LABELS,
+  priority = false,
 }: GalleryBlockProps) {
   const items = flattenGallery(gallery);
   if (!items.length) return null;
@@ -52,7 +55,7 @@ export default function GalleryBlock({
       )}
       <GalleryLightbox items={items} title={name} labels={labels}>
         {layout === 'carousel' ? (
-          <GalleryCarousel items={items} title={name} labelledBy={heading ? headingId : undefined} labels={labels} autoplayMs={autoplayMs} showCaptions={showCaptions} />
+          <GalleryCarousel priority={priority} items={items} title={name} labelledBy={heading ? headingId : undefined} labels={labels} autoplayMs={autoplayMs} showCaptions={showCaptions} />
         ) : (
           <GalleryMasonry
             gallery={gallery}
@@ -63,6 +66,7 @@ export default function GalleryBlock({
             showSectionTitles={showSectionTitles}
             sectionLevel={heading ? 3 : 2}
             labels={labels}
+            priority={priority}
           />
         )}
       </GalleryLightbox>

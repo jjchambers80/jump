@@ -11,6 +11,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { resolveAssetUrl } from '@/lib/assets';
 import { fillCount, resolveSrcset, type FlatGalleryItem, type GalleryLabels } from '@/lib/galleries';
 import { GALLERY_OPEN_ATTR } from '@/theme/sections/islandClasses';
+import { prefersReducedMotion, useCarouselRotation } from '@/lib/useCarouselRotation';
+import GalleryImage from './GalleryImage';
 
 interface GalleryCarouselProps {
   items: FlatGalleryItem[];
@@ -20,25 +22,21 @@ interface GalleryCarouselProps {
   labels: GalleryLabels;
   autoplayMs: number;
   showCaptions: boolean;
+  /** The carousel opens the page: its first photo loads first. */
+  priority?: boolean;
 }
 
 const control =
   'inline-flex h-11 w-11 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-900 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 aria-disabled:opacity-40 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800 dark:focus-visible:ring-offset-slate-950';
 
-export default function GalleryCarousel({ items, title, labelledBy, labels, autoplayMs, showCaptions }: GalleryCarouselProps) {
+export default function GalleryCarousel({ items, title, labelledBy, labels, autoplayMs, showCaptions, priority = false }: GalleryCarouselProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(0);
   const [atEnd, setAtEnd] = useState(false);
-  const [paused, setPaused] = useState(autoplayMs <= 0);
-  const [holding, setHolding] = useState(false);
   const [announce, setAnnounce] = useState(false);
   const total = items.length;
   const timed = autoplayMs > 0 && total > 1;
-  const rotating = timed && !paused;
-
-  useEffect(() => {
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) setPaused(true);
-  }, []);
+  const { paused, setPaused, holding, setHolding, rotating } = useCarouselRotation(timed);
 
   const step = () => {
     const track = trackRef.current;
@@ -58,8 +56,7 @@ export default function GalleryCarousel({ items, title, labelledBy, labels, auto
   const goTo = useCallback((to: number) => {
     const track = trackRef.current;
     if (!track) return;
-    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    track.scrollTo({ left: Math.max(0, to) * step(), behavior: reduced ? 'auto' : 'smooth' });
+    track.scrollTo({ left: Math.max(0, to) * step(), behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
   }, []);
 
   /** The visitor moved the photos: stop rotating for good, say where they are. */
@@ -144,8 +141,8 @@ export default function GalleryCarousel({ items, title, labelledBy, labels, auto
               aria-label={`${fillCount(labels.open, i + 1, total)}${item.alt ? `: ${item.alt}` : ''}`}
               className="flex h-[clamp(14rem,50vw,28rem)] w-full items-center justify-center overflow-hidden rounded-lg bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 dark:bg-slate-800 dark:focus-visible:ring-offset-slate-950"
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+              <GalleryImage
+                fallbackText={item.alt || 'Photo unavailable'}
                 src={resolveAssetUrl(item.src) || undefined}
                 srcSet={resolveSrcset(item.srcset)}
                 sizes="(min-width: 1024px) 27vw, (min-width: 768px) 38vw, 85vw"
@@ -153,6 +150,7 @@ export default function GalleryCarousel({ items, title, labelledBy, labels, auto
                 height={item.height ?? undefined}
                 alt=""
                 loading={i < 3 ? 'eager' : 'lazy'}
+                fetchPriority={priority && i === 0 ? 'high' : i >= 3 ? 'low' : undefined}
                 decoding="async"
                 className="h-full w-full object-contain"
               />
