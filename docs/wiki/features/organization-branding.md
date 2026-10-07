@@ -41,7 +41,7 @@ No new environment variables. Images use the existing `ImageService` storage con
 3. `evaluateBrandColor(hex)` runs three checks, each needing ≥ 4.5:1:
    - button text (auto-picked white or `#111827`) on the brand color
    - the brand color as link text on the light page background `#f9fafb`
-   - a **derived** lighter tint as link text on the dark page background `#0f172a`
+   - a **derived** lighter tint as link text on the lightest dark surface, the slate-800 cards `#1e293b` (it then also passes on the `#0f172a` page)
 4. `ContrastBadge` shows "Passes/Fails WCAG AA", the three ratios, a preview, and a `?` tooltip explaining the ADA/WCAG requirement.
 5. **Save brand color** sends `PATCH /organizations/:id { brandColor }`. Failing colors are allowed (warn, not block) — the UI shows "You can save this color, but it may not meet ADA requirements."
 6. The server normalizes to lowercase `#rrggbb` (3-digit expanded) and stores one field. `null` clears it.
@@ -77,7 +77,7 @@ Validation error for bad hex: `400 "Brand color must be a hex value like #1d4ed8
 - **Use the tokens.** On public org/venue/event pages and `EventCard`, use `bg-brand`, `hover:bg-brand-hover`, `text-brand-fg`, `text-brand-link` — never raw `bg-blue-600` / `text-indigo-400` — or the brand color will not apply.
 - **Defaults are pinned.** `--brand` defaults in `globals.css` must stay equal to `bg-blue-600` etc. or the unbranded `/events` listing shifts visually.
 - **Tailwind opacity modifiers don't work on brand tokens** (`bg-brand/50`): the values are CSS vars, not RGB channels.
-- **Dark-mode link color is derived**, not stored. A brand chosen for light backgrounds is tinted lighter until it reaches 4.5:1 on `#0f172a`; brand fidelity in dark mode is intentionally lower.
+- **Dark-mode link color is derived**, not stored. A brand chosen for light backgrounds is tinted lighter until it reaches 4.5:1 on `#1e293b` (`DARK_SURFACE_BG`, the slate-800 cards that Steps, Tiers and EventStub put links on), so it passes on the `#0f172a` page too; brand fidelity in dark mode is intentionally lower.
 - **Server validates format, not compliance.** Any valid hex is accepted; the badge is advisory. If a hard block is ever needed, port the ~30-line luminance function from `lib/color.ts` into the validator.
 - **Public venue response deliberately omits `organizationId`** (existing contract test). Only `brandColor` is exposed.
 - **`PATCH /organizations/:id` now requires org ownership.** Non-system admins can only edit their own org; tests must use a user with `organizationId` set (see `tests/contract/organizations.test.js`).

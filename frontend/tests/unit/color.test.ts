@@ -3,6 +3,7 @@ import {
   BRAND_DEFAULTS,
   BRAND_PRESETS,
   DARK_PAGE_BG,
+  DARK_SURFACE_BG,
   LIGHT_PAGE_BG,
   bestForeground,
   brandCssVars,
@@ -93,6 +94,15 @@ describe('deriveAccessibleOn', () => {
   });
 });
 
+describe('brand-link-dark', () => {
+  // Links render on slate-800 cards as well as the slate-900 page (Steps, Tiers).
+  it.each(['#d6007d', '#ed018b', ...BRAND_PRESETS.map((p) => p.hex)])('%s passes on dark cards and the dark page', (hex) => {
+    const link = brandCssVars(hex)!['--brand-link-dark'];
+    expect(contrastRatio(link, DARK_SURFACE_BG)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(link, DARK_PAGE_BG)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
 describe('evaluateBrandColor', () => {
   it('passes AA for every preset', () => {
     for (const { hex } of BRAND_PRESETS) {
@@ -115,7 +125,7 @@ describe('evaluateBrandColor', () => {
     const result = evaluateBrandColor('#1d4ed8');
     expect(result.buttonText).toMatchObject({ fg: '#ffffff', bg: '#1d4ed8', passes: true });
     expect(result.linkLight).toMatchObject({ fg: '#1d4ed8', bg: LIGHT_PAGE_BG, passes: true });
-    expect(result.linkDark.bg).toBe(DARK_PAGE_BG);
+    expect(result.linkDark.bg).toBe(DARK_SURFACE_BG);
   });
 });
 

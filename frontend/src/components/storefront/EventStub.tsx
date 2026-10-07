@@ -6,9 +6,9 @@ import { formatPrice, type EventSummary } from '@/components/EventCard';
 
 // One brand fill per card: the CTA. The date tile is a recessed neutral surface
 // with only the month in brand-link, and the price is plain text, so nothing
-// competes with the button. The dark tile is slate-900, the page color
-// brand-link-dark is derived against (color.ts), so the month keeps AA; its
-// inset shadow redraws the card's slate-700 ring, which the tile covers.
+// competes with the button. brand-link-dark is derived against slate-800
+// (color.ts), so the month keeps AA on the slate-900 tile and the card; the
+// tile's inset shadow redraws the card's slate-700 ring, which it covers.
 
 /** Scarcity only once it means something: the last 10 tickets. */
 const SCARCE_AT = 10;
