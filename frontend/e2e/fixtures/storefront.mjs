@@ -6,6 +6,7 @@ import { getPreset, resolveContent, resolveSettings } from '@jump/theme';
 import { VENDOR_PHOTOS, vendorLandingDocument } from './vendorLanding.mjs';
 import { SPONSOR_PHOTOS, sponsorLandingDocument } from './sponsorLanding.mjs';
 import { ABOUT_PHOTOS, aboutLandingDocument } from './aboutLanding.mjs';
+import { VENDOR_FAQ_PHOTOS, vendorFaqLandingDocument } from './vendorFaqLanding.mjs';
 
 const preset = getPreset('eventimus-default');
 /** The Events template every fixture serves for `page=events`. */
@@ -331,7 +332,7 @@ export const FIXTURES = {
     // The "Why" card photos all resolve to the local cover; alt text comes from the document.
     const files = Object.fromEntries(Object.values(VENDOR_PHOTOS).map((id) => [id, { url: PARITY_COVER, alt: null, width: 1536, height: 1024 }]));
     return {
-      render: { ...base, resolved: { ...base.resolved, files, links: { ...base.resolved.links, 'PAGE:p-apply': link } } },
+      render: { ...base, resolved: { ...base.resolved, files, links: { ...base.resolved.links, 'PAGE:p-apply': link, 'PAGE:p-faq': '/organizations/theme-vendors/pages/vendor-faq' } } },
       routes: {
         '/public/pages/vendors': {
           organization: base.organization,
@@ -375,6 +376,26 @@ export const FIXTURES = {
         },
       },
       pageDocuments: { 'p-about': aboutLandingDocument('p-vendors') },
+    };
+  })(),
+  // The Vendor FAQ landing page (vendorFaqLanding.mjs), same store.
+  'theme-vendor-faq': (() => {
+    const base = render('theme-vendor-faq', { organization: { name: 'Raleigh Retro Gamers', brandColor: '#d6007d', themeMode: 'SYSTEM' } });
+    const files = Object.fromEntries(Object.values(VENDOR_FAQ_PHOTOS).map((id) => [id, { url: PARITY_COVER, alt: null, width: 1536, height: 1024 }]));
+    const links = {
+      ...base.resolved.links,
+      'PAGE:p-apply': '/organizations/theme-vendor-faq/pages/vendor-application',
+      'PAGE:p-contact': '/organizations/theme-vendor-faq/pages/contact',
+    };
+    return {
+      render: { ...base, resolved: { ...base.resolved, files, links } },
+      routes: {
+        '/public/pages/vendor-faq': {
+          organization: base.organization,
+          page: { id: 'p-vendor-faq', title: 'Vendor FAQ', slug: 'vendor-faq', content: '', template: { name: 'full-width', sections: [{ type: 'page_content' }] } },
+        },
+      },
+      pageDocuments: { 'p-vendor-faq': vendorFaqLandingDocument('p-apply', 'p-contact') },
     };
   })(),
   'theme-dark': { render: render('theme-dark', { organization: { themeMode: 'DARK', brandColor: '#be185d' } }), routes: {} },
