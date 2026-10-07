@@ -1,7 +1,7 @@
 # Content › Galleries
 
 **Status:** Implemented (spec 046)
-**Last Updated:** 2026-10-07
+**Last Updated:** 2026-10-07 (post-review fixes)
 
 ## Overview
 
@@ -68,6 +68,19 @@ Spec: `specs/046-photo-galleries/plan.md`. Research: `docs/research/2026-10-07-p
 - **Carousel:** follows the APG basic carousel. The rotation control comes first. Rotation stops on hover, on focus, and for good after the visitor moves the carousel, and never starts under `prefers-reduced-motion`.
 - **Masonry order:** CSS columns fill top to bottom, so DOM order is focus order. Never reorder photos with JavaScript or `order`.
 - **Admin:** every drag has a button alternative (section arrows, the panel's Move buttons), and moves are announced.
+
+## Differences from the plan (code review, 2026-10-07)
+
+- **Who can edit:** the routes use `requireOrganizer`, like every Content router, where the plan said ADMIN.
+- **Alt text errors:** `ALT_TEXT_REQUIRED` lists `{ section, item, fileId }` positions, not item ids, because a whole-tree `PUT` sends no item ids.
+- **Theme editor preview:** it resolves every gallery of the store (`allGalleries`), so a gallery picked in the section settings previews without reloading. That costs one query per editor load.
+- **Embed ids:** the sanitiser accepts `[a-z0-9]{1,64}`, a superset of cuid, rather than a strict cuid regex.
+- **Not built yet:**
+  - Rich-text editor: the cover tile with the first 4 photos (embeds show as a text card with the title, layout and "Gallery not found").
+  - Theme editor: the "Manage galleries ↗" link beside the gallery picker.
+  - Editor header: a Copy id action.
+  - Storefront: `fetchpriority="high"` on the first photo, and alt text in place of an image that fails to load.
+  - Code sharing: the gallery carousel has its own rotation timer instead of reusing `HeroCarouselFrame`'s.
 
 ## Later
 

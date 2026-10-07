@@ -6,14 +6,11 @@
 // in a live region. Save refuses photos without alt text and lists them.
 
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
-import ConfirmDialog from '@/components/content/ConfirmDialog';
 import FilePickerDialog from '@/components/content/FilePickerDialog';
 import SaveBar from '@/components/content/SaveBar';
 import ToastHost, { showToast } from '@/components/content/Toast';
-import { useFilesApi } from '@/app/admin/content/files/useFilesApi';
-import type { StoreFile } from '@/lib/content';
 import {
   GALLERY_MAX_ITEMS,
   GALLERY_MAX_SECTIONS,
@@ -31,34 +28,18 @@ import {
   type MissingAlt,
 } from '@/lib/galleries';
 import { useUnsavedChanges } from '@/lib/useUnsavedChanges';
+import AltTextSummary from './AltTextSummary';
+import DeleteGalleryButton from './DeleteGalleryButton';
 import GalleryDetailsCard from './GalleryDetailsCard';
 import GallerySectionCard from './GallerySectionCard';
 import PhotoPanel from './PhotoPanel';
 import SectionDeleteDialog from './SectionDeleteDialog';
 import { useGalleriesApi } from './useGalleriesApi';
-
-const UPLOAD_BATCH = 10;
-
-const fromFile = (file: StoreFile): DraftItem => ({
-  key: draftKey('photo'),
-  fileId: file.id,
-  altText: null,
-  decorative: false,
-  caption: null,
-  file: {
-    name: file.name,
-    altText: file.altText,
-    width: file.width,
-    height: file.height,
-    thumbUrl: file.thumbUrl,
-    previewUrl: file.previewUrl,
-  },
-});
+import { useGalleryUploads } from './useGalleryUploads';
 
 export default function GalleryEditor({ gallery, onSaved }: { gallery: Gallery; onSaved: (g: Gallery) => void }) {
   const router = useRouter();
   const galleriesApi = useGalleriesApi();
-  const filesApi = useFilesApi();
   const [title, setTitle] = useState(gallery.title);
   const [description, setDescription] = useState(gallery.description ?? '');
   const [sections, setSections] = useState<DraftSection[]>(() => fromServer(gallery));
@@ -72,9 +53,6 @@ export default function GalleryEditor({ gallery, onSaved }: { gallery: Gallery; 
   const [openPhoto, setOpenPhoto] = useState<string | null>(null);
   const [pickerFor, setPickerFor] = useState<string | null>(null);
   const [deleteSection, setDeleteSection] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const deleteRef = useRef<HTMLButtonElement>(null);
   const pickerReturnRef = useRef<HTMLElement | null>(null);
   const summaryRef = useRef<HTMLDivElement>(null);
 
@@ -92,33 +70,7 @@ export default function GalleryEditor({ gallery, onSaved }: { gallery: Gallery; 
   const updateSection = (next: DraftSection) =>
     setSections((current) => current.map((section) => (section.key === next.key ? next : section)));
 
-  const appendPhotos = (sectionKey: string, files: StoreFile[]) => {
-    const images = files.filter((file) => file.kind === 'image').slice(0, Math.max(0, room));
-    if (!images.length) return;
-    setSections((current) =>
-      current.map((section) =>
-        section.key === sectionKey ? { ...section, items: [...section.items, ...images.map(fromFile)] } : section
-      )
-    );
-    announce(`Added ${images.length} ${images.length === 1 ? 'photo' : 'photos'}`);
-    if (images.length < files.length) showToast(`A gallery holds up to ${GALLERY_MAX_ITEMS} photos`);
-  };
-
-  const uploadInto = async (sectionKey: string, files: File[]) => {
-    const uploaded: StoreFile[] = [];
-    const failed: string[] = [];
-    for (let i = 0; i < files.length; i += UPLOAD_BATCH) {
-      try {
-        const result = await filesApi.upload(files.slice(i, i + UPLOAD_BATCH));
-        uploaded.push(...result.files);
-        failed.push(...result.errors.map((error) => `${error.name}: ${error.message}`));
-      } catch (err: any) {
-        failed.push(err?.message || 'Upload failed');
-      }
-    }
-    appendPhotos(sectionKey, uploaded);
-    if (failed.length) showToast(`${failed.length} not uploaded — ${failed[0]}`);
-  };
+  const { appendPhotos, uploadInto } = useGalleryUploads(setSections, room, announce);
 
   const located = openPhoto
     ? sections
@@ -168,18 +120,6 @@ export default function GalleryEditor({ gallery, onSaved }: { gallery: Gallery; 
     setProblems([]);
   };
 
-  const removeGallery = async () => {
-    setDeleting(true);
-    try {
-      await galleriesApi.remove(gallery.id);
-      router.push('/admin/content/galleries');
-    } catch (err: any) {
-      setDeleting(false);
-      setConfirmDelete(false);
-      showToast(err?.message || 'Delete failed');
-    }
-  };
-
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 pb-28">
       <ToastHost />
@@ -198,39 +138,10 @@ export default function GalleryEditor({ gallery, onSaved }: { gallery: Gallery; 
           </button>
           <h1 className="mt-1 truncate text-2xl font-bold text-gray-900 dark:text-white">{gallery.title}</h1>
         </div>
-        <button
-          ref={deleteRef}
-          type="button"
-          onClick={() => setConfirmDelete(true)}
-          className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-red-700 shadow-sm hover:bg-red-50 dark:border-slate-600 dark:bg-slate-800 dark:text-red-300"
-        >
-          <Trash2 className="h-4 w-4" aria-hidden />
-          Delete
-        </button>
+        <DeleteGalleryButton gallery={gallery} />
       </div>
 
-      {problems.length > 0 && (
-        <div
-          ref={summaryRef}
-          tabIndex={-1}
-          role="alert"
-          data-testid="alt-summary"
-          className="mb-6 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200"
-        >
-          <p className="font-semibold">
-            {problems.length} {problems.length === 1 ? 'photo needs' : 'photos need'} alt text before you can save
-          </p>
-          <ul className="mt-2 list-disc space-y-1 pl-5">
-            {problems.map((problem) => (
-              <li key={problem.itemKey}>
-                <button type="button" onClick={() => setOpenPhoto(problem.itemKey)} className="text-left underline">
-                  {problem.label}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <AltTextSummary ref={summaryRef} problems={problems} onOpen={setOpenPhoto} />
 
       <GalleryDetailsCard
         title={title}
@@ -354,26 +265,6 @@ export default function GalleryEditor({ gallery, onSaved }: { gallery: Gallery; 
         />
       )}
 
-      {confirmDelete && (
-        <ConfirmDialog
-          titleId="delete-gallery-title"
-          title={`Delete ${gallery.title}?`}
-          confirmLabel="Delete"
-          busyLabel="Deleting…"
-          busy={deleting}
-          danger
-          returnFocusRef={deleteRef}
-          onClose={() => setConfirmDelete(false)}
-          onConfirm={() => void removeGallery()}
-        >
-          <p>The gallery is removed. Its photos stay in Files.</p>
-          {gallery.placements.length > 0 && (
-            <p>
-              It disappears from {gallery.placements.map((placement) => placement.title).join(', ')}.
-            </p>
-          )}
-        </ConfirmDialog>
-      )}
     </div>
   );
 }

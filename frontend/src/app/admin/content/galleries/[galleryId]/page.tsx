@@ -4,7 +4,7 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useOrg } from '@/components/OrgContext';
 import type { Gallery } from '@/lib/galleries';
 import GalleryEditor from '../GalleryEditor';
@@ -34,9 +34,15 @@ export default function GalleryPage() {
     }
   }, [selectedOrgId, galleriesApi, params.galleryId]);
 
+  // Load once the org is known, and again only when the selected org changes:
+  // the switcher's refresh() toggles `loading`, which must not refetch (and,
+  // on the editor, unmount unsaved edits).
+  const loadedFor = useRef<string | null | undefined>(undefined);
   useEffect(() => {
-    if (!orgLoading) void load();
-  }, [orgLoading, load]);
+    if (orgLoading || loadedFor.current === selectedOrgId) return;
+    loadedFor.current = selectedOrgId;
+    void load();
+  }, [orgLoading, selectedOrgId, load]);
 
   if (loading) {
     return (

@@ -413,6 +413,7 @@ export default function FileDetailPage() {
             <p className="rounded-md border border-amber-200 bg-amber-50 p-2 text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
               Used in {file.references.length} {file.references.length === 1 ? 'place' : 'places'}:{' '}
               {file.references.map((ref) => ref.title).join(', ')}.
+              {file.references.some((ref) => ref.kind === 'GALLERY') && ' It will be removed from those galleries.'}
             </p>
           )}
         </ConfirmDialog>

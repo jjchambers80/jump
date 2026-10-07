@@ -136,7 +136,7 @@ export default function GalleryCarousel({ items, title, labelledBy, labels, auto
             role="group"
             aria-roledescription="slide"
             aria-label={fillCount(labels.counter, i + 1, total)}
-            className="w-[85%] shrink-0 snap-start sm:w-[45%] lg:w-[30%]"
+            className="w-[85%] shrink-0 snap-start md:w-[38%] lg:w-[27%]"
           >
             <button
               type="button"
@@ -148,7 +148,7 @@ export default function GalleryCarousel({ items, title, labelledBy, labels, auto
               <img
                 src={resolveAssetUrl(item.src) || undefined}
                 srcSet={resolveSrcset(item.srcset)}
-                sizes="(min-width: 1024px) 30vw, (min-width: 640px) 45vw, 85vw"
+                sizes="(min-width: 1024px) 27vw, (min-width: 768px) 38vw, 85vw"
                 width={item.width ?? undefined}
                 height={item.height ?? undefined}
                 alt=""

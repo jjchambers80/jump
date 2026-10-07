@@ -230,7 +230,7 @@ export default function RichTextEditor({
   const videoButtonRef = useRef<HTMLButtonElement>(null);
   const [galleryDialog, setGalleryDialog] = useState<{ editing: GalleryAttrs | null } | null>(null);
   const [galleries, setGalleries] = useState<GallerySummary[] | null>(null);
-  const galleryTitles = useRef<Record<string, string>>({});
+  const galleryTitles = useRef<Record<string, string> | null>(null);
   const galleryButtonRef = useRef<HTMLButtonElement>(null);
   const lastEmitted = useRef(value);
 
@@ -503,6 +503,7 @@ export default function RichTextEditor({
           onLoad={(list) => {
             galleryTitles.current = Object.fromEntries(list.map((g) => [g.id, g.title]));
             setGalleries(list);
+            (editor.storage as unknown as { galleryEmbed?: { repaint: Set<() => void> } }).galleryEmbed?.repaint.forEach((paint) => paint());
           }}
         />
       )}

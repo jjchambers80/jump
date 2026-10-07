@@ -6,6 +6,7 @@
 
 import { prisma } from '@jump/db';
 import { uniqueHandle } from '../utils/uniqueHandle.js';
+import { galleryIdsInThemeJson } from '@jump/theme';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import imageService from './ImageService.js';
 import storeFileService from './StoreFileService.js';
@@ -145,7 +146,9 @@ class GalleryService {
       const data = { updatedAt: new Date() };
       if (title !== undefined) data.title = title.trim();
       if (description !== undefined) data.description = description?.trim() || null;
-      await tx.gallery.update({ where: { id }, data });
+      // Scoped write: a gallery deleted since the check above is a 404, not a 500.
+      const { count } = await tx.gallery.updateMany({ where: { id, organizationId }, data });
+      if (!count) throw new NotFoundError('Gallery not found');
       await tx.gallerySection.deleteMany({ where: { galleryId: id } });
       for (const [position, section] of sections.entries()) {
         await tx.gallerySection.create({
@@ -308,10 +311,9 @@ class GalleryService {
       const list = index.get(galleryId);
       if (!list.some((p) => p.kind === placement.kind && p.targetId === placement.targetId)) list.push(placement);
     };
-    const markerRe = /data-jump-gallery="([a-z0-9]+)"/g;
     for (const page of pages) {
-      for (const match of page.content.matchAll(markerRe)) {
-        add(match[1], {
+      for (const galleryId of galleryIdsInHtml(page.content)) {
+        add(galleryId, {
           kind: 'PAGE',
           targetId: page.id,
           title: page.title,
@@ -320,8 +322,8 @@ class GalleryService {
       }
     }
     for (const post of posts) {
-      for (const match of post.content.matchAll(markerRe)) {
-        add(match[1], {
+      for (const galleryId of galleryIdsInHtml(post.content)) {
+        add(galleryId, {
           kind: 'BLOG_POST',
           targetId: post.id,
           title: post.title,
@@ -329,21 +331,15 @@ class GalleryService {
         });
       }
     }
-    const galleryIds = new Set(
-      (await prisma.gallery.findMany({ where: { organizationId }, select: { id: true } })).map((g) => g.id)
-    );
-    // ponytail: docs × galleries string scan; index ids per document if theme counts grow.
+    // Only the Gallery section's own setting counts, never an id that merely appears in a document.
     for (const document of documents) {
-      const text = JSON.stringify(document.data);
-      for (const galleryId of galleryIds) {
-        if (text.includes(`"${galleryId}"`)) {
-          add(galleryId, {
-            kind: 'THEME',
-            targetId: document.theme.id,
-            title: `Theme ${document.theme.name}`,
-            href: `/admin/online-store/themes/${document.theme.id}/editor`,
-          });
-        }
+      for (const galleryId of galleryIdsInThemeJson(document.data)) {
+        add(galleryId, {
+          kind: 'THEME',
+          targetId: document.theme.id,
+          title: `Theme ${document.theme.name}`,
+          href: `/admin/online-store/themes/${document.theme.id}/editor`,
+        });
       }
     }
     return index;
