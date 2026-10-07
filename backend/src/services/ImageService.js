@@ -12,6 +12,11 @@ const VARIANTS = {
   hero: { width: 1200, height: 630, fit: 'cover' },
 };
 
+// Spec 046: uncropped, width-bounded variants for whole-image fits (gallery
+// masonry, lightbox, carousel). Generated on first request, then stored, so
+// files uploaded before galleries need no backfill. Never enlarged.
+export const WIDTH_VARIANTS = { w480: 480, w960: 960, w1600: 1600, w2400: 2400 };
+
 const MIME_TO_EXT = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
@@ -245,13 +250,14 @@ class ImageService {
     let key;
     if (variant === 'original') {
       key = originalKey(hash, image.file.mimeType);
-    } else if (VARIANTS[variant]) {
+    } else if (VARIANTS[variant] || WIDTH_VARIANTS[variant]) {
       key = variantKey(variant, hash);
     } else {
       return null;
     }
 
-    const data = await this.storage.get(key);
+    let data = await this.storage.get(key);
+    if (!data && WIDTH_VARIANTS[variant]) data = await this._buildWidthVariant(image.file, variant, key);
     if (!data) return null;
 
     return {
@@ -259,6 +265,42 @@ class ImageService {
       contentType: variant === 'original' ? image.file.mimeType : 'image/webp',
       hash,
     };
+  }
+
+  /**
+   * Resize the original to fit inside the variant's width and store it.
+   * Concurrent first requests do the same idempotent work (content-addressed key).
+   */
+  async _buildWidthVariant(file, variant, key) {
+    const original = await this.storage.get(originalKey(file.hash, file.mimeType));
+    if (!original) return null;
+    const buffer = await sharp(original.buffer)
+      .rotate()
+      .resize({ width: WIDTH_VARIANTS[variant], fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 80 })
+      .toBuffer();
+    await this.storage.put(key, buffer, 'image/webp');
+    return { buffer };
+  }
+
+  /**
+   * `src` + `srcset` over the width variants for a whole-image fit. Widths at
+   * or above the original collapse into one candidate at the original width
+   * (variants are never enlarged). Unknown size: every width.
+   */
+  widthSources(image) {
+    const intrinsic = image.file.width || null;
+    const candidates = [];
+    for (const [variant, width] of Object.entries(WIDTH_VARIANTS)) {
+      if (intrinsic && width >= intrinsic) {
+        candidates.push({ variant, width: intrinsic });
+        break;
+      }
+      candidates.push({ variant, width });
+    }
+    const srcset = candidates.map((c) => `${this.servingUrl(image, c.variant)} ${c.width}w`).join(', ');
+    const fallback = candidates.find((c) => c.variant === 'w1600') || candidates[candidates.length - 1];
+    return { src: this.servingUrl(image, fallback.variant), srcset };
   }
 
   /**
@@ -274,7 +316,7 @@ class ImageService {
     for (const file of orphans) {
       const origKey = originalKey(file.hash, file.mimeType);
       await this.storage.delete(origKey);
-      for (const variant of Object.keys(VARIANTS)) {
+      for (const variant of [...Object.keys(VARIANTS), ...Object.keys(WIDTH_VARIANTS)]) {
         await this.storage.delete(variantKey(variant, file.hash));
       }
       // Content › Files documents (spec 025) live under documents/<hash>.<ext>.
