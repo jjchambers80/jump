@@ -9,7 +9,7 @@ const EVENTS = { type: 'EVENTS' };
 
 /** Content › Files ids of the event photos (prod ids). The e2e fixture resolves these keys. */
 export const ABOUT_PHOTOS = {
-  market: 'cmuxl984a003bpa1w5rkvx7el',
+  market: 'cmuxl89wq001spa1woyhsy4bi',
   vendorTable: 'cmuxl96tt0031pa1wmqan7g85',
   artists: 'cmuxl98we003lpa1wc4g3g7i9',
   gameDemo: 'cmuxl89kq001npa1wrct6mj13',
@@ -35,7 +35,7 @@ export function aboutLandingDocument(vendorsPageId, photos = ABOUT_PHOTOS) {
           headingLevel: 'h1',
           heading: 'About Raleigh Retro Gamers',
           subheading: 'Raleigh Retro Gamers was founded in 2018 with a simple goal: bring together collectors, gamers, and nostalgia seekers across the Triangle.',
-          image: photo(photos.market, 'Shoppers crowd a Raleigh Retro Gamers outdoor market lined with pop-up tents and vendor tables.'),
+          image: photo(photos.market, 'Shoppers browse vendor tables of games and collectibles beneath a Raleigh Retro Gamers banner at an indoor evening market.'),
           layout: 'full-bleed',
           overlay: 60,
           alignment: 'left',
