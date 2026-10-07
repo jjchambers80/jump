@@ -33,6 +33,9 @@ for (const viewport of [
       await expect(masonry.getByRole('navigation', { name: 'Gallery sections' }).getByRole('link')).toHaveCount(4);
       await expect(masonry.getByText('Saturday noon')).toBeVisible();
 
+      // Every photo reserves its box before it loads (no layout shift).
+      const sizes = await masonry.locator('img').evaluateAll((imgs) => imgs.map((img) => [img.getAttribute('width'), img.getAttribute('height')]));
+      expect(sizes.every(([w, h]) => Number(w) > 0 && Number(h) > 0)).toBe(true);
       const photos = masonry.getByRole('button', { name: /^Open photo/ });
       await expect(photos).toHaveCount(TOTAL);
       await expect(photos.first()).toHaveAccessibleName(`Open photo 1 of ${TOTAL}: Crowd at the arcade row`);

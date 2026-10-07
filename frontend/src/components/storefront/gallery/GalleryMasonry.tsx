@@ -37,22 +37,24 @@ export default function GalleryMasonry({
   const sizes = `(min-width: 1024px) ${Math.ceil(100 / desktop)}vw, (min-width: 768px) ${Math.ceil(100 / tablet)}vw, ${Math.ceil(100 / mobile)}vw`;
   const total = gallery.sections.reduce((sum, section) => sum + section.items.length, 0);
   const titled = showSectionTitles && gallery.sections.length > 1;
+  // The link bar names sections, so it lists only titled ones.
+  const linked = titled ? gallery.sections.filter((section) => section.title) : [];
   const SectionHeading = sectionLevel === 3 ? 'h3' : 'h2';
   const anchor = (sectionId: string) => `gallery-${placementId}-${sectionId}`;
   let offset = 0;
 
   return (
     <div style={style}>
-      {titled && gallery.sections.length > 3 && (
+      {linked.length > 3 && (
         <nav aria-label={labels.sections} className="-mx-4 mb-6 overflow-x-auto px-4">
           <ul className="flex gap-2">
-            {gallery.sections.map((section, i) => (
+            {linked.map((section) => (
               <li key={section.id} className="shrink-0">
                 <a
                   href={`#${anchor(section.id)}`}
                   className="inline-flex min-h-11 items-center rounded-full border border-gray-300 px-4 text-sm font-medium text-gray-800 hover:border-gray-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 dark:border-slate-600 dark:text-slate-200"
                 >
-                  {section.title || `${i + 1}`}
+                  {section.title}
                 </a>
               </li>
             ))}

@@ -46,9 +46,15 @@ export default function GalleriesPage() {
     }
   }, [selectedOrgId, galleriesApi]);
 
+  // Load once the org is known, and again only when the selected org changes:
+  // the switcher's refresh() toggles `loading`, which must not refetch (and,
+  // on the editor, unmount unsaved edits).
+  const loadedFor = useRef<string | null | undefined>(undefined);
   useEffect(() => {
-    if (!orgLoading) void load();
-  }, [orgLoading, load]);
+    if (orgLoading || loadedFor.current === selectedOrgId) return;
+    loadedFor.current = selectedOrgId;
+    void load();
+  }, [orgLoading, selectedOrgId, load]);
 
   const openCreate = () => {
     setTitle('');

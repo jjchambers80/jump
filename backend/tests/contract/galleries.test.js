@@ -334,6 +334,23 @@ describe('Content › Galleries contract', () => {
     expect(Object.keys(post.body.post.galleries)).toEqual([gallery.id]);
   });
 
+  it('counts a theme placement only from a Gallery section, never a stray id', async () => {
+    const theme = await prisma.theme.create({
+      data: { organizationId: organization.id, name: `${TAG} theme`, presetKey: 'eventimus-default', presetVersion: '1.0' },
+    });
+    await prisma.themeDocument.create({
+      data: { themeId: theme.id, kind: 'TEMPLATE', key: 'home', data: { content: [{ type: 'Hero', props: { id: 'h', heading: gallery.id } }] } },
+    });
+    const { default: galleryService } = await import('../../src/services/GalleryService.js');
+    expect((await galleryService.placements(organization.id, gallery.id)).filter((p) => p.kind === 'THEME')).toEqual([]);
+    await prisma.themeDocument.create({
+      data: { themeId: theme.id, kind: 'TEMPLATE', key: 'events', data: { content: [{ type: 'Gallery', props: { id: 'g', gallery: gallery.id } }] } },
+    });
+    expect((await galleryService.placements(organization.id, gallery.id)).filter((p) => p.kind === 'THEME')).toEqual([
+      expect.objectContaining({ targetId: theme.id }),
+    ]);
+  });
+
   it('deletes a gallery and clears its file references', async () => {
     const response = await request(app).delete(`/admin/galleries/${gallery.id}`).set(...auth(organizerToken));
     expect(response.status).toBe(204);

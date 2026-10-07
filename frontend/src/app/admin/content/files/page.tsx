@@ -512,8 +512,9 @@ export default function FilesPage() {
           </p>
           {referencedCount > 0 && (
             <p className="rounded-md border border-amber-200 bg-amber-50 p-2 text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
-              Used in {referencedCount} {referencedCount === 1 ? 'place' : 'places'} (pages or blog
-              posts). Those will show a broken image or link.
+              Used in {referencedCount} {referencedCount === 1 ? 'place' : 'places'} (pages, blog
+              posts or galleries). Pages and posts will show a broken image or link; galleries drop
+              the photo.
             </p>
           )}
         </ConfirmDialog>

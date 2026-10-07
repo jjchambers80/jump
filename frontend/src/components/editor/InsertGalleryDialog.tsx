@@ -38,6 +38,7 @@ export default function InsertGalleryDialog({
   const [galleryId, setGalleryId] = useState(editing?.id ?? '');
   const [layout, setLayout] = useState<GalleryLayout>(editing?.layout ?? 'masonry');
   const selectRef = useRef<HTMLSelectElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     selectRef.current?.focus();
@@ -45,6 +46,25 @@ export default function InsertGalleryDialog({
       if (event.key === 'Escape') {
         event.preventDefault();
         onClose();
+        return;
+      }
+      // aria-modal: Tab wraps inside the dialog instead of reaching the page.
+      if (event.key !== 'Tab' || !dialogRef.current) return;
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), select, input:not([disabled])')
+      ).filter((el) => !(el instanceof HTMLInputElement && el.type === 'radio' && !el.checked));
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      } else if (!dialogRef.current.contains(document.activeElement)) {
+        event.preventDefault();
+        first.focus();
       }
     };
     document.addEventListener('keydown', onKey);
@@ -71,6 +91,7 @@ export default function InsertGalleryDialog({
       }}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={`${id}-title`}

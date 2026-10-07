@@ -23,14 +23,20 @@ declare module '@tiptap/core' {
   }
 }
 
-const GalleryEmbed = Node.create<{ titles: () => Record<string, string> }>({
+/** `titles()` is null until the gallery list has loaded; then a missing id is a deleted gallery. */
+const GalleryEmbed = Node.create<{ titles: () => Record<string, string> | null }, { repaint: Set<() => void> }>({
   name: 'galleryEmbed',
   group: 'block',
   atom: true,
   draggable: true,
 
   addOptions() {
-    return { titles: () => ({}) };
+    return { titles: () => null };
+  },
+
+  // Cards register a repaint, so titles that load after the editor do reach them.
+  addStorage() {
+    return { repaint: new Set<() => void>() };
   },
 
   addAttributes() {
@@ -64,13 +70,18 @@ const GalleryEmbed = Node.create<{ titles: () => Record<string, string> }>({
       const dom = document.createElement('div');
       dom.className = 'jump-gallery-embed';
       dom.setAttribute('data-testid', 'editor-gallery');
-      const title = this.options.titles()[node.attrs.id];
       const name = document.createElement('strong');
-      name.textContent = title ? `Gallery: ${title}` : 'Photo gallery';
+      const paint = () => {
+        const titles = this.options.titles();
+        const title = titles?.[node.attrs.id];
+        name.textContent = title ? `Gallery: ${title}` : titles ? 'Gallery not found' : 'Photo gallery';
+      };
+      paint();
+      this.storage.repaint.add(paint);
       const meta = document.createElement('span');
       meta.textContent = `${LAYOUT_LABEL[node.attrs.layout as GalleryLayout] ?? 'Masonry grid'} · double-click to change`;
       dom.append(name, meta);
-      return { dom };
+      return { dom, destroy: () => this.storage.repaint.delete(paint) };
     };
   },
 
