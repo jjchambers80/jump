@@ -27,6 +27,7 @@ export interface FieldSpec {
 export interface FieldContext {
   schemes: { id: string; name: string }[];
   menus: { id: string; title: string }[];
+  galleries?: { id: string; title: string }[];
 }
 
 const OPTION_LABELS: Record<string, string> = {
@@ -271,6 +272,16 @@ export function puckField(spec: FieldSpec, ctx: FieldContext): Field {
           type: 'select',
           label: spec.label,
           options: [{ label: 'Default menu', value: null as unknown as string }, ...ctx.menus.map((m) => ({ label: m.title, value: m.id }))],
+        };
+      }
+      if (spec.target === 'gallery') {
+        return {
+          type: 'select',
+          label: spec.label,
+          options: [
+            { label: 'Choose a gallery', value: null as unknown as string },
+            ...(ctx.galleries ?? []).map((g) => ({ label: g.title, value: g.id })),
+          ],
         };
       }
       return { type: 'text', label: spec.label };

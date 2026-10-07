@@ -18,6 +18,7 @@ import HeroSection from '../sections/HeroSection';
 import SlideBlock from '../sections/SlideBlock';
 import RichTextSection from '../sections/RichTextSection';
 import UpcomingEventsSection from '../sections/UpcomingEventsSection';
+import GallerySection from '../sections/GallerySection';
 import PageContentSection from '../sections/PageContentSection';
 import ImageWithTextSection from '../sections/ImageWithTextSection';
 import FeatureGridSection from '../sections/FeatureGridSection';
@@ -94,6 +95,9 @@ export const renderConfig: Config = {
     },
     UpcomingEvents: {
       render: ({ puck, ...props }: PuckProps) => <UpcomingEventsSection {...(props as any)} ctx={sectionContext(puck.metadata)} />,
+    },
+    Gallery: {
+      render: ({ puck, ...props }: PuckProps) => <GallerySection {...(props as any)} ctx={sectionContext(puck.metadata)} />,
     },
     ImageWithText: {
       fields: { blocks: buttonsSlot },

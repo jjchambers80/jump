@@ -191,6 +191,58 @@ export function removeSection(sections: DraftSection[], sectionKey: string, move
     );
 }
 
+/** Storefront shape (GalleryService.serializePublic). */
+export interface PublicGalleryItem {
+  id: string;
+  src: string;
+  srcset: string;
+  width: number | null;
+  height: number | null;
+  alt: string;
+  caption: string | null;
+}
+
+export interface PublicGallery {
+  id: string;
+  title: string;
+  sections: { id: string; title: string | null; items: PublicGalleryItem[] }[];
+}
+
+/** Visitor-facing wording; themed pages override it from the theme catalog. */
+export interface GalleryLabels {
+  /** "Open photo {n} of {total}" */
+  open: string;
+  /** "{n} of {total}" */
+  counter: string;
+  previous: string;
+  next: string;
+  close: string;
+  pause: string;
+  sections: string;
+}
+
+export const DEFAULT_GALLERY_LABELS: GalleryLabels = {
+  open: 'Open photo {n} of {total}',
+  counter: '{n} of {total}',
+  previous: 'Previous photo',
+  next: 'Next photo',
+  close: 'Close',
+  pause: 'Pause photos',
+  sections: 'Gallery sections',
+};
+
+export const fillCount = (template: string, n: number, total: number) =>
+  template.replace('{n}', String(n)).replace('{total}', String(total));
+
+/** Every photo in display order, with its section title (the lightbox crosses sections). */
+export function flattenGallery(gallery: PublicGallery) {
+  return gallery.sections.flatMap((section) =>
+    section.items.map((item) => ({ ...item, sectionTitle: section.title }))
+  );
+}
+
+export type FlatGalleryItem = ReturnType<typeof flattenGallery>[number];
+
 /** Backend srcsets hold API-relative URLs; make every candidate absolute. */
 export function resolveSrcset(srcset: string | null | undefined): string | undefined {
   if (!srcset) return undefined;

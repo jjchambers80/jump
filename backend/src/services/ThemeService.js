@@ -17,6 +17,7 @@ import {
   THEMES_PER_ORG,
   documentDef,
   fileIdsInThemeJson,
+  galleryIdsInThemeJson,
   linkKey,
   linksInThemeJson,
   getPreset,
@@ -37,6 +38,7 @@ import { sanitizeContentHtml } from '../utils/sanitizeHtml.js';
 import logger from '../utils/logger.js';
 import storeFileService from './StoreFileService.js';
 import menuService from './MenuService.js';
+import galleryService from './GalleryService.js';
 import pageService from './PageService.js';
 import { publicEventSummaries } from './OrganizationService.js';
 
@@ -530,20 +532,26 @@ class ThemeService {
   }
 
   /** Data sections reference by id, resolved and filtered to the organization (D8). */
-  async _resolve(organizationId, values, { events: withEvents = true } = {}) {
+  async _resolve(organizationId, values, { events: withEvents = true, allGalleries = false } = {}) {
     const fileIds = fileIdsInThemeJson(values);
-    const [events, menus, links, files] = await Promise.all([
+    // The editor resolves every gallery, so picking one previews at once.
+    const galleryIds = allGalleries
+      ? (await prisma.gallery.findMany({ where: { organizationId }, select: { id: true } })).map((g) => g.id)
+      : galleryIdsInThemeJson(values);
+    const [events, menus, links, files, galleries] = await Promise.all([
       withEvents ? publicEventSummaries(organizationId) : [],
       menuService.publicMenus(organizationId),
       menuService.resolveLinks(organizationId, linksInThemeJson(values), linkKey),
       fileIds.length
         ? prisma.storeFile.findMany({ where: { id: { in: fileIds }, organizationId }, include: { file: true, image: true } })
         : [],
+      galleryService.resolveForOrg(organizationId, galleryIds),
     ]);
     return {
       events,
       menus,
       links,
+      galleries,
       files: Object.fromEntries(
         files.map((row) => [
           row.id,
@@ -628,7 +636,7 @@ class ThemeService {
     const pageId = pageIdOfKey(page);
     const [organization, resolved, contentPage] = await Promise.all([
       prisma.organization.findUnique({ where: { id: organizationId }, select: ORGANIZATION_IDENTITY }),
-      this._resolve(organizationId, { settings: theme.settings, values }),
+      this._resolve(organizationId, { settings: theme.settings, values }, { allGalleries: true }),
       pageId ? pageService.getPublic(organizationId, pageId, { includeHidden: true }) : null,
     ]);
     return { organization, resolved: { ...resolved, ...(contentPage && { page: contentPage }) } };

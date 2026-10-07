@@ -2,6 +2,7 @@
 
 import type { EventSummary } from '@/components/EventCard';
 import type { PublicMenus } from '@/lib/menus';
+import type { PublicGallery } from '@/lib/galleries';
 import type { ThemeMode } from '@/lib/theme';
 import type { PublicPage } from '@/components/storefront/StorefrontPageBody';
 
@@ -48,6 +49,8 @@ export interface ResolvedData {
   menus: PublicMenus;
   links: Record<string, string>;
   files: Record<string, { url: string; width: number | null; height: number | null; alt: string | null; mimeType?: string }>;
+  /** Galleries placed by Gallery sections (spec 046), keyed by id; missing = render nothing. */
+  galleries?: Record<string, PublicGallery>;
   /** The Content page being rendered (`page=page:<id or slug>`). */
   page?: PublicPage;
 }
