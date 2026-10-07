@@ -132,7 +132,7 @@ export default function HeroSection({
       )}
       </div>
       <Buttons
-        className={`mt-8 flex flex-wrap gap-3 ${centered ? 'justify-center' : ''} ${
+        className={`mt-8 flex flex-wrap gap-3 ${centered ? 'justify-center' : ''} ${onImage ? 'text-white' : ''} ${
           bottom ? 'max-sm:flex-col max-sm:flex-nowrap max-sm:[&_a]:flex max-sm:[&_a]:w-full max-sm:[&_a]:justify-center' : ''
         }`}
       />
