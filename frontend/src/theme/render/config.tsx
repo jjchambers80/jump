@@ -11,6 +11,7 @@ import EventsHeroSection from '../sections/EventsHeroSection';
 import EventListSection from '../sections/EventListSection';
 import ButtonBlock from '../sections/ButtonBlock';
 import CallToActionSection from '../sections/CallToActionSection';
+import SpotlightSection from '../sections/SpotlightSection';
 import FaqItemBlock from '../sections/FaqItemBlock';
 import FaqSection from '../sections/FaqSection';
 import HeroCarouselSection from '../sections/HeroCarouselSection';
@@ -73,6 +74,12 @@ export const renderConfig: Config = {
       fields: { blocks: buttonsSlot },
       render: ({ puck, blocks, ...props }: PuckProps) => (
         <CallToActionSection {...(props as any)} Buttons={slotWrapper(blocks)} ctx={sectionContext(puck.metadata)} />
+      ),
+    },
+    Spotlight: {
+      fields: { blocks: buttonsSlot },
+      render: ({ puck, blocks, ...props }: PuckProps) => (
+        <SpotlightSection {...(props as any)} Buttons={slotWrapper(blocks)} ctx={sectionContext(puck.metadata)} />
       ),
     },
     HeroCarousel: {

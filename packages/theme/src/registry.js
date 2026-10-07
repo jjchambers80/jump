@@ -300,6 +300,20 @@ export const SECTIONS = {
     },
     blocks: buttons,
   },
+  // A quiet one-line band: a small badge or logo, a few words and a button
+  // (a cause the store supports, a partner, a sponsor).
+  Spotlight: {
+    label: 'Spotlight',
+    category: 'Text',
+    groups: ['template'],
+    settings: {
+      image: image('Badge or logo'),
+      eyebrow: text('Eyebrow', { max: 60, default: '' }),
+      heading: text('Heading', { max: 120, default: 'A cause we support' }),
+      text: textarea('Text', { max: 300, default: '' }),
+    },
+    blocks: buttons,
+  },
   Faq: {
     label: 'FAQ',
     category: 'Text',
