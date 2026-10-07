@@ -354,6 +354,7 @@ export default function BlogPostForm({
                   onChange={(html) => patch({ content: html })}
                   placeholder="Write your post…"
                   onInsertImage={insertImage}
+                  allowGalleries
                   aria-labelledby="post-content-label"
                   testId="post-content-editor"
                 />

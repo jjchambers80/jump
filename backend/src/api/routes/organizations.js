@@ -21,6 +21,7 @@ import storefrontPreferencesService from '../../services/StorefrontPreferencesSe
 import { validateStorefrontUnlock } from '../validators/storefrontPreferencesValidators.js';
 import { gateByOrgParam } from '../../middleware/storefrontGate.js';
 import blogPostService from '../../services/BlogPostService.js';
+import galleryService from '../../services/GalleryService.js';
 import pageService from '../../services/PageService.js';
 import menuService from '../../services/MenuService.js';
 import urlRedirectService from '../../services/UrlRedirectService.js';
@@ -224,7 +225,9 @@ router.get('/:id/public/blogs/:blogHandle/:postHandle', gateByOrgParam, async (r
   try {
     const organization = await publicOrganizationIdentity(req.params.id);
     const post = await blogPostService.publicGet(organization.id, req.params.blogHandle, req.params.postHandle);
-    res.json({ organization, post });
+    // Spec 046: galleries the post embeds, resolved for this organization.
+    const galleries = await galleryService.resolveInHtml(organization.id, post.content);
+    res.json({ organization, post: { ...post, galleries } });
   } catch (error) {
     next(error);
   }

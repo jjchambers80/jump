@@ -100,3 +100,38 @@ for (const viewport of [
     });
   });
 }
+
+// Rich-text embeds (spec 046D): galleries render where the editor put them.
+for (const viewport of [
+  { name: 'phone', width: 375, height: 812 },
+  { name: 'desktop', width: 1280, height: 900 },
+]) {
+  test(`content page embeds on ${viewport.name}: in place, unknown ones skipped, axe`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await page.goto('/organizations/theme-gallery/pages/photos');
+    const article = page.locator('main');
+    await expect(article.getByText('Our favourite shots.')).toBeVisible();
+    // Text, carousel, text, masonry, text — the deleted gallery leaves no trace.
+    const order = await article
+      .locator('p, [aria-roledescription="carousel"], [data-gallery] ul[role="list"]')
+      .evaluateAll((els) =>
+        els
+          .map((el) => (el.matches('[aria-roledescription="carousel"]') ? 'carousel' : el.matches('ul') ? 'masonry' : el.textContent?.trim()))
+          .filter((v, i, all) => v !== all[i - 1] && (v === 'carousel' || v === 'masonry' || /shots|room|next year/.test(v ?? '')))
+      );
+    expect(order).toEqual(['Our favourite shots.', 'carousel', 'Every photo, by room:', 'masonry', 'See you next year.']);
+    await expect(article.locator('[data-gallery]')).toHaveCount(2);
+
+    await article.getByRole('button', { name: `Open photo 3 of ${TOTAL}: Costume contest winners` }).last().click();
+    await expect(page.getByRole('dialog', { name: GALLERY.title })).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+    const results = await new AxeBuilder({ page })
+      .include('main')
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+      .analyze();
+    expect(results.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
+  });
+}

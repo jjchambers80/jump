@@ -151,3 +151,32 @@
 .jump-prose--editor .jump-video-frame iframe {
   pointer-events: none;
 }
+/* Gallery embed card in the editor (spec 046D); the storefront renders the gallery. */
+.jump-prose--editor .jump-gallery-embed {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 2px dashed rgb(165 180 252);
+  border-radius: 0.5rem;
+  background: rgb(238 242 255);
+  color: rgb(49 46 129);
+  cursor: pointer;
+}
+.jump-prose--editor .jump-gallery-embed span {
+  font-size: 0.8125rem;
+  color: rgb(67 56 202);
+}
+.dark .jump-prose--editor .jump-gallery-embed {
+  border-color: rgb(99 102 241);
+  background: rgb(30 27 75);
+  color: rgb(224 231 255);
+}
+.dark .jump-prose--editor .jump-gallery-embed span {
+  color: rgb(199 210 254);
+}
+.jump-prose--editor .jump-gallery-embed.ProseMirror-selectednode {
+  outline: 2px solid rgb(79 70 229);
+  outline-offset: 2px;
+}

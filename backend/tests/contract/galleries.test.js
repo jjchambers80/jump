@@ -299,6 +299,41 @@ describe('Content › Galleries contract', () => {
     expect(Object.keys(preview.galleries)).toContain(gallery.id);
   });
 
+  it('returns embedded galleries with the public page and blog post', async () => {
+    const embed = `<figure data-jump-gallery="${gallery.id}" data-layout="carousel"></figure>`;
+    await prisma.page.create({
+      data: { organizationId: organization.id, title: 'Show photos', slug: `show-${seed}`, content: `<p>x</p>${embed}`, isVisible: true },
+    });
+    const page = await request(app).get(`/organizations/${organization.id}/public/pages/show-${seed}`);
+    expect(page.status).toBe(200);
+    const pagePayload = page.body.page ?? page.body;
+    expect(Object.keys(pagePayload.galleries)).toEqual([gallery.id]);
+
+    // Another store embedding this store's gallery id gets nothing.
+    await prisma.page.create({
+      data: { organizationId: otherOrganization.id, title: 'Stolen', slug: `stolen-${seed}`, content: embed, isVisible: true },
+    });
+    const stolen = await request(app).get(`/organizations/${otherOrganization.id}/public/pages/stolen-${seed}`);
+    expect((stolen.body.page ?? stolen.body).galleries).toEqual({});
+
+    const blog = await prisma.blog.create({ data: { organizationId: organization.id, title: 'News', handle: `news-${seed}` } });
+    await prisma.blogPost.create({
+      data: {
+        organizationId: organization.id,
+        blogId: blog.id,
+        title: 'Recap',
+        handle: 'recap',
+        content: embed,
+        authorName: 'Staff',
+        isVisible: true,
+        publishedAt: new Date(Date.now() - 60_000),
+      },
+    });
+    const post = await request(app).get(`/organizations/${organization.id}/public/blogs/news-${seed}/recap`);
+    expect(post.status).toBe(200);
+    expect(Object.keys(post.body.post.galleries)).toEqual([gallery.id]);
+  });
+
   it('deletes a gallery and clears its file references', async () => {
     const response = await request(app).delete(`/admin/galleries/${gallery.id}`).set(...auth(organizerToken));
     expect(response.status).toBe(204);

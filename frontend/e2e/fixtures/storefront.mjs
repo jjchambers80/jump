@@ -287,7 +287,23 @@ export const FIXTURES = {
   })(),
   'theme-gallery': (() => {
     const base = render('theme-gallery', { template: galleryDocument });
-    return { render: { ...base, resolved: { ...base.resolved, galleries: { 'gal-expo': GALLERY } } }, routes: {} };
+    // A Content page whose rich text embeds the gallery twice (spec 046D).
+    // Embed ids are cuid-shaped (lowercase letters and digits only).
+    const embed = (layout) => `<figure data-jump-gallery="galexpo" data-layout="${layout}"></figure>`;
+    const photosPage = {
+      organization: base.organization,
+      page: {
+        id: 'p-photos',
+        title: 'Show photos',
+        slug: 'photos',
+        content: `<p>Our favourite shots.</p>${embed('carousel')}<p>Every photo, by room:</p>${embed('masonry')}<figure data-jump-gallery="deleted1" data-layout="masonry"></figure><p>See you next year.</p>`,
+        galleries: { galexpo: { ...GALLERY, id: 'galexpo' } },
+      },
+    };
+    return {
+      render: { ...base, resolved: { ...base.resolved, galleries: { 'gal-expo': GALLERY } } },
+      routes: { '/public/pages/photos': photosPage },
+    };
   })(),
   'theme-parity': { render: render('theme-parity', { organization: { coverUrl: PARITY_COVER } }), routes: {} },
   'theme-parity-dark': {

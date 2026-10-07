@@ -13,6 +13,13 @@ import storeFileService from './StoreFileService.js';
 export const GALLERY_MAX_SECTIONS = 20;
 export const GALLERY_MAX_ITEMS = 500;
 
+/** Gallery ids embedded in sanitised content HTML (the editor's Insert gallery). */
+export function galleryIdsInHtml(html) {
+  const ids = new Set();
+  if (typeof html === 'string') for (const match of html.matchAll(/data-jump-gallery="([a-z0-9]+)"/g)) ids.add(match[1]);
+  return [...ids];
+}
+
 const ITEM_INCLUDE = { file: { include: { file: true, image: true } } };
 const TREE_INCLUDE = {
   sections: {
@@ -196,6 +203,11 @@ class GalleryService {
       if (serialized.sections.length) out[gallery.id] = serialized;
     }
     return out;
+  }
+
+  /** The galleries a page or blog post body embeds, for its public payload. */
+  async resolveInHtml(organizationId, html) {
+    return this.resolveForOrg(organizationId, galleryIdsInHtml(html));
   }
 
   serializePublic(gallery) {

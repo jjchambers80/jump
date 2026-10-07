@@ -9,6 +9,8 @@
 import type { PageTemplateSection } from '@/services/api';
 import ContactFormSection from './ContactFormSection';
 import ContentHtml from './ContentHtml';
+import ContentWithGalleries from './ContentWithGalleries';
+import type { PublicGallery } from '@/lib/galleries';
 import ApplyDrawer, { ApplyInline } from '@/components/applications/ApplyDrawer';
 
 export interface PublicPage {
@@ -16,6 +18,8 @@ export interface PublicPage {
   title: string;
   slug: string;
   content: string;
+  /** Spec 046D: galleries the content embeds, resolved for the organization. */
+  galleries?: Record<string, PublicGallery>;
   template?: { name: string; sections: PageTemplateSection[] } | null;
   /** Spec 042: the store has an email a contact form can deliver to. */
   contactFormAvailable?: boolean;
@@ -84,12 +88,12 @@ export default function StorefrontPageBody({
           </aside>
         )}
         {!sections ? (
-          <ContentHtml html={page.content} className="mt-8" />
+          <ContentWithGalleries html={page.content} galleries={page.galleries} className="mt-8" />
         ) : (
           sections.map((section, index) => {
             switch (section.type) {
               case 'page_content':
-                return <ContentHtml key={index} html={page.content} className="mt-8" />;
+                return <ContentWithGalleries key={index} html={page.content} galleries={page.galleries} className="mt-8" />;
               case 'rich_text':
                 return <ContentHtml key={index} html={section.settings.html} className="mt-8" />;
               case 'contact_form':

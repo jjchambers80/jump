@@ -547,3 +547,45 @@ test('on a phone the right column stacks under the content', async ({ page }) =>
   expect(visibility.y).toBeGreaterThan(content.y);
   expect(Math.abs(visibility.x - content.x)).toBeLessThan(40);
 });
+
+test('Gallery toolbar button embeds a gallery; saved embeds show as cards', async ({ page }) => {
+  await page.route(`${API}/admin/galleries**`, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        galleries: [
+          { id: 'galexpo', title: 'Retro Expo', handle: 'retro-expo', sectionCount: 2, photoCount: 12, coverThumbUrl: null, placementCount: 0, updatedAt: '2026-10-07T00:00:00.000Z' },
+          { id: 'galbooths', title: 'Vendor booths', handle: 'vendor-booths', sectionCount: 1, photoCount: 1, coverThumbUrl: null, placementCount: 0, updatedAt: '2026-10-07T00:00:00.000Z' },
+        ],
+      }),
+    })
+  );
+  const api = await mockPagesApi(page, [
+    storePage({
+      id: 'page-photos',
+      title: 'Photos',
+      content: '<p>Intro</p><figure data-jump-gallery="galexpo" data-layout="masonry"></figure>',
+    }),
+  ]);
+  await page.goto('/admin/online-store/pages/page-photos');
+  await expect(page.getByTestId('editor-gallery')).toHaveCount(1);
+
+  const galleryButton = page.getByRole('button', { name: 'Gallery', exact: true });
+  await page.getByLabel('Page content').getByText('Intro').click();
+  await galleryButton.click();
+  const dialog = page.getByRole('dialog', { name: 'Insert gallery' });
+  await expect(dialog.getByLabel('Gallery')).toBeFocused();
+  await dialog.getByLabel('Gallery').selectOption({ label: 'Vendor booths (1 photo)' });
+  await dialog.getByLabel(/Carousel/).check();
+  await dialog.getByRole('button', { name: 'Insert gallery' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByTestId('editor-gallery')).toHaveCount(2);
+  await expect(page.getByTestId('editor-gallery').filter({ hasText: 'Gallery: Vendor booths' })).toContainText('Carousel');
+
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page).toHaveURL(/\/admin\/online-store\/pages$/);
+  const content = String(api.calls.find((call) => call.method === 'PUT')?.body?.content);
+  expect(content).toContain('<figure data-jump-gallery="galexpo" data-layout="masonry"></figure>');
+  expect(content).toContain('<figure data-jump-gallery="galbooths" data-layout="carousel"></figure>');
+});
