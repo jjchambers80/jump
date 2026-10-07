@@ -6,7 +6,7 @@
 // in a live region. Save refuses photos without alt text and lists them.
 
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Plus } from 'lucide-react';
+import { ArrowLeft, Copy, Plus } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
 import FilePickerDialog from '@/components/content/FilePickerDialog';
 import SaveBar from '@/components/content/SaveBar';
@@ -28,6 +28,7 @@ import {
   type MissingAlt,
 } from '@/lib/galleries';
 import { useUnsavedChanges } from '@/lib/useUnsavedChanges';
+import { copyText } from '@/lib/content';
 import AltTextSummary from './AltTextSummary';
 import DeleteGalleryButton from './DeleteGalleryButton';
 import GalleryDetailsCard from './GalleryDetailsCard';
@@ -138,7 +139,17 @@ export default function GalleryEditor({ gallery, onSaved }: { gallery: Gallery; 
           </button>
           <h1 className="mt-1 truncate text-2xl font-bold text-gray-900 dark:text-white">{gallery.title}</h1>
         </div>
-        <DeleteGalleryButton gallery={gallery} />
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={async () => showToast((await copyText(gallery.id)) ? 'Gallery id copied' : 'Could not copy the id')}
+            className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+          >
+            <Copy className="h-4 w-4" aria-hidden />
+            Copy id
+          </button>
+          <DeleteGalleryButton gallery={gallery} />
+        </div>
       </div>
 
       <AltTextSummary ref={summaryRef} problems={problems} onOpen={setOpenPhoto} />

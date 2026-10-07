@@ -143,7 +143,7 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
   const [pagePayloads, setPagePayloads] = useState<Record<string, PublicPage>>({});
   const [mountKey, setMountKey] = useState(0);
   const [menus, setMenus] = useState<{ id: string; title: string }[]>([]);
-  const [galleries, setGalleries] = useState<{ id: string; title: string }[]>([]);
+  const [galleries, setGalleries] = useState<{ id: string; title: string; photoCount: number }[]>([]);
   const [files, setFiles] = useState<Record<string, { url: string; width: number | null; height: number | null; alt: string | null }>>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<{ message: string; details?: string[] } | null>(null);
@@ -192,7 +192,7 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
       .catch(() => setMenus([]));
     galleriesApi
       .list()
-      .then((r) => setGalleries(r.galleries.map((g) => ({ id: g.id, title: g.title }))))
+      .then((r) => setGalleries(r.galleries.map((g) => ({ id: g.id, title: g.title, photoCount: g.photoCount }))))
       .catch(() => setGalleries([]));
     try {
       const raw = window.sessionStorage.getItem(BACKUP_KEY + themeId);

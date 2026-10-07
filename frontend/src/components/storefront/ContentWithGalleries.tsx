@@ -25,7 +25,7 @@ export default function ContentWithGalleries({ html, galleries = {}, className =
         if (!gallery) return null;
         return (
           <div key={index} className={index ? 'mt-8' : ''}>
-            <GalleryBlock gallery={gallery} placementId={`embed-${index}-${part.galleryId}`} layout={part.layout} />
+            <GalleryBlock gallery={gallery} placementId={`embed-${index}-${part.galleryId}`} layout={part.layout} priority={index === 0} />
           </div>
         );
       })}

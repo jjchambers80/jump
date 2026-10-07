@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react';
 import { CAROUSEL_TRACK_CLASS } from './islandClasses';
+import { prefersReducedMotion, useCarouselRotation } from '@/lib/useCarouselRotation';
 
 export interface CarouselLabels {
   carousel: string;
@@ -48,10 +49,8 @@ export default function HeroCarouselFrame({
   const frameRef = useRef<HTMLElement>(null);
   const [count, setCount] = useState(0);
   const [index, setIndex] = useState(0);
-  const [paused, setPaused] = useState(false);
-  const [holding, setHolding] = useState(false);
   const [announce, setAnnounce] = useState(false);
-  const reduced = useRef(false);
+  const { paused, setPaused, holding, setHolding, rotating } = useCarouselRotation(count > 1 && intervalMs > 0);
 
   const track = () => frameRef.current?.querySelector<HTMLElement>(`.${CAROUSEL_TRACK_CLASS}`) ?? null;
   const slides = () => Array.from(track()?.children ?? []) as HTMLElement[];
@@ -59,8 +58,6 @@ export default function HeroCarouselFrame({
   // Slide count, slide semantics and the active slide. The editor adds and
   // removes slides under us, so the track is observed, not read once.
   useEffect(() => {
-    reduced.current = Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
-    if (reduced.current) setPaused(true);
     const el = track();
     if (!el) return;
     let visible: IntersectionObserver | null = null;
@@ -115,7 +112,7 @@ export default function HeroCarouselFrame({
     if (!el || !list.length) return;
     const next = (to + list.length) % list.length;
     // Every slide is exactly one track wide.
-    el.scrollTo({ left: next * el.clientWidth, behavior: reduced.current ? 'auto' : 'smooth' });
+    el.scrollTo({ left: next * el.clientWidth, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
     setIndex(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -132,7 +129,6 @@ export default function HeroCarouselFrame({
 
   const many = count > 1;
   const timed = many && intervalMs > 0;
-  const rotating = timed && !paused;
   const round =
     'inline-flex items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm transition-colors hover:bg-black/65 motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black/40';
 

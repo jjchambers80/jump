@@ -27,7 +27,7 @@ export interface FieldSpec {
 export interface FieldContext {
   schemes: { id: string; name: string }[];
   menus: { id: string; title: string }[];
-  galleries?: { id: string; title: string }[];
+  galleries?: { id: string; title: string; photoCount: number }[];
 }
 
 const OPTION_LABELS: Record<string, string> = {
@@ -201,6 +201,53 @@ export function LinkFieldControl({ id, label, value, onChange }: { id: string; l
   );
 }
 
+/** Gallery section picker (spec 046): the store's galleries, a link to manage them, and an empty-gallery hint. */
+function GalleryFieldControl({
+  id,
+  label,
+  value,
+  galleries,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string | null;
+  galleries: { id: string; title: string; photoCount: number }[];
+  onChange: (v: string | null) => void;
+}) {
+  const picked = galleries.find((gallery) => gallery.id === value);
+  return (
+    <div className="space-y-1">
+      <label htmlFor={id} className="block text-sm font-medium text-gray-700">
+        {label}
+      </label>
+      <select id={id} className={input} value={value ?? ''} onChange={(e) => onChange(e.target.value || null)}>
+        <option value="">Choose a gallery</option>
+        {value && !picked && <option value={value}>Deleted gallery</option>}
+        {galleries.map((gallery) => (
+          <option key={gallery.id} value={gallery.id}>
+            {gallery.title}
+          </option>
+        ))}
+      </select>
+      {value && !picked && <p className="mt-1 text-xs text-red-700">This gallery was deleted. Choose another.</p>}
+      {picked && picked.photoCount === 0 && (
+        <p className="mt-1 text-xs text-amber-800">This gallery has no photos yet, so the section shows nothing.</p>
+      )}
+      {!galleries.length && <p className={small}>No galleries yet.</p>}
+      <a
+        href={picked ? `/admin/content/galleries/${picked.id}` : '/admin/content/galleries'}
+        target="_blank"
+        rel="noopener"
+        className="inline-block text-xs font-medium text-indigo-700 underline"
+      >
+        {picked ? 'Edit this gallery' : 'Manage galleries'} <span aria-hidden>↗</span>
+        <span className="sr-only"> (opens in a new tab)</span>
+      </a>
+    </div>
+  );
+}
+
 export function DateTimeControl({ id, label, value, onChange }: { id: string; label: string; value: string | null; onChange: (v: string | null) => void }) {
   // Shown in the browser's zone; stored as an instant (ISO).
   const local = value ? new Date(new Date(value).getTime() - new Date(value).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '';
@@ -275,14 +322,9 @@ export function puckField(spec: FieldSpec, ctx: FieldContext): Field {
         };
       }
       if (spec.target === 'gallery') {
-        return {
-          type: 'select',
-          label: spec.label,
-          options: [
-            { label: 'Choose a gallery', value: null as unknown as string },
-            ...(ctx.galleries ?? []).map((g) => ({ label: g.title, value: g.id })),
-          ],
-        };
+        return custom<string | null>(spec.label, ({ id, value, onChange }) => (
+          <GalleryFieldControl id={id} label={spec.label} value={value ?? null} galleries={ctx.galleries ?? []} onChange={onChange} />
+        ));
       }
       return { type: 'text', label: spec.label };
     case 'datetime':

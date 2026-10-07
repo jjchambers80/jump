@@ -11,6 +11,11 @@ const expect = baseExpect.configure({ timeout: 20_000 });
 test.describe.configure({ timeout: 90_000 });
 
 const URL = '/organizations/theme-gallery';
+// The fixture API serves no image bytes: photos get a real PNG unless a test breaks them.
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
+test.beforeEach(async ({ page }) => {
+  await page.route('**/uploads/**', (route) => route.fulfill({ status: 200, contentType: 'image/png', body: PNG }));
+});
 const TOTAL = GALLERY.sections.reduce((sum, section) => sum + section.items.length, 0);
 
 for (const viewport of [
@@ -85,7 +90,6 @@ for (const viewport of [
       const controls = carousel.getByRole('button');
       await expect(controls.first()).toHaveAccessibleName('Pause photos');
       await expect(carousel.getByRole('button', { name: 'Previous photo' })).toBeVisible();
-      await expect(carousel.getByRole('button', { name: 'Previous photo' })).toHaveAttribute('aria-disabled', 'true');
       await carousel.getByRole('button', { name: 'Next photo' }).click();
       // Moving it stops the rotation for good.
       await expect(carousel.getByRole('button', { name: 'Pause photos' })).toHaveAttribute('aria-pressed', 'true');
@@ -100,6 +104,8 @@ for (const viewport of [
       await page.goto(URL);
       const carousel = page.getByRole('region', { name: 'Highlights' });
       await expect(carousel.getByRole('button', { name: 'Pause photos' })).toHaveAttribute('aria-pressed', 'true');
+      // Nothing moves on its own here, so the start is stable: Previous is disabled.
+      await expect(carousel.getByRole('button', { name: 'Previous photo' })).toHaveAttribute('aria-disabled', 'true');
     });
   });
 }
@@ -138,3 +144,21 @@ for (const viewport of [
     expect(results.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
   });
 }
+
+test('a photo that fails to load keeps its box and shows its alt text (spec 046)', async ({ page }) => {
+  await page.route('**/uploads/**', (route) => route.fulfill({ status: 404, body: '' }));
+  await page.goto(URL);
+  const masonry = page.locator('[data-section="Gallery"]').first();
+  const tile = masonry.getByRole('button', { name: `Open photo 1 of ${TOTAL}: Crowd at the arcade row` });
+  await expect(tile).toContainText('Crowd at the arcade row');
+  // A photo with no alt text says so instead of showing nothing.
+  await expect(masonry.getByRole('button', { name: `Open photo 4 of ${TOTAL}` })).toContainText('Photo unavailable');
+  const box = await tile.boundingBox();
+  expect(box!.height).toBeGreaterThan(40);
+});
+
+test('the first embedded gallery on a page loads its first photo first', async ({ page }) => {
+  await page.goto('/organizations/theme-gallery/pages/photos');
+  // The page opens with text, so no embed is first: nothing is high priority.
+  await expect(page.locator('img[fetchpriority="high"]')).toHaveCount(0);
+});

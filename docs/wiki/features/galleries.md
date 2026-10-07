@@ -1,7 +1,7 @@
 # Content › Galleries
 
 **Status:** Implemented (spec 046)
-**Last Updated:** 2026-10-07 (post-review fixes)
+**Last Updated:** 2026-10-07 (deferred items built)
 
 ## Overview
 
@@ -75,12 +75,15 @@ Spec: `specs/046-photo-galleries/plan.md`. Research: `docs/research/2026-10-07-p
 - **Alt text errors:** `ALT_TEXT_REQUIRED` lists `{ section, item, fileId }` positions, not item ids, because a whole-tree `PUT` sends no item ids.
 - **Theme editor preview:** it resolves every gallery of the store (`allGalleries`), so a gallery picked in the section settings previews without reloading. That costs one query per editor load.
 - **Embed ids:** the sanitiser accepts `[a-z0-9]{1,64}`, a superset of cuid, rather than a strict cuid regex.
-- **Not built yet:**
-  - Rich-text editor: the cover tile with the first 4 photos (embeds show as a text card with the title, layout and "Gallery not found").
-  - Theme editor: the "Manage galleries ↗" link beside the gallery picker.
-  - Editor header: a Copy id action.
-  - Storefront: `fetchpriority="high"` on the first photo, and alt text in place of an image that fails to load.
-  - Code sharing: the gallery carousel has its own rotation timer instead of reusing `HeroCarouselFrame`'s.
+- **First-photo priority:** only a rich-text embed that opens the content gets `fetchpriority="high"`. A theme section cannot tell where it sits on the page, so it never does.
+
+## Editor and storefront details
+
+- **Rich-text cover tile:** an embed in the editor shows its first four photos (`thumbUrls` from the gallery list), the title, the layout, and **Edit** and **Remove** buttons. A deleted gallery shows "Gallery not found".
+- **Theme editor picker:** a custom field. It warns when the picked gallery is empty or was deleted, and has a **Manage galleries ↗** link (**Edit this gallery ↗** once one is picked).
+- **Gallery editor:** **Copy id** copies the gallery's id, for the CLI and agents later.
+- **Broken photos:** `GalleryImage` keeps a photo's reserved box when it fails to load and shows its alt text (or "Photo unavailable"). It also catches a failure that happened before hydration.
+- **Shared rotation:** both carousels use `lib/useCarouselRotation.ts` (paused, holding, never under reduced motion).
 
 ## Later
 

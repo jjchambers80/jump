@@ -31,7 +31,7 @@ import {
 import { useEffect, useRef, useState, type ReactNode, type Ref } from 'react';
 import InsertVideoDialog, { type VideoAttrs } from './InsertVideoDialog';
 import VideoEmbed from './VideoEmbed';
-import GalleryEmbed, { type GalleryAttrs } from './GalleryEmbed';
+import GalleryEmbed, { type GalleryAttrs, type GalleryCardInfo } from './GalleryEmbed';
 import InsertGalleryDialog from './InsertGalleryDialog';
 import GalleryListLoader from './GalleryListLoader';
 import type { GallerySummary } from '@/lib/galleries';
@@ -230,7 +230,7 @@ export default function RichTextEditor({
   const videoButtonRef = useRef<HTMLButtonElement>(null);
   const [galleryDialog, setGalleryDialog] = useState<{ editing: GalleryAttrs | null } | null>(null);
   const [galleries, setGalleries] = useState<GallerySummary[] | null>(null);
-  const galleryTitles = useRef<Record<string, string> | null>(null);
+  const galleryInfo = useRef<Record<string, GalleryCardInfo> | null>(null);
   const galleryButtonRef = useRef<HTMLButtonElement>(null);
   const lastEmitted = useRef(value);
 
@@ -257,7 +257,10 @@ export default function RichTextEditor({
               HTMLAttributes: { loading: 'lazy' },
             }),
             VideoEmbed,
-            GalleryEmbed.configure({ titles: () => galleryTitles.current }),
+            GalleryEmbed.configure({
+              galleries: () => galleryInfo.current,
+              onEdit: (attrs) => setGalleryDialog({ editing: attrs }),
+            }),
           ]
         : []),
     ],
@@ -501,7 +504,7 @@ export default function RichTextEditor({
       {allowGalleries && (
         <GalleryListLoader
           onLoad={(list) => {
-            galleryTitles.current = Object.fromEntries(list.map((g) => [g.id, g.title]));
+            galleryInfo.current = Object.fromEntries(list.map((g) => [g.id, { title: g.title, thumbUrls: g.thumbUrls ?? [] }]));
             setGalleries(list);
             (editor.storage as unknown as { galleryEmbed?: { repaint: Set<() => void> } }).galleryEmbed?.repaint.forEach((paint) => paint());
           }}
