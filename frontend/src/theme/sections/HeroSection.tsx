@@ -172,11 +172,12 @@ export default function HeroSection({
               file && <HeroMedia url={file.url} alt={alt} overlay={opacity} cover={full} />
             )}
             {!full && <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[32px] ring-1 ring-inset ring-white/10" />}
+            {/* Edge-to-edge heroes get a wider desktop inset so the text clears the window edge. */}
             {/* button-bottom: pb-20 keeps the buttons clear of the video's pause button. */}
             <div
               // Before hydration measures the header, 9rem is about its height.
               style={underHeader ? { paddingTop: 'calc(var(--hero-offset, 9rem) + 2rem)' } : undefined}
-              className={`w-full px-6 py-16 sm:px-10 lg:px-12 ${bottom ? 'max-sm:flex max-sm:flex-col max-sm:pb-20' : ''}`}
+              className={`w-full px-6 py-16 sm:px-10 ${full ? 'lg:px-20 xl:px-28' : 'lg:px-12'} ${bottom ? 'max-sm:flex max-sm:flex-col max-sm:pb-20' : ''}`}
             >
               {text(true)}
             </div>
