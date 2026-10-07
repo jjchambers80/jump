@@ -3,7 +3,8 @@ import { signInAsStaff } from './helpers/session';
 
 // Spec 045C: Settings › Agent access, Account › Connected apps and
 // Settings › Platform load their data, and switch flips go through the
-// "Confirm it's you" step-up. Backend mocked.
+// "Confirm it's you" step-up. Backend mocked. The nav entries for the first
+// two stay hidden until NEXT_PUBLIC_AGENT_ACCESS_ENABLED, so tests open them by URL.
 
 const API = 'http://localhost:3002';
 const ORG_ID = 'org-agent';
@@ -72,7 +73,7 @@ test.describe('as ADMIN', () => {
     await mockApi(page);
     await page.goto('/admin/settings/agent-access');
     const nav = page.getByRole('navigation', { name: 'Settings sections' });
-    await expect(nav.getByRole('link', { name: 'Agent access' })).toBeVisible();
+    await expect(nav.getByRole('link', { name: 'General' })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Platform' })).toHaveCount(0);
   });
 

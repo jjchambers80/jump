@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 const SECTIONS = [
   { href: '/admin/account', label: 'General' },
   { href: '/admin/account/security', label: 'Security' },
-  { href: '/admin/account/connected-apps', label: 'Connected apps' },
+  ...(process.env.NEXT_PUBLIC_AGENT_ACCESS_ENABLED === 'true' ? [{ href: '/admin/account/connected-apps', label: 'Connected apps' }] : []),
 ];
 
 const active = 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300';
