@@ -6,6 +6,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { Render } from '@puckeditor/core/rsc';
 import { renderConfig, renderable } from './render/config';
+import RetroGridBackground from './RetroGridBackground';
 import ThemeScope from './ThemeScope';
 import PreviewBar, { ClearPreviewCookie } from './PreviewBar';
 import { pageWidthVars, schemeCss, settingsVars } from './settingsCss';
@@ -83,6 +84,8 @@ export default function ThemeFrame({
       className="min-h-screen bg-gray-50 dark:bg-slate-900"
     >
       {data.previewInvalid && <ClearPreviewCookie />}
+      <RetroGridBackground settings={data.settings} />
+      {/* relative: paints above the fixed backdrop */}
       <div data-theme-frame={data.theme.id ?? 'preset'} className="relative" style={pageWidthVars(data.documents.template?.root) as CSSProperties | undefined}>
         {header}
         {children ??

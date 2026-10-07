@@ -10,6 +10,7 @@ import { BLOCKS, COMMON_SECTION_FIELDS, DOCUMENTS, SECTIONS, fieldDefaults, sect
 import { EyeOff } from 'lucide-react';
 import { renderConfig } from '../render/config';
 import ThemeScope from '../ThemeScope';
+import RetroGridBackground from '../RetroGridBackground';
 import { pageWidthVars, schemeCss, settingsVars } from '../settingsCss';
 import { sectionContext } from '../sections/context';
 import { createUsePuck, type Config, type Fields } from './puck';
@@ -194,7 +195,8 @@ export function buildEditorConfig(ctx: FieldContext, page = 'home'): Config {
               staticMode
               className="min-h-screen bg-gray-50 dark:bg-slate-900"
             >
-              <div style={pageWidthVars({ props: { pageWidth } })}>
+              <RetroGridBackground settings={section.settings} />
+              <div className="relative" style={pageWidthVars({ props: { pageWidth } })}>
                 <Header />
                 <main>
                   <Template />

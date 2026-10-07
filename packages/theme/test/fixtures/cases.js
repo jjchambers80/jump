@@ -78,6 +78,8 @@ export const DOCUMENT_CASES = [
 export const SETTINGS_CASES = [
   { name: 'empty settings', settings: {}, errors: [] },
   { name: 'layout width', settings: { layout: { pageWidth: 1400 } }, errors: [] },
+  { name: 'retro grid background', settings: { background: { style: 'retro-grid' } }, errors: [] },
+  { name: 'unknown background style', settings: { background: { style: 'url(x)' } }, errors: ['background.style'] },
   { name: 'unknown group', settings: { customCss: { body: 'x' } }, errors: ['customCss'] },
   { name: 'free-form CSS value refused', settings: { layout: { pageWidth: '100vw' } }, errors: ['layout.pageWidth'] },
   { name: 'no schemes', settings: { colors: { schemes: [] } }, errors: ['colors.schemes'] },

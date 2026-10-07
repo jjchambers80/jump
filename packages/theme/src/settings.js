@@ -62,6 +62,12 @@ export const SETTINGS_GROUPS = {
       gridVertical: range('Grid vertical space', 4, 40, { step: 4, unit: 'px', default: 16 }),
     },
   },
+  background: {
+    label: 'Background',
+    fields: {
+      style: select('Page background', ['none', 'retro-grid']),
+    },
+  },
   animations: {
     label: 'Animations',
     fields: {

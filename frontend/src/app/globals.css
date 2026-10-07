@@ -300,3 +300,29 @@ body {
     opacity: 1;
   }
 }
+
+/* Theme setting Background › Retro grid (RetroGridBackground.tsx): a static
+   perspective floor grid across the bottom third of the viewport. No backdrop
+   of its own, so the page background shows above and through it. */
+.retro-grid {
+  position: fixed;
+  inset: 67% 0 0 0;
+  overflow: hidden;
+  pointer-events: none;
+  perspective: 300px;
+  perspective-origin: 50% 0;
+  /* Fade the far rows out toward the horizon. */
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 25%);
+  mask-image: linear-gradient(to bottom, transparent, #000 25%);
+}
+.retro-grid-floor {
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 300%;
+  height: 200%;
+  transform-origin: top;
+  transform: rotateX(72deg);
+  background-image: linear-gradient(rgba(122, 170, 255, 0.45) 2px, transparent 2px), linear-gradient(90deg, rgba(122, 170, 255, 0.45) 2px, transparent 2px);
+  background-size: 80px 80px;
+}
