@@ -260,7 +260,7 @@ export const GALLERY = {
   sections: [
     { id: 's-floor', title: 'Main floor', items: [galleryPhoto('p1', 'Crowd at the arcade row', 'Saturday noon'), galleryPhoto('p2', 'Pinball tournament', null, 800, 1200)] },
     { id: 's-cosplay', title: 'Cosplay', items: [galleryPhoto('p3', 'Costume contest winners')] },
-    { id: 's-panels', title: 'Panels', items: [galleryPhoto('p4', '', null, 1200, 1200)] },
+    { id: 's-panels', title: 'Panels', items: [galleryPhoto('p4', null, null, 1200, 1200)] },
     { id: 's-night', title: 'After dark', items: [galleryPhoto('p5', 'Neon signs at night'), galleryPhoto('p6', 'Closing party')] },
   ],
 };

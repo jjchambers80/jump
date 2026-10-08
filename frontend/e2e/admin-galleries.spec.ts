@@ -161,14 +161,13 @@ for (const viewport of [
       await picker.getByRole('button', { name: 'Add 2 photos' }).click();
       await expect(page.getByRole('region', { name: 'Cosplay' }).getByTestId('gallery-photo')).toHaveCount(2);
 
-      // Save is refused while a photo has no alt text; the summary takes focus.
-      await page.getByTestId('save-bar').getByRole('button', { name: 'Save' }).click();
+      // A photo without alt text is a warning, not a blocker; the warning links to it.
       const summary = page.getByTestId('alt-summary');
-      await expect(summary).toBeFocused();
-      await expect(summary).toContainText('1 photo needs alt text');
-      expect(puts).toHaveLength(0);
+      await expect(summary).toContainText('1 photo has no alt text');
+      await expect(summary).toContainText('You can still save');
+      await summary.getByText('Show the photos').click();
 
-      // Fix it from the summary: the photo panel opens; type alt text and move it earlier.
+      // Fix it from the warning: the photo panel opens; type alt text and move it earlier.
       await summary.getByRole('button', { name: /Main floor, photo 2/ }).click();
       const panel = page.getByRole('dialog', { name: /Photo 2 of 2/ });
       await expect(panel).toBeVisible();
@@ -179,6 +178,7 @@ for (const viewport of [
       await expect(page.getByRole('dialog', { name: /Photo 1 of 2/ })).toBeVisible();
       await page.keyboard.press('Escape');
       await expect(page.getByRole('button', { name: 'Edit photo: Main stage at noon' })).toBeFocused();
+      await expect(page.getByTestId('alt-summary')).toHaveCount(0);
 
       await page.getByTestId('save-bar').getByRole('button', { name: 'Save' }).click();
       await expect(page.getByTestId('toast')).toContainText('Gallery saved');
@@ -215,10 +215,8 @@ for (const viewport of [
       await expect(confirm.getByLabel('Move to Cosplay')).toBeChecked();
       await confirm.getByRole('button', { name: 'Delete section' }).click();
       await expect(page.getByTestId('gallery-section')).toHaveCount(1);
-      // Stage still lacks alt text: mark it decorative from its panel, then save.
-      await page.getByRole('button', { name: 'Edit photo: stage (alt text missing)' }).click();
-      await page.getByRole('dialog').getByLabel('Decorative (adds no information)').check();
-      await page.getByRole('dialog').getByRole('button', { name: 'Done' }).click();
+      // Stage still lacks alt text: saving works anyway, with the warning still showing.
+      await expect(page.getByTestId('alt-summary')).toContainText('1 photo has no alt text');
       await page.getByTestId('save-bar').getByRole('button', { name: 'Save' }).click();
       await expect(page.getByTestId('toast')).toContainText('Gallery saved');
       expect(puts[0].sections).toEqual([
@@ -226,7 +224,7 @@ for (const viewport of [
           title: 'Cosplay',
           items: [
             { fileId: 'f-crowd', altText: null, decorative: false, caption: null },
-            { fileId: 'f-stage', altText: null, decorative: true, caption: null },
+            { fileId: 'f-stage', altText: null, decorative: false, caption: null },
           ],
         },
       ]);

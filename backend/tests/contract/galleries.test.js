@@ -171,14 +171,18 @@ describe('Content › Galleries contract', () => {
     expect((await request(app).get(`/images/${imageId}/${'0'.repeat(64)}/w480`)).status).toBe(404);
   });
 
-  it('refuses photos without alt text unless decorative', async () => {
+  it('saves photos without alt text; the public shape marks them undescribed (null), decorative ones ""', async () => {
+    // A separate gallery, so the shared one keeps its tree for the tests below.
+    const other = (await request(app).post('/admin/galleries').set(...auth(organizerToken)).send({ title: 'Alt check' })).body;
     const response = await request(app)
-      .put(`/admin/galleries/${gallery.id}`)
+      .put(`/admin/galleries/${other.id}`)
       .set(...auth(organizerToken))
-      .send({ sections: [{ items: [{ fileId: wideFile.id }, { fileId: smallFile.id }] }] });
-    expect(response.status).toBe(400);
-    expect(response.body.code).toBe('ALT_TEXT_REQUIRED');
-    expect(response.body.details.items).toEqual([{ section: 0, item: 1, fileId: smallFile.id }]);
+      .send({ sections: [{ items: [{ fileId: wideFile.id }, { fileId: smallFile.id }, { fileId: smallFile.id, decorative: true }] }] });
+    expect(response.status).toBe(200);
+    const { default: galleryService } = await import('../../src/services/GalleryService.js');
+    const items = (await galleryService.resolveForOrg(organization.id, [other.id]))[other.id].sections[0].items;
+    expect(items.map((item) => item.alt)).toEqual(['Crowd on the main floor', null, '']);
+    await request(app).delete(`/admin/galleries/${other.id}`).set(...auth(organizerToken));
   });
 
   it('refuses another store’s file, a document and unknown ids', async () => {

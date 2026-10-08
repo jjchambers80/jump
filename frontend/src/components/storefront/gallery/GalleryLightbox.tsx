@@ -131,7 +131,7 @@ export default function GalleryLightbox({ items, title, labels, children }: Gall
                 sizes="100vw"
                 width={item.width ?? undefined}
                 height={item.height ?? undefined}
-                alt={item.alt}
+                alt={item.alt ?? fillCount(labels.photo, index + 1, items.length)}
                 className="max-h-full min-h-0 w-auto max-w-full flex-shrink object-contain motion-safe:animate-[gallery-fade_150ms_ease-out]"
               />
               {item.caption && (

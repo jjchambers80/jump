@@ -101,16 +101,15 @@ export default function PhotoPanel({
             value={item.decorative ? '' : (item.altText ?? '')}
             placeholder={fileAlt || 'Describe what the photo shows'}
             disabled={item.decorative}
-            aria-invalid={missing || undefined}
             aria-describedby="photo-alt-hint"
             onChange={(event) => onChange({ ...item, altText: event.target.value })}
             className={field}
           />
-          <p id="photo-alt-hint" className={`mt-1 text-sm ${missing ? 'font-medium text-red-700 dark:text-red-400' : 'text-gray-500 dark:text-slate-400'}`}>
+          <p id="photo-alt-hint" className={`mt-1 text-sm ${missing ? 'font-medium text-amber-800 dark:text-amber-300' : 'text-gray-500 dark:text-slate-400'}`}>
             {item.decorative
               ? 'Screen readers skip decorative photos.'
               : missing
-                ? 'Add alt text or mark the photo as decorative.'
+                ? 'No alt text yet: screen readers will hear only its position. Describe what it shows, or mark it decorative.'
                 : !item.altText?.trim() && fileAlt
                   ? 'Using the alt text from Files. Type to change it for this gallery only.'
                   : 'Used in this gallery only; the file in Files keeps its own.'}
