@@ -1,6 +1,8 @@
 // Eventimus wordmark (Illustrator export, "Layer_1 copy"), cropped to the
-// letters. Neon green with a soft glow, no background chip on any theme
-// (logotypes are exempt from WCAG contrast minimums).
+// letters. No background chip; two shades of the brand green #A8F018 so the
+// mark clears WCAG 4.5:1 on both themes: #4D7C0F (lime-700, 4.5:1+ on white
+// and gray-50/100) in light mode, #A8F018 with a soft glow (10.5:1+ on
+// slate-800 and darker) in dark mode. No single shade passes on both.
 
 interface EventimusLogoProps {
   className?: string;
@@ -12,7 +14,7 @@ export default function EventimusLogo({ className = 'h-5' }: EventimusLogoProps)
       viewBox="0 324 1629 149"
       role="img"
       aria-label="Eventimus"
-      className={`w-auto text-[#39FF14] [filter:drop-shadow(0_0_6px_rgba(57,255,20,0.45))] ${className}`}
+      className={`w-auto text-[#4D7C0F] dark:text-[#A8F018] dark:[filter:drop-shadow(0_0_6px_rgba(168,240,24,0.4))] ${className}`}
       fill="currentColor"
     >
       <path d="M1629,324.84l-37.7,36.8-110.82.18c-11.01,1.29-11.78,16.7-.92,18.97l112.93.07c31.02,5.44,34.43,30.48,32.56,57.54-1.2,17.29-12.11,31.4-29.54,34.46-59.31-1.01-118.87.85-178.01,1.08-4.32.02-9.09-1.55-13.49-1.58,8.25-7.69,15.65-16.42,23.98-24.02,6.66-6.08,10.09-10.85,19.47-11.53,37.81-2.73,78.91,2.12,117.07.07,11.24-1.32,11.6-17.56.92-19.97-34.85-2.39-73.53,3-107.93-.07s-36.92-36.19-33.26-63.23c1.76-13.02,16.89-28.76,30.24-28.76h174.5Z" />
