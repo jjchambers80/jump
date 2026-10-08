@@ -56,6 +56,17 @@ function handleTwoStepRequired(status: number, code: unknown) {
   window.location.assign(`/auth/two-step?callbackUrl=${encodeURIComponent(callbackUrl)}`);
 }
 
+// Settings › Users "secure sign-in method": the backend refuses everything but
+// the user's own account until two-step is on; the edge middleware does the
+// same for pages, this covers a page that was already open.
+let twoStepSetupRedirectStarted = false;
+function handleTwoStepSetupRequired(status: number, code: unknown) {
+  if (status !== 403 || code !== 'TWO_STEP_SETUP_REQUIRED' || typeof window === 'undefined' || twoStepSetupRedirectStarted) return;
+  if (window.location.pathname.startsWith('/admin/account')) return;
+  twoStepSetupRedirectStarted = true;
+  window.location.assign('/admin/account/security?required=two-step');
+}
+
 class ApiClient {
   private baseURL: string;
 
@@ -112,6 +123,7 @@ class ApiClient {
       if (!response.ok) {
         handleRevokedSession(response.status, data?.code);
         handleTwoStepRequired(response.status, data?.code);
+        handleTwoStepSetupRequired(response.status, data?.code);
         throw {
           status: response.status,
           message: data?.message || data?.error_description || 'Request failed',
@@ -920,6 +932,44 @@ export const agentAccessApi = {
   getPlatformStats: () => api.get<AgentPlatformStats>('/admin/platform/stats'),
   revokeAllPlatformGrants: (confirmation: string) =>
     api.post<{ count: number }>('/admin/platform/revoke-all', { confirmation }),
+};
+
+// Settings › Users: staff of the active organization
+export type MemberRole = 'ADMIN' | 'ORGANIZER';
+export type MemberStatus = 'ACTIVE' | 'PENDING' | 'INACTIVE';
+
+export interface OrgMember {
+  id: string;
+  email: string;
+  name: string | null;
+  image: string | null;
+  role: MemberRole;
+  status: MemberStatus;
+  requireTwoStep: boolean;
+  twoStepEnabled: boolean;
+  invitedAt: string | null;
+  joinedAt: string;
+}
+
+export interface InviteMembersResult {
+  invited: string[];
+  alreadyMember: string[];
+  emailFailed: string[];
+}
+
+export const membersApi = {
+  list: (params: { role?: MemberRole; status?: MemberStatus } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.role) qs.set('role', params.role);
+    if (params.status) qs.set('status', params.status);
+    return api.get<{ users: OrgMember[] }>(`/admin/settings/users${qs.size ? `?${qs}` : ''}`);
+  },
+  invite: (body: { emails: string[]; role: MemberRole; requireTwoStep: boolean }) =>
+    api.post<InviteMembersResult>('/admin/settings/users', body),
+  update: (userId: string, body: Partial<{ role: MemberRole; requireTwoStep: boolean; isActive: boolean }>) =>
+    api.patch<OrgMember>(`/admin/settings/users/${userId}`, body),
+  remove: (userId: string) => api.delete<void>(`/admin/settings/users/${userId}`),
+  resend: (userId: string) => api.post<void>(`/admin/settings/users/${userId}/resend`, {}),
 };
 
 export const api = new ApiClient();

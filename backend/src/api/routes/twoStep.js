@@ -8,7 +8,8 @@ import { Router } from 'express';
 import { requireAuth, requireAuthAllowPending } from '../../middleware/auth.js';
 import { requireRecentAuth } from '../../middleware/recentAuth.js';
 import { LIMITS, makeLimiter } from '../../middleware/rateLimit.js';
-import { ValidationError } from '../../middleware/errorHandler.js';
+import { prisma } from '@jump/db';
+import { ConflictError, ValidationError } from '../../middleware/errorHandler.js';
 import twoStepService from '../../services/TwoStepService.js';
 
 const router = Router();
@@ -57,6 +58,17 @@ router.post('/enable', requireAuth, requireRecentAuth, wrap(async (req, res) => 
 router.post('/disable', requireAuth, requireRecentAuth, wrap(async (req, res) => {
   const factor = pickFactor(req.body);
   if (!factor.code && !factor.recoveryCode) throw new ValidationError('Enter a current code to turn two-step off');
+  // Settings › Users "secure sign-in method": an organization that requires
+  // two-step keeps it on; an admin there must lift the requirement first.
+  const requiring = await prisma.organizationMember.findFirst({
+    where: { userId: req.user.id, requireTwoStep: true },
+    select: { organization: { select: { name: true } } },
+  });
+  if (requiring) {
+    const error = new ConflictError(`${requiring.organization.name} requires two-step authentication, so it can't be turned off.`);
+    error.code = 'TWO_STEP_REQUIRED_BY_ORGANIZATION';
+    throw error;
+  }
   await twoStepService.disable(req.user.id, factor, req);
   res.status(204).end();
 }));

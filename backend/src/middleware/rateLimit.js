@@ -200,6 +200,12 @@ export const LIMITS = Object.freeze({
     limit: 3,
     message: 'Too many recovery requests. Try again later.',
   },
+  // Settings › Users: add-user / resend-invite requests (each sends email)
+  MEMBER_INVITE: {
+    windowMs: 60 * 60 * 1000,
+    limit: 30,
+    message: 'Too many invitations. Try again later.',
+  },
 });
 
 /** Paths the baseline limiter never counts: health, metrics scrape, Stripe webhooks. */

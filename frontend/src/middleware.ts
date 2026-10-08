@@ -116,6 +116,9 @@ function notFound(req: NextRequest) {
   return NextResponse.rewrite(new URL('/__storefront-not-found', req.url), { status: 404 });
 }
 
+/** Where a session that must turn on two-step is sent (also used by services/api.ts). */
+const TWO_STEP_SETUP_PATH = '/admin/account/security?required=two-step';
+
 export default auth(async (req: NextRequest & { auth: unknown }) => {
   const host = normalizeHost(req.headers.get('host'));
 
@@ -135,6 +138,15 @@ export default auth(async (req: NextRequest & { auth: unknown }) => {
       const twoStepUrl = new URL('/auth/two-step', req.nextUrl);
       twoStepUrl.searchParams.set('callbackUrl', pathname + req.nextUrl.search);
       return oauthFrameProtection(NextResponse.redirect(twoStepUrl), pathname);
+    }
+    // Settings › Users "secure sign-in method": an organization requires
+    // two-step and it is off — only the user's own account pages stay open.
+    if (
+      staffOnly &&
+      (req.auth as { twoStepSetupRequired?: boolean } | null)?.twoStepSetupRequired &&
+      !(pathname === '/admin/account' || pathname.startsWith('/admin/account/'))
+    ) {
+      return oauthFrameProtection(NextResponse.redirect(new URL(TWO_STEP_SETUP_PATH, req.nextUrl)), pathname);
     }
     return oauthFrameProtection(NextResponse.next(), pathname);
   }

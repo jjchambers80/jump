@@ -1,62 +1,42 @@
-// Settings › Users — user account management (T014, T019)
+// Settings › Users — the staff of the active organization.
 // Lives under Settings alongside General and Domains; /admin/users redirects
-// here (next.config.mjs). AdminRoute wrapper not needed — layout.tsx handles
-// the auth guard. ADMIN/SYSTEM_ADMIN-only access enforced by role check within
-// the page (T019); SettingsNav hides the section link for other roles.
+// here (next.config.mjs). ADMIN/SYSTEM_ADMIN only (SettingsNav hides the link
+// for other roles; the backend also checks the role in *this* organization).
+// Add users → /admin/settings/users/new. A member reads Pending until their
+// first sign-in.
 
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import api from '@/services/api';
-import SettingsNav from '../SettingsNav';
-import { UsersIcon } from '../icons';
+import { useOrg } from '@/components/OrgContext';
+import { membersApi, type MemberRole, type MemberStatus, type OrgMember } from '@/services/api';
+import { ShieldIcon, UsersIcon } from '../icons';
+import { FLASH_KEY, MemberStatusPill, ROLE_LABEL, SettingsShell, errorMessage, primaryBtn } from './shared';
 
-function SettingsShell({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Settings</h1>
-      <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">Manage your organization and business information.</p>
+const FILTERS: { value: MemberStatus | ''; label: string }[] = [
+  { value: '', label: 'All' },
+  { value: 'ACTIVE', label: 'Active' },
+  { value: 'PENDING', label: 'Pending' },
+];
 
-      <div className="mt-8 flex min-w-0 flex-col gap-6 md:flex-row md:items-start">
-        <SettingsNav />
-        {children}
-      </div>
-    </div>
-  );
-}
-
-interface UserSummary {
-  id: string;
-  email: string;
-  name: string | null;
-  firstName: string | null;
-  lastName: string | null;
-  role: string;
-  organizationId: string | null;
-  organizationName: string | null;
-  isActive: boolean;
-  createdAt: string;
-}
-
-interface Pagination {
-  page: number;
-  limit: number;
-  total: number;
-  totalPages: number;
-}
+const grid = 'xl:grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_8rem_14rem]';
+const th = 'px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-slate-400';
+const linkBtn =
+  'min-h-[44px] rounded px-1.5 py-1 text-sm font-semibold text-accent-700 sm:min-h-0 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:opacity-50 dark:text-accent-300';
+const dangerBtn =
+  'min-h-[44px] rounded px-1.5 py-1 text-sm font-semibold text-red-700 sm:min-h-0 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-50 dark:text-red-400';
 
 export default function UsersPage() {
   const { data: session, status } = useSession();
   const userRole = (session?.user as any)?.role;
 
-  // T019: ADMIN/SYSTEM_ADMIN-only guard — ORGANIZER sees access denied
   if (status === 'authenticated' && !['ADMIN', 'SYSTEM_ADMIN'].includes(userRole)) {
     return (
       <SettingsShell>
-        <section className="min-w-0 flex-1 py-16 px-4 text-center">
-          <div className="text-6xl mb-4">🔒</div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Access Denied</h2>
+        <section className="min-w-0 flex-1 px-4 py-16 text-center">
+          <h2 className="mb-2 text-2xl font-bold text-gray-900 dark:text-white">Access denied</h2>
           <p className="text-gray-600 dark:text-slate-400">Admin role required to manage users.</p>
         </section>
       </SettingsShell>
@@ -72,208 +52,222 @@ export default function UsersPage() {
 
 function UsersContent() {
   const { data: session } = useSession();
-  const userRole = (session?.user as any)?.role;
-  const [users, setUsers] = useState<UserSummary[]>([]);
-  const [pagination, setPagination] = useState<Pagination | null>(null);
-  const [loading, setLoading] = useState(true);
+  const myId = session?.user?.id;
+  const { selectedOrgId, loading: orgLoading } = useOrg();
+  const [users, setUsers] = useState<OrgMember[] | null>(null);
+  const [filter, setFilter] = useState<MemberStatus | ''>('');
   const [error, setError] = useState<string | null>(null);
-  const [roleFilter, setRoleFilter] = useState('');
-  const [page, setPage] = useState(1);
-  const [updating, setUpdating] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  const fetchUsers = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async () => {
     setError(null);
     try {
-      const params = new URLSearchParams();
-      params.set('page', String(page));
-      params.set('limit', '20');
-      if (roleFilter) params.set('role', roleFilter);
-
-      const data = await api.get<{ users: UserSummary[]; pagination: Pagination }>(
-        `/users?${params.toString()}`
-      );
-      setUsers(data.users);
-      setPagination(data.pagination);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load users');
-    } finally {
-      setLoading(false);
+      setUsers((await membersApi.list()).users);
+    } catch (err) {
+      setUsers(null);
+      setError(errorMessage(err, 'Could not load users'));
     }
-  }, [page, roleFilter]);
+  }, []);
+
+  // Wait for the org switcher, refetch on org change (same gate as other Settings pages).
+  const loadedForOrg = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (orgLoading && !selectedOrgId) return;
+    if (loadedForOrg.current === selectedOrgId) return;
+    loadedForOrg.current = selectedOrgId;
+    load();
+  }, [orgLoading, selectedOrgId, load]);
 
   useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
-
-  async function handleRoleChange(userId: string, newRole: string) {
-    setUpdating(userId);
     try {
-      const updated = await api.patch<UserSummary>(`/users/${userId}`, { role: newRole });
-      setUsers((prev) => prev.map((u) => (u.id === userId ? updated : u)));
-    } catch (err: any) {
-      setError(err.message || 'Failed to update role');
-    } finally {
-      setUpdating(null);
+      const flash = sessionStorage.getItem(FLASH_KEY);
+      if (flash) {
+        sessionStorage.removeItem(FLASH_KEY);
+        setNotice(flash);
+      }
+    } catch {
+      // Storage blocked: no flash message
     }
-  }
+  }, []);
 
-  async function handleToggleActive(userId: string, currentActive: boolean) {
-    setUpdating(userId);
+  const run = async (member: OrgMember, action: () => Promise<unknown>, done: string) => {
+    setBusyId(member.id);
+    setError(null);
+    setNotice(null);
     try {
-      const updated = await api.patch<UserSummary>(`/users/${userId}`, {
-        isActive: !currentActive,
-      });
-      setUsers((prev) => prev.map((u) => (u.id === userId ? updated : u)));
-    } catch (err: any) {
-      setError(err.message || 'Failed to update status');
+      await action();
+      setNotice(done);
+      await load();
+    } catch (err) {
+      setError(errorMessage(err, 'Could not update this user'));
     } finally {
-      setUpdating(null);
+      setBusyId(null);
     }
-  }
+  };
 
-  const roles = userRole === 'SYSTEM_ADMIN'
-    ? ['UNASSIGNED', 'ORGANIZER', 'ADMIN', 'SYSTEM_ADMIN']
-    : ['UNASSIGNED', 'ORGANIZER', 'ADMIN'];
+  const label = (m: OrgMember) => m.name || m.email;
+  const visible = (users ?? []).filter((u) => !filter || u.status === filter);
+  const counts = (status: MemberStatus | '') => (users ?? []).filter((u) => !status || u.status === status).length;
 
   return (
     <section aria-labelledby="users-heading" className="min-w-0 flex-1">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 id="users-heading" className="flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white">
             <UsersIcon className="h-5 w-5 text-gray-500 dark:text-slate-400" />
             Users
           </h2>
-          <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
-            {pagination ? `${pagination.total} users total` : 'Loading...'}
+          <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">
+            People who can sign in to this organization&apos;s admin.
           </p>
         </div>
-
-        {/* Role Filter */}
-        <select
-          value={roleFilter}
-          onChange={(e) => {
-            setRoleFilter(e.target.value);
-            setPage(1);
-          }}
-          className="px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-sm text-gray-700 dark:text-slate-300"
-        >
-          <option value="">All roles</option>
-          {roles.map((r) => (
-            <option key={r} value={r}>
-              {r}
-            </option>
-          ))}
-        </select>
+        <Link href="/admin/settings/users/new" className={primaryBtn}>
+          Add users
+        </Link>
       </div>
 
+      {notice && (
+        <p role="status" className="mb-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-800 dark:bg-green-900/20 dark:text-green-300">
+          {notice}
+        </p>
+      )}
       {error && (
-        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-400">
+        <div role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
           {error}
         </div>
       )}
 
-      {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent-600" />
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <div role="group" aria-label="Filter users by status" className="flex gap-1 border-b border-gray-200 p-2 dark:border-slate-700">
+          {FILTERS.map((f) => (
+            <button
+              key={f.value || 'all'}
+              type="button"
+              aria-pressed={filter === f.value}
+              onClick={() => setFilter(f.value)}
+              className={`min-h-[44px] rounded-md px-3 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 sm:min-h-0 sm:py-1.5 ${
+                filter === f.value
+                  ? 'bg-gray-100 text-gray-900 dark:bg-slate-700 dark:text-white'
+                  : 'text-gray-600 hover:bg-gray-50 dark:text-slate-400 dark:hover:bg-slate-700/50'
+              }`}
+            >
+              {f.label}
+              {users && <span className="ml-1.5 text-xs text-gray-500 dark:text-slate-400">{counts(f.value)}</span>}
+            </button>
+          ))}
         </div>
-      ) : (
-        <>
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
-              <thead className="bg-gray-50 dark:bg-slate-900">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
-                    User
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
-                    Role
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
-                    Organization
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
-                    Status
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
-                    Joined
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
-                {users.map((user) => (
-                  <tr key={user.id} className={!user.isActive ? 'opacity-50' : ''}>
-                    <td className="px-4 py-3">
-                      <div className="text-sm font-medium text-gray-900 dark:text-white">
-                        {user.name ||
-                          [user.firstName, user.lastName].filter(Boolean).join(' ') ||
-                          '—'}
+
+        {!users ? (
+          <p className="px-4 py-8 text-center text-sm text-gray-600 dark:text-slate-400" aria-busy={!error}>
+            {error ? 'Users could not be loaded.' : 'Loading users…'}
+          </p>
+        ) : visible.length === 0 ? (
+          <p role="status" className="px-4 py-8 text-center text-sm text-gray-600 dark:text-slate-400">
+            {filter === 'PENDING' ? 'No pending invitations.' : 'No users match this filter.'}
+          </p>
+        ) : (
+          <>
+            {/* Column labels for the sm+ grid; each row labels its own controls */}
+            <div aria-hidden="true" className={`hidden bg-gray-50 dark:bg-slate-900 xl:grid ${grid}`}>
+              <span className={th}>User</span>
+              <span className={th}>Status</span>
+              <span className={th}>Role</span>
+              <span />
+            </div>
+            <ul role="list" className="divide-y divide-gray-100 border-t border-gray-200 dark:divide-slate-700 dark:border-slate-700">
+              {visible.map((m) => {
+                const isMe = m.id === myId;
+                const busy = busyId === m.id;
+                return (
+                  <li key={m.id} data-testid={`member-${m.email}`} className={`flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 xl:grid xl:gap-4 ${grid}`}>
+                    <div className="min-w-0 basis-full xl:basis-auto">
+                      <div className="truncate text-sm font-medium text-gray-900 dark:text-white" title={m.email}>
+                        {label(m)}
+                        {isMe && <span className="ml-1.5 text-xs font-normal text-gray-600 dark:text-slate-400">(you)</span>}
                       </div>
-                      <div className="text-xs text-gray-500 dark:text-slate-400">{user.email}</div>
-                    </td>
-                    <td className="px-4 py-3">
+                      {m.name && <div className="truncate text-xs text-gray-600 dark:text-slate-400">{m.email}</div>}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <MemberStatusPill status={m.status} />
+                      <TwoStepBadge member={m} />
+                    </div>
+                    <div>
+                      <label className="sr-only" htmlFor={`role-${m.id}`}>
+                        Role for {label(m)}
+                      </label>
                       <select
-                        value={user.role}
-                        onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                        disabled={updating === user.id || user.id === session?.user?.id}
-                        className="text-xs px-2 py-1 border border-gray-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-gray-700 dark:text-slate-300 disabled:opacity-50"
+                        id={`role-${m.id}`}
+                        value={m.role}
+                        disabled={busy || isMe}
+                        onChange={(e) => {
+                          const role = e.target.value as MemberRole;
+                          run(m, () => membersApi.update(m.id, { role }), `${label(m)} is now ${role === 'ADMIN' ? 'an Admin' : 'an Organizer'}.`);
+                        }}
+                        className="min-h-[44px] rounded-md border border-gray-300 bg-white px-2 text-sm text-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 sm:min-h-0 sm:py-1"
                       >
-                        {roles.map((r) => (
+                        {(Object.keys(ROLE_LABEL) as MemberRole[]).map((r) => (
                           <option key={r} value={r}>
-                            {r}
+                            {ROLE_LABEL[r]}
                           </option>
                         ))}
                       </select>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600 dark:text-slate-400">
-                      {user.organizationName || '—'}
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => handleToggleActive(user.id, user.isActive)}
-                        disabled={updating === user.id || user.id === session?.user?.id}
-                        className={`text-xs font-medium px-2.5 py-1 rounded-full transition disabled:opacity-50 ${
-                          user.isActive
-                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200'
-                            : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200'
-                        }`}
-                      >
-                        {user.isActive ? 'Active' : 'Inactive'}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-500 dark:text-slate-400">
-                      {new Date(user.createdAt).toLocaleDateString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination */}
-          {pagination && pagination.totalPages > 1 && (
-            <div className="flex items-center justify-between mt-4">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                className="text-sm px-3 py-1.5 border border-gray-300 dark:border-slate-600 rounded-lg disabled:opacity-50 text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800"
-              >
-                Previous
-              </button>
-              <span className="text-sm text-gray-500 dark:text-slate-400">
-                Page {pagination.page} of {pagination.totalPages}
-              </span>
-              <button
-                onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
-                disabled={page >= pagination.totalPages}
-                className="text-sm px-3 py-1.5 border border-gray-300 dark:border-slate-600 rounded-lg disabled:opacity-50 text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800"
-              >
-                Next
-              </button>
-            </div>
-          )}
-        </>
-      )}
+                    </div>
+                    <div className="ml-auto flex flex-wrap gap-2 xl:ml-0 xl:flex-nowrap xl:justify-end">
+                      {!isMe && m.status === 'PENDING' && (
+                        <button
+                          type="button"
+                          className={linkBtn}
+                          disabled={busy}
+                          aria-label={`Resend invite to ${label(m)}`}
+                          onClick={() => run(m, () => membersApi.resend(m.id), `Invite re-sent to ${m.email}.`)}
+                        >
+                          Resend invite
+                        </button>
+                      )}
+                      {!isMe && (
+                        <button
+                          type="button"
+                          className={dangerBtn}
+                          disabled={busy}
+                          aria-label={`Remove ${label(m)} from this organization`}
+                          onClick={() => {
+                            if (!window.confirm(`Remove ${label(m)} from this organization? They will lose access to its admin.`)) return;
+                            run(m, () => membersApi.remove(m.id), `${label(m)} was removed.`);
+                          }}
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
+      </div>
     </section>
   );
+}
+
+/** Shield next to the status: two-step on, or required but not set up yet. */
+function TwoStepBadge({ member }: { member: OrgMember }) {
+  if (member.twoStepEnabled) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-gray-600 dark:text-slate-400" title="Two-step authentication is on">
+        <ShieldIcon className="h-4 w-4 text-green-700 dark:text-green-400" />
+        <span className="sr-only">Two-step authentication is on</span>
+      </span>
+    );
+  }
+  if (member.requireTwoStep) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-amber-800 dark:text-amber-300">
+        <ShieldIcon className="h-4 w-4" />
+        Two-step required
+      </span>
+    );
+  }
+  return null;
 }

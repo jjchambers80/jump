@@ -90,6 +90,8 @@ async function loadUserClaims(userId: string): Promise<UserClaims | null> {
         take: 1,
         select: { organizationId: true },
       },
+      // Settings › Users "secure sign-in method": any membership requiring two-step
+      _count: { select: { memberships: { where: { requireTwoStep: true } } } },
     },
   });
   if (!dbUser || dbUser.deletedAt) return null;
@@ -104,6 +106,7 @@ async function loadUserClaims(userId: string): Promise<UserClaims | null> {
       ? `/images/${dbUser.avatarImage.id}/${dbUser.avatarImage.file.hash}/thumb`
       : dbUser.image ?? null,
     twoStepEnabled: Boolean(dbUser.twoStepEnabledAt),
+    twoStepSetupRequired: !dbUser.twoStepEnabledAt && dbUser._count.memberships > 0,
   };
 }
 
@@ -160,6 +163,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
       (session as any).sid = token.sid ?? null;
       (session as any).mfaPending = token.mfa === 'pending';
+      (session as any).twoStepSetupRequired = token.twoStepSetup === 'required';
       // Generate the raw JWT so the client can send it as a Bearer token to the backend
       (session as any).accessToken = jwt.sign(
         {
@@ -170,6 +174,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           organizationId: token.organizationId ?? null,
           sid: token.sid ?? undefined,
           mfa: token.mfa ?? undefined,
+          twoStepSetup: token.twoStepSetup ?? undefined,
           iat: Math.floor(Date.now() / 1000),
         },
         AUTH_SECRET,

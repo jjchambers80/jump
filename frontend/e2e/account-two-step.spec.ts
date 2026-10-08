@@ -246,3 +246,21 @@ test.describe('Account › Security › Two-step card', () => {
     expect(mock.calls.filter((c) => c.startsWith('DELETE'))).toHaveLength(1);
   });
 });
+
+test.describe('Two-step: required by an organization (Settings › Users secure sign-in)', () => {
+  test('admin pages redirect to Account › Security, which explains why; account pages stay open', async ({ page, baseURL }) => {
+    await signInAsStaff(page, { ...USER, twoStepSetup: 'required' }, baseURL!);
+    await mockOrgAndSecurity(page);
+    await page.route(`${API}/account/two-step`, (route) =>
+      route.fulfill(json({ enabled: false, enabledAt: null, methods: { app: false, securityKey: false, passkeyCount: 0 }, recoveryCodes: null, trustedDevices: [], setupPending: false }))
+    );
+
+    await page.goto('/admin/events');
+    await expect(page).toHaveURL(/\/admin\/account\/security\?required=two-step$/);
+    await expect(page.getByRole('status').filter({ hasText: 'Turn on two-step authentication to continue' })).toBeVisible();
+    await expect(page.getByTestId('two-step-card').getByRole('button', { name: 'Turn on' })).toBeVisible();
+
+    await page.goto('/admin/account');
+    await expect(page).toHaveURL(/\/admin\/account$/);
+  });
+});

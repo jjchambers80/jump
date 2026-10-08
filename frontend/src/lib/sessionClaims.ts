@@ -18,6 +18,8 @@ export interface UserClaims {
   picture?: string | null;
   /** Whether the account has two-step authentication on (spec 030 C). */
   twoStepEnabled?: boolean;
+  /** An organization requires two-step ("secure sign-in method") and it is off. */
+  twoStepSetupRequired?: boolean;
 }
 
 /** The subset of the Auth.js token this module reads and writes. */
@@ -34,6 +36,8 @@ export interface ClaimsToken {
   sid?: unknown;
   /** Two-step state (spec 030 C). */
   mfa?: unknown;
+  /** 'required' while a membership requires two-step that is not on yet. */
+  twoStepSetup?: unknown;
   /** Epoch ms of the last DB read backing role/organizationId. */
   claimsRefreshedAt?: unknown;
 }
@@ -57,6 +61,9 @@ export function applyUserClaims<T extends ClaimsToken>(token: T, claims: UserCla
   if (claims.locale !== undefined) token.locale = claims.locale;
   if (claims.timeZone !== undefined) token.timeZone = claims.timeZone;
   if (claims.picture !== undefined) token.picture = claims.picture;
+  if (claims.twoStepSetupRequired !== undefined) {
+    token.twoStepSetup = claims.twoStepSetupRequired ? 'required' : undefined;
+  }
   token.claimsRefreshedAt = now;
   return token;
 }

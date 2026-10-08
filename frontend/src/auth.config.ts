@@ -39,6 +39,7 @@ export default {
     // exposes the same flag.
     session({ session, token }) {
       (session as any).mfaPending = token.mfa === 'pending';
+      (session as any).twoStepSetupRequired = token.twoStepSetup === 'required';
       return session;
     },
   },

@@ -74,3 +74,19 @@ describe('applyUserClaims account preferences (spec 030)', () => {
     expect(token.picture).toBeNull();
   });
 });
+
+describe('applyUserClaims secure sign-in requirement (Settings › Users)', () => {
+  const base = { role: 'ORGANIZER', name: 'JJ', email: 'jj@example.com', organizationId: null };
+
+  it('marks the token while an organization requires two-step that is off', () => {
+    const token: ClaimsToken = { sub: 'u1' };
+    applyUserClaims(token, { ...base, twoStepSetupRequired: true }, NOW);
+    expect(token.twoStepSetup).toBe('required');
+  });
+
+  it('clears the mark once two-step is on or the requirement is gone', () => {
+    const token: ClaimsToken = { sub: 'u1', twoStepSetup: 'required' };
+    applyUserClaims(token, { ...base, twoStepSetupRequired: false }, NOW);
+    expect(token.twoStepSetup).toBeUndefined();
+  });
+});

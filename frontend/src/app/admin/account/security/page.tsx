@@ -4,6 +4,7 @@
 // secondary email (B), two-step authentication (C), devices (D).
 
 import { useCallback, useEffect, useState } from 'react';
+import { useSession } from 'next-auth/react';
 import { accountApi, type SecurityOverview } from '../accountApi';
 import { ReauthProvider } from '../useReauth';
 import DevicesCard from './DevicesCard';
@@ -15,6 +16,9 @@ export default function AccountSecurityPage() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
+  // Settings › Users "secure sign-in method": the edge middleware sends the
+  // member here until two-step is on.
+  const setupRequired = Boolean((useSession().data as { twoStepSetupRequired?: boolean } | null)?.twoStepSetupRequired);
 
   const load = useCallback(async () => {
     try {
@@ -48,6 +52,16 @@ export default function AccountSecurityPage() {
         <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">
           How you sign in to Jump, and where you&apos;re signed in. Changes here ask you to confirm it&apos;s you first.
         </p>
+
+        {setupRequired && (
+          <div role="status" className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
+            <p className="font-semibold">Turn on two-step authentication to continue</p>
+            <p className="mt-1">
+              Your organization requires a secure sign-in method. Set up two-step authentication below — the rest of the admin
+              opens as soon as it&apos;s on.
+            </p>
+          </div>
+        )}
 
         {actionError && (
           <div role="alert" className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
