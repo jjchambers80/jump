@@ -42,7 +42,7 @@ export default function AdminRoute({ children }: AdminRouteProps) {
   if (loading && !isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent-600" />
       </div>
     );
   }
@@ -62,7 +62,7 @@ export default function AdminRoute({ children }: AdminRouteProps) {
           </p>
           <button
             onClick={() => router.push('/events')}
-            className="bg-indigo-600 text-white px-6 py-2 rounded-md hover:bg-indigo-700 transition-colors"
+            className="bg-accent-500 text-gray-950 px-6 py-2 rounded-md hover:bg-accent-hover transition-colors"
           >
             Back to Events
           </button>

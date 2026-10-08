@@ -34,7 +34,7 @@ export default function InfoTooltip({ label, children, className }: InfoTooltipP
         onKeyDown={(e) => {
           if (e.key === 'Escape') setOpen(false);
         }}
-        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-gray-400 dark:border-slate-500 text-[11px] font-bold leading-none text-gray-600 dark:text-slate-300 hover:border-gray-600 hover:text-gray-900 dark:hover:border-slate-300 dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-gray-400 dark:border-slate-500 text-[11px] font-bold leading-none text-gray-600 dark:text-slate-300 hover:border-gray-600 hover:text-gray-900 dark:hover:border-slate-300 dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-accent-500"
       >
         ?
       </button>

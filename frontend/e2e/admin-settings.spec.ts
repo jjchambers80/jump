@@ -105,7 +105,7 @@ test('places Settings in the sidebar footer and renders General as read-only sum
   const settingsLink = sidebar.getByRole('link', { name: 'Settings' });
   await expect(settingsLink).toBeVisible();
   await expect(settingsLink).toHaveAttribute('href', '/admin/settings');
-  await expect(settingsLink).toHaveClass(/bg-indigo/);
+  await expect(settingsLink).toHaveClass(/bg-accent/);
   await expect(sidebar.getByRole('link', { name: /Create Event/i })).toHaveCount(0);
   await expect(sidebar.locator('nav').getByRole('link', { name: 'Settings' })).toHaveCount(0);
 
@@ -554,7 +554,7 @@ test('lists Users under Settings instead of the main sidebar and redirects the o
   await sections.getByRole('link', { name: 'Users' }).click();
   await expect(page).toHaveURL(/\/admin\/settings\/users$/);
   await expect(sections.getByRole('link', { name: 'Users' })).toHaveAttribute('aria-current', 'page');
-  await expect(sidebar.getByRole('link', { name: 'Settings' })).toHaveClass(/bg-indigo/);
+  await expect(sidebar.getByRole('link', { name: 'Settings' })).toHaveClass(/bg-accent/);
   await expect(page.getByRole('heading', { name: 'Users', exact: true })).toBeVisible();
   await expect(page.getByText('jordan@test.com')).toBeVisible();
 

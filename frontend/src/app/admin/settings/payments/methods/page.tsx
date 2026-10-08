@@ -131,7 +131,7 @@ export default function PaymentMethodsPage() {
           <div className={cardClass} data-testid="payment-methods-card">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h3 className="text-base font-semibold text-gray-900 dark:text-white">Online</h3>
-              <Link href="/admin/settings/payments#payments-rates-card" className="text-sm font-semibold text-indigo-600 hover:underline dark:text-indigo-300">
+              <Link href="/admin/settings/payments#payments-rates-card" className="text-sm font-semibold text-accent-600 hover:underline dark:text-accent-300">
                 View rates
               </Link>
             </div>
@@ -215,8 +215,8 @@ function MethodToggleRow({
           aria-label={`${row.label} at checkout`}
           disabled={!canEdit || saving}
           onClick={() => onToggle(row, !row.enabled)}
-          className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 ${
-            row.enabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-slate-600'
+          className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:cursor-not-allowed disabled:opacity-50 ${
+            row.enabled ? 'bg-accent-500' : 'bg-gray-300 dark:bg-slate-600'
           }`}
         >
           <span aria-hidden="true" className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${row.enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />

@@ -18,6 +18,23 @@ module.exports = {
           fg: 'var(--brand-fg)',
           link: 'var(--brand-link)',
         },
+        // Admin accent: Eventimus lime #c8ff00 for fills (dark text on top)
+        // and dark-mode links; 600+ are darker shades that stay readable as
+        // link text on white in light mode.
+        accent: {
+          50: '#f8ffe0',
+          100: '#efffb3',
+          200: '#e2ff80',
+          300: '#c8ff00',
+          400: '#c8ff00',
+          hover: '#b8eb00',
+          500: '#c8ff00',
+          600: '#4d6b00',
+          700: '#3f5800',
+          800: '#2f4200',
+          900: '#1f2c00',
+          950: '#121a00',
+        },
       },
       keyframes: {
         slideUp: {

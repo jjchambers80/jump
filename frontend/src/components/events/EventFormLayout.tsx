@@ -12,12 +12,12 @@ import TierPresetMenu, { type TierPreset } from './TierPresetMenu';
 export const EVENT_FORM_ID = 'event-form';
 
 export const inputClass =
-  'block w-full min-h-11 sm:min-h-10 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500';
+  'block w-full min-h-11 sm:min-h-10 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500';
 export const labelClass = 'block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1';
 export const hintClass = 'mt-1 text-xs text-gray-500 dark:text-slate-400';
 
 const focusRing =
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900';
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900';
 
 /** Full-width page shell: header, alerts, then the 8/4 grid. */
 export function EventFormShell({
@@ -75,7 +75,7 @@ export function EventFormHeader({
       <div className="min-w-0">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
           {eyebrow && (
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-indigo-600 dark:text-indigo-400">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-accent-600 dark:text-accent-400">
               {eyebrow}
             </span>
           )}
@@ -190,7 +190,7 @@ export function EventFormActions({
         form={EVENT_FORM_ID}
         disabled={disabled}
         aria-busy={saving}
-        className={`${size} min-h-11 rounded-md bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed ${focusRing}`}
+        className={`${size} min-h-11 rounded-md bg-accent-500 px-6 py-2.5 text-sm font-semibold text-gray-950 shadow-sm hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed ${focusRing}`}
       >
         {saving ? savingLabel : submitLabel}
       </button>
@@ -257,7 +257,7 @@ export function AdmissionModeField({
                 onChange={() => onChange(option.value)}
                 className="peer sr-only"
               />
-              <span className="flex min-h-10 items-center justify-center rounded-md px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:text-gray-900 dark:text-slate-400 dark:hover:text-slate-100 peer-checked:bg-white peer-checked:text-gray-900 peer-checked:shadow-sm peer-checked:ring-1 peer-checked:ring-gray-900/5 dark:peer-checked:bg-slate-700 dark:peer-checked:text-white dark:peer-checked:ring-white/10 peer-disabled:opacity-50 peer-focus-visible:ring-2 peer-focus-visible:ring-indigo-500 motion-reduce:transition-none">
+              <span className="flex min-h-10 items-center justify-center rounded-md px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:text-gray-900 dark:text-slate-400 dark:hover:text-slate-100 peer-checked:bg-white peer-checked:text-gray-900 peer-checked:shadow-sm peer-checked:ring-1 peer-checked:ring-gray-900/5 dark:peer-checked:bg-slate-700 dark:peer-checked:text-white dark:peer-checked:ring-white/10 peer-disabled:opacity-50 peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500 motion-reduce:transition-none">
                 {option.label}
               </span>
             </label>
@@ -297,7 +297,7 @@ export function RsvpSettingsFields({
         />
         <span
           aria-hidden
-          className="relative h-5 w-9 shrink-0 rounded-full bg-gray-200 transition-colors dark:bg-gray-700 after:absolute after:start-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] dark:after:border-gray-600 peer-checked:bg-indigo-600 peer-checked:after:translate-x-full peer-checked:after:border-white rtl:peer-checked:after:-translate-x-full peer-focus-visible:ring-2 peer-focus-visible:ring-indigo-500 peer-focus-visible:ring-offset-2 dark:peer-focus-visible:ring-offset-slate-800"
+          className="relative h-5 w-9 shrink-0 rounded-full bg-gray-200 transition-colors dark:bg-gray-700 after:absolute after:start-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] dark:after:border-gray-600 peer-checked:bg-accent-500 peer-checked:after:translate-x-full peer-checked:after:border-white rtl:peer-checked:after:-translate-x-full peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500 peer-focus-visible:ring-offset-2 dark:peer-focus-visible:ring-offset-slate-800"
         />
         <span className="text-sm text-gray-700 dark:text-slate-300">Limit RSVPs</span>
       </label>
@@ -365,7 +365,7 @@ export function TierHeaderActions({
       <button
         type="button"
         onClick={onAdd}
-        className={`min-h-9 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 ${focusRing}`}
+        className={`min-h-9 rounded-md bg-accent-500 px-3 py-1.5 text-xs font-semibold text-gray-950 shadow-sm hover:bg-accent-hover ${focusRing}`}
       >
         + Add Tier
       </button>

@@ -59,7 +59,7 @@ export default function MapLegend({
                   onClick={() => onTierSelect?.(isSelected ? null : tier.id)}
                   className={`flex items-start gap-2 w-full text-left px-2 py-1 rounded text-sm transition-colors ${
                     isSelected
-                      ? 'bg-indigo-50 dark:bg-indigo-900/30 ring-1 ring-indigo-500'
+                      ? 'bg-accent-50 dark:bg-accent-900/30 ring-1 ring-accent-500'
                       : 'hover:bg-gray-50 dark:hover:bg-slate-700'
                   }`}
                 >

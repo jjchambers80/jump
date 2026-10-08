@@ -38,7 +38,7 @@ function KpiCard({ icon, label, value, subtitle, loading }: KpiCardProps) {
   return (
     <div className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4">
       <div className="flex items-center gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-accent-50 dark:bg-accent-900/30 text-accent-600 dark:text-accent-400">
           {icon}
         </div>
         <div className="min-w-0">

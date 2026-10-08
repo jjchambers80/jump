@@ -112,11 +112,11 @@ function PaletteTile({
       aria-label={`Add ${item.name.toLowerCase()}`}
       aria-describedby={`palette-hint-${item.kind}`}
       data-testid={`palette-${item.kind}`}
-      className={`group flex w-full cursor-grab items-center gap-2.5 rounded-lg border text-left transition-colors active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-slate-900 motion-safe:transition-transform motion-safe:active:scale-[0.98] ${
+      className={`group flex w-full cursor-grab items-center gap-2.5 rounded-lg border text-left transition-colors active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-slate-900 motion-safe:transition-transform motion-safe:active:scale-[0.98] ${
         wide ? 'px-3 py-2.5' : 'flex-col justify-center gap-1 px-2 py-2.5 text-center'
       } ${
         sellable
-          ? 'border-indigo-200 bg-indigo-50/60 hover:border-indigo-400 hover:bg-indigo-50 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:hover:border-indigo-400/60 dark:hover:bg-indigo-500/20'
+          ? 'border-accent-200 bg-accent-50/60 hover:border-accent-400 hover:bg-accent-50 dark:border-accent-500/30 dark:bg-accent-500/10 dark:hover:border-accent-400/60 dark:hover:bg-accent-hover/20'
           : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-slate-500 dark:hover:bg-slate-700/60'
       }`}
     >
@@ -125,7 +125,7 @@ function PaletteTile({
           wide ? 'h-9 w-9' : 'h-7 w-7'
         } ${
           sellable
-            ? 'bg-indigo-600 text-white dark:bg-indigo-500'
+            ? 'bg-accent-500 text-gray-950 dark:bg-accent-500'
             : 'bg-gray-100 text-gray-600 dark:bg-slate-700 dark:text-slate-300'
         }`}
         aria-hidden="true"

@@ -10,8 +10,8 @@ import { ExternalLinkIcon, XIcon, FilterIcon, DownloadIcon, Trash2Icon, AlertTri
 
 const cardClass = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
 const dangerBtn = 'rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm font-semibold text-red-700 hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:border-red-800 dark:bg-slate-800 dark:text-red-300';
-const switchBase = 'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800';
-const switchOn = 'bg-indigo-600';
+const switchBase = 'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800';
+const switchOn = 'bg-accent-500';
 const switchOff = 'bg-gray-200 dark:bg-slate-700';
 const thumb = 'block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition-transform';
 
@@ -223,7 +223,7 @@ function AgentAccessSettingsPage() {
                             {grant.scopes.map((s) => (
                               <span
                                 key={s}
-                                className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300"
+                                className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-accent-50 text-accent-700 dark:bg-accent-900/30 dark:text-accent-300"
                               >
                                 {s}
                               </span>

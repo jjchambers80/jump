@@ -39,7 +39,7 @@ export default function EditPagePage({ params }: { params: { pageId: string } })
       <div className="mb-6">
         <Link
           href="/admin/online-store/pages"
-          className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+          className="text-sm font-medium text-accent-600 hover:underline dark:text-accent-300"
         >
           ← Pages
         </Link>

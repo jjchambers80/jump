@@ -57,7 +57,7 @@ export default function RevisionsDialog({
           <h2 id="revisions-title" className="text-lg font-semibold text-gray-900">
             Revision history
           </h2>
-          <button type="button" onClick={onClose} className="rounded px-2 py-1 text-sm text-gray-600 hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+          <button type="button" onClick={onClose} className="rounded px-2 py-1 text-sm text-gray-600 hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500">
             Close
           </button>
         </div>
@@ -87,7 +87,7 @@ export default function RevisionsDialog({
                   <button
                     type="button"
                     onClick={() => setConfirming(revision)}
-                    className="shrink-0 rounded-md border border-gray-300 px-2.5 py-1 text-sm font-medium text-gray-800 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                    className="shrink-0 rounded-md border border-gray-300 px-2.5 py-1 text-sm font-medium text-gray-800 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
                   >
                     Restore
                   </button>

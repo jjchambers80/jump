@@ -97,7 +97,7 @@ function sectionFor(pathname: string): string | undefined {
 const linkClass = (active: boolean) =>
   `flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
     active
-      ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
+      ? 'bg-accent-50 dark:bg-accent-900/30 text-accent-700 dark:text-accent-300'
       : 'text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700'
   }`;
 
@@ -171,7 +171,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
           <div className="flex items-center justify-between px-4 py-4">
             <Link
               href="/admin/dashboard"
-              className="rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+              className="rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
               onClick={onClose}
             >
               <EventimusLogo />
@@ -229,7 +229,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                       aria-expanded={open}
                       aria-controls={panelId}
                       aria-label={`${open ? 'Collapse' : 'Expand'} ${item.label}`}
-                      className="p-2 rounded-md text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-gray-700 dark:hover:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="p-2 rounded-md text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-gray-700 dark:hover:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-500"
                     >
                       <ChevronRight
                         className={`w-4 h-4 transition-transform motion-reduce:transition-none ${
@@ -265,9 +265,9 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
             <Link
               href="/admin/settings"
               onClick={onClose}
-              className={`flex items-center w-full px-3 py-2 text-sm font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+              className={`flex items-center w-full px-3 py-2 text-sm font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-accent-500 ${
                 isActive('/admin/settings')
-                  ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
+                  ? 'bg-accent-50 dark:bg-accent-900/30 text-accent-700 dark:text-accent-300'
                   : 'text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700'
               }`}
             >

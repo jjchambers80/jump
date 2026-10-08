@@ -134,7 +134,7 @@ export default function PageTemplatesPage() {
         <div>
           <Link
             href="/admin/online-store/pages"
-            className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+            className="text-sm font-medium text-accent-600 hover:underline dark:text-accent-300"
           >
             ← Pages
           </Link>
@@ -158,7 +158,7 @@ export default function PageTemplatesPage() {
             type="button"
             disabled={busy || !selectedOrgId}
             onClick={() => fileInput.current?.click()}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md bg-accent-500 px-4 py-2 text-sm font-semibold text-gray-950 shadow-sm hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             Upload template
           </button>
@@ -246,7 +246,7 @@ export default function PageTemplatesPage() {
                       <button
                         type="button"
                         onClick={() => void download(template)}
-                        className="mr-3 font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+                        className="mr-3 font-medium text-accent-600 hover:underline dark:text-accent-300"
                         aria-label={`Download ${template.label}`}
                       >
                         Download

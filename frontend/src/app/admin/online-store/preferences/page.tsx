@@ -19,13 +19,13 @@ const PASSWORD_MIN = 4;
 const PASSWORD_MAX = 100;
 
 const field =
-  'mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-900 dark:text-white';
+  'mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500/30 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-900 dark:text-white';
 const label = 'block text-sm font-medium text-gray-700 dark:text-slate-300';
 const hint = 'mt-1 text-xs text-gray-500 dark:text-slate-400';
 const card =
   'space-y-5 rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-6';
 const saveButton =
-  'rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50';
+  'rounded-md bg-accent-500 px-4 py-2 text-sm font-semibold text-gray-950 shadow-sm hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50';
 
 function Toggle({
   id,
@@ -49,8 +49,8 @@ function Toggle({
       aria-label={ariaLabel}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 ${
-        checked ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-slate-600'
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:cursor-not-allowed disabled:opacity-50 ${
+        checked ? 'bg-accent-500' : 'bg-gray-300 dark:bg-slate-600'
       }`}
     >
       <span
@@ -233,7 +233,7 @@ export default function PreferencesPage() {
 
   const header = (
     <div className="mb-6" data-testid="preferences-header">
-      <p className="text-sm font-medium text-indigo-600 dark:text-indigo-300">Online store</p>
+      <p className="text-sm font-medium text-accent-600 dark:text-accent-300">Online store</p>
       <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Preferences</h1>
     </div>
   );

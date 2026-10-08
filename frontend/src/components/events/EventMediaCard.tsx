@@ -10,7 +10,7 @@ import { ALLOWED_TYPES, MAX_SIZE_BYTES, MAX_SIZE_MB } from '@/components/ImageUp
 import { FormCard } from './EventFormLayout';
 
 const focusRing =
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800';
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800';
 
 const acceptsHint = `Accepts JPG, PNG, GIF or WebP up to ${MAX_SIZE_MB} MB`;
 
@@ -66,7 +66,7 @@ export function EventMediaCard({
   const browse = () => inputRef.current?.click();
 
   const dropTone = dragOver
-    ? 'border-indigo-400 bg-indigo-50 dark:border-indigo-500 dark:bg-indigo-900/20'
+    ? 'border-accent-400 bg-accent-50 dark:border-accent-500 dark:bg-accent-900/20'
     : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50 dark:border-slate-600 dark:hover:border-slate-500 dark:hover:bg-slate-700/40';
 
   return (

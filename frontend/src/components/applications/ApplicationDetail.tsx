@@ -36,7 +36,7 @@ import { describeError, useApplicationsApi } from '@/app/admin/events/[eventId]/
 
 const card = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
 const btn = 'rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
-const primary = 'rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50';
+const primary = 'rounded-md bg-accent-500 px-3 py-1.5 text-sm font-semibold text-gray-950 hover:bg-accent-hover disabled:opacity-50';
 const danger = 'rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm font-semibold text-red-700 hover:bg-red-50 dark:border-red-800 dark:bg-slate-800 dark:text-red-300';
 const field = 'mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100';
 
@@ -202,13 +202,13 @@ export default function ApplicationDetail({ eventId = '', standingFormId, applic
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
       {standing ? (
         <header className="mb-4">
-          <p className="text-sm font-medium text-indigo-600 dark:text-indigo-300">{app?.form.name ?? 'Form'}</p>
+          <p className="text-sm font-medium text-accent-600 dark:text-accent-300">{app?.form.name ?? 'Form'}</p>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{name ?? 'Submission'}</h1>
         </header>
       ) : (
         <ApplicationsHeader eventId={params.eventId} title={name ?? 'Application'} subtitle={app ? `${app.form.name}${app.tier ? ` · ${app.tier.name}` : ''}` : undefined} />
       )}
-      <Link href={standing ? `/admin/content/forms/${standingFormId}` : `/admin/events/${params.eventId}/applications`} className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300">
+      <Link href={standing ? `/admin/content/forms/${standingFormId}` : `/admin/events/${params.eventId}/applications`} className="text-sm font-medium text-accent-600 hover:underline dark:text-accent-300">
         ← All {standing ? 'submissions' : 'applications'}
       </Link>
 
@@ -241,7 +241,7 @@ export default function ApplicationDetail({ eventId = '', standingFormId, applic
                   {app.decidedAt ? ` · decided ${formatDate(app.decidedAt, true)}` : ''}
                 </span>
                 {app.orderId && app.orderRef && (
-                  <Link href={`/admin/orders/${app.orderId}`} className="font-mono text-xs text-indigo-600 hover:underline dark:text-indigo-400" data-testid="application-order-link">
+                  <Link href={`/admin/orders/${app.orderId}`} className="font-mono text-xs text-accent-600 hover:underline dark:text-accent-400" data-testid="application-order-link">
                     Order {app.orderRef}
                   </Link>
                 )}
@@ -277,7 +277,7 @@ export default function ApplicationDetail({ eventId = '', standingFormId, applic
               <h3 className="text-base font-semibold text-gray-900 dark:text-white">{name}</h3>
               <p className="mt-1 text-sm text-gray-700 dark:text-slate-300">
                 {app.contact.firstName} {app.contact.lastName} ·{' '}
-                <a href={`mailto:${app.contact.email}`} className="text-indigo-600 hover:underline dark:text-indigo-300">
+                <a href={`mailto:${app.contact.email}`} className="text-accent-600 hover:underline dark:text-accent-300">
                   {app.contact.email}
                 </a>
               </p>
@@ -287,7 +287,7 @@ export default function ApplicationDetail({ eventId = '', standingFormId, applic
                   <div>
                     <dt className="text-xs uppercase tracking-wide text-gray-500 dark:text-slate-400">Website</dt>
                     <dd>
-                      <a href={app.profile?.website ?? undefined} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline dark:text-indigo-300">
+                      <a href={app.profile?.website ?? undefined} target="_blank" rel="noreferrer" className="text-accent-600 hover:underline dark:text-accent-300">
                         {app.profile?.website}
                       </a>
                     </dd>
@@ -330,7 +330,7 @@ export default function ApplicationDetail({ eventId = '', standingFormId, applic
                             <img src={a.image.urls.thumb} alt={a.label} className="mt-1 h-24 w-24 rounded-md object-cover" />
                           </a>
                         ) : a.type === 'URL' && a.value ? (
-                          <a href={String(a.value)} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline dark:text-indigo-300">
+                          <a href={String(a.value)} target="_blank" rel="noreferrer" className="text-accent-600 hover:underline dark:text-accent-300">
                             {String(a.value)}
                           </a>
                         ) : (
@@ -384,7 +384,7 @@ export default function ApplicationDetail({ eventId = '', standingFormId, applic
                               setNotice(null);
                               setCorrection('tier');
                             }}
-                            className="text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+                            className="text-xs font-medium text-accent-600 hover:underline dark:text-accent-300"
                             data-testid="application-change-tier"
                           >
                             Change
@@ -467,7 +467,7 @@ export default function ApplicationDetail({ eventId = '', standingFormId, applic
                             setNotice(null);
                             setCorrection('adjust');
                           }}
-                          className="text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+                          className="text-xs font-medium text-accent-600 hover:underline dark:text-accent-300"
                           data-testid="application-add-adjustment"
                         >
                           Add adjustment
@@ -517,7 +517,7 @@ export default function ApplicationDetail({ eventId = '', standingFormId, applic
                             setNotice(null);
                             setEditingAddOns(true);
                           }}
-                          className="text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+                          className="text-xs font-medium text-accent-600 hover:underline dark:text-accent-300"
                           data-testid="application-edit-add-ons"
                         >
                           Edit add-ons
@@ -605,7 +605,7 @@ export default function ApplicationDetail({ eventId = '', standingFormId, applic
                     </button>
                   )}
                   {app.payment.stripeDashboardUrl && (
-                    <a href={app.payment.stripeDashboardUrl} target="_blank" rel="noreferrer" className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300">
+                    <a href={app.payment.stripeDashboardUrl} target="_blank" rel="noreferrer" className="text-sm font-medium text-accent-600 hover:underline dark:text-accent-300">
                       View in Stripe ↗
                     </a>
                   )}
@@ -638,7 +638,7 @@ export default function ApplicationDetail({ eventId = '', standingFormId, applic
                   <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Booth</p>
                   <Link
                     href={`/admin/maps/${app.booth.mapId}?booth=${app.booth.id}`}
-                    className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+                    className="inline-flex items-center gap-1 text-sm font-medium text-accent-600 hover:underline dark:text-accent-300"
                   >
                     {app.booth.label}
                     {app.booth.w && app.booth.h ? ` · ${app.booth.w}×${app.booth.h}` : ''} — view on map
@@ -716,7 +716,7 @@ export default function ApplicationDetail({ eventId = '', standingFormId, applic
               <div className="mt-4 border-t border-gray-200 pt-4 dark:border-slate-700" data-testid="application-tags">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-medium text-gray-700 dark:text-slate-300">Tags</p>
-                  <button ref={tagsBtnRef} type="button" onClick={openTags} className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300">
+                  <button ref={tagsBtnRef} type="button" onClick={openTags} className="text-sm font-medium text-accent-600 hover:underline dark:text-accent-300">
                     Edit tags
                   </button>
                 </div>
@@ -764,7 +764,7 @@ export default function ApplicationDetail({ eventId = '', standingFormId, applic
                       {d.note && <p className="text-gray-700 dark:text-slate-300">{d.note}</p>}
                       {d.emailSubject && (
                         <details className="mt-1">
-                          <summary className="cursor-pointer text-xs text-indigo-600 dark:text-indigo-300">Email sent: {d.emailSubject}</summary>
+                          <summary className="cursor-pointer text-xs text-accent-600 dark:text-accent-300">Email sent: {d.emailSubject}</summary>
                           <pre className="mt-1 whitespace-pre-wrap rounded bg-gray-50 p-2 text-xs text-gray-700 dark:bg-slate-900/40 dark:text-slate-300">{d.emailBody}</pre>
                         </details>
                       )}

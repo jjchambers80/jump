@@ -39,14 +39,14 @@ function ConfirmSecondary() {
             <p className="mt-2 text-sm text-gray-600 dark:text-slate-400">
               <span className="font-medium text-gray-900 dark:text-white">{state.email}</span> can now restore access to your Jump account and receives security notifications.
             </p>
-            <Link href="/admin/account/security" className="mt-6 inline-block rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">Go to Security</Link>
+            <Link href="/admin/account/security" className="mt-6 inline-block rounded-md bg-accent-500 px-4 py-2 text-sm font-semibold text-gray-950 hover:bg-accent-hover">Go to Security</Link>
           </>
         )}
         {state.kind === 'error' && (
           <>
             <h1 className="text-xl font-semibold text-gray-900 dark:text-white">{state.code === 'TOKEN_EXPIRED' ? 'This link has expired' : 'This link can’t be used'}</h1>
             <p role="alert" className="mt-2 text-sm text-gray-600 dark:text-slate-400">{state.message}</p>
-            <Link href="/admin/account/security" className="mt-6 inline-block text-sm font-medium text-indigo-600 dark:text-indigo-400">Back to Security</Link>
+            <Link href="/admin/account/security" className="mt-6 inline-block text-sm font-medium text-accent-600 dark:text-accent-400">Back to Security</Link>
           </>
         )}
       </div>

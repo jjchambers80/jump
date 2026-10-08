@@ -34,7 +34,7 @@ import { formatCount as n, formatMoney, relativeDays, type EventOverview, type O
 import { AdmissionFlyout, FormSettingsFlyout, ListingFlyout, TierFlyout } from '@/components/events/EventFlyouts';
 
 const focusRing =
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900';
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900';
 
 function EventDetailsContent() {
   const router = useRouter();
@@ -179,7 +179,7 @@ function EventDetailsContent() {
             {event.status !== 'CANCELLED' && (
               <Link
                 href={`${base}/edit/details${q}`}
-                className={`inline-flex min-h-9 items-center gap-1.5 rounded-md bg-indigo-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 ${focusRing}`}
+                className={`inline-flex min-h-9 items-center gap-1.5 rounded-md bg-accent-500 px-3 text-sm font-semibold text-gray-950 shadow-sm hover:bg-accent-hover ${focusRing}`}
               >
                 <Pencil className="h-3.5 w-3.5" aria-hidden />
                 Edit event
@@ -367,12 +367,12 @@ function EventHero({
         <div className="flex min-w-0 flex-1 gap-4 sm:gap-5">
           {/* Date tile over the image tile, like the list card, only larger. */}
           <div className="relative shrink-0">
-            <div className="h-16 w-16 overflow-hidden rounded-xl bg-indigo-50 ring-1 ring-inset ring-black/5 dark:bg-slate-700/60 dark:ring-white/10 sm:h-28 sm:w-28">
+            <div className="h-16 w-16 overflow-hidden rounded-xl bg-accent-50 ring-1 ring-inset ring-black/5 dark:bg-slate-700/60 dark:ring-white/10 sm:h-28 sm:w-28">
               {image ? (
                 <img src={image} alt="" className={`h-full w-full object-cover ${event.status === 'CANCELLED' ? 'grayscale' : ''}`} />
               ) : (
                 <div className="flex h-full w-full items-center justify-center [background-image:repeating-linear-gradient(135deg,rgb(99_102_241/0.10)_0_1px,transparent_1px_7px)]">
-                  <span className="select-none text-3xl font-black tracking-tighter sm:text-5xl text-indigo-400/60 dark:text-indigo-300/40">{monogram}</span>
+                  <span className="select-none text-3xl font-black tracking-tighter sm:text-5xl text-accent-400/60 dark:text-accent-300/40">{monogram}</span>
                 </div>
               )}
             </div>
@@ -381,7 +381,7 @@ function EventHero({
                 aria-hidden
                 className="absolute -bottom-2 -right-2 flex w-10 flex-col sm:-bottom-3 sm:-right-3 sm:w-12 items-center overflow-hidden rounded-lg border border-gray-200 bg-white text-center shadow-md dark:border-slate-600 dark:bg-slate-900"
               >
-                <span className="w-full bg-indigo-600 py-px text-[0.6rem] font-bold uppercase tracking-[0.16em] text-white">{dateParts[2]}</span>
+                <span className="w-full bg-accent-500 py-px text-[0.6rem] font-bold uppercase tracking-[0.16em] text-gray-950">{dateParts[2]}</span>
                 <span className="py-0.5 text-lg font-bold leading-none tabular-nums text-gray-900 dark:text-white">{dateParts[3]}</span>
               </div>
             )}

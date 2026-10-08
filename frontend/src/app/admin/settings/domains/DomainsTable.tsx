@@ -50,7 +50,7 @@ function DomainRow({ domain, nested }: { domain: StorefrontDomain; nested: boole
       <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
         <Link
           href={`/admin/settings/domains/${domain.id}`}
-          className="truncate text-sm font-medium text-gray-900 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-white"
+          className="truncate text-sm font-medium text-gray-900 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:text-white"
         >
           {domain.hostname}
         </Link>

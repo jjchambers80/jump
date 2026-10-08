@@ -31,7 +31,7 @@ export default function Navbar() {
         <div className="flex items-center justify-between h-14">
           {/* Logo / Brand */}
           <Link href="/events" className="flex items-center gap-2">
-            <span className="text-xl font-bold text-indigo-600 dark:text-indigo-400">Jump</span>
+            <span className="text-xl font-bold text-accent-600 dark:text-accent-400">Jump</span>
             <span className="text-sm text-gray-500 dark:text-slate-400 hidden sm:inline">
               Tickets
             </span>
@@ -41,7 +41,7 @@ export default function Navbar() {
           <div className="flex items-center gap-4">
             <Link
               href="/events"
-              className="text-sm font-medium text-gray-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
+              className="text-sm font-medium text-gray-600 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition"
             >
               Events
             </Link>
@@ -55,8 +55,8 @@ export default function Navbar() {
                 href="/admin"
                 className={`text-sm font-medium transition ${
                   isAdminArea
-                    ? 'text-indigo-600 dark:text-indigo-400'
-                    : 'text-gray-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400'
+                    ? 'text-accent-600 dark:text-accent-400'
+                    : 'text-gray-600 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400'
                 }`}
               >
                 Admin
@@ -87,7 +87,7 @@ export default function Navbar() {
             ) : !loading ? (
               <Link
                 href="/auth/signin"
-                className="text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition px-4 py-1.5 rounded-lg"
+                className="text-sm font-medium text-gray-950 bg-accent-500 hover:bg-accent-hover transition px-4 py-1.5 rounded-lg"
               >
                 Sign In
               </Link>

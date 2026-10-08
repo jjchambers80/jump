@@ -52,10 +52,10 @@ function optionLabel(value: unknown) {
 }
 
 const input =
-  'block w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30';
+  'block w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500/30';
 const small = 'mt-1 text-xs text-gray-500';
 const button =
-  'rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500';
+  'rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500';
 
 type ImageValue = { fileId: string; alt?: string; decorative?: boolean } | null;
 
@@ -193,7 +193,7 @@ export function LinkFieldControl({ id, label, value, onChange }: { id: string; l
         }
       />
       {value && (
-        <button type="button" className="text-xs font-medium text-indigo-700 hover:underline" onClick={() => onChange(null)}>
+        <button type="button" className="text-xs font-medium text-accent-700 hover:underline" onClick={() => onChange(null)}>
           Remove link
         </button>
       )}
@@ -239,7 +239,7 @@ function GalleryFieldControl({
         href={picked ? `/admin/content/galleries/${picked.id}` : '/admin/content/galleries'}
         target="_blank"
         rel="noopener"
-        className="inline-block text-xs font-medium text-indigo-700 underline"
+        className="inline-block text-xs font-medium text-accent-700 underline"
       >
         {picked ? 'Edit this gallery' : 'Manage galleries'} <span aria-hidden>↗</span>
         <span className="sr-only"> (opens in a new tab)</span>

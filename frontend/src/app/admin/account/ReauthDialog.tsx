@@ -115,7 +115,7 @@ export default function ReauthDialog({ onVerified, onCancel }: Props) {
                 role="radio"
                 aria-checked={method === m}
                 onClick={() => { setMethod(m); setError(null); }}
-                className={`rounded-md border px-3 py-1.5 text-sm font-medium ${method === m ? 'border-indigo-600 bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300' : 'border-gray-300 text-gray-700 dark:border-slate-600 dark:text-slate-300'}`}
+                className={`rounded-md border px-3 py-1.5 text-sm font-medium ${method === m ? 'border-accent-600 bg-accent-50 text-accent-700 dark:bg-accent-900/30 dark:text-accent-300' : 'border-gray-300 text-gray-700 dark:border-slate-600 dark:text-slate-300'}`}
               >
                 {METHOD_LABEL[m]}
               </button>
@@ -147,7 +147,7 @@ export default function ReauthDialog({ onVerified, onCancel }: Props) {
             <p id="reauth-code-hint" className={hintClass}>
               {sentTo ? (
                 <>We emailed a 6-digit code to <span className="font-medium">{sentTo}</span>. It expires in 10 minutes.{' '}
-                  <button type="button" onClick={sendCode} className="font-medium text-indigo-600 dark:text-indigo-400">Send again</button></>
+                  <button type="button" onClick={sendCode} className="font-medium text-accent-600 dark:text-accent-400">Send again</button></>
               ) : (
                 'We’ll email a 6-digit code to your account address.'
               )}

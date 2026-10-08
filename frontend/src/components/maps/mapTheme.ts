@@ -184,9 +184,9 @@ export const LABEL_TEXT_LIGHT = '#1f2937';
 export const LABEL_TEXT_DARK = '#e5e7eb';
 
 /** Legend tier list background when selected. */
-export const LEGEND_SELECTED_BG_LIGHT = 'bg-indigo-50';
-export const LEGEND_SELECTED_BG_DARK = 'dark:bg-indigo-900/30';
-export const LEGEND_SELECTED_RING = 'ring-1 ring-indigo-500';
+export const LEGEND_SELECTED_BG_LIGHT = 'bg-accent-50';
+export const LEGEND_SELECTED_BG_DARK = 'dark:bg-accent-900/30';
+export const LEGEND_SELECTED_RING = 'ring-1 ring-accent-500';
 export const LEGEND_HOVER_BG_LIGHT = 'hover:bg-gray-50';
 export const LEGEND_HOVER_BG_DARK = 'dark:hover:bg-slate-700';
 

@@ -354,12 +354,12 @@ export function TierFlyout({
           </div>
           <div className="space-y-1.5 pb-1">
             <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-300">
-              <input type="checkbox" checked={draft.isRefundable} onChange={(e) => set('isRefundable', e.target.checked)} className="h-4 w-4 accent-indigo-600" />
+              <input type="checkbox" checked={draft.isRefundable} onChange={(e) => set('isRefundable', e.target.checked)} className="h-4 w-4 accent-accent-600" />
               Refundable
             </label>
             {tier && (
               <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-300">
-                <input type="checkbox" checked={draft.isActive} onChange={(e) => set('isActive', e.target.checked)} className="h-4 w-4 accent-indigo-600" />
+                <input type="checkbox" checked={draft.isActive} onChange={(e) => set('isActive', e.target.checked)} className="h-4 w-4 accent-accent-600" />
                 On sale
               </label>
             )}
@@ -440,9 +440,9 @@ export function FormSettingsFlyout({
             {FORM_STATUSES.map((status) => (
               <label
                 key={status}
-                className={`flex cursor-pointer items-center justify-center rounded-md border px-3 py-2 text-sm font-medium has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-indigo-500 ${
+                className={`flex cursor-pointer items-center justify-center rounded-md border px-3 py-2 text-sm font-medium has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent-500 ${
                   state.status === status
-                    ? 'border-indigo-500 bg-indigo-50 text-indigo-800 dark:border-indigo-400 dark:bg-indigo-950/50 dark:text-indigo-200'
+                    ? 'border-accent-500 bg-accent-50 text-accent-800 dark:border-accent-400 dark:bg-accent-950/50 dark:text-accent-200'
                     : 'border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800'
                 }`}
               >

@@ -218,9 +218,9 @@ export default function AddOnsSection({ orgId, eventId, priceTiers, taxRate, tax
               </div>
               {canEdit && (
                 <div className="flex items-center gap-1 shrink-0">
-                  <button type="button" onClick={() => move(index, -1)} disabled={index === 0 || busyId !== null} className="inline-flex h-6 w-6 items-center justify-center rounded text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200 disabled:opacity-30" aria-label={`Move ${a.name} up`}>↑</button>
-                  <button type="button" onClick={() => move(index, 1)} disabled={index === addOns!.length - 1 || busyId !== null} className="inline-flex h-6 w-6 items-center justify-center rounded text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200 disabled:opacity-30" aria-label={`Move ${a.name} down`}>↓</button>
-                  <button type="button" onClick={() => openEdit(a)} className="px-2 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded">Edit</button>
+                  <button type="button" onClick={() => move(index, -1)} disabled={index === 0 || busyId !== null} className="inline-flex h-6 w-6 items-center justify-center rounded text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200 disabled:opacity-30" aria-label={`Move ${a.name} up`}>↑</button>
+                  <button type="button" onClick={() => move(index, 1)} disabled={index === addOns!.length - 1 || busyId !== null} className="inline-flex h-6 w-6 items-center justify-center rounded text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200 disabled:opacity-30" aria-label={`Move ${a.name} down`}>↓</button>
+                  <button type="button" onClick={() => openEdit(a)} className="px-2 py-1 text-xs font-medium text-accent-600 dark:text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-900/20 rounded">Edit</button>
                   <button type="button" onClick={() => setActive(a, !a.isActive)} disabled={busyId === a.id} className="px-2 py-1 text-xs font-medium text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded">
                     {a.isActive ? 'Deactivate' : 'Activate'}
                   </button>
@@ -331,7 +331,7 @@ function AddOnDialog({ draft: initial, priceTiers, taxRate, taxInclusive, onSave
         <div className="px-6 py-4 space-y-4">
           {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
           {d.id && (
-            <p className="rounded-md bg-indigo-50 px-3 py-2 text-xs text-indigo-900 dark:bg-indigo-950/50 dark:text-indigo-200">
+            <p className="rounded-md bg-accent-50 px-3 py-2 text-xs text-accent-900 dark:bg-accent-950/50 dark:text-accent-200">
               Name, description, &ldquo;sold with&rdquo; and tax belong to the saved add-on and change on every event that offers it. Price, stock and tiers are this event&apos;s own.
             </p>
           )}
@@ -417,7 +417,7 @@ function AddOnDialog({ draft: initial, priceTiers, taxRate, taxInclusive, onSave
           <button type="button" onClick={onCancel} className="rounded-md border border-gray-300 dark:border-slate-600 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700">
             Cancel
           </button>
-          <button type="submit" disabled={saving} className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">
+          <button type="submit" disabled={saving} className="rounded-md bg-accent-500 px-4 py-2 text-sm font-semibold text-gray-950 hover:bg-accent-hover disabled:opacity-50">
             {saving ? 'Saving…' : d.id ? 'Save' : 'Create'}
           </button>
         </div>

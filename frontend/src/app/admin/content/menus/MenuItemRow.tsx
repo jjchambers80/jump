@@ -44,7 +44,7 @@ export interface RowActions {
 type Props = TreeItemComponentProps<MenuDraftItem> & { actions: RowActions; maxDepth: number };
 
 const iconButton =
-  'inline-flex h-7 w-7 items-center justify-center rounded text-gray-500 hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-30 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white';
+  'inline-flex h-7 w-7 items-center justify-center rounded text-gray-500 hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-accent-500 disabled:opacity-30 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white';
 
 function summary(item: MenuDraftItem) {
   if (item.linkType === 'EXTERNAL') return item.url ?? 'Link';
@@ -151,7 +151,7 @@ const MenuItemRow = forwardRef<HTMLDivElement, Props>(function MenuItemRow(props
         ref={ref}
         className={`mb-2 rounded-md border bg-white dark:bg-slate-900 ${
           item.editing
-            ? 'border-indigo-400 p-3 dark:border-indigo-500'
+            ? 'border-accent-400 p-3 dark:border-accent-500'
             : 'border-gray-200 px-2 py-1.5 dark:border-slate-600'
         } ${clone ? 'shadow-lg' : ''}`}
       >
@@ -178,7 +178,7 @@ const MenuItemRow = forwardRef<HTMLDivElement, Props>(function MenuItemRow(props
                     }
                     if (event.key === 'Escape') cancel();
                   }}
-                  className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+                  className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
                 />
               </div>
               <div>
@@ -221,7 +221,7 @@ const MenuItemRow = forwardRef<HTMLDivElement, Props>(function MenuItemRow(props
                 type="button"
                 onClick={commit}
                 aria-label="Confirm item"
-                className="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500"
+                className="inline-flex items-center gap-1 rounded-md bg-accent-500 px-3 py-1.5 text-sm font-semibold text-gray-950 hover:bg-accent-hover"
               >
                 <Check className="h-4 w-4" aria-hidden />
                 Done
@@ -234,7 +234,7 @@ const MenuItemRow = forwardRef<HTMLDivElement, Props>(function MenuItemRow(props
               type="button"
               {...handleProps}
               aria-label={`Drag ${item.label}`}
-              className="inline-flex h-7 w-7 cursor-grab touch-none items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 active:cursor-grabbing dark:hover:bg-slate-700"
+              className="inline-flex h-7 w-7 cursor-grab touch-none items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-accent-500 active:cursor-grabbing dark:hover:bg-slate-700"
             >
               <GripVertical className="h-4 w-4" aria-hidden />
             </button>

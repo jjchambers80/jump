@@ -194,7 +194,7 @@ export default function GalleryEditor({ gallery, onSaved }: { gallery: Gallery; 
           setSections((current) => [...current, { key: draftKey('section'), title: '', items: [] }]);
           announce('Section added');
         }}
-        className="mt-4 inline-flex min-h-10 items-center gap-1 text-sm font-medium text-indigo-600 hover:underline disabled:opacity-50 dark:text-indigo-300"
+        className="mt-4 inline-flex min-h-10 items-center gap-1 text-sm font-medium text-accent-600 hover:underline disabled:opacity-50 dark:text-accent-300"
       >
         <Plus className="h-4 w-4" aria-hidden />
         Add section

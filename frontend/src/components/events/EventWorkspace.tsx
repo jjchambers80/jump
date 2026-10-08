@@ -30,7 +30,7 @@ export interface EventWorkspaceFacts {
 export type WorkspaceTab = 'overview' | 'applications' | 'map' | 'attendees' | 'rsvps' | 'analytics' | 'check-in';
 
 const focusRing =
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900';
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900';
 
 /** Loads the workspace facts once the org selection has settled. */
 export function useEventWorkspace(eventId: string) {
@@ -86,7 +86,7 @@ export function WorkspaceTabs({
                 aria-current={active ? 'page' : undefined}
                 className={`relative -mb-px inline-flex min-h-10 items-center gap-2 rounded-t border-b-2 px-3 text-sm font-medium transition-colors motion-reduce:transition-none ${
                   active
-                    ? 'border-indigo-600 text-indigo-700 dark:border-indigo-400 dark:text-indigo-200'
+                    ? 'border-accent-600 text-accent-700 dark:border-accent-400 dark:text-accent-200'
                     : 'border-transparent text-gray-600 hover:border-gray-300 hover:text-gray-900 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-white'
                 } ${focusRing}`}
               >

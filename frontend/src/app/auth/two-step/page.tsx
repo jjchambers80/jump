@@ -137,7 +137,7 @@ function TwoStepForm() {
             autoComplete="one-time-code"
             placeholder={mode === 'app' ? '123456' : 'abcde-fghij'}
             required
-            className="w-full px-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-center text-lg tracking-widest focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 mb-4"
+            className="w-full px-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-center text-lg tracking-widest focus:ring-2 focus:ring-accent-500 focus:border-accent-500 mb-4"
           />
           <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-300 mb-4">
             <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
@@ -146,19 +146,19 @@ function TwoStepForm() {
           <button
             type="submit"
             disabled={busy || (mode === 'app' ? code.length !== 6 : code.length < 10)}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 dark:disabled:bg-slate-700 text-white font-medium py-2.5 rounded-lg transition"
+            className="w-full bg-accent-500 hover:bg-accent-hover disabled:bg-gray-300 dark:disabled:bg-slate-700 text-gray-950 disabled:text-gray-500 dark:disabled:text-slate-400 font-medium py-2.5 rounded-lg transition"
           >
             {busy ? 'Verifying…' : 'Verify'}
           </button>
         </form>
         <div className="mt-5 flex flex-col items-center gap-2 text-sm">
-          <button type="button" onClick={useSecurityKey} disabled={busy} className="text-indigo-600 dark:text-indigo-400 hover:underline">
+          <button type="button" onClick={useSecurityKey} disabled={busy} className="text-accent-600 dark:text-accent-400 hover:underline">
             Use a security key or passkey
           </button>
           <button
             type="button"
             onClick={() => { setMode(mode === 'app' ? 'recovery' : 'app'); setCode(''); setError(''); }}
-            className="text-indigo-600 dark:text-indigo-400 hover:underline"
+            className="text-accent-600 dark:text-accent-400 hover:underline"
           >
             {mode === 'app' ? 'Use a recovery code' : 'Use your authenticator app'}
           </button>
@@ -168,7 +168,7 @@ function TwoStepForm() {
         </div>
         <p className="mt-6 text-center text-xs text-gray-500 dark:text-slate-400">
           Lost your app and codes?{' '}
-          <Link href="/auth/recover" className="text-indigo-600 dark:text-indigo-400 hover:underline">Restore access</Link> with your secondary email.
+          <Link href="/auth/recover" className="text-accent-600 dark:text-accent-400 hover:underline">Restore access</Link> with your secondary email.
         </p>
       </div>
     </div>

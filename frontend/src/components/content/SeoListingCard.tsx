@@ -15,7 +15,7 @@ export function previewHandle(value: string) {
 }
 
 const field =
-  'mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white';
+  'mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white';
 const label = 'block text-sm font-medium text-gray-700 dark:text-slate-300';
 const hint = 'mt-1 text-xs text-gray-500 dark:text-slate-400';
 
@@ -129,7 +129,7 @@ export default function SeoListingCard({
             onBlur={() => onHandleChange(previewHandle(handle))}
             maxLength={60}
             placeholder={previewHandle(title) || 'about-us'}
-            className="block w-full rounded-r-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+            className="block w-full rounded-r-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
           />
         </div>
         <p className={hint} data-testid="seo-url">

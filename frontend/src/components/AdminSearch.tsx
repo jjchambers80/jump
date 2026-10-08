@@ -261,7 +261,7 @@ export default function AdminSearch({ mobile = false, onClose }: AdminSearchProp
             }
           }}
           onKeyDown={handleKeyDown}
-          className="h-9 w-full rounded-md border border-gray-300 bg-gray-50 py-2 pl-9 pr-9 text-sm text-gray-900 placeholder:text-gray-500 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white dark:placeholder:text-slate-400 dark:focus:border-indigo-400"
+          className="h-9 w-full rounded-md border border-gray-300 bg-gray-50 py-2 pl-9 pr-9 text-sm text-gray-900 placeholder:text-gray-500 focus:border-accent-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-accent-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white dark:placeholder:text-slate-400 dark:focus:border-accent-400"
         />
         {query && (
           <button
@@ -275,7 +275,7 @@ export default function AdminSearch({ mobile = false, onClose }: AdminSearchProp
               setOpen(false);
               inputRef.current?.focus();
             }}
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-gray-400 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:hover:text-slate-200"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-gray-400 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-accent-500 dark:hover:text-slate-200"
           >
             <X className="h-4 w-4" aria-hidden />
           </button>
@@ -321,7 +321,7 @@ export default function AdminSearch({ mobile = false, onClose }: AdminSearchProp
               <button
                 type="button"
                 onClick={() => search(trimmedQuery)}
-                className="mt-2 font-medium text-indigo-600 hover:text-indigo-700 hover:underline focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-indigo-400"
+                className="mt-2 font-medium text-accent-600 hover:text-accent-700 hover:underline focus:outline-none focus:ring-2 focus:ring-accent-500 dark:text-accent-400"
               >
                 Try again
               </button>
@@ -358,7 +358,7 @@ export default function AdminSearch({ mobile = false, onClose }: AdminSearchProp
                         }}
                         className={`block px-4 py-2 focus:outline-none ${
                           itemIndex === activeIndex
-                            ? 'bg-indigo-50 dark:bg-indigo-900/30'
+                            ? 'bg-accent-50 dark:bg-accent-900/30'
                             : 'hover:bg-gray-50 dark:hover:bg-slate-700/70'
                         }`}
                       >
@@ -386,9 +386,9 @@ export default function AdminSearch({ mobile = false, onClose }: AdminSearchProp
                           setOpen(false);
                           onClose?.();
                         }}
-                        className={`block border-b border-gray-100 px-4 py-2 text-xs font-medium text-indigo-600 hover:underline focus:outline-none dark:border-slate-700 dark:text-indigo-400 ${
+                        className={`block border-b border-gray-100 px-4 py-2 text-xs font-medium text-accent-600 hover:underline focus:outline-none dark:border-slate-700 dark:text-accent-400 ${
                           itemIndex === activeIndex
-                            ? 'bg-indigo-50 dark:bg-indigo-900/30'
+                            ? 'bg-accent-50 dark:bg-accent-900/30'
                             : 'hover:bg-gray-50 dark:hover:bg-slate-700/70'
                         }`}
                       >

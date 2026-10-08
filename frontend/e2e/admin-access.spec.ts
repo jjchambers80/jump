@@ -80,9 +80,9 @@ test.describe('US1 - Admin accesses the admin area', () => {
 
     const sidebar = page.locator('aside');
 
-    // Dashboard link should have active styling (indigo background)
+    // Dashboard link should have active styling (accent background)
     const dashboardLink = sidebar.getByRole('link', { name: 'Dashboard' });
-    await expect(dashboardLink).toHaveClass(/bg-indigo/);
+    await expect(dashboardLink).toHaveClass(/bg-accent/);
 
     // Navigate to Events
     await sidebar.getByRole('link', { name: 'Events' }).click();
@@ -90,11 +90,11 @@ test.describe('US1 - Admin accesses the admin area', () => {
 
     // Events link should now have active styling
     const eventsLink = sidebar.getByRole('link', { name: 'Events' });
-    await expect(eventsLink).toHaveClass(/bg-indigo/);
+    await expect(eventsLink).toHaveClass(/bg-accent/);
 
     // Dashboard link should no longer have active styling
     const dashboardLinkAfter = sidebar.getByRole('link', { name: 'Dashboard' });
-    await expect(dashboardLinkAfter).not.toHaveClass(/bg-indigo/);
+    await expect(dashboardLinkAfter).not.toHaveClass(/bg-accent/);
   });
 });
 

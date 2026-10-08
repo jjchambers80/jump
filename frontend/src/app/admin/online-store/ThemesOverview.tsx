@@ -19,9 +19,9 @@ import ThemePreviewPlaceholder from './ThemePreviewPlaceholder';
 
 const card = 'rounded-lg border border-gray-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800';
 const primary =
-  'inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2';
+  'inline-flex items-center gap-1.5 rounded-md bg-accent-500 px-3 py-2 text-sm font-semibold text-gray-950 hover:bg-accent-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2';
 const secondary =
-  'inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
+  'inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
 
 export default function ThemesOverview() {
   const { selectedOrg: org } = useOrg();
@@ -172,7 +172,7 @@ export default function ThemesOverview() {
             value={prefs?.storefrontPrivate ? 'private' : 'public'}
             onChange={(e) => void changeAccess(e.target.value)}
             disabled={!prefs || accessSaving}
-            className="h-9 rounded-md border border-gray-300 bg-white px-2 text-sm font-medium text-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+            className="h-9 rounded-md border border-gray-300 bg-white px-2 text-sm font-medium text-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
           >
             <option value="public">Public</option>
             <option value="private">Password protected</option>
@@ -268,7 +268,7 @@ export default function ThemesOverview() {
 
       <p className="mt-6 text-sm text-gray-500 dark:text-slate-400">
         Changes you save on the live theme show on your store at once; draft themes stay private until you publish them.{' '}
-        <Link href="/admin/online-store/preferences" className="font-medium text-indigo-600 hover:underline dark:text-indigo-400">
+        <Link href="/admin/online-store/preferences" className="font-medium text-accent-600 hover:underline dark:text-accent-400">
           Brand and store preferences
         </Link>
       </p>

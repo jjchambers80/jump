@@ -62,7 +62,7 @@ export default function BrandColorPicker({ value, onChange }: BrandColorPickerPr
               title={`${preset.name} ${preset.hex}`}
               data-testid={`brand-preset-${preset.name.toLowerCase()}`}
               onClick={() => onChange(preset.hex)}
-              className={`h-8 w-8 rounded-full border-2 transition-transform focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-slate-800 ${
+              className={`h-8 w-8 rounded-full border-2 transition-transform focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-accent-500 dark:focus:ring-offset-slate-800 ${
                 selected
                   ? 'border-gray-900 dark:border-white scale-110'
                   : 'border-transparent hover:scale-105'
@@ -95,7 +95,7 @@ export default function BrandColorPicker({ value, onChange }: BrandColorPickerPr
           aria-invalid={textError ? true : undefined}
           aria-describedby={textError ? `${inputId}-error` : undefined}
           data-testid="brand-color-hex"
-          className="w-28 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-2 py-1.5 font-mono text-sm text-gray-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="w-28 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-2 py-1.5 font-mono text-sm text-gray-900 dark:text-slate-100 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
         />
         {value && (
           <button

@@ -63,7 +63,7 @@ function DashboardContent() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent-600" />
       </div>
     );
   }
@@ -128,7 +128,7 @@ function DashboardContent() {
             </h3>
             <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-4">
               <div
-                className="bg-indigo-600 h-4 rounded-full transition-all duration-500"
+                className="bg-accent-500 h-4 rounded-full transition-all duration-500"
                 style={{
                   width: `${Math.min(100, ((stats.ticketsSold ?? 0) / stats.totalCapacity) * 100)}%`,
                 }}
@@ -156,7 +156,7 @@ function DashboardContent() {
               <p className="text-sm mb-4">Create your first event to get started</p>
               <Link
                 href="/admin/create-event"
-                className="inline-block bg-indigo-600 text-white px-6 py-2 rounded-md hover:bg-indigo-700 transition-colors"
+                className="inline-block bg-accent-500 text-gray-950 px-6 py-2 rounded-md hover:bg-accent-hover transition-colors"
               >
                 Create Event
               </Link>

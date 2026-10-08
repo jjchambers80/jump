@@ -55,7 +55,7 @@ export default function FinancePage() {
               <Link
                 href={section.href}
                 data-testid={section.testId}
-                className="flex items-center gap-4 px-4 py-4 text-sm transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 dark:hover:bg-slate-700/40 sm:px-5"
+                className="flex items-center gap-4 px-4 py-4 text-sm transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500 dark:hover:bg-slate-700/40 sm:px-5"
               >
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-600 dark:bg-slate-700 dark:text-slate-300">
                   <Icon className="h-5 w-5" aria-hidden />

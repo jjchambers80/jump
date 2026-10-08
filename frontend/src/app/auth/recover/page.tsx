@@ -59,15 +59,15 @@ export default function RecoverPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white mb-4 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              className="w-full px-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white mb-4 focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
             />
-            <button type="submit" disabled={loading || !email} className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 text-white font-medium py-2.5 rounded-lg transition">
+            <button type="submit" disabled={loading || !email} className="w-full bg-accent-500 hover:bg-accent-hover disabled:bg-gray-300 text-gray-950 disabled:text-gray-500 dark:disabled:text-slate-400 font-medium py-2.5 rounded-lg transition">
               {loading ? 'Sending…' : 'Send sign-in link'}
             </button>
           </form>
         )}
         <p className="mt-6 text-center text-xs text-gray-500 dark:text-slate-400">
-          <Link href="/auth/signin" className="text-indigo-600 dark:text-indigo-400 hover:underline">Back to sign in</Link>
+          <Link href="/auth/signin" className="text-accent-600 dark:text-accent-400 hover:underline">Back to sign in</Link>
         </p>
       </div>
     </div>

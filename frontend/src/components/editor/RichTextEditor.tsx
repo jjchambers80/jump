@@ -103,7 +103,7 @@ function ToolbarButton({
       disabled={disabled}
       onMouseDown={(event) => event.preventDefault()}
       onClick={onClick}
-      className={`inline-flex h-8 w-8 items-center justify-center rounded text-gray-700 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-40 dark:text-slate-200 dark:hover:bg-slate-700 ${
+      className={`inline-flex h-8 w-8 items-center justify-center rounded text-gray-700 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-accent-500 disabled:opacity-40 dark:text-slate-200 dark:hover:bg-slate-700 ${
         active ? 'bg-gray-200 dark:bg-slate-700' : ''
       }`}
     >
@@ -205,7 +205,7 @@ function LinkPopover({ editor, onClose }: { editor: Editor; onClose: () => void 
         <button
           type="button"
           onClick={apply}
-          className="rounded-md bg-indigo-600 px-3 py-1 text-xs font-semibold text-white hover:bg-indigo-500"
+          className="rounded-md bg-accent-500 px-3 py-1 text-xs font-semibold text-gray-950 hover:bg-accent-hover"
         >
           Apply
         </button>
@@ -499,7 +499,7 @@ export default function RichTextEditor({
       </div>
       <EditorContent
         editor={editor}
-        className="rounded-b-md border border-gray-300 bg-white focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/30 dark:border-slate-600 dark:bg-slate-900"
+        className="rounded-b-md border border-gray-300 bg-white focus-within:border-accent-500 focus-within:ring-2 focus-within:ring-accent-500/30 dark:border-slate-600 dark:bg-slate-900"
       />
       {allowGalleries && (
         <GalleryListLoader

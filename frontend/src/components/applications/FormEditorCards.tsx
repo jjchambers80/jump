@@ -14,7 +14,7 @@ import { MAX_PINNED_QUESTIONS, money, QUESTION_TYPE_LABEL, type AdminForm, type 
 
 const card = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
 const btn = 'rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
-const primary = 'rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50';
+const primary = 'rounded-md bg-accent-500 px-3 py-1.5 text-sm font-semibold text-gray-950 hover:bg-accent-hover disabled:opacity-50';
 const danger = 'text-sm font-medium text-red-700 hover:underline dark:text-red-300';
 const field = 'mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 disabled:opacity-60';
 const labelClass = 'block text-sm font-medium text-gray-700 dark:text-slate-300';
@@ -226,7 +226,7 @@ export function SettingsCard({
                     ['MAP', 'Choose a spot on the floor map', 'Vendors pick a spot within the category you approve them for. Spots can have their own price.'],
                   ] as const
                 ).map(([value, title, detail]) => (
-                  <label key={value} className="flex cursor-pointer items-start gap-2 rounded-md border border-gray-200 p-3 text-sm has-[:checked]:border-indigo-500 dark:border-slate-700">
+                  <label key={value} className="flex cursor-pointer items-start gap-2 rounded-md border border-gray-200 p-3 text-sm has-[:checked]:border-accent-500 dark:border-slate-700">
                     <input
                       type="radio"
                       name="f-space"
@@ -249,7 +249,7 @@ export function SettingsCard({
                   {!template && form.eventId && (
                     <>
                       {' '}
-                      <Link href={`/admin/events/${form.eventId}/map`} className="font-medium text-indigo-600 hover:underline dark:text-indigo-400">
+                      <Link href={`/admin/events/${form.eventId}/map`} className="font-medium text-accent-600 hover:underline dark:text-accent-400">
                         Open the floor map
                       </Link>
                     </>
@@ -266,7 +266,7 @@ export function SettingsCard({
                     [false, 'First come, first served', 'Approval reserves nothing; approved vendors take spaces in the order they pay.'],
                   ] as const
                 ).map(([value, title, detail]) => (
-                  <label key={String(value)} className="flex cursor-pointer items-start gap-2 rounded-md border border-gray-200 p-3 text-sm has-[:checked]:border-indigo-500 dark:border-slate-700">
+                  <label key={String(value)} className="flex cursor-pointer items-start gap-2 rounded-md border border-gray-200 p-3 text-sm has-[:checked]:border-accent-500 dark:border-slate-700">
                     <input
                       type="radio"
                       name="f-reserve"
@@ -369,7 +369,7 @@ export function TiersCard({
         {!template && eventAddOns.length === 0 && (
           <>
             {' '}Add-ons (power, badges, tables) are created on the{' '}
-            <Link href={`/admin/events/${form.eventId}/edit`} className="text-indigo-600 hover:underline dark:text-indigo-300">event page</Link>.
+            <Link href={`/admin/events/${form.eventId}/edit`} className="text-accent-600 hover:underline dark:text-accent-300">event page</Link>.
           </>
         )}
       </p>
@@ -458,7 +458,7 @@ export function TiersCard({
                 <td className="py-2 text-right">
                   {canEdit && (
                     <span className="flex justify-end gap-3">
-                      <button type="button" className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300" onClick={() => startEdit(t)}>Edit</button>
+                      <button type="button" className="text-sm font-medium text-accent-600 hover:underline dark:text-accent-300" onClick={() => startEdit(t)}>Edit</button>
                       <button type="button" className={danger} onClick={() => window.confirm(`Delete tier "${t.name}"?`) && onDelete(t.id)}>Delete</button>
                     </span>
                   )}
@@ -623,7 +623,7 @@ export function QuestionsCard({
                     {q.label}
                     {q.required && <span className="text-red-600"> *</span>}
                     {q.pinned && (
-                      <span className="ml-2 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300" data-testid={`question-pinned-${q.id}`}>
+                      <span className="ml-2 rounded-full bg-accent-50 px-2 py-0.5 text-xs font-semibold text-accent-700 dark:bg-accent-900/30 dark:text-accent-300" data-testid={`question-pinned-${q.id}`}>
                         List column
                       </span>
                     )}
@@ -638,7 +638,7 @@ export function QuestionsCard({
                   <div className="flex shrink-0 items-center gap-2 text-sm">
                     <button type="button" aria-label="Move up" className={btn} disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
                     <button type="button" aria-label="Move down" className={btn} disabled={i === form.questions.length - 1} onClick={() => move(i, 1)}>↓</button>
-                    <button type="button" className="font-medium text-indigo-600 hover:underline dark:text-indigo-300" onClick={() => startEdit(q)}>Edit</button>
+                    <button type="button" className="font-medium text-accent-600 hover:underline dark:text-accent-300" onClick={() => startEdit(q)}>Edit</button>
                     <button type="button" className={danger} onClick={() => window.confirm(template ? `Remove "${q.label}"?` : `Remove "${q.label}"? Existing answers are kept.`) && onRemove(q.id)}>Remove</button>
                   </div>
                 )}

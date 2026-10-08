@@ -77,7 +77,7 @@ export default function ConfirmDialog({
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="rounded-md px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800"
+            className="rounded-md px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-accent-500 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800"
           >
             Cancel
           </button>
@@ -86,10 +86,10 @@ export default function ConfirmDialog({
             type="button"
             onClick={onConfirm}
             disabled={busy || confirmDisabled}
-            className={`rounded-md px-4 py-2 text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
+            className={`rounded-md px-4 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
               danger
-                ? 'bg-red-600 hover:bg-red-500 focus:ring-red-500'
-                : 'bg-indigo-600 hover:bg-indigo-500 focus:ring-indigo-500'
+                ? 'bg-red-600 text-white hover:bg-red-500 focus:ring-red-500'
+                : 'bg-accent-500 text-gray-950 hover:bg-accent-hover focus:ring-accent-500'
             }`}
           >
             {busy ? busyLabel : confirmLabel}

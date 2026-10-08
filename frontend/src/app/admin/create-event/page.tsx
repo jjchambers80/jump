@@ -107,7 +107,7 @@ function CreateEventForm() {
         <div className="mb-6">
           <button
             onClick={() => router.push('/admin/dashboard')}
-            className="text-indigo-600 hover:text-indigo-500 text-sm font-medium"
+            className="text-accent-600 hover:text-accent-600 dark:hover:text-accent-400 text-sm font-medium"
           >
             ← Back to Dashboard
           </button>
@@ -146,7 +146,7 @@ function CreateEventForm() {
               maxLength={255}
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-slate-700 dark:text-slate-100 ${
+              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 dark:bg-slate-700 dark:text-slate-100 ${
                 validationErrors.name
                   ? 'border-red-300 dark:border-red-500'
                   : 'border-gray-300 dark:border-slate-600'
@@ -171,7 +171,7 @@ function CreateEventForm() {
               min={minDate}
               value={formData.date}
               onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-slate-700 dark:text-slate-100 ${
+              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 dark:bg-slate-700 dark:text-slate-100 ${
                 validationErrors.date
                   ? 'border-red-300 dark:border-red-500'
                   : 'border-gray-300 dark:border-slate-600'
@@ -195,7 +195,7 @@ function CreateEventForm() {
               maxLength={500}
               value={formData.venue}
               onChange={(e) => setFormData({ ...formData, venue: e.target.value })}
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-slate-700 dark:text-slate-100 ${
+              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 dark:bg-slate-700 dark:text-slate-100 ${
                 validationErrors.venue
                   ? 'border-red-300 dark:border-red-500'
                   : 'border-gray-300 dark:border-slate-600'
@@ -224,7 +224,7 @@ function CreateEventForm() {
                 max={100000}
                 value={formData.capacity}
                 onChange={(e) => setFormData({ ...formData, capacity: e.target.value })}
-                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-slate-700 dark:text-slate-100 ${
+                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 dark:bg-slate-700 dark:text-slate-100 ${
                   validationErrors.capacity
                     ? 'border-red-300 dark:border-red-500'
                     : 'border-gray-300 dark:border-slate-600'
@@ -253,7 +253,7 @@ function CreateEventForm() {
                 step={0.01}
                 value={formData.ticketPrice}
                 onChange={(e) => setFormData({ ...formData, ticketPrice: e.target.value })}
-                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-slate-700 dark:text-slate-100 ${
+                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 dark:bg-slate-700 dark:text-slate-100 ${
                   validationErrors.ticketPrice
                     ? 'border-red-300 dark:border-red-500'
                     : 'border-gray-300 dark:border-slate-600'
@@ -273,7 +273,7 @@ function CreateEventForm() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-indigo-600 text-white py-3 px-4 rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium text-lg"
+              className="w-full bg-accent-500 text-gray-950 py-3 px-4 rounded-md hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium text-lg"
             >
               {loading ? 'Creating Event...' : 'Create Event'}
             </button>

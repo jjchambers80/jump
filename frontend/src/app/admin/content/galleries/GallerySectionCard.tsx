@@ -33,7 +33,7 @@ interface GallerySectionCardProps {
 }
 
 const iconButton =
-  'inline-flex h-10 w-10 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-700';
+  'inline-flex h-10 w-10 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-700';
 
 export default function GallerySectionCard({
   section,
@@ -83,7 +83,7 @@ export default function GallerySectionCard({
         onDropFiles(Array.from(event.dataTransfer.files));
       }}
       className={`rounded-lg border bg-white p-4 shadow-sm dark:bg-slate-800 sm:p-5 ${
-        dragOver ? 'border-indigo-500 ring-2 ring-indigo-500/30' : 'border-gray-200 dark:border-slate-700'
+        dragOver ? 'border-accent-500 ring-2 ring-accent-500/30' : 'border-gray-200 dark:border-slate-700'
       }`}
     >
       <div className="flex items-start gap-2">
@@ -97,7 +97,7 @@ export default function GallerySectionCard({
             onChange={(event) => onChange({ ...section, title: event.target.value })}
             maxLength={120}
             placeholder={count > 1 ? `Section ${index + 1} heading (optional)` : 'Heading (optional)'}
-            className="block w-full rounded-md border border-transparent bg-transparent px-2 py-1.5 text-base font-semibold text-gray-900 placeholder:font-normal placeholder:text-gray-500 hover:border-gray-300 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:text-white dark:placeholder:text-slate-400 dark:hover:border-slate-600"
+            className="block w-full rounded-md border border-transparent bg-transparent px-2 py-1.5 text-base font-semibold text-gray-900 placeholder:font-normal placeholder:text-gray-500 hover:border-gray-300 focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500/30 dark:text-white dark:placeholder:text-slate-400 dark:hover:border-slate-600"
           />
           <p className="px-2 text-sm text-gray-500 dark:text-slate-400">
             {section.items.length} {section.items.length === 1 ? 'photo' : 'photos'}
@@ -139,7 +139,7 @@ export default function GallerySectionCard({
           data-add-photos={section.key}
           onClick={onAddPhotos}
           disabled={!canAddPhotos}
-          className="inline-flex min-h-10 items-center gap-1.5 rounded-md border border-dashed border-gray-300 px-3 py-2 text-sm font-medium text-indigo-700 hover:border-indigo-400 hover:bg-indigo-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:opacity-50 dark:border-slate-600 dark:text-indigo-300 dark:hover:bg-slate-700"
+          className="inline-flex min-h-10 items-center gap-1.5 rounded-md border border-dashed border-gray-300 px-3 py-2 text-sm font-medium text-accent-700 hover:border-accent-400 hover:bg-accent-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:opacity-50 dark:border-slate-600 dark:text-accent-300 dark:hover:bg-slate-700"
         >
           <ImagePlus className="h-4 w-4" aria-hidden />
           Add photos

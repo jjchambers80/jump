@@ -54,7 +54,7 @@ export function TierCard({
 
   return (
     <div
-      className="relative overflow-hidden rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 p-4 flex items-center gap-4 cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-600 transition-colors"
+      className="relative overflow-hidden rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 p-4 flex items-center gap-4 cursor-pointer hover:border-accent-300 dark:hover:border-accent-600 transition-colors"
       onClick={onEdit}
     >
       {accentClass && <span aria-hidden className={`absolute inset-y-0 left-0 w-1 ${accentClass}`} />}
@@ -64,7 +64,7 @@ export function TierCard({
           type="button"
           onClick={() => onMove('up')}
           disabled={index === 0}
-          className="inline-flex h-6 w-6 items-center justify-center rounded text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200 disabled:opacity-30"
+          className="inline-flex h-6 w-6 items-center justify-center rounded text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200 disabled:opacity-30"
           title="Move up"
           aria-label={`Move ${tier.name || 'untitled tier'} up`}
         >
@@ -74,7 +74,7 @@ export function TierCard({
           type="button"
           onClick={() => onMove('down')}
           disabled={index === total - 1}
-          className="inline-flex h-6 w-6 items-center justify-center rounded text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200 disabled:opacity-30"
+          className="inline-flex h-6 w-6 items-center justify-center rounded text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200 disabled:opacity-30"
           title="Move down"
           aria-label={`Move ${tier.name || 'untitled tier'} down`}
         >
@@ -112,7 +112,7 @@ export function TierCard({
             {tier.visibility.charAt(0) + tier.visibility.slice(1).toLowerCase()}
           </span>
           {tier.isRefundable && (
-            <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-indigo-100 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400">
+            <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-accent-100 dark:bg-accent-900/20 text-accent-700 dark:text-accent-400">
               Refundable
             </span>
           )}
@@ -193,7 +193,7 @@ export function TierEditDialog({ tier, index, onSave, onCancel }: TierEditDialog
   }, []);
 
   const inputClass =
-    'block w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500';
+    'block w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500';
   const labelClass = 'block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1';
 
   return (
@@ -348,7 +348,7 @@ export function TierEditDialog({ tier, index, onSave, onCancel }: TierEditDialog
                   type="checkbox"
                   checked={draft.isRefundable}
                   onChange={(e) => update('isRefundable', e.target.checked)}
-                  className="rounded border-gray-300 dark:border-slate-600 text-indigo-600 focus:ring-indigo-500"
+                  className="rounded border-gray-300 dark:border-slate-600 text-accent-600 focus:ring-accent-500"
                 />
                 <span className="text-sm text-gray-700 dark:text-slate-300">Refundable</span>
               </label>
@@ -368,7 +368,7 @@ export function TierEditDialog({ tier, index, onSave, onCancel }: TierEditDialog
           <button
             type="button"
             onClick={() => onSave(draft)}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
+            className="rounded-md bg-accent-500 px-4 py-2 text-sm font-semibold text-gray-950 shadow-sm hover:bg-accent-hover"
           >
             Done
           </button>

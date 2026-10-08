@@ -150,7 +150,7 @@ export default function AnalyticsOverviewPage() {
       {/* Loading */}
       {loading && (
         <div className="flex items-center justify-center py-16">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent-600" />
         </div>
       )}
 
@@ -158,7 +158,7 @@ export default function AnalyticsOverviewPage() {
         <>
           {/* Aggregate Stats */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-            <div className="rounded-lg border bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800 p-4">
+            <div className="rounded-lg border bg-accent-50 dark:bg-accent-900/20 border-accent-200 dark:border-accent-800 p-4">
               <p className="text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">
                 Published Events
               </p>
@@ -260,7 +260,7 @@ export default function AnalyticsOverviewPage() {
                                       ? 'bg-red-500'
                                       : pct >= 50
                                         ? 'bg-amber-500'
-                                        : 'bg-indigo-600'
+                                        : 'bg-accent-500'
                                   }`}
                                   style={{ width: `${Math.min(pct, 100)}%` }}
                                 />
@@ -273,7 +273,7 @@ export default function AnalyticsOverviewPage() {
                           <td className="px-6 py-4 text-right">
                             <Link
                               href={`/admin/events/${event.id}/analytics`}
-                              className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
+                              className="text-xs font-medium text-accent-600 dark:text-accent-400 hover:text-accent-700 dark:hover:text-accent-300"
                             >
                               Details →
                             </Link>

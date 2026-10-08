@@ -94,7 +94,7 @@ export default function InsertVideoDialog({
             type="button"
             aria-label="Close"
             onClick={onClose}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-slate-300 dark:hover:bg-slate-800"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-accent-500 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             <X className="h-4 w-4" aria-hidden />
           </button>
@@ -120,7 +120,7 @@ export default function InsertVideoDialog({
             aria-describedby={`${id}-help${error ? ` ${id}-error` : ''}`}
             aria-invalid={error ? true : undefined}
             spellCheck={false}
-            className="mt-2 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-600 dark:bg-slate-950 dark:text-white"
+            className="mt-2 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-sm text-gray-900 focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500/30 dark:border-slate-600 dark:bg-slate-950 dark:text-white"
           />
           <p id={`${id}-help`} className="mt-1.5 text-xs text-gray-600 dark:text-slate-400">
             The embed snippet usually starts with &quot;&lt;iframe ...&quot;. YouTube and Vimeo
@@ -148,7 +148,7 @@ export default function InsertVideoDialog({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-accent-500 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
             >
               Cancel
             </button>
@@ -156,7 +156,7 @@ export default function InsertVideoDialog({
               type="button"
               onClick={insert}
               disabled={!snippet.trim()}
-              className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50 dark:focus:ring-offset-slate-900"
+              className="rounded-lg bg-accent-500 px-3 py-1.5 text-sm font-semibold text-gray-950 hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2 disabled:opacity-50 dark:focus:ring-offset-slate-900"
             >
               {editing ? 'Save video' : 'Insert video'}
             </button>

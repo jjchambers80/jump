@@ -67,9 +67,9 @@ export default function ThemeModePicker({ value, onChange }: ThemeModePickerProp
             htmlFor={id}
             data-testid={`theme-mode-${option.value.toLowerCase()}`}
             data-selected={selected ? 'true' : undefined}
-            className={`relative flex cursor-pointer gap-3 rounded-lg border p-3 transition-colors focus-within:ring-2 focus-within:ring-indigo-500 ${
+            className={`relative flex cursor-pointer gap-3 rounded-lg border p-3 transition-colors focus-within:ring-2 focus-within:ring-accent-500 ${
               selected
-                ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-500/10'
+                ? 'border-accent-500 bg-accent-50 dark:bg-accent-500/10'
                 : 'border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:border-gray-400 dark:hover:border-slate-500'
             }`}
           >
@@ -84,7 +84,7 @@ export default function ThemeModePicker({ value, onChange }: ThemeModePickerProp
             />
             <span
               className={`mt-0.5 flex-shrink-0 ${
-                selected ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-slate-400'
+                selected ? 'text-accent-600 dark:text-accent-400' : 'text-gray-500 dark:text-slate-400'
               }`}
             >
               {ICONS[option.value]}

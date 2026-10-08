@@ -29,7 +29,7 @@ import { useFilesApi } from './useFilesApi';
 const th =
   'px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400';
 const iconButton =
-  'inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 opacity-0 transition-opacity duration-150 hover:bg-gray-100 hover:text-gray-900 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:transition-none dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white';
+  'inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 opacity-0 transition-opacity duration-150 hover:bg-gray-100 hover:text-gray-900 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-accent-500 group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:transition-none dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white';
 
 export default function FilesPage() {
   const router = useRouter();
@@ -164,7 +164,7 @@ export default function FilesPage() {
         data-testid="files-header"
       >
         <div>
-          <p className="text-sm font-medium text-indigo-600 dark:text-indigo-300">Content</p>
+          <p className="text-sm font-medium text-accent-600 dark:text-accent-300">Content</p>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Files</h1>
         </div>
         <div className="flex items-center gap-2">
@@ -173,7 +173,7 @@ export default function FilesPage() {
             type="button"
             onClick={() => setUrlOpen(true)}
             disabled={!selectedOrgId}
-            className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-accent-500 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
           >
             Upload from URL
           </button>
@@ -185,7 +185,7 @@ export default function FilesPage() {
               setUploadOpen(true);
             }}
             disabled={!selectedOrgId}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
+            className="rounded-md bg-accent-500 px-4 py-2 text-sm font-semibold text-gray-950 shadow-sm hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2 disabled:opacity-50"
           >
             Upload files
           </button>
@@ -216,10 +216,10 @@ export default function FilesPage() {
 
       {selectedOrgId && (
         <div
-          className={`relative rounded-lg border bg-white dark:bg-slate-800 ${dragOver ? 'border-indigo-500 ring-2 ring-indigo-500/30' : 'border-gray-200 dark:border-slate-700'}`}
+          className={`relative rounded-lg border bg-white dark:bg-slate-800 ${dragOver ? 'border-accent-500 ring-2 ring-accent-500/30' : 'border-gray-200 dark:border-slate-700'}`}
         >
           {dragOver && (
-            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-indigo-50/80 text-sm font-medium text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-200">
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-accent-50/80 text-sm font-medium text-accent-700 dark:bg-accent-900/40 dark:text-accent-200">
               Drop to upload
             </div>
           )}
@@ -249,7 +249,7 @@ export default function FilesPage() {
                 placeholder="Search by name or alt text"
                 value={q}
                 onChange={(event) => setQ(event.target.value)}
-                className="w-full rounded-md border border-gray-300 bg-white py-1.5 pl-8 pr-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+                className="w-full rounded-md border border-gray-300 bg-white py-1.5 pl-8 pr-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
               />
             </div>
             <label className="sr-only" htmlFor="files-sort">
@@ -270,7 +270,7 @@ export default function FilesPage() {
 
           {selected.size > 0 && (
             <div
-              className="flex items-center gap-3 border-b border-gray-200 bg-indigo-50 px-4 py-2 text-sm dark:border-slate-700 dark:bg-indigo-900/20"
+              className="flex items-center gap-3 border-b border-gray-200 bg-accent-50 px-4 py-2 text-sm dark:border-slate-700 dark:bg-accent-900/20"
               data-testid="bulk-bar"
             >
               <span className="font-medium text-gray-900 dark:text-white">

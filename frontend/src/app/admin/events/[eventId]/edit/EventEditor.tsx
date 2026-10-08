@@ -179,7 +179,7 @@ function EventTaxSummary({ tax }: { tax: NonNullable<EventDetail['tax']> }) {
     <p className="mt-1 text-xs text-gray-600 dark:text-slate-400" data-testid="event-tax-summary">
       Tax: {parts.join(' · ')}
       {' · '}
-      <Link href="/admin/settings/tax" className="font-medium text-indigo-600 hover:underline dark:text-indigo-300">
+      <Link href="/admin/settings/tax" className="font-medium text-accent-600 hover:underline dark:text-accent-300">
         Settings › Tax
       </Link>
       {!tax.region && ' — set the venue\'s state to collect tax'}
@@ -615,7 +615,7 @@ function EditEventContent({ scope }: { scope: EditorScope }) {
         <p className="text-red-600 dark:text-red-400">Missing organization context.</p>
         <button
           onClick={() => router.push('/admin/events')}
-          className="mt-4 text-sm text-indigo-600 dark:text-indigo-400 hover:underline"
+          className="mt-4 text-sm text-accent-600 dark:text-accent-400 hover:underline"
         >
           ← Back to Events
         </button>
@@ -641,7 +641,7 @@ function EditEventContent({ scope }: { scope: EditorScope }) {
         <p className="text-red-600 dark:text-red-400">{error || 'Event not found'}</p>
         <button
           onClick={() => router.push('/admin/events')}
-          className="mt-4 text-sm text-indigo-600 dark:text-indigo-400 hover:underline"
+          className="mt-4 text-sm text-accent-600 dark:text-accent-400 hover:underline"
         >
           ← Back to Events
         </button>
@@ -733,7 +733,7 @@ function EditEventContent({ scope }: { scope: EditorScope }) {
                       if (dirty && scope !== key && !window.confirm('Leave without saving your changes?')) e.preventDefault();
                     }}
                     className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                      scope === key ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-700'
+                      scope === key ? 'bg-accent-500 text-gray-950' : 'text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-700'
                     }`}
                   >
                     {key === 'details' ? 'Details' : 'Sales'}
@@ -744,7 +744,7 @@ function EditEventContent({ scope }: { scope: EditorScope }) {
                 href={`/events/${eventId}`}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-accent-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
               >
                 View event
                 <ExternalLink className="h-4 w-4" aria-hidden />

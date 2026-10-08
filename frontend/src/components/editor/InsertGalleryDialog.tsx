@@ -105,7 +105,7 @@ export default function InsertGalleryDialog({
             type="button"
             aria-label="Close"
             onClick={onClose}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-slate-300 dark:hover:bg-slate-800"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-accent-500 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             <X className="h-4 w-4" aria-hidden />
           </button>
@@ -116,7 +116,7 @@ export default function InsertGalleryDialog({
           ) : galleries.length === 0 ? (
             <p className="text-sm text-gray-700 dark:text-slate-300">
               No galleries yet.{' '}
-              <Link href="/admin/content/galleries" target="_blank" className="font-medium text-indigo-700 underline dark:text-indigo-300">
+              <Link href="/admin/content/galleries" target="_blank" className="font-medium text-accent-700 underline dark:text-accent-300">
                 Create one in Content › Galleries
               </Link>
               , then come back.
@@ -131,7 +131,7 @@ export default function InsertGalleryDialog({
                 id={`${id}-gallery`}
                 value={galleryId}
                 onChange={(event) => setGalleryId(event.target.value)}
-                className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-600 dark:bg-slate-950 dark:text-white"
+                className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500/30 dark:border-slate-600 dark:bg-slate-950 dark:text-white"
               >
                 {missing && <option value={editing!.id}>Deleted gallery</option>}
                 {galleries.map((gallery) => (
@@ -150,7 +150,7 @@ export default function InsertGalleryDialog({
                   key={option.value}
                   className={`flex cursor-pointer gap-3 rounded-lg border p-3 text-sm ${
                     layout === option.value
-                      ? 'border-indigo-600 ring-1 ring-indigo-600 dark:border-indigo-400 dark:ring-indigo-400'
+                      ? 'border-accent-600 ring-1 ring-accent-600 dark:border-accent-400 dark:ring-accent-400'
                       : 'border-gray-300 dark:border-slate-600'
                   }`}
                 >
@@ -160,7 +160,7 @@ export default function InsertGalleryDialog({
                     value={option.value}
                     checked={layout === option.value}
                     onChange={() => setLayout(option.value)}
-                    className="mt-0.5 h-4 w-4 text-indigo-600 focus:ring-indigo-500"
+                    className="mt-0.5 h-4 w-4 text-accent-600 focus:ring-accent-500"
                   />
                   <span>
                     <span className="block font-medium text-gray-900 dark:text-white">{option.label}</span>
@@ -183,7 +183,7 @@ export default function InsertGalleryDialog({
             <button
               type="button"
               onClick={onClose}
-              className="min-h-10 rounded-lg border border-gray-300 px-3 text-sm font-medium text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="min-h-10 rounded-lg border border-gray-300 px-3 text-sm font-medium text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-accent-500 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
             >
               Cancel
             </button>
@@ -191,7 +191,7 @@ export default function InsertGalleryDialog({
               type="button"
               disabled={!galleryId}
               onClick={() => onSubmit({ id: galleryId, layout })}
-              className="min-h-10 rounded-lg bg-indigo-600 px-3 text-sm font-semibold text-white hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50 dark:focus:ring-offset-slate-900"
+              className="min-h-10 rounded-lg bg-accent-500 px-3 text-sm font-semibold text-gray-950 hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2 disabled:opacity-50 dark:focus:ring-offset-slate-900"
             >
               {editing ? 'Save gallery' : 'Insert gallery'}
             </button>

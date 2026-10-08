@@ -15,7 +15,7 @@ import type { Blog } from '@/lib/blog';
 import { useBlogApi } from '../blog-posts/useBlogApi';
 
 const field =
-  'mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white';
+  'mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white';
 const label = 'block text-sm font-medium text-gray-700 dark:text-slate-300';
 const th =
   'px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400';
@@ -122,7 +122,7 @@ export default function BlogsPage() {
           type="button"
           onClick={() => open({ kind: 'create' })}
           disabled={!selectedOrgId}
-          className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
+          className="rounded-md bg-accent-500 px-4 py-2 text-sm font-semibold text-gray-950 shadow-sm hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2 disabled:opacity-50"
         >
           Add blog
         </button>
@@ -187,7 +187,7 @@ export default function BlogsPage() {
                       }}
                       type="button"
                       onClick={() => open({ kind: 'edit', blog })}
-                      className="font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+                      className="font-medium text-accent-600 hover:underline dark:text-accent-300"
                     >
                       Edit
                     </button>
@@ -289,7 +289,7 @@ export default function BlogsPage() {
                     onBlur={() => setHandle((current) => previewHandle(current))}
                     placeholder={previewHandle(title) || 'news'}
                     maxLength={60}
-                    className="block w-full rounded-r-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+                    className="block w-full rounded-r-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
                   />
                 </div>
               </div>

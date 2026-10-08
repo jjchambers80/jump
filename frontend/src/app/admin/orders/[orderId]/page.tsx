@@ -288,7 +288,7 @@ export default function AdminOrderDetailPage() {
         </div>
         <Link
           href="/admin/orders"
-          className="mt-4 inline-block text-sm text-indigo-600 dark:text-indigo-400 hover:underline"
+          className="mt-4 inline-block text-sm text-accent-600 dark:text-accent-400 hover:underline"
         >
           Back to Orders
         </Link>
@@ -368,7 +368,7 @@ export default function AdminOrderDetailPage() {
             <div className="pt-2">
               <Link
                 href={`/admin/events/${order.application.eventId}/applications/${order.application.id}`}
-                className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline"
+                className="text-sm text-accent-600 dark:text-accent-400 hover:underline"
                 data-testid="order-open-application"
               >
                 Open application →

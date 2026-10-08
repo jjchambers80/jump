@@ -15,11 +15,11 @@ import { TAX_SOURCE_LABEL, reportToCsv, type TaxReport } from '../types';
 
 const cardClass = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
 const inputClass =
-  'rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-white';
+  'rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500 dark:border-slate-600 dark:bg-slate-800 dark:text-white';
 const secondaryBtn =
-  'rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
+  'rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-accent-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
 const primaryBtn =
-  'rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50';
+  'rounded-md bg-accent-500 px-4 py-2 text-sm font-semibold text-gray-950 hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent-500 disabled:cursor-not-allowed disabled:opacity-50';
 const num = 'px-4 py-3 text-right text-sm tabular-nums';
 const numSub = 'px-4 py-2 text-right text-xs tabular-nums text-gray-600 dark:text-slate-400';
 
@@ -88,7 +88,7 @@ export default function TaxReportPage() {
 
         <section aria-labelledby="tax-report-heading" className="min-w-0 flex-1 space-y-6">
           <nav aria-label="Breadcrumb" className="text-sm text-gray-600 dark:text-slate-400">
-            <Link href="/admin/settings/tax" className="font-medium text-indigo-600 hover:underline dark:text-indigo-300">
+            <Link href="/admin/settings/tax" className="font-medium text-accent-600 hover:underline dark:text-accent-300">
               Tax
             </Link>
             <span aria-hidden="true"> › </span>

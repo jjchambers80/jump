@@ -134,7 +134,7 @@ export default function UploadFilesDialog({
           }}
           className={`mt-4 flex flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-8 text-center transition-colors ${
             dragOver
-              ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
+              ? 'border-accent-500 bg-accent-50 dark:bg-accent-900/20'
               : 'border-gray-300 dark:border-slate-600'
           }`}
         >
@@ -143,7 +143,7 @@ export default function UploadFilesDialog({
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
-            className="mt-2 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            className="mt-2 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-accent-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
           >
             Choose files
           </button>
@@ -218,7 +218,7 @@ export default function UploadFilesDialog({
             type="button"
             onClick={onClose}
             disabled={uploading}
-            className="rounded-md px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800"
+            className="rounded-md px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-accent-500 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800"
           >
             {serverErrors.length ? 'Done' : 'Cancel'}
           </button>
@@ -226,7 +226,7 @@ export default function UploadFilesDialog({
             type="button"
             onClick={() => void submit()}
             disabled={!valid.length || uploading}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md bg-accent-500 px-4 py-2 text-sm font-semibold text-gray-950 hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {uploading ? 'Uploading…' : `Upload${valid.length ? ` ${valid.length}` : ''}`}
           </button>

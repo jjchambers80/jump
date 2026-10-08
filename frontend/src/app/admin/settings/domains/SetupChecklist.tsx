@@ -37,7 +37,7 @@ export function deriveSteps(domain: StorefrontDomain): { dns: StepState; propaga
 function StepIcon({ state }: { state: StepState }) {
   if (state === 'done') return <CheckCircleIcon className="h-5 w-5 text-green-600 dark:text-green-400" />;
   if (state === 'failed') return <CircleDashedIcon className="h-5 w-5 text-red-500" />;
-  if (state === 'active') return <CircleDashedIcon className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />;
+  if (state === 'active') return <CircleDashedIcon className="h-5 w-5 text-accent-600 dark:text-accent-400" />;
   return <CircleDashedIcon className="h-5 w-5 text-gray-300 dark:text-slate-600" />;
 }
 
@@ -72,7 +72,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
           setTimeout(() => setCopied(false), 1500);
         });
       }}
-      className="shrink-0 rounded px-1.5 py-0.5 text-xs font-medium text-indigo-600 hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-indigo-400 dark:hover:bg-indigo-900/30"
+      className="shrink-0 rounded px-1.5 py-0.5 text-xs font-medium text-accent-600 hover:bg-accent-50 focus:outline-none focus:ring-2 focus:ring-accent-500 dark:text-accent-400 dark:hover:bg-accent-900/30"
       aria-label={`Copy ${label}`}
     >
       {copied ? 'Copied' : 'Copy'}
@@ -159,7 +159,7 @@ export default function SetupChecklist({ domain, checking, onCheck }: SetupCheck
                   href={provider.dnsConsoleUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700"
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-accent-500 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700"
                 >
                   {provider.name}
                   <ExternalLinkIcon />
@@ -187,7 +187,7 @@ export default function SetupChecklist({ domain, checking, onCheck }: SetupCheck
                 type="button"
                 onClick={onCheck}
                 disabled={checking}
-                className="rounded-md bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60 dark:bg-white dark:text-gray-900 dark:hover:bg-slate-200"
+                className="rounded-md bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-accent-500 disabled:opacity-60 dark:bg-white dark:text-gray-900 dark:hover:bg-slate-200"
               >
                 {checking ? 'Checking…' : 'I updated DNS records'}
               </button>

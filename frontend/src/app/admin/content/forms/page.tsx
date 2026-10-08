@@ -53,7 +53,7 @@ export default function FormsPage() {
     <div className="mx-auto max-w-6xl px-4 py-8">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-sm font-medium text-indigo-600 dark:text-indigo-300">Content</p>
+          <p className="text-sm font-medium text-accent-600 dark:text-accent-300">Content</p>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Forms</h1>
           <p className="mt-1 max-w-xl text-sm text-gray-600 dark:text-slate-400">
             Always-on application forms that don&apos;t belong to an event. Everyone who submits one shows up in Customers.
@@ -62,7 +62,7 @@ export default function FormsPage() {
         {canEdit && (
           <Link
             href="/admin/content/forms/new"
-            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md bg-indigo-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md bg-accent-500 px-4 text-sm font-semibold text-gray-950 shadow-sm hover:bg-accent-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-600"
           >
             <Plus className="h-4 w-4" aria-hidden />
             New form
@@ -120,7 +120,7 @@ export default function FormsPage() {
             </div>
           ) : shown.length === 0 ? (
             <div data-testid="forms-empty-state" className="flex flex-col items-center px-6 py-14 text-center">
-              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-300">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-accent-50 text-accent-600 dark:bg-accent-900/30 dark:text-accent-300">
                 <ClipboardList className="h-6 w-6" aria-hidden />
               </span>
               <h2 className="mt-4 text-base font-semibold text-gray-900 dark:text-white">{forms?.length ? 'No forms match' : 'No forms yet'}</h2>
@@ -128,7 +128,7 @@ export default function FormsPage() {
                 {forms?.length ? 'Try another status or search.' : 'Collect vendor, press or volunteer applications any time of year — then put the form on a page.'}
               </p>
               {!forms?.length && canEdit && (
-                <Link href="/admin/content/forms/new" className="mt-5 inline-flex min-h-[44px] items-center rounded-md bg-indigo-600 px-4 text-sm font-semibold text-white hover:bg-indigo-700">
+                <Link href="/admin/content/forms/new" className="mt-5 inline-flex min-h-[44px] items-center rounded-md bg-accent-500 px-4 text-sm font-semibold text-gray-950 hover:bg-accent-hover">
                   Create your first form
                 </Link>
               )}
@@ -139,7 +139,7 @@ export default function FormsPage() {
                 <li key={form.id} data-testid={`form-row-${form.id}`}>
                   <Link
                     href={`/admin/content/forms/${form.id}`}
-                    className="group grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 px-4 py-3.5 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-indigo-600 dark:hover:bg-slate-700/40 sm:grid-cols-[1fr_7rem_7rem_8rem]"
+                    className="group grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 px-4 py-3.5 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-600 dark:hover:bg-slate-700/40 sm:grid-cols-[1fr_7rem_7rem_8rem]"
                   >
                     <span className="min-w-0">
                       <span className="block truncate font-medium text-gray-900 group-hover:underline dark:text-white">{form.name}</span>

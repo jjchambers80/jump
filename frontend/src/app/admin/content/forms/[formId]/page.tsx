@@ -119,7 +119,7 @@ function StandingForm({ formId }: { formId: string }) {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-      <Link href="/admin/content/forms" className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300">
+      <Link href="/admin/content/forms" className="text-sm font-medium text-accent-600 hover:underline dark:text-accent-300">
         ← All forms
       </Link>
 
@@ -172,7 +172,7 @@ function StandingForm({ formId }: { formId: string }) {
                 aria-current={tab === key ? 'page' : undefined}
                 className={`inline-flex min-h-[44px] items-center border-b-2 px-3 text-sm font-medium ${
                   tab === key
-                    ? 'border-indigo-600 text-indigo-700 dark:border-indigo-400 dark:text-indigo-300'
+                    ? 'border-accent-600 text-accent-700 dark:border-accent-400 dark:text-accent-300'
                     : 'border-transparent text-gray-600 hover:border-gray-300 hover:text-gray-900 dark:text-slate-400 dark:hover:text-white'
                 }`}
                 data-testid={`form-tab-${key}`}

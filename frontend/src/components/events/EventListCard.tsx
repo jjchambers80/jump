@@ -146,7 +146,7 @@ export default function EventListCard({
   return (
     <article
       aria-labelledby={headingId}
-      className={`group relative rounded-lg border transition-colors hover:border-indigo-300 dark:hover:border-indigo-500/50 ${
+      className={`group relative rounded-lg border transition-colors hover:border-accent-300 dark:hover:border-accent-500/50 ${
         isPast && event.status !== 'CANCELLED'
           ? 'border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60'
           : 'border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800'
@@ -187,7 +187,7 @@ export default function EventListCard({
 
           {/* Event image — square, decorative (the title names the event) */}
           <div
-            className="relative hidden sm:block h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-indigo-50 ring-1 ring-inset ring-black/5 dark:bg-slate-700/60 dark:ring-white/10"
+            className="relative hidden sm:block h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-accent-50 ring-1 ring-inset ring-black/5 dark:bg-slate-700/60 dark:ring-white/10"
             aria-hidden="true"
             data-testid="event-image-tile"
           >
@@ -203,7 +203,7 @@ export default function EventListCard({
               />
             ) : (
               <div className="flex h-full w-full items-center justify-center [background-image:repeating-linear-gradient(135deg,rgb(99_102_241/0.10)_0_1px,transparent_1px_7px)]">
-                <span className="select-none text-2xl font-black leading-none tracking-tighter text-indigo-400/60 dark:text-indigo-300/40">
+                <span className="select-none text-2xl font-black leading-none tracking-tighter text-accent-400/60 dark:text-accent-300/40">
                   {monogram}
                 </span>
               </div>
@@ -217,7 +217,7 @@ export default function EventListCard({
               <h2 id={headingId} className="text-base font-semibold text-gray-900 dark:text-white truncate">
                 <Link
                   href={detailsHref}
-                  className="rounded hover:text-indigo-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:hover:text-indigo-400 after:absolute after:inset-0 after:rounded-lg after:content-['']"
+                  className="rounded hover:text-accent-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:hover:text-accent-400 after:absolute after:inset-0 after:rounded-lg after:content-['']"
                 >
                   {event.name}
                 </Link>
@@ -280,7 +280,7 @@ export default function EventListCard({
                           ? 'bg-red-500'
                           : sellThroughPct >= 80
                           ? 'bg-yellow-500'
-                          : 'bg-indigo-500'
+                          : 'bg-accent-500'
                       }`}
                       style={{ width: `${Math.min(sellThroughPct, 100)}%` }}
                     />
@@ -317,7 +317,7 @@ export default function EventListCard({
                 <button
                   type="button"
                   onClick={onDuplicate}
-                  className="inline-flex min-h-9 items-center rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                  className="inline-flex min-h-9 items-center rounded-md bg-accent-500 px-3 py-1.5 text-xs font-semibold text-gray-950 shadow-sm hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
                 >
                   Duplicate
                 </button>
@@ -336,7 +336,7 @@ export default function EventListCard({
               {isRsvp && (
                 <Link
                   href={`/admin/events/${event.id}/rsvps?orgId=${selectedOrgId}`}
-                  className="inline-flex min-h-9 items-center gap-1 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                  className="inline-flex min-h-9 items-center gap-1 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
                 >
                   <Users className="h-3.5 w-3.5" aria-hidden="true" />
                   RSVPs
@@ -345,7 +345,7 @@ export default function EventListCard({
               {!isRsvp && event.status === 'PUBLISHED' && (
                 <Link
                   href={`/admin/events/${event.id}/analytics`}
-                  className="inline-flex min-h-9 items-center gap-1 rounded-md border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                  className="inline-flex min-h-9 items-center gap-1 rounded-md border border-accent-300 dark:border-accent-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-accent-700 dark:text-accent-300 hover:bg-accent-50 dark:hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
                 >
                   <BarChart3 className="h-3.5 w-3.5" aria-hidden="true" />
                   Analytics
@@ -358,7 +358,7 @@ export default function EventListCard({
                   onClick={onToggleExpand}
                   aria-expanded={isExpanded}
                   aria-controls={`event-tiers-${event.id}`}
-                  className="inline-flex min-h-9 items-center gap-1 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                  className="inline-flex min-h-9 items-center gap-1 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
                 >
                   {isExpanded ? (
                     <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
@@ -436,7 +436,7 @@ export default function EventListCard({
                             <div className="flex items-center gap-2">
                               <div className="w-16 bg-gray-200 dark:bg-slate-700 rounded-full h-1.5">
                                 <div
-                                  className="bg-indigo-600 h-1.5 rounded-full"
+                                  className="bg-accent-500 h-1.5 rounded-full"
                                   style={{ width: `${Math.min(pct, 100)}%` }}
                                 />
                               </div>

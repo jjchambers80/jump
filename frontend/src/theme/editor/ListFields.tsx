@@ -9,9 +9,9 @@ import { ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react';
 import { LinkFieldControl, DateTimeControl } from './fields';
 
 const input =
-  'block w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30';
+  'block w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500/30';
 const iconButton =
-  'inline-flex h-7 w-7 items-center justify-center rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500';
+  'inline-flex h-7 w-7 items-center justify-center rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500';
 
 type Row = Record<string, any>;
 
@@ -72,7 +72,7 @@ export function AnnouncementsList({ value, onChange }: { value: Row[] | undefine
         </div>
       ))}
       {rows.length < 5 && (
-        <button type="button" onClick={() => onChange([...rows, { text: 'Tickets on sale now' }])} className="inline-flex items-center gap-1 text-sm font-medium text-indigo-700 hover:underline">
+        <button type="button" onClick={() => onChange([...rows, { text: 'Tickets on sale now' }])} className="inline-flex items-center gap-1 text-sm font-medium text-accent-700 hover:underline">
           <Plus className="h-4 w-4" aria-hidden /> Add announcement
         </button>
       )}
@@ -132,7 +132,7 @@ export function FooterColumnsList({ value, onChange }: { value: Row[] | undefine
         </div>
       ))}
       {rows.length < 8 && (
-        <button type="button" onClick={() => onChange([...rows, { kind: 'Text', heading: '', body: '' }])} className="inline-flex items-center gap-1 text-sm font-medium text-indigo-700 hover:underline">
+        <button type="button" onClick={() => onChange([...rows, { kind: 'Text', heading: '', body: '' }])} className="inline-flex items-center gap-1 text-sm font-medium text-accent-700 hover:underline">
           <Plus className="h-4 w-4" aria-hidden /> Add column
         </button>
       )}

@@ -36,7 +36,7 @@ export default function ThemeToggle() {
       onClick={cycleTheme}
       aria-label={label}
       title={titleText}
-      className="p-2 rounded-lg text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition-colors"
+      className="p-2 rounded-lg text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 transition-colors"
     >
       {theme === 'light' ? (
         /* Sun icon */
