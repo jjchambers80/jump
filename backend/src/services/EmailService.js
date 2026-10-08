@@ -85,6 +85,19 @@ function eventimusEmail({ preheader, heading, body }) {
 </html>`;
 }
 
+const EV_P = 'margin: 0 0 16px; color: #d1d5db; font-size: 15px; line-height: 24px;';
+const EV_NOTE = 'margin: 24px 0 0; color: #9ca3af; font-size: 13px; line-height: 20px;';
+const EV_STRONG = 'color: #ffffff;';
+
+/** Lime full-width button for eventimusEmail(). */
+function eventimusButton(href, label) {
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 28px 0 0;">
+              <tr><td align="center" bgcolor="#c8ff00" style="background: #c8ff00; border-radius: 8px;">
+                <a href="${escapeHtml(href)}" target="_blank" style="display: block; padding: 14px 24px; color: #111827; font-size: 16px; font-weight: 700; text-decoration: none;">${escapeHtml(label)}</a>
+              </td></tr>
+            </table>`;
+}
+
 function icsText(value) {
   return String(value || '').replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;');
 }
@@ -369,28 +382,22 @@ ${manageTicketsHtml}
     const msg = {
       to: [to],
       from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
-      subject: 'Confirm your new email address for Jump',
-      html: `
-        <html>
-          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
-            <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
-              <h1 style="color: #333; font-size: 22px;">Confirm your new email</h1>
-            </div>
-            <div style="padding: 20px;">
-              <p>You asked to change the email address on your Jump account from <strong>${escapeHtml(currentEmail)}</strong> to <strong>${escapeHtml(to)}</strong>.</p>
-              <div style="text-align: center; margin: 32px 0;">
-                <a href="${confirmUrl}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 16px; font-weight: bold; padding: 14px 32px; border-radius: 8px; text-decoration: none;">Confirm email address</a>
-              </div>
-              <p style="color: #666; font-size: 13px;">This link works once and expires in 1 hour. If you did not request this change, you can ignore this email — your email address stays the same until the link is used.</p>
-            </div>
-          </body>
-        </html>
-      `,
+      subject: 'Confirm your new email address for Eventimus',
+      text: `You asked to change the email on your Eventimus account from ${currentEmail} to ${to}.\n\nConfirm: ${confirmUrl}\n\nThis link works once and expires in 1 hour. If you did not request this change, ignore this email.`,
+      html: eventimusEmail({
+        preheader: 'Confirm the new email address on your Eventimus account.',
+        heading: 'Confirm your new email',
+        body: `
+          <p style="${EV_P}">You asked to change the email address on your Eventimus account from <strong style="${EV_STRONG}">${escapeHtml(currentEmail)}</strong> to <strong style="${EV_STRONG}">${escapeHtml(to)}</strong>.</p>
+          ${eventimusButton(confirmUrl, 'Confirm email address')}
+          <p style="${EV_NOTE}">This link works once and expires in 1 hour. If you did not request this change, ignore this email: your email address stays the same until the link is used.</p>`,
+      }),
     };
 
     await deliver(msg);
     logger.info('Email change confirmation sent', { event: 'account_email_change_sent' });
   }
+
 
   /**
    * Notice to the OLD address after an email change completed (spec 030).
@@ -400,25 +407,21 @@ ${manageTicketsHtml}
     const msg = {
       to: [to],
       from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
-      subject: 'Your Jump email address was changed',
-      html: `
-        <html>
-          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
-            <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
-              <h1 style="color: #333; font-size: 22px;">Email address changed</h1>
-            </div>
-            <div style="padding: 20px;">
-              <p>The email address on your Jump account was changed from <strong>${escapeHtml(to)}</strong> to <strong>${escapeHtml(newEmail)}</strong>. Sign-in links now go to the new address.</p>
-              <p style="color: #666; font-size: 13px;">If you did not make this change, reply to this email right away so we can help secure your account.</p>
-            </div>
-          </body>
-        </html>
-      `,
+      subject: 'Your Eventimus email address was changed',
+      text: `The email address on your Eventimus account was changed from ${to} to ${newEmail}. Sign-in links now go to the new address.\n\nIf you did not make this change, reply to this email right away so we can help secure your account.`,
+      html: eventimusEmail({
+        preheader: `Your Eventimus email address is now ${newEmail}.`,
+        heading: 'Email address changed',
+        body: `
+          <p style="${EV_P}">The email address on your Eventimus account was changed from <strong style="${EV_STRONG}">${escapeHtml(to)}</strong> to <strong style="${EV_STRONG}">${escapeHtml(newEmail)}</strong>. Sign-in links now go to the new address.</p>
+          <p style="${EV_NOTE}">If you did not make this change, reply to this email right away so we can help secure your account.</p>`,
+      }),
     };
 
     await deliver(msg);
     logger.info('Email changed notice sent', { event: 'account_email_changed_notice_sent' });
   }
+
 
   /**
    * Plain security notice for account changes (spec 030): sessions signed
@@ -431,24 +434,20 @@ ${manageTicketsHtml}
     const msg = {
       to: recipients,
       from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
-      subject: `Jump security: ${title}`,
-      html: `
-        <html>
-          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
-            <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
-              <h1 style="color: #333; font-size: 22px;">${escapeHtml(title)}</h1>
-            </div>
-            <div style="padding: 20px;">
-              <p>${escapeHtml(body)}</p>
-              <p style="color: #666; font-size: 13px;">This message was sent because a security setting on your Jump account changed.</p>
-            </div>
-          </body>
-        </html>
-      `,
+      subject: `Eventimus security: ${title}`,
+      text: `${title}\n\n${body}\n\nThis message was sent because a security setting on your Eventimus account changed.`,
+      html: eventimusEmail({
+        preheader: body,
+        heading: title,
+        body: `
+          <p style="${EV_P}">${escapeHtml(body)}</p>
+          <p style="${EV_NOTE}">This message was sent because a security setting on your Eventimus account changed.</p>`,
+      }),
     };
     await deliver(msg);
     logger.info('Security notice sent', { event: 'security_notice_sent', title });
   }
+
 
   /** Six-digit step-up code (spec 030 B). Eventimus-branded: staff account email. */
   async sendReauthCode({ to, code }) {
@@ -479,54 +478,42 @@ ${manageTicketsHtml}
     const msg = {
       to: [to],
       from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
-      subject: 'Verify your secondary email for Jump',
-      html: `
-        <html>
-          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
-            <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
-              <h1 style="color: #333; font-size: 22px;">Verify this email</h1>
-            </div>
-            <div style="padding: 20px;">
-              <p>This address was added as the secondary email on a Jump account. Once verified it can be used to restore access to that account, and security notifications are sent here too.</p>
-              <div style="text-align: center; margin: 32px 0;">
-                <a href="${confirmUrl}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 16px; font-weight: bold; padding: 14px 32px; border-radius: 8px; text-decoration: none;">Verify email address</a>
-              </div>
-              <p style="color: #666; font-size: 13px;">This link works once and expires in 1 hour. If you didn't add this address, ignore this email.</p>
-            </div>
-          </body>
-        </html>
-      `,
+      subject: 'Verify your secondary email for Eventimus',
+      text: `This address was added as the secondary email on an Eventimus account.\n\nVerify: ${confirmUrl}\n\nThis link works once and expires in 1 hour. If you didn't add this address, ignore this email.`,
+      html: eventimusEmail({
+        preheader: 'Verify this address to use it for account recovery.',
+        heading: 'Verify this email',
+        body: `
+          <p style="${EV_P}">This address was added as the secondary email on an Eventimus account. Once verified it can be used to restore access to that account, and security notifications are sent here too.</p>
+          ${eventimusButton(confirmUrl, 'Verify email address')}
+          <p style="${EV_NOTE}">This link works once and expires in 1 hour. If you didn’t add this address, ignore this email.</p>`,
+      }),
     };
     await deliver(msg);
     logger.info('Secondary email verification sent', { event: 'secondary_email_verification_sent' });
   }
+
 
   /** One-time recovery sign-in link, sent to the verified secondary address (spec 030 B). */
   async sendRecoveryLink({ to, primaryEmail, recoverUrl }) {
     const msg = {
       to: [to],
       from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
-      subject: 'Restore access to your Jump account',
-      html: `
-        <html>
-          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
-            <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
-              <h1 style="color: #333; font-size: 22px;">Restore access</h1>
-            </div>
-            <div style="padding: 20px;">
-              <p>Use the button below to sign in to the Jump account <strong>${escapeHtml(primaryEmail)}</strong>. This address is its secondary email.</p>
-              <div style="text-align: center; margin: 32px 0;">
-                <a href="${recoverUrl}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 16px; font-weight: bold; padding: 14px 32px; border-radius: 8px; text-decoration: none;">Sign in</a>
-              </div>
-              <p style="color: #666; font-size: 13px;">This link works once and expires in 15 minutes. If you didn't request it, ignore this email and consider reviewing Account › Security.</p>
-            </div>
-          </body>
-        </html>
-      `,
+      subject: 'Restore access to your Eventimus account',
+      text: `Use this link to sign in to the Eventimus account ${primaryEmail}. This address is its secondary email.\n\n${recoverUrl}\n\nThis link works once and expires in 15 minutes. If you didn't request it, ignore this email and consider reviewing Account › Security.`,
+      html: eventimusEmail({
+        preheader: `Sign in to ${primaryEmail} with this one-time link.`,
+        heading: 'Restore access',
+        body: `
+          <p style="${EV_P}">Use the button below to sign in to the Eventimus account <strong style="${EV_STRONG}">${escapeHtml(primaryEmail)}</strong>. This address is its secondary email.</p>
+          ${eventimusButton(recoverUrl, 'Sign in')}
+          <p style="${EV_NOTE}">This link works once and expires in 15 minutes. If you didn’t request it, ignore this email and consider reviewing Account › Security.</p>`,
+      }),
     };
     await deliver(msg);
     logger.info('Recovery link sent', { event: 'recovery_link_sent' });
   }
+
 
   /**
    * Invitation to an organization's admin (Settings › Users › Add users).
