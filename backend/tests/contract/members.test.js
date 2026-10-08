@@ -230,4 +230,49 @@ describe('Settings › Users contract', () => {
     const signedIn = await request(app).post(`/admin/settings/users/${organizerId}/resend`).set(...auth(adminToken));
     expect(signedIn.status).toBe(409);
   });
+
+  describe('secure sign-in method (requireTwoStep) enforcement', () => {
+    const setupToken = () =>
+      jwt.sign(
+        { sub: organizerId, email: staffEmails[1], role: 'ORGANIZER', twoStepSetup: 'required' },
+        process.env.AUTH_SECRET,
+        { algorithm: 'HS256', expiresIn: '1h' }
+      );
+
+    test('only the account, staff auth and the org list are open until two-step is on', async () => {
+      const token = setupToken();
+      const blocked = await request(app).get('/admin/dashboard/overview').set(...auth(token));
+      expect(blocked.status).toBe(403);
+      expect(blocked.body.code).toBe('TWO_STEP_SETUP_REQUIRED');
+      const blockedWrite = await request(app).post('/organizations').set(...auth(token)).send({ name: 'x' });
+      expect(blockedWrite.body.code).toBe('TWO_STEP_SETUP_REQUIRED');
+
+      expect((await request(app).get('/account').set(...auth(token))).status).toBe(200);
+      expect((await request(app).get('/organizations').set(...auth(token))).status).toBe(200);
+    });
+
+    test('two-step cannot be turned off while an organization requires it', async () => {
+      await prisma.organizationMember.update({
+        where: { userId_organizationId: { userId: organizerId, organizationId: org.id } },
+        data: { requireTwoStep: true },
+      });
+      sentEmails.length = 0;
+      await request(app).post('/account/reauth/start').set(...auth(organizerToken)).send({ method: 'email' }).expect(200);
+      const code = String(sentEmails[0].subject).match(/^(\d{6}) is your/)[1];
+      const proof = await request(app).post('/account/reauth').set(...auth(organizerToken)).send({ code }).expect(200);
+
+      const res = await request(app)
+        .post('/account/two-step/disable')
+        .set(...auth(organizerToken))
+        .set('X-Jump-Reauth', proof.body.reauthToken)
+        .send({ code: '123456' });
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('TWO_STEP_REQUIRED_BY_ORGANIZATION');
+      expect(res.body.message).toContain(org.name);
+      await prisma.organizationMember.update({
+        where: { userId_organizationId: { userId: organizerId, organizationId: org.id } },
+        data: { requireTwoStep: false },
+      });
+    });
+  });
 });

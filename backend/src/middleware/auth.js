@@ -3,10 +3,21 @@
 // Attaches decoded user { id, email, role, name, organizationId } to req.user
 
 import jwt from 'jsonwebtoken';
-import { AuthenticationError } from './errorHandler.js';
+import { AuthenticationError, ForbiddenError } from './errorHandler.js';
 import sessionService from '../services/SessionService.js';
 
 const AUTH_SECRET = process.env.AUTH_SECRET;
+
+/**
+ * Settings › Users "secure sign-in method": until two-step is on, a member an
+ * organization requires it of may reach only their own account (where they
+ * turn it on), staff auth, and the org list the admin shell renders.
+ */
+function allowedBeforeTwoStepSetup(req) {
+  const path = req.originalUrl.split('?')[0];
+  if (/^\/(account|auth)(\/|$)/.test(path)) return true;
+  return req.method === 'GET' && path === '/organizations';
+}
 
 function activeOrgFrom(req, decoded) {
   const header = req.get('x-jump-org');
@@ -54,6 +65,12 @@ export const requireAuth = async (req, res, next) => {
     if (decoded.mfa === 'pending' && !req.allowPendingTwoStep) {
       const error = new AuthenticationError('Finish two-step verification to continue');
       error.code = 'TWO_STEP_REQUIRED';
+      throw error;
+    }
+
+    if (decoded.twoStepSetup === 'required' && !allowedBeforeTwoStepSetup(req)) {
+      const error = new ForbiddenError('Your organization requires two-step authentication. Turn it on under Account › Security.');
+      error.code = 'TWO_STEP_SETUP_REQUIRED';
       throw error;
     }
 
