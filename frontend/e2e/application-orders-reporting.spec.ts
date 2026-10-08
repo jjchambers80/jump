@@ -105,9 +105,9 @@ test('analytics shows revenue by source and the dashboard shows gross revenue', 
   await page.route(`${API}/admin/dashboard/stats**`, (route) =>
     route.fulfill(json({ totalCapacity: 500, ticketsSold: 3, remainingCapacity: 497, ticketsRedeemed: 0, salesRate: 0, paymentSuccessRate: 100, revenue: { orders: 64.35, applications: 932, gross: 996.35 } }))
   );
-  await page.route(`${API}/admin/events**`, (route) => route.fulfill(json({ events: [] })));
   await page.goto('/admin/dashboard');
-  await expect(page.getByText('Gross Revenue')).toBeVisible();
-  await expect(page.getByText('$996')).toBeVisible();
-  await expect(page.getByText('$64 orders · $932 applications')).toBeVisible();
+  const kpis = page.getByTestId('dashboard-kpis');
+  await expect(kpis.getByText('Gross revenue')).toBeVisible();
+  await expect(kpis.getByText('$996')).toBeVisible();
+  await expect(kpis.getByText('$64 orders · $932 applications')).toBeVisible();
 });
