@@ -147,7 +147,7 @@ router.post('/passkeys/register/verify', passkeyLimiter, requireRecentAuth, vali
     userAgent: req.get('user-agent'),
   });
   await securityEventService.record(req.user.id, 'PASSKEY_ADDED', { req, meta: { passkeyId: passkey.id } });
-  emailService.sendSecurityNotice({ to: user.email, title: 'A passkey was added', body: `A passkey ("${passkey.label}") was added to your Jump account. If this wasn't you, sign in and review Account › Security.` }).catch(() => {});
+  emailService.sendSecurityNotice({ to: user.email, title: 'A passkey was added', body: `A passkey ("${passkey.label}") was added to your Eventimus account. If this wasn't you, sign in and review Account › Security.` }).catch(() => {});
   res.status(201).json(passkey);
 }));
 
@@ -158,7 +158,7 @@ router.patch('/passkeys/:id', wrap(async (req, res) => {
 router.delete('/passkeys/:id', requireRecentAuth, wrap(async (req, res) => {
   await passkeyService.remove(req.user.id, req.params.id);
   await securityEventService.record(req.user.id, 'PASSKEY_REMOVED', { req, meta: { passkeyId: req.params.id } });
-  emailService.sendSecurityNotice({ to: req.user.email, title: 'A passkey was removed', body: 'A passkey was removed from your Jump account. If this wasn\'t you, sign in and review Account › Security.' }).catch(() => {});
+  emailService.sendSecurityNotice({ to: req.user.email, title: 'A passkey was removed', body: 'A passkey was removed from your Eventimus account. If this wasn\'t you, sign in and review Account › Security.' }).catch(() => {});
   res.status(204).end();
 }));
 
@@ -208,7 +208,7 @@ router.post('/sessions/revoke-others', wrap(async (req, res) => {
       .sendSecurityNotice({
         to: req.user.email,
         title: 'You logged out of your other devices',
-        body: `${result.revoked} other ${result.revoked === 1 ? 'session was' : 'sessions were'} signed out of your Jump account. If this wasn't you, sign in and check Account › Security › Devices.`,
+        body: `${result.revoked} other ${result.revoked === 1 ? 'session was' : 'sessions were'} signed out of your Eventimus account. If this wasn't you, sign in and check Account › Security › Devices.`,
       })
       .catch(() => {});
   }

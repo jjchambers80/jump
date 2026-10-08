@@ -97,9 +97,14 @@ describe('EmailService brand color', () => {
     expect(sent.html).not.toContain('logo.png');
   });
 
-  it('staff security emails keep the platform color', async () => {
-    await emailService.sendRecoveryLink({ to: 'a@b.co', primaryEmail: 'c@d.co', recoverUrl: 'https://x.test' });
-    expect(send.mock.calls[0][0].html).toContain('#2563eb');
+  it('staff security emails use the Eventimus shell and escape their input', async () => {
+    await emailService.sendRecoveryLink({ to: 'a@b.co', primaryEmail: '<c@d.co>', recoverUrl: 'https://x.test/?a=1&b=2' });
+    const msg = send.mock.calls[0][0];
+    expect(msg.subject).toBe('Restore access to your Eventimus account');
+    expect(msg.html).toContain('#c8ff00');
+    expect(msg.html).toContain('&lt;c@d.co&gt;');
+    expect(msg.html).toContain('href="https://x.test/?a=1&amp;b=2"');
+    expect(msg.text).toContain('https://x.test/?a=1&b=2');
   });
 
   it('verification code email is Eventimus-branded and escapes the code', async () => {

@@ -123,7 +123,7 @@ class TwoStepService {
     await this._notify(
       user,
       'Two-step authentication is on',
-      `Two-step authentication was turned on for your Jump account (${user.email})${others.revoked ? `, and ${others.revoked} other device${others.revoked === 1 ? ' was' : 's were'} signed out` : ''}. If this wasn't you, sign in and review Account › Security.`
+      `Two-step authentication was turned on for your Eventimus account (${user.email})${others.revoked ? `, and ${others.revoked} other device${others.revoked === 1 ? ' was' : 's were'} signed out` : ''}. If this wasn't you, sign in and review Account › Security.`
     );
     // The enabling browser's own session predates 2FA; give it a proof so it stays signed in.
     const proof = await this._issueProof(userId);
@@ -141,7 +141,7 @@ class TwoStepService {
       prisma.trustedDevice.deleteMany({ where: { userId } }),
     ]);
     await securityEventService.record(userId, 'TWO_STEP_DISABLED', { req });
-    await this._notify(user, 'Two-step authentication is off', `Two-step authentication was turned off for your Jump account (${user.email}). If this wasn't you, sign in and turn it back on under Account › Security.`);
+    await this._notify(user, 'Two-step authentication is off', `Two-step authentication was turned off for your Eventimus account (${user.email}). If this wasn't you, sign in and turn it back on under Account › Security.`);
   }
 
   async regenerateRecoveryCodes(userId, req) {
@@ -149,7 +149,7 @@ class TwoStepService {
     if (!user.twoStepEnabledAt) throw new ValidationError('Two-step authentication is not on');
     const codes = await this._issueRecoveryCodes(userId);
     await securityEventService.record(userId, 'RECOVERY_CODES_REGENERATED', { req });
-    await this._notify(user, 'New recovery codes were generated', `A new set of recovery codes was generated for your Jump account (${user.email}). The old codes no longer work.`);
+    await this._notify(user, 'New recovery codes were generated', `A new set of recovery codes was generated for your Eventimus account (${user.email}). The old codes no longer work.`);
     return { recoveryCodes: codes };
   }
 
@@ -232,7 +232,7 @@ class TwoStepService {
     await securityEventService.record(userId, method === 'recovery' ? 'RECOVERY_CODE_USED' : 'TWO_STEP_VERIFIED', { req, meta: { method } });
     if (method === 'recovery') {
       const remaining = await prisma.recoveryCode.count({ where: { userId, usedAt: null } });
-      await this._notify(user, 'A recovery code was used', `A recovery code was used to sign in to your Jump account (${user.email}). ${remaining} code${remaining === 1 ? '' : 's'} remain. If this wasn't you, sign in and review Account › Security.`);
+      await this._notify(user, 'A recovery code was used', `A recovery code was used to sign in to your Eventimus account (${user.email}). ${remaining} code${remaining === 1 ? '' : 's'} remain. If this wasn't you, sign in and review Account › Security.`);
     }
     const result = { proof: await this._issueProof(userId), method };
     if (body.rememberDevice === true) result.trustToken = await this._trustDevice(userId, req);

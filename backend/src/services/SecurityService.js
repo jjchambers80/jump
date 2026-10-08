@@ -164,7 +164,7 @@ class SecurityService {
     await this._notify(
       user,
       changing ? 'Your password was changed' : 'A password was added to your account',
-      `${changing ? 'The password on' : 'A password was added to'} your Jump account (${user.email})${others.revoked ? `, and ${others.revoked} other device${others.revoked === 1 ? ' was' : 's were'} signed out` : ''}. If this wasn't you, sign in and review Account › Security.`
+      `${changing ? 'The password on' : 'A password was added to'} your Eventimus account (${user.email})${others.revoked ? `, and ${others.revoked} other device${others.revoked === 1 ? ' was' : 's were'} signed out` : ''}. If this wasn't you, sign in and review Account › Security.`
     );
     return { set: true, updatedAt: new Date(), otherDevicesSignedOut: others.revoked };
   }
@@ -174,7 +174,7 @@ class SecurityService {
     if (!user.passwordHash) throw new ValidationError('No password is set');
     await prisma.user.update({ where: { id: userId }, data: { passwordHash: null, passwordUpdatedAt: null } });
     await securityEventService.record(userId, 'PASSWORD_REMOVED', { req });
-    await this._notify(user, 'Your password was removed', `The password on your Jump account (${user.email}) was removed. You can still sign in with an email link, Google or a passkey.`);
+    await this._notify(user, 'Your password was removed', `The password on your Eventimus account (${user.email}) was removed. You can still sign in with an email link, Google or a passkey.`);
     return { set: false };
   }
 
@@ -216,7 +216,7 @@ class SecurityService {
     await prisma.account.delete({ where: { id: account.id } });
     if (provider === 'google') await this._revokeGoogle(account).catch(() => {});
     await securityEventService.record(userId, 'PROVIDER_DISCONNECTED', { req, meta: { provider } });
-    await this._notify(user, `${providerLabel(provider)} was disconnected`, `${providerLabel(provider)} sign-in was disconnected from your Jump account (${user.email}). You can still sign in with an email link${user.passwordHash ? ', your password' : ''}.`);
+    await this._notify(user, `${providerLabel(provider)} was disconnected`, `${providerLabel(provider)} sign-in was disconnected from your Eventimus account (${user.email}). You can still sign in with an email link${user.passwordHash ? ', your password' : ''}.`);
   }
 
   async _revokeGoogle(account) {
@@ -267,7 +267,7 @@ class SecurityService {
     if (!user || user.deletedAt || !user.secondaryEmail) throw coded(new ValidationError('This link is no longer valid'), 'TOKEN_INVALID');
     await prisma.user.update({ where: { id: user.id }, data: { secondaryEmailVerifiedAt: new Date() } });
     await securityEventService.record(user.id, 'SECONDARY_EMAIL_VERIFIED');
-    await this._notify({ ...user, secondaryEmailVerifiedAt: new Date() }, 'Secondary email verified', `${user.secondaryEmail} can now be used to restore access to your Jump account (${user.email}) and receives security notices.`);
+    await this._notify({ ...user, secondaryEmailVerifiedAt: new Date() }, 'Secondary email verified', `${user.secondaryEmail} can now be used to restore access to your Eventimus account (${user.email}) and receives security notices.`);
     return { email: user.secondaryEmail };
   }
 
@@ -279,7 +279,7 @@ class SecurityService {
     await clearTokens('secondary-email', userId);
     await securityEventService.record(userId, 'SECONDARY_EMAIL_REMOVED', { req });
     // Tell both addresses: the one losing access too.
-    await emailService.sendSecurityNotice({ to: [user.email, removed], title: 'Secondary email removed', body: `${removed} was removed as the secondary email on your Jump account (${user.email}).` }).catch(() => {});
+    await emailService.sendSecurityNotice({ to: [user.email, removed], title: 'Secondary email removed', body: `${removed} was removed as the secondary email on your Eventimus account (${user.email}).` }).catch(() => {});
   }
 
   // ---- Recovery via the verified secondary address ----
