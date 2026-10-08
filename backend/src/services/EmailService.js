@@ -108,7 +108,7 @@ class EmailService {
 
         const msg = {
           to: [order.contact?.email || order.contactEmail],
-          from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+          from: fromAs(order.event?.organizationName),
           subject: `Order Confirmed — ${order.event?.name || 'Your Event'} (${order.orderRef})`,
           html: `
             <html>
@@ -196,7 +196,7 @@ ${manageTicketsHtml}
               <p>Use the button below to sign in and see your tickets and orders with ${escapeHtml(orgName)}.</p>`;
     const msg = {
       to: [contact.email],
-      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      from: fromAs(organization.name),
       subject: code ? `${code} is your sign-in code for ${orgName}` : `Your sign-in link for ${orgName}`,
       html: `
         <html>
@@ -235,7 +235,7 @@ ${manageTicketsHtml}
     const orgName = organization.name || 'Jump';
     const msg = {
       to: [to],
-      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      from: fromAs(organization.name),
       subject,
       html: `
         <html>
@@ -266,7 +266,7 @@ ${manageTicketsHtml}
     const orgName = organization.name || 'Jump';
     const msg = {
       to: [to],
-      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      from: fromAs(organization.name),
       subject: `Confirm your new email address for ${orgName}`,
       html: `
         <html>
@@ -302,7 +302,7 @@ ${manageTicketsHtml}
       : `Someone signed in to your ${escapeHtml(orgName)} account asked to change its email address to <strong>${escapeHtml(newEmail)}</strong>. Nothing changes unless that address confirms.`;
     const msg = {
       to: [to],
-      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      from: fromAs(organization.name),
       subject: completed ? `Your ${orgName} email address was changed` : `Email change requested for your ${orgName} account`,
       html: `
         <html>
@@ -557,7 +557,7 @@ ${manageTicketsHtml}
 
     const msg = {
       to: [to],
-      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      from: fromAs(organization.name),
       subject,
       text: body,
       ...(organization.email && { reply_to: organization.email }),
@@ -664,7 +664,7 @@ ${manageTicketsHtml}
       try {
         const msg = {
           to: [email],
-          from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+          from: fromAs(event.organizationName ?? event.venue?.organization?.name),
           subject: `Event Cancelled — ${event.name}`,
           html: `
             <html>
@@ -730,7 +730,7 @@ ${manageTicketsHtml}
 
         const msg = {
           to: [contact.email],
-          from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+          from: fromAs(organization.name),
           subject: `Reminder: ${event.name} is happening tomorrow — ${orgName}`,
           html: `
             <html>
@@ -827,7 +827,7 @@ ${manageTicketsHtml}
     ].join('\r\n');
     const msg = {
       to: [contact.email],
-      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      from: fromAs(organization.name),
       subject: `You're on the list — ${event.name}`,
       text: [
         `Hi ${contact.firstName || 'there'},`, '', `You're on the list for ${event.name}.`,
@@ -918,7 +918,7 @@ ${manageTicketsHtml}
     ];
     const msg = {
       to: [to],
-      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      from: fromAs(organization.name),
       subject: `Receipt for ${application.event?.name || 'your application'} (${order.orderRef})`,
       text: textLines.join('\n'),
       html: `
