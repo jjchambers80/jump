@@ -1,255 +1,163 @@
-// Admin Dashboard page (T006, T111, T112, T118)
-// Real-time stats with auto-refresh every 5 seconds (ADR-004)
-// Event list with Edit and Publish buttons
-// AdminRoute wrapper removed — layout.tsx handles auth guard
+// Admin dashboard: the organizer's bird's-eye view of the active
+// organization. Banners for anything blocking, then headline numbers, the
+// 14-day sales trend, upcoming events, what needs attention and the latest
+// orders. One column on phones; main + side column from lg.
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
-import adminService, { AdminEvent, DashboardStats } from '@/services/adminService';
+import { AlertCircle, Plus, RefreshCw, ScanLine } from 'lucide-react';
+import adminService, { DashboardOverview, DashboardStats } from '@/services/adminService';
+import { useOrg } from '@/components/OrgContext';
+import { useAccountFormat } from '@/lib/accountFormat';
 import PayoutsBanner from './PayoutsBanner';
 import SetupGuide from './SetupGuide';
 import PlanBanner from './PlanBanner';
-import { formatEventDateTime } from '@/lib/eventTime';
+import DashboardKpis from './DashboardKpis';
+import SalesTrend from './SalesTrend';
+import UpcomingEvents from './UpcomingEvents';
+import NeedsAttention from './NeedsAttention';
+import RecentOrders from './RecentOrders';
 
-function DashboardContent() {
-  const router = useRouter();
+const REFRESH_MS = 30_000;
+
+export default function DashboardPage() {
   const { data: session } = useSession();
-  const user = session?.user;
+  const { selectedOrgId, selectedOrg, loading: orgLoading } = useOrg();
+  const { prefs, formatDateTime } = useAccountFormat();
+  const timeZone = prefs.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [events, setEvents] = useState<AdminEvent[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [overview, setOverview] = useState<DashboardOverview | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [publishingId, setPublishingId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    try {
-      const [statsData, eventsData] = await Promise.all([
-        adminService.getDashboardStats(),
-        adminService.getEvents(),
-      ]);
-      setStats(statsData);
-      setEvents(eventsData.events);
-      setError('');
-    } catch (err: any) {
-      setError(err.message || 'Failed to load dashboard data');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    setRefreshing(true);
+    // Settled separately: one failing panel never blanks the others.
+    const [statsResult, overviewResult] = await Promise.allSettled([
+      adminService.getDashboardStats(),
+      adminService.getDashboardOverview(timeZone),
+    ]);
+    if (statsResult.status === 'fulfilled') setStats(statsResult.value);
+    // Shape check: an older backend (or a catch-all mock) answers without the overview fields.
+    if (overviewResult.status === 'fulfilled' && Array.isArray(overviewResult.value?.trend)) setOverview(overviewResult.value);
+    const failed = [statsResult, overviewResult].find((r): r is PromiseRejectedResult => r.status === 'rejected');
+    setError(failed ? failed.reason?.message || 'Could not load the dashboard.' : '');
+    if (!failed) setUpdatedAt(new Date());
+    setRefreshing(false);
+  }, [timeZone]);
 
-  // Initial load and auto-refresh every 5 seconds (T118, ADR-004)
+  // Reload on org switch; then poll while the tab is visible.
   useEffect(() => {
+    if (orgLoading && !selectedOrgId) return;
+    setStats(null);
+    setOverview(null);
     fetchData();
-    const interval = setInterval(fetchData, 5000);
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchData();
+    }, REFRESH_MS);
     return () => clearInterval(interval);
-  }, [fetchData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedOrgId, fetchData]);
 
   const handlePublish = async (eventId: string) => {
     setPublishingId(eventId);
     try {
       await adminService.publishEvent(eventId);
-      await fetchData(); // Refresh data
+      await fetchData();
     } catch (err: any) {
-      setError(err.message || 'Failed to publish event');
+      setError(err.message || 'Could not publish the event.');
     } finally {
       setPublishingId(null);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent-600" />
-      </div>
-    );
-  }
+  const firstName = session?.user?.name?.split(' ')[0];
 
   return (
-    <div>
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Welcome */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">Dashboard</h1>
-          <p className="text-sm text-gray-500 dark:text-slate-500">Welcome, {user?.name}</p>
+    <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 sm:py-8">
+      <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-sm text-gray-600 dark:text-slate-300">
+            Welcome back{firstName ? `, ${firstName}` : ''}
+          </p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
+          {selectedOrg && <p className="text-sm text-gray-500 dark:text-slate-400">{selectedOrg.name}</p>}
         </div>
-        <PayoutsBanner />
-        <PlanBanner />
-        {/* Spec 022: setup cards for a new organization; hides itself once dismissed */}
-        <SetupGuide />
-        {error && (
-          <div className="mb-6 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-slate-700 text-red-700 dark:text-red-400 px-4 py-3 rounded-md">
-            {error}
-          </div>
-        )}
-
-        {/* Stats Cards (T111) */}
-        {stats && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-            <StatCard
-              label="Gross Revenue"
-              value={formatMoney(stats.revenue?.gross ?? 0)}
-              icon="💵"
-              subtitle={stats.revenue ? `${formatMoney(stats.revenue.orders)} orders · ${formatMoney(stats.revenue.applications)} applications` : undefined}
-            />
-            <StatCard
-              label="Total Capacity"
-              value={(stats.totalCapacity ?? 0).toLocaleString()}
-              icon="🎫"
-            />
-            <StatCard
-              label="Tickets Sold"
-              value={(stats.ticketsSold ?? 0).toLocaleString()}
-              icon="✅"
-              subtitle={`${(stats.remainingCapacity ?? 0).toLocaleString()} remaining`}
-            />
-            <StatCard
-              label="Sales Rate"
-              value={`${stats.salesRate ?? 0}/min`}
-              icon="📈"
-              subtitle="Last hour"
-            />
-            <StatCard
-              label="Payment Success"
-              value={`${stats.paymentSuccessRate ?? 100}%`}
-              icon="💳"
-            />
-          </div>
-        )}
-
-        {/* Capacity bar */}
-        {stats && (stats.totalCapacity ?? 0) > 0 && (
-          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm dark:shadow-lg dark:shadow-black/20 p-6 mb-8">
-            <h3 className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
-              Overall Capacity
-            </h3>
-            <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-4">
-              <div
-                className="bg-accent-500 h-4 rounded-full transition-all duration-500"
-                style={{
-                  width: `${Math.min(100, ((stats.ticketsSold ?? 0) / stats.totalCapacity) * 100)}%`,
-                }}
-              />
-            </div>
-            <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
-              {stats.ticketsSold ?? 0} / {stats.totalCapacity} tickets sold (
-              {(((stats.ticketsSold ?? 0) / stats.totalCapacity) * 100).toFixed(1)}%)
-            </p>
-          </div>
-        )}
-
-        {/* Events List (T112) */}
-        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm dark:shadow-lg dark:shadow-black/20">
-          <div className="px-6 py-4 border-b border-gray-200 dark:border-slate-700 flex justify-between items-center">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Your Events</h2>
-            <span className="text-sm text-gray-500 dark:text-slate-500">
-              {events.length} events
-            </span>
-          </div>
-
-          {events.length === 0 ? (
-            <div className="px-6 py-12 text-center text-gray-500 dark:text-slate-500">
-              <p className="text-lg mb-2">No events yet</p>
-              <p className="text-sm mb-4">Create your first event to get started</p>
-              <Link
-                href="/admin/create-event"
-                className="inline-block bg-accent-500 text-gray-950 px-6 py-2 rounded-md hover:bg-accent-hover transition-colors"
-              >
-                Create Event
-              </Link>
-            </div>
-          ) : (
-            <div className="divide-y divide-gray-200 dark:divide-slate-700">
-              {events.map((event) => (
-                <div
-                  key={event.id}
-                  className="px-6 py-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-slate-700"
-                >
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-medium text-gray-900 dark:text-slate-100">
-                        {event.name}
-                      </h3>
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                          event.status === 'PUBLISHED'
-                            ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400'
-                            : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400'
-                        }`}
-                      >
-                        {event.status}
-                      </span>
-                    </div>
-                    <div className="mt-1 text-sm text-gray-500 dark:text-slate-500 flex gap-4">
-                      <span>📅 {formatEventDateTime(event.date, event.venue?.timezone)}</span>
-                      <span>📍 {event.venue?.name ?? 'No venue'}</span>
-                      <span>
-                        🎫 {event.ticketsSold}/{event.capacity} sold
-                      </span>
-                      {event.priceTiers?.[0] && (
-                        <span>💰 ${(event.priceTiers[0].priceCents / 100).toFixed(2)}</span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {event.status === 'DRAFT' && (
-                      <button
-                        onClick={() => handlePublish(event.id)}
-                        disabled={publishingId === event.id}
-                        className="bg-green-600 text-white px-3 py-1.5 rounded-md text-sm hover:bg-green-700 transition-colors disabled:opacity-50"
-                      >
-                        {publishingId === event.id ? 'Publishing...' : 'Publish'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+          <Link
+            href="/admin/orders/scan"
+            className="inline-flex min-h-[2.75rem] flex-1 items-center justify-center gap-2 rounded-md border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-800 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700 sm:flex-none"
+          >
+            <ScanLine className="h-4 w-4" aria-hidden="true" />
+            Check in
+          </Link>
+          <Link
+            href="/admin/create-event"
+            className="inline-flex min-h-[2.75rem] flex-1 items-center justify-center gap-2 rounded-md bg-accent-500 px-4 text-sm font-semibold text-gray-950 hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900 sm:flex-none"
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Create event
+          </Link>
         </div>
+      </header>
 
-        {/* Auto-refresh indicator */}
-        <p className="mt-4 text-xs text-gray-400 dark:text-slate-500 text-center">
-          Dashboard auto-refreshes every 5 seconds
-        </p>
+      <PlanBanner />
+      <PayoutsBanner />
+      <SetupGuide />
+
+      {error && (
+        <div role="alert" className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+          <AlertCircle className="h-5 w-5 shrink-0" aria-hidden="true" />
+          <span className="min-w-0 flex-1">{error}</span>
+          <button
+            type="button"
+            onClick={fetchData}
+            className="min-h-[2.75rem] rounded-md px-3 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+          >
+            Try again
+          </button>
+        </div>
+      )}
+
+      <div className="space-y-6">
+        <section aria-labelledby="kpi-heading">
+          <h2 id="kpi-heading" className="sr-only">
+            Key numbers
+          </h2>
+          <DashboardKpis stats={stats} overview={overview} />
+        </section>
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          {/* Attention first on phones: it is what to do next. */}
+          <div className="space-y-6 lg:order-2">
+            <NeedsAttention attention={overview?.attention ?? null} publishingId={publishingId} onPublish={handlePublish} />
+            <RecentOrders orders={overview?.recentOrders ?? null} />
+          </div>
+          <div className="space-y-6 lg:order-1 lg:col-span-2">
+            <SalesTrend trend={overview?.trend ?? null} />
+            <UpcomingEvents events={overview?.upcoming ?? null} />
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-6 flex items-center justify-center gap-2 text-xs text-gray-500 dark:text-slate-400">
+        {updatedAt && <span>Updated {formatDateTime(updatedAt, { timeStyle: 'short' })}</span>}
+        <button
+          type="button"
+          onClick={fetchData}
+          disabled={refreshing}
+          className="inline-flex min-h-[2.75rem] items-center gap-1 rounded-md px-2 font-medium text-gray-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:opacity-60 dark:text-slate-200"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'motion-safe:animate-spin' : ''}`} aria-hidden="true" />
+          Refresh
+        </button>
       </div>
     </div>
   );
-}
-
-function formatMoney(value: number): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
-}
-
-function StatCard({
-  label,
-  value,
-  icon,
-  subtitle,
-}: {
-  label: string;
-  value: string;
-  icon: string;
-  subtitle?: string;
-}) {
-  return (
-    <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm dark:shadow-lg dark:shadow-black/20 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-gray-600 dark:text-slate-400">{label}</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-slate-100 mt-1">{value}</p>
-          {subtitle && <p className="text-xs text-gray-500 dark:text-slate-500 mt-1">{subtitle}</p>}
-        </div>
-        <span className="text-3xl">{icon}</span>
-      </div>
-    </div>
-  );
-}
-
-export default function DashboardPage() {
-  return <DashboardContent />;
 }

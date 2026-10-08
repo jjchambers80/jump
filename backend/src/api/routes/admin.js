@@ -62,6 +62,7 @@ import mapService from '../../services/MapService.js';
 import { PAID_ORDER_STATUSES } from '../../services/paidStatuses.js';
 import { activeOrgFor } from './adminScope.js';
 import agentAccessService from '../../services/AgentAccessService.js';
+import dashboardService from '../../services/DashboardService.js';
 
 const router = express.Router();
 
@@ -1059,6 +1060,23 @@ router.get('/dashboard/stats', async (req, res, next) => {
       paymentSuccessRate,
       revenue: { orders: ordersGross, applications: applicationsGross, gross: round(ordersGross + applicationsGross) },
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /admin/dashboard/overview?tz=America/New_York
+ * Bird's-eye view for the dashboard: 14-day sales trend (days in `tz`),
+ * upcoming events, recent paid orders and what needs attention.
+ */
+router.get('/dashboard/overview', async (req, res, next) => {
+  try {
+    const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
+    if (!isUnscoped(scope) && !scope.organizationId) {
+      return res.json({ timeZone: 'UTC', trend: [], upcoming: [], recentOrders: [], checkedInLast24h: 0, attention: { draftEvents: [], applicationsToReview: [] } });
+    }
+    res.json(await dashboardService.overview(scope.venueFilter || {}, { timeZone: req.query.tz }));
   } catch (error) {
     next(error);
   }

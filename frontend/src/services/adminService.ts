@@ -48,6 +48,40 @@ export interface DashboardStats {
   revenue?: { orders: number; applications: number; gross: number };
 }
 
+/** GET /admin/dashboard/overview: the dashboard's bird's-eye view. */
+export interface DashboardOverview {
+  /** Zone the trend days were bucketed in (the viewer's). */
+  timeZone: string;
+  trend: { date: string; revenue: number; orders: number; tickets: number }[];
+  upcoming: {
+    id: string;
+    name: string;
+    date: string;
+    status: 'DRAFT' | 'PUBLISHED' | 'CANCELLED';
+    admissionMode: 'TICKETED' | 'RSVP';
+    venueName: string | null;
+    timezone: string | null;
+    sold: number;
+    capacity: number;
+  }[];
+  recentOrders: {
+    id: string;
+    orderRef: string;
+    kind: 'TICKET' | 'APPLICATION';
+    status: string;
+    total: number;
+    quantity: number;
+    at: string;
+    buyer: string;
+    eventName: string | null;
+  }[];
+  checkedInLast24h: number;
+  attention: {
+    draftEvents: { id: string; name: string; date: string; timezone: string | null }[];
+    applicationsToReview: { eventId: string | null; formId: string | null; name: string; count: number }[];
+  };
+}
+
 export type SetupTaskId = 'event' | 'design' | 'payments' | 'business' | 'domain' | 'applications' | 'checkin';
 
 export interface SetupTask {
@@ -109,6 +143,10 @@ const adminService = {
   async getDashboardStats(eventId?: string): Promise<DashboardStats> {
     const query = eventId ? `?eventId=${eventId}` : '';
     return api.get<DashboardStats>(`/admin/dashboard/stats${query}`);
+  },
+
+  async getDashboardOverview(timeZone: string): Promise<DashboardOverview> {
+    return api.get<DashboardOverview>(`/admin/dashboard/overview?tz=${encodeURIComponent(timeZone)}`);
   },
 };
 
