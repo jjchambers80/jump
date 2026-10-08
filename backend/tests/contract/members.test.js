@@ -35,7 +35,7 @@ describe('Settings › Users contract', () => {
   let otherAdminId;
 
   beforeAll(async () => {
-    org = await prisma.organization.create({ data: { name: `${TAG} Store` } });
+    org = await prisma.organization.create({ data: { name: `${TAG} Store`, logoUrl: 'https://cdn.example.test/logo.png' } });
     otherOrg = await prisma.organization.create({ data: { name: `${TAG} Other` } });
     adminToken = await staffToken({ email: staffEmails[0], role: 'ADMIN', name: 'Ada Admin' });
     organizerToken = await staffToken({ email: staffEmails[1], role: 'ORGANIZER' });
@@ -72,6 +72,9 @@ describe('Settings › Users contract', () => {
     expect(sentEmails[0].to).toEqual([newEmail]);
     expect(sentEmails[0].subject).toContain(org.name);
     expect(sentEmails[0].html).toContain('/auth/signin');
+    // Sent as the organization from the platform address, with its logo in the header
+    expect(sentEmails[0].from).toMatch(new RegExp(`^"${TAG} Store" <[^>]+@[^>]+>$`));
+    expect(sentEmails[0].html).toContain('src="https://cdn.example.test/logo.png"');
     expect(sentEmails[0].html).toContain('Two-step authentication is required');
 
     const list = await request(app).get('/admin/settings/users').set(...auth(adminToken));
