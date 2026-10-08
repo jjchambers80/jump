@@ -7,6 +7,7 @@ import logger from '../utils/logger.js';
 import { orderUrl } from '../utils/storefrontUrl.js';
 import { formatEventDateTime } from '../utils/eventTime.js';
 import { absoluteAssetUrl } from '../utils/publicUrl.js';
+import { emailBrand } from '../utils/emailBrand.js';
 
 function escapeHtml(value) {
   return String(value)
@@ -76,6 +77,7 @@ class EmailService {
     let lastError;
 
     const viewTicketsUrl = await orderUrl(order.id, order.event?.organizationId);
+    const b = emailBrand(order.event?.organizationBrandColor);
     const orgName = order.event?.organizationName || 'the organizer';
     const manageTicketsHtml = manageTicketsUrl
       ? `
@@ -130,7 +132,7 @@ class EmailService {
                   </div>
 
                   <div style="text-align: center; margin: 32px 0;">
-                    <a href="${viewTicketsUrl}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 16px; font-weight: bold; padding: 14px 32px; border-radius: 8px; text-decoration: none;">View Tickets</a>
+                    <a href="${viewTicketsUrl}" style="display: inline-block; background-color: ${b.brand}; color: ${b.onBrand}; font-size: 16px; font-weight: bold; padding: 14px 32px; border-radius: 8px; text-decoration: none;">View Tickets</a>
                   </div>
 
                   <p style="color: #666; font-size: 14px;">Your QR codes for event entry are available on the tickets page. Present them at the venue entrance — each ticket is valid for one entry.</p>
@@ -185,6 +187,7 @@ ${manageTicketsHtml}
    * @param {{ name?: string, logoUrl?: string }} [params.organization]
    */
   async sendBuyerLoginEmail({ contact, loginUrl, organization = {}, code = null }) {
+    const b = emailBrand(organization.brandColor);
     const orgName = organization.name || 'Jump';
     // Spec 031 phase 3: CODE organizations get the six digits up top; the link stays as a fallback.
     const codeHtml = code
@@ -208,7 +211,7 @@ ${manageTicketsHtml}
             <div style="padding: 20px;">
               <p>Hi ${escapeHtml(contact.firstName || 'there')},</p>${codeHtml}
               <div style="text-align: center; margin: 32px 0;">
-                <a href="${loginUrl}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 16px; font-weight: bold; padding: 14px 32px; border-radius: 8px; text-decoration: none;">Sign in</a>
+                <a href="${loginUrl}" style="display: inline-block; background-color: ${b.brand}; color: ${b.onBrand}; font-size: 16px; font-weight: bold; padding: 14px 32px; border-radius: 8px; text-decoration: none;">Sign in</a>
               </div>
               <p style="color: #666; font-size: 13px;">This link works once and expires in 15 minutes. If you did not request it, you can ignore this email — nothing changes until the link is used.</p>
             </div>
@@ -232,6 +235,7 @@ ${manageTicketsHtml}
    * @param {{ to: string, organization: { name?: string, logoUrl?: string|null }, subject: string, title: string, paragraphs: string[], code?: string|null, link?: { url: string, label: string }|null }} params
    */
   async sendBuyerNotice({ to, organization = {}, subject, title, paragraphs, code = null, link = null }) {
+    const b = emailBrand(organization.brandColor);
     const orgName = organization.name || 'Jump';
     const msg = {
       to: [to],
@@ -247,7 +251,7 @@ ${manageTicketsHtml}
             <div style="padding: 20px;">
               ${paragraphs.map((p) => `<p>${escapeHtml(p)}</p>`).join('\n              ')}
               ${code ? `<p style="text-align: center; margin: 24px 0; font-size: 32px; font-weight: bold; letter-spacing: 8px; font-family: 'SF Mono', Menlo, Consolas, monospace;">${escapeHtml(code.slice(0, 3))} ${escapeHtml(code.slice(3))}</p>` : ''}
-              ${link ? `<div style="text-align: center; margin: 32px 0;"><a href="${link.url}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 16px; font-weight: bold; padding: 14px 32px; border-radius: 8px; text-decoration: none;">${escapeHtml(link.label)}</a></div>` : ''}
+              ${link ? `<div style="text-align: center; margin: 32px 0;"><a href="${link.url}" style="display: inline-block; background-color: ${b.brand}; color: ${b.onBrand}; font-size: 16px; font-weight: bold; padding: 14px 32px; border-radius: 8px; text-decoration: none;">${escapeHtml(link.label)}</a></div>` : ''}
             </div>
           </body>
         </html>
@@ -263,6 +267,7 @@ ${manageTicketsHtml}
    * @param {{ to: string, currentEmail: string, confirmUrl: string, organization: { name?: string, logoUrl?: string|null } }} params
    */
   async sendBuyerEmailChangeConfirmation({ to, currentEmail, confirmUrl, organization = {} }) {
+    const b = emailBrand(organization.brandColor);
     const orgName = organization.name || 'Jump';
     const msg = {
       to: [to],
@@ -278,7 +283,7 @@ ${manageTicketsHtml}
             <div style="padding: 20px;">
               <p>You asked to change the email address on your ${escapeHtml(orgName)} account from <strong>${escapeHtml(currentEmail)}</strong> to <strong>${escapeHtml(to)}</strong>.</p>
               <div style="text-align: center; margin: 32px 0;">
-                <a href="${confirmUrl}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 16px; font-weight: bold; padding: 14px 32px; border-radius: 8px; text-decoration: none;">Confirm email address</a>
+                <a href="${confirmUrl}" style="display: inline-block; background-color: ${b.brand}; color: ${b.onBrand}; font-size: 16px; font-weight: bold; padding: 14px 32px; border-radius: 8px; text-decoration: none;">Confirm email address</a>
               </div>
               <p style="color: #666; font-size: 13px;">This link works once and expires in 1 hour. If you did not request this change, you can ignore this email — your email address stays the same until the link is used.</p>
             </div>
@@ -498,7 +503,8 @@ ${manageTicketsHtml}
    * sign-in page: email link or Google both land on that account.
    * @param {{ to: string, organizationName: string, logoUrl?: string|null, inviterName: string, role: 'ADMIN'|'ORGANIZER', requireTwoStep: boolean, signInUrl: string }} params
    */
-  async sendStaffInvite({ to, organizationName, logoUrl, inviterName, role, requireTwoStep, signInUrl }) {
+  async sendStaffInvite({ to, organizationName, logoUrl, brandColor, inviterName, role, requireTwoStep, signInUrl }) {
+    const b = emailBrand(brandColor);
     const roleLabel = role === 'ADMIN' ? 'an Admin' : 'an Organizer';
     const msg = {
       to: [to],
@@ -513,10 +519,10 @@ ${manageTicketsHtml}
             </div>
             <div style="padding: 20px;">
               <p>${escapeHtml(inviterName)} added you to <strong>${escapeHtml(organizationName)}</strong> as ${roleLabel}.</p>
-              <p>Sign in with this email address, <strong>${escapeHtml(to)}</strong>. You can get a sign-in link by email or continue with Google.</p>
+              <p>Sign in with this email address, <a href="mailto:${escapeHtml(to)}" style="color: ${b.link}; font-weight: bold;">${escapeHtml(to)}</a>. You can get a sign-in link by email or continue with Google.</p>
               ${requireTwoStep ? '<p><strong>Two-step authentication is required.</strong> After you sign in you will be asked to set it up under Account › Security before you can use the admin.</p>' : ''}
               <div style="text-align: center; margin: 32px 0;">
-                <a href="${signInUrl}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 16px; font-weight: bold; padding: 14px 32px; border-radius: 8px; text-decoration: none;">Sign in</a>
+                <a href="${signInUrl}" style="display: inline-block; background-color: ${b.brand}; color: ${b.onBrand}; font-size: 16px; font-weight: bold; padding: 14px 32px; border-radius: 8px; text-decoration: none;">Sign in</a>
               </div>
               <p style="color: #666; font-size: 13px;">If you weren't expecting this, you can ignore this email.</p>
             </div>
@@ -538,6 +544,7 @@ ${manageTicketsHtml}
    *   Replies go to `organization.email` when the organization has one.
    */
   async sendApplicationMessage({ to, subject, body, organization = {} }) {
+    const b = emailBrand(organization.brandColor);
     const orgName = organization.name || 'the organizer';
     const paragraphs = String(body || '')
       .split(/\n\s*\n/)
@@ -545,11 +552,11 @@ ${manageTicketsHtml}
       .filter(Boolean)
       .map((p) => {
         if (/^https?:\/\/\S+$/.test(p)) {
-          return `<div style="text-align: center; margin: 24px 0;"><a href="${escapeHtml(p)}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 15px; font-weight: bold; padding: 12px 28px; border-radius: 8px; text-decoration: none;">Open</a></div>`;
+          return `<div style="text-align: center; margin: 24px 0;"><a href="${escapeHtml(p)}" style="display: inline-block; background-color: ${b.brand}; color: ${b.onBrand}; font-size: 15px; font-weight: bold; padding: 12px 28px; border-radius: 8px; text-decoration: none;">Open</a></div>`;
         }
         const lines = p.split('\n').map((line) => {
           const escaped = escapeHtml(line);
-          return escaped.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color: #2563eb;">$1</a>');
+          return escaped.replace(/(https?:\/\/[^\s<]+)/g, `<a href="$1" style="color: ${b.link};">$1</a>`);
         });
         return `<p style="margin: 0 0 14px; line-height: 1.5;">${lines.join('<br />')}</p>`;
       })
@@ -814,6 +821,7 @@ ${manageTicketsHtml}
     const event = rsvp.event;
     const contact = rsvp.contact;
     const organization = event.venue?.organization || {};
+    const b = emailBrand(organization.brandColor);
     const eventWhen = formatEventDateTime(event.date, event.venue?.timezone);
     const startsAt = new Date(event.date);
     const endsAt = new Date(startsAt.getTime() + 2 * 60 * 60 * 1000);
@@ -848,7 +856,7 @@ ${manageTicketsHtml}
               ${location ? `<p style="margin: 4px 0;"><strong>Where:</strong> ${escapeHtml(location)}</p>` : ''}
               <p style="margin: 4px 0;"><strong>Party size:</strong> ${rsvp.partySize}</p>
             </div>
-            <p style="color: #666; font-size: 13px;">Plans changed? <a href="${escapeHtml(cancelUrl)}" style="color: #2563eb;">Cancel your RSVP</a>.</p>
+            <p style="color: #666; font-size: 13px;">Plans changed? <a href="${escapeHtml(cancelUrl)}" style="color: ${b.link};">Cancel your RSVP</a>.</p>
           </div>
         </body></html>`,
       attachments: [{
@@ -881,6 +889,7 @@ ${manageTicketsHtml}
     const order = application.order;
     const organization = application.event?.venue?.organization || {};
     // Spec 033: the event date is wall-clock local to the venue.
+    const b = emailBrand(organization.brandColor);
     const eventWhen = formatEventDateTime(application.event?.date, application.event?.venue?.timezone);
     const orgName = organization.name || 'the organizer';
     const to = application.contact?.email;
@@ -937,9 +946,9 @@ ${manageTicketsHtml}
                 <table style="width: 100%; border-collapse: collapse;">${rowsHtml}<tr><td colspan="2" style="border-top: 1px solid #e5e7eb; padding: 0;"></td></tr>${summaryRows}</table>
                 <p style="margin: 12px 0 0; color: #666; font-size: 13px;">Paid by ${escapeHtml(method)}${order.paidAt ? ` on ${new Date(order.paidAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}` : ''}.</p>
               </div>
-              ${booth ? `<p style="margin: 0 0 16px;">Your booth: <strong>${escapeHtml(booth.label)}</strong>${booth.size ? ` (${escapeHtml(booth.size)})` : ''}${booth.mapUrl ? ` · <a href="${escapeHtml(booth.mapUrl)}" style="color: #2563eb;">See it on the map</a>` : ''}</p>` : ''}
-              <div style="text-align: center; margin: 24px 0;"><a href="${escapeHtml(statusUrl)}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 15px; font-weight: bold; padding: 12px 28px; border-radius: 8px; text-decoration: none;">View your application</a></div>
-              ${accountUrl ? `<p style="color: #666; font-size: 13px; text-align: center;">Manage your applications any time: <a href="${escapeHtml(accountUrl)}" style="color: #2563eb;">your account</a></p>` : ''}
+              ${booth ? `<p style="margin: 0 0 16px;">Your booth: <strong>${escapeHtml(booth.label)}</strong>${booth.size ? ` (${escapeHtml(booth.size)})` : ''}${booth.mapUrl ? ` · <a href="${escapeHtml(booth.mapUrl)}" style="color: ${b.link};">See it on the map</a>` : ''}</p>` : ''}
+              <div style="text-align: center; margin: 24px 0;"><a href="${escapeHtml(statusUrl)}" style="display: inline-block; background-color: ${b.brand}; color: ${b.onBrand}; font-size: 15px; font-weight: bold; padding: 12px 28px; border-radius: 8px; text-decoration: none;">View your application</a></div>
+              ${accountUrl ? `<p style="color: #666; font-size: 13px; text-align: center;">Manage your applications any time: <a href="${escapeHtml(accountUrl)}" style="color: ${b.link};">your account</a></p>` : ''}
               <p style="color: #666; font-size: 12px; margin-top: 16px;">Questions about this payment? Reply to this email to reach ${escapeHtml(orgName)}.</p>
             </div>
           </body>

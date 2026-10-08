@@ -620,7 +620,7 @@ class OrderService {
                 city: true,
                 state: true,
                 timezone: true,
-                organization: { select: { name: true, logoUrl: true } },
+                organization: { select: { name: true, logoUrl: true, brandColor: true } },
               },
             },
           },

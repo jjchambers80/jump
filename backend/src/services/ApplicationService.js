@@ -160,7 +160,7 @@ const DETAIL_INCLUDE = {
       overduePolicy: true,
       reserveOnApproval: true,
       spaceSelection: true, // spec 039
-      organization: { select: { id: true, name: true, email: true, logoUrl: true, taxInclusivePricing: true } },
+      organization: { select: { id: true, name: true, email: true, logoUrl: true, brandColor: true, taxInclusivePricing: true } },
       // Spec 037 phase 5: the categories the organizer can assign on approval.
       tiers: {
         orderBy: { displayOrder: 'asc' },
@@ -174,7 +174,7 @@ const DETAIL_INCLUDE = {
       name: true,
       date: true,
       taxRate: true,
-      venue: { select: { organizationId: true, timezone: true, organization: { select: { id: true, name: true, email: true, logoUrl: true, taxInclusivePricing: true, statementDescriptorSuffix: true, enabledPaymentMethods: true } } } },
+      venue: { select: { organizationId: true, timezone: true, organization: { select: { id: true, name: true, email: true, logoUrl: true, brandColor: true, taxInclusivePricing: true, statementDescriptorSuffix: true, enabledPaymentMethods: true } } } },
     },
   },
   answers: { include: { question: true, image: { include: { file: true } } } },

@@ -73,7 +73,7 @@ class ContactErasureService {
   async _contact(organizationId, contactId) {
     const contact = await prisma.contact.findFirst({
       where: { id: contactId, ...(organizationId && { organizationId }) },
-      include: { organization: { select: { id: true, name: true, logoUrl: true } } },
+      include: { organization: { select: { id: true, name: true, logoUrl: true, brandColor: true } } },
     });
     if (!contact) throw new NotFoundError('Customer not found');
     if (contact.anonymizedAt) throw coded(new ConflictError('This customer’s data has already been erased'), 'ALREADY_ERASED');
