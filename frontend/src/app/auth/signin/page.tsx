@@ -1,4 +1,4 @@
-// Sign-In Page — Magic Link + Google (T094)
+// Sign-In Page — email sign-in link + Google (T094)
 // Per FR-045, Auth.js v5 integration
 
 'use client';
@@ -106,7 +106,7 @@ function SignInForm() {
       });
 
       if (result?.error) {
-        setError('Failed to send magic link. Please try again.');
+        setError('Could not send the sign-in link. Please try again.');
       } else {
         setSent(true);
       }
@@ -263,43 +263,46 @@ function SignInForm() {
           className="w-full px-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500 focus:ring-2 focus:ring-accent-500 focus:border-accent-500 mb-4"
         />
 
-        {/* Dev Sign-In — instant, no email needed */}
-        <button
-          type="button"
-          disabled={loading || !email}
-          onClick={async () => {
-            setLoading(true);
-            setError('');
-            try {
-              const result = await signIn('dev-email', {
-                email,
-                redirect: false,
-                callbackUrl: devCallbackUrl,
-              });
-              if (result?.error) {
-                setError('Sign-in failed. Make sure the email exists in the database.');
-              } else if (result?.url) {
-                window.location.href = result.url;
+        {/* Dev Sign-In — instant, no email needed. The dev-email provider only
+            exists under NODE_ENV=development (auth.ts), so the button follows it */}
+        {process.env.NODE_ENV === 'development' && (
+          <button
+            type="button"
+            disabled={loading || !email}
+            onClick={async () => {
+              setLoading(true);
+              setError('');
+              try {
+                const result = await signIn('dev-email', {
+                  email,
+                  redirect: false,
+                  callbackUrl: devCallbackUrl,
+                });
+                if (result?.error) {
+                  setError('Sign-in failed. Make sure the email exists in the database.');
+                } else if (result?.url) {
+                  window.location.href = result.url;
+                }
+              } catch {
+                setError('An unexpected error occurred.');
+              } finally {
+                setLoading(false);
               }
-            } catch {
-              setError('An unexpected error occurred.');
-            } finally {
-              setLoading(false);
-            }
-          }}
-          className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-300 dark:disabled:bg-slate-700 text-white font-medium py-2.5 rounded-lg transition mb-3"
-        >
-          {loading ? 'Signing in...' : '⚡ Dev Sign-In (instant)'}
-        </button>
+            }}
+            className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-300 dark:disabled:bg-slate-700 text-white font-medium py-2.5 rounded-lg transition mb-3"
+          >
+            {loading ? 'Signing in...' : '⚡ Dev Sign-In (instant)'}
+          </button>
+        )}
 
-        {/* Magic Link */}
+        {/* Email sign-in link — same wording as the storefront buyer form */}
         <form onSubmit={handleMagicLink}>
           <button
             type="submit"
             disabled={loading || !email}
             className="w-full bg-accent-500 hover:bg-accent-hover disabled:bg-gray-300 dark:disabled:bg-slate-700 text-gray-950 disabled:text-gray-500 dark:disabled:text-slate-400 font-medium py-2.5 rounded-lg transition"
           >
-            {loading ? 'Sending...' : 'Send Magic Link'}
+            {loading ? 'Sending...' : 'Email me a sign-in link'}
           </button>
         </form>
 
