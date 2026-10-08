@@ -21,7 +21,7 @@ Shopify-style channels (POS-only users) don't exist in Jump, so there is no user
 | `backend/src/api/routes/admin.js` | `GET/POST /admin/settings/users`, `PATCH/DELETE /admin/settings/users/:userId`, `POST …/:userId/resend`. Scoped by `activeOrgFor` |
 | `backend/src/api/validators/memberValidators.js` | Invite body (1–20 emails, `ADMIN`/`ORGANIZER`, boolean `requireTwoStep`); partial PATCH whitelist |
 | `backend/src/services/EmailService.js` | `sendStaffInvite`: Eventimus-branded (platform sender and colors, no store logo), subject "<Org> invited you to Eventimus", link to `/auth/signin?callbackUrl=/admin&invite=<orgId>&email=<invitee>` |
-| `frontend/src/app/auth/signin/page.tsx` | With `invite`, shows "Join <Org> on Eventimus" and the org logo from `GET /organizations/:id/public/meta` (never from the query) and prefills `email` |
+| `frontend/src/app/auth/signin/page.tsx` | With `invite`, shows "Join <Org> on Eventimus" (Eventimus logo only; org name from `GET /organizations/:id/public/meta`, never from the query) and prefills `email` |
 | `backend/src/middleware/auth.js` | `twoStepSetup: 'required'` → 403 `TWO_STEP_SETUP_REQUIRED` outside `/account`, `/auth`, `GET /organizations` |
 | `backend/src/api/routes/twoStep.js` | `POST /disable` → 409 `TWO_STEP_REQUIRED_BY_ORGANIZATION` while a membership requires it |
 | `frontend/src/app/admin/settings/users/page.tsx` | The list: status filter, role select, resend / remove |
