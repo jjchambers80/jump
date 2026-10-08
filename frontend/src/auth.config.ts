@@ -6,6 +6,7 @@ import type { NextAuthConfig } from 'next-auth';
 import Resend from 'next-auth/providers/resend';
 import Google from 'next-auth/providers/google';
 import { decodeSessionToken, encodeSessionToken } from './lib/authJwt';
+import { sendSignInEmail } from './lib/signInEmail';
 
 export default {
   // Railway (and local dev) sit behind a proxy; Auth.js must trust the Host header.
@@ -20,6 +21,7 @@ export default {
     Resend({
       apiKey: process.env.AUTH_RESEND_KEY,
       from: process.env.AUTH_RESEND_FROM || 'onboarding@resend.dev',
+      sendVerificationRequest: sendSignInEmail,
     }),
     Google({
       clientId: process.env.AUTH_GOOGLE_ID,

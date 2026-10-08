@@ -53,6 +53,38 @@ async function deliver(msg) {
   return result?.data ?? null;
 }
 
+/**
+ * Eventimus shell for platform (staff account) email, matching the sign-in
+ * page: gray-900 page, gray-800 card under a lime rule, white wordmark.
+ * frontend/src/lib/signInEmail.ts renders the sign-in link email the same way.
+ */
+function eventimusEmail({ preheader, heading, body }) {
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="supported-color-schemes" content="dark" />
+  </head>
+  <body style="margin: 0; padding: 0; background: #111827;">
+    <div style="display: none; max-height: 0; overflow: hidden; opacity: 0;">${escapeHtml(preheader)}</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#111827" style="background: #111827;">
+      <tr><td align="center" style="padding: 40px 16px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 480px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;">
+          <tr><td align="center" style="padding: 0 0 24px; font-size: 26px; line-height: 32px; font-weight: 800; letter-spacing: -0.5px; color: #ffffff;">eventimus</td></tr>
+          <tr><td bgcolor="#1f2937" style="background: #1f2937; border-top: 4px solid #c8ff00; border-radius: 12px; padding: 36px 32px;">
+            <h1 style="margin: 0 0 12px; color: #ffffff; font-size: 22px; line-height: 30px; font-weight: 700;">${escapeHtml(heading)}</h1>
+            ${body}
+          </td></tr>
+          <tr><td align="center" style="padding: 24px 0 0; color: #6b7280; font-size: 12px; line-height: 18px;">Sent by Eventimus because of activity on your account.</td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>`;
+}
+
 function icsText(value) {
   return String(value || '').replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;');
 }
@@ -418,26 +450,25 @@ ${manageTicketsHtml}
     logger.info('Security notice sent', { event: 'security_notice_sent', title });
   }
 
-  /** Six-digit step-up code (spec 030 B). */
+  /** Six-digit step-up code (spec 030 B). Eventimus-branded: staff account email. */
   async sendReauthCode({ to, code }) {
     const msg = {
       to: [to],
       from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
-      subject: `${code} is your Jump verification code`,
-      html: `
-        <html>
-          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
-            <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
-              <h1 style="color: #333; font-size: 22px;">Confirm it's you</h1>
-            </div>
-            <div style="padding: 20px; text-align: center;">
-              <p>Enter this code in Jump to confirm a security change:</p>
-              <p style="font-size: 32px; letter-spacing: 8px; font-weight: bold; margin: 24px 0;">${escapeHtml(code)}</p>
-              <p style="color: #666; font-size: 13px;">It expires in 10 minutes. If you didn't request it, ignore this email — nothing changes without the code.</p>
-            </div>
-          </body>
-        </html>
-      `,
+      subject: `${code} is your Eventimus verification code`,
+      text: `Your Eventimus verification code is ${code}\n\nEnter it to confirm a security change on your account. It expires in 10 minutes. If you didn't request it, ignore this email: nothing changes without the code.`,
+      html: eventimusEmail({
+        preheader: `${code} is your verification code. It expires in 10 minutes.`,
+        heading: 'Confirm it’s you',
+        body: `
+          <p style="margin: 0 0 24px; color: #d1d5db; font-size: 15px; line-height: 24px;">Enter this code in Eventimus to confirm a security change on your account.</p>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr><td align="center" bgcolor="#111827" style="background: #111827; border: 1px solid #374151; border-radius: 10px; padding: 22px 12px;">
+              <span style="font-family: 'SFMono-Regular', Menlo, Consolas, monospace; font-size: 34px; line-height: 40px; font-weight: 700; letter-spacing: 10px; color: #c8ff00;">${escapeHtml(code)}</span>
+            </td></tr>
+          </table>
+          <p style="margin: 24px 0 0; color: #9ca3af; font-size: 13px; line-height: 20px;">It expires in 10 minutes. If you didn’t request it, ignore this email: nothing changes without the code.</p>`,
+      }),
     };
     await deliver(msg);
     logger.info('Reauth code sent', { event: 'reauth_code_sent' });
