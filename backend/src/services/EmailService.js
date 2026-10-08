@@ -27,6 +27,18 @@ function orgLogoHtml(logoUrl, orgName) {
 }
 
 /**
+ * The platform From address shown under another display name, e.g.
+ * `"Raleigh Retro Gamers" <noreply@eventimus.net>`. The display name needs no
+ * DNS setup; only the address must be on the verified sending domain.
+ */
+function fromAs(displayName) {
+  const platform = process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>';
+  const address = platform.match(/<([^>]+)>/)?.[1] || platform.trim();
+  const name = String(displayName || '').replace(/[\r\n"\\]/g, '').trim();
+  return name ? `"${name}" <${address}>` : platform;
+}
+
+/**
  * Send through Resend. The SDK resolves `{ data, error }` instead of throwing
  * when Resend refuses a message (unverified sender domain, sandbox sender to
  * a foreign address, bad key), so a refusal is turned into a throw here;
@@ -484,18 +496,19 @@ ${manageTicketsHtml}
    * Invitation to an organization's admin (Settings › Users › Add users).
    * The user and membership already exist, so the button is the normal
    * sign-in page: email link or Google both land on that account.
-   * @param {{ to: string, organizationName: string, inviterName: string, role: 'ADMIN'|'ORGANIZER', requireTwoStep: boolean, signInUrl: string }} params
+   * @param {{ to: string, organizationName: string, logoUrl?: string|null, inviterName: string, role: 'ADMIN'|'ORGANIZER', requireTwoStep: boolean, signInUrl: string }} params
    */
-  async sendStaffInvite({ to, organizationName, inviterName, role, requireTwoStep, signInUrl }) {
+  async sendStaffInvite({ to, organizationName, logoUrl, inviterName, role, requireTwoStep, signInUrl }) {
     const roleLabel = role === 'ADMIN' ? 'an Admin' : 'an Organizer';
     const msg = {
       to: [to],
-      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      from: fromAs(organizationName),
       subject: `You've been added to ${organizationName}`,
       html: `
         <html>
           <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
             <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
+              ${orgLogoHtml(logoUrl, organizationName)}
               <h1 style="color: #333; font-size: 22px;">Join ${escapeHtml(organizationName)}</h1>
             </div>
             <div style="padding: 20px;">
