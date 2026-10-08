@@ -31,3 +31,36 @@ describe('EmailService delivery', () => {
     expect(send.mock.calls[0][0]).not.toHaveProperty('reply_to');
   });
 });
+
+describe('EmailService From name', () => {
+  const platform = process.env.RESEND_FROM_EMAIL;
+  beforeEach(() => {
+    send.mockReset();
+    send.mockResolvedValue({ data: { id: 'em_3' }, error: null });
+    process.env.RESEND_FROM_EMAIL = 'Eventimus <noreply@eventimus.net>';
+  });
+  afterAll(() => {
+    if (platform === undefined) delete process.env.RESEND_FROM_EMAIL;
+    else process.env.RESEND_FROM_EMAIL = platform;
+  });
+
+  it('store emails come from the organization name at the platform address', async () => {
+    await emailService.sendBuyerLoginEmail({ contact: { email: 'b@example.com' }, loginUrl: 'https://x.test', organization: { name: 'Raleigh Retro Gamers' } });
+    expect(send.mock.calls[0][0].from).toBe('"Raleigh Retro Gamers" <noreply@eventimus.net>');
+  });
+
+  it('strips quotes and line breaks from the display name', async () => {
+    await emailService.sendApplicationMessage({ ...message, organization: { name: 'Bad "Org"\r\nBcc: x@y.z' } });
+    expect(send.mock.calls[0][0].from).toBe('"Bad OrgBcc: x@y.z" <noreply@eventimus.net>');
+  });
+
+  it('falls back to the platform sender without an organization name', async () => {
+    await emailService.sendBuyerLoginEmail({ contact: { email: 'b@example.com' }, loginUrl: 'https://x.test' });
+    expect(send.mock.calls[0][0].from).toBe('Eventimus <noreply@eventimus.net>');
+  });
+
+  it('account and security emails stay on the platform sender', async () => {
+    await emailService.sendSecurityNotice({ to: 'staff@example.com', title: 'Password changed', body: 'x' });
+    expect(send.mock.calls[0][0].from).toBe('Eventimus <noreply@eventimus.net>');
+  });
+});
