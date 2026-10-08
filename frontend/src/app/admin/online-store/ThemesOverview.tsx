@@ -3,7 +3,8 @@
 // Online Store page for organizations in the themes rollout (spec 038 §10,
 // card 038J1): store access, View store, the live theme card with Edit
 // theme, and draft themes (038J2: rename, duplicate, publish, delete; 038K:
-// preview and share preview links). Thumbnails and import come later.
+// preview and share preview links). Thumbnails are the live home page in
+// scaled iframes (ThemeScreenshot); import comes later.
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -15,7 +16,7 @@ import { useOrg } from '@/components/OrgContext';
 import api, { type StorefrontPreferences } from '@/services/api';
 import { useAccountFormat } from '@/lib/accountFormat';
 import { codeHref, editorHref, presetLabel, themesApi, type ThemeSummary } from '@/lib/themes';
-import ThemePreviewPlaceholder from './ThemePreviewPlaceholder';
+import ThemeScreenshot from './ThemeScreenshot';
 
 const card = 'rounded-lg border border-gray-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800';
 const primary =
@@ -201,9 +202,17 @@ export default function ThemesOverview() {
         <div className={`${card} h-72 animate-pulse`} aria-busy="true" aria-label="Loading themes" />
       ) : live ? (
         <article aria-labelledby="live-theme-name" className={card} data-testid="live-theme">
-          <div className="grid gap-4 border-b border-gray-200 bg-gray-50 p-4 dark:border-slate-700 dark:bg-slate-900/40 sm:grid-cols-[1fr_auto]">
-            <ThemePreviewPlaceholder brandColor={org.brandColor ?? null} name={org.name} variant="desktop" />
-            <ThemePreviewPlaceholder brandColor={org.brandColor ?? null} name={org.name} variant="mobile" />
+          <div className="p-2">
+            <div className="relative overflow-hidden rounded-xl bg-gray-100 px-6 pb-0 pt-6 dark:bg-slate-900/60 sm:px-10 sm:pt-10">
+              <div className="overflow-hidden rounded-t-lg shadow-[0_0_0_1px_rgba(0,0,0,0.08),0_4px_16px_rgba(0,0,0,0.08)] sm:mr-16">
+                <ThemeScreenshot src={storeUrl} variant="desktop" />
+              </div>
+              <div className="absolute bottom-0 right-4 hidden w-28 translate-y-6 overflow-hidden rounded-[18px] border-[5px] border-gray-900 bg-gray-900 shadow-xl sm:block sm:right-8 sm:w-36">
+                <div className="overflow-hidden rounded-[13px]">
+                  <ThemeScreenshot src={storeUrl} variant="mobile" />
+                </div>
+              </div>
+            </div>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3 p-4">
             <div className="min-w-0">
