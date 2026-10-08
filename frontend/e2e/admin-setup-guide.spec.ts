@@ -1,7 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 import { signInAsStaff } from './helpers/session';
 
-// Spec 022 phase 1: the dashboard setup guide.
+// Spec 022: the onboarding checklist page, its sidebar link with a progress
+// ring, and the dashboard banner that points at it.
 
 const API = 'http://localhost:3002';
 
@@ -58,71 +59,104 @@ test.beforeEach(async ({ page, baseURL }) => {
   await signInAsStaff(page, { id: 'guide-admin', email: 'guide-admin@test.com', role: 'ADMIN' }, baseURL!);
 });
 
-test('renders one card per shown task, marks done tasks, links the rest', async ({ page }) => {
+test('checklist groups the shown steps, counts them and selects the first open one', async ({ page }) => {
   await mockApi(page, freshGuide());
-  await page.goto('/admin/dashboard');
-  const guide = page.getByTestId('setup-guide');
-  await expect(guide).toBeVisible();
-  await expect(guide.getByRole('heading', { name: 'Set up your organization' })).toBeVisible();
-  await expect(guide.getByText('1 of 5 done')).toBeVisible();
+  await page.goto('/admin/onboarding');
+  const list = page.getByRole('navigation', { name: 'Onboarding steps' });
+  await expect(page.getByRole('heading', { name: 'Onboarding checklist', level: 1 })).toBeVisible();
 
-  await expect(page.getByTestId('setup-card-applications')).toHaveCount(0);
+  const store = list.getByRole('region', { name: 'Set up your store' });
+  await expect(store.getByLabel('1 of 4 done')).toBeVisible();
+  await expect(list.getByRole('region', { name: 'Start selling' }).getByLabel('0 of 1 done')).toBeVisible();
+  await expect(page.getByTestId('setup-step-applications')).toHaveCount(0);
+  await expect(page.getByTestId('setup-step-design')).toHaveAttribute('data-done', 'true');
 
-  const design = page.getByTestId('setup-card-design');
-  await expect(design).toHaveAttribute('data-done', 'true');
-  await expect(design.getByLabel('Done')).toBeVisible();
-  await expect(design.getByRole('link')).toHaveCount(0);
+  // business is first in list order and not done
+  await expect(page.getByTestId('setup-step-business')).toHaveAttribute('aria-current', 'step');
+  const detail = page.getByTestId('setup-detail-business').locator('visible=true');
+  await expect(detail.getByRole('heading', { name: 'Add your business details' })).toBeVisible();
+  await expect(detail.getByRole('link', { name: 'Add details' })).toHaveAttribute('href', '/admin/settings');
 
-  const payments = page.getByTestId('setup-card-payments');
-  await expect(payments).toContainText('Connect your Stripe account');
+  await page.getByTestId('setup-step-payments').click();
+  const payments = page.getByTestId('setup-detail-payments').locator('visible=true');
+  await expect(payments.getByRole('heading', { name: 'Connect your Stripe account' })).toBeVisible();
   await expect(payments.getByRole('link', { name: 'Connect Stripe' })).toHaveAttribute('href', '/admin/settings/payments');
 
-  await expect(page.getByTestId('setup-card-event').getByRole('link', { name: 'Create event' })).toHaveAttribute('href', '/admin/create-event');
-  await expect(page.getByTestId('setup-card-domain').getByRole('link', { name: 'Set up domain' })).toHaveAttribute('href', '/admin/settings/domains');
+  await page.getByTestId('setup-step-design').click();
+  const design = page.getByTestId('setup-detail-design').locator('visible=true');
+  await expect(design.getByRole('heading', { name: 'Store design chosen' })).toBeVisible();
+  await expect(design.getByText('Done')).toBeVisible();
 });
 
 test('platform payments copy when Connect is off', async ({ page }) => {
   const guide = freshGuide();
   guide.tasks = guide.tasks.map((t) => (t.id === 'payments' ? { ...t, state: 'platform' } : t));
   await mockApi(page, guide);
-  await page.goto('/admin/dashboard');
-  await expect(page.getByTestId('setup-card-payments')).toContainText("You're ready to accept payments");
+  await page.goto('/admin/onboarding');
+  await expect(page.getByTestId('setup-step-payments')).toContainText("You're ready to accept payments");
 });
 
-test('dismissing hides the guide and stamps the organization', async ({ page }) => {
-  const { patches } = await mockApi(page, freshGuide());
+test('sidebar shows the checklist link with its progress ring', async ({ page }) => {
+  await mockApi(page, freshGuide());
   await page.goto('/admin/dashboard');
-  await page.getByRole('button', { name: 'Dismiss guide' }).click();
-  await expect(page.getByTestId('setup-guide')).toHaveCount(0);
+  const link = page.getByTestId('sidebar-onboarding');
+  await expect(link).toHaveAttribute('href', '/admin/onboarding');
+  await expect(link.getByRole('img', { name: '1 of 5 steps done' })).toBeVisible();
+
+  await page.getByTestId('sidebar-collapse-toggle').click();
+  await expect(link).toHaveAttribute('title', 'Onboarding checklist, 1 of 5 done');
+  await expect(link.getByRole('img', { name: '1 of 5 steps done' })).toBeVisible();
+});
+
+test('dashboard banner links to the checklist', async ({ page }) => {
+  await mockApi(page, freshGuide());
+  await page.goto('/admin/dashboard');
+  const banner = page.getByTestId('setup-guide');
+  await expect(banner.getByText('1 of 5 done')).toBeVisible();
+  await expect(banner.getByRole('link', { name: 'Continue setup' })).toHaveAttribute('href', '/admin/onboarding');
+});
+
+test('dismissing stamps the organization and hides the sidebar link', async ({ page }) => {
+  const { patches } = await mockApi(page, freshGuide());
+  await page.goto('/admin/onboarding');
+  await expect(page.getByTestId('sidebar-onboarding')).toBeVisible();
+  await page.getByRole('button', { name: 'Dismiss checklist' }).click();
+  await expect(page.getByTestId('sidebar-onboarding')).toHaveCount(0);
   expect(patches).toEqual([{ dismissed: true }]);
 });
 
-test('a dismissed guide never renders', async ({ page }) => {
+test('a dismissed guide shows no banner and no sidebar link', async ({ page }) => {
   const guide = freshGuide();
   guide.dismissedAt = '2027-01-02T00:00:00.000Z';
   await mockApi(page, guide);
   await page.goto('/admin/dashboard');
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
   await expect(page.getByTestId('setup-guide')).toHaveCount(0);
+  await expect(page.getByTestId('sidebar-onboarding')).toHaveCount(0);
 });
 
-test('all done shows the completion heading', async ({ page }) => {
+test('all done hides the link and banner; the page says so', async ({ page }) => {
   const guide = freshGuide();
   guide.tasks = guide.tasks.map((t) => ({ ...t, done: true }));
   await mockApi(page, guide);
+  await page.goto('/admin/onboarding');
+  await expect(page.getByText("You're all set.")).toBeVisible();
+  await expect(page.getByTestId('sidebar-onboarding')).toHaveCount(0);
   await page.goto('/admin/dashboard');
-  await expect(page.getByRole('heading', { name: "You're all set" })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
+  await expect(page.getByTestId('setup-guide')).toHaveCount(0);
 });
 
-test('stacks to one column at 375px without horizontal overflow', async ({ page }) => {
+test('at 375px the detail opens inside the selected row without horizontal overflow', async ({ page }) => {
   await mockApi(page, freshGuide());
   await page.setViewportSize({ width: 375, height: 800 });
-  await page.goto('/admin/dashboard');
-  const first = page.getByTestId('setup-card-event');
-  const second = page.getByTestId('setup-card-design');
-  const a = await first.boundingBox();
-  const b = await second.boundingBox();
-  expect(a && b && b.y > a.y + a.height - 1).toBe(true);
+  await page.goto('/admin/onboarding');
+  await page.getByTestId('setup-step-domain').click();
+  const detail = page.getByTestId('setup-detail-domain').locator('visible=true');
+  await expect(detail.getByRole('link', { name: 'Set up domain' })).toBeVisible();
+  const row = await page.getByTestId('setup-step-domain').boundingBox();
+  const box = await detail.boundingBox();
+  expect(row && box && box.y >= row.y + row.height - 1).toBe(true);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
   expect(overflow).toBe(false);
 });
