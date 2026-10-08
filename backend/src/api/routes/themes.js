@@ -71,6 +71,11 @@ router.get('/', enabled(async (req, res, organizationId) => {
   res.json({ themes: await themeService.list(organizationId) });
 }));
 
+/** GET /admin/themes/thumbnails → { thumbnails: { [draftId]: path } } (contracts C7; drafts only). */
+router.get('/thumbnails', enabled(async (req, res, organizationId) => {
+  res.json(await themePreviewService.thumbnails(organizationId));
+}));
+
 router.get('/:themeId', enabled(async (req, res, organizationId) => {
   res.json(await themeService.get(organizationId, req.params.themeId));
 }));

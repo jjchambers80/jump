@@ -46,14 +46,21 @@ export interface StorefrontResponse<T> {
   body: T | null;
 }
 
-/** GET a public storefront route from the server, forwarding store access. */
-export async function storefrontGet<T>(path: string): Promise<StorefrontResponse<T>> {
-  const access = accessHeader();
-  const preview = cookies().get(PREVIEW_COOKIE)?.value;
+/**
+ * GET a public storefront route from the server, forwarding store access.
+ * A card thumbnail (contracts C7) sends only its own token: no cookie is read.
+ */
+export async function storefrontGet<T>(path: string, { thumbnail }: { thumbnail?: string } = {}): Promise<StorefrontResponse<T>> {
+  const access = thumbnail ? null : accessHeader();
+  const preview = thumbnail ? null : cookies().get(PREVIEW_COOKIE)?.value;
   try {
     const res = await fetch(`${SERVER_API_URL}${path}`, {
       cache: 'no-store',
-      headers: { ...(access && { 'X-Storefront-Access': access }), ...(preview && { 'X-Theme-Preview': preview }) },
+      headers: {
+        ...(access && { 'X-Storefront-Access': access }),
+        ...(preview && { 'X-Theme-Preview': preview }),
+        ...(thumbnail && { 'X-Theme-Thumbnail': thumbnail }),
+      },
       signal: AbortSignal.timeout(5000),
     });
     const body = (await res.json().catch(() => null)) as T | null;
@@ -82,10 +89,11 @@ export type StorefrontFrame =
  * switch must never be the reason a storefront is down.
  */
 /** `page`: home, events, frame, or `page:<id or slug>` for a Content page. */
-export async function loadStorefrontFrame(orgId: string, page: string): Promise<StorefrontFrame> {
+export async function loadStorefrontFrame(orgId: string, page: string, options: { thumbnail?: string } = {}): Promise<StorefrontFrame> {
   if (!themesOn()) return { kind: 'legacy' };
   const response = await storefrontGet<ThemeRender | { renderer: 'legacy' }>(
     `/organizations/${encodeURIComponent(orgId)}/public/storefront/render?page=${encodeURIComponent(page)}`,
+    options,
   );
   const lock = lockFrom(response);
   if (lock) return { kind: 'locked', lock, hadAccessCookie: Boolean(accessHeader()) };

@@ -18,6 +18,7 @@ const RESERVED = [
   /^\/api(\/|$)/,
   /^\/admin(\/|$)/,
   /^\/auth(\/|$)/,
+  /^\/theme-thumbnail(\/|$)/,
   /^\/organizations(\/|$)/,
   /^\/rsvp(\/|$)/,
   /^\/apply(\/|$)/,

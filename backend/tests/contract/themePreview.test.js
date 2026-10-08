@@ -1,6 +1,6 @@
 // Contract tests for draft theme previews (spec 038 D11, card 038K): signed
 // preview links, the render endpoint's X-Theme-Preview header, staff vs share
-// links on a private store, and fallback to the live theme.
+// links on a private store, card thumbnails, and fallback to the live theme.
 
 import { afterAll, beforeAll, describe, expect, it } from '@jest/globals';
 import jwt from 'jsonwebtoken';
@@ -124,6 +124,26 @@ describe('Draft theme preview contract (038K)', () => {
 
     // An invalid token gets no gate bypass either.
     expect((await render('not-a-token')).status).toBe(403);
+  });
+
+  it('thumbnails: one cookie-free token per draft that renders past the gate and is not a preview link', async () => {
+    const res = await api('get', '/thumbnails');
+    expect(res.status).toBe(200);
+    expect(Object.keys(res.body.thumbnails)).toEqual([draft.id]);
+    const path = res.body.thumbnails[draft.id];
+    expect(path.startsWith(`/theme-thumbnail/${organization.id}?t=`)).toBe(true);
+    const t = new URL(path, 'http://x').searchParams.get('t');
+
+    // The store is private here: the thumbnail still renders the draft.
+    const shot = await render(null, { 'X-Theme-Thumbnail': t });
+    expect(shot.status).toBe(200);
+    expect(shot.body.theme.id).toBe(draft.id);
+    expect(shot.body.preview).toMatchObject({ themeId: draft.id, thumbnail: true });
+
+    // Neither audience is accepted as the other.
+    expect((await render(t)).status).toBe(403);
+    expect((await render(null, { 'X-Theme-Thumbnail': tokenOf((await link()).url) })).status).toBe(403);
+    expect((await api('get', '/thumbnails', otherToken)).body.thumbnails[draft.id]).toBeUndefined();
   });
 
   it('once published, the token shows the live theme with no preview bar', async () => {

@@ -95,6 +95,8 @@ export const themesApi = {
   duplicate: (id: string, name?: string) => api.post<ThemeSummary>(`/admin/themes/${id}/duplicate`, name ? { name } : {}),
   publish: (id: string) => api.post<ThemeSummary>(`/admin/themes/${id}/publish`, {}),
   remove: (id: string) => api.delete<void>(`/admin/themes/${id}`),
+  /** Draft id → `/theme-thumbnail/...` path, valid 10 min (contracts C7). */
+  thumbnails: () => api.get<{ thumbnails: Record<string, string> }>('/admin/themes/thumbnails'),
   previewLink: (id: string, share = false) =>
     api.post<{ url: string; expiresAt: string; share: boolean }>(`/admin/themes/${id}/preview-link`, { share }),
   restore: (id: string, revisionId: string, themeVersion: number) =>

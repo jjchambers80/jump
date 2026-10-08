@@ -44,6 +44,11 @@ async function mockApi(page: Page) {
   );
   await page.route(`${API}/admin/online-store/preferences`, (route) => route.fulfill({ json: prefs }));
   await page.route(`${API}/admin/themes`, (route) => route.fulfill({ json: { themes } }));
+  await page.route(`${API}/admin/themes/thumbnails`, (route) =>
+    route.fulfill({
+      json: { thumbnails: Object.fromEntries(themes.filter((t) => t.role !== 'MAIN').map((t) => [t.id, `/theme-thumbnail/${org.id}?t=tok-${t.id}`])) },
+    }),
+  );
   await page.route(`${API}/admin/themes/*/duplicate`, async (route) => {
     calls.push(`duplicate ${route.request().url().split('/').at(-2)}`);
     const copy = theme('theme-copy', 'Copy of Eventimus Default', 'UNPUBLISHED');
@@ -84,6 +89,7 @@ test.describe('Draft themes (038J2)', () => {
     const row = drafts.getByRole('listitem').filter({ hasText: 'Copy of Eventimus Default' });
     await expect(row).toBeVisible();
     await expect(row.getByRole('link', { name: 'Edit theme' })).toHaveAttribute('href', '/admin/online-store/themes/theme-copy/editor');
+    await expect(row.locator('iframe')).toHaveAttribute('src', `/theme-thumbnail/${org.id}?t=tok-theme-copy`);
 
     await row.getByRole('button', { name: 'Publish' }).click();
     await expect(page.getByRole('article', { name: 'Copy of Eventimus Default' })).toBeVisible();
