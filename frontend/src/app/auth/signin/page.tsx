@@ -103,7 +103,7 @@ function SignInForm() {
 
   if (sent) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center px-4">
+      <div className="min-h-screen flex items-center justify-center px-4 py-12">
         <div className="max-w-md w-full bg-white dark:bg-slate-800 rounded-xl shadow-lg p-8 text-center">
           <div className="text-5xl mb-4">✉️</div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
@@ -131,7 +131,7 @@ function SignInForm() {
   }
 
   return (
-    <div className="min-h-[60vh] flex items-center justify-center px-4">
+    <div className="min-h-screen flex items-center justify-center px-4 py-12">
       <div className="max-w-md w-full bg-white dark:bg-slate-800 rounded-xl shadow-lg p-8">
         <div className="mb-6 flex justify-center">
           <EventimusLogo className="h-6" />
