@@ -515,30 +515,73 @@ test('stacks without horizontal overflow on mobile', async ({ page }) => {
 
 // Users moved out of the main admin menu into Settings › Users.
 
+type MockMember = {
+  id: string;
+  email: string;
+  name: string | null;
+  image: null;
+  role: 'ADMIN' | 'ORGANIZER';
+  status: 'ACTIVE' | 'PENDING' | 'INACTIVE';
+  requireTwoStep: boolean;
+  twoStepEnabled: boolean;
+  invitedAt: string | null;
+  joinedAt: string;
+};
+
+const member = (overrides: Partial<MockMember>): MockMember => ({
+  id: 'user-1',
+  email: 'jordan@test.com',
+  name: 'Jordan Lee',
+  image: null,
+  role: 'ORGANIZER',
+  status: 'ACTIVE',
+  requireTwoStep: false,
+  twoStepEnabled: false,
+  invitedAt: null,
+  joinedAt: '2026-01-01T00:00:00.000Z',
+  ...overrides,
+});
+
+/** Settings › Users backend: GET list, POST invite, DELETE remove, POST resend. */
 async function mockUsersApi(page: Page) {
-  await page.route('http://localhost:3002/users?**', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        users: [
-          {
-            id: 'user-1',
-            email: 'jordan@test.com',
-            name: 'Jordan Lee',
-            firstName: 'Jordan',
-            lastName: 'Lee',
-            role: 'ORGANIZER',
-            organizationId: 'org-settings',
-            organizationName: 'Roman Skin Care LLC',
-            isActive: true,
-            createdAt: '2026-01-01T00:00:00.000Z',
-          },
-        ],
-        pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
-      }),
-    });
+  const state = {
+    users: [
+      member({ id: 'settings-admin', email: 'settings-admin@test.com', name: 'Sam Admin', role: 'ADMIN', twoStepEnabled: true }),
+      member({}),
+    ],
+    invites: [] as unknown[],
+    removed: [] as string[],
+    resent: [] as string[],
+  };
+  await page.route(/localhost:3002\/admin\/settings\/users/, async (route) => {
+    const req = route.request();
+    const path = new URL(req.url()).pathname;
+    const json = (status: number, body?: unknown) =>
+      route.fulfill({ status, contentType: 'application/json', body: body === undefined ? '' : JSON.stringify(body) });
+    if (req.method() === 'GET') return json(200, { users: state.users });
+    if (req.method() === 'POST' && path === '/admin/settings/users') {
+      const body = req.postDataJSON();
+      state.invites.push(body);
+      for (const email of body.emails) {
+        state.users.push(
+          member({ id: `new-${email}`, email, name: null, role: body.role, status: 'PENDING', requireTwoStep: body.requireTwoStep, invitedAt: '2026-10-08T00:00:00.000Z' })
+        );
+      }
+      return json(201, { invited: body.emails, alreadyMember: [], emailFailed: [] });
+    }
+    if (req.method() === 'POST' && path.endsWith('/resend')) {
+      state.resent.push(path.split('/')[4]);
+      return json(204);
+    }
+    if (req.method() === 'DELETE') {
+      const id = path.split('/').pop()!;
+      state.removed.push(id);
+      state.users = state.users.filter((u) => u.id !== id);
+      return json(204);
+    }
+    return route.fallback();
   });
+  return state;
 }
 
 test('lists Users under Settings instead of the main sidebar and redirects the old URL', async ({ page }) => {
@@ -557,6 +600,8 @@ test('lists Users under Settings instead of the main sidebar and redirects the o
   await expect(sidebar.getByRole('link', { name: 'Settings' })).toHaveClass(/bg-accent/);
   await expect(page.getByRole('heading', { name: 'Users', exact: true })).toBeVisible();
   await expect(page.getByText('jordan@test.com')).toBeVisible();
+  // Organization column is gone: the list is one organization's staff
+  await expect(page.getByRole('columnheader', { name: 'Organization' })).toHaveCount(0);
 
   await page.goto('/admin/users');
   await expect(page).toHaveURL(/\/admin\/settings\/users$/);
@@ -575,4 +620,62 @@ test('hides the Users section from ORGANIZER and denies direct access', async ({
   await page.goto('/admin/settings/users');
   await expect(page.getByText(/access denied/i)).toBeVisible();
   await expect(page.getByText(/admin role required/i)).toBeVisible();
+});
+
+test('adds users by email with a role and the secure sign-in requirement', async ({ page }) => {
+  await mockSettingsApi(page);
+  const api = await mockUsersApi(page);
+  await page.goto('/admin/settings/users');
+
+  await page.getByRole('link', { name: 'Add users' }).click();
+  await expect(page).toHaveURL(/\/admin\/settings\/users\/new$/);
+  await expect(page.getByRole('heading', { name: 'Add users', exact: true })).toBeVisible();
+
+  const results = await new AxeBuilder({ page }).include('main').withTags(['wcag2a', 'wcag2aa']).analyze();
+  expect(results.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical')).toEqual([]);
+
+  const emails = page.getByLabel('Emails');
+  await emails.fill('casey@test.com, not-an-email');
+  await expect(page.getByText('Check this address: not-an-email')).toBeVisible();
+  await expect(emails).toHaveAttribute('aria-invalid', 'true');
+
+  await emails.fill('casey@test.com\nRiley@Test.com, casey@test.com');
+  await expect(page.getByText('2 people will be added.')).toBeVisible();
+
+  const secure = page.getByRole('switch', { name: 'Secure sign-in method' });
+  await expect(secure).toHaveAttribute('aria-checked', 'true');
+  await page.getByRole('radio', { name: /Admin/ }).check();
+  await page.getByRole('button', { name: 'Add 2 users' }).click();
+
+  await expect(page).toHaveURL(/\/admin\/settings\/users$/);
+  expect(api.invites).toEqual([{ emails: ['casey@test.com', 'riley@test.com'], role: 'ADMIN', requireTwoStep: true }]);
+  await expect(page.getByRole('status').filter({ hasText: 'Invited 2 users.' })).toBeVisible();
+
+  const casey = page.getByTestId('member-casey@test.com');
+  await expect(casey.getByText('Pending')).toBeVisible();
+  await expect(casey.getByText('Two-step required')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Pending' }).click();
+  await expect(page.getByTestId('member-jordan@test.com')).toHaveCount(0);
+
+  await casey.getByRole('button', { name: 'Resend invite to casey@test.com' }).click();
+  await expect(page.getByText('Invite re-sent to casey@test.com.')).toBeVisible();
+  expect(api.resent).toEqual(['new-casey@test.com']);
+});
+
+test('removes a user after confirmation, never yourself', async ({ page }) => {
+  await mockSettingsApi(page);
+  const api = await mockUsersApi(page);
+  await page.goto('/admin/settings/users');
+
+  const me = page.getByTestId('member-settings-admin@test.com');
+  await expect(me.getByText('(you)')).toBeVisible();
+  await expect(me.getByRole('button', { name: /Remove/ })).toHaveCount(0);
+  await expect(me.getByLabel('Role for Sam Admin')).toBeDisabled();
+
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: 'Remove Jordan Lee from this organization' }).click();
+  await expect(page.getByText('Jordan Lee was removed.')).toBeVisible();
+  expect(api.removed).toEqual(['user-1']);
+  await expect(page.getByTestId('member-jordan@test.com')).toHaveCount(0);
 });

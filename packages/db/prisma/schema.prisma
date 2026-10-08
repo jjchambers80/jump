@@ -741,6 +741,14 @@ model OrganizationMember {
   role           MemberRole
   createdAt      DateTime   @default(now())
 
+  // Settings › Users (add users): set when an admin invited this member;
+  // "Pending" until the user's first sign-in (no UserSession yet).
+  // invitedById is a plain id for the audit line, no relation.
+  invitedAt      DateTime?
+  invitedById    String?
+  // "Secure sign-in method": the member must turn on two-step to use this org
+  requireTwoStep Boolean    @default(false)
+
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 

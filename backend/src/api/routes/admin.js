@@ -27,6 +27,8 @@ import {
 import { validateOrderListQuery } from '../validators/orderValidators.js';
 import organizationService from '../../services/OrganizationService.js';
 import organizationPersonService from '../../services/OrganizationPersonService.js';
+import memberService from '../../services/MemberService.js';
+import { validateInviteMembers, validateUpdateMember } from '../validators/memberValidators.js';
 import orderService from '../../services/OrderService.js';
 import ticketService from '../../services/TicketService.js';
 import refundService from '../../services/RefundService.js';
@@ -562,6 +564,43 @@ const wrap = (fn) => async (req, res, next) => {
     next(error);
   }
 };
+
+// Settings › Users: staff of the active organization. requireAdmin checks the
+// global role; assertOrgAdmin checks the role in *this* organization.
+async function orgAdminScope(req) {
+  const organizationId = await activeOrgFor(req);
+  await memberService.assertOrgAdmin(req.user, organizationId);
+  return organizationId;
+}
+const memberInviteLimiter = makeLimiter('MEMBER_INVITE', LIMITS.MEMBER_INVITE);
+
+/** GET /admin/settings/users?role=&status= */
+router.get('/settings/users', requireAdmin, wrap(async (req, res) => {
+  const { role, status } = req.query;
+  res.json({ users: await memberService.list(await orgAdminScope(req), { role, status }) });
+}));
+
+/** POST /admin/settings/users — add users by email and send each an invite */
+router.post('/settings/users', requireAdmin, memberInviteLimiter, validateInviteMembers, wrap(async (req, res) => {
+  res.status(201).json(await memberService.invite(req.user, await orgAdminScope(req), req.body));
+}));
+
+/** PATCH /admin/settings/users/:userId — role, requireTwoStep, isActive */
+router.patch('/settings/users/:userId', requireAdmin, validateUpdateMember, wrap(async (req, res) => {
+  res.json(await memberService.update(req.user, await orgAdminScope(req), req.params.userId, req.body));
+}));
+
+/** DELETE /admin/settings/users/:userId — remove from this organization */
+router.delete('/settings/users/:userId', requireAdmin, wrap(async (req, res) => {
+  await memberService.remove(req.user, await orgAdminScope(req), req.params.userId);
+  res.status(204).end();
+}));
+
+/** POST /admin/settings/users/:userId/resend — re-send a pending invite */
+router.post('/settings/users/:userId/resend', requireAdmin, memberInviteLimiter, wrap(async (req, res) => {
+  await memberService.resend(req.user, await orgAdminScope(req), req.params.userId);
+  res.status(204).end();
+}));
 
 /**
  * Scope for the organization-wide Participants routes (spec 019), the

@@ -922,6 +922,44 @@ export const agentAccessApi = {
     api.post<{ count: number }>('/admin/platform/revoke-all', { confirmation }),
 };
 
+// Settings › Users: staff of the active organization
+export type MemberRole = 'ADMIN' | 'ORGANIZER';
+export type MemberStatus = 'ACTIVE' | 'PENDING' | 'INACTIVE';
+
+export interface OrgMember {
+  id: string;
+  email: string;
+  name: string | null;
+  image: string | null;
+  role: MemberRole;
+  status: MemberStatus;
+  requireTwoStep: boolean;
+  twoStepEnabled: boolean;
+  invitedAt: string | null;
+  joinedAt: string;
+}
+
+export interface InviteMembersResult {
+  invited: string[];
+  alreadyMember: string[];
+  emailFailed: string[];
+}
+
+export const membersApi = {
+  list: (params: { role?: MemberRole; status?: MemberStatus } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.role) qs.set('role', params.role);
+    if (params.status) qs.set('status', params.status);
+    return api.get<{ users: OrgMember[] }>(`/admin/settings/users${qs.size ? `?${qs}` : ''}`);
+  },
+  invite: (body: { emails: string[]; role: MemberRole; requireTwoStep: boolean }) =>
+    api.post<InviteMembersResult>('/admin/settings/users', body),
+  update: (userId: string, body: Partial<{ role: MemberRole; requireTwoStep: boolean; isActive: boolean }>) =>
+    api.patch<OrgMember>(`/admin/settings/users/${userId}`, body),
+  remove: (userId: string) => api.delete<void>(`/admin/settings/users/${userId}`),
+  resend: (userId: string) => api.post<void>(`/admin/settings/users/${userId}/resend`, {}),
+};
+
 export const api = new ApiClient();
 export default api;
 

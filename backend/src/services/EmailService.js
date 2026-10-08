@@ -481,6 +481,41 @@ ${manageTicketsHtml}
   }
 
   /**
+   * Invitation to an organization's admin (Settings › Users › Add users).
+   * The user and membership already exist, so the button is the normal
+   * sign-in page: email link or Google both land on that account.
+   * @param {{ to: string, organizationName: string, inviterName: string, role: 'ADMIN'|'ORGANIZER', requireTwoStep: boolean, signInUrl: string }} params
+   */
+  async sendStaffInvite({ to, organizationName, inviterName, role, requireTwoStep, signInUrl }) {
+    const roleLabel = role === 'ADMIN' ? 'an Admin' : 'an Organizer';
+    const msg = {
+      to: [to],
+      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      subject: `You've been added to ${organizationName}`,
+      html: `
+        <html>
+          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+            <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
+              <h1 style="color: #333; font-size: 22px;">Join ${escapeHtml(organizationName)}</h1>
+            </div>
+            <div style="padding: 20px;">
+              <p>${escapeHtml(inviterName)} added you to <strong>${escapeHtml(organizationName)}</strong> as ${roleLabel}.</p>
+              <p>Sign in with this email address, <strong>${escapeHtml(to)}</strong>. You can get a sign-in link by email or continue with Google.</p>
+              ${requireTwoStep ? '<p><strong>Two-step authentication is required.</strong> After you sign in you will be asked to set it up under Account › Security before you can use the admin.</p>' : ''}
+              <div style="text-align: center; margin: 32px 0;">
+                <a href="${signInUrl}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 16px; font-weight: bold; padding: 14px 32px; border-radius: 8px; text-decoration: none;">Sign in</a>
+              </div>
+              <p style="color: #666; font-size: 13px;">If you weren't expecting this, you can ignore this email.</p>
+            </div>
+          </body>
+        </html>
+      `,
+    };
+    await deliver(msg);
+    logger.info('Staff invite sent', { event: 'staff_invite_sent' });
+  }
+
+  /**
    * Send an application decision / status email (spec 011). `body` is plain
    * text already rendered from the organization's template; paragraphs are
    * split on blank lines and every line is escaped, so organizer text can
