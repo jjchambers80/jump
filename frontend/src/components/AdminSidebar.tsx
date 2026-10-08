@@ -7,7 +7,9 @@
 // Sections with sub-pages (Finance, Online store, Content) are collapsed by
 // default; a chevron toggle expands them, and the section holding the current
 // page opens automatically so the active link is never hidden.
-// Active state via usePathname(), mobile-responsive with toggle
+// Active state via usePathname(), mobile-responsive with toggle. On desktop the
+// toggle beside Settings collapses the rail to icons only (face symbol in place
+// of the logo); the choice is remembered per browser.
 
 'use client';
 
@@ -23,6 +25,8 @@ import {
   Landmark,
   LayoutDashboard,
   Map,
+  PanelLeftClose,
+  PanelLeftOpen,
   MapPin,
   ScanLine,
   Settings,
@@ -101,6 +105,8 @@ const linkClass = (active: boolean) =>
       : 'text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700'
   }`;
 
+const COLLAPSED_KEY = 'jump.adminSidebarCollapsed';
+
 interface AdminSidebarProps {
   isOpen: boolean;
   onClose: () => void;
@@ -121,6 +127,23 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
     const current = sectionFor(pathname);
     if (current) setExpanded((prev) => (prev[current] ? prev : { ...prev, [current]: true }));
   }, [pathname]);
+
+  // Desktop-only: the mobile drawer always opens full width.
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => {
+    try {
+      setCollapsed(localStorage.getItem(COLLAPSED_KEY) === '1');
+    } catch {}
+  }, []);
+  const toggleCollapsed = () =>
+    setCollapsed((prev) => {
+      try {
+        localStorage.setItem(COLLAPSED_KEY, prev ? '0' : '1');
+      } catch {}
+      return !prev;
+    });
+  // Labels hide only at md+ so the mobile drawer is unaffected.
+  const labelClass = collapsed ? 'md:sr-only' : '';
 
   const toggle = (href: string) => setExpanded((prev) => ({ ...prev, [href]: !prev[href] }));
 
@@ -159,22 +182,34 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
       {/* Sidebar */}
       <aside
         className={`
-          fixed top-0 left-0 z-40 h-full w-64 bg-white dark:bg-slate-800
+          fixed top-0 left-0 z-40 h-full w-64 shrink-0 bg-white dark:bg-slate-800
           border-r border-gray-200 dark:border-slate-700
-          transform transition-transform duration-200 ease-in-out
+          transform transition-[transform,width] duration-200 ease-in-out motion-reduce:transition-none
+          ${collapsed ? 'md:w-16' : ''}
           md:relative md:translate-x-0 md:z-auto
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
         `}
       >
         <div className="flex flex-col h-full">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-4">
+          <div
+            className={`flex items-center justify-between px-4 py-4 ${
+              collapsed ? 'md:justify-center md:px-2' : ''
+            }`}
+          >
             <Link
               href="/admin/dashboard"
               className="rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
               onClick={onClose}
             >
-              <EventimusLogo />
+              {collapsed ? (
+                <>
+                  <EventimusLogo className="h-5 md:hidden" />
+                  <EventimusLogo symbolOnly className="hidden h-6 md:block" />
+                </>
+              ) : (
+                <EventimusLogo />
+              )}
             </Link>
             {/* Mobile close button */}
             <button
@@ -206,10 +241,18 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                   href={item.href}
                   onClick={onClose}
                   aria-current={active ? 'page' : undefined}
-                  className={`${linkClass(active)} flex-1 min-w-0`}
+                  title={collapsed ? item.label : undefined}
+                  className={`${linkClass(active)} flex-1 min-w-0 ${
+                    collapsed ? 'md:justify-center md:px-0' : ''
+                  }`}
                 >
-                  {Icon && <Icon className="w-4 h-4 mr-3 shrink-0" aria-hidden="true" />}
-                  {item.label}
+                  {Icon && (
+                    <Icon
+                      className={`w-4 h-4 mr-3 shrink-0 ${collapsed ? 'md:mr-0' : ''}`}
+                      aria-hidden="true"
+                    />
+                  )}
+                  <span className={labelClass}>{item.label}</span>
                 </Link>
               );
 
@@ -229,7 +272,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                       aria-expanded={open}
                       aria-controls={panelId}
                       aria-label={`${open ? 'Collapse' : 'Expand'} ${item.label}`}
-                      className="p-2 rounded-md text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-gray-700 dark:hover:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-500"
+                      className={`${collapsed ? 'md:hidden ' : ''}p-2 rounded-md text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-gray-700 dark:hover:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-500`}
                     >
                       <ChevronRight
                         className={`w-4 h-4 transition-transform motion-reduce:transition-none ${
@@ -239,7 +282,11 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                       />
                     </button>
                   </div>
-                  <div id={panelId} hidden={!open} className="mt-1 space-y-1">
+                  <div
+                    id={panelId}
+                    hidden={!open}
+                    className={`mt-1 space-y-1 ${collapsed ? 'md:hidden' : ''}`}
+                  >
                     {children.map((child) => {
                       const childActive = isActive(child.href);
                       return (
@@ -261,19 +308,44 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
           </nav>
 
           {/* Settings remains pinned and visible when the navigation list scrolls. */}
-          <div className="px-3 py-4 border-t border-gray-200 dark:border-slate-700">
+          <div
+            className={`flex items-center gap-1 px-3 py-4 border-t border-gray-200 dark:border-slate-700 ${
+              collapsed ? 'md:flex-col md:px-2' : ''
+            }`}
+          >
             <Link
               href="/admin/settings"
               onClick={onClose}
-              className={`flex items-center w-full px-3 py-2 text-sm font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-accent-500 ${
+              title={collapsed ? 'Settings' : undefined}
+              className={`flex flex-1 items-center min-w-0 px-3 py-2 text-sm font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-accent-500 ${
+                collapsed ? 'md:w-full md:flex-none md:justify-center md:px-0' : ''
+              } ${
                 isActive('/admin/settings')
                   ? 'bg-accent-50 dark:bg-accent-900/30 text-accent-700 dark:text-accent-300'
                   : 'text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700'
               }`}
             >
-              <Settings className="w-4 h-4 mr-3 shrink-0" aria-hidden="true" />
-              Settings
+              <Settings
+                className={`w-4 h-4 mr-3 shrink-0 ${collapsed ? 'md:mr-0' : ''}`}
+                aria-hidden="true"
+              />
+              <span className={labelClass}>Settings</span>
             </Link>
+            <button
+              type="button"
+              onClick={toggleCollapsed}
+              aria-expanded={!collapsed}
+              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              data-testid="sidebar-collapse-toggle"
+              className="hidden md:block p-2 rounded-md text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-gray-700 dark:hover:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-500"
+            >
+              {collapsed ? (
+                <PanelLeftOpen className="w-4 h-4" aria-hidden="true" />
+              ) : (
+                <PanelLeftClose className="w-4 h-4" aria-hidden="true" />
+              )}
+            </button>
           </div>
         </div>
       </aside>

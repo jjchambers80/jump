@@ -51,3 +51,27 @@ test('the section holding the current page is open on load and after navigation'
   await expect(sidebar.getByRole('link', { name: 'Payouts' })).toBeVisible();
   await expect(sidebar.getByRole('link', { name: 'Finance', exact: true })).toHaveAttribute('aria-current', 'page');
 });
+
+test('the rail collapses to icons, swaps in the face symbol and remembers it', async ({ page }) => {
+  await page.goto('/admin/venues');
+  const sidebar = page.locator('aside');
+  const toggle = sidebar.getByRole('button', { name: 'Collapse sidebar' });
+
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  const fullWidth = (await sidebar.boundingBox())!.width;
+  if (process.env.SHOT_DIR) await page.screenshot({ path: `${process.env.SHOT_DIR}/open.png` });
+
+  await toggle.click();
+  await expect(sidebar.getByRole('button', { name: 'Expand sidebar' })).toHaveAttribute('aria-expanded', 'false');
+  await expect.poll(async () => (await sidebar.boundingBox())!.width).toBeLessThan(fullWidth / 2);
+  // Links keep their accessible names; the chevrons and sub-links step aside.
+  await expect(sidebar.getByRole('link', { name: 'Venues' })).toHaveAttribute('aria-current', 'page');
+  await expect(sidebar.getByRole('button', { name: 'Expand Content' })).toBeHidden();
+  if (process.env.SHOT_DIR) await page.screenshot({ path: `${process.env.SHOT_DIR}/collapsed.png` });
+
+  await page.reload();
+  await expect(sidebar.getByRole('button', { name: 'Expand sidebar' })).toBeVisible();
+
+  await sidebar.getByRole('button', { name: 'Expand sidebar' }).click();
+  await expect(sidebar.getByRole('button', { name: 'Expand Content' })).toBeVisible();
+});
