@@ -154,8 +154,7 @@ test.describe('signup flow', () => {
     // Done → dashboard for the new org, setup guide visible
     await expect(page).toHaveURL(/\/admin\/dashboard/);
     await expect(page.getByTestId('setup-guide')).toBeVisible();
-    await expect(page.getByTestId('setup-card-event')).toContainText('Create your first event');
-    await expect(page.getByTestId('setup-card-applications')).toBeVisible();
+    await expect(page.getByTestId('sidebar-onboarding')).toBeVisible();
     await expect(page.getByTestId('org-switcher-trigger')).toContainText('Raleigh Retro Gamers');
 
     const saved = api.calls.filter((c) => c.method === 'PATCH' && c.path.endsWith('/survey')).map((c) => c.body);

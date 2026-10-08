@@ -80,7 +80,7 @@ test('ADMIN sees no funnel card', async ({ page, baseURL }) => {
   await expect(page.getByTestId('org-survey')).toHaveCount(0);
 });
 
-test('setup guide shows the check-in card for door sellers', async ({ page, baseURL }) => {
+test('onboarding checklist shows the check-in step for door sellers', async ({ page, baseURL }) => {
   await signInAsStaff(page, { id: 'adm', email: 'adm@test.com', role: 'ADMIN' }, baseURL!);
   await page.route(`${API}/**`, (route) => {
     const path = new URL(route.request().url()).pathname;
@@ -98,8 +98,8 @@ test('setup guide shows the check-in card for door sellers', async ({ page, base
     if (path === '/admin/events') return json(route, { events: [] });
     return json(route, []);
   });
-  await page.goto('/admin/dashboard');
-  const card = page.getByTestId('setup-card-checkin');
-  await expect(card).toContainText('Check tickets in at the door');
-  await expect(card.getByRole('link', { name: 'Open scanner' })).toHaveAttribute('href', '/admin/orders/scan');
+  await page.goto('/admin/onboarding');
+  await expect(page.getByTestId('setup-step-checkin')).toContainText('Check tickets in at the door');
+  const detail = page.getByTestId('setup-detail-checkin').locator('visible=true');
+  await expect(detail.getByRole('link', { name: 'Open scanner' })).toHaveAttribute('href', '/admin/orders/scan');
 });
