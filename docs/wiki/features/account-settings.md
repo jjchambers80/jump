@@ -5,7 +5,7 @@
 
 ## Overview
 
-Clicking the signed-in user's name / email at the bottom of the organization menu opens `/admin/account` — the person's own settings, not the organization's. General covers the profile photo, first / last name, email address (a verified change), phone number, preferred language and time zone. Nothing here changes with the org switcher, and nothing here affects what customers see on an online store. Security (`/admin/account/security`) is a placeholder until spec 030 features B (sign-in methods), C (two-step) and D (devices) land.
+Clicking the signed-in user's name / email at the bottom of the organization menu opens `/admin/account` — the person's own settings, not the organization's. General covers the profile photo, first / last name, email address (a verified change), phone number, preferred language, time zone and theme. Nothing here changes with the org switcher, and nothing here affects what customers see on an online store. Security (`/admin/account/security`) is a placeholder until spec 030 features B (sign-in methods), C (two-step) and D (devices) land.
 
 ## Key Files
 
@@ -48,6 +48,8 @@ No new environment variables. Rate limit `ACCOUNT_EMAIL_CHANGE` (5 / h per IP, `
 ### Preferences
 
 `locale` must be in `SUPPORTED_LOCALES`; `timeZone` is validated with `Intl.DateTimeFormat`. Both are copied into the JWT so `useSession()` exposes them; `useAccountFormat()` is the helper new admin code should use for dates. Copy on the page: *"When you're logged in to Jump, this is the language you'll see. It doesn't affect the language your customers see on your online store."* / *"This is the time zone for your account. It's used for the dates and times you see in Jump."*
+
+**Theme** (Light / Dark / System) is the last Preferences row (`app/admin/account/AppearanceRow.tsx`), a segmented radio group that calls next-themes `setTheme` directly: it applies at once, is stored in this browser's `localStorage.theme` (not on the account, so it is per device), and has no dialog or save step. It used to be a cycle button in the org menu; that button is gone, so the org menu holds only org switching, Manage account and Log out.
 
 ## Testing
 
