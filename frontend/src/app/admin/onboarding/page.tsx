@@ -65,7 +65,7 @@ export default function OnboardingChecklistPage() {
 
   if (!guide) {
     return (
-      <div className="space-y-3" aria-busy="true" aria-label="Loading checklist">
+      <div className="mx-auto max-w-5xl space-y-3 px-4 py-8 sm:px-6 lg:px-8" aria-busy="true" aria-label="Loading checklist">
         <div className="h-8 w-64 animate-pulse rounded bg-gray-200 dark:bg-slate-700" />
         <div className="h-4 w-96 max-w-full animate-pulse rounded bg-gray-200 dark:bg-slate-700" />
       </div>
@@ -92,7 +92,7 @@ export default function OnboardingChecklistPage() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl" data-testid="onboarding-checklist">
+    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8" data-testid="onboarding-checklist">
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-200 pb-6 dark:border-slate-700">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">Onboarding checklist</h1>

@@ -19,7 +19,6 @@ e2e/application-orders-reporting.spec.ts
 e2e/applications-payments.spec.ts
 e2e/applications.spec.ts
 e2e/customer-detail-phase2.spec.ts
-e2e/signup.spec.ts
 e2e/theme-modes.spec.ts
 e2e/wcag-contrast.spec.ts
 tests/integration/adminEventCreation.spec.ts
