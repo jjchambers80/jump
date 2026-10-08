@@ -9,7 +9,6 @@ import EventimusLogo from '@/components/EventimusLogo';
 import { useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import { startAuthentication } from '@simplewebauthn/browser';
-import { resolveAssetUrl } from '@/lib/assets';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
 
@@ -26,9 +25,9 @@ function SignInForm() {
   const callbackUrl = safeCallbackUrl(params.get('callbackUrl'), '/events');
   const devCallbackUrl = safeCallbackUrl(params.get('callbackUrl'), '/admin/dashboard');
   // Staff invite link (Settings › Users): ?invite=<orgId>&email=<invitee>.
-  // The org name and logo come from the public lookup, never from the query.
+  // The org name comes from the public lookup, never from the query.
   const inviteOrgId = params.get('invite');
-  const [inviteOrg, setInviteOrg] = useState<{ name: string; logoUrl: string | null } | null>(null);
+  const [inviteOrg, setInviteOrg] = useState<{ name: string } | null>(null);
   const [email, setEmail] = useState(params.get('email') ?? '');
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
@@ -43,14 +42,13 @@ function SignInForm() {
     fetch(`${API_URL}/organizations/${encodeURIComponent(inviteOrgId)}/public/meta`)
       .then((res) => (res.ok ? res.json() : null))
       .then((org) => {
-        if (!cancelled && org?.name) setInviteOrg({ name: org.name, logoUrl: org.logoUrl ?? null });
+        if (!cancelled && org?.name) setInviteOrg({ name: org.name });
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
   }, [inviteOrgId]);
-  const inviteLogo = inviteOrg?.logoUrl ? resolveAssetUrl(inviteOrg.logoUrl) : null;
 
   async function handlePassword(e: React.FormEvent) {
     e.preventDefault();
@@ -158,10 +156,6 @@ function SignInForm() {
         </div>
         {inviteOrg ? (
           <>
-            {inviteLogo && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={inviteLogo} alt="" className="mx-auto mb-4 h-10 w-auto max-w-[160px] object-contain" />
-            )}
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white text-center mb-2 break-words">
               Join {inviteOrg.name} on Eventimus
             </h1>
