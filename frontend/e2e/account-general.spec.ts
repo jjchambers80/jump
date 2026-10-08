@@ -1,5 +1,5 @@
 // Account › General (spec 030 feature A): org-menu entry, name / phone /
-// time-zone dialogs, verified email change pending state, photo removal.
+// time-zone dialogs, theme preference, verified email change pending state, photo removal.
 
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
@@ -92,6 +92,25 @@ test.describe('Account › General', () => {
     await expect(page.getByRole('button', { name: 'Edit name' })).toContainText('Ada Lovelace');
     await expect(page.getByRole('button', { name: 'Change email address' })).toContainText('ada@example.com');
     await expect(page.getByRole('button', { name: 'Change time zone' })).toContainText('Browser default');
+    const results = await new AxeBuilder({ page }).include('main').analyze();
+    expect(results.violations).toEqual([]);
+  });
+
+  test('theme lives under Preferences, not the org menu, and applies at once', async ({ page, baseURL }) => {
+    await signIn(page, baseURL!);
+    await mockAccountApi(page);
+    await page.goto('/admin/account');
+    const theme = page.getByRole('radiogroup', { name: 'Theme' });
+    await theme.getByText('Dark', { exact: true }).click();
+    await expect(theme.getByRole('radio', { name: 'Dark' })).toBeChecked();
+    await expect(page.locator('html')).toHaveClass(/dark/);
+    await theme.getByText('Light', { exact: true }).click();
+    await expect(theme.getByRole('radio', { name: 'Light' })).toBeChecked();
+    await expect(page.locator('html')).not.toHaveClass(/dark/);
+    expect(await page.evaluate(() => localStorage.getItem('theme'))).toBe('light');
+    await page.getByTestId('org-switcher-trigger').click();
+    await expect(page.getByTestId('org-switcher-account')).toBeVisible();
+    await expect(page.getByRole('button', { name: /^(Light|Dark|System) mode$/ })).toHaveCount(0);
     const results = await new AxeBuilder({ page }).include('main').analyze();
     expect(results.violations).toEqual([]);
   });

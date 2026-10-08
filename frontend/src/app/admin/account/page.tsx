@@ -1,7 +1,7 @@
 'use client';
 
 // Account › General (spec 030 feature A): photo, name, email (verified
-// change), phone, preferred language and time zone for the signed-in user.
+// change), phone, preferred language, time zone and theme for the signed-in user.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
@@ -10,6 +10,7 @@ import { GlobeIcon, UsersIcon } from '@/app/admin/settings/icons';
 import { localeLabel } from '@/lib/locales';
 import { browserTimeZone, timeZoneLabel } from '@/lib/timeZones';
 import { Account, accountApi } from './accountApi';
+import AppearanceRow from './AppearanceRow';
 import EmailDialog from './EmailDialog';
 import LanguageDialog from './LanguageDialog';
 import NameDialog from './NameDialog';
@@ -212,6 +213,7 @@ export default function AccountGeneralPage() {
                 buttonRef={timeZoneRowRef}
                 onClick={() => openEditor('timeZone')}
               />
+              <AppearanceRow />
             </div>
           </div>
         </div>
