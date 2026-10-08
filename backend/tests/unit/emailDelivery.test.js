@@ -64,3 +64,27 @@ describe('EmailService From name', () => {
     expect(send.mock.calls[0][0].from).toBe('Eventimus <noreply@eventimus.net>');
   });
 });
+
+describe('EmailService brand color', () => {
+  beforeEach(() => {
+    send.mockReset();
+    send.mockResolvedValue({ data: { id: 'em_4' }, error: null });
+  });
+
+  it('store buttons and links use the organization brand color', async () => {
+    await emailService.sendApplicationMessage({
+      ...message,
+      body: 'See https://x.test/a for details\n\nhttps://x.test/open',
+      organization: { name: 'RRG', brandColor: '#d6007d' },
+    });
+    const html = send.mock.calls[0][0].html;
+    expect(html).toContain('background-color: #d6007d; color: #ffffff;');
+    expect(html).toContain('<a href="https://x.test/a" style="color: #d6007d;">');
+    expect(html).not.toContain('#2563eb');
+  });
+
+  it('staff security emails keep the platform color', async () => {
+    await emailService.sendRecoveryLink({ to: 'a@b.co', primaryEmail: 'c@d.co', recoverUrl: 'https://x.test' });
+    expect(send.mock.calls[0][0].html).toContain('#2563eb');
+  });
+});

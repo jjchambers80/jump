@@ -181,7 +181,7 @@ class BuyerAuthService {
         email: true,
         firstName: true,
         accountCreatedAt: true,
-        organization: { select: { name: true, logoUrl: true, buyerSignInMethod: true } },
+        organization: { select: { name: true, logoUrl: true, brandColor: true, buyerSignInMethod: true } },
       },
     });
 

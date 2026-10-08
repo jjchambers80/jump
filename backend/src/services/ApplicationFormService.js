@@ -113,7 +113,7 @@ export function applicationLines(tier, form, addOnLines = [], adjustmentTotal = 
 }
 
 const FORM_INCLUDE = {
-  organization: { select: { id: true, name: true, taxInclusivePricing: true, logoUrl: true } },
+  organization: { select: { id: true, name: true, taxInclusivePricing: true, logoUrl: true, brandColor: true } },
   tiers: { orderBy: { displayOrder: 'asc' }, include: { addOns: { select: { addOnId: true } } } },
   questions: { where: { archivedAt: null }, orderBy: { displayOrder: 'asc' } },
   _count: { select: { applications: true } },
@@ -128,7 +128,7 @@ class ApplicationFormService {
   async requireEvent(eventId, organizationId = null) {
     const event = await prisma.event.findUnique({
       where: { id: eventId },
-      include: { venue: { include: { organization: { select: { id: true, name: true, taxInclusivePricing: true, logoUrl: true } } } } },
+      include: { venue: { include: { organization: { select: { id: true, name: true, taxInclusivePricing: true, logoUrl: true, brandColor: true } } } } },
     });
     if (!event || (organizationId && event.venue.organizationId !== organizationId)) {
       throw new NotFoundError('Event not found');
@@ -139,7 +139,7 @@ class ApplicationFormService {
   async requireOrganization(organizationId) {
     const organization = await prisma.organization.findUnique({
       where: { id: organizationId },
-      select: { id: true, name: true, taxInclusivePricing: true, logoUrl: true },
+      select: { id: true, name: true, taxInclusivePricing: true, logoUrl: true, brandColor: true },
     });
     if (!organization) throw new NotFoundError('Organization not found');
     return organization;

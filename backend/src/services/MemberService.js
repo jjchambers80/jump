@@ -77,7 +77,7 @@ class MemberService {
   async invite(actor, organizationId, { emails, role, requireTwoStep = false }) {
     const organization = await prisma.organization.findUnique({
       where: { id: organizationId },
-      select: { name: true, logoUrl: true },
+      select: { name: true, logoUrl: true, brandColor: true },
     });
     if (!organization) throw new NotFoundError('Organization not found');
     const inviter = await prisma.user.findUnique({
@@ -115,7 +115,7 @@ class MemberService {
       }
       invited.push(email);
       try {
-        await this._sendInvite({ to: email, organizationName: organization.name, logoUrl: organization.logoUrl, inviterName, role, requireTwoStep });
+        await this._sendInvite({ to: email, organizationName: organization.name, logoUrl: organization.logoUrl, brandColor: organization.brandColor, inviterName, role, requireTwoStep });
       } catch (error) {
         // The member exists either way; the admin can resend from the list.
         logger.error('Staff invite email failed', { event: 'staff_invite_failed', error: error.message });
@@ -166,13 +166,14 @@ class MemberService {
     const member = await this._member(organizationId, userId);
     if (statusOf(member) !== 'PENDING') throw new ConflictError('This user has already signed in');
     const [organization, inviter] = await Promise.all([
-      prisma.organization.findUnique({ where: { id: organizationId }, select: { name: true, logoUrl: true } }),
+      prisma.organization.findUnique({ where: { id: organizationId }, select: { name: true, logoUrl: true, brandColor: true } }),
       prisma.user.findUnique({ where: { id: actor.id }, select: { name: true, email: true } }),
     ]);
     await this._sendInvite({
       to: member.user.email,
       organizationName: organization.name,
       logoUrl: organization.logoUrl,
+      brandColor: organization.brandColor,
       inviterName: inviter?.name || inviter?.email || 'An admin',
       role: member.role,
       requireTwoStep: member.requireTwoStep,

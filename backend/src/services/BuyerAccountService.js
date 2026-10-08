@@ -35,7 +35,7 @@ const PROFILE_SELECT = {
   emailSubscribed: true,
   accountCreatedAt: true,
   erasureScheduledAt: true,
-  organization: { select: { id: true, name: true, logoUrl: true } },
+  organization: { select: { id: true, name: true, logoUrl: true, brandColor: true } },
 };
 
 const hashToken = (raw) => createHash('sha256').update(raw).digest('hex');

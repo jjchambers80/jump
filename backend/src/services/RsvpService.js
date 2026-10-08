@@ -47,7 +47,7 @@ class RsvpService {
           venue: {
             include: {
               organization: {
-                select: { id: true, name: true, logoUrl: true, email: true },
+                select: { id: true, name: true, logoUrl: true, brandColor: true, email: true },
               },
             },
           },
