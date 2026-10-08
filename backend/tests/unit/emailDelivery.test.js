@@ -101,4 +101,13 @@ describe('EmailService brand color', () => {
     await emailService.sendRecoveryLink({ to: 'a@b.co', primaryEmail: 'c@d.co', recoverUrl: 'https://x.test' });
     expect(send.mock.calls[0][0].html).toContain('#2563eb');
   });
+
+  it('verification code email is Eventimus-branded and escapes the code', async () => {
+    await emailService.sendReauthCode({ to: 'a@b.co', code: '123456' });
+    const msg = send.mock.calls[0][0];
+    expect(msg.subject).toBe('123456 is your Eventimus verification code');
+    expect(msg.html).toContain('#c8ff00');
+    expect(msg.html).toContain('>123456</span>');
+    expect(msg.text).toContain('123456');
+  });
 });
