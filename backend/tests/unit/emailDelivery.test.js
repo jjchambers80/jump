@@ -83,6 +83,20 @@ describe('EmailService brand color', () => {
     expect(html).not.toContain('#2563eb');
   });
 
+  it('staff variant (digest, dispute alerts) keeps the platform sender and color, no logo', async () => {
+    await emailService.sendApplicationMessage({
+      ...message,
+      body: 'https://x.test/admin',
+      organization: { name: 'RRG', logoUrl: 'https://cdn.example.test/logo.png', brandColor: '#d6007d' },
+      staff: true,
+    });
+    const sent = send.mock.calls[0][0];
+    expect(sent.from).not.toContain('RRG');
+    expect(sent.html).toContain('background-color: #2563eb;');
+    expect(sent.html).not.toContain('#d6007d');
+    expect(sent.html).not.toContain('logo.png');
+  });
+
   it('staff security emails keep the platform color', async () => {
     await emailService.sendRecoveryLink({ to: 'a@b.co', primaryEmail: 'c@d.co', recoverUrl: 'https://x.test' });
     expect(send.mock.calls[0][0].html).toContain('#2563eb');

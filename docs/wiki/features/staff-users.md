@@ -20,7 +20,8 @@ Shopify-style channels (POS-only users) don't exist in Jump, so there is no user
 | `backend/src/services/MemberService.js` | `assertOrgAdmin` (role in *this* org, not the global claim), `list`, `invite`, `update`, `remove`, `resend`, `_syncGlobalRole` |
 | `backend/src/api/routes/admin.js` | `GET/POST /admin/settings/users`, `PATCH/DELETE /admin/settings/users/:userId`, `POST …/:userId/resend`. Scoped by `activeOrgFor` |
 | `backend/src/api/validators/memberValidators.js` | Invite body (1–20 emails, `ADMIN`/`ORGANIZER`, boolean `requireTwoStep`); partial PATCH whitelist |
-| `backend/src/services/EmailService.js` | `sendStaffInvite`: link to `/auth/signin?callbackUrl=/admin` |
+| `backend/src/services/EmailService.js` | `sendStaffInvite`: Eventimus-branded (platform sender and colors, no store logo), subject "<Org> invited you to Eventimus", link to `/auth/signin?callbackUrl=/admin&invite=<orgId>&email=<invitee>` |
+| `frontend/src/app/auth/signin/page.tsx` | With `invite`, shows "Join <Org> on Eventimus" and the org logo from `GET /organizations/:id/public/meta` (never from the query) and prefills `email` |
 | `backend/src/middleware/auth.js` | `twoStepSetup: 'required'` → 403 `TWO_STEP_SETUP_REQUIRED` outside `/account`, `/auth`, `GET /organizations` |
 | `backend/src/api/routes/twoStep.js` | `POST /disable` → 409 `TWO_STEP_REQUIRED_BY_ORGANIZATION` while a membership requires it |
 | `frontend/src/app/admin/settings/users/page.tsx` | The list: status filter, role select, resend / remove |
@@ -34,6 +35,7 @@ Shopify-style channels (POS-only users) don't exist in Jump, so there is no user
 - **Two roles, two places.** `OrganizationMember.role` is the per-org role. `User.role` is the global claim RBAC middleware reads. Every invite, role change and removal re-derives `User.role` from the memberships: any ADMIN membership makes the user ADMIN, any membership makes them ORGANIZER, none leaves them UNASSIGNED, and SYSTEM_ADMIN is never touched. `requireAdmin` alone is not enough here: a global ADMIN who is only ORGANIZER in the active org gets 403.
 - **Guards.** You can't change your own role or status or remove yourself. The last ADMIN of an organization can't be demoted or removed (409). Deactivating signs a user out of all of Jump, so it is refused when they belong to another organization; remove them instead.
 - **Existing users** keep their account. Inviting an email that already exists adds a membership. Emails that are already members are reported back as `alreadyMember` and get no email.
+- **Brand by where the button lands.** Staff email (invite, sign-in link, security, application digest, dispute alerts) opens the Eventimus admin, so it is platform-branded and names the org in the copy. Digest and dispute alerts call `sendApplicationMessage({ ..., staff: true })`. Buyer, applicant and RSVP email opens the storefront and stays store-branded.
 - **Email failures never roll back.** They are returned as `emailFailed`; use **Resend invite**.
 - **Secure sign-in.** Any membership with `requireTwoStep` and no two-step on puts the user in setup mode. In setup mode only Account pages and the account API work until they turn it on. Enabling it calls `update({ mfaProof })`, which refreshes the claims at once.
 - The legacy `GET/PATCH /users` stays for SYSTEM_ADMIN tools; the Settings page no longer calls it.

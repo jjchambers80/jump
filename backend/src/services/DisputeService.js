@@ -438,7 +438,7 @@ class DisputeService {
         event: {
           select: {
             name: true,
-            venue: { select: { organization: { select: { id: true, name: true, logoUrl: true } } } },
+            venue: { select: { organization: { select: { id: true, name: true } } } },
           },
         },
       },
@@ -484,7 +484,8 @@ class DisputeService {
           to,
           subject: `${heading} — ${organization.name}`,
           body: lines.join('\n'),
-          organization: { name: organization.name, logoUrl: organization.logoUrl },
+          organization: { name: organization.name },
+          staff: true,
         });
       } catch (error) {
         logger.error('Dispute email failed', { orderId, to, error: error.message });

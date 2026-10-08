@@ -77,7 +77,7 @@ class MemberService {
   async invite(actor, organizationId, { emails, role, requireTwoStep = false }) {
     const organization = await prisma.organization.findUnique({
       where: { id: organizationId },
-      select: { name: true, logoUrl: true, brandColor: true },
+      select: { name: true },
     });
     if (!organization) throw new NotFoundError('Organization not found');
     const inviter = await prisma.user.findUnique({
@@ -115,7 +115,7 @@ class MemberService {
       }
       invited.push(email);
       try {
-        await this._sendInvite({ to: email, organizationName: organization.name, logoUrl: organization.logoUrl, brandColor: organization.brandColor, inviterName, role, requireTwoStep });
+        await this._sendInvite({ to: email, organizationId, organizationName: organization.name, inviterName, role, requireTwoStep });
       } catch (error) {
         // The member exists either way; the admin can resend from the list.
         logger.error('Staff invite email failed', { event: 'staff_invite_failed', error: error.message });
@@ -166,14 +166,13 @@ class MemberService {
     const member = await this._member(organizationId, userId);
     if (statusOf(member) !== 'PENDING') throw new ConflictError('This user has already signed in');
     const [organization, inviter] = await Promise.all([
-      prisma.organization.findUnique({ where: { id: organizationId }, select: { name: true, logoUrl: true, brandColor: true } }),
+      prisma.organization.findUnique({ where: { id: organizationId }, select: { name: true } }),
       prisma.user.findUnique({ where: { id: actor.id }, select: { name: true, email: true } }),
     ]);
     await this._sendInvite({
       to: member.user.email,
+      organizationId,
       organizationName: organization.name,
-      logoUrl: organization.logoUrl,
-      brandColor: organization.brandColor,
       inviterName: inviter?.name || inviter?.email || 'An admin',
       role: member.role,
       requireTwoStep: member.requireTwoStep,
@@ -194,10 +193,12 @@ class MemberService {
     if (admins <= 1) throw new ConflictError('An organization needs at least one admin');
   }
 
-  _sendInvite(params) {
+  /** The sign-in link names the org and prefills the email ("Join <Org> on Eventimus"). */
+  _sendInvite({ organizationId, ...params }) {
+    const query = new URLSearchParams({ callbackUrl: '/admin', invite: organizationId, email: params.to });
     return emailService.sendStaffInvite({
       ...params,
-      signInUrl: `${platformBaseUrl()}/auth/signin?callbackUrl=${encodeURIComponent('/admin')}`,
+      signInUrl: `${platformBaseUrl()}/auth/signin?${query}`,
     });
   }
 
