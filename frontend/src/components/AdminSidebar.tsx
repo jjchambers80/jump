@@ -36,6 +36,8 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import EventimusLogo from './EventimusLogo';
+import ProgressRing from './onboarding/ProgressRing';
+import { useSetupGuide } from './onboarding/useSetupGuide';
 
 interface NavItem {
   label: string;
@@ -116,6 +118,10 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
   const pathname = usePathname();
   const { data: session } = useSession();
   const userRole = (session?.user as any)?.role;
+  // Onboarding checklist link, pinned above the nav until every step is done
+  // or the guide is dismissed. Nothing renders while the guide loads.
+  const setup = useSetupGuide();
+  const showSetup = !!setup.guide && !setup.guide.dismissedAt && setup.total > 0 && !setup.complete;
 
   // Sections are collapsed until toggled; the one holding the current page is
   // opened whenever the route changes into it.
@@ -230,6 +236,27 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
 
           {/* Navigation links */}
           <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+            {showSetup && (
+              <div className="pb-3 mb-3 border-b border-gray-200 dark:border-slate-700">
+                <Link
+                  href="/admin/onboarding"
+                  onClick={onClose}
+                  aria-current={isActive('/admin/onboarding') ? 'page' : undefined}
+                  title={collapsed ? `Onboarding checklist, ${setup.done} of ${setup.total} done` : undefined}
+                  data-testid="sidebar-onboarding"
+                  className={`${linkClass(isActive('/admin/onboarding'))} border border-gray-200 dark:border-slate-600 ${
+                    collapsed ? 'md:justify-center md:px-0' : ''
+                  }`}
+                >
+                  <ProgressRing
+                    done={setup.done}
+                    total={setup.total}
+                    className={`w-4 h-4 mr-3 ${collapsed ? 'md:mr-0' : ''}`}
+                  />
+                  <span className={labelClass}>Onboarding checklist</span>
+                </Link>
+              </div>
+            )}
             {visibleItems.map((item) => {
               const active = isActive(item.href);
               const Icon = item.icon;

@@ -7,7 +7,7 @@
 
 ## Overview
 
-The self-serve path from "signed in" to "has an organization". **Create organization** in the admin org switcher opens `/signup` in a new tab (Shopify-style); a signed-in user with no staff role (`UNASSIGNED`) who opens `/admin` is sent there too. The flow is name → subscribe (only with `BILLING_ENABLED`; skippable) → survey → done. Step 1 creates a **pending** `Organization` plus an ADMIN `OrganizationMember` for the caller; the survey (five ticketing-flavoured screens, all skippable) is stored on the organization's `PlatformCustomer`; **done** stamps `Organization.onboardingCompletedAt`, promotes the owner from `UNASSIGNED` to `ADMIN`, forces the session's JWT claims to refresh, tells the opener tab to refetch its organization list, and lands on `/admin/dashboard?org=<id>` where the **setup guide** card grid replaces the empty-state box.
+The self-serve path from "signed in" to "has an organization". **Create organization** in the admin org switcher opens `/signup` in a new tab (Shopify-style); a signed-in user with no staff role (`UNASSIGNED`) who opens `/admin` is sent there too. The flow is name → subscribe (only with `BILLING_ENABLED`; skippable) → survey → done. Step 1 creates a **pending** `Organization` plus an ADMIN `OrganizationMember` for the caller; the survey (five ticketing-flavoured screens, all skippable) is stored on the organization's `PlatformCustomer`; **done** stamps `Organization.onboardingCompletedAt`, promotes the owner from `UNASSIGNED` to `ADMIN`, forces the session's JWT claims to refresh, tells the opener tab to refetch its organization list, and lands on `/admin/dashboard?org=<id>` where a **setup banner** points at the **onboarding checklist** (`/admin/onboarding`): the guide's steps grouped as *Set up your store* / *Start selling*, the selected step's explanation and call to action beside them (inside the selected row on phones). Until every shown step is done or the guide is dismissed, the sidebar pins an *Onboarding checklist* link with a progress ring above the nav (icon only in the collapsed rail).
 
 `PlatformCustomer` is the *organization's relationship with Jump*: owner, plan (`FREE` or `STARTER`), the Stripe Billing customer and subscription **in Jump's own Stripe account** (never the organization's connected account), survey answers. It is not a `Contact` (those are the organization's own buyers) and not the Auth.js `Account` model.
 
@@ -40,7 +40,9 @@ The self-serve path from "signed in" to "has an organization". **Create organiza
 | `frontend/src/components/AdminRoute.tsx` | `UNASSIGNED` → `router.replace('/signup')` |
 | `frontend/src/auth.ts` | `jwt` callback refreshes claims on `trigger === 'update'` (the done page calls `useSession().update()`) |
 | `frontend/src/app/auth/signin/page.tsx` | Honors `?callbackUrl=` (same-origin paths only); footer link **Create your organization** |
-| `frontend/src/app/admin/dashboard/SetupGuide.tsx` | The card grid; copy and inline SVG art live here |
+| `frontend/src/app/admin/onboarding/page.tsx` | The onboarding checklist page |
+| `frontend/src/app/admin/dashboard/SetupGuide.tsx` | Dashboard banner (progress ring, `X of Y done`, Continue setup) |
+| `frontend/src/components/onboarding/` | `setupTasks.tsx` (copy, SVG art, groups), `useSetupGuide.ts` (fetch per org, refetch on focus, dismiss broadcasts `jump:setup-guide-changed`), `ProgressRing.tsx`; the sidebar link uses both |
 | `frontend/src/app/admin/organizations/page.tsx` | SYSTEM_ADMIN list: `?includePending=1`, **Pending setup** pill, **Discard** |
 
 ## Configuration
