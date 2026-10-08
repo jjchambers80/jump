@@ -46,6 +46,7 @@ export const CATALOG = {
   'gallery.previous': entry('Photo gallery', 'Previous photo', 40),
   'gallery.next': entry('Photo gallery', 'Next photo', 40),
   'gallery.close': entry('Photo gallery', 'Close', 40),
+  'gallery.photo': entry('Photo gallery', 'Photo {n} of {total}', 40, 'Name of a photo that has no alt text yet'),
   'gallery.pause': entry('Photo gallery', 'Pause photos', 40),
   'gallery.sections': entry('Photo gallery', 'Gallery sections', 40, 'Name of the section links for screen readers'),
   'hero.pauseVideo': entry('Hero', 'Pause background video', 40),

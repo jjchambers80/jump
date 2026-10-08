@@ -19,13 +19,11 @@ import {
   missingAlt,
   moveBy,
   moveToSection,
-  needsAlt,
   photoCount,
   toInput,
   type DraftItem,
   type DraftSection,
   type Gallery,
-  type MissingAlt,
 } from '@/lib/galleries';
 import { useUnsavedChanges } from '@/lib/useUnsavedChanges';
 import { copyText } from '@/lib/content';
@@ -49,13 +47,11 @@ export default function GalleryEditor({ gallery, onSaved }: { gallery: Gallery; 
   );
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [problems, setProblems] = useState<MissingAlt[]>([]);
   const [announcement, setAnnouncement] = useState('');
   const [openPhoto, setOpenPhoto] = useState<string | null>(null);
   const [pickerFor, setPickerFor] = useState<string | null>(null);
   const [deleteSection, setDeleteSection] = useState<string | null>(null);
   const pickerReturnRef = useRef<HTMLElement | null>(null);
-  const summaryRef = useRef<HTMLDivElement>(null);
 
   const input = toInput(title, description, sections);
   const dirty = JSON.stringify(input) !== saved;
@@ -90,12 +86,6 @@ export default function GalleryEditor({ gallery, onSaved }: { gallery: Gallery; 
 
   const save = async () => {
     if (saving) return;
-    const missing = missingAlt(sections);
-    setProblems(missing);
-    if (missing.length) {
-      requestAnimationFrame(() => summaryRef.current?.focus());
-      return;
-    }
     setSaving(true);
     setSaveError(null);
     try {
@@ -118,7 +108,6 @@ export default function GalleryEditor({ gallery, onSaved }: { gallery: Gallery; 
     setTitle(gallery.title);
     setDescription(gallery.description ?? '');
     setSections(fromServer(gallery));
-    setProblems([]);
   };
 
   return (
@@ -152,7 +141,7 @@ export default function GalleryEditor({ gallery, onSaved }: { gallery: Gallery; 
         </div>
       </div>
 
-      <AltTextSummary ref={summaryRef} problems={problems} onOpen={setOpenPhoto} />
+      <AltTextSummary problems={missingAlt(sections)} onOpen={setOpenPhoto} />
 
       <GalleryDetailsCard
         title={title}
@@ -231,7 +220,6 @@ export default function GalleryEditor({ gallery, onSaved }: { gallery: Gallery; 
               ...located.section,
               items: located.section.items.map((entry) => (entry.key === item.key ? item : entry)),
             });
-            setProblems((current) => current.filter((problem) => problem.itemKey !== item.key || needsAlt(item)));
           }}
           onMove={(offset) => {
             updateSection({ ...located.section, items: moveBy(located.section.items, located.index, offset) });

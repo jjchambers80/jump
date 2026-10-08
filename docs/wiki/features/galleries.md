@@ -22,10 +22,12 @@ Spec: `specs/046-photo-galleries/plan.md`. Research: `docs/research/2026-10-07-p
 - **Saving:** a gallery saves as one tree (`PUT /admin/galleries/:id`), like menus. There are no per-item endpoints, and `position` stays dense.
 - **Limits:** at most 20 sections and 500 photos (`GALLERY_LIMIT`).
 - **Files:** photos must be images from the same store's Files (`GALLERY_FILE_INVALID`).
-- **Alt text:**
-  - Every photo needs alt text, its own or the file's, or must be marked decorative (`ALT_TEXT_REQUIRED`).
-  - Alt text set on a gallery photo is a per-gallery override. It is **never written back** to the file.
-  - In the admin editor, Save lists the photos still missing alt text before calling the API.
+- **Alt text (warn, never block, since 2026-10-07):**
+  - A photo's alt text is its own, else the file's. Marking it **decorative** gives it an empty alt on purpose.
+  - A photo with neither is saved anyway. The editor shows an amber warning listing those photos, each linking to its panel, and their tiles get an "Alt text" badge.
+  - In the public shape such a photo has `alt: null`, so the storefront names it by its position ("Open photo 3 of 35" on the button, "Photo 3 of 35" in the lightbox, catalog key `gallery.photo`).
+  - Saving used to be refused (`ALT_TEXT_REQUIRED`). That changed because organizers uploading dozens of event photos were blocked on 35 descriptions, and a generic placeholder would only pretend to describe them. Automatic descriptions can come later, once the platform has an AI key.
+  - Alt text set on a gallery photo is a per-gallery override, **never written back** to the file.
 - **Deleting a file** removes it from every gallery (`GalleryItem.file` cascades).
 - **Used in:** saves write `StoreFileReference` rows of kind `GALLERY`, so the gallery appears in Files "Used in".
 - **References by id:** pages, blog posts and themes reference a gallery by id with **no foreign key**, the same as menu items:
@@ -72,7 +74,6 @@ Spec: `specs/046-photo-galleries/plan.md`. Research: `docs/research/2026-10-07-p
 ## Differences from the plan (code review, 2026-10-07)
 
 - **Who can edit:** the routes use `requireOrganizer`, like every Content router, where the plan said ADMIN.
-- **Alt text errors:** `ALT_TEXT_REQUIRED` lists `{ section, item, fileId }` positions, not item ids, because a whole-tree `PUT` sends no item ids.
 - **Theme editor preview:** it resolves every gallery of the store (`allGalleries`), so a gallery picked in the section settings previews without reloading. That costs one query per editor load.
 - **Embed ids:** the sanitiser accepts `[a-z0-9]{1,64}`, a superset of cuid, rather than a strict cuid regex.
 - **First-photo priority:** only a rich-text embed that opens the content gets `fetchpriority="high"`. A theme section cannot tell where it sits on the page, so it never does.

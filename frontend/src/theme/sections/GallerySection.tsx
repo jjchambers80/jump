@@ -54,6 +54,7 @@ export default function GallerySection({
     previous: t(ctx, 'gallery.previous'),
     next: t(ctx, 'gallery.next'),
     close: t(ctx, 'gallery.close'),
+    photo: t(ctx, 'gallery.photo'),
     pause: t(ctx, 'gallery.pause'),
     sections: t(ctx, 'gallery.sections'),
   };

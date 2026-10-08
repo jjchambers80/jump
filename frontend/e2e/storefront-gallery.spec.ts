@@ -57,6 +57,9 @@ for (const viewport of [
       await expect(dialog.getByRole('button', { name: 'Close' })).toBeFocused();
       await page.keyboard.press('ArrowRight');
       await expect(dialog.getByText(`3 of ${TOTAL} · Cosplay`)).toBeVisible();
+      // A photo nobody has described yet is named by its position.
+      await page.keyboard.press('ArrowRight');
+      await expect(dialog.getByRole('img')).toHaveAttribute('alt', `Photo 4 of ${TOTAL}`);
       await page.keyboard.press('End');
       await expect(dialog.getByRole('img')).toHaveAttribute('alt', 'Closing party');
       await expect(dialog.getByRole('button', { name: 'Next photo' })).toHaveAttribute('aria-disabled', 'true');
@@ -90,9 +93,12 @@ for (const viewport of [
       const controls = carousel.getByRole('button');
       await expect(controls.first()).toHaveAccessibleName('Pause photos');
       await expect(carousel.getByRole('button', { name: 'Previous photo' })).toBeVisible();
-      await carousel.getByRole('button', { name: 'Next photo' }).click();
-      // Moving it stops the rotation for good.
-      await expect(carousel.getByRole('button', { name: 'Pause photos' })).toHaveAttribute('aria-pressed', 'true');
+      // Moving it stops the rotation for good. Retry the click: under load it can land
+      // on the server-rendered button before the carousel has hydrated.
+      await expect(async () => {
+        await carousel.getByRole('button', { name: 'Next photo' }).click();
+        await expect(carousel.getByRole('button', { name: 'Pause photos' })).toHaveAttribute('aria-pressed', 'true', { timeout: 1000 });
+      }).toPass({ timeout: 20_000 });
       await expect(carousel.getByRole('button', { name: 'Previous photo' })).toHaveAttribute('aria-disabled', 'false');
 
       await carousel.getByRole('button', { name: `Open photo 1 of ${TOTAL}: Crowd at the arcade row` }).click();

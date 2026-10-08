@@ -123,26 +123,15 @@ class GalleryService {
           select: { id: true, altText: true },
         })
       : [];
-    const fileAlt = new Map(files.map((file) => [file.id, file.altText]));
-    const unknown = fileIds.filter((fileId) => !fileAlt.has(fileId));
+    const known = new Set(files.map((file) => file.id));
+    const unknown = fileIds.filter((fileId) => !known.has(fileId));
     if (unknown.length) {
       throw codedError('Galleries hold images from this store’s Files only', 'GALLERY_FILE_INVALID', {
         fileIds: unknown,
       });
     }
-    const missingAlt = [];
-    sections.forEach((section, sectionIndex) =>
-      section.items.forEach((item, itemIndex) => {
-        if (!item.decorative && !item.altText?.trim() && !fileAlt.get(item.fileId)?.trim()) {
-          missingAlt.push({ section: sectionIndex, item: itemIndex, fileId: item.fileId });
-        }
-      })
-    );
-    if (missingAlt.length) {
-      throw codedError('Every photo needs alt text or must be marked decorative', 'ALT_TEXT_REQUIRED', {
-        items: missingAlt,
-      });
-    }
+    // Missing alt text never blocks a save: the admin warns, and the storefront
+    // names the photo by its position ("Photo 3 of 35") until someone describes it.
 
     await prisma.$transaction(async (tx) => {
       const data = { updatedAt: new Date() };
@@ -228,7 +217,8 @@ class GalleryService {
             id: item.id,
             ...this._sources(item),
             ...this._size(item),
-            alt: effectiveAlt(item),
+            // '' = decorative on purpose; null = not described yet (the storefront names it by position).
+            alt: item.decorative ? '' : effectiveAlt(item) || null,
             caption: item.caption,
           })),
         })),

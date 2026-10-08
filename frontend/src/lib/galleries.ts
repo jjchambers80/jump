@@ -200,7 +200,8 @@ export interface PublicGalleryItem {
   srcset: string;
   width: number | null;
   height: number | null;
-  alt: string;
+  /** '' = decorative; null = not described yet. */
+  alt: string | null;
   caption: string | null;
 }
 
@@ -219,6 +220,8 @@ export interface GalleryLabels {
   previous: string;
   next: string;
   close: string;
+  /** "Photo {n} of {total}": the name of a photo nobody has described yet. */
+  photo: string;
   pause: string;
   sections: string;
 }
@@ -229,6 +232,7 @@ export const DEFAULT_GALLERY_LABELS: GalleryLabels = {
   previous: 'Previous photo',
   next: 'Next photo',
   close: 'Close',
+  photo: 'Photo {n} of {total}',
   pause: 'Pause photos',
   sections: 'Gallery sections',
 };
