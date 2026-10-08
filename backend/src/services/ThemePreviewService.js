@@ -6,6 +6,10 @@
 // Staff links (1 h) render past a private store's password because only
 // signed-in staff of that organization can mint them. Share links (14 d) do
 // not: their visitor still meets the store gate.
+//
+// Thumbnails (contracts C7) are a second audience on the same secret: a
+// 10-minute, cookie-free token per draft for the Online Store cards, sent as
+// `/theme-thumbnail/:orgId?t=` and forwarded as X-Theme-Thumbnail.
 
 import { createHmac } from 'crypto';
 import jwt from 'jsonwebtoken';
@@ -16,6 +20,8 @@ import { storefrontFor } from '../utils/storefrontUrl.js';
 const AUDIENCE = 'theme-preview';
 const STAFF_TTL_S = 60 * 60;
 const SHARE_TTL_S = 14 * 24 * 60 * 60;
+export const THUMBNAIL_AUDIENCE = 'theme-thumbnail';
+const THUMBNAIL_TTL_S = 10 * 60;
 
 // Never the raw AUTH_SECRET: a session verifier must not accept a preview token.
 function secret() {
@@ -45,13 +51,33 @@ class ThemePreviewService {
     };
   }
 
+  /** GET /admin/themes/thumbnails → { thumbnails: { [draftId]: path } } (contracts C7). */
+  async thumbnails(organizationId) {
+    const drafts = await prisma.theme.findMany({ where: { organizationId, role: 'UNPUBLISHED' }, select: { id: true } });
+    const thumbnails = {};
+    for (const { id } of drafts) {
+      const token = jwt.sign({ orgId: organizationId, themeId: id, page: 'home' }, secret(), {
+        algorithm: 'HS256',
+        audience: THUMBNAIL_AUDIENCE,
+        expiresIn: THUMBNAIL_TTL_S,
+      });
+      thumbnails[id] = `/theme-thumbnail/${encodeURIComponent(organizationId)}?t=${encodeURIComponent(token)}`;
+    }
+    return { thumbnails };
+  }
+
   /** The token's claims when it is valid for this organization, else null. */
-  verify(token, organizationId) {
+  verify(token, organizationId, audience = AUDIENCE) {
     if (!token) return null;
     try {
-      const claims = jwt.verify(token, secret(), { algorithms: ['HS256'], audience: AUDIENCE });
+      const claims = jwt.verify(token, secret(), { algorithms: ['HS256'], audience });
       if (claims.orgId !== organizationId || typeof claims.themeId !== 'string') return null;
-      return { themeId: claims.themeId, share: Boolean(claims.share), expiresAt: new Date(claims.exp * 1000).toISOString() };
+      return {
+        themeId: claims.themeId,
+        share: Boolean(claims.share),
+        expiresAt: new Date(claims.exp * 1000).toISOString(),
+        ...(audience === THUMBNAIL_AUDIENCE && { thumbnail: true }),
+      };
     } catch {
       return null;
     }

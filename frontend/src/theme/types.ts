@@ -66,7 +66,7 @@ export interface ThemeRender {
   documents: { header: ThemeDocument; template: ThemeDocument | null; footer: ThemeDocument };
   resolved: ResolvedData;
   /** A draft theme opened through a preview link (D11). */
-  preview?: { themeId: string; name: string; expiresAt: string; share: boolean };
+  preview?: { themeId: string; name: string; expiresAt: string; share: boolean; thumbnail?: true };
   /** A preview cookie was sent but no longer fits: the frame clears it. */
   previewInvalid?: true;
 }

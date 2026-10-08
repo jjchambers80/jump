@@ -615,7 +615,9 @@ class ThemeService {
         ...(await this._resolve(organizationId, { settings, documents }, { events: templateKey !== 'frame' })),
         ...(contentPage && { page: contentPage }),
       },
-      ...(draft && { preview: { themeId: draft.id, name: draft.name, expiresAt: preview.expiresAt, share: preview.share } }),
+      ...(draft && {
+        preview: { themeId: draft.id, name: draft.name, expiresAt: preview.expiresAt, share: preview.share, ...(preview.thumbnail && { thumbnail: true }) },
+      }),
     };
   }
 

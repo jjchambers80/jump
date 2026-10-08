@@ -96,7 +96,7 @@ export default function ThemeFrame({
           ))}
         {renderDocument(data.documents.footer, ctx)}
       </div>
-      {data.preview && <PreviewBar name={data.preview.name} path={path} />}
+      {data.preview && !data.preview.thumbnail && <PreviewBar name={data.preview.name} path={path} />}
     </ThemeScope>
   );
 }

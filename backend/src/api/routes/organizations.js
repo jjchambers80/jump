@@ -28,7 +28,7 @@ import urlRedirectService from '../../services/UrlRedirectService.js';
 import { findByPublicIdentifier } from '../../utils/publicIdentifier.js';
 import { clientIpForRateLimit } from '../../utils/clientIp.js';
 import themeService, { themesEnabledFor } from '../../services/ThemeService.js';
-import themePreviewService from '../../services/ThemePreviewService.js';
+import themePreviewService, { THUMBNAIL_AUDIENCE } from '../../services/ThemePreviewService.js';
 import contactInquiryService from '../../services/ContactInquiryService.js';
 import { validateContactInquiry } from '../validators/contactInquiryValidators.js';
 import { LIMITS, makeLimiter } from '../../middleware/rateLimit.js';
@@ -272,9 +272,11 @@ router.get(
       if (!organization) throw new NotFoundError('Organization not found');
       if (!themesEnabledFor(organization)) return res.json({ renderer: 'legacy' });
       req.themeOrganizationId = organization.id;
-      // Draft preview (D11): null = none sent, false = sent but not valid here.
+      // Draft preview (D11) or card thumbnail (C7): null = none sent, false = sent but not valid here.
+      const thumbnailToken = req.get('X-Theme-Thumbnail');
       const previewToken = req.get('X-Theme-Preview');
-      if (previewToken) req.themePreview = themePreviewService.verify(previewToken, organization.id) ?? false;
+      if (thumbnailToken) req.themePreview = themePreviewService.verify(thumbnailToken, organization.id, THUMBNAIL_AUDIENCE) ?? false;
+      else if (previewToken) req.themePreview = themePreviewService.verify(previewToken, organization.id) ?? false;
       next();
     } catch (error) {
       next(error);

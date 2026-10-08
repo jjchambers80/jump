@@ -31,6 +31,7 @@ export default function ThemesOverview() {
   const isSystemAdmin = (session?.user as { role?: string } | undefined)?.role === 'SYSTEM_ADMIN';
   const { formatDateTime } = useAccountFormat();
   const [themes, setThemes] = useState<ThemeSummary[] | null>(null);
+  const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
   const [prefs, setPrefs] = useState<StorefrontPreferences | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -45,6 +46,8 @@ export default function ThemesOverview() {
       ]);
       setThemes(list);
       setPrefs(preferences);
+      // Decorative: a failed thumbnail call leaves the drafts without pictures.
+      themesApi.thumbnails().then(({ thumbnails: paths }) => setThumbnails(paths), () => setThumbnails({}));
     } catch (err: any) {
       setError(err?.message || 'Could not load your themes');
     }
@@ -251,8 +254,15 @@ export default function ThemesOverview() {
           ) : (
             <ul className="divide-y divide-gray-200 dark:divide-slate-700" data-testid="draft-themes">
               {drafts.map((theme) => (
-                <li key={theme.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                  <div className="min-w-0">
+                <li key={theme.id} className="flex flex-wrap items-center gap-4 px-4 py-3">
+                  <div className="w-36 shrink-0 overflow-hidden rounded-md shadow-[0_0_0_1px_rgba(0,0,0,0.08),0_2px_6px_rgba(0,0,0,0.06)] sm:w-44">
+                    {thumbnails[theme.id] ? (
+                      <ThemeScreenshot src={thumbnails[theme.id]} variant="desktop" />
+                    ) : (
+                      <div aria-hidden className="aspect-[1280/800] bg-gray-100 dark:bg-slate-900/60" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
                     <p className="truncate font-medium text-gray-900 dark:text-white">{theme.name}</p>
                     <p className="text-sm text-gray-600 dark:text-slate-400">
                       Last saved: {formatDateTime(theme.lastSavedAt, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}

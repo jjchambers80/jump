@@ -516,6 +516,15 @@ test.describe('Draft theme preview (038K)', () => {
     expect((await context.cookies()).some((c) => c.name === 'jump_theme_preview')).toBe(false);
   });
 
+  test('a card thumbnail renders the draft with no preview bar, and needs a valid token', async ({ page }) => {
+    await page.goto('/theme-thumbnail/theme-home?t=fixture-thumbnail');
+    await expect(page.locator('[data-theme-frame]')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Theme preview' })).toHaveCount(0);
+    for (const path of ['/theme-thumbnail/theme-home', '/theme-thumbnail/theme-home?t=forged']) {
+      expect((await page.goto(path))?.status()).toBe(404);
+    }
+  });
+
   test('a refused preview cookie is expired by the route handler', async ({ page, context }) => {
     await context.addCookies([{ name: 'jump_theme_preview', value: 'expired', domain: 'localhost', path: '/' }]);
     await page.goto('/organizations/theme-home');

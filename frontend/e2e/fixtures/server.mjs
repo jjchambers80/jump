@@ -94,6 +94,16 @@ createServer(async (req, res) => {
         : page === 'events'
           ? withTemplate(EVENTS_TEMPLATE, { page: 'events', fallback: false })
           : fixture.render;
+    // Card thumbnail (contracts C7): one valid token; any other value falls back to the live theme.
+    const thumbnail = req.headers['x-theme-thumbnail'];
+    if (thumbnail)
+      return send(
+        res,
+        200,
+        thumbnail === 'fixture-thumbnail'
+          ? { ...body, preview: { themeId: 'draft-1', name: 'Summer draft', expiresAt: '2099-01-01T00:00:00.000Z', share: false, thumbnail: true } }
+          : { ...body, previewInvalid: true },
+      );
     // Draft preview (038K): one valid token; any other value is refused, so the frame clears the cookie.
     const preview = req.headers['x-theme-preview'];
     if (!preview) return send(res, 200, body);
