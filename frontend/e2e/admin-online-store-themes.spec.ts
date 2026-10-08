@@ -72,6 +72,11 @@ test.describe('Online Store page with themes (038J1)', () => {
     await expect(card.getByText(/Last saved: .* by Sam Organizer · Eventimus Default · v1\.0/)).toBeVisible();
     await expect(card.getByRole('link', { name: 'Edit theme' })).toHaveAttribute('href', '/admin/online-store/themes/theme-main/editor');
     await expect(page.getByRole('link', { name: 'View store' })).toHaveAttribute('href', '/organizations/riverside-presents');
+    // Thumbnails are the live home page, desktop + mobile.
+    const frames = card.locator('iframe');
+    await expect(frames).toHaveCount(2);
+    for (const frame of await frames.all()) await expect(frame).toHaveAttribute('src', '/organizations/riverside-presents');
+    if (process.env.SHOT) await card.screenshot({ path: process.env.SHOT });
   });
 
   test('the ⋯ menu works by keyboard and returns focus', async ({ page }) => {
