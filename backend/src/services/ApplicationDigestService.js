@@ -34,7 +34,7 @@ class ApplicationDigestService {
         status: 'ACTIVE',
         OR: [{ applicationDigestAt: null }, { applicationDigestAt: { lte: new Date(now.getTime() - MIN_GAP_MS) } }],
       },
-      select: { id: true, name: true, logoUrl: true, applicationDigestAt: true },
+      select: { id: true, name: true, applicationDigestAt: true },
     });
     let sent = 0;
     for (const org of orgs) {
@@ -99,7 +99,7 @@ class ApplicationDigestService {
     const { subject, body } = this.compose(org, rows, since, now, { awaitingSpace });
     for (const to of recipients) {
       try {
-        await emailService.sendApplicationMessage({ to, subject, body, organization: { name: org.name, logoUrl: org.logoUrl } });
+        await emailService.sendApplicationMessage({ to, subject, body, organization: { name: org.name }, staff: true });
       } catch (error) {
         logger.error('Application digest email failed', { organizationId: org.id, to, error: error.message });
       }

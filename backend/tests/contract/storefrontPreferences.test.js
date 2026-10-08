@@ -97,6 +97,7 @@ describe('Online Store preferences contract', () => {
       title: 'Retro Nights',
       description: 'Tickets for retro gaming nights',
       imageUrl: null,
+      logoUrl: null,
     });
 
     const other = await request(app)

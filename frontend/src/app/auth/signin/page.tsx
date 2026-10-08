@@ -3,12 +3,13 @@
 
 'use client';
 
-import React, { Suspense, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import EventimusLogo from '@/components/EventimusLogo';
 import { useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import { startAuthentication } from '@simplewebauthn/browser';
+import { resolveAssetUrl } from '@/lib/assets';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
 
@@ -24,13 +25,32 @@ function SignInForm() {
   // back where they were going (spec 022)
   const callbackUrl = safeCallbackUrl(params.get('callbackUrl'), '/events');
   const devCallbackUrl = safeCallbackUrl(params.get('callbackUrl'), '/admin/dashboard');
-  const [email, setEmail] = useState('');
+  // Staff invite link (Settings › Users): ?invite=<orgId>&email=<invitee>.
+  // The org name and logo come from the public lookup, never from the query.
+  const inviteOrgId = params.get('invite');
+  const [inviteOrg, setInviteOrg] = useState<{ name: string; logoUrl: string | null } | null>(null);
+  const [email, setEmail] = useState(params.get('email') ?? '');
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   // Spec 030 B: optional password + passkey sign-in beside the magic link
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    if (!inviteOrgId) return;
+    let cancelled = false;
+    fetch(`${API_URL}/organizations/${encodeURIComponent(inviteOrgId)}/public/meta`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((org) => {
+        if (!cancelled && org?.name) setInviteOrg({ name: org.name, logoUrl: org.logoUrl ?? null });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [inviteOrgId]);
+  const inviteLogo = inviteOrg?.logoUrl ? resolveAssetUrl(inviteOrg.logoUrl) : null;
 
   async function handlePassword(e: React.FormEvent) {
     e.preventDefault();
@@ -136,12 +156,29 @@ function SignInForm() {
         <div className="mb-6 flex justify-center">
           <EventimusLogo className="h-6" />
         </div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white text-center mb-2">
-          Sign in
-        </h1>
-        <p className="text-sm text-gray-500 dark:text-slate-400 text-center mb-8">
-          Use a passkey, your Google account, an email link or a password
-        </p>
+        {inviteOrg ? (
+          <>
+            {inviteLogo && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={inviteLogo} alt="" className="mx-auto mb-4 h-10 w-auto max-w-[160px] object-contain" />
+            )}
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white text-center mb-2 break-words">
+              Join {inviteOrg.name} on Eventimus
+            </h1>
+            <p className="text-sm text-gray-500 dark:text-slate-400 text-center mb-8">
+              Sign in with the email address your invite was sent to
+            </p>
+          </>
+        ) : (
+          <>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white text-center mb-2">
+              Sign in
+            </h1>
+            <p className="text-sm text-gray-500 dark:text-slate-400 text-center mb-8">
+              Use a passkey, your Google account, an email link or a password
+            </p>
+          </>
+        )}
 
         {params.get('reason') === 'revoked' && (
           <div role="status" className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-sm text-amber-800 dark:text-amber-300">

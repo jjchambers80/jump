@@ -270,6 +270,14 @@ test.describe('Sign-in page entry points', () => {
     await expect(page.getByRole('status')).toContainText("we've sent it a sign-in link");
   });
 
+  test('a staff invite link names the org and prefills the email', async ({ page }) => {
+    await page.route(`${API}/organizations/org_1/public/meta`, (route) =>
+      route.fulfill(json({ id: 'org_1', name: 'Raleigh Retro Gamers', logoUrl: null })));
+    await page.goto('/auth/signin?callbackUrl=%2Fadmin&invite=org_1&email=new%40example.com');
+    await expect(page.getByRole('heading', { name: 'Join Raleigh Retro Gamers on Eventimus' })).toBeVisible();
+    await expect(page.getByLabel('Email address')).toHaveValue('new@example.com');
+  });
+
   test('a secondary-email confirmation link lands on a result page', async ({ page }) => {
     await page.route(`${API}/account/secondary-email/confirm`, (route) => route.fulfill(json({ email: 'backup@example.com' })));
     await page.goto('/auth/confirm-secondary-email?token=abcdefghijklmnopqrstuvwxyz');

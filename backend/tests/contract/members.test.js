@@ -70,13 +70,15 @@ describe('Settings › Users contract', () => {
 
     expect(sentEmails).toHaveLength(1);
     expect(sentEmails[0].to).toEqual([newEmail]);
-    expect(sentEmails[0].subject).toContain(org.name);
-    expect(sentEmails[0].html).toContain('/auth/signin');
-    // Sent as the organization from the platform address, with its logo in the header
-    expect(sentEmails[0].from).toMatch(new RegExp(`^"${TAG} Store" <[^>]+@[^>]+>$`));
-    expect(sentEmails[0].html).toContain('src="https://cdn.example.test/logo.png"');
-    expect(sentEmails[0].html).toContain('background-color: #d6007d;');
-    expect(sentEmails[0].html).toContain(`href="mailto:${newEmail}" style="color: #d6007d;`);
+    expect(sentEmails[0].subject).toBe(`${org.name} invited you to Eventimus`);
+    // The button opens the Eventimus sign-in page, so the email is platform-branded:
+    // platform sender and colors, no store logo; the link names the org and the invitee
+    const signIn = new URL(sentEmails[0].html.match(/href="([^"]*\/auth\/signin[^"]*)"/)[1].replace(/&amp;/g, '&'));
+    expect(Object.fromEntries(signIn.searchParams)).toEqual({ callbackUrl: '/admin', invite: org.id, email: newEmail });
+    expect(sentEmails[0].from).not.toContain(org.name);
+    expect(sentEmails[0].html).not.toContain('cdn.example.test/logo.png');
+    expect(sentEmails[0].html).not.toContain('#d6007d');
+    expect(sentEmails[0].html).toContain('background-color: #2563eb;');
     expect(sentEmails[0].html).toContain('Two-step authentication is required');
 
     const list = await request(app).get('/admin/settings/users').set(...auth(adminToken));

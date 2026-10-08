@@ -254,13 +254,15 @@ class OrganizationService {
   async getPublicMeta(identifier) {
     const org = await findByPublicIdentifier(prisma.organization, identifier, {
       where: { status: 'ACTIVE' },
-      select: { id: true, slug: true, name: true, seoTitle: true, seoDescription: true, coverUrl: true },
+      select: { id: true, slug: true, name: true, logoUrl: true, seoTitle: true, seoDescription: true, coverUrl: true },
     });
     if (!org) throw new NotFoundError('Organization not found');
     return {
       id: org.id,
       name: org.name,
       slug: org.slug,
+      // Staff invite sign-in page ("Join <Org> on Eventimus")
+      logoUrl: org.logoUrl,
       title: org.seoTitle || org.name,
       description: org.seoDescription,
       // Social sharing image: the cover from Online store › Branding.
