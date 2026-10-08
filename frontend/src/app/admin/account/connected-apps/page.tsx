@@ -113,7 +113,7 @@ export default function ConnectedAppsPage() {
                             {grant.scopes.map((s) => (
                               <span
                                 key={s}
-                                className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300"
+                                className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-accent-50 text-accent-700 dark:bg-accent-900/30 dark:text-accent-300"
                               >
                                 {s}
                               </span>

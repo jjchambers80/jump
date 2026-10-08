@@ -50,7 +50,7 @@ async function loadTheme(themeId: string): Promise<Loaded> {
 
 const fileName = (path: string) => path.split('/').pop() as string;
 const button =
-  'inline-flex items-center gap-1 whitespace-nowrap rounded px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500';
+  'inline-flex items-center gap-1 whitespace-nowrap rounded px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500';
 
 export default function CodeEditor({ themeId }: { themeId: string }) {
   const { selectedOrgId, loading: orgLoading } = useOrg();
@@ -254,7 +254,7 @@ export default function CodeEditor({ themeId }: { themeId: string }) {
           <p role="alert" className="text-gray-800">
             {loadError}
           </p>
-          <Link href="/admin/online-store" className="mt-4 inline-block text-sm font-medium text-indigo-700 hover:underline">
+          <Link href="/admin/online-store" className="mt-4 inline-block text-sm font-medium text-accent-700 hover:underline">
             Back to Online Store
           </Link>
         </div>
@@ -275,9 +275,9 @@ export default function CodeEditor({ themeId }: { themeId: string }) {
           type="button"
           onClick={() => open(path)}
           aria-current={active === path ? 'true' : undefined}
-          className={`flex w-full items-center gap-1.5 py-0.5 pr-2 text-left text-[13px] hover:bg-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 ${
+          className={`flex w-full items-center gap-1.5 py-0.5 pr-2 text-left text-[13px] hover:bg-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500 ${
             indent ? 'pl-7' : 'pl-3'
-          } ${active === path ? 'bg-indigo-100 text-indigo-900' : 'text-gray-800'}`}
+          } ${active === path ? 'bg-accent-100 text-accent-900' : 'text-gray-800'}`}
         >
           {path === SCHEMA_PATH ? <Lock className="h-3.5 w-3.5 text-gray-500" aria-hidden /> : <FileJson className="h-3.5 w-3.5 text-amber-600" aria-hidden />}
           <span className={`flex-1 truncate ${count ? 'text-red-700' : ''}`}>{label}</span>
@@ -323,7 +323,7 @@ export default function CodeEditor({ themeId }: { themeId: string }) {
           type="button"
           onClick={() => void save()}
           disabled={!dirty || saving}
-          className="rounded-md bg-indigo-600 px-3 py-1 text-xs font-semibold text-white hover:bg-indigo-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-md bg-accent-500 px-3 py-1 text-xs font-semibold text-gray-950 hover:bg-accent-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {saving ? 'Saving…' : 'Save'}
         </button>
@@ -334,7 +334,7 @@ export default function CodeEditor({ themeId }: { themeId: string }) {
           {backup && (
             <p className="flex items-center justify-between gap-3 text-gray-800">
               <span>Your unsaved edits from before the reload are kept for this session.</span>
-              <button type="button" className="text-xs font-medium text-indigo-700 underline" onClick={applyBackup}>
+              <button type="button" className="text-xs font-medium text-accent-700 underline" onClick={applyBackup}>
                 Apply them again
               </button>
             </p>
@@ -365,7 +365,7 @@ export default function CodeEditor({ themeId }: { themeId: string }) {
                 type="button"
                 aria-expanded={docsOpen}
                 onClick={() => setDocsOpen((v) => !v)}
-                className="flex w-full items-center gap-1 py-0.5 pl-2 text-left text-[13px] text-gray-800 hover:bg-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500"
+                className="flex w-full items-center gap-1 py-0.5 pl-2 text-left text-[13px] text-gray-800 hover:bg-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500"
               >
                 {docsOpen ? <ChevronDown className="h-3.5 w-3.5" aria-hidden /> : <ChevronRight className="h-3.5 w-3.5" aria-hidden />}
                 documents
@@ -383,7 +383,7 @@ export default function CodeEditor({ themeId }: { themeId: string }) {
                 key={path}
                 className={`flex items-center border-r border-gray-200 text-[13px] ${active === path ? 'bg-white text-gray-900' : 'text-gray-600'}`}
               >
-                <button type="button" role="tab" aria-selected={active === path} onClick={() => setActive(path)} className="flex items-center gap-1.5 py-1.5 pl-3 pr-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500">
+                <button type="button" role="tab" aria-selected={active === path} onClick={() => setActive(path)} className="flex items-center gap-1.5 py-1.5 pl-3 pr-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500">
                   <FileJson className="h-3.5 w-3.5 text-amber-600" aria-hidden />
                   {fileName(path)}
                   {dirtyPaths.includes(path) && <span className="h-2 w-2 rounded-full bg-gray-500" aria-label="Unsaved changes" />}
@@ -452,7 +452,7 @@ export default function CodeEditor({ themeId }: { themeId: string }) {
         </main>
       </div>
 
-      <footer className="flex h-6 shrink-0 items-center gap-4 bg-indigo-700 px-3 text-[11px] text-white">
+      <footer className="flex h-6 shrink-0 items-center gap-4 bg-accent-400 px-3 text-[11px] text-gray-950">
         <button type="button" onClick={() => setProblemsOpen((v) => !v)} className="inline-flex items-center gap-1 hover:underline" aria-expanded={problemsOpen}>
           <CircleX className="h-3 w-3" aria-hidden />
           <span data-testid="problem-count">{problems.length}</span>
@@ -496,7 +496,7 @@ export default function CodeEditor({ themeId }: { themeId: string }) {
               <button
                 type="button"
                 autoFocus
-                className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500"
+                className="rounded-md bg-accent-500 px-3 py-1.5 text-sm font-semibold text-gray-950 hover:bg-accent-hover"
                 onClick={() => {
                   setConflict(false);
                   setBackup(texts);

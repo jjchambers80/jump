@@ -51,7 +51,7 @@ function ServiceCell({ region, service }: { region: TaxRegionRow; service: TaxSe
   return (
     <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
       <span className="inline-flex items-center gap-1 text-gray-900 dark:text-white">
-        <BoltIcon className="h-4 w-4 text-indigo-500" />
+        <BoltIcon className="h-4 w-4 text-accent-600 dark:text-accent-400" />
         Stripe Tax
       </span>
       {region.lastRate != null && !region.lastError && (
@@ -97,7 +97,7 @@ export default function TaxRegionsTable({ regions, needsAddress, service, rowRef
                     type="button"
                     aria-label={`Edit tax region ${region.name}`}
                     onClick={() => onEdit(region)}
-                    className="grid w-full grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1.4fr)_2.5rem] items-center text-left transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 dark:hover:bg-slate-700/40"
+                    className="grid w-full grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1.4fr)_2.5rem] items-center text-left transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500 dark:hover:bg-slate-700/40"
                   >
                     <span className={cell}>
                       <span className="block font-medium text-gray-900 dark:text-white">{region.name}</span>
@@ -124,7 +124,7 @@ export default function TaxRegionsTable({ regions, needsAddress, service, rowRef
               <td className={`${cell} text-gray-600 dark:text-slate-400`} colSpan={3}>
                 <span className="block">
                   {needsAddress.map((v) => v.name).join(', ')} collect no tax until a US state is set.{' '}
-                  <Link href="/admin/venues" className="font-medium text-indigo-600 hover:underline dark:text-indigo-300">
+                  <Link href="/admin/venues" className="font-medium text-accent-600 hover:underline dark:text-accent-300">
                     Edit venues
                   </Link>
                 </span>

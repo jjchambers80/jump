@@ -15,7 +15,7 @@ interface GalleryDetailsCardProps {
 }
 
 const field =
-  'mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white';
+  'mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white';
 const KIND_LABEL = { PAGE: 'Page', BLOG_POST: 'Blog post', THEME: 'Theme' } as const;
 
 export default function GalleryDetailsCard({
@@ -65,7 +65,7 @@ export default function GalleryDetailsCard({
           <ul className="mt-2 space-y-1 text-sm">
             {placements.map((placement) => (
               <li key={`${placement.kind}:${placement.targetId}`}>
-                <Link href={placement.href} className="text-indigo-700 hover:underline dark:text-indigo-300">
+                <Link href={placement.href} className="text-accent-700 hover:underline dark:text-accent-300">
                   {placement.title}
                 </Link>
                 <span className="text-gray-500 dark:text-slate-400"> · {KIND_LABEL[placement.kind]}</span>

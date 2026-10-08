@@ -54,7 +54,7 @@ export default function OrganizationSelector({
         id="org-selector"
         value={selectedOrgId || ''}
         onChange={(e) => onSelect(e.target.value)}
-        className="block w-64 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+        className="block w-64 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
       >
         <option value="" disabled>
           Select organization…

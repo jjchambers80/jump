@@ -65,7 +65,7 @@ export default function UploadFromUrlDialog({
         placeholder="https://example.com/flyer.pdf"
         value={url}
         onChange={(event) => setUrl(event.target.value)}
-        className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+        className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
       />
       <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
         The file is downloaded once and stored with your other files.

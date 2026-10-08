@@ -48,7 +48,7 @@ export default function PagesPage() {
   const createAction = (
     <Link
       href="/admin/online-store/pages/new"
-      className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+      className="rounded-md bg-accent-500 px-4 py-2 text-sm font-semibold text-gray-950 shadow-sm hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2"
     >
       Create Page
     </Link>
@@ -58,7 +58,7 @@ export default function PagesPage() {
     <div className="mx-auto max-w-5xl px-4 py-8">
       <div className="mb-6 flex items-center justify-between gap-4" data-testid="pages-header">
         <div>
-          <p className="text-sm font-medium text-indigo-600 dark:text-indigo-300">Online store</p>
+          <p className="text-sm font-medium text-accent-600 dark:text-accent-300">Online store</p>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Pages</h1>
         </div>
         <div className="flex items-center gap-3">
@@ -181,7 +181,7 @@ export default function PagesPage() {
                       <Link
                         href={`/admin/online-store/pages/${storePage.id}`}
                         aria-label={`Edit ${storePage.title}`}
-                        className="font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+                        className="font-medium text-accent-600 hover:underline dark:text-accent-300"
                       >
                         Edit
                       </Link>

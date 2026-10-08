@@ -12,7 +12,7 @@ import type { AdmissionMode } from './EventFormLayout';
 
 /** Tier colors, shared with the tier list so a meter segment and its row match. */
 const TIER_ACCENTS = [
-  { bar: 'bg-indigo-500', soft: 'bg-indigo-500/40', dot: 'bg-indigo-500' },
+  { bar: 'bg-accent-500', soft: 'bg-accent-500/40', dot: 'bg-accent-500' },
   { bar: 'bg-sky-500', soft: 'bg-sky-500/40', dot: 'bg-sky-500' },
   { bar: 'bg-emerald-500', soft: 'bg-emerald-500/40', dot: 'bg-emerald-500' },
   { bar: 'bg-amber-500', soft: 'bg-amber-500/40', dot: 'bg-amber-500' },
@@ -120,7 +120,7 @@ export function EventEditSummary({
             aria-hidden
             className="flex h-full items-end justify-end pr-4 [background-image:repeating-linear-gradient(135deg,rgb(255_255_255/0.05)_0_1px,transparent_1px_9px)]"
           >
-            <span className="translate-y-5 select-none text-8xl font-black leading-none tracking-tighter text-indigo-400/20">
+            <span className="translate-y-5 select-none text-8xl font-black leading-none tracking-tighter text-accent-400/20">
               {monogram}
             </span>
           </div>
@@ -135,7 +135,7 @@ export function EventEditSummary({
           className="relative z-10 -mt-7 flex w-16 shrink-0 flex-col items-center overflow-hidden rounded-lg border border-gray-200 bg-white text-center shadow-md dark:border-slate-600 dark:bg-slate-900"
           aria-hidden={!!date}
         >
-          <span className="w-full bg-indigo-600 py-0.5 text-[0.65rem] font-bold uppercase tracking-[0.16em] text-white">
+          <span className="w-full bg-accent-500 py-0.5 text-[0.65rem] font-bold uppercase tracking-[0.16em] text-gray-950">
             {date?.month || '—'}
           </span>
           <span className="py-1 text-2xl font-bold leading-none tabular-nums text-gray-900 dark:text-white">
@@ -198,7 +198,7 @@ export function EventEditSummary({
                     e.preventDefault();
                     jumpTo(section.id);
                   }}
-                  className="inline-flex min-h-8 items-center rounded-md px-2 text-xs font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white"
+                  className="inline-flex min-h-8 items-center rounded-md px-2 text-xs font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white"
                 >
                   {section.label}
                 </a>

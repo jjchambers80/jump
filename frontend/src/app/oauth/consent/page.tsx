@@ -71,11 +71,11 @@ function Consent() {
         aria-labelledby="oauth-consent-title"
       >
         <div className="flex items-start gap-3">
-          <span className="rounded-xl bg-indigo-50 p-2.5 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+          <span className="rounded-xl bg-accent-50 p-2.5 text-accent-700 dark:bg-accent-950 dark:text-accent-300">
             <ShieldCheck aria-hidden="true" className="h-6 w-6" />
           </span>
           <div>
-            <p className="text-sm font-semibold text-indigo-700 dark:text-indigo-300">Jump agent access</p>
+            <p className="text-sm font-semibold text-accent-700 dark:text-accent-300">Jump agent access</p>
             <h1 id="oauth-consent-title" className="mt-1 text-2xl font-bold tracking-tight">
               Connect an app to your store
             </h1>
@@ -132,14 +132,14 @@ function Consent() {
               {details.organizations.length ? (
                 <div className="mt-3 space-y-2">
                   {details.organizations.map((organization) => (
-                    <label key={organization.id} className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-300 p-3 has-[:checked]:border-indigo-600 has-[:checked]:ring-1 has-[:checked]:ring-indigo-600 dark:border-slate-600">
+                    <label key={organization.id} className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-300 p-3 has-[:checked]:border-accent-600 has-[:checked]:ring-1 has-[:checked]:ring-accent-600 dark:border-slate-600">
                       <input
                         type="radio"
                         name="organization"
                         value={organization.id}
                         checked={organizationId === organization.id}
                         onChange={() => setOrganizationId(organization.id)}
-                        className="h-4 w-4 accent-indigo-600"
+                        className="h-4 w-4 accent-accent-600"
                       />
                       <span className="text-sm font-medium">{organization.name}</span>
                     </label>
@@ -161,7 +161,7 @@ function Consent() {
                 type="button"
                 onClick={() => window.location.assign(details.denyUrl)}
                 disabled={busy}
-                className="min-h-11 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:hover:bg-slate-800"
+                className="min-h-11 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:hover:bg-slate-800"
               >
                 Cancel
               </button>
@@ -169,7 +169,7 @@ function Consent() {
                 type="button"
                 onClick={() => void approve()}
                 disabled={!organizationId || busy}
-                className="min-h-11 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                className="min-h-11 rounded-lg bg-accent-500 px-4 py-2 text-sm font-semibold text-gray-950 hover:bg-accent-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {busy ? 'Connecting…' : 'Allow access'}
               </button>

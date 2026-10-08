@@ -45,7 +45,7 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
                   {/* Mobile sidebar toggle */}
                   <button
                     onClick={() => setSidebarOpen(true)}
-                    className="mr-3 p-1 text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-slate-400 dark:hover:text-slate-200 md:hidden"
+                    className="mr-3 p-1 text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-accent-500 dark:text-slate-400 dark:hover:text-slate-200 md:hidden"
                     aria-label="Open sidebar"
                   >
                     <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -74,7 +74,7 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
                     aria-label={mobileSearchOpen ? 'Close administration search' : 'Open administration search'}
                     aria-expanded={mobileSearchOpen}
                     onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
-                    className="rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200 md:hidden"
+                    className="rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-accent-500 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200 md:hidden"
                   >
                     <Search className="h-5 w-5" aria-hidden />
                   </button>

@@ -56,7 +56,7 @@ export default function OnlineStorePage() {
           onClick={async () => {
             setStatus(await themesApi.setRollout(true));
           }}
-          className="rounded-md bg-indigo-600 px-3 py-1.5 font-semibold text-white hover:bg-indigo-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+          className="rounded-md bg-accent-500 px-3 py-1.5 font-semibold text-gray-950 hover:bg-accent-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2"
         >
           Turn on themes
         </button>

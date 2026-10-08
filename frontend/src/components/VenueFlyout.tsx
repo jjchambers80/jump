@@ -37,7 +37,7 @@ interface Props {
 }
 
 const inputClass =
-  'block w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500';
+  'block w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500';
 const labelClass = 'block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1';
 
 function defaultTimezone(): string {
@@ -267,7 +267,7 @@ export default function VenueFlyout({ orgId, onClose, onCreated }: Props) {
               id="venue-flyout-public"
               checked={isPublic}
               onChange={(e) => setIsPublic(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-accent-600 focus:ring-accent-500"
             />
             <label htmlFor="venue-flyout-public" className="text-sm text-gray-700 dark:text-slate-300">
               Public venue page enabled. When disabled, the public URL returns not found.
@@ -303,7 +303,7 @@ export default function VenueFlyout({ orgId, onClose, onCreated }: Props) {
           <button
             type="submit"
             disabled={saving}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50"
+            className="rounded-md bg-accent-500 px-4 py-2 text-sm font-semibold text-gray-950 shadow-sm hover:bg-accent-hover disabled:opacity-50"
           >
             {saving ? 'Saving…' : 'Create venue'}
           </button>

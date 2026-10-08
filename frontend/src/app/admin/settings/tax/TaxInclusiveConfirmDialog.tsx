@@ -89,7 +89,7 @@ export default function TaxInclusiveConfirmDialog({ enabling, sampleRate, saving
             type="button"
             onClick={onClose}
             disabled={saving}
-            className="rounded-md px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800"
+            className="rounded-md px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-accent-500 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800"
           >
             Cancel
           </button>
@@ -98,7 +98,7 @@ export default function TaxInclusiveConfirmDialog({ enabling, sampleRate, saving
             type="button"
             onClick={onConfirm}
             disabled={saving}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md bg-accent-500 px-4 py-2 text-sm font-semibold text-gray-950 hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {saving ? 'Saving…' : enabling ? 'Include tax in prices' : 'Add tax on top'}
           </button>

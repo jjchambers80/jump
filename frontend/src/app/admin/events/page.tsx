@@ -328,7 +328,7 @@ function EventsListContent() {
             onClick={() => {
               router.replace(`/admin/events${searchParams.get('orgId') ? `?orgId=${searchParams.get('orgId')}` : ''}`, { scroll: false });
             }}
-            className="mt-3 text-sm font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded"
+            className="mt-3 text-sm font-medium text-accent-600 hover:text-accent-600 dark:text-accent-400 dark:hover:text-accent-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 rounded"
           >
             Clear filters
           </button>

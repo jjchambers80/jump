@@ -350,7 +350,7 @@ export default function MenuEditor({ menu, onSaved }: MenuEditorProps) {
           value={title}
           onChange={(event) => setTitle(event.target.value)}
           maxLength={100}
-          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
         />
         <p className="mt-2 text-sm text-gray-500 dark:text-slate-400">Handle: {menu.handle}</p>
       </section>
@@ -392,7 +392,7 @@ export default function MenuEditor({ menu, onSaved }: MenuEditorProps) {
         <button
           type="button"
           onClick={() => setItems((current) => [...current, newItem()])}
-          className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+          className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-accent-600 hover:underline dark:text-accent-300"
         >
           <Plus className="h-4 w-4" aria-hidden />
           Add menu item

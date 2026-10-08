@@ -154,7 +154,7 @@ export default function OnlineStoreSettings({ org, onSaved, onError }: OnlineSto
           type="text"
           value={editName}
           onChange={(e) => setEditName(e.target.value)}
-          className="flex-1 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-1.5 text-sm text-gray-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="flex-1 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-1.5 text-sm text-gray-900 dark:text-slate-100 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
         />
         <button
           type="submit"
@@ -181,7 +181,7 @@ export default function OnlineStoreSettings({ org, onSaved, onError }: OnlineSto
           pattern="[a-z0-9]+(-[a-z0-9]+)*"
           maxLength={60}
           spellCheck={false}
-          className="flex-1 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-1.5 text-sm font-mono text-gray-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="flex-1 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-1.5 text-sm font-mono text-gray-900 dark:text-slate-100 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
         />
         <button
           type="submit"

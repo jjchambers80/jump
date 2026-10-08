@@ -32,9 +32,9 @@ import {
 
 const cardClass = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
 const secondaryBtn =
-  'inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
+  'inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-accent-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
 const rowClass =
-  'flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 dark:hover:bg-slate-700/40';
+  'flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500 dark:hover:bg-slate-700/40';
 const MAX_BADGES = 4;
 
 export default function PaymentsSettingsPage() {
@@ -179,7 +179,7 @@ export default function PaymentsSettingsPage() {
                     <button
                       type="button"
                       data-testid="payments-connect-action"
-                      className="text-sm font-semibold text-indigo-600 hover:underline disabled:opacity-50 dark:text-indigo-300"
+                      className="text-sm font-semibold text-accent-600 hover:underline disabled:opacity-50 dark:text-accent-300"
                       disabled={connectActions.busy !== null}
                       onClick={connectActions.onboard}
                     >
@@ -285,7 +285,7 @@ export default function PaymentsSettingsPage() {
                         ? `${settings.organization.phoneCountryCode ?? '+1'} ${formatPhone(settings.organization.phoneNumber)}`
                         : 'not set'}
                     </span>{' '}
-                    <Link href="/admin/settings" className="font-medium text-indigo-600 underline dark:text-indigo-300">
+                    <Link href="/admin/settings" className="font-medium text-accent-600 underline dark:text-accent-300">
                       General ›
                     </Link>
                   </p>
@@ -318,7 +318,7 @@ export default function PaymentsSettingsPage() {
                 <div className="flex items-center justify-between gap-3 px-4 py-3">
                   <dt className="text-gray-700 dark:text-slate-300">Sales tax</dt>
                   <dd>
-                    <Link href="/admin/settings/tax" className="font-medium text-indigo-600 hover:underline dark:text-indigo-300">
+                    <Link href="/admin/settings/tax" className="font-medium text-accent-600 hover:underline dark:text-accent-300">
                       Per Settings › Tax
                     </Link>
                   </dd>

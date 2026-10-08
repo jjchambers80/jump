@@ -136,7 +136,7 @@ export default function BoothBlockDialog({
                     width={Math.max(boothW * k - 1, 1)}
                     height={Math.max(boothH * k - 1, 1)}
                     rx={1.5}
-                    className="fill-indigo-100 stroke-indigo-500 dark:fill-indigo-500/20 dark:stroke-indigo-400"
+                    className="fill-accent-100 stroke-accent-500 dark:fill-accent-500/20 dark:stroke-accent-400"
                     strokeWidth={1}
                   />
                   {boothW * k > 18 && boothH * k > 12 && (
@@ -145,7 +145,7 @@ export default function BoothBlockDialog({
                       y={c.y * k + (boothH * k) / 2}
                       textAnchor="middle"
                       dominantBaseline="central"
-                      className="fill-indigo-900 dark:fill-indigo-100"
+                      className="fill-accent-900 dark:fill-accent-100"
                       fontSize={Math.min(11, (boothW * k) / 3)}
                     >
                       {c.label}

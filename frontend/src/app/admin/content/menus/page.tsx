@@ -78,7 +78,7 @@ export default function MenusPage() {
         data-testid="menus-header"
       >
         <div>
-          <p className="text-sm font-medium text-indigo-600 dark:text-indigo-300">Content</p>
+          <p className="text-sm font-medium text-accent-600 dark:text-accent-300">Content</p>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Menus</h1>
         </div>
         <div className="flex items-center gap-2">
@@ -99,7 +99,7 @@ export default function MenusPage() {
               setCreateOpen(true);
             }}
             disabled={!selectedOrgId}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
+            className="rounded-md bg-accent-500 px-4 py-2 text-sm font-semibold text-gray-950 shadow-sm hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2 disabled:opacity-50"
           >
             Create menu
           </button>
@@ -222,7 +222,7 @@ export default function MenusPage() {
             onChange={(event) => setTitle(event.target.value)}
             maxLength={100}
             placeholder="e.g. Sponsors"
-            className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+            className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
           />
           {dialogError && (
             <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-400">

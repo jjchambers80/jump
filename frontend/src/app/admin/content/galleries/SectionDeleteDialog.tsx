@@ -42,7 +42,7 @@ export default function SectionDeleteDialog({ sections, sectionKey, onClose, onC
                 name="section-photos"
                 checked={choice === entry.key}
                 onChange={() => setChoice(entry.key)}
-                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500"
+                className="h-4 w-4 text-accent-600 focus:ring-accent-500"
               />
               Move to {name(entry)}
             </label>
@@ -53,7 +53,7 @@ export default function SectionDeleteDialog({ sections, sectionKey, onClose, onC
               name="section-photos"
               checked={choice === 'remove'}
               onChange={() => setChoice('remove')}
-              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500"
+              className="h-4 w-4 text-accent-600 focus:ring-accent-500"
             />
             Remove them from the gallery (they stay in Files)
           </label>

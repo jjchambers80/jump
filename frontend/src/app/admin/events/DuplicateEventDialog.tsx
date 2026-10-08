@@ -68,7 +68,7 @@ export default function DuplicateEventDialog({ orgId, event, onClose, onDone }: 
           <button type="button" onClick={onClose} disabled={busy} className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700">
             Cancel
           </button>
-          <button type="submit" disabled={busy} className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">
+          <button type="submit" disabled={busy} className="rounded-md bg-accent-500 px-3 py-1.5 text-sm font-semibold text-gray-950 hover:bg-accent-hover disabled:opacity-50">
             {busy ? 'Duplicating…' : 'Duplicate'}
           </button>
         </div>

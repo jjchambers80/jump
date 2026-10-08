@@ -23,7 +23,7 @@ type Editor = 'name' | 'email' | 'phone' | 'language' | 'timeZone' | null;
 
 const cardClass = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
 const listClass = 'mt-4 divide-y divide-gray-200 overflow-hidden rounded-lg border border-gray-200 dark:divide-slate-700 dark:border-slate-700';
-const linkButtonClass = 'text-sm font-medium text-indigo-600 hover:text-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 dark:text-indigo-400';
+const linkButtonClass = 'text-sm font-medium text-accent-600 hover:text-accent-600 focus:outline-none focus:ring-2 focus:ring-accent-500 disabled:opacity-50 dark:text-accent-400';
 
 function PhoneIcon() {
   return (

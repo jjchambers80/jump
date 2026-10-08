@@ -9,7 +9,7 @@ import { usePathname } from 'next/navigation';
 import EventWorkspaceHeader from '@/components/events/EventWorkspace';
 
 const tab = 'rounded-md px-3 py-1.5 text-sm font-medium';
-const activeTab = 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300';
+const activeTab = 'bg-accent-50 text-accent-700 dark:bg-accent-900/30 dark:text-accent-300';
 const idleTab = 'text-gray-700 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800';
 
 export default function ApplicationsHeader({ eventId, title, subtitle }: { eventId: string; title?: string; subtitle?: string }) {

@@ -87,7 +87,7 @@ export default function EventActionsMenu({
         aria-expanded={open}
         aria-label={`More actions for ${eventName}`}
         onClick={() => setOpen((o) => !o)}
-        className="flex min-h-[28px] min-w-[28px] items-center justify-center rounded-md text-lg leading-none text-gray-500 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+        className="flex min-h-[28px] min-w-[28px] items-center justify-center rounded-md text-lg leading-none text-gray-500 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
       >
         ⋯
       </button>

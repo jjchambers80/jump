@@ -30,12 +30,12 @@ import { useUnsavedChanges } from '@/lib/useUnsavedChanges';
 import { useBlogApi } from './useBlogApi';
 
 const field =
-  'mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white';
+  'mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white';
 const label = 'block text-sm font-medium text-gray-700 dark:text-slate-300';
 const card =
   'rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800';
 const secondaryButton =
-  'inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700';
+  'inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-accent-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700';
 
 interface Draft {
   title: string;
@@ -390,7 +390,7 @@ export default function BlogPostForm({
                 <button
                   type="button"
                   onClick={() => patch({ hasExcerpt: true })}
-                  className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+                  className="text-sm font-medium text-accent-600 hover:underline dark:text-accent-300"
                 >
                   Add excerpt
                 </button>
@@ -448,7 +448,7 @@ export default function BlogPostForm({
                     name="visibility"
                     checked={draft.isVisible === option.value}
                     onChange={() => patch({ isVisible: option.value })}
-                    className="mt-0.5 h-4 w-4 border-gray-300 text-indigo-600"
+                    className="mt-0.5 h-4 w-4 border-gray-300 text-accent-600"
                   />
                   <span>
                     <span className="block font-medium text-gray-900 dark:text-white">
@@ -500,7 +500,7 @@ export default function BlogPostForm({
                     ref={featuredRef}
                     type="button"
                     onClick={() => setPickerFor('featured')}
-                    className="font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+                    className="font-medium text-accent-600 hover:underline dark:text-accent-300"
                   >
                     Change
                   </button>
@@ -518,7 +518,7 @@ export default function BlogPostForm({
                 ref={featuredRef}
                 type="button"
                 onClick={() => setPickerFor('featured')}
-                className="mt-3 flex w-full items-center justify-center rounded-md border-2 border-dashed border-gray-300 px-4 py-8 text-sm font-medium text-indigo-600 hover:border-indigo-400 dark:border-slate-600 dark:text-indigo-300"
+                className="mt-3 flex w-full items-center justify-center rounded-md border-2 border-dashed border-gray-300 px-4 py-8 text-sm font-medium text-accent-600 hover:border-accent-400 dark:border-slate-600 dark:text-accent-300"
               >
                 Choose image
               </button>
@@ -559,7 +559,7 @@ export default function BlogPostForm({
                 <button
                   type="button"
                   onClick={() => setNewBlogTitle('')}
-                  className="mt-1 text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+                  className="mt-1 text-xs font-medium text-accent-600 hover:underline dark:text-accent-300"
                 >
                   Create a new blog
                 </button>
@@ -581,7 +581,7 @@ export default function BlogPostForm({
                   <button
                     type="button"
                     onClick={() => void createBlog()}
-                    className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500"
+                    className="rounded-md bg-accent-500 px-3 py-1.5 text-xs font-semibold text-gray-950 hover:bg-accent-hover"
                   >
                     Add
                   </button>

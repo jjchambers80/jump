@@ -242,7 +242,7 @@ export default function VenuesPage() {
         {selectedOrgId && !showForm && (
           <button
             onClick={handleCreate}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
+            className="rounded-md bg-accent-500 px-4 py-2 text-sm font-semibold text-gray-950 shadow-sm hover:bg-accent-hover"
           >
             Add Venue
           </button>
@@ -271,7 +271,7 @@ export default function VenuesPage() {
                 href={`/venues/${editingId}`}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+                className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-accent-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
               >
                 View venue
                 <ExternalLink className="h-4 w-4" aria-hidden />
@@ -289,7 +289,7 @@ export default function VenuesPage() {
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 placeholder="Venue name"
-                className="block w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="block w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
                 required
               />
             </div>
@@ -321,7 +321,7 @@ export default function VenuesPage() {
               value={formData.address}
               onChange={(e) => setFormData({ ...formData, address: e.target.value })}
               placeholder="123 Main St"
-              className="block w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="block w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
               required
             />
           </div>
@@ -336,7 +336,7 @@ export default function VenuesPage() {
                 value={formData.city}
                 onChange={(e) => setFormData({ ...formData, city: e.target.value })}
                 placeholder="e.g. Raleigh"
-                className="block w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="block w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
               />
             </div>
             <StateSelect
@@ -352,7 +352,7 @@ export default function VenuesPage() {
                 value={formData.postalCode}
                 onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
                 placeholder="e.g. 27601"
-                className="block w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="block w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
               />
             </div>
           </div>
@@ -363,7 +363,7 @@ export default function VenuesPage() {
               id="isPublic"
               checked={formData.isPublic}
               onChange={(e) => setFormData({ ...formData, isPublic: e.target.checked })}
-              className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              className="h-4 w-4 rounded border-gray-300 text-accent-600 focus:ring-accent-500"
             />
             <label htmlFor="isPublic" className="text-sm text-gray-700 dark:text-slate-300">
               Public venue page enabled. When disabled, the public URL returns not found.
@@ -386,7 +386,7 @@ export default function VenuesPage() {
             <button
               type="submit"
               disabled={saving}
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50"
+              className="rounded-md bg-accent-500 px-4 py-2 text-sm font-semibold text-gray-950 shadow-sm hover:bg-accent-hover disabled:opacity-50"
             >
               {saving || logoUploading ? 'Saving…' : editingId ? 'Update' : 'Create'}
             </button>
@@ -459,7 +459,7 @@ export default function VenuesPage() {
                       href={`/venues/${venue.id}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="rounded-md border border-indigo-300 dark:border-indigo-700 px-3 py-1 text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+                      className="rounded-md border border-accent-300 dark:border-accent-700 px-3 py-1 text-xs font-medium text-accent-700 dark:text-accent-300 hover:bg-accent-50 dark:hover:bg-accent-900/20"
                     >
                       View public page
                     </Link>

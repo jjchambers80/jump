@@ -99,7 +99,7 @@ export default function BoothPanel({
           <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Assigned to</p>
           <Link
             href={`/admin/events/${eventId}/applications/${holder.id}`}
-            className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+            className="text-sm font-medium text-accent-600 hover:underline dark:text-accent-300"
           >
             {holder.businessName || 'Unknown vendor'}
           </Link>
@@ -108,8 +108,8 @@ export default function BoothPanel({
 
       {/* Move mode indicator */}
       {moveMode === booth.id && (
-        <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 dark:border-indigo-800 dark:bg-indigo-900/20">
-          <p className="text-xs font-medium text-indigo-700 dark:text-indigo-300">
+        <div className="rounded-lg border border-accent-200 bg-accent-50 px-3 py-2 dark:border-accent-800 dark:bg-accent-900/20">
+          <p className="text-xs font-medium text-accent-700 dark:text-accent-300">
             Click the booth on the map to move this vendor to
           </p>
           <button
@@ -134,7 +134,7 @@ export default function BoothPanel({
               setCandidates([]);
               setAssignError(null);
             }}
-            className="rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="rounded-md bg-accent-500 px-2.5 py-1 text-xs font-medium text-gray-950 hover:bg-accent-hover disabled:opacity-50"
           >
             Assign
           </button>
@@ -253,7 +253,7 @@ export default function BoothPanel({
                       key={c.id}
                       className={`flex items-center justify-between gap-2 rounded-md px-3 py-2 text-sm transition-colors ${
                         c.tierMatch
-                          ? 'bg-indigo-50 dark:bg-indigo-900/20'
+                          ? 'bg-accent-50 dark:bg-accent-900/20'
                           : 'bg-gray-50 dark:bg-slate-700/50'
                       }`}
                     >
@@ -276,7 +276,7 @@ export default function BoothPanel({
                         type="button"
                         onClick={() => doAssign(c.id)}
                         disabled={assigning === c.id}
-                        className="shrink-0 rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                        className="shrink-0 rounded-md bg-accent-500 px-2.5 py-1 text-xs font-medium text-gray-950 hover:bg-accent-hover disabled:opacity-50"
                       >
                         {assigning === c.id ? '…' : 'Assign'}
                       </button>

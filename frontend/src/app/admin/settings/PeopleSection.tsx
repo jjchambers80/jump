@@ -69,7 +69,7 @@ export default function PeopleSection({ onChildActiveChange }: PeopleSectionProp
             Add account representative, all owners, executives and directors
           </p>
         </div>
-        <button ref={addButtonRef} type="button" onClick={() => { setAdding(true); onChildActiveChange(true); }} className="shrink-0 rounded-md border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800">
+        <button ref={addButtonRef} type="button" onClick={() => { setAdding(true); onChildActiveChange(true); }} className="shrink-0 rounded-md border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-accent-500 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800">
           Add
         </button>
       </div>
@@ -79,7 +79,7 @@ export default function PeopleSection({ onChildActiveChange }: PeopleSectionProp
       ) : error ? (
         <div className="mt-4 text-sm" role="alert">
           <span className="text-red-600 dark:text-red-400">{error}</span>{' '}
-          <button type="button" onClick={() => void loadPeople()} className="font-semibold text-indigo-600 underline dark:text-indigo-400">Retry</button>
+          <button type="button" onClick={() => void loadPeople()} className="font-semibold text-accent-600 underline dark:text-accent-400">Retry</button>
         </div>
       ) : (
         <div className="mt-4 space-y-3">
@@ -89,7 +89,7 @@ export default function PeopleSection({ onChildActiveChange }: PeopleSectionProp
             return (
               <div key={person.id} className="rounded-lg border border-gray-200 p-3 dark:border-slate-700">
                 <div className="flex min-w-0 items-center gap-3">
-                  <span aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-sm font-semibold text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-200">
+                  <span aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-100 text-sm font-semibold text-accent-700 dark:bg-accent-900/50 dark:text-accent-200">
                     {initials(person)}
                   </span>
                   <div className="min-w-0 flex-1">

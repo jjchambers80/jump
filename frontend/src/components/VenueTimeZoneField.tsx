@@ -71,7 +71,7 @@ export default function VenueTimeZoneField({
             type="button"
             ref={changeRef}
             onClick={() => setOpen(true)}
-            className="text-sm font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400"
+            className="text-sm font-medium text-accent-600 hover:text-accent-600 dark:text-accent-400"
             aria-describedby={`${id}-label`}
           >
             Change
@@ -104,7 +104,7 @@ export default function VenueTimeZoneField({
                 onChange(null);
                 setOpen(false);
               }}
-              className="mt-1 text-sm font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400"
+              className="mt-1 text-sm font-medium text-accent-600 hover:text-accent-600 dark:text-accent-400"
             >
               Use the address instead ({timeZoneLabel(derived.timezone)})
             </button>

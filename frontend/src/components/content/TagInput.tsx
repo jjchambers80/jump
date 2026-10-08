@@ -43,7 +43,7 @@ export default function TagInput({
   const remove = (index: number) => onChange(value.filter((_, i) => i !== index));
 
   return (
-    <div className="mt-1 flex flex-wrap items-center gap-1.5 rounded-md border border-gray-300 bg-white px-2 py-1.5 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/30 dark:border-slate-600 dark:bg-slate-900">
+    <div className="mt-1 flex flex-wrap items-center gap-1.5 rounded-md border border-gray-300 bg-white px-2 py-1.5 focus-within:border-accent-500 focus-within:ring-2 focus-within:ring-accent-500/30 dark:border-slate-600 dark:bg-slate-900">
       {value.map((tag, index) => (
         <span
           key={tag}

@@ -31,7 +31,7 @@ function formatChecked(iso: string | null) {
 }
 
 const secondaryBtn =
-  'rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
+  'rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-accent-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
 
 export default function EditTaxRegionDialog({ region, service, canEdit, returnFocusRef, onClose, onSaved, onRecalculated }: EditTaxRegionDialogProps) {
   const taxApi = useTaxApi();
@@ -123,7 +123,7 @@ export default function EditTaxRegionDialog({ region, service, canEdit, returnFo
             checked={collecting}
             disabled={!canEdit}
             onChange={(e) => setCollecting(e.target.checked)}
-            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800"
+            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-accent-600 focus:ring-accent-500 dark:border-slate-600 dark:bg-slate-800"
           />
           <span>
             <span className={fieldLabel}>Collect sales tax in {region.name}</span>
@@ -144,7 +144,7 @@ export default function EditTaxRegionDialog({ region, service, canEdit, returnFo
               value="STRIPE"
               checked={source === 'STRIPE'}
               onChange={() => setSource('STRIPE')}
-              className="mt-0.5 h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800"
+              className="mt-0.5 h-4 w-4 border-gray-300 text-accent-600 focus:ring-accent-500 dark:border-slate-600 dark:bg-slate-800"
             />
             <span className="min-w-0">
               <span className="block text-sm font-medium text-gray-900 dark:text-white">Stripe Tax (automatic)</span>
@@ -170,7 +170,7 @@ export default function EditTaxRegionDialog({ region, service, canEdit, returnFo
               value="MANUAL"
               checked={source === 'MANUAL'}
               onChange={() => setSource('MANUAL')}
-              className="mt-0.5 h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800"
+              className="mt-0.5 h-4 w-4 border-gray-300 text-accent-600 focus:ring-accent-500 dark:border-slate-600 dark:bg-slate-800"
             />
             <span className="min-w-0 flex-1">
               <span className="block text-sm font-medium text-gray-900 dark:text-white">Manual rate</span>
@@ -185,7 +185,7 @@ export default function EditTaxRegionDialog({ region, service, canEdit, returnFo
                     value={rateText}
                     onChange={(e) => setRateText(e.target.value)}
                     placeholder="8.25"
-                    className="w-28 rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+                    className="w-28 rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
                   />
                   <span className="text-sm text-gray-700 dark:text-slate-300">%</span>
                   {rateInvalid && rateText.trim() !== '' && (

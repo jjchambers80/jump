@@ -314,7 +314,7 @@ function TicketDetailModal({
                                 <button
                                   onClick={handleSaveAttendee}
                                   disabled={saving}
-                                  className="px-3 py-1 text-xs font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+                                  className="px-3 py-1 text-xs font-medium rounded bg-accent-500 text-gray-950 hover:bg-accent-hover disabled:opacity-50"
                                 >
                                   {saving ? 'Saving...' : 'Save'}
                                 </button>
@@ -353,7 +353,7 @@ function TicketDetailModal({
                               {detail.siblingTickets.length === 0 && (
                               <button
                                 onClick={() => setEditingAttendee(true)}
-                                className="mt-1 inline-flex items-center gap-1 text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
+                                className="mt-1 inline-flex items-center gap-1 text-xs text-accent-600 dark:text-accent-400 hover:underline"
                               >
                                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -378,7 +378,7 @@ function TicketDetailModal({
                         <p><span className="font-medium">Amount charged:</span> {formatCurrency(detail.pricePaid)}</p>
                         <p><span className="font-medium">Confirmation:</span> {detail.barcode}</p>
                         <p><span className="font-medium">Order:</span>{' '}
-                          <Link href={`/admin/orders/${detail.order.id}`} className="text-indigo-600 dark:text-indigo-400 hover:underline">
+                          <Link href={`/admin/orders/${detail.order.id}`} className="text-accent-600 dark:text-accent-400 hover:underline">
                             {detail.order.orderRef}
                           </Link>
                         </p>
@@ -614,7 +614,7 @@ export default function TicketRowsView({
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(e); }}
-            className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
           />
           {search && (
             <button
@@ -634,7 +634,7 @@ export default function TicketRowsView({
           onClick={() => setShowFilters(!showFilters)}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
             showFilters || statusFilter || (eventFilter && !eventId)
-              ? 'border-indigo-300 dark:border-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300'
+              ? 'border-accent-300 dark:border-accent-600 bg-accent-50 dark:bg-accent-900/20 text-accent-700 dark:text-accent-300'
               : 'border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700'
           }`}
         >
@@ -657,7 +657,7 @@ export default function TicketRowsView({
                   onClick={() => setStatusFilter(s)}
                   className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                     statusFilter === s
-                      ? 'bg-indigo-600 text-white'
+                      ? 'bg-accent-500 text-gray-950'
                       : 'bg-white dark:bg-slate-700 text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-600 border border-gray-200 dark:border-slate-600'
                   }`}
                 >
@@ -686,7 +686,7 @@ export default function TicketRowsView({
           {(statusFilter || (eventFilter && !eventId)) && (
             <button
               onClick={() => { setStatusFilter(''); setEventFilter(eventId ?? ''); }}
-              className="px-3 py-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
+              className="px-3 py-1.5 text-xs font-medium text-accent-600 dark:text-accent-400 hover:underline"
             >
               Clear filters
             </button>
@@ -793,7 +793,7 @@ export default function TicketRowsView({
                       Conf #: {ticket.barcode}
                     </p>
                     <p className="text-xs text-gray-500 dark:text-slate-400 truncate">
-                      Order #: <Link href={`/admin/orders/${ticket.orderId}`} className="text-indigo-600 dark:text-indigo-400 hover:underline">{ticket.orderRef}</Link>
+                      Order #: <Link href={`/admin/orders/${ticket.orderId}`} className="text-accent-600 dark:text-accent-400 hover:underline">{ticket.orderRef}</Link>
                     </p>
                   </div>
 
@@ -824,7 +824,7 @@ export default function TicketRowsView({
                   <div className="text-right flex flex-col items-end gap-1">
                     <button
                       onClick={() => setSelectedTicketId(ticket.id)}
-                      className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
+                      className="text-xs text-accent-600 dark:text-accent-400 hover:underline"
                     >
                       view ticket
                     </button>
@@ -837,7 +837,7 @@ export default function TicketRowsView({
                     ) : (
                       <button
                         onClick={() => handleResendConfirmation(ticket.id, ticket.orderId)}
-                        className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
+                        className="text-xs text-accent-600 dark:text-accent-400 hover:underline"
                       >
                         resend confirmation
                       </button>
@@ -881,7 +881,7 @@ export default function TicketRowsView({
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => setSelectedTicketId(ticket.id)}
-                          className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
+                          className="text-xs text-accent-600 dark:text-accent-400 hover:underline"
                         >
                           view ticket
                         </button>
@@ -894,7 +894,7 @@ export default function TicketRowsView({
                         ) : (
                           <button
                             onClick={() => handleResendConfirmation(ticket.id, ticket.orderId)}
-                            className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
+                            className="text-xs text-accent-600 dark:text-accent-400 hover:underline"
                           >
                             resend
                           </button>

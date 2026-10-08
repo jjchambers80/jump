@@ -12,7 +12,7 @@ import { describeError, useApplicationsApi } from '../useApplicationsApi';
 
 const card = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
 const btn = 'rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
-const primary = 'rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50';
+const primary = 'rounded-md bg-accent-500 px-3 py-1.5 text-sm font-semibold text-gray-950 hover:bg-accent-hover disabled:opacity-50';
 const field = 'mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100';
 
 const STATUS_PILL: Record<AdminForm['status'], string> = {
@@ -134,7 +134,7 @@ export default function FormsPage({ params }: { params: { eventId: string } }) {
                     key={t.id || 'blank'}
                     className={`relative flex items-start gap-3 rounded-lg border px-3 py-2.5 transition-colors ${
                       checked
-                        ? 'border-indigo-500 bg-indigo-50/60 ring-1 ring-indigo-500 dark:border-indigo-400 dark:bg-indigo-950/40 dark:ring-indigo-400'
+                        ? 'border-accent-500 bg-accent-50/60 ring-1 ring-accent-500 dark:border-accent-400 dark:bg-accent-950/40 dark:ring-accent-400'
                         : 'border-gray-200 hover:border-gray-300 dark:border-slate-600 dark:hover:border-slate-500'
                     }`}
                   >
@@ -145,7 +145,7 @@ export default function FormsPage({ params }: { params: { eventId: string } }) {
                       value={t.id}
                       checked={checked}
                       onChange={() => setTemplateId(t.id)}
-                      className="mt-0.5 h-4 w-4 accent-indigo-600"
+                      className="mt-0.5 h-4 w-4 accent-accent-600"
                     />
                     <label htmlFor={`tpl-${t.id || 'blank'}`} className="min-w-0 flex-1 cursor-pointer">
                       <span className="block truncate text-sm font-medium text-gray-900 dark:text-white">{t.name}</span>
@@ -155,7 +155,7 @@ export default function FormsPage({ params }: { params: { eventId: string } }) {
                     </label>
                     {t.id && (
                       <span className="flex shrink-0 items-center gap-2 text-xs">
-                        <Link href={`/admin/events/templates/${t.id}`} className="font-medium text-indigo-600 hover:underline dark:text-indigo-300" aria-label={`Edit template ${t.name}`}>
+                        <Link href={`/admin/events/templates/${t.id}`} className="font-medium text-accent-600 hover:underline dark:text-accent-300" aria-label={`Edit template ${t.name}`}>
                           Edit
                         </Link>
                         <button type="button" onClick={() => removeTemplate(t.id, t.name)} className="font-medium text-red-700 hover:underline dark:text-red-300" aria-label={`Delete template ${t.name}`}>

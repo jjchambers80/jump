@@ -12,7 +12,7 @@ import { AccountSession, accountApi } from '../accountApi';
 const cardClass = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
 const listClass = 'mt-4 divide-y divide-gray-200 overflow-hidden rounded-lg border border-gray-200 dark:divide-slate-700 dark:border-slate-700';
 const secondaryButton =
-  'rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700';
+  'rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-accent-500 disabled:opacity-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700';
 
 const GEOIP_ENABLED = process.env.NEXT_PUBLIC_GEOIP_ENABLED === 'true';
 
@@ -139,7 +139,7 @@ export default function DevicesCard() {
                 <span className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-medium text-gray-900 dark:text-white">{session.device.label}</span>
                   {session.current && (
-                    <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
+                    <span className="rounded-full bg-accent-50 px-2 py-0.5 text-xs font-semibold text-accent-700 dark:bg-accent-900/30 dark:text-accent-300">
                       This device
                     </span>
                   )}

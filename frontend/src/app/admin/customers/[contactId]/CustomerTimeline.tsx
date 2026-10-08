@@ -156,14 +156,14 @@ export default function CustomerTimeline({ contactId }: { contactId: string }) {
           rows={3}
           onChange={(event) => setBody(event.target.value)}
           placeholder="Add a comment about this customer…"
-          className="w-full resize-y rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-gray-900 dark:text-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
+          className="w-full resize-y rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-gray-900 dark:text-white focus:border-accent-500 focus:ring-2 focus:ring-accent-500"
         />
         <div className="mt-2 flex items-center justify-between gap-3">
           <span className={`text-xs ${remaining < 0 ? 'text-red-600' : 'text-gray-500 dark:text-slate-400'}`}>{Math.max(remaining, 0)} characters remaining</span>
           <button
             type="submit"
             disabled={!normalizedBody || body.length > 2000 || saving}
-            className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-lg bg-accent-500 px-3 py-1.5 text-sm font-medium text-gray-950 hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             {saving ? 'Adding…' : 'Add comment'}
           </button>
@@ -185,7 +185,7 @@ export default function CustomerTimeline({ contactId }: { contactId: string }) {
             const canDelete = isComment && (item.canDelete === true || currentUser?.role === 'ADMIN' || item.author?.id === currentUser?.id || item.authorUserId === currentUser?.id);
             return (
               <li key={item.id} data-timeline-item className="flex gap-3 px-4 py-3">
-                <span aria-hidden className={`mt-1 h-2.5 w-2.5 flex-none rounded-full ${isComment ? 'bg-indigo-500' : 'bg-gray-400 dark:bg-slate-500'}`} />
+                <span aria-hidden className={`mt-1 h-2.5 w-2.5 flex-none rounded-full ${isComment ? 'bg-accent-500' : 'bg-gray-400 dark:bg-slate-500'}`} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-3">
                     <p className="whitespace-pre-wrap break-words text-sm text-gray-800 dark:text-slate-200">{itemText(item)}</p>
@@ -205,7 +205,7 @@ export default function CustomerTimeline({ contactId }: { contactId: string }) {
 
       {nextCursor && !loading && (
         <div className="border-t border-gray-200 p-3 text-center dark:border-slate-700">
-          <button type="button" disabled={loadingMore} onClick={() => load(nextCursor)} className="text-sm font-medium text-indigo-600 hover:underline disabled:opacity-50 dark:text-indigo-400">
+          <button type="button" disabled={loadingMore} onClick={() => load(nextCursor)} className="text-sm font-medium text-accent-600 hover:underline disabled:opacity-50 dark:text-accent-400">
             {loadingMore ? 'Loading…' : 'Load older activity'}
           </button>
         </div>

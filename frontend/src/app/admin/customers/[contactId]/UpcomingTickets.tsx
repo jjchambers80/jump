@@ -72,7 +72,7 @@ export default function UpcomingTickets({ tickets }: { tickets: UpcomingTicket[]
             <div key={event.id} className="px-4 py-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <Link href={`/admin/events/${event.id}/edit`} className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-400">
+                  <Link href={`/admin/events/${event.id}/edit`} className="text-sm font-medium text-accent-600 hover:underline dark:text-accent-400">
                     {event.name}
                   </Link>
                   <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">{formatEventDate(event.date, event.timezone)} · {eventTickets.length} ticket{eventTickets.length === 1 ? '' : 's'}</p>

@@ -49,7 +49,7 @@ function RecoverComplete() {
           <>
             <h1 className="text-xl font-semibold text-gray-900 dark:text-white">This link can’t be used</h1>
             <p role="alert" className="mt-2 text-sm text-gray-600 dark:text-slate-400">{error}</p>
-            <Link href="/auth/recover" className="mt-6 inline-block text-sm font-medium text-indigo-600 dark:text-indigo-400">Request a new link</Link>
+            <Link href="/auth/recover" className="mt-6 inline-block text-sm font-medium text-accent-600 dark:text-accent-400">Request a new link</Link>
           </>
         ) : (
           <p role="status" className="text-sm text-gray-600 dark:text-slate-400">Signing you in…</p>

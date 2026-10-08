@@ -11,7 +11,7 @@ import { LayoutTemplate, Loader2, Plus } from 'lucide-react';
 import EventWorkspaceHeader, { useEventWorkspace } from '@/components/events/EventWorkspace';
 import { mapsApi, type FloorPlanSummary } from '@/services/api';
 
-const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900';
+const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900';
 
 export default function EventMapPage({ params }: { params: { eventId: string } }) {
   const router = useRouter();
@@ -82,9 +82,9 @@ export default function EventMapPage({ params }: { params: { eventId: string } }
                 type="button"
                 onClick={() => create(null)}
                 disabled={!!busy}
-                className={`group flex h-full w-full flex-col items-start rounded-lg border-2 border-dashed border-gray-300 p-4 text-left hover:border-indigo-400 hover:bg-indigo-50/40 disabled:opacity-60 dark:border-slate-600 dark:hover:border-indigo-400/70 dark:hover:bg-indigo-950/30 ${focusRing}`}
+                className={`group flex h-full w-full flex-col items-start rounded-lg border-2 border-dashed border-gray-300 p-4 text-left hover:border-accent-400 hover:bg-accent-50/40 disabled:opacity-60 dark:border-slate-600 dark:hover:border-accent-400/70 dark:hover:bg-accent-950/30 ${focusRing}`}
               >
-                <span className="flex h-9 w-9 items-center justify-center rounded-md bg-indigo-50 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300">
+                <span className="flex h-9 w-9 items-center justify-center rounded-md bg-accent-50 text-accent-600 dark:bg-accent-900/40 dark:text-accent-300">
                   {busy === 'blank' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}
                 </span>
                 <span className="mt-3 text-sm font-semibold text-gray-900 dark:text-white">Blank map</span>
@@ -98,7 +98,7 @@ export default function EventMapPage({ params }: { params: { eventId: string } }
                   onClick={() => create(plan.id)}
                   disabled={!!busy}
                   aria-label={`Use floor plan ${plan.name}`}
-                  className={`flex h-full w-full flex-col items-start rounded-lg border border-gray-200 p-4 text-left hover:border-indigo-400 hover:shadow-sm disabled:opacity-60 dark:border-slate-600 dark:hover:border-indigo-400/70 ${focusRing}`}
+                  className={`flex h-full w-full flex-col items-start rounded-lg border border-gray-200 p-4 text-left hover:border-accent-400 hover:shadow-sm disabled:opacity-60 dark:border-slate-600 dark:hover:border-accent-400/70 ${focusRing}`}
                 >
                   <span className="flex h-9 w-9 items-center justify-center rounded-md bg-gray-100 text-gray-600 dark:bg-slate-700 dark:text-slate-300">
                     {busy === plan.id ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <LayoutTemplate className="h-4 w-4" aria-hidden />}

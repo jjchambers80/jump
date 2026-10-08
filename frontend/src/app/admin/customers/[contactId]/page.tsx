@@ -472,7 +472,7 @@ function CustomerDetailPageContent() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
           <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-6 text-center">
             <p className="text-red-800 dark:text-red-300">{error || 'Customer not found'}</p>
-            <Link href={customersHref} className="mt-3 inline-block text-sm text-indigo-600 dark:text-indigo-400 hover:underline">
+            <Link href={customersHref} className="mt-3 inline-block text-sm text-accent-600 dark:text-accent-400 hover:underline">
               Back to customers
             </Link>
           </div>
@@ -579,7 +579,7 @@ function CustomerDetailPageContent() {
       <div className="flex items-start justify-between mb-4">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
-            <Link href={customersHref} className="hover:text-indigo-600 dark:hover:text-indigo-400">
+            <Link href={customersHref} className="hover:text-accent-600 dark:hover:text-accent-400">
               Customers
             </Link>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -592,11 +592,11 @@ function CustomerDetailPageContent() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setNameDialogOpen(true)}
-              className="group flex items-center gap-1 text-lg font-bold text-gray-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400"
+              className="group flex items-center gap-1 text-lg font-bold text-gray-900 dark:text-white hover:text-accent-600 dark:hover:text-accent-400"
               data-testid="customer-name-edit"
             >
               <span>{customer.firstName} {customer.lastName}</span>
-              <svg className="w-4 h-4 text-gray-400 group-hover:text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 text-gray-400 group-hover:text-accent-600 dark:group-hover:text-accent-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
               </svg>
             </button>
@@ -888,7 +888,7 @@ function CustomerDetailPageContent() {
             <div className="px-4 py-3 space-y-3">
               {/* Email */}
               <div className="flex items-center justify-between">
-                <a href={`mailto:${customer.email}`} className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline truncate">
+                <a href={`mailto:${customer.email}`} className="text-sm text-accent-600 dark:text-accent-400 hover:underline truncate">
                   {customer.email}
                 </a>
                 <button
@@ -919,7 +919,7 @@ function CustomerDetailPageContent() {
                       onChange={(e) => setEditValue(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit(); }}
                       autoFocus
-                      className="w-full px-2 py-1 text-sm rounded border border-indigo-300 dark:border-indigo-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-indigo-500"
+                      className="w-full px-2 py-1 text-sm rounded border border-accent-300 dark:border-accent-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-accent-500"
                       placeholder="(555) 555-0100"
                     />
                     <button onClick={saveEdit} disabled={saving} className="text-green-600 hover:text-green-700 flex-shrink-0">
@@ -932,7 +932,7 @@ function CustomerDetailPageContent() {
                 ) : (
                   <button
                     onClick={() => startEdit('phone')}
-                    className="text-sm text-gray-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400"
+                    className="text-sm text-gray-700 dark:text-slate-300 hover:text-accent-600 dark:hover:text-accent-400"
                   >
                     {customer.phone || <span className="text-gray-400 dark:text-slate-500 italic">Add phone...</span>}
                   </button>
@@ -950,7 +950,7 @@ function CustomerDetailPageContent() {
                       onChange={(e) => setEditValue(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit(); }}
                       autoFocus
-                      className="w-full px-2 py-1 text-sm rounded border border-indigo-300 dark:border-indigo-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-indigo-500"
+                      className="w-full px-2 py-1 text-sm rounded border border-accent-300 dark:border-accent-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-accent-500"
                       placeholder="City, State"
                     />
                     <button onClick={saveEdit} disabled={saving} className="text-green-600 hover:text-green-700 flex-shrink-0">
@@ -963,7 +963,7 @@ function CustomerDetailPageContent() {
                 ) : (
                   <button
                     onClick={() => startEdit('location')}
-                    className="text-sm text-gray-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400"
+                    className="text-sm text-gray-700 dark:text-slate-300 hover:text-accent-600 dark:hover:text-accent-400"
                   >
                     {customer.location || <span className="text-gray-400 dark:text-slate-500 italic">Add location...</span>}
                   </button>
@@ -1026,7 +1026,7 @@ function CustomerDetailPageContent() {
               {(customer.tags || []).length === 0 ? (
                 <button
                   onClick={openTagsDialog}
-                  className="text-sm text-gray-400 dark:text-slate-500 italic hover:text-indigo-600 dark:hover:text-indigo-400"
+                  className="text-sm text-gray-400 dark:text-slate-500 italic hover:text-accent-600 dark:hover:text-accent-400"
                 >
                   No tags
                 </button>
@@ -1064,14 +1064,14 @@ function CustomerDetailPageContent() {
                     <button
                       onClick={sendSignInLink}
                       disabled={signInLinkSending}
-                      className="w-full px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                      className="w-full px-3 py-1.5 text-xs font-medium text-gray-950 bg-accent-500 rounded-md hover:bg-accent-hover disabled:opacity-50 transition-colors"
                     >
                       {signInLinkSending ? 'Sending link...' : 'Send sign-in link'}
                     </button>
                     {customer.accountUrl && (
                       <button
                         onClick={copyAccountUrl}
-                        className="w-full px-3 py-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 border border-indigo-300 dark:border-indigo-700 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors flex items-center justify-center gap-1.5"
+                        className="w-full px-3 py-1.5 text-xs font-medium text-accent-600 dark:text-accent-400 border border-accent-300 dark:border-accent-700 rounded-md hover:bg-accent-50 dark:hover:bg-accent-900/20 transition-colors flex items-center justify-center gap-1.5"
                       >
                         {accountUrlCopied ? (
                           <>
@@ -1133,14 +1133,14 @@ function CustomerDetailPageContent() {
                     onKeyDown={(e) => { if (e.key === 'Escape') cancelEdit(); }}
                     autoFocus
                     rows={3}
-                    className="w-full px-2 py-1.5 text-sm rounded border border-indigo-300 dark:border-indigo-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-indigo-500 resize-none"
+                    className="w-full px-2 py-1.5 text-sm rounded border border-accent-300 dark:border-accent-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-accent-500 resize-none"
                     placeholder="Add a note about this customer..."
                   />
                   <div className="flex items-center justify-end gap-2">
                     <button onClick={cancelEdit} className="px-3 py-1 text-xs font-medium text-gray-700 dark:text-slate-300 border border-gray-300 dark:border-slate-600 rounded hover:bg-gray-50 dark:hover:bg-slate-700">
                       Cancel
                     </button>
-                    <button onClick={saveEdit} disabled={saving} className="px-3 py-1 text-xs font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700 disabled:opacity-50">
+                    <button onClick={saveEdit} disabled={saving} className="px-3 py-1 text-xs font-medium text-gray-950 bg-accent-500 rounded hover:bg-accent-hover disabled:opacity-50">
                       Save
                     </button>
                   </div>

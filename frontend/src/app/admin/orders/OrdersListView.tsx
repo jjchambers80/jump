@@ -155,7 +155,7 @@ export default function OrdersListView({ initialEventId = '' }: { initialEventId
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             data-testid="orders-search"
-            className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
           />
           {search && (
             <button
@@ -179,7 +179,7 @@ export default function OrdersListView({ initialEventId = '' }: { initialEventId
           onClick={() => setShowFilters(!showFilters)}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
             showFilters || filtersActive
-              ? 'border-indigo-300 dark:border-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300'
+              ? 'border-accent-300 dark:border-accent-600 bg-accent-50 dark:bg-accent-900/20 text-accent-700 dark:text-accent-300'
               : 'border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700'
           }`}
         >
@@ -219,7 +219,7 @@ export default function OrdersListView({ initialEventId = '' }: { initialEventId
                   data-testid={`orders-kind-${value || 'all'}`}
                   className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                     kind === value
-                      ? 'bg-indigo-600 text-white'
+                      ? 'bg-accent-500 text-gray-950'
                       : 'bg-white dark:bg-slate-700 text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-600 border border-gray-200 dark:border-slate-600'
                   }`}
                 >
@@ -278,7 +278,7 @@ export default function OrdersListView({ initialEventId = '' }: { initialEventId
             <input id="orders-to" type="date" value={to} onChange={(e) => setTo(e.target.value)} className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm text-gray-700 dark:text-slate-300 px-3 py-1.5" />
           </div>
           {filtersActive && (
-            <button type="button" onClick={clearFilters} className="px-3 py-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline">
+            <button type="button" onClick={clearFilters} className="px-3 py-1.5 text-xs font-medium text-accent-600 dark:text-accent-400 hover:underline">
               Clear filters
             </button>
           )}
@@ -333,7 +333,7 @@ export default function OrdersListView({ initialEventId = '' }: { initialEventId
                 {rows.map((row) => (
                   <tr key={row.id} data-testid="order-row" data-kind={row.kind} className="hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors">
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <Link href={`/admin/orders/${row.id}`} className="font-mono text-sm text-indigo-600 dark:text-indigo-400 hover:underline">
+                      <Link href={`/admin/orders/${row.id}`} className="font-mono text-sm text-accent-600 dark:text-accent-400 hover:underline">
                         {row.orderRef}
                       </Link>
                     </td>

@@ -121,7 +121,7 @@ function SignInForm() {
               setSent(false);
               setEmail('');
             }}
-            className="mt-6 text-sm text-indigo-600 dark:text-indigo-400 hover:underline"
+            className="mt-6 text-sm text-accent-600 dark:text-accent-400 hover:underline"
           >
             Use a different email
           </button>
@@ -137,7 +137,7 @@ function SignInForm() {
           <EventimusLogo className="h-6" />
         </div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white text-center mb-2">
-          Sign in to Eventimus
+          Sign in
         </h1>
         <p className="text-sm text-gray-500 dark:text-slate-400 text-center mb-8">
           Use a passkey, your Google account, an email link or a password
@@ -223,7 +223,7 @@ function SignInForm() {
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
           required
-          className="w-full px-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 mb-4"
+          className="w-full px-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500 focus:ring-2 focus:ring-accent-500 focus:border-accent-500 mb-4"
         />
 
         {/* Dev Sign-In — instant, no email needed */}
@@ -260,7 +260,7 @@ function SignInForm() {
           <button
             type="submit"
             disabled={loading || !email}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 dark:disabled:bg-slate-700 text-white font-medium py-2.5 rounded-lg transition"
+            className="w-full bg-accent-500 hover:bg-accent-hover disabled:bg-gray-300 dark:disabled:bg-slate-700 text-gray-950 disabled:text-gray-500 dark:disabled:text-slate-400 font-medium py-2.5 rounded-lg transition"
           >
             {loading ? 'Sending...' : 'Send Magic Link'}
           </button>
@@ -272,7 +272,7 @@ function SignInForm() {
             <button
               type="button"
               onClick={() => setShowPassword(true)}
-              className="w-full text-center text-sm text-indigo-600 dark:text-indigo-400 hover:underline"
+              className="w-full text-center text-sm text-accent-600 dark:text-accent-400 hover:underline"
             >
               Sign in with a password instead
             </button>
@@ -288,7 +288,7 @@ function SignInForm() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="w-full px-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 mb-3"
+                className="w-full px-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent-500 focus:border-accent-500 mb-3"
               />
               <button
                 type="submit"
@@ -303,14 +303,14 @@ function SignInForm() {
 
         <p className="mt-4 text-center text-xs text-gray-500 dark:text-slate-400">
           Can&apos;t sign in?{' '}
-          <Link href="/auth/recover" className="text-indigo-600 dark:text-indigo-400 hover:underline">
+          <Link href="/auth/recover" className="text-accent-600 dark:text-accent-400 hover:underline">
             Restore access with your secondary email
           </Link>
         </p>
 
         <p className="mt-6 text-center text-xs text-gray-500 dark:text-slate-400">
           Want to sell tickets on Eventimus?{' '}
-          <Link href="/signup" className="text-indigo-600 dark:text-indigo-400 hover:underline">
+          <Link href="/signup" className="text-accent-600 dark:text-accent-400 hover:underline">
             Create your organization
           </Link>
         </p>

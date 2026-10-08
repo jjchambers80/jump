@@ -68,7 +68,7 @@ export default function FormEditorPage({ params }: { params: { eventId: string; 
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
       <ApplicationsHeader eventId={params.eventId} title={form?.name ?? 'Form'} subtitle={form ? `${form.kind === 'PAID' ? 'Paid' : 'Free'} form · /${form.slug}` : undefined} />
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Link href={`/admin/events/${params.eventId}/applications/forms`} className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300">
+        <Link href={`/admin/events/${params.eventId}/applications/forms`} className="text-sm font-medium text-accent-600 hover:underline dark:text-accent-300">
           ← All forms
         </Link>
         <div className="flex items-center gap-2">
@@ -87,7 +87,7 @@ export default function FormEditorPage({ params }: { params: { eventId: string; 
       {createdFrom && (
         <p className="mt-2 text-sm text-gray-600 dark:text-slate-400" data-testid="form-created-from">
           Created from the{' '}
-          <Link href={`/admin/events/templates/${createdFrom.id}`} className="text-indigo-600 underline dark:text-indigo-300">
+          <Link href={`/admin/events/templates/${createdFrom.id}`} className="text-accent-600 underline dark:text-accent-300">
             {createdFrom.name}
           </Link>{' '}
           template.

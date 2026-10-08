@@ -74,7 +74,7 @@ test('sidebar links to Online store and has no Organizations link', async ({ pag
   await expect(sidebar.getByRole('link', { name: 'Organizations' })).toHaveCount(0);
   await sidebar.getByRole('link', { name: 'Online store' }).click();
   await expect(page).toHaveURL(/\/admin\/online-store$/);
-  await expect(sidebar.getByRole('link', { name: 'Online store' })).toHaveClass(/bg-indigo/);
+  await expect(sidebar.getByRole('link', { name: 'Online store' })).toHaveClass(/bg-accent/);
   await expect(page.getByRole('heading', { name: 'Online store' })).toBeVisible();
 });
 

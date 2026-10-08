@@ -249,7 +249,7 @@ export default function LinkPicker({ value, onChange, inputId }: LinkPickerProps
               setQuery(summarize(value));
             }
           }}
-          className="block w-full rounded-md border border-gray-300 bg-white py-2 pl-8 pr-3 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+          className="block w-full rounded-md border border-gray-300 bg-white py-2 pl-8 pr-3 text-sm text-gray-900 focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
         />
       </div>
       {open && (
@@ -281,7 +281,7 @@ export default function LinkPicker({ value, onChange, inputId }: LinkPickerProps
                   onMouseDown={(event) => event.preventDefault()}
                   onMouseEnter={() => setActive(index)}
                   onClick={() => choose(option)}
-                  className={`flex cursor-pointer items-center gap-2 px-3 py-1.5 text-gray-800 dark:text-slate-200 ${index === active ? 'bg-indigo-50 dark:bg-indigo-900/30' : ''}`}
+                  className={`flex cursor-pointer items-center gap-2 px-3 py-1.5 text-gray-800 dark:text-slate-200 ${index === active ? 'bg-accent-50 dark:bg-accent-900/30' : ''}`}
                 >
                   <span className="text-gray-400">{option.icon}</span>
                   <span className="min-w-0 flex-1 truncate">{option.title}</span>

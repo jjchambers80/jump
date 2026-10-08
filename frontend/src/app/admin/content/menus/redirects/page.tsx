@@ -14,7 +14,7 @@ import { useRedirectsApi, type UrlRedirect } from './useRedirectsApi';
 const th =
   'px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400';
 const field =
-  'mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white';
+  'mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white';
 const label = 'block text-sm font-medium text-gray-700 dark:text-slate-300';
 
 function formatDate(value: string) {
@@ -169,7 +169,7 @@ export default function RedirectsPage() {
           type="button"
           onClick={() => open('new')}
           disabled={!selectedOrgId}
-          className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
+          className="rounded-md bg-accent-500 px-4 py-2 text-sm font-semibold text-gray-950 shadow-sm hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2 disabled:opacity-50"
         >
           Create URL redirect
         </button>
@@ -205,13 +205,13 @@ export default function RedirectsPage() {
                 placeholder="Search paths"
                 value={q}
                 onChange={(event) => setQ(event.target.value)}
-                className="w-full rounded-md border border-gray-300 bg-white py-1.5 pl-8 pr-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+                className="w-full rounded-md border border-gray-300 bg-white py-1.5 pl-8 pr-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
               />
             </div>
           </div>
           {selected.size > 0 && (
             <div
-              className="flex items-center gap-3 border-b border-gray-200 bg-indigo-50 px-4 py-2 text-sm dark:border-slate-700 dark:bg-indigo-900/20"
+              className="flex items-center gap-3 border-b border-gray-200 bg-accent-50 px-4 py-2 text-sm dark:border-slate-700 dark:bg-accent-900/20"
               data-testid="bulk-bar"
             >
               <span className="font-medium text-gray-900 dark:text-white">
@@ -323,7 +323,7 @@ export default function RedirectsPage() {
                           }}
                           type="button"
                           onClick={() => open(row)}
-                          className="font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+                          className="font-medium text-accent-600 hover:underline dark:text-accent-300"
                         >
                           Edit
                         </button>

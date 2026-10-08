@@ -42,7 +42,7 @@ export default function EventsPagination({ page, totalPages, total, limit, onPag
           onClick={() => onPageChange(page - 1)}
           disabled={page <= 1}
           aria-label="Previous page"
-          className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+          className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
         >
           ‹ Prev
         </button>
@@ -57,9 +57,9 @@ export default function EventsPagination({ page, totalPages, total, limit, onPag
               type="button"
               onClick={() => onPageChange(p)}
               aria-current={p === page ? 'page' : undefined}
-              className={`inline-flex min-h-9 min-w-9 items-center justify-center rounded-md text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+              className={`inline-flex min-h-9 min-w-9 items-center justify-center rounded-md text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 ${
                 p === page
-                  ? 'bg-indigo-600 text-white'
+                  ? 'bg-accent-500 text-gray-950'
                   : 'border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700'
               }`}
             >
@@ -72,7 +72,7 @@ export default function EventsPagination({ page, totalPages, total, limit, onPag
           onClick={() => onPageChange(page + 1)}
           disabled={page >= totalPages}
           aria-label="Next page"
-          className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+          className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
         >
           Next ›
         </button>

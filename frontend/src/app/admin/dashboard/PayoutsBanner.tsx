@@ -68,16 +68,16 @@ export default function PayoutsBanner() {
     <div
       role="status"
       data-testid="payouts-banner"
-      className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm dark:border-indigo-800 dark:bg-indigo-900/20"
+      className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-accent-200 bg-accent-50 px-4 py-3 text-sm dark:border-accent-800 dark:bg-accent-900/20"
     >
       <div className="min-w-0">
-        <p className="font-semibold text-indigo-900 dark:text-indigo-200">{copy.title}</p>
-        <p className="text-indigo-800 dark:text-indigo-300">{copy.body}</p>
+        <p className="font-semibold text-accent-900 dark:text-accent-200">{copy.title}</p>
+        <p className="text-accent-800 dark:text-accent-300">{copy.body}</p>
       </div>
       <div className="flex items-center gap-2">
         <Link
           href="/admin/settings/payments/payout-bank-account"
-          className="inline-flex items-center rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="inline-flex items-center rounded-md bg-accent-500 px-3 py-1.5 text-sm font-semibold text-gray-950 hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent-500"
         >
           {copy.cta}
         </Link>
@@ -85,7 +85,7 @@ export default function PayoutsBanner() {
           type="button"
           onClick={dismiss}
           aria-label="Dismiss payouts reminder"
-          className="rounded-md px-2 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-indigo-300 dark:hover:bg-indigo-900/40"
+          className="rounded-md px-2 py-1.5 text-sm font-medium text-accent-700 hover:bg-accent-100 focus:outline-none focus:ring-2 focus:ring-accent-500 dark:text-accent-300 dark:hover:bg-accent-900/40"
         >
           Later
         </button>

@@ -183,7 +183,7 @@ function FloorSection(props: InspectorPanelProps) {
         <button
           type="button"
           onClick={onShowShortcuts}
-          className="inline-flex items-center gap-2 rounded-md text-sm font-medium text-indigo-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-indigo-300"
+          className="inline-flex items-center gap-2 rounded-md text-sm font-medium text-accent-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:text-accent-300"
         >
           <Keyboard className="h-4 w-4" aria-hidden="true" />
           Mouse and keyboard tips
@@ -427,7 +427,7 @@ function MultiSection(props: InspectorPanelProps & { booths: MapBooth[]; count: 
 
 function ItemActions({ onTurn, onDuplicate, onDelete, canTurn }: InspectorPanelProps & { canTurn: boolean }) {
   const btn =
-    'inline-flex min-h-[36px] flex-1 items-center justify-center gap-1.5 rounded-md border px-2 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500';
+    'inline-flex min-h-[36px] flex-1 items-center justify-center gap-1.5 rounded-md border px-2 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500';
   return (
     <div className="flex gap-1.5 pt-1">
       {canTurn && (
@@ -581,7 +581,7 @@ function PriceField({
             type="button"
             onClick={() => onCommit(null)}
             data-testid={`${id}-reset`}
-            className="text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+            className="text-xs font-medium text-accent-600 hover:underline dark:text-accent-400"
           >
             Use tier price
           </button>
@@ -804,9 +804,9 @@ function Segmented({
         return (
           <label
             key={o.value}
-            className={`relative flex flex-1 cursor-pointer items-center justify-center rounded px-2 py-1.5 text-xs font-medium transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-indigo-500 ${
+            className={`relative flex flex-1 cursor-pointer items-center justify-center rounded px-2 py-1.5 text-xs font-medium transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent-500 ${
               checked
-                ? 'bg-indigo-600 text-white dark:bg-indigo-500'
+                ? 'bg-accent-500 text-gray-950 dark:bg-accent-500'
                 : 'text-gray-700 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-700'
             }`}
           >

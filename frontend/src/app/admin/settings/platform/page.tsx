@@ -10,8 +10,8 @@ import { AlertTriangleIcon, Trash2Icon, ShieldAlertIcon, BarChart2Icon, UsersIco
 
 const cardClass = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
 const dangerBtn = 'rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm font-semibold text-red-700 hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:border-red-800 dark:bg-slate-800 dark:text-red-300';
-const switchBase = 'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800';
-const switchOn = 'bg-indigo-600';
+const switchBase = 'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800';
+const switchOn = 'bg-accent-500';
 const switchOff = 'bg-gray-200 dark:bg-slate-700';
 const thumb = 'block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition-transform';
 
@@ -120,7 +120,7 @@ function PlatformSettingsPage() {
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <ZapIcon className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                <ZapIcon className="h-5 w-5 text-accent-600 dark:text-accent-400" />
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Global agent access</h3>
               </div>
               <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">
@@ -145,7 +145,7 @@ function PlatformSettingsPage() {
         <div className="grid gap-4 md:grid-cols-3">
           <div className={cardClass}>
             <div className="flex items-center gap-2">
-              <UsersIcon className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+              <UsersIcon className="h-5 w-5 text-accent-600 dark:text-accent-400" />
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Active grants</h3>
             </div>
             <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{stats?.grantCount ?? 0}</p>
@@ -156,7 +156,7 @@ function PlatformSettingsPage() {
 
           <div className={cardClass}>
             <div className="flex items-center gap-2">
-              <BarChart2Icon className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+              <BarChart2Icon className="h-5 w-5 text-accent-600 dark:text-accent-400" />
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Total tool calls</h3>
             </div>
             <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{stats?.callCount ?? 0}</p>
@@ -167,7 +167,7 @@ function PlatformSettingsPage() {
 
           <div className={cardClass}>
             <div className="flex items-center gap-2">
-              <ZapIcon className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+              <ZapIcon className="h-5 w-5 text-accent-600 dark:text-accent-400" />
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Current access tokens</h3>
             </div>
             <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{stats?.currentTokens ?? 0}</p>

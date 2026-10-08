@@ -21,7 +21,7 @@ interface StatementDescriptorDialogProps {
 }
 
 const readOnlyRow = 'mt-1 flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900/40';
-const generalLink = 'shrink-0 text-xs font-semibold text-indigo-600 hover:underline dark:text-indigo-300';
+const generalLink = 'shrink-0 text-xs font-semibold text-accent-600 hover:underline dark:text-accent-300';
 
 export default function StatementDescriptorDialog({ settings, canEdit, returnFocusRef, onClose, onSaved }: StatementDescriptorDialogProps) {
   const api = usePaymentsApi();

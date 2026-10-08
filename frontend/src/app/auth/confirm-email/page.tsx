@@ -55,7 +55,7 @@ function ConfirmEmail() {
             <p className="mt-2 text-sm text-gray-600 dark:text-slate-400">
               Your Jump account now uses <span className="font-medium text-gray-900 dark:text-white">{state.email}</span>. Sign-in links go there from now on.
             </p>
-            <Link href="/admin/account" className="mt-6 inline-block rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <Link href="/admin/account" className="mt-6 inline-block rounded-md bg-accent-500 px-4 py-2 text-sm font-semibold text-gray-950 hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent-500">
               Go to your account
             </Link>
           </>
@@ -66,7 +66,7 @@ function ConfirmEmail() {
               {state.code === 'TOKEN_EXPIRED' ? 'This link has expired' : 'This link can’t be used'}
             </h1>
             <p role="alert" className="mt-2 text-sm text-gray-600 dark:text-slate-400">{state.message}</p>
-            <Link href="/admin/account" className="mt-6 inline-block text-sm font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400">
+            <Link href="/admin/account" className="mt-6 inline-block text-sm font-medium text-accent-600 hover:text-accent-600 dark:text-accent-400">
               Back to account settings
             </Link>
           </>

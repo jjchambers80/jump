@@ -627,7 +627,7 @@ function BuilderContent() {
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center" role="status">
-        <Loader2 className="h-6 w-6 animate-spin text-indigo-500" aria-hidden="true" />
+        <Loader2 className="h-6 w-6 animate-spin text-accent-600 dark:text-accent-400" aria-hidden="true" />
         <span className="ml-2 text-gray-500 dark:text-slate-400">Loading map…</span>
       </div>
     );
@@ -641,7 +641,7 @@ function BuilderContent() {
           <p className="font-medium text-red-600 dark:text-red-400">{error}</p>
           <button
             onClick={() => router.push('/admin/maps')}
-            className="mt-4 text-sm text-indigo-600 hover:underline dark:text-indigo-400"
+            className="mt-4 text-sm text-accent-600 hover:underline dark:text-accent-400"
           >
             Back to maps
           </button>
@@ -673,7 +673,7 @@ function BuilderContent() {
       <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-gray-200 bg-white px-4 py-2.5 dark:border-slate-700 dark:bg-slate-800">
         <Link
           href={state.eventId ? `/admin/events/${state.eventId}` : '/admin/maps'}
-          className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-400 dark:hover:bg-slate-700"
+          className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:text-slate-400 dark:hover:bg-slate-700"
           aria-label="Back to event"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
@@ -741,7 +741,7 @@ function BuilderContent() {
                 href={`/events/${state.eventId}/map`}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex min-h-[36px] items-center gap-1.5 rounded-md px-3 text-sm font-medium text-gray-700 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-200 dark:hover:bg-slate-700"
+                className="inline-flex min-h-[36px] items-center gap-1.5 rounded-md px-3 text-sm font-medium text-gray-700 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:text-slate-200 dark:hover:bg-slate-700"
               >
                 <ExternalLink className="h-4 w-4" aria-hidden="true" />
                 View map
@@ -750,7 +750,7 @@ function BuilderContent() {
               <button
                 type="button"
                 onClick={handleUnpublish}
-                className="inline-flex min-h-[36px] items-center gap-1.5 rounded-md border border-gray-300 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+                className="inline-flex min-h-[36px] items-center gap-1.5 rounded-md border border-gray-300 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
               >
                 <EyeOff className="h-4 w-4" aria-hidden="true" />
                 Unpublish
@@ -851,7 +851,7 @@ function BuilderContent() {
                   <button
                     type="button"
                     onClick={() => addItem('BOOTH')}
-                    className="inline-flex items-center justify-center gap-2 rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+                    className="inline-flex items-center justify-center gap-2 rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
                   >
                     <Square className="h-4 w-4" aria-hidden="true" />
                     One booth
@@ -862,7 +862,7 @@ function BuilderContent() {
           )}
 
           {moveMode && (
-            <div className="absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-3 rounded-full bg-indigo-600 py-1.5 pl-4 pr-1.5 text-sm font-medium text-white shadow-lg">
+            <div className="absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-3 rounded-full bg-accent-500 py-1.5 pl-4 pr-1.5 text-sm font-medium text-gray-950 shadow-lg">
               Click the booth to move the vendor to
               <button
                 type="button"
@@ -1036,7 +1036,7 @@ function IconButton({
       aria-keyshortcuts={shortcut}
       aria-pressed={pressed}
       title={shortcut ? `${label} (${shortcut})` : label}
-      className="flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:text-slate-300 dark:hover:bg-slate-700"
+      className="flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:text-slate-300 dark:hover:bg-slate-700"
     >
       {children}
     </button>
@@ -1136,7 +1136,7 @@ export default function MapBuilderPage() {
     <Suspense
       fallback={
         <div className="flex h-64 items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-indigo-500" aria-hidden="true" />
+          <Loader2 className="h-6 w-6 animate-spin text-accent-600 dark:text-accent-400" aria-hidden="true" />
         </div>
       }
     >

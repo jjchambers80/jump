@@ -26,7 +26,7 @@ export default function SummaryRow({ label, leading, primary, secondary, trailin
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 dark:hover:bg-slate-700/40"
+      className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500 dark:hover:bg-slate-700/40"
     >
       <span className="flex h-8 w-8 shrink-0 items-center justify-center text-gray-500 dark:text-slate-400">{leading}</span>
       <span className="min-w-0 flex-1">

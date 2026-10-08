@@ -43,9 +43,9 @@ const toForm = (p: TierPreset): PresetForm => ({
   isRefundable: p.isRefundable,
 });
 
-const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500';
+const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500';
 const input =
-  'block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100';
+  'block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100';
 const label = 'mb-1 block text-sm font-medium text-gray-700 dark:text-slate-300';
 const iconBtn = `inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white ${focusRing}`;
 
@@ -103,7 +103,7 @@ export default function TierPresetMenu({
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-controls="tier-preset-menu"
-        className={`inline-flex min-h-9 items-center gap-1 rounded-md border border-indigo-300 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-50 dark:border-indigo-700 dark:text-indigo-300 dark:hover:bg-indigo-900/20 ${focusRing}`}
+        className={`inline-flex min-h-9 items-center gap-1 rounded-md border border-accent-300 px-3 py-1.5 text-xs font-medium text-accent-700 hover:bg-accent-50 dark:border-accent-700 dark:text-accent-300 dark:hover:bg-accent-900/20 ${focusRing}`}
       >
         Saved tiers
         <ChevronDown className="h-3.5 w-3.5" aria-hidden />
@@ -151,7 +151,7 @@ export default function TierPresetMenu({
           <button
             type="button"
             onClick={() => setEditing('new')}
-            className={`flex w-full items-center gap-2 border-t border-gray-100 px-4 py-2.5 text-sm font-medium text-indigo-700 hover:bg-indigo-50 dark:border-slate-700 dark:text-indigo-300 dark:hover:bg-indigo-900/20 ${focusRing}`}
+            className={`flex w-full items-center gap-2 border-t border-gray-100 px-4 py-2.5 text-sm font-medium text-accent-700 hover:bg-accent-50 dark:border-slate-700 dark:text-accent-300 dark:hover:bg-accent-900/20 ${focusRing}`}
           >
             <Plus className="h-4 w-4" aria-hidden />
             New saved tier
@@ -270,7 +270,7 @@ function PresetDialog({
             </select>
           </div>
           <label className="flex items-center gap-2 pb-2 text-sm text-gray-700 dark:text-slate-300">
-            <input type="checkbox" checked={form.isRefundable} onChange={(e) => set('isRefundable', e.target.checked)} className="h-4 w-4 accent-indigo-600" />
+            <input type="checkbox" checked={form.isRefundable} onChange={(e) => set('isRefundable', e.target.checked)} className="h-4 w-4 accent-accent-600" />
             Refundable
           </label>
         </div>

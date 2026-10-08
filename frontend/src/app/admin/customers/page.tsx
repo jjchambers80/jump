@@ -317,8 +317,8 @@ function CustomersPageContent() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
-            <svg className="w-5 h-5 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-9 h-9 rounded-lg bg-accent-100 dark:bg-accent-900/30 flex items-center justify-center">
+            <svg className="w-5 h-5 text-accent-600 dark:text-accent-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
             </svg>
           </div>
@@ -338,7 +338,7 @@ function CustomersPageContent() {
                 onClick={() => setScope(value)}
                 className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                   scope === value
-                    ? 'bg-indigo-600 text-white'
+                    ? 'bg-accent-500 text-gray-950'
                     : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700'
                 }`}
               >
@@ -365,7 +365,7 @@ function CustomersPageContent() {
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(e); }}
-          className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
         />
         {search && (
           <button
@@ -574,7 +574,7 @@ function CustomersPageContent() {
                           onChange={(e) => setEditValue(e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit(); }}
                           autoFocus
-                          className="w-full px-1.5 py-0.5 text-xs rounded border border-indigo-300 dark:border-indigo-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-indigo-500"
+                          className="w-full px-1.5 py-0.5 text-xs rounded border border-accent-300 dark:border-accent-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-accent-500"
                           placeholder="City, State"
                         />
                         <button onClick={saveEdit} disabled={saving} className="text-green-600 hover:text-green-700">
@@ -587,7 +587,7 @@ function CustomersPageContent() {
                     ) : (
                       <button
                         onClick={() => startEdit(customer, 'location')}
-                        className="text-xs text-gray-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 truncate block w-full text-left"
+                        className="text-xs text-gray-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 truncate block w-full text-left"
                         title="Click to edit location"
                       >
                         {customer.location || <span className="text-gray-300 dark:text-slate-600">—</span>}
@@ -618,7 +618,7 @@ function CustomersPageContent() {
                           onChange={(e) => setEditValue(e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit(); }}
                           autoFocus
-                          className="w-full px-1.5 py-0.5 text-xs rounded border border-indigo-300 dark:border-indigo-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-indigo-500"
+                          className="w-full px-1.5 py-0.5 text-xs rounded border border-accent-300 dark:border-accent-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-accent-500"
                           placeholder="Add a note..."
                         />
                         <button onClick={saveEdit} disabled={saving} className="text-green-600 hover:text-green-700">
@@ -631,7 +631,7 @@ function CustomersPageContent() {
                     ) : (
                       <button
                         onClick={() => startEdit(customer, 'note')}
-                        className="text-xs text-gray-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 truncate block w-full text-left"
+                        className="text-xs text-gray-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 truncate block w-full text-left"
                         title="Click to edit note"
                       >
                         {customer.note || <span className="text-gray-300 dark:text-slate-600">Add note...</span>}

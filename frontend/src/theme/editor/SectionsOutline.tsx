@@ -50,12 +50,12 @@ function Row({ item, index, zone, count, depth }: { item: Item; index: number; z
   return (
     <li>
       <div
-        className={`flex items-center gap-1 rounded px-2 py-1 text-sm ${selected ? 'bg-indigo-50 text-indigo-900' : 'hover:bg-gray-50'} ${
+        className={`flex items-center gap-1 rounded px-2 py-1 text-sm ${selected ? 'bg-accent-50 text-accent-900' : 'hover:bg-gray-50'} ${
           item.props.hidden ? 'opacity-60' : ''
         }`}
         style={{ paddingLeft: 8 + depth * 16 }}
       >
-        <button type="button" title={label} className="min-w-0 flex-1 truncate text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500" onClick={select} aria-current={selected ? 'true' : undefined}>
+        <button type="button" title={label} className="min-w-0 flex-1 truncate text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500" onClick={select} aria-current={selected ? 'true' : undefined}>
           {label}
         </button>
         {locked && <Lock className="h-3.5 w-3.5 text-gray-500" aria-label="Locked" />}
@@ -65,7 +65,7 @@ function Row({ item, index, zone, count, depth }: { item: Item; index: number; z
             onClick={() => setHidden(!item.props.hidden)}
             aria-label={`${item.props.hidden ? 'Show' : 'Hide'} ${label}`}
             aria-pressed={Boolean(item.props.hidden)}
-            className="rounded p-1 text-gray-600 hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+            className="rounded p-1 text-gray-600 hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
           >
             {item.props.hidden ? <EyeOff className="h-3.5 w-3.5" aria-hidden /> : <Eye className="h-3.5 w-3.5" aria-hidden />}
           </button>
@@ -124,7 +124,7 @@ function AddBlock({ item, count }: { item: Item; count: number }) {
       }}
       style={{ paddingLeft: 24 }}
       aria-label={`Add ${noun} to ${labelOf(item.type)}`}
-      className="inline-flex items-center gap-1 rounded py-0.5 pr-1 text-xs font-medium text-indigo-700 hover:bg-indigo-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+      className="inline-flex items-center gap-1 rounded py-0.5 pr-1 text-xs font-medium text-accent-700 hover:bg-accent-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
     >
       <Plus className="h-3 w-3" aria-hidden /> Add {noun}
     </button>
@@ -149,7 +149,7 @@ function AddSection({ slot, items }: { slot: string; items: Item[] }) {
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-sm font-medium text-indigo-700 hover:bg-indigo-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+        className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-sm font-medium text-accent-700 hover:bg-accent-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
       >
         <Plus className="h-3.5 w-3.5" aria-hidden /> Add section
       </button>

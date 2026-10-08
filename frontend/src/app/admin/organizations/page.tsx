@@ -180,14 +180,14 @@ export default function OrganizationsPage() {
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             placeholder="Organization name"
-            className="block w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="block w-full rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
             required
           />
         </div>
         <button
           type="submit"
           disabled={creating || !newName.trim()}
-          className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="rounded-md bg-accent-500 px-4 py-2 text-sm font-semibold text-gray-950 shadow-sm hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {creating ? 'Creating…' : 'Create'}
         </button>
@@ -276,7 +276,7 @@ export default function OrganizationsPage() {
                         </>
                       )}
                       {org.plan === 'STARTER' && (
-                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300" data-testid="org-plan">
+                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-accent-100 text-accent-800 dark:bg-accent-900/30 dark:text-accent-300" data-testid="org-plan">
                           Starter{org.subscriptionStatus === 'trialing' ? ' · trial' : org.subscriptionStatus === 'past_due' ? ' · past due' : ''}
                         </span>
                       )}
@@ -296,7 +296,7 @@ export default function OrganizationsPage() {
                   ) : editingId !== org.id ? (
                     <button
                       onClick={() => setEditingId(org.id)}
-                      className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300"
+                      className="text-sm font-medium text-accent-600 dark:text-accent-400 hover:text-accent-600 dark:hover:text-accent-300"
                     >
                       Edit
                     </button>

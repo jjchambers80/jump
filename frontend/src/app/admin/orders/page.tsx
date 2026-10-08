@@ -56,8 +56,8 @@ function AdminOrdersPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-5 gap-4 flex-wrap">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center">
-            <svg className="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-8 h-8 rounded-lg bg-accent-100 dark:bg-accent-900/40 flex items-center justify-center">
+            <svg className="w-4 h-4 text-accent-600 dark:text-accent-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
             </svg>
           </div>
@@ -77,7 +77,7 @@ function AdminOrdersPage() {
                 data-testid={`orders-view-${key}`}
                 onClick={() => choose(key)}
                 className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                  view === key ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700'
+                  view === key ? 'bg-accent-500 text-gray-950' : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700'
                 }`}
               >
                 {label}

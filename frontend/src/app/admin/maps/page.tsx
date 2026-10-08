@@ -111,7 +111,7 @@ function MapsListContent() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-6 h-6 animate-spin text-indigo-500" />
+        <Loader2 className="w-6 h-6 animate-spin text-accent-600 dark:text-accent-400" />
       </div>
     );
   }
@@ -125,7 +125,7 @@ function MapsListContent() {
           <p className="text-gray-500 dark:text-slate-400 mb-4">{error}</p>
           <button
             onClick={loadMaps}
-            className="px-4 py-2 bg-indigo-600 text-white rounded text-sm hover:bg-indigo-700"
+            className="px-4 py-2 bg-accent-500 text-gray-950 rounded text-sm hover:bg-accent-hover"
           >
             Retry
           </button>
@@ -156,7 +156,7 @@ function MapsListContent() {
         </div>
         <button
           onClick={() => openCreateDialog()}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-accent-500 text-gray-950 rounded-lg text-sm font-medium hover:bg-accent-hover transition-colors"
         >
           <Plus className="w-4 h-4" />
           Create map
@@ -175,7 +175,7 @@ function MapsListContent() {
           </p>
           <button
             onClick={() => openCreateDialog()}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+            className="px-4 py-2 bg-accent-500 text-gray-950 rounded-lg text-sm font-medium hover:bg-accent-hover transition-colors"
           >
             Create your first map
           </button>
@@ -215,7 +215,7 @@ function MapsListContent() {
                   <td className="px-4 py-3">
                     <a
                       href={`/admin/maps/${m.id}`}
-                      className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
+                      className="text-sm font-medium text-accent-600 dark:text-accent-400 hover:underline"
                     >
                       {m.name}
                     </a>
@@ -300,7 +300,7 @@ function MapsListContent() {
                   <button
                     type="button"
                     onClick={() => openCreateDialog(plan.id)}
-                    className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500"
+                    className="rounded-md bg-accent-500 px-3 py-1.5 text-xs font-semibold text-gray-950 hover:bg-accent-hover"
                   >
                     Use on an event
                   </button>
@@ -398,7 +398,7 @@ function MapsListContent() {
                 type="button"
                 onClick={handleCreate}
                 disabled={!createEventId || creating}
-                className="px-4 py-2 text-sm bg-indigo-600 text-white hover:bg-indigo-700 rounded transition-colors disabled:opacity-50"
+                className="px-4 py-2 text-sm bg-accent-500 text-gray-950 hover:bg-accent-hover rounded transition-colors disabled:opacity-50"
               >
                 {creating ? 'Creating…' : 'Create map'}
               </button>
@@ -446,7 +446,7 @@ export default function MapsListPage() {
     <Suspense
       fallback={
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-6 h-6 animate-spin text-indigo-500" />
+          <Loader2 className="w-6 h-6 animate-spin text-accent-600 dark:text-accent-400" />
         </div>
       }
     >

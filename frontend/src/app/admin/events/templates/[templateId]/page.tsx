@@ -12,7 +12,7 @@ import { formatDate, type FormTemplate, type Question, type TemplateDefinition, 
 import { describeError } from '@/app/admin/events/[eventId]/applications/useApplicationsApi';
 import { useParticipantsApi } from '@/components/applications/useParticipantsApi';
 
-const primary = 'rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50';
+const primary = 'rounded-md bg-accent-500 px-3 py-1.5 text-sm font-semibold text-gray-950 hover:bg-accent-hover disabled:opacity-50';
 
 /** Definition tiers / questions carry no ids; the cards need stable ones for their edit state. */
 function toEditorForm(template: FormTemplate, name: string, definition: TemplateDefinition): EditorForm {
@@ -134,7 +134,7 @@ export default function TemplateEditorPage({ params }: { params: { templateId: s
                 window.history.back();
               }
             }}
-            className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+            className="text-sm font-medium text-accent-600 hover:underline dark:text-accent-300"
           >
             ← Back
           </Link>

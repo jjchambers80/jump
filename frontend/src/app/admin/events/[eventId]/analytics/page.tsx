@@ -87,7 +87,7 @@ function StatCard({
   color?: string;
 }) {
   const colorClasses: Record<string, string> = {
-    indigo: 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800',
+    indigo: 'bg-accent-50 dark:bg-accent-900/20 border-accent-200 dark:border-accent-800',
     green: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800',
     blue: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800',
     amber: 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800',
@@ -183,7 +183,7 @@ export default function EventAnalyticsPage() {
       {/* Loading */}
       {loading && (
         <div className="flex items-center justify-center py-16">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent-600" />
         </div>
       )}
 
@@ -325,7 +325,7 @@ export default function EventAnalyticsPage() {
                                     ? 'bg-red-500'
                                     : sellThrough >= 50
                                       ? 'bg-amber-500'
-                                      : 'bg-indigo-600'
+                                      : 'bg-accent-500'
                                 }`}
                                 style={{ width: `${Math.min(sellThrough, 100)}%` }}
                               />

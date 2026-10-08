@@ -30,7 +30,7 @@ export default function AppearanceRow() {
         {OPTIONS.map((option) => (
           <label
             key={option.value}
-            className="cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors has-[:checked]:bg-white has-[:checked]:text-gray-900 has-[:checked]:shadow-sm has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-indigo-500 dark:text-slate-400 dark:has-[:checked]:bg-slate-700 dark:has-[:checked]:text-white"
+            className="cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors has-[:checked]:bg-white has-[:checked]:text-gray-900 has-[:checked]:shadow-sm has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent-500 dark:text-slate-400 dark:has-[:checked]:bg-slate-700 dark:has-[:checked]:text-white"
           >
             <input
               type="radio"

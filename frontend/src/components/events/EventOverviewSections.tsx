@@ -24,9 +24,9 @@ import {
 } from '@/lib/eventOverview';
 
 const eyebrow = 'text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-slate-400';
-const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-800';
-const editButton = `inline-flex min-h-8 items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 text-xs font-semibold text-gray-700 hover:border-indigo-300 hover:text-indigo-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-indigo-400/60 dark:hover:text-indigo-200 ${focusRing}`;
-const quietLink = `inline-flex items-center gap-1 rounded text-sm font-medium text-indigo-600 hover:text-indigo-500 hover:underline dark:text-indigo-300 dark:hover:text-indigo-200 ${focusRing}`;
+const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-800';
+const editButton = `inline-flex min-h-8 items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 text-xs font-semibold text-gray-700 hover:border-accent-300 hover:text-accent-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-accent-400/60 dark:hover:text-accent-200 ${focusRing}`;
+const quietLink = `inline-flex items-center gap-1 rounded text-sm font-medium text-accent-600 hover:text-accent-600 hover:underline dark:text-accent-300 dark:hover:text-accent-200 ${focusRing}`;
 
 /** One card on the page: a numbered-free eyebrow title and its Edit link. */
 export function OverviewSection({
@@ -213,7 +213,7 @@ export function SalesSection({
                             onClick={() => onEditTier(tier)}
                             aria-haspopup="dialog"
                             aria-label={`Edit tier ${tier.name}`}
-                            className={`rounded text-left font-medium text-gray-900 underline decoration-gray-300 decoration-dotted underline-offset-4 hover:text-indigo-700 hover:decoration-indigo-400 dark:text-white dark:decoration-slate-500 dark:hover:text-indigo-200 ${focusRing}`}
+                            className={`rounded text-left font-medium text-gray-900 underline decoration-gray-300 decoration-dotted underline-offset-4 hover:text-accent-700 hover:decoration-accent-400 dark:text-white dark:decoration-slate-500 dark:hover:text-accent-200 ${focusRing}`}
                           >
                             {tier.name}
                           </button>
@@ -350,7 +350,7 @@ export function RsvpSection({
           aria-label={`${n(headcount)} of ${n(limit)} guests`}
           className="mt-3 h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-slate-700"
         >
-          <div className="h-full rounded-full bg-indigo-500" style={{ width: `${pct * 100}%` }} />
+          <div className="h-full rounded-full bg-accent-500" style={{ width: `${pct * 100}%` }} />
         </div>
       ) : null}
       <p className="mt-3 text-xs text-gray-500 dark:text-slate-400">
@@ -680,7 +680,7 @@ export function AdmissionCard({
 }
 
 const BOOTH_STYLE: Record<BoothState, { label: string; cell: string }> = {
-  SOLD: { label: 'Sold', cell: 'bg-indigo-500 dark:bg-indigo-400' },
+  SOLD: { label: 'Sold', cell: 'bg-accent-500 dark:bg-accent-400' },
   RESERVED: { label: 'Reserved', cell: 'bg-violet-400 dark:bg-violet-400/80' },
   HELD: { label: 'On hold', cell: 'bg-amber-400' },
   AVAILABLE: { label: 'Available', cell: 'bg-white ring-1 ring-inset ring-emerald-500/70 dark:bg-slate-800 dark:ring-emerald-400/60' },

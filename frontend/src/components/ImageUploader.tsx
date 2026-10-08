@@ -65,7 +65,7 @@ export default function ImageUploader({
         onDrop={handleDrop}
         className={`rounded-lg border-2 border-dashed p-4 text-center transition-colors ${
           dragOver
-            ? 'border-indigo-400 bg-indigo-50 dark:border-indigo-500 dark:bg-indigo-900/20'
+            ? 'border-accent-400 bg-accent-50 dark:border-accent-500 dark:bg-accent-900/20'
             : 'border-gray-300 dark:border-slate-600'
         }`}
       >

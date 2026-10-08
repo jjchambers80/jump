@@ -93,7 +93,7 @@ export default function DoorCheckInPage({ params }: { params: { eventId: string 
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
-      <Link href={`/admin/events/${eventId}`} className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-300">
+      <Link href={`/admin/events/${eventId}`} className="text-sm font-medium text-accent-600 hover:underline dark:text-accent-300">
         ← Back to event
       </Link>
 
@@ -142,13 +142,13 @@ export default function DoorCheckInPage({ params }: { params: { eventId: string 
             aria-label="Search vendors"
             autoComplete="off"
             // 16px minimum keeps iOS Safari from zooming the whole page on focus.
-            className="w-full rounded-lg border border-gray-300 bg-white py-3 pl-10 pr-3 text-base text-gray-900 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+            className="w-full rounded-lg border border-gray-300 bg-white py-3 pl-10 pr-3 text-base text-gray-900 placeholder:text-gray-400 focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
           />
         </div>
         <button
           type="button"
           onClick={() => setScanning(true)}
-          className="flex shrink-0 items-center gap-2 rounded-lg bg-indigo-600 px-4 py-3 text-base font-semibold text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+          className="flex shrink-0 items-center gap-2 rounded-lg bg-accent-500 px-4 py-3 text-base font-semibold text-gray-950 hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2"
         >
           <Camera className="h-5 w-5" aria-hidden />
           Scan
@@ -339,7 +339,7 @@ function ScannerSheet({ onScanned, onClose }: { onScanned: (payload: string) => 
           aria-label="Vendor pass code"
           className="flex-1 rounded-lg border border-gray-300 px-3 py-3 text-base dark:border-slate-600 dark:bg-slate-900 dark:text-white"
         />
-        <button type="submit" className="rounded-lg bg-indigo-600 px-4 py-3 text-base font-semibold text-white hover:bg-indigo-700">
+        <button type="submit" className="rounded-lg bg-accent-500 px-4 py-3 text-base font-semibold text-gray-950 hover:bg-accent-hover">
           Look up
         </button>
       </form>

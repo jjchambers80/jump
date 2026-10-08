@@ -75,7 +75,7 @@ export default function OrgSwitcher() {
         data-testid="org-switcher-trigger"
         className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
       >
-        <span className="flex items-center justify-center w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-bold">
+        <span className="flex items-center justify-center w-7 h-7 rounded-full bg-accent-500 text-gray-950 text-xs font-bold">
           {initials}
         </span>
         <span className="text-sm font-medium text-gray-900 dark:text-slate-100 max-w-[160px] truncate hidden sm:inline">
@@ -97,20 +97,20 @@ export default function OrgSwitcher() {
                 onClick={() => handleSelect(org.id)}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors ${
                   org.id === selectedOrg?.id
-                    ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
+                    ? 'bg-accent-50 dark:bg-accent-900/30 text-accent-700 dark:text-accent-300'
                     : 'text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700'
                 }`}
               >
                 <span className={`flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold ${
                   org.id === selectedOrg?.id
-                    ? 'bg-indigo-600 text-white'
+                    ? 'bg-accent-500 text-gray-950'
                     : 'bg-gray-200 dark:bg-slate-600 text-gray-600 dark:text-slate-300'
                 }`}>
                   {org.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()}
                 </span>
                 <span className="flex-1 truncate font-medium">{org.name}</span>
                 {org.id === selectedOrg?.id && (
-                  <svg className="w-4 h-4 text-indigo-600 dark:text-indigo-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-4 h-4 text-accent-600 dark:text-accent-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
                 )}
@@ -141,7 +141,7 @@ export default function OrgSwitcher() {
               href="/admin/account"
               onClick={() => setOpen(false)}
               data-testid="org-switcher-account"
-              className="px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500"
+              className="px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500"
             >
               {userImage ? (
                 <img src={userImage} alt="" className="w-8 h-8 rounded-full object-cover bg-gray-200 dark:bg-slate-600" />
@@ -153,7 +153,7 @@ export default function OrgSwitcher() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 dark:text-slate-100 truncate">{userName}</p>
                 <p className="text-xs text-gray-500 dark:text-slate-400 truncate">{userEmail}</p>
-                <p className="text-xs text-indigo-600 dark:text-indigo-400">Manage account</p>
+                <p className="text-xs text-accent-600 dark:text-accent-400">Manage account</p>
               </div>
             </Link>
             <button

@@ -39,7 +39,7 @@ const LIVE_NOTE_KEY = 'jump.theme-editor.live-note.';
 const BACKUP_KEY = 'jump.theme-editor.backup.';
 
 const headerButton =
-  'whitespace-nowrap rounded-md border border-gray-300 bg-white px-2 py-1 text-sm font-medium text-gray-800 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500';
+  'whitespace-nowrap rounded-md border border-gray-300 bg-white px-2 py-1 text-sm font-medium text-gray-800 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500';
 
 interface Loaded {
   theme: ThemeDetail;
@@ -365,7 +365,7 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
           <p role="alert" className="text-gray-800">
             {loadError}
           </p>
-          <Link href="/admin/online-store" className="mt-4 inline-block text-sm font-medium text-indigo-700 hover:underline">
+          <Link href="/admin/online-store" className="mt-4 inline-block text-sm font-medium text-accent-700 hover:underline">
             Back to Online Store
           </Link>
         </div>
@@ -395,7 +395,7 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
             {backup && (
               <p className="flex items-center justify-between gap-3 text-gray-800">
                 <span>Your unsaved edits from before the reload are kept for this session.</span>
-                <button type="button" className="text-xs font-medium text-indigo-700 underline" onClick={applyBackup}>
+                <button type="button" className="text-xs font-medium text-accent-700 underline" onClick={applyBackup}>
                   Apply them again
                 </button>
               </p>
@@ -485,7 +485,7 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
                   onClick={() => void save()}
                   disabled={!dirty || saving}
                   aria-describedby={dirty ? 'unsaved-summary' : undefined}
-                  className="whitespace-nowrap rounded-md bg-indigo-600 px-3 py-1 text-sm font-semibold text-white hover:bg-indigo-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="whitespace-nowrap rounded-md bg-accent-500 px-3 py-1 text-sm font-semibold text-gray-950 hover:bg-accent-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {saving ? 'Saving…' : 'Save'}
                 </button>
@@ -529,7 +529,7 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
               <button
                 type="button"
                 autoFocus
-                className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500"
+                className="rounded-md bg-accent-500 px-3 py-1.5 text-sm font-semibold text-gray-950 hover:bg-accent-hover"
                 onClick={() => {
                   setConflict(false);
                   try {

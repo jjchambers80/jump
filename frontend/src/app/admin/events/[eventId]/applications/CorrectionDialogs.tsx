@@ -190,7 +190,7 @@ export function AdjustmentDialog({ eventId, application, returnFocusRef, onClose
               role="radio"
               aria-checked={kind === k}
               onClick={() => setKind(k)}
-              className={`rounded-md border px-3 py-1.5 text-sm font-medium ${kind === k ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-gray-300 bg-white text-gray-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200'}`}
+              className={`rounded-md border px-3 py-1.5 text-sm font-medium ${kind === k ? 'border-accent-600 bg-accent-500 text-gray-950' : 'border-gray-300 bg-white text-gray-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200'}`}
             >
               {k === 'discount' ? 'Discount' : 'Extra charge'}
             </button>

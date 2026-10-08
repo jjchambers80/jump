@@ -32,7 +32,7 @@ export default function PhotoTile({ item, onOpen }: PhotoTileProps) {
         data-testid="gallery-photo"
         onClick={onOpen}
         aria-label={`Edit photo: ${label}${missing ? ' (alt text missing)' : ''}`}
-        className="group block aspect-square w-full touch-manipulation overflow-hidden rounded-md border border-gray-200 bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-slate-600 dark:bg-slate-700 dark:focus-visible:ring-offset-slate-800"
+        className="group block aspect-square w-full touch-manipulation overflow-hidden rounded-md border border-gray-200 bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 dark:border-slate-600 dark:bg-slate-700 dark:focus-visible:ring-offset-slate-800"
         {...listeners}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}

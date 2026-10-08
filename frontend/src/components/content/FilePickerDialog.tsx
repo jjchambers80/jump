@@ -159,9 +159,9 @@ export default function FilePickerDialog({
                     type="button"
                     onClick={() => (multiple ? toggle(file) : onPick?.(file))}
                     {...(multiple ? { 'aria-pressed': isSelected(file) } : {})}
-                    className={`group relative block w-full overflow-hidden rounded-md border text-left focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                    className={`group relative block w-full overflow-hidden rounded-md border text-left focus:outline-none focus:ring-2 focus:ring-accent-500 ${
                       multiple && isSelected(file)
-                        ? 'border-indigo-600 ring-2 ring-indigo-600 dark:border-indigo-400 dark:ring-indigo-400'
+                        ? 'border-accent-600 ring-2 ring-accent-600 dark:border-accent-400 dark:ring-accent-400'
                         : 'border-gray-200 dark:border-slate-600'
                     }`}
                   >
@@ -169,7 +169,7 @@ export default function FilePickerDialog({
                       <span
                         aria-hidden
                         className={`absolute right-1.5 top-1.5 z-10 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white shadow ${
-                          isSelected(file) ? 'bg-indigo-600 text-white' : 'bg-black/30 text-transparent'
+                          isSelected(file) ? 'bg-accent-500 text-gray-950' : 'bg-black/30 text-transparent'
                         }`}
                       >
                         <Check className="h-3.5 w-3.5" />
@@ -218,7 +218,7 @@ export default function FilePickerDialog({
               type="button"
               disabled={!selected.length}
               onClick={() => onPickMany?.(selected)}
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-md bg-accent-500 px-4 py-2 text-sm font-semibold text-gray-950 hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {selected.length
                 ? `Add ${selected.length} ${noun}${selected.length === 1 ? '' : 's'}`

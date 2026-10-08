@@ -35,7 +35,7 @@ export default function FocalPointPicker({
       aria-valuemin={0}
       aria-valuemax={100}
       data-testid="focal-point-picker"
-      className="relative inline-block max-w-full cursor-crosshair select-none rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      className="relative inline-block max-w-full cursor-crosshair select-none rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500"
       onClick={(event) => {
         const rect = event.currentTarget.getBoundingClientRect();
         onChange(
@@ -62,7 +62,7 @@ export default function FocalPointPicker({
       />
       <span
         aria-hidden
-        className="pointer-events-none absolute h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-indigo-600/70 shadow ring-1 ring-black/30"
+        className="pointer-events-none absolute h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-accent-500/70 shadow ring-1 ring-black/30"
         style={{ left: `${focalX * 100}%`, top: `${focalY * 100}%` }}
       />
     </div>

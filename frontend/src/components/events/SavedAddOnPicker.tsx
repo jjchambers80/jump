@@ -199,7 +199,7 @@ export default function SavedAddOnPicker({
           onFocus={() => setOpen(true)}
           onBlur={() => setTimeout(() => !editing && setOpen(false), 150)}
           onKeyDown={onKey}
-          className="block w-full rounded-md border border-gray-300 bg-white py-2 pl-8 pr-3 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+          className="block w-full rounded-md border border-gray-300 bg-white py-2 pl-8 pr-3 text-sm text-gray-900 shadow-sm focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500/30 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
         />
       </div>
 
@@ -213,7 +213,7 @@ export default function SavedAddOnPicker({
             )}
             {options.map((option, i) => {
               const selected = i === active;
-              const row = `flex w-full items-center gap-2 px-3 py-2 text-left text-sm ${selected ? 'bg-indigo-50 dark:bg-indigo-950/50' : ''}`;
+              const row = `flex w-full items-center gap-2 px-3 py-2 text-left text-sm ${selected ? 'bg-accent-50 dark:bg-accent-950/50' : ''}`;
               if (option.kind === 'saved') {
                 const item = option.item;
                 const already = !!item.onEvent;
@@ -293,7 +293,7 @@ export default function SavedAddOnPicker({
                   id={optionId(i)}
                   role="option"
                   aria-selected={selected}
-                  className={`${row} cursor-pointer border-t border-gray-100 font-medium text-indigo-700 dark:border-slate-700 dark:text-indigo-300`}
+                  className={`${row} cursor-pointer border-t border-gray-100 font-medium text-accent-700 dark:border-slate-700 dark:text-accent-300`}
                   onMouseEnter={() => setActive(i)}
                   onMouseDown={(e) => {
                     e.preventDefault();
@@ -415,7 +415,7 @@ export function SavedAddOnFlyout({
           </div>
         </div>
         <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-300">
-          <input type="checkbox" checked={state.taxable} onChange={(e) => setState((s) => ({ ...s, taxable: e.target.checked }))} className="h-4 w-4 accent-indigo-600" />
+          <input type="checkbox" checked={state.taxable} onChange={(e) => setState((s) => ({ ...s, taxable: e.target.checked }))} className="h-4 w-4 accent-accent-600" />
           Taxable at the event&apos;s rate
         </label>
       </div>

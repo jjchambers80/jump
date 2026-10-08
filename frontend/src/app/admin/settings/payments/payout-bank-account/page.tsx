@@ -25,11 +25,11 @@ const BANK_ACCOUNT_PATH = '/admin/settings/payments/payout-bank-account';
 
 const cardClass = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
 const secondaryBtn =
-  'inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
+  'inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-accent-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
 const primaryBtn =
-  'inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50';
+  'inline-flex items-center gap-1.5 rounded-md bg-accent-500 px-3 py-1.5 text-sm font-semibold text-gray-950 hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent-500 disabled:cursor-not-allowed disabled:opacity-50';
 const rowClass =
-  'flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 dark:hover:bg-slate-700/40';
+  'flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500 dark:hover:bg-slate-700/40';
 
 // Stripe payout arrival dates are calendar days (midnight UTC); render them as such.
 function formatDate(iso: string) {
@@ -117,7 +117,7 @@ function PayoutBankAccountContent() {
 
         <section aria-labelledby="payout-bank-heading" className="min-w-0 flex-1 space-y-6">
           <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-slate-400">
-            <Link href="/admin/settings/payments" className="font-medium text-indigo-600 hover:underline dark:text-indigo-300">
+            <Link href="/admin/settings/payments" className="font-medium text-accent-600 hover:underline dark:text-accent-300">
               Payments
             </Link>
             <ChevronRightIcon className="h-3.5 w-3.5" />
@@ -321,7 +321,7 @@ function PayoutBankAccountContent() {
                   Monthly payouts on a day a month does not have (the 30th in February) go out on the last day of that month.
                 </p>
                 <p className="mt-2 text-sm">
-                  <Link href="/admin/finance/payouts" className="font-medium text-indigo-600 hover:underline dark:text-indigo-300">
+                  <Link href="/admin/finance/payouts" className="font-medium text-accent-600 hover:underline dark:text-accent-300">
                     View payout history ›
                   </Link>
                 </p>

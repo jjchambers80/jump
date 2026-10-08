@@ -18,7 +18,7 @@ import { SERVICE_LABEL, SERVICE_STYLE, type TaxRegionRow, type TaxSettingsRespon
 
 const cardClass = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
 const secondaryBtn =
-  'inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
+  'inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-accent-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
 
 export default function TaxSettingsPage() {
   const { selectedOrgId, loading: orgLoading } = useOrg();
@@ -135,7 +135,7 @@ export default function TaxSettingsPage() {
               )}
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 px-4 py-3 dark:border-slate-700">
-              <BoltIcon className="h-5 w-5 text-indigo-500" />
+              <BoltIcon className="h-5 w-5 text-accent-600 dark:text-accent-400" />
               <span className="text-sm font-medium text-gray-900 dark:text-white">Stripe Tax</span>
               {service ? (
                 <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${SERVICE_STYLE[service.status]}`}>
@@ -192,7 +192,7 @@ export default function TaxSettingsPage() {
 
             <Link
               href="/admin/settings/tax/report"
-              className="mt-4 flex items-center gap-3 rounded-lg border border-gray-200 px-4 py-3 text-sm font-medium text-gray-900 transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-700 dark:text-white dark:hover:bg-slate-700/40"
+              className="mt-4 flex items-center gap-3 rounded-lg border border-gray-200 px-4 py-3 text-sm font-medium text-gray-900 transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:border-slate-700 dark:text-white dark:hover:bg-slate-700/40"
             >
               <TaxIcon className="h-5 w-5 text-gray-500 dark:text-slate-400" />
               <span className="flex-1">Collected tax report</span>
@@ -210,7 +210,7 @@ export default function TaxSettingsPage() {
                 checked={data?.settings.taxInclusivePricing === true}
                 disabled={!data || !data.canEdit || savingSettings}
                 onChange={(e) => setConfirmInclusive(e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800"
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-accent-600 focus:ring-accent-500 dark:border-slate-600 dark:bg-slate-800"
               />
               <span>
                 <span className="block text-sm font-medium text-gray-900 dark:text-white">Include sales tax in ticket prices</span>

@@ -133,19 +133,19 @@ export default function BlogPostsPage() {
         data-testid="blog-posts-header"
       >
         <div>
-          <p className="text-sm font-medium text-indigo-600 dark:text-indigo-300">Content</p>
+          <p className="text-sm font-medium text-accent-600 dark:text-accent-300">Content</p>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Blog posts</h1>
         </div>
         <div className="flex items-center gap-2">
           <Link
             href="/admin/content/blogs"
-            className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-accent-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
           >
             Manage blogs
           </Link>
           <Link
             href="/admin/content/blog-posts/new"
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+            className="rounded-md bg-accent-500 px-4 py-2 text-sm font-semibold text-gray-950 shadow-sm hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2"
           >
             Add blog post
           </Link>
@@ -206,7 +206,7 @@ export default function BlogPostsPage() {
                 placeholder="Search title, author or tag"
                 value={q}
                 onChange={(event) => setQ(event.target.value)}
-                className="w-full rounded-md border border-gray-300 bg-white py-1.5 pl-8 pr-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+                className="w-full rounded-md border border-gray-300 bg-white py-1.5 pl-8 pr-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500/30 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
               />
             </div>
             <label className="sr-only" htmlFor="posts-blog">
@@ -243,7 +243,7 @@ export default function BlogPostsPage() {
 
           {selected.size > 0 && (
             <div
-              className="flex flex-wrap items-center gap-3 border-b border-gray-200 bg-indigo-50 px-4 py-2 text-sm dark:border-slate-700 dark:bg-indigo-900/20"
+              className="flex flex-wrap items-center gap-3 border-b border-gray-200 bg-accent-50 px-4 py-2 text-sm dark:border-slate-700 dark:bg-accent-900/20"
               data-testid="bulk-bar"
             >
               <span className="font-medium text-gray-900 dark:text-white">

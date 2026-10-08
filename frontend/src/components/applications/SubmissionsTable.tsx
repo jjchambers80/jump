@@ -337,11 +337,11 @@ export default function SubmissionsTable({ eventId, standingFormId }: { eventId?
     <>
       {/* Status summary */}
       <div className="mb-4 flex flex-wrap gap-2" data-testid="applications-summary">
-        <button type="button" onClick={() => setQuery({ status: undefined })} className={`${btn} ${!query.status ? 'ring-2 ring-indigo-500' : ''}`}>
+        <button type="button" onClick={() => setQuery({ status: undefined })} className={`${btn} ${!query.status ? 'ring-2 ring-accent-500' : ''}`}>
           All {Object.values(summary).reduce((s, n) => s + (n ?? 0), 0)}
         </button>
         {STATUS_ORDER.map((s) => (
-          <button key={s} type="button" onClick={() => setQuery({ status: s, payment: undefined })} className={`${btn} ${query.status === s && !awaitingSpaceActive ? 'ring-2 ring-indigo-500' : ''}`}>
+          <button key={s} type="button" onClick={() => setQuery({ status: s, payment: undefined })} className={`${btn} ${query.status === s && !awaitingSpaceActive ? 'ring-2 ring-accent-500' : ''}`}>
             {STATUS_LABEL[s]} <span className="ml-1 text-gray-500 dark:text-slate-400">{summary[s] ?? 0}</span>
           </button>
         ))}
@@ -350,7 +350,7 @@ export default function SubmissionsTable({ eventId, standingFormId }: { eventId?
           <button
             type="button"
             onClick={() => setQuery(awaitingSpaceActive ? { status: undefined, payment: undefined } : { status: 'APPROVED', payment: 'AWAITING_SELECTION' })}
-            className={`${btn} ${awaitingSpaceActive ? 'ring-2 ring-indigo-500' : ''}`}
+            className={`${btn} ${awaitingSpaceActive ? 'ring-2 ring-accent-500' : ''}`}
             data-testid="applications-awaiting-space"
           >
             Awaiting space <span className="ml-1 text-gray-500 dark:text-slate-400">{list?.awaitingSpace ?? 0}</span>
@@ -473,8 +473,8 @@ export default function SubmissionsTable({ eventId, standingFormId }: { eventId?
       )}
 
       {selected.size > 0 && (
-        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-indigo-50 px-4 py-2 text-sm dark:bg-indigo-900/20" data-testid="applications-bulk-bar">
-          <span className="font-semibold text-indigo-900 dark:text-indigo-200">{selected.size} selected</span>
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-accent-50 px-4 py-2 text-sm dark:bg-accent-900/20" data-testid="applications-bulk-bar">
+          <span className="font-semibold text-accent-900 dark:text-accent-200">{selected.size} selected</span>
           {(['APPROVE', 'WAITLIST', 'REJECT'] as Decision[]).map((d) => {
             const paidApprove = d === 'APPROVE' && selectedPaid;
             return (
@@ -483,8 +483,8 @@ export default function SubmissionsTable({ eventId, standingFormId }: { eventId?
               </button>
             );
           })}
-          {selectedPaid && <span className="text-xs text-indigo-800 dark:text-indigo-300">Approve paid applications from their detail page.</span>}
-          <button type="button" onClick={() => toggleAll(false)} className="text-indigo-700 hover:underline dark:text-indigo-300">
+          {selectedPaid && <span className="text-xs text-accent-800 dark:text-accent-300">Approve paid applications from their detail page.</span>}
+          <button type="button" onClick={() => toggleAll(false)} className="text-accent-700 hover:underline dark:text-accent-300">
             Clear
           </button>
         </div>
@@ -534,11 +534,11 @@ export default function SubmissionsTable({ eventId, standingFormId }: { eventId?
                   No applications match.{' '}
                   {forms.length === 0 && !standing &&
                     (orgWide ? (
-                      <Link href="/admin/events" className="text-indigo-600 hover:underline dark:text-indigo-300">
+                      <Link href="/admin/events" className="text-accent-600 hover:underline dark:text-accent-300">
                         Create a form on an event
                       </Link>
                     ) : (
-                      <Link href={`/admin/events/${eventId}/applications/forms`} className="text-indigo-600 hover:underline dark:text-indigo-300">
+                      <Link href={`/admin/events/${eventId}/applications/forms`} className="text-accent-600 hover:underline dark:text-accent-300">
                         Create a form
                       </Link>
                     ))}
@@ -627,7 +627,7 @@ export default function SubmissionsTable({ eventId, standingFormId }: { eventId?
                     )}
                     {row.orderId && row.orderRef && (
                       <div className="mt-1">
-                        <Link href={`/admin/orders/${row.orderId}`} className="font-mono text-xs text-indigo-600 hover:underline dark:text-indigo-400" data-testid={`application-order-${row.id}`} onClick={(e) => e.stopPropagation()}>
+                        <Link href={`/admin/orders/${row.orderId}`} className="font-mono text-xs text-accent-600 hover:underline dark:text-accent-400" data-testid={`application-order-${row.id}`} onClick={(e) => e.stopPropagation()}>
                           {row.orderRef}
                         </Link>
                       </div>
