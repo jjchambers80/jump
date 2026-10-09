@@ -2357,6 +2357,62 @@ model AgentAuditLog {
   @@index([grantId, createdAt])
 }
 
+// Spec 048: append-only audit trail of staff, agent and system changes. No
+// updatedAt and no foreign keys (rows outlive users and organizations); a
+// trigger refuses UPDATE, and only the retention sweep deletes.
+model AuditLog {
+  id               String         @id @default(cuid())
+  createdAt        DateTime       @default(now())
+  organizationId   String?
+  actorType        AuditActorType
+  actorUserId      String?
+  actorLabel       String
+  actorRole        String?
+  viaPlatformAdmin Boolean        @default(false)
+  developerTokenId String?
+  agentGrantId     String?
+  agentClientName  String?
+  action           String
+  operation        AuditOperation
+  feature          String
+  entityType       String
+  entityId         String?
+  entityLabel      String?
+  changes          Json?
+  meta             Json?
+  source           String
+  requestId        String?
+  method           String?
+  route            String?
+  ipHash           String?
+  userAgent        String?
+  location         String?
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, entityType, entityId, createdAt])
+  @@index([organizationId, actorUserId, createdAt])
+  @@index([requestId])
+  @@index([createdAt])
+}
+
+enum AuditActorType {
+  USER
+  DEVELOPER_TOKEN
+  AGENT
+  SYSTEM
+}
+
+enum AuditOperation {
+  CREATE
+  UPDATE
+  DELETE
+  BULK_CREATE
+  BULK_UPDATE
+  BULK_DELETE
+  EXPORT
+  OTHER
+}
+
 // Platform-wide feature switches. Values are JSON so later settings do not
 // require one nullable column each.
 model PlatformSetting {

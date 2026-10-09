@@ -61,6 +61,7 @@ import orderService from '../services/OrderService.js';
 import boothService from '../services/BoothService.js';
 import rsvpReminderService from '../services/RsvpReminderService.js';
 import { BOOTH_SWEEP_INTERVAL_MS } from '../config/applications.js';
+import { auditContextMiddleware } from '../audit/middleware.js';
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -127,6 +128,10 @@ app.use((req, res, next) => {
   res.setHeader('X-Correlation-ID', req.id);
   next();
 });
+
+// Audit trail (spec 048): staff writes made while handling this request are
+// captured and written to AuditLog once the response has succeeded.
+app.use(auditContextMiddleware);
 
 // Baseline per-IP cap (spec 020): a wide net under every route except
 // health, metrics and the Stripe webhooks; the money paths carry tighter ones.
