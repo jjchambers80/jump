@@ -11,6 +11,11 @@ export const LEGAL_VERSIONS = Object.freeze({
   terms: '2026-09-19-draft',
   privacy: '2026-09-19-draft',
   cardAuthorization: '2026-09-19-draft',
+  // Spec 047 D0-D: no caller yet. donationTerms is the charity agreement an org
+  // admin accepts before taking gifts (DV); recurringGift is the donor's
+  // recurring authorization (D3). Never required until those phases ship.
+  donationTerms: '2026-10-09-draft',
+  recurringGift: '2026-10-09-draft',
 });
 
 /** `LegalDocument` enum value for each version key. */
@@ -18,6 +23,8 @@ export const DOCUMENT_FOR_KEY = Object.freeze({
   terms: 'TERMS',
   privacy: 'PRIVACY',
   cardAuthorization: 'CARD_AUTHORIZATION',
+  donationTerms: 'DONATION_TERMS',
+  recurringGift: 'RECURRING_GIFT',
 });
 
 /** Version key for each `LegalDocument` this config knows. */
@@ -25,6 +32,8 @@ export const KEY_FOR_DOCUMENT = Object.freeze({
   TERMS: 'terms',
   PRIVACY: 'privacy',
   CARD_AUTHORIZATION: 'cardAuthorization',
+  DONATION_TERMS: 'donationTerms',
+  RECURRING_GIFT: 'recurringGift',
 });
 
 /**

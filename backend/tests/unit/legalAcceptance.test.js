@@ -13,15 +13,18 @@ const {
   hashIp,
   requestMeta,
 } = await import('../../src/services/LegalAcceptanceService.js');
-const { LEGAL_VERSIONS, cardAuthorizationText, applyConsentText, checkoutAcceptanceRequired } =
-  await import('../../src/config/legal.js');
+const {
+  LEGAL_VERSIONS,
+  KEY_FOR_DOCUMENT,
+  DOCUMENT_FOR_KEY,
+  cardAuthorizationText,
+  applyConsentText,
+  checkoutAcceptanceRequired,
+} = await import('../../src/config/legal.js');
 
 const current = (document) => ({
   document,
-  version:
-    LEGAL_VERSIONS[
-      { TERMS: 'terms', PRIVACY: 'privacy', CARD_AUTHORIZATION: 'cardAuthorization' }[document]
-    ],
+  version: LEGAL_VERSIONS[KEY_FOR_DOCUMENT[document]],
 });
 
 describe('assertCurrent', () => {
@@ -65,6 +68,50 @@ describe('assertCurrent', () => {
         ['TERMS', 'PRIVACY', 'CARD_AUTHORIZATION']
       )
     ).toThrow(/card authorization/);
+  });
+});
+
+describe('donation documents (spec 047 D0-D)', () => {
+  test('both maps and the versions cover DONATION_TERMS and RECURRING_GIFT', () => {
+    expect(LEGAL_VERSIONS).toMatchObject({
+      donationTerms: '2026-10-09-draft',
+      recurringGift: '2026-10-09-draft',
+    });
+    expect(DOCUMENT_FOR_KEY).toMatchObject({
+      donationTerms: 'DONATION_TERMS',
+      recurringGift: 'RECURRING_GIFT',
+    });
+    for (const [key, document] of Object.entries(DOCUMENT_FOR_KEY))
+      expect(KEY_FOR_DOCUMENT[document]).toBe(key);
+    expect(Object.keys(KEY_FOR_DOCUMENT).sort()).toEqual(Object.values(DOCUMENT_FOR_KEY).sort());
+    expect(service.versions()).toEqual(LEGAL_VERSIONS);
+  });
+
+  test('are known (checked for staleness) but never required by default', () => {
+    expect(
+      service.assertCurrent([
+        current('TERMS'),
+        current('PRIVACY'),
+        current('DONATION_TERMS'),
+        current('RECURRING_GIFT'),
+      ])
+    ).toEqual([current('TERMS'), current('PRIVACY')]);
+    expect(() =>
+      service.assertCurrent([
+        current('TERMS'),
+        current('PRIVACY'),
+        { document: 'RECURRING_GIFT', version: 'old' },
+      ])
+    ).toThrow(expect.objectContaining({ code: 'LEGAL_VERSION_STALE' }));
+  });
+
+  test('can be required', () => {
+    expect(service.assertCurrent([current('DONATION_TERMS')], ['DONATION_TERMS'])).toEqual([
+      current('DONATION_TERMS'),
+    ]);
+    expect(() => service.assertCurrent([current('TERMS')], ['RECURRING_GIFT'])).toThrow(
+      expect.objectContaining({ code: 'LEGAL_ACCEPTANCE_REQUIRED' })
+    );
   });
 });
 

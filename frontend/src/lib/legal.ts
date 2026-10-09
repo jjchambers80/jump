@@ -9,9 +9,11 @@ export interface LegalVersions {
   terms: string;
   privacy: string;
   cardAuthorization: string;
+  donationTerms: string;
+  recurringGift: string;
 }
 
-export type LegalDocument = 'TERMS' | 'PRIVACY' | 'CARD_AUTHORIZATION';
+export type LegalDocument = 'TERMS' | 'PRIVACY' | 'CARD_AUTHORIZATION' | 'DONATION_TERMS' | 'RECURRING_GIFT';
 
 export interface LegalAcceptanceInput {
   document: LegalDocument;
