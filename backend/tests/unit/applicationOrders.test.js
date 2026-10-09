@@ -57,6 +57,12 @@ describe('order line helpers', () => {
     expect(buyerLineTotal(line, 'ABSORB', { taxInclusive: true })).toBe(30);
   });
 
+  test("a line's own feeMode wins over the order's; null falls back (spec 047 D0-B)", () => {
+    expect(buyerLineTotal({ ...line, feeMode: 'ABSORB' }, 'PASS')).toBe(32.18);
+    expect(buyerLineTotal({ ...line, feeMode: 'PASS' }, 'ABSORB')).toBe(34.58);
+    expect(buyerLineTotal({ ...line, feeMode: null }, 'ABSORB')).toBe(32.18);
+  });
+
   test('adjustmentTotal sums ADJUSTMENT lines only; a WAIVER is a record', () => {
     const items = [
       { kind: 'APPLICATION_TIER', unitPrice: 250 },
