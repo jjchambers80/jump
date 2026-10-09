@@ -149,6 +149,20 @@ export default auth(async (req: NextRequest & { auth: unknown }) => {
     ) {
       return oauthFrameProtection(NextResponse.redirect(new URL(TWO_STEP_SETUP_PATH, req.nextUrl)), pathname);
     }
+    // System administration: SYSTEM_ADMIN lands there from /admin, nobody
+    // else gets in. The role claim can lag the DB by up to 60 s; the
+    // system layout re-checks on the client and the API enforces it.
+    if (staffOnly) {
+      const isSystemAdmin = (req.auth as { role?: string } | null)?.role === 'SYSTEM_ADMIN';
+      if (pathname === '/admin' || pathname === '/admin/') {
+        const home = new URL(isSystemAdmin ? '/admin/system' : '/admin/dashboard', req.nextUrl);
+        home.search = req.nextUrl.search;
+        return NextResponse.redirect(home);
+      }
+      if (!isSystemAdmin && (pathname === '/admin/system' || pathname.startsWith('/admin/system/'))) {
+        return NextResponse.redirect(new URL('/admin/dashboard', req.nextUrl));
+      }
+    }
     return oauthFrameProtection(NextResponse.next(), pathname);
   }
 

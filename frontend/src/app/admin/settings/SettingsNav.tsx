@@ -26,7 +26,6 @@ const SECTIONS: Section[] = [
   ...(process.env.NEXT_PUBLIC_AGENT_ACCESS_ENABLED === 'true'
     ? [{ href: '/admin/settings/agent-access', label: 'Agent access', roles: ['ADMIN', 'SYSTEM_ADMIN'] }]
     : []),
-  { href: '/admin/settings/platform', label: 'Platform', roles: ['SYSTEM_ADMIN'] },
 ];
 
 const active = 'bg-accent-50 text-accent-700 dark:bg-accent-900/30 dark:text-accent-300';

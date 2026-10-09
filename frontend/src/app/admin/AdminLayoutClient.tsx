@@ -8,7 +8,7 @@ import { useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import AdminRoute from '@/components/AdminRoute';
 import AdminSearch from '@/components/AdminSearch';
-import AdminSidebar from '@/components/AdminSidebar';
+import AdminSidebar, { isSystemPath } from '@/components/AdminSidebar';
 import EventimusLogo from '@/components/EventimusLogo';
 import OrgSwitcher from '@/components/OrgSwitcher';
 import { OrgProvider } from '@/components/OrgContext';
@@ -21,6 +21,9 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const mobileSearchButtonRef = useRef<HTMLButtonElement>(null);
+  // Store search runs against the selected organization; the system area is
+  // platform-wide, so it would answer a question nobody asked there.
+  const showSearch = !isSystemPath(pathname);
 
   if (pathname && FULL_SCREEN.test(pathname)) {
     return (
@@ -63,26 +66,28 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
                 </div>
 
                 <div className="hidden flex-1 justify-center md:flex">
-                  <AdminSearch />
+                  {showSearch && <AdminSearch />}
                 </div>
 
                 <div className="ml-auto flex flex-shrink-0 items-center gap-2">
-                  <button
-                    ref={mobileSearchButtonRef}
-                    type="button"
-                    data-admin-search-toggle
-                    aria-label={mobileSearchOpen ? 'Close administration search' : 'Open administration search'}
-                    aria-expanded={mobileSearchOpen}
-                    onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
-                    className="rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-accent-500 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200 md:hidden"
-                  >
-                    <Search className="h-5 w-5" aria-hidden />
-                  </button>
+                  {showSearch && (
+                    <button
+                      ref={mobileSearchButtonRef}
+                      type="button"
+                      data-admin-search-toggle
+                      aria-label={mobileSearchOpen ? 'Close administration search' : 'Open administration search'}
+                      aria-expanded={mobileSearchOpen}
+                      onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
+                      className="rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-accent-500 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200 md:hidden"
+                    >
+                      <Search className="h-5 w-5" aria-hidden />
+                    </button>
+                  )}
                   <OrgSwitcher />
                 </div>
               </div>
 
-              {mobileSearchOpen && (
+              {showSearch && mobileSearchOpen && (
                 <div className="px-4 pb-3 md:hidden">
                   <AdminSearch
                     mobile

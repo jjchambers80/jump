@@ -23,7 +23,7 @@ function safeCallbackUrl(raw: string | null, fallback: string): string {
 
 function TwoStepForm() {
   const params = useSearchParams();
-  const callbackUrl = safeCallbackUrl(params.get('callbackUrl'), '/admin/dashboard');
+  const callbackUrl = safeCallbackUrl(params.get('callbackUrl'), '/admin');
   const { data: session, status, update } = useSession();
   const [checkingTrusted, setCheckingTrusted] = useState(true);
   const [mode, setMode] = useState<Mode>('app');
