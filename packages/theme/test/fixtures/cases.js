@@ -86,6 +86,8 @@ export const SETTINGS_CASES = [
   { name: 'scheme hex', settings: { colors: { schemes: [{ id: 'scheme-1', name: 'A', background: '#FFFFFF', foreground: 'auto', accent: 'brand', accentForeground: 'auto', secondaryButtonLabel: 'auto', border: 'auto', muted: 'auto', shadow: 'auto' }] } }, errors: [] },
   { name: 'scheme bad color', settings: { colors: { schemes: [{ id: 'scheme-1', name: 'A', background: 'red', foreground: 'auto', accent: 'brand', accentForeground: 'auto', secondaryButtonLabel: 'auto', border: 'auto', muted: 'auto', shadow: 'auto' }] } }, errors: ['colors.schemes[0].background'] },
   { name: 'social link on the wrong host', settings: { social: { instagram: 'https://evil.example/instagram.com' } }, errors: ['social.instagram'] },
+  { name: 'reddit and twitch links', settings: { social: { reddit: 'https://www.reddit.com/user/riverside', twitch: 'https://www.twitch.tv/riverside' } }, errors: [] },
+  { name: 'twitch link on the wrong host', settings: { social: { twitch: 'https://twitch.example/riverside' } }, errors: ['social.twitch'] },
   { name: 'social link on a subdomain', settings: { social: { instagram: 'https://www.instagram.com/riverside' } }, errors: [] },
   { name: 'badge scheme must exist', settings: { colors: { schemes: [{ id: 'scheme-1', name: 'A', background: 'auto', foreground: 'auto', accent: 'brand', accentForeground: 'auto', secondaryButtonLabel: 'auto', border: 'auto', muted: 'auto', shadow: 'auto' }] }, badges: { soldOutScheme: 'scheme-2' } }, errors: ['badges.soldOutScheme'] },
 ];

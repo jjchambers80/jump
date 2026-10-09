@@ -6,6 +6,7 @@ import Link from 'next/link';
 import ContentHtml from '@/components/storefront/ContentHtml';
 import FooterMenu from '@/components/storefront/FooterMenu';
 import LogoBox from '@/components/LogoBox';
+import SocialIcon from '@/components/storefront/SocialIcon';
 import { resolveAssetUrl } from '@/lib/assets';
 import { LEGAL_PAGES_ENABLED, LEGAL_PATHS } from '@/lib/legal';
 import { schemeClass } from '../settingsCss';
@@ -20,6 +21,8 @@ const SOCIAL_LABELS: Record<string, string> = {
   youtube: 'YouTube',
   linkedin: 'LinkedIn',
   threads: 'Threads',
+  reddit: 'Reddit',
+  twitch: 'Twitch',
   website: 'Website',
 };
 
@@ -86,11 +89,19 @@ function FooterBlock({ block, ctx }: { block: ThemeItem; ctx: SectionContext }) 
       return (
         <div>
           <h2 className={heading}>Follow us</h2>
-          <ul className="mt-2 sm:mt-3">
+          {/* Icon-only links: the accessible name carries the network; 44px targets. */}
+          <ul className="-ml-3 mt-2 flex flex-wrap gap-1 sm:mt-3">
             {social.map(([key, url]) => (
               <li key={key}>
-                <a href={url as string} rel="noopener me" target="_blank" className={linkClass}>
-                  {SOCIAL_LABELS[key] ?? key}
+                <a
+                  href={url as string}
+                  rel="noopener me"
+                  target="_blank"
+                  aria-label={`${SOCIAL_LABELS[key] ?? key} (opens in a new tab)`}
+                  title={SOCIAL_LABELS[key] ?? key}
+                  className="inline-flex size-11 items-center justify-center rounded-full text-gray-600 transition-colors hover:bg-gray-900/5 hover:text-brand-link focus:outline-none focus-visible:ring-2 focus-visible:ring-brand motion-reduce:transition-none dark:text-slate-300 dark:hover:bg-white/10"
+                >
+                  <SocialIcon network={key} />
                 </a>
               </li>
             ))}

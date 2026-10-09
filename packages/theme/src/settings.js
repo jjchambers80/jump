@@ -120,6 +120,8 @@ export const SETTINGS_GROUPS = {
       youtube: httpsUrl('YouTube', ['youtube.com', 'youtu.be']),
       linkedin: httpsUrl('LinkedIn', ['linkedin.com']),
       threads: httpsUrl('Threads', ['threads.net', 'threads.com']),
+      reddit: httpsUrl('Reddit', ['reddit.com']),
+      twitch: httpsUrl('Twitch', ['twitch.tv']),
       website: httpsUrl('Website'),
     },
   },
