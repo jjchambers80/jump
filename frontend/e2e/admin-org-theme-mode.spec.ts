@@ -153,9 +153,8 @@ test.beforeEach(async ({ page, baseURL }) => {
 
 test('shows the Theme section above Branding with System selected by default', async ({ page }) => {
   await mockOrgApi(page);
-  await page.goto('/admin/organizations');
+  await page.goto('/admin/online-store');
 
-  await page.getByRole('button', { name: 'Edit' }).click();
   const picker = page.getByTestId('theme-mode-picker');
   await expect(picker).toBeVisible();
   await expect(page.getByRole('radio')).toHaveCount(3);
@@ -172,9 +171,8 @@ test('shows the Theme section above Branding with System selected by default', a
 
 test('selects Dark and saves { themeMode: "DARK" }', async ({ page }) => {
   const api = await mockOrgApi(page);
-  await page.goto('/admin/organizations');
+  await page.goto('/admin/online-store');
 
-  await page.getByRole('button', { name: 'Edit' }).click();
   await page.getByTestId('theme-mode-dark').click();
   await expect(page.getByRole('radio', { name: /Dark/ })).toBeChecked();
 
@@ -188,9 +186,8 @@ test('selects Dark and saves { themeMode: "DARK" }', async ({ page }) => {
 
 test('radio group is keyboard navigable', async ({ page }) => {
   await mockOrgApi(page);
-  await page.goto('/admin/organizations');
+  await page.goto('/admin/online-store');
 
-  await page.getByRole('button', { name: 'Edit' }).click();
   await page.getByRole('radio', { name: /System/ }).focus();
   await page.keyboard.press('ArrowRight');
   await expect(page.getByRole('radio', { name: /Light/ })).toBeChecked();

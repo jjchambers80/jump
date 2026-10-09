@@ -96,6 +96,7 @@ const navItems: NavItem[] = [
 // Users join this list as their pages land.
 const systemNavItems: NavItem[] = [
   { label: 'Overview', href: '/admin/system', icon: ShieldCheck },
+  { label: 'Organizations', href: '/admin/system/organizations', icon: Store },
   { label: 'Settings', href: '/admin/system/settings', icon: Settings },
 ];
 

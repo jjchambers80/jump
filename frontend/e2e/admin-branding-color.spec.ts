@@ -98,9 +98,8 @@ test.beforeEach(async ({ page, baseURL }) => {
 
 test('picks a preset, sees a passing badge, and saves the normalized hex', async ({ page }) => {
   const api = await mockOrgApi(page);
-  await page.goto('/admin/organizations');
+  await page.goto('/admin/online-store');
 
-  await page.getByRole('button', { name: 'Edit' }).click();
   await expect(page.getByTestId('brand-color-picker')).toBeVisible();
 
   const verdict = page.getByTestId('contrast-verdict');
@@ -120,9 +119,8 @@ test('picks a preset, sees a passing badge, and saves the normalized hex', async
 
 test('flags a failing custom hex but still allows saving it', async ({ page }) => {
   const api = await mockOrgApi(page);
-  await page.goto('/admin/organizations');
+  await page.goto('/admin/online-store');
 
-  await page.getByRole('button', { name: 'Edit' }).click();
   const hexInput = page.getByTestId('brand-color-hex');
   await hexInput.fill('#FFFF00');
 
@@ -141,9 +139,8 @@ test('flags a failing custom hex but still allows saving it', async ({ page }) =
 
 test('rejects invalid text without sending a request', async ({ page }) => {
   const api = await mockOrgApi(page);
-  await page.goto('/admin/organizations');
+  await page.goto('/admin/online-store');
 
-  await page.getByRole('button', { name: 'Edit' }).click();
   await page.getByTestId('brand-color-hex').fill('not-a-color');
   await expect(page.getByTestId('brand-color-hex-error')).toContainText('Enter a hex color');
   await expect(page.getByTestId('brand-color-save')).toBeDisabled();
@@ -152,9 +149,8 @@ test('rejects invalid text without sending a request', async ({ page }) => {
 
 test('explains why contrast matters via a keyboard-accessible tooltip', async ({ page }) => {
   await mockOrgApi(page);
-  await page.goto('/admin/organizations');
+  await page.goto('/admin/online-store');
 
-  await page.getByRole('button', { name: 'Edit' }).click();
   const trigger = page.getByRole('button', { name: 'Why contrast matters' });
   await trigger.focus();
   await expect(page.getByRole('tooltip')).toContainText('4.5:1');
