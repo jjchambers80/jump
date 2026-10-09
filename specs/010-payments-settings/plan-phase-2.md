@@ -390,4 +390,6 @@ The owner's stated intent is "the organizer provides their Stripe account; platf
 
 Decision blocks the Connect steps in the launch checklist. Not blocking anything else on main.
 
+**Decided 2026-10-09: option C** (organization connects its own Stripe account; direct charges with `application_fee_amount`), for tickets, applications and donations. Built by spec 047 D0-S (`specs/047-donations/plan-d0.md` §3). Step 5 of the launch checklist above is wrong under any option for Express accounts; under option C with `controller.fees.payer = account`, Stripe files the 1099-K.
+
 **2026-09-18 input** (spec 022 planning): production has Jump's Stripe account plus each organization's *own* Stripe account; test mirrors it with a Jump sandbox and a client sandbox. That rules out A. B is the smallest change (onboarding only); C is a separate spec. See `specs/022-organization-onboarding/plan.md` §3.3.
