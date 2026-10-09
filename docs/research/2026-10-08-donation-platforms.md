@@ -424,6 +424,8 @@ Consequences of putting R4 in v1:
 
 ### D0. Groundwork (no UI)
 
+> **Superseded 2026-10-09 by [spec 047 D0](../../specs/047-donations/plan-d0.md).** The owner chose **option C**: every charge, tickets included, is a direct charge on the organization's own Stripe account. Item 1 (webhook routing) is dropped, item 4 is decided, and the L1/L3/L7 checklist items below are answered or replaced by spec 047 §7.
+
 1. **Webhook routing.** Make `BillingService.isBillingEvent` require a Jump-billing marker:
    - `metadata.kind = 'jump_billing'` on the billing Checkout and subscription, or
    - `subscription.items[].price.id === JUMP_STARTER_PRICE_ID`.
@@ -738,7 +740,7 @@ There is deliberately **no** `Donation` money table. The gift's money is the Ord
    - NC 131F solicitor status and money transmission under each charge model.
    - Whether Jump may issue acknowledgments in the charity's name.
    - The receipt, statement and disclosure wording.
-8. **Gift charge model (D0.4, blocks D1).** Choose between:
+8. **Gift charge model.** **Decided 2026-10-09: option C, direct charges on the organization's own account, for every charge** (spec 047 D0-S). The options were:
    - destination charges, as today;
    - `on_behalf_of`;
    - direct charges on the charity's account.

@@ -1,40 +1,48 @@
 # Spec 047 — Donations, phase D0: groundwork
 
 **Status**: Plan, 2026-10-09. Nothing built.
-**Ask**: nonprofits take donations in Jump: one-time gifts added to an event ticket purchase, preset amounts (common denominations) or a custom amount, gifts without a ticket, and recurring monthly gifts. The research and the full phase plan (D0, DV, D1–D5) live in [Donation platforms](../../docs/research/2026-10-08-donation-platforms.md) §9; the law behind every requirement is in [Donation legal compliance](../../docs/research/2026-10-08-donation-legal-compliance.md). This file specifies **D0 only**: the changes every later phase stands on. D0 ships **no donor-facing UI** and changes no behaviour for existing ticket, application or billing flows.
+**Ask**: nonprofits take donations in Jump: one-time gifts added to an event ticket purchase, preset amounts (common denominations) or a custom amount, gifts without a ticket, and recurring monthly gifts. The research and the full phase plan (D0, DV, D1–D5) live in [Donation platforms](../../docs/research/2026-10-08-donation-platforms.md) §9; the law behind every requirement is in [Donation legal compliance](../../docs/research/2026-10-08-donation-legal-compliance.md). This file specifies **D0 only**: the changes every later phase stands on. D0 ships **no donor-facing UI**.
 
 **v1 = D0 + DV + D1 + D3** (owner, 2026-10-09). Decided the same day:
 
+- **Option C: direct charges on the organization's own Stripe account.** The organization connects its Stripe account (an existing one, or a new one it owns with the full Stripe dashboard). Every charge — tickets, applications, gifts, monthly gifts — is created **on that account**. Jump takes its platform fee through `application_fee_amount`. Money never passes through Jump's balance. This settles spec 010 `plan-phase-2.md` §11.1 (option C there) and research decision 8.
 - Ticket checkout offers **one-time** gifts only. "Make it monthly" is a separate one-step payment on the confirmation page, never part of the ticket payment (plan decision 13).
 - Default preset amounts are **$10 / $25 / $50 / $100** plus Other; each organization can change them (decision 14).
 - `Order.eventId` becomes nullable **in D0**, because monthly gifts have no event (decision 4).
+
+**What option C settles** (compliance doc §4): the organization is the merchant on the card statement and owns refunds and disputes; Jump never holds gift money, which removes the money-transmission, NC "solicitor" (custody) and California commingling questions and Stripe's "donations on behalf of someone else" rule; Stripe's nonprofit rate becomes reachable because it applies to the nonprofit's own account; a ticket and a gift share **one** payment again. With `controller.fees.payer = account`, Stripe — not Jump — files the 1099-K (compliance §2.5). Costs: the organization becomes the seller of record for sales tax (spec 009 flips), and every Stripe call that creates or moves money is re-pointed at the connected account (D0-S).
 
 ## 1. What exists today (origin/main 4bb0142)
 
 | Piece | Where | What D0 needs from it |
 |---|---|---|
+| Connect | `ConnectService.js:170` (`accounts.create`, `controller.stripe_dashboard.type: 'express'`), `:187` account links, `:201` Express login links; `OrganizationStripeAccount.stripeAccountId` | **Express accounts Jump creates**, destination charges. Dark in production (`STRIPE_CONNECT_ENABLED` off), so no live organization is on it: nothing to migrate |
+| Charge routing | `PaymentSettingsService.checkoutOptionsFor` (`:198-239`) | Destination charge: `transfer_data.destination` + `application_fee_amount = total cents − subtotal cents`. Jump is merchant; Jump keeps fees **and tax** |
+| Money calls | `OrderService.js:440, 969, 1032, 1070` (Checkout); `ApplicationPaymentService.js:84, 143, 158, 178, 294, 329, 493, 643, 730, 764, 800, 1003` (Customers, SetupIntents, PaymentIntents, Checkout); `stripeRefund.js:51` (`reverse_transfer` + `refund_application_fee` when `connected`); `DisputeService.js:166` (`charges.retrieve`); `ContactErasureService.js:251` (`customers.del`); `TaxService.js:378, 436-437` (Stripe Tax on the platform account) | All run on **Jump's** account today |
+| Ledger | `PaymentTransaction.stripeAccountId String?` (`schema.prisma:1183`): null = charged on the platform account | Already tells a refund which account a charge lives on |
+| Webhooks | `webhooks.js:103` platform endpoint (orders, applications, refunds, disputes); `:230` Connect endpoint handles only `account.*`, `capability.updated`, `payout.*`; `:301` billing endpoint | Under direct charges, checkout, payment, refund and dispute events for organization charges arrive on the **Connect** endpoint with `event.account` |
+| Billing | `BillingService` (spec 022) on Jump's own account | Unchanged by option C: Jump's subscription with each organization stays Jump's |
 | Fee math | `backend/src/services/FeeService.js` ↔ `frontend/src/lib/fees.ts` (Gotcha 12: identical) | One platform rate for the whole order (`FEE_CONFIG.platformFeePercent` = 5%), processing `(subtotal + platformFee) × 2.9% + $0.30` once per order, fees allocated to lines by listed value. No per-line rate, no per-line fee mode |
 | Fee tests | `backend/tests/unit/feeService.test.js`, `frontend/tests/unit/fees.test.ts` | Hand-written cases mirrored in both, no shared fixture file (unlike `eventTime` / `usTimeZones`) |
 | Fee modes | `FeeMode { PASS ABSORB }` on `Order` and `ApplicationForm`; `applicationAmounts` (`ApplicationFormService.js:51`), `buyerLineTotal` (`orderLines.js:41`) | ABSORB exists, but **per order**: a ticket (PASS) plus an uncovered gift (ABSORB) cannot be expressed |
-| Destination charge | `PaymentSettingsService.checkoutOptionsFor` (`:198-239`) | `application_fee_amount` = total cents − subtotal cents, i.e. the organization always receives exactly the ex-tax subtotal. Wrong for an ABSORB line, where the organization receives less than the line's price |
 | Order | `schema.prisma` `model Order` | `eventId String` **required**, `event Event` relation required, `@@index([contactId, eventId, status])`. No `organizationId`: every org-scoped query reaches the org through `event → venue → organizationId` |
 | Order kinds | `OrderKind { TICKET APPLICATION }`, `OrderItemKind { TICKET_TIER APPLICATION_TIER ADJUSTMENT WAIVER }` | D1 adds `DONATION` to both; D0 does not (no code writes it yet) |
-| Webhooks | `webhooks.js:103-119` platform endpoint; `/stripe/billing` (`:301`); `BillingService.isBillingEvent` (`BillingService.js:15-21, 177-182`) | `isBillingEvent` returns true for **every** `customer.subscription.*` and `invoice.payment_failed`, and every subscription-mode `checkout.session.completed`. The platform endpoint marks those IGNORED. A donation subscription on the platform account would be dropped |
-| Billing metadata | `BillingService.js:78, 99-107` | Session metadata carries `billing: 'subscription'`; `subscription_data.metadata` carries only `organizationId`. Existing live subscriptions carry no marker |
 | Consent | `LegalDocument` enum (`schema.prisma:1652`), `backend/src/config/legal.js` `LEGAL_VERSIONS` / `DOCUMENT_FOR_KEY` / `KEY_FOR_DOCUMENT`, `frontend/src/lib/legal.ts` | No donation or recurring-gift document |
 | Stripe tax code | `TaxService.js:14` `ADMISSIONS_TAX_CODE = 'txcd_20060057'` | Compliance research reports this code as "Stenographic Services". Not donation work; tracked in §7 |
 
 ## 2. Scope
 
-D0 is four code cards and one decision card. Each code card is its own PR, mergeable alone, with no visible change.
-
 | Card | What | Depends on |
 |---|---|---|
-| **D0-A** | Webhook routing: billing events identified by marker, not by event type | — |
-| **D0-B** | Per-line platform rate and fee mode in both fee libraries + destination-charge split | — |
+| **D0-S** | Direct charges on the organization's own Stripe account (option C), in five sub-cards S1–S5 | — |
+| **D0-B** | Per-line platform rate and fee mode in both fee libraries | — (S2 uses its `platformFee` as the application fee) |
 | **D0-C** | `Order.organizationId` (backfilled, required) and nullable `Order.eventId` | — |
 | **D0-D** | `DONATION_TERMS` and `RECURRING_GIFT` legal documents | — |
-| **D0-E** | Decisions and ops: gift charge model with Stripe, 1099-K filer, counsel questions | Gates D1, not D0 code |
+| **D0-E** | Decisions and ops without code | — |
+
+D0-B, D0-C and D0-D change nothing visible. D0-S is the one card with a visible change (organizer onboarding and who appears on the buyer's card statement) and ships behind `STRIPE_CONNECT_ENABLED`, which stays off in production until the launch checklist's Connect steps are redone for option C.
+
+**Dropped from the earlier draft:** a webhook card that taught `BillingService.isBillingEvent` to tell Jump billing apart from donation subscriptions. Under option C donation subscriptions live on the organization's account, so their events arrive on the Connect endpoint and never reach the platform or billing endpoints.
 
 **Out of D0** (each was in the earlier sketch):
 
@@ -42,29 +50,50 @@ D0 is four code cards and one decision card. Each code card is its own PR, merge
 - `OrderKind.DONATION` / `OrderItemKind.DONATION`, `GiftReceipt`, `RecurringGift`, `DonationCampaign`: added by the phase that first writes them (D1, D3, D2).
 - `Organization.deductibilityStatus` and the other DV fields: DV.
 
-## 3. D0-A — Webhook routing
+## 3. D0-S — Direct charges on the organization's Stripe account
 
-**Problem.** Jump's own subscription billing (spec 022) and an organization's donation subscriptions are both Stripe subscriptions. Today any subscription event is assumed to be Jump billing.
+**Rule after this card:** every charge for an organization is created with the request option `{ stripeAccount: <organization's acct_…> }`, carries `application_fee_amount` = Jump's platform fee (D0-B), and is read, refunded and disputed on that account. Jump's own account keeps only Jump billing (spec 022) and orders charged before this card (`PaymentTransaction.stripeAccountId = null`). Verify each Stripe parameter against current Stripe docs when building; the shapes below are the plan, not a guarantee.
 
-**Change.**
+### S1. Connect the organization's own account (onboarding)
 
-1. `BillingService` stamps a marker on everything it creates: `subscription_data.metadata.billing = 'subscription'` (the session already has it).
-2. `isBillingEvent(event)` becomes "a billing event type **and** a Jump-billing object":
-   - `checkout.session.completed`: `mode === 'subscription'` and `metadata.billing === 'subscription'`.
-   - `customer.subscription.*`: `metadata.billing === 'subscription'`, **or** any item's `price.id === starterPriceId()` (live subscriptions created before the marker).
-   - `invoice.payment_failed`: `subscription_details.metadata.billing === 'subscription'` (API 2024-11-20.acacia; it moves to `parent.subscription_details` on a later API version), **or** any line's price id `=== starterPriceId()`.
-   - With `JUMP_STARTER_PRICE_ID` unset, only the marker counts.
-3. The platform endpoint keeps ignoring Jump-billing events. Every **other** subscription event falls through to the order handlers, which ignore types they don't know (no donation handler exists until D3).
-4. The billing endpoint keeps ignoring non-billing events (`webhooks.js:311`), now including donation subscriptions if both endpoints are subscribed to the same types.
+- **Has a Stripe account:** "Connect with Stripe" OAuth (`connect.stripe.com/oauth/authorize` → `stripe.oauth.token`), storing `stripe_user_id` in `OrganizationStripeAccount.stripeAccountId`. Deauthorization already lands on `account.application.deauthorized` (`webhooks.js`).
+- **No Stripe account yet:** `accounts.create` with `controller: { stripe_dashboard: { type: 'full' }, fees: { payer: 'account' }, losses: { payments: 'stripe' }, requirement_collection: 'stripe' }`, then an account link. The organization owns the account and its full dashboard; Stripe, not Jump, carries negative balances and files the 1099-K.
+- Replace the Express login link (`ConnectService.js:201`) with a link to the organization's Stripe dashboard. Payouts and balance (`:335-336`) keep working with `stripeAccount`.
+- Test-mode Express accounts are dropped; production has none.
 
-**Why a marker and not "anything that isn't ours"**: the price-id fallback alone breaks when the STARTER price is rotated; the marker alone misses live subscriptions. Both together cover old and new.
+### S2. Ticket checkout as a direct charge
 
-**Tests** (`backend/tests/contract/billing.test.js`, extended):
+- `OrderService.createOrder` → `stripe.checkout.sessions.create(params, { stripeAccount })` with `payment_intent_data.application_fee_amount` = platform fee cents. No `transfer_data`.
+- `checkoutOptionsFor` returns the account id and fee instead of `transfer_data`. Payment methods: the organization's account settings decide what it can accept; Jump's allowlist (`config/payments.js`) still filters. The statement descriptor is the organization's own (the spec 010 suffix setting becomes a hint, not a value Jump sends).
+- `OrderService.js:969, 1032, 1070` retrieve sessions with the same `stripeAccount`, read from the order's `PaymentTransaction.stripeAccountId`.
+- `PaymentTransaction.stripeAccountId` is written at session creation.
 
-- Billing session, subscription and failed invoice with the marker: billing endpoint applies, platform endpoint IGNORED (unchanged behaviour).
-- Legacy subscription with no marker but the STARTER price: still billing.
-- A subscription and a subscription-mode session with **no marker and another price**: platform endpoint does **not** mark it IGNORED as billing; billing endpoint ignores it.
-- Unit test for `isBillingEvent` covering every branch above, including the unset price id.
+### S3. Webhooks for connected-account money events
+
+- The Connect endpoint (`webhooks.js:230`) dispatches `checkout.session.*`, `payment_intent.*`, `charge.refunded`, `charge.dispute.*` to the **same** handlers the platform endpoint uses (`PaymentService`, `ApplicationPaymentService`, `DisputeService`), passing `event.account`. Extract the platform endpoint's switch into one function both endpoints call: never two copies.
+- Handlers check that `event.account` equals the order's `PaymentTransaction.stripeAccountId`, so one organization's account can never complete another's order.
+- The platform endpoint keeps handling the same types for legacy platform charges (`stripeAccountId = null`).
+- Stripe Dashboard: the Connect webhook endpoint subscribes to the added event types (launch checklist).
+- Dedup (`StripeWebhookEvent`, unique on endpoint + event id) and the fail-closed rules (AGENTS.md "Stripe webhooks") apply unchanged.
+
+### S4. Refunds, disputes, erasure
+
+- `stripeRefund.js`: for a direct charge, `refunds.create({ payment_intent, amount, refund_application_fee: true }, { stripeAccount, idempotencyKey })`. No `reverse_transfer` (there is no transfer). `stripeAccountId = null` keeps today's platform call.
+- Whether Jump returns its platform fee on refunds stays the current rule (`refund_application_fee: true`); spec 031 retained fees are unchanged.
+- `DisputeService.js:166` retrieves the charge on the order's account. Disputes are now the organization's in Stripe; Jump still mirrors them into `Dispute` rows and alerts the organizer.
+- `ContactErasureService.js:251` deletes the Stripe Customer on the account it was created on.
+
+### S5. Applications and tax on the connected account
+
+- **Applications** (`ApplicationPaymentService`): Customers, SetupIntents, saved cards, off-session PaymentIntents and Checkout all move to `{ stripeAccount }`; `application_fee_amount` replaces `transfer_data` (`:329`). `Contact.stripeCustomerId` is already per organization (Contact is per org, Gotcha 8), so the stored id now names a Customer on that organization's account. `APPLICATIONS_PAYMENTS_ENABLED` is off in production; any test-mode cards on file are re-collected.
+- **Sales tax** (spec 009): the organization is now the seller. `TaxService` Stripe Tax calls (`:378, 436-437`) run on the organization's account and read its registrations; `MANUAL` rates are unchanged. The collected tax stays in the organization's charge (not in Jump's fee) and the organization remits it. Settings › Tax copy, `docs/wiki/features/tax-settings.md` and Gotcha 12 change to say so.
+
+### D0-S tests
+
+- Contract tests with the Stripe mock assert the `stripeAccount` request option and `application_fee_amount` on every money call above, and the absence of `transfer_data`.
+- Connect endpoint: a `checkout.session.completed` with `account` completes the order; one with a different `account` is refused; a platform-endpoint event for a legacy order still completes it.
+- Refund: direct-charge order refunds on its account without `reverse_transfer`; legacy order refunds on the platform as today.
+- `npm run verify:stripe` gains a direct-charge run against a test-mode connected account (outside `npm test`).
 
 ## 4. D0-B — Per-line platform rate and fee mode
 
@@ -101,15 +130,17 @@ Unchanged where every line is default: every existing case in both test files mu
 
 `applicationAmounts` keeps working unchanged (it passes no per-line mode and applies form ABSORB itself). Moving it onto the per-line mode is a follow-up, not D0.
 
-### 4.3 Destination-charge split
+### 4.3 What each party gets under direct charges
 
-`checkoutOptionsFor(organization, { fees, lineItems })` computes `application_fee_amount = total cents − subtotal cents` (`PaymentSettingsService.js:201`). With ABSORB lines the organization must receive `orgReceives`, so:
+All of `total` is charged on the organization's account. Then:
 
-- `application_fee_amount = total cents − orgReceives cents`, still from the exact line-item cents Stripe will charge.
-- With no ABSORB line, `orgReceives = subtotal`, so the result is identical to today.
-- Callers that don't pass `orgReceives` (none after this card) fall back to `subtotal`.
+- **Jump:** `application_fee_amount = platformFee` cents (0 for a gift line at 0%). Not processing, not tax.
+- **Stripe:** its actual processing fee, deducted from the organization's balance.
+- **Organization:** the rest, including the tax it collected and must remit. Its ex-tax net is approximately `orgReceives = subtotal − absorbedFees`.
 
-The organization-facing rule "you receive exactly the ex-tax subtotal" in the doc comment becomes "you receive `orgReceives`: the subtotal, less fees on lines whose fees you absorb".
+`processingFee` in the fee libraries is an **estimate** at 2.9% + $0.30: what a PASS buyer is asked to cover. Stripe's actual fee can differ (the nonprofit rate is lower; international and some card types are higher), and the organization keeps or bears the difference. Copy that says "covers the processing fee" never promises the exact Stripe amount.
+
+D0-B only adds the numbers. **S2** switches `checkoutOptionsFor` from `total cents − subtotal cents` to `fees.platformFee` in the same PR that drops `transfer_data`, so the dark destination-charge path is never left with a fee rule meant for direct charges.
 
 ### 4.4 Ledger columns
 
@@ -125,8 +156,8 @@ The organization-facing rule "you receive exactly the ex-tax subtotal" in the do
   4. ticket 5% PASS + donation 0% ABSORB;
   5. tax-inclusive ticket + donation 0% ABSORB;
   6. three lines with mixed rates, checking drift lands on a non-zero-rate line.
-- Each case asserts every order field and every line field, plus two invariants: `Σ lineTotal = total`, and `total − orgReceives = platformFee + processingFee + tax` (what the platform keeps, whoever bore the fees).
-- `paymentSettingsService.test.js`: `application_fee_amount` for cases 2 and 4, and unchanged for an all-PASS order.
+- Each case asserts every order field and every line field, plus two invariants: `Σ lineTotal = total`, and `total − orgReceives = platformFee + processingFee + tax` (Jump's fee, Stripe's estimated fee and the tax the organization remits).
+- In S2, `paymentSettingsService.test.js` asserts `application_fee_amount` equals `platformFee` cents for cases 1–6 and for an all-PASS ticket order.
 
 ## 5. D0-C — `Order.organizationId`, nullable `Order.eventId`
 
@@ -212,21 +243,23 @@ Already null-safe, re-checked only: `DashboardService.js:98,130`, `AdminSearchSe
 - `LegalDocument` gains `DONATION_TERMS` (the charity agreement an org admin accepts before taking gifts; DV) and `RECURRING_GIFT` (the donor's recurring authorization; D3).
 - `backend/src/config/legal.js`: `LEGAL_VERSIONS.donationTerms` and `.recurringGift` = `'2026-10-09-draft'`, plus both maps. `frontend/src/lib/legal.ts` type union.
 - `GET /legal/versions` returns them. No page, checkbox or caller until DV / D3.
-- Counsel supplies the text (blocker L5/L6); until then the versions stay `-draft`, like spec 023.
+- The text is written from IRS Publication 1771 and the compliance doc §3.5 disclosures (no counsel on retainer); versions stay `-draft` until the owner approves it, like spec 023.
 
-## 7. D0-E — Decisions and ops (no code; gates D1)
+## 7. D0-E — Decisions and ops (no code)
 
 | # | Item | Owner | Output |
 |---|---|---|---|
-| E1 | **Gift charge model** (compliance doc §4: A destination, B `on_behalf_of`, C direct). Recommended: C for gift-only orders; for ticket + gift choose with Stripe between a second gift payment and B | Owner + Stripe + counsel | Decision written into spec 010 `plan-phase-2.md` §11.1 and this spec. **D1 cannot start without it**: it decides whether D1's ticket checkout carries the gift line or a second payment |
-| E2 | **Stripe approval** (blocker L1): request "fundraising on a Connect platform" with the chosen model | Owner | Written approval on file |
-| E3 | **1099-K filer** (L7). Stripe does not file for Express (`application_express`) accounts | Owner + tax advisor | Filer chosen; fix `specs/010-payments-settings/plan-phase-2.md:341` and `docs/wiki/config/production-launch-checklist.md`. Also gates `STRIPE_CONNECT_ENABLED` for tickets |
-| E4 | **Counsel questions** (compliance §7, the launch-blocking ones: AB 488 / Hawaii register or geofence, NC solicitor and money transmission per model, acknowledgments as the charity's agent, receipt and disclosure wording) | Owner | Added to the spec 023 counsel card |
-| E5 | **Stripe tax code** `TaxService.js:14`: confirm against Stripe's tax-code list and fix in its own PR with the spec 009 owner | Engineering | Separate `fix:` PR; not donation work |
+| E1 | **Confirm with Stripe support** that a Connect platform using direct charges on nonprofits' own accounts needs no platform-level review for donations (compliance §4: "merchants fundraising on an approved crowdfunding platform using Stripe Connect" need no extra approval; each nonprofit's own account goes through Stripe's restricted-business review at onboarding) | Owner | Stripe's answer on file. Free |
+| E2 | **California and Hawaii platform laws** (AB 488 "type E", HRS 467B). Option C does not obviously take Jump out of them. Launch default: **block gifts from CA and HI donors** (`DONATIONS_GEO_BLOCK`, D1); register later ($625/yr CA, $250/yr HI) when volume justifies it. A one-hour flat-fee consult on this question is the best use of legal money if any is spent | Owner | Geofence on at launch; registration decision revisited |
+| E3 | **Receipt and disclosure wording** from IRS Publication 1771 plus the state legends in compliance §3.3–3.5, owner-approved | Owner + engineering | Text for `GiftReceipt` and the "About this gift" block, before D1 ships |
+| E4 | **Launch checklist and spec 010**: record option C in `specs/010-payments-settings/plan-phase-2.md` §11.1; replace the Express steps in `docs/wiki/config/production-launch-checklist.md` with OAuth / full-dashboard onboarding and the Connect endpoint event list; correct the 1099-K line (`plan-phase-2.md:341`): with `fees.payer = account` Stripe files | Engineering | Docs PR with D0-S |
+| E5 | **Stripe tax code** `TaxService.js:14`: confirm against Stripe's tax-code list and fix in its own PR | Engineering | Separate `fix:` PR; not donation work. Under option C it applies on the organization's account |
+
+Questions the compliance doc listed for counsel that option C answers: money transmission and NC solicitor status (Jump never holds gift money), California commingling (same), 1099-K filer (Stripe), and Stripe's "on behalf of" rule (the nonprofit charges on its own account).
 
 ## 8. Done when
 
-- D0-A, D0-B, D0-C, D0-D merged with CI green; `npm test` (backend) and `npm run test:unit` + typecheck (frontend) pass with **no existing test changed** except moving fee cases into the shared fixture.
-- No visible change: checkout totals, application totals, receipts, dashboard, customers, tax report and billing behave exactly as before (existing contract and Playwright suites).
-- D0-E items E1–E4 have an owner and a date. E1 decided before D1 is specified.
-- `docs/wiki/` and `backend/AGENTS.md` updated: Gotcha 12 (per-line rate and fee mode, shared fixture), Gotcha 17 (`Order.organizationId` is the org scope; `eventId` is null only for DONATION orders).
+- D0-B, D0-C, D0-D merged with CI green and no visible change; `npm test` (backend) and `npm run test:unit` + typecheck (frontend) pass with **no existing test changed** except moving fee cases into the shared fixture and adding `organizationId` to direct order inserts.
+- D0-S merged behind `STRIPE_CONNECT_ENABLED`: a test-mode organization connects its own account, buys a ticket, gets a refund and opens a dispute, all on its account, with Jump's fee arriving as an application fee.
+- E1 answered and E4 merged before D1 starts; E2 and E3 settled before `DONATIONS_ENABLED` goes on in production.
+- `docs/wiki/` and the AGENTS files updated: Gotcha 12 (per-line rate and fee mode, shared fixture, organization collects tax), Gotcha 13 (direct charges: `stripeAccount` on every money call, never `transfer_data`), Gotcha 17 (`Order.organizationId` is the org scope; `eventId` is null only for DONATION orders), and the Stripe webhooks gotcha (money events arrive on the Connect endpoint).
