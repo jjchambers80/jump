@@ -1657,6 +1657,8 @@ enum LegalDocument {
   SUBSCRIPTION_TERMS
   CONNECT_TERMS
   MARKETING
+  DONATION_TERMS
+  RECURRING_GIFT
 }
 
 enum LegalSource {
