@@ -4,7 +4,7 @@
 
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { signInAsStaff } from './helpers/session';
+import { mintSessionToken, signInAsStaff, type StaffUser } from './helpers/session';
 
 const API = 'http://localhost:3002';
 const json = (body: unknown, status = 200) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
@@ -147,5 +147,59 @@ test.describe('as store ADMIN', () => {
   test('/admin/system redirects to the dashboard', async ({ page }) => {
     await page.goto('/admin/system/settings');
     await expect(page).toHaveURL(/\/admin\/dashboard$/);
+  });
+});
+
+// Password sign-in through the real sign-in page. Auth.js endpoints are
+// mocked: the credentials callback sets the session cookie (as Auth.js
+// would) and answers with the callbackUrl it was given.
+async function passwordSignIn(page: Page, baseURL: string, user: StaffUser, query = '') {
+  const posted: string[] = [];
+  await mockApi(page);
+  await page.route('**/api/auth/providers', (route) =>
+    route.fulfill(json({ password: { id: 'password', name: 'Password', type: 'credentials' } })),
+  );
+  await page.route('**/api/auth/csrf', (route) => route.fulfill(json({ csrfToken: 'csrf' })));
+  await page.route('**/api/auth/session', (route) =>
+    route.fulfill(json({ user: { id: user.id, email: user.email, role: user.role, name: user.name }, mfaPending: user.mfa === 'pending', expires: '2099-01-01T00:00:00.000Z' })),
+  );
+  await page.route('**/api/auth/callback/password**', async (route) => {
+    const callbackUrl = new URLSearchParams(route.request().postData() ?? '').get('callbackUrl') ?? '';
+    posted.push(callbackUrl);
+    const token = await mintSessionToken(user);
+    await page.context().addCookies([
+      { name: 'authjs.session-token', value: token, domain: new URL(baseURL).hostname, path: '/', httpOnly: true, sameSite: 'Lax' },
+    ]);
+    return route.fulfill(json({ url: new URL(callbackUrl, baseURL).toString() }));
+  });
+
+  await page.goto(`/auth/signin${query}`);
+  await page.getByLabel('Email').fill(user.email);
+  await page.getByRole('button', { name: 'Sign in with a password instead' }).click();
+  await page.getByLabel('Password', { exact: true }).fill('correct horse battery');
+  await page.getByRole('button', { name: 'Sign in with password' }).click();
+  return posted;
+}
+
+test.describe('password sign-in landing', () => {
+  test('SYSTEM_ADMIN with no callbackUrl lands on /admin/system', async ({ page, baseURL }) => {
+    const posted = await passwordSignIn(page, baseURL!, sysAdmin);
+    await expect(page).toHaveURL(/\/admin\/system$/);
+    expect(posted).toEqual(['/auth/landing']);
+  });
+
+  test('an explicit callbackUrl still wins for SYSTEM_ADMIN', async ({ page, baseURL }) => {
+    await passwordSignIn(page, baseURL!, sysAdmin, '?callbackUrl=%2Fadmin%2Fevents');
+    await expect(page).toHaveURL(/\/admin\/events$/);
+  });
+
+  test('SYSTEM_ADMIN with two-step pending goes through /auth/two-step to /admin', async ({ page, baseURL }) => {
+    await passwordSignIn(page, baseURL!, { ...sysAdmin, mfa: 'pending' });
+    await expect(page).toHaveURL(/\/auth\/two-step\?callbackUrl=%2Fadmin$/);
+  });
+
+  test('a store ADMIN keeps the /events default', async ({ page, baseURL }) => {
+    await passwordSignIn(page, baseURL!, storeAdmin);
+    await expect(page).toHaveURL(/\/events$/);
   });
 });
