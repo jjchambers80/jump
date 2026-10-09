@@ -98,7 +98,7 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
             </header>
 
             {/* Scrollable content */}
-            <main className="flex-1 overflow-y-auto">{children}</main>
+            <main className="relative flex-1 overflow-y-auto">{children}</main>
           </div>
         </div>
       </OrgProvider>

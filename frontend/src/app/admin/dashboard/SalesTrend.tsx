@@ -88,23 +88,27 @@ export default function SalesTrend({ trend }: { trend: DashboardOverview['trend'
               <span>Today</span>
             </div>
 
-            <table className="sr-only">
-              <caption>{metric === 'revenue' ? 'Revenue' : 'Tickets sold'} per day, last 14 days</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Day</th>
-                  <th scope="col">{metric === 'revenue' ? 'Revenue' : 'Tickets'}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {days.map((d) => (
-                  <tr key={d.date}>
-                    <th scope="row">{dayLabel(d.date, true)}</th>
-                    <td>{show(d[metric])}</td>
+            {/* sr-only on the table itself fails: tables ignore height:1px, and the
+                full-height table stretched the page past the admin shell. */}
+            <div className="sr-only">
+              <table>
+                <caption>{metric === 'revenue' ? 'Revenue' : 'Tickets sold'} per day, last 14 days</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Day</th>
+                    <th scope="col">{metric === 'revenue' ? 'Revenue' : 'Tickets'}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {days.map((d) => (
+                    <tr key={d.date}>
+                      <th scope="row">{dayLabel(d.date, true)}</th>
+                      <td>{show(d[metric])}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
             {total === 0 && (
               <p className="mt-3 text-sm text-gray-500 dark:text-slate-400">No sales in the last 14 days.</p>
