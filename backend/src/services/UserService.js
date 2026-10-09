@@ -20,15 +20,23 @@ class UserService {
    * @param {Object} options
    * @param {string} [options.role] - Filter by UserRole
    * @param {string} [options.organizationId] - Filter by organization
+   * @param {string} [options.q] - Case-insensitive search on email / name
+   * @param {boolean} [options.isActive] - Filter by active status
    * @param {number} [options.page=1] - Page number
    * @param {number} [options.limit=20] - Items per page
    * @returns {Promise<{ users: Array, pagination: Object }>}
    */
-  async listUsers({ role, organizationId, page = 1, limit = 20 } = {}) {
+  async listUsers({ role, organizationId, q, isActive, page = 1, limit = 20 } = {}) {
     const where = { deletedAt: null };
 
     if (role) where.role = role;
     if (organizationId) where.memberships = { some: { organizationId } };
+    if (isActive !== undefined) where.isActive = isActive;
+    if (q) {
+      where.OR = ['email', 'name', 'firstName', 'lastName'].map((field) => ({
+        [field]: { contains: q, mode: 'insensitive' },
+      }));
+    }
 
     const [users, total] = await Promise.all([
       prisma.user.findMany({
@@ -59,10 +67,12 @@ class UserService {
    * @param {string} [data.role] - New role
    * @param {boolean} [data.isActive] - Active status
    * @param {string} [data.organizationId] - Organization to assign (nullable)
+   * @param {{ tx?: import('@prisma/client').Prisma.TransactionClient }} [options]
+   *   Run inside the caller's transaction (e.g. one holding an advisory lock).
    * @returns {Promise<Object>}
    */
-  async updateUser(userId, data) {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+  async updateUser(userId, data, { tx: outerTx } = {}) {
+    const user = await (outerTx ?? prisma).user.findUnique({ where: { id: userId } });
     if (!user || user.deletedAt) {
       throw new NotFoundError('User not found');
     }
@@ -77,7 +87,8 @@ class UserService {
     // UNASSIGNED is not staff, so those roles never get (or keep) one.
     const effectiveRole = data.role ?? user.role;
     const isStaffRole = effectiveRole === 'ADMIN' || effectiveRole === 'ORGANIZER';
-    const updated = await prisma.$transaction(async (tx) => {
+    const inTx = (fn) => (outerTx ? fn(outerTx) : prisma.$transaction(fn));
+    const updated = await inTx(async (tx) => {
       if (data.organizationId !== undefined || !isStaffRole) {
         await tx.organizationMember.deleteMany({ where: { userId } });
         if (data.organizationId && isStaffRole) {

@@ -547,6 +547,33 @@ ${manageTicketsHtml}
   }
 
   /**
+   * Invitation to run the platform as a system admin (System › Users).
+   * No organization: the link lands on System administration after sign-in.
+   * @param {{ to: string, inviterName: string, signInUrl: string }} params
+   */
+  async sendSystemAdminInvite({ to, inviterName, signInUrl }) {
+    const twoStep = 'Two-step authentication is required. After you sign in you will be asked to set it up under Account › Security.';
+    const msg = {
+      to: [to],
+      from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
+      subject: 'You are now an Eventimus system admin',
+      text: `${inviterName} made you a system admin on Eventimus. System admins manage every organization and user on the platform.\n\nSign in with this email address, ${to}, using an email sign-in link or Google:\n${signInUrl}\n\n${twoStep}\n\nIf you weren't expecting this, contact the person who invited you.`,
+      html: eventimusEmail({
+        preheader: `${inviterName} made you a system admin on Eventimus.`,
+        heading: 'System administration',
+        body: `
+          <p style="${EV_P}">${escapeHtml(inviterName)} made you a <strong style="${EV_STRONG}">system admin</strong> on Eventimus. System admins manage every organization and user on the platform.</p>
+          <p style="${EV_P}">Sign in with this email address, <strong style="${EV_STRONG}">${escapeHtml(to)}</strong>. You can get a sign-in link by email or continue with Google.</p>
+          <p style="${EV_P}"><strong style="${EV_STRONG}">Two-step authentication is required.</strong> After you sign in you will be asked to set it up under Account › Security.</p>
+          ${eventimusButton(signInUrl, 'Sign in')}
+          <p style="${EV_NOTE}">If you weren’t expecting this, contact the person who invited you.</p>`,
+      }),
+    };
+    await deliver(msg);
+    logger.info('System admin invite sent', { event: 'system_admin_invite_sent' });
+  }
+
+  /**
    * Send an application decision / status email (spec 011). `body` is plain
    * text already rendered from the organization's template; paragraphs are
    * split on blank lines and every line is escaped, so organizer text can

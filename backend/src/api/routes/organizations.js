@@ -14,7 +14,7 @@ import {
   validateUpdateOrganization,
 } from '../validators/organizationValidators.js';
 import organizationService from '../../services/OrganizationService.js';
-import { NotFoundError } from '../../middleware/errorHandler.js';
+import { ForbiddenError, NotFoundError } from '../../middleware/errorHandler.js';
 import { uploadImage } from '../../middleware/imageUpload.js';
 import imageService, { dimensionQuery } from '../../services/ImageService.js';
 import storefrontPreferencesService from '../../services/StorefrontPreferencesService.js';
@@ -126,6 +126,10 @@ router.patch(
   validateUpdateOrganization,
   async (req, res, next) => {
     try {
+      // Suspension is a platform decision (System administration), never an org ADMIN's.
+      if (req.body.status !== undefined && req.user.role !== 'SYSTEM_ADMIN') {
+        throw new ForbiddenError('Only a system admin can change an organization status');
+      }
       const organization = await organizationService.getOrganizationById(req.params.id);
       if (!organization) {
         throw new NotFoundError('Organization not found');

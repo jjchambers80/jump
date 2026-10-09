@@ -44,9 +44,14 @@ router.get('/', requireAuth, requireAdmin, async (req, res, next) => {
  */
 router.patch('/:id', requireAuth, requireAdmin, validateUpdateUser, async (req, res, next) => {
   try {
-    // Only SYSTEM_ADMIN can assign SYSTEM_ADMIN role
-    if (req.body.role === 'SYSTEM_ADMIN' && req.user.role !== 'SYSTEM_ADMIN') {
-      throw new ForbiddenError('Only SYSTEM_ADMIN can assign SYSTEM_ADMIN role');
+    // System admins are granted, revoked and (de)activated only through
+    // /admin/system/users, which enforces step-up, self-change and
+    // last-admin guards and the audit trail. Never here, not even by one.
+    const target = await prisma.user.findUnique({ where: { id: req.params.id }, select: { role: true } });
+    if (req.body.role === 'SYSTEM_ADMIN' || target?.role === 'SYSTEM_ADMIN') {
+      const error = new ForbiddenError('Manage system admins under System administration › Users (/admin/system/users)');
+      error.code = 'USE_SYSTEM_ADMIN_USERS';
+      throw error;
     }
     if (req.user.role !== 'SYSTEM_ADMIN') {
       // Role and active status are account-wide, so an org ADMIN may change

@@ -28,6 +28,25 @@ const withUserCount = ({ _count, ...org }) => ({
   _count: { venues: _count.venues, users: _count.members },
 });
 
+const SYSTEM_ORG_INCLUDE = {
+  _count: { select: { venues: true, members: true } },
+  platformCustomer: { select: { plan: true, subscriptionStatus: true } },
+};
+
+/** Row shape of the system administration organization list (spec: system admin). */
+const systemOrgRow = (org) => ({
+  id: org.id,
+  name: org.name,
+  slug: org.slug,
+  status: org.status,
+  createdAt: org.createdAt,
+  onboardingCompletedAt: org.onboardingCompletedAt,
+  memberCount: org._count.members,
+  venueCount: org._count.venues,
+  plan: org.platformCustomer?.plan ?? null,
+  subscriptionStatus: org.platformCustomer?.subscriptionStatus ?? null,
+});
+
 /** Published events of an organization, as the storefront lists them. */
 export const PUBLIC_EVENTS_QUERY = {
   where: { status: 'PUBLISHED' },
@@ -165,6 +184,44 @@ class OrganizationService {
           : null,
       };
     });
+  }
+
+  /**
+   * System administration list (SYSTEM_ADMIN only): every organization,
+   * pending signups included, searchable and paginated.
+   * @param {{ q?: string, status?: 'ACTIVE'|'INACTIVE'|'PENDING', page?: number, limit?: number }} options
+   *   PENDING = still in /signup (onboardingCompletedAt null), whatever its status.
+   */
+  async listOrganizationsPage({ q, status, page = 1, limit = 20 } = {}) {
+    const where = {};
+    if (status === 'PENDING') where.onboardingCompletedAt = null;
+    else if (status) where.status = status;
+    if (q) {
+      where.OR = [
+        { name: { contains: q, mode: 'insensitive' } },
+        { slug: { contains: q, mode: 'insensitive' } },
+      ];
+    }
+    const [orgs, total] = await Promise.all([
+      prisma.organization.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        include: SYSTEM_ORG_INCLUDE,
+      }),
+      prisma.organization.count({ where }),
+    ]);
+    return {
+      organizations: orgs.map(systemOrgRow),
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  /** One organization in the system administration row shape, or null. */
+  async getSystemOrganization(id) {
+    const org = await prisma.organization.findUnique({ where: { id }, include: SYSTEM_ORG_INCLUDE });
+    return org ? systemOrgRow(org) : null;
   }
 
   /**
