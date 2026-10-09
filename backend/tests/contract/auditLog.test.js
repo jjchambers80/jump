@@ -170,3 +170,80 @@ describe('Audit log actors and exports (048-B)', () => {
     expect(row).toMatchObject({ actorType: 'SYSTEM', actorLabel: 'Stripe', action: 'organization.updated' });
   });
 });
+
+describe('Activity log API (048-C)', () => {
+  const C_TAG = 'audit-log-c-ct';
+  const emails = [`admin@${C_TAG}.test`, `organizer@${C_TAG}.test`, `admin-b@${C_TAG}.test`];
+  let orgA;
+  let orgB;
+  let adminToken;
+  let organizerToken;
+  let adminBToken;
+
+  beforeAll(async () => {
+    await prisma.organization.deleteMany({ where: { name: { startsWith: `${C_TAG} ` } } }).catch(() => {});
+    adminToken = await staffToken({ email: emails[0], role: 'ADMIN' });
+    organizerToken = await staffToken({ email: emails[1], role: 'ORGANIZER' });
+    adminBToken = await staffToken({ email: emails[2], role: 'ADMIN' });
+    orgA = await prisma.organization.create({ data: { name: `${C_TAG} A` } });
+    orgB = await prisma.organization.create({ data: { name: `${C_TAG} B` } });
+    await joinOrgByToken(adminToken, orgA.id, 'ADMIN');
+    await joinOrgByToken(organizerToken, orgA.id, 'ORGANIZER');
+    await joinOrgByToken(adminBToken, orgB.id, 'ADMIN');
+    const base = { actorType: 'USER', actorLabel: 'Seed', action: 'page.updated', operation: 'UPDATE', feature: 'Content › Pages', entityType: 'Page', source: 'admin' };
+    await prisma.auditLog.createMany({
+      data: [
+        { ...base, organizationId: orgA.id, entityLabel: 'Home', changes: { title: ['=1+1', 'Home'] } },
+        { ...base, organizationId: orgA.id, entityLabel: 'Old', createdAt: new Date(Date.now() - 800 * 24 * 3600 * 1000) },
+        { ...base, organizationId: orgA.id, entityLabel: '=HYPERLINK("x")' },
+        { ...base, organizationId: orgB.id, entityLabel: 'Secret B' },
+      ],
+    });
+  });
+
+  afterAll(async () => {
+    const ids = [orgA.id, orgB.id];
+    await prisma.auditLog.deleteMany({ where: { organizationId: { in: ids } } });
+    await prisma.organization.deleteMany({ where: { id: { in: ids } } }).catch(() => {});
+    await cleanupStaff(emails);
+  });
+
+  it('lists only the active organization, newest first, with facets', async () => {
+    const response = await request(app).get('/admin/audit-log').set(...auth(adminToken));
+    expect(response.status).toBe(200);
+    const labels = response.body.rows.map((r) => r.entityLabel);
+    expect(labels).toContain('Home');
+    expect(labels).not.toContain('Secret B');
+    expect(response.body.facets.features).toContain('Content › Pages');
+    expect(response.body.retentionDays).toBe(730);
+    expect(response.body.rows[0]).not.toHaveProperty('ipHash');
+  });
+
+  it('filters by record name', async () => {
+    const response = await request(app).get('/admin/audit-log?q=hom').set(...auth(adminToken));
+    expect(response.body.rows.map((r) => r.entityLabel)).toEqual(['Home']);
+  });
+
+  it('refuses a store organizer and a bad filter', async () => {
+    expect((await request(app).get('/admin/audit-log').set(...auth(organizerToken))).status).toBe(403);
+    expect((await request(app).get('/admin/audit-log?operation=NOPE').set(...auth(adminToken))).status).toBe(400);
+  });
+
+  it('exports CSV without formula injection and logs the export', async () => {
+    const response = await request(app).get('/admin/audit-log/export.csv').set(...auth(adminToken));
+    expect(response.status).toBe(200);
+    expect(response.text.split('\r\n')[0]).toMatch(/^When,Who/);
+    expect(response.text).toContain('title: ""=1+1""');
+    expect(response.text).toContain(`"'=HYPERLINK(""x"")"`);
+    expect(response.text).not.toContain('Secret B');
+    const [row] = await rowsFor({ organizationId: orgA.id, operation: 'EXPORT' });
+    expect(row.entityLabel).toMatch(/^activity-log-/);
+  });
+
+  it('sweeps rows past retention', async () => {
+    const { default: auditLogService } = await import('../../src/audit/AuditLogService.js');
+    await auditLogService.sweep();
+    expect(await prisma.auditLog.count({ where: { organizationId: orgA.id, entityLabel: 'Old' } })).toBe(0);
+    expect(await prisma.auditLog.count({ where: { organizationId: orgA.id, entityLabel: 'Home' } })).toBe(1);
+  });
+});

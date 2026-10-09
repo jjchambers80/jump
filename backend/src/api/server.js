@@ -297,6 +297,12 @@ if (process.env.NODE_ENV !== 'test') {
   setTimeout(() => sessionService.sweep().catch(() => {}), 90 * 1000).unref();
   setInterval(() => sessionService.sweep().catch(() => {}), SESSION_SWEEP_MS).unref();
 
+  // Audit log retention (spec 048): rows older than AUDIT_RETENTION_DAYS
+  // (default 730 = 24 months) are deleted daily.
+  const AUDIT_SWEEP_MS = Number(process.env.AUDIT_SWEEP_INTERVAL_MS) || 24 * 60 * 60 * 1000;
+  setTimeout(() => auditLogService.sweep().catch(() => {}), 105 * 1000).unref();
+  setInterval(() => auditLogService.sweep().catch(() => {}), AUDIT_SWEEP_MS).unref();
+
   // RSVP reminder sweep (spec 034 §9.2): send reminder emails ~24 h before
   // an RSVP event starts. Idempotent per RSVP via remindedAt stamp.
   const RSVP_REMINDER_MS = Number(process.env.RSVP_REMINDER_SWEEP_INTERVAL_MS) || 60 * 60 * 1000;
