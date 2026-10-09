@@ -85,7 +85,9 @@ async function loadUserClaims(userId: string): Promise<UserClaims | null> {
       // Spec 030: uploaded photo wins over the provider picture
       avatarImage: { select: { id: true, file: { select: { hash: true } } } },
       // Active org = oldest membership; the admin org switcher overrides via X-Jump-Org (spec 007)
+      // Suspended organizations (status INACTIVE) are skipped.
       memberships: {
+        where: { organization: { status: 'ACTIVE' } },
         orderBy: { createdAt: 'asc' },
         take: 1,
         select: { organizationId: true },

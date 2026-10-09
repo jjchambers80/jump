@@ -141,7 +141,7 @@ class DomainService {
     this._dns = dns; // swapped in unit tests
   }
 
-  _invalidate() {
+  clearCache() {
     this._cache.clear();
     this._activeCache = { hosts: null, expires: 0 };
   }
@@ -265,7 +265,7 @@ class DomainService {
       const next = await prisma.organizationDomain.findFirst({ where: { organizationId: d.organizationId }, orderBy: { createdAt: 'asc' } });
       if (next) await prisma.organizationDomain.update({ where: { id: next.id }, data: { isPrimary: true } });
     }
-    this._invalidate();
+    this.clearCache();
     logger.info('Storefront domain removed', { event: 'domain_removed', organizationId: d.organizationId, hostname: d.hostname });
   }
 
@@ -275,7 +275,7 @@ class DomainService {
       prisma.organizationDomain.updateMany({ where: { organizationId: d.organizationId, isPrimary: true }, data: { isPrimary: false } }),
       prisma.organizationDomain.update({ where: { id: d.id }, data: { isPrimary: true } }),
     ]);
-    this._invalidate();
+    this.clearCache();
     return this.serialize(await prisma.organizationDomain.findUnique({ where: { id: d.id } }));
   }
 
@@ -370,7 +370,7 @@ class DomainService {
 
     const updated = await prisma.organizationDomain.update({ where: { id: d.id }, data });
     if (updated.status !== d.status) {
-      this._invalidate();
+      this.clearCache();
       logger.info('Storefront domain status changed', { event: 'domain_status', hostname: d.hostname, from: d.status, to: updated.status });
     }
     return this.serialize(updated);
@@ -391,21 +391,25 @@ class DomainService {
     }
   }
 
-  /** Host -> organizationId for ACTIVE domains or store subdomains (cached). Null when unknown. */
+  /**
+   * Host -> organizationId for ACTIVE domains or store subdomains of ACTIVE
+   * organizations (cached). Null when unknown or the organization is
+   * suspended; call clearCache() after changing an organization's status.
+   */
   async resolveHost(host) {
     if (!host) return null;
     const hostname = stripDot(String(host).split(':')[0]);
     const hit = this._cache.get(hostname);
     if (hit && hit.expires > Date.now()) return hit.organizationId;
     const d = await prisma.organizationDomain.findFirst({
-      where: { hostname, status: 'ACTIVE' },
+      where: { hostname, status: 'ACTIVE', organization: { status: 'ACTIVE' } },
       select: { organizationId: true },
     });
     let organizationId = d?.organizationId || null;
     const slug = organizationId ? null : storeSubdomainSlug(hostname);
     if (slug) {
-      const org = await prisma.organization.findUnique({ where: { slug }, select: { id: true } });
-      organizationId = org?.id || null;
+      const org = await prisma.organization.findUnique({ where: { slug }, select: { id: true, status: true } });
+      organizationId = org?.status === 'ACTIVE' ? org.id : null;
     }
     this._cache.set(hostname, { organizationId, expires: Date.now() + CACHE_TTL_MS });
     return organizationId;
@@ -414,7 +418,10 @@ class DomainService {
   /** All ACTIVE hostnames (cached), for CORS. */
   async activeHostnames() {
     if (this._activeCache.hosts && this._activeCache.expires > Date.now()) return this._activeCache.hosts;
-    const rows = await prisma.organizationDomain.findMany({ where: { status: 'ACTIVE' }, select: { hostname: true } });
+    const rows = await prisma.organizationDomain.findMany({
+      where: { status: 'ACTIVE', organization: { status: 'ACTIVE' } },
+      select: { hostname: true },
+    });
     const hosts = new Set(rows.map((r) => r.hostname));
     this._activeCache = { hosts, expires: Date.now() + CACHE_TTL_MS };
     return hosts;

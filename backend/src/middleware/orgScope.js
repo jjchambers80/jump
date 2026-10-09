@@ -8,23 +8,42 @@
 import { prisma } from '@jump/db';
 import { ForbiddenError } from './errorHandler.js';
 
+/** 403 for staff of a suspended organization (status INACTIVE). */
+export class OrganizationSuspendedError extends ForbiddenError {
+  constructor() {
+    super('This organization is suspended. Contact Eventimus support to restore access.');
+    this.code = 'ORGANIZATION_SUSPENDED';
+  }
+}
+
 /**
- * Lists the organizations a user belongs to, oldest membership first.
+ * Lists the ACTIVE organizations a user belongs to, oldest membership first.
+ * Memberships of suspended organizations grant nothing.
  *
  * @param {string} userId
  * @returns {Promise<Array<{ organizationId: string, role: 'ADMIN'|'ORGANIZER' }>>}
  */
 export async function getMemberships(userId) {
   return prisma.organizationMember.findMany({
-    where: { userId },
+    where: { userId, organization: { status: 'ACTIVE' } },
     select: { organizationId: true, role: true },
     orderBy: { createdAt: 'asc' },
   });
 }
 
+/** True when the user belongs to a suspended organization (`organizationId`, or any). */
+async function hasSuspendedMembership(userId, organizationId) {
+  const count = await prisma.organizationMember.count({
+    where: { userId, ...(organizationId && { organizationId }), organization: { status: 'INACTIVE' } },
+  });
+  return count > 0;
+}
+
 /**
  * Resolves the user's active organization: the requested one if they are a
- * member of it, otherwise their first membership.
+ * member of it, otherwise their first membership. Throws
+ * OrganizationSuspendedError when the requested organization is suspended,
+ * or when every organization the user belongs to is.
  *
  * @param {string} userId
  * @param {string} [preferredOrgId]
@@ -32,10 +51,14 @@ export async function getMemberships(userId) {
  */
 export async function resolveActiveMembership(userId, preferredOrgId) {
   const memberships = await getMemberships(userId);
-  if (memberships.length === 0) return null;
   if (preferredOrgId) {
     const match = memberships.find((m) => m.organizationId === preferredOrgId);
     if (match) return match;
+    if (await hasSuspendedMembership(userId, preferredOrgId)) throw new OrganizationSuspendedError();
+  }
+  if (memberships.length === 0) {
+    if (await hasSuspendedMembership(userId)) throw new OrganizationSuspendedError();
+    return null;
   }
   return memberships[0];
 }
@@ -97,14 +120,15 @@ export const requireOrgMembership = (param = 'orgId') => async (req, res, next) 
     const membership = orgId
       ? await prisma.organizationMember.findUnique({
           where: { userId_organizationId: { userId: req.user.id, organizationId: orgId } },
-          select: { organizationId: true, role: true },
+          select: { organizationId: true, role: true, organization: { select: { status: true } } },
         })
       : null;
 
     if (!membership) {
       throw new ForbiddenError('Access denied to this organization');
     }
-    req.membership = membership;
+    if (membership.organization.status !== 'ACTIVE') throw new OrganizationSuspendedError();
+    req.membership = { organizationId: membership.organizationId, role: membership.role };
     next();
   } catch (error) {
     next(error);

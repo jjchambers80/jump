@@ -78,7 +78,7 @@ describe('normalizeHostname', () => {
 describe('DomainService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    service._invalidate();
+    service.clearCache();
     railway.isConfigured.mockReturnValue(false);
     service._dns = {}; // no network: provider detection is skipped unless a test installs resolveNs
     db.update.mockImplementation(async ({ data }) => ({ ...base, ...data }));
@@ -307,7 +307,7 @@ describe('DomainService', () => {
       process.env.FRONTEND_URL = 'https://eventimus.net';
       db.findFirst.mockResolvedValue(null);
       orgDb.findUnique.mockImplementation(async ({ where }) =>
-        where.slug === 'acme' || where.id === 'org-acme' ? { id: 'org-acme', slug: 'acme' } : null
+        where.slug === 'acme' || where.id === 'org-acme' ? { id: 'org-acme', slug: 'acme', status: 'ACTIVE' } : null
       );
     });
     afterAll(() => {
@@ -317,7 +317,7 @@ describe('DomainService', () => {
 
     it('resolves <slug>.<root> to the organization by slug', async () => {
       expect(await service.resolveHost('ACME.eventimus.net:443')).toBe('org-acme');
-      expect(orgDb.findUnique).toHaveBeenCalledWith({ where: { slug: 'acme' }, select: { id: true } });
+      expect(orgDb.findUnique).toHaveBeenCalledWith({ where: { slug: 'acme' }, select: { id: true, status: true } });
     });
     it('never resolves the apex, reserved labels, multi-label or unknown slugs', async () => {
       for (const host of ['eventimus.net', 'www.eventimus.net', 'mcp.eventimus.net', 'a.acme.eventimus.net', 'nope.eventimus.net']) {

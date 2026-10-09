@@ -243,13 +243,14 @@ describe('Venue Contract Tests', () => {
     });
 
     it.each([
-      ['unknown', 'missing-venue-id'],
-      ['private', () => privateVenueId],
-      ['owned by an inactive organization', () => inactiveVenueId],
-    ])('returns 404 for a %s venue', async (_label, venueId) => {
+      ['unknown', 'missing-venue-id', 'Venue not found'],
+      ['private', () => privateVenueId, 'Venue not found'],
+      // The storefront gate refuses a suspended organization before the route runs.
+      ['owned by an inactive organization', () => inactiveVenueId, 'Organization not found'],
+    ])('returns 404 for a %s venue', async (_label, venueId, message) => {
       const id = typeof venueId === 'function' ? venueId() : venueId;
       const res = await request(app).get(`/venues/${id}`).expect(404);
-      expect(res.body.message).toBe('Venue not found');
+      expect(res.body.message).toBe(message);
     });
 
     it('returns an empty event list for a public venue with no published events', async () => {

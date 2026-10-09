@@ -32,6 +32,7 @@ import { validateEmailChange, validatePreferences, validateUpdateBuyerProfile } 
 import { contactIdFromUnsubscribeToken, verifyUnsubscribeToken } from '../../utils/unsubscribeToken.js';
 import { validateSelectionBody } from '../validators/applicationValidators.js';
 import { requireBuyer } from '../../middleware/buyerAuth.js';
+import { activeOrgByBuyer } from '../../middleware/storefrontGate.js';
 import { ForbiddenError, NotFoundError, ValidationError } from '../../middleware/errorHandler.js';
 import { buyerVerifyUrl } from '../../utils/storefrontUrl.js';
 import { evaluateRefundPolicy, REFUND_POLICY_MESSAGES, REFUND_POLICY_SELECT } from '../../services/RefundPolicyService.js';
@@ -408,7 +409,7 @@ router.get('/me/applications/:id', requireBuyer, async (req, res, next) => {
 });
 
 /** POST /buyer/me/applications/:id/pay → { url } pay-now Checkout for an approved application with a payment due. */
-router.post('/me/applications/:id/pay', requireBuyer, async (req, res, next) => {
+router.post('/me/applications/:id/pay', requireBuyer, activeOrgByBuyer, async (req, res, next) => {
   try {
     res.json(await applicationService.payNowForContact(req.buyer.organizationId, req.buyer.contactId, req.params.id));
   } catch (error) {
@@ -426,7 +427,7 @@ router.post('/me/applications/:id/cancel-checkout', requireBuyer, boothLimiter, 
 });
 
 /** Hold and purchase a booth owned by this buyer's approved application. */
-router.post('/me/applications/:id/booth', requireBuyer, boothLimiter, async (req, res, next) => {
+router.post('/me/applications/:id/booth', requireBuyer, activeOrgByBuyer, boothLimiter, async (req, res, next) => {
   try {
     res.json(await applicationService.chooseBoothForContact(
       req.buyer.organizationId,
@@ -440,7 +441,7 @@ router.post('/me/applications/:id/booth', requireBuyer, boothLimiter, async (req
 });
 
 /** Spec 037 phase 5: choose a space — `{ boothId?, addOns?, useSavedCard? }` (see the guest route). */
-router.post('/me/applications/:id/select', requireBuyer, boothLimiter, validateSelectionBody, async (req, res, next) => {
+router.post('/me/applications/:id/select', requireBuyer, activeOrgByBuyer, boothLimiter, validateSelectionBody, async (req, res, next) => {
   try {
     res.json(await applicationService.selectForContact(req.buyer.organizationId, req.buyer.contactId, req.params.id, req.body));
   } catch (error) {
@@ -458,7 +459,7 @@ router.post('/me/applications/:id/release', requireBuyer, boothLimiter, async (r
 });
 
 /** POST /buyer/me/applications/:id/update-card → { url } setup-mode Checkout to replace the saved card. */
-router.post('/me/applications/:id/update-card', requireBuyer, async (req, res, next) => {
+router.post('/me/applications/:id/update-card', requireBuyer, activeOrgByBuyer, async (req, res, next) => {
   try {
     res.json(await applicationService.updateCardForContact(req.buyer.organizationId, req.buyer.contactId, req.params.id));
   } catch (error) {
