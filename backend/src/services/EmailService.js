@@ -524,31 +524,23 @@ ${manageTicketsHtml}
    * @param {{ to: string, organizationName: string, inviterName: string, role: 'ADMIN'|'ORGANIZER', requireTwoStep: boolean, signInUrl: string }} params
    */
   async sendStaffInvite({ to, organizationName, inviterName, role, requireTwoStep, signInUrl }) {
-    const b = emailBrand(null);
     const roleLabel = role === 'ADMIN' ? 'an Admin' : 'an Organizer';
+    const twoStep = 'Two-step authentication is required. After you sign in you will be asked to set it up under Account › Security before you can use the admin.';
     const msg = {
       to: [to],
       from: process.env.RESEND_FROM_EMAIL || 'Jump <noreply@jump.events>',
       subject: `${organizationName} invited you to Eventimus`,
-      html: `
-        <html>
-          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
-            <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
-              <p style="margin: 0 0 8px; color: #6b7280; font-size: 13px; font-weight: bold; letter-spacing: 2px; text-transform: uppercase;">Eventimus</p>
-              <h1 style="color: #333; font-size: 22px;">Join ${escapeHtml(organizationName)} on Eventimus</h1>
-            </div>
-            <div style="padding: 20px;">
-              <p>${escapeHtml(inviterName)} added you to <strong>${escapeHtml(organizationName)}</strong> as ${roleLabel}.</p>
-              <p>Sign in with this email address, <a href="mailto:${escapeHtml(to)}" style="color: ${b.link}; font-weight: bold;">${escapeHtml(to)}</a>. You can get a sign-in link by email or continue with Google.</p>
-              ${requireTwoStep ? '<p><strong>Two-step authentication is required.</strong> After you sign in you will be asked to set it up under Account › Security before you can use the admin.</p>' : ''}
-              <div style="text-align: center; margin: 32px 0;">
-                <a href="${escapeHtml(signInUrl)}" style="display: inline-block; background-color: ${b.brand}; color: ${b.onBrand}; font-size: 16px; font-weight: bold; padding: 14px 32px; border-radius: 8px; text-decoration: none;">Sign in</a>
-              </div>
-              <p style="color: #666; font-size: 13px;">If you weren't expecting this, you can ignore this email.</p>
-            </div>
-          </body>
-        </html>
-      `,
+      text: `${inviterName} added you to ${organizationName} on Eventimus as ${roleLabel}.\n\nSign in with this email address, ${to}, using an email sign-in link or Google:\n${signInUrl}\n${requireTwoStep ? `\n${twoStep}\n` : ''}\nIf you weren't expecting this, you can ignore this email.`,
+      html: eventimusEmail({
+        preheader: `${inviterName} added you to ${organizationName} as ${roleLabel}.`,
+        heading: `Join ${organizationName} on Eventimus`,
+        body: `
+          <p style="${EV_P}">${escapeHtml(inviterName)} added you to <strong style="${EV_STRONG}">${escapeHtml(organizationName)}</strong> as ${roleLabel}.</p>
+          <p style="${EV_P}">Sign in with this email address, <strong style="${EV_STRONG}">${escapeHtml(to)}</strong>. You can get a sign-in link by email or continue with Google.</p>
+          ${requireTwoStep ? `<p style="${EV_P}"><strong style="${EV_STRONG}">Two-step authentication is required.</strong> After you sign in you will be asked to set it up under Account › Security before you can use the admin.</p>` : ''}
+          ${eventimusButton(signInUrl, 'Sign in')}
+          <p style="${EV_NOTE}">If you weren’t expecting this, you can ignore this email.</p>`,
+      }),
     };
     await deliver(msg);
     logger.info('Staff invite sent', { event: 'staff_invite_sent' });

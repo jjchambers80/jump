@@ -78,7 +78,7 @@ describe('Settings › Users contract', () => {
     expect(sentEmails[0].from).not.toContain(org.name);
     expect(sentEmails[0].html).not.toContain('cdn.example.test/logo.png');
     expect(sentEmails[0].html).not.toContain('#d6007d');
-    expect(sentEmails[0].html).toContain('background-color: #2563eb;');
+    expect(sentEmails[0].html).toContain('background: #c8ff00;');
     expect(sentEmails[0].html).toContain('Two-step authentication is required');
 
     const list = await request(app).get('/admin/settings/users').set(...auth(adminToken));
