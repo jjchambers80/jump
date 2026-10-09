@@ -21,6 +21,7 @@ import { prisma } from '@jump/db';
 import logger from '../utils/logger.js';
 import { ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import * as railway from '../lib/railwayDomains.js';
+import { RESERVED_ORGANIZATION_SLUGS, SLUG_PATTERN } from '../utils/slug.js';
 import { detectDnsProvider, providerInfo } from '../lib/dnsProvider.js';
 
 const HOSTNAME_RE = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
@@ -45,7 +46,29 @@ function platformHosts() {
     .split(',')
     .map((u) => { try { return new URL(u.trim()).hostname.toLowerCase(); } catch { return null; } })
     .filter(Boolean);
-  return new Set([...fromEnv, ...fromUrls, 'localhost']);
+  const root = storeSubdomainRoot();
+  return new Set([...fromEnv, ...fromUrls, 'localhost', ...(root ? [root] : [])]);
+}
+
+/** STOREFRONT_ROOT_DOMAIN (e.g. eventimus.net): every organization is <slug>.<root>. Unset: off. */
+export function storeSubdomainRoot() {
+  return stripDot((process.env.STOREFRONT_ROOT_DOMAIN || '').trim()) || null;
+}
+
+/** The organization slug a store subdomain names, or null (apex, www, reserved, multi-label). */
+export function storeSubdomainSlug(hostname) {
+  const root = storeSubdomainRoot();
+  if (!root || !hostname.endsWith(`.${root}`)) return null;
+  const label = hostname.slice(0, -(root.length + 1));
+  if (!SLUG_PATTERN.test(label) || RESERVED_ORGANIZATION_SLUGS.has(label)) return null;
+  return label;
+}
+
+/** `<slug>.<root>` on the platform URL's scheme and port (http://acme.localhost:3001 in dev). */
+export function storeSubdomainUrl(slug) {
+  const url = new URL(platformBaseUrl());
+  url.hostname = `${slug}.${storeSubdomainRoot()}`;
+  return url.origin;
 }
 
 /** Public platform base URL (first FRONTEND_URL), for the "Jump URL" row. */
@@ -155,8 +178,11 @@ class DomainService {
   }
 
   /** Platform storefront URL for an organization (the row that is always "connected"). */
-  platformUrlFor(organizationId) {
-    return `${platformBaseUrl()}/organizations/${organizationId}`;
+  async platformUrlFor(organizationId) {
+    const org = await prisma.organization.findUnique({ where: { id: organizationId }, select: { slug: true } });
+    const slug = org?.slug || organizationId;
+    if (storeSubdomainRoot() && org) return storeSubdomainUrl(slug);
+    return `${platformBaseUrl()}/organizations/${slug}`;
   }
 
   async listForOrganization(organizationId) {
@@ -365,7 +391,7 @@ class DomainService {
     }
   }
 
-  /** Host -> organizationId for ACTIVE domains (cached). Null when unknown. */
+  /** Host -> organizationId for ACTIVE domains or store subdomains (cached). Null when unknown. */
   async resolveHost(host) {
     if (!host) return null;
     const hostname = stripDot(String(host).split(':')[0]);
@@ -375,7 +401,12 @@ class DomainService {
       where: { hostname, status: 'ACTIVE' },
       select: { organizationId: true },
     });
-    const organizationId = d?.organizationId || null;
+    let organizationId = d?.organizationId || null;
+    const slug = organizationId ? null : storeSubdomainSlug(hostname);
+    if (slug) {
+      const org = await prisma.organization.findUnique({ where: { slug }, select: { id: true } });
+      organizationId = org?.id || null;
+    }
     this._cache.set(hostname, { organizationId, expires: Date.now() + CACHE_TTL_MS });
     return organizationId;
   }
@@ -393,7 +424,9 @@ class DomainService {
     try {
       const url = new URL(origin);
       if (url.protocol !== 'https:' && process.env.NODE_ENV === 'production') return false;
-      return (await this.activeHostnames()).has(url.hostname.toLowerCase());
+      const hostname = url.hostname.toLowerCase();
+      if (storeSubdomainSlug(hostname)) return Boolean(await this.resolveHost(hostname));
+      return (await this.activeHostnames()).has(hostname);
     } catch {
       return false;
     }

@@ -18,11 +18,16 @@ export function normalizeHost(host: string | null | undefined): string {
 
 /**
  * Platform hosts never resolve to an organization: localhost, the configured
- * app host(s), and any *.up.railway.app service URL.
+ * app host(s), and any *.up.railway.app service URL. With a store root domain
+ * (NEXT_PUBLIC_STOREFRONT_ROOT_DOMAIN), `<slug>.<root>` is a store subdomain,
+ * so a tenant, even when the root itself is a configured platform host; the
+ * root and `www.<root>` stay platform.
  */
-export function isPlatformHost(host: string, configured: string[]): boolean {
+export function isPlatformHost(host: string, configured: string[], storeRoot?: string | null): boolean {
   const h = normalizeHost(host);
   if (!h) return true; // no Host header: treat as platform, never as a tenant
+  const root = normalizeHost(storeRoot);
+  if (root && h.endsWith(`.${root}`) && h !== `www.${root}`) return false;
   if (h === 'localhost' || h === '127.0.0.1' || h === '[::1]') return true;
   if (h.endsWith('.up.railway.app')) return true;
   return configured.some((c) => {

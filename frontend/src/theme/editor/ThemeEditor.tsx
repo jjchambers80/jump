@@ -4,6 +4,7 @@
 // one Puck tree, saved atomically through PUT /admin/themes/:id/save.
 // Loaded with ssr: false from the editor page; the only Puck user.
 
+import { storefrontUrl } from '@/lib/publicPaths';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -477,7 +478,7 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
                         if (!dirty || window.confirm('Open the code editor? Unsaved changes will be lost.')) router.push(codeHref(themeId));
                       },
                     },
-                    { label: 'View store', href: `/organizations/${loaded.organization.slug}`, external: true },
+                    { label: 'View store', href: storefrontUrl(loaded.organization.slug), external: true },
                   ]}
                 />
                 <button

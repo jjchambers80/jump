@@ -6,6 +6,7 @@
 // the organization picked in the header org switcher. Each section saves on
 // its own through PATCH /admin/online-store/preferences (partial).
 
+import { storefrontUrl } from '@/lib/publicPaths';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { useOrg } from '@/components/OrgContext';
 import api, { type StorefrontPreferences, type StorefrontPreferencesInput } from '@/services/api';
@@ -264,7 +265,8 @@ export default function PreferencesPage() {
 
   const storeName = selectedOrg?.name ?? 'Your store';
   const origin = typeof window === 'undefined' ? '' : window.location.origin;
-  const homepageUrl = `${origin}/organizations/${selectedOrgId}`;
+  const storePath = storefrontUrl(selectedOrg?.slug || selectedOrgId);
+  const homepageUrl = storePath.startsWith('/') ? `${origin}${storePath}` : storePath;
   const accessDirty =
     privateMode !== prefs.storefrontPrivate ||
     password.length > 0 ||

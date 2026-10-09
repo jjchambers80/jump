@@ -1,7 +1,8 @@
 // Public storefront (frontend) URLs used in emails and Stripe redirects.
 //
 // Per organization (spec 007 phase 3): an organization with an ACTIVE custom
-// domain gets links on that host; everyone else gets the platform frontend.
+// domain gets links on that host; with STOREFRONT_ROOT_DOMAIN set, everyone
+// else gets <slug>.<root>; otherwise the platform frontend.
 // FRONTEND_URL is a comma-separated CORS allowlist (see server.js); its first
 // entry is the canonical platform origin.
 //
@@ -9,7 +10,7 @@
 // (see frontend/src/lib/storefrontHost.ts): `/` is the org page and
 // `/account` is the buyer account page, so links differ by host.
 
-import domainService from '../services/DomainService.js';
+import domainService, { storeSubdomainRoot, storeSubdomainUrl } from '../services/DomainService.js';
 import { prisma } from '@jump/db';
 
 export function platformBaseUrl() {
@@ -29,6 +30,10 @@ export function storefrontBaseUrl() {
 export async function storefrontFor(organizationId) {
   const host = await domainService.primaryHostname(organizationId).catch(() => null);
   if (host) return { base: `https://${host}`, custom: true };
+  if (storeSubdomainRoot()) {
+    const org = await prisma.organization.findUnique({ where: { id: organizationId }, select: { slug: true } });
+    if (org) return { base: storeSubdomainUrl(org.slug), custom: true };
+  }
   return { base: platformBaseUrl(), custom: false };
 }
 

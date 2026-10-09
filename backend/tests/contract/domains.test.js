@@ -98,7 +98,7 @@ describe('Storefront domains contract (spec 007 phase 3)', () => {
     const b = await request(app).get('/admin/settings/domains').set('Authorization', `Bearer ${tokenFor(adminB)}`);
     expect(a.status).toBe(200);
     expect(a.body.domains.map((d) => d.id)).toEqual([domain.id]);
-    expect(a.body.platformUrl).toMatch(new RegExp(`/organizations/${orgA.id}$`));
+    expect(a.body.platformUrl).toMatch(new RegExp(`/organizations/${orgA.slug}$`));
     expect(b.body.domains).toEqual([]);
   });
 

@@ -44,6 +44,7 @@ function oauthFrameProtection(response: NextResponse, pathname: string) {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
 const PLATFORM_HOSTS = platformHostsFromEnv(process.env as Record<string, string | undefined>);
+const STORE_ROOT = process.env.NEXT_PUBLIC_STOREFRONT_ROOT_DOMAIN;
 
 // host -> { orgId | null, expires }. Per edge isolate; the backend also caches.
 const RESOLVE_TTL_MS = 60 * 1000;
@@ -122,7 +123,7 @@ const TWO_STEP_SETUP_PATH = '/admin/account/security?required=two-step';
 export default auth(async (req: NextRequest & { auth: unknown }) => {
   const host = normalizeHost(req.headers.get('host'));
 
-  if (isPlatformHost(host, PLATFORM_HOSTS)) {
+  if (isPlatformHost(host, PLATFORM_HOSTS, STORE_ROOT)) {
     const { pathname } = req.nextUrl;
     const staffOnly = STAFF_ONLY_PREFIXES.some(
       (p) => pathname === p || pathname.startsWith(`${p}/`)
@@ -151,7 +152,7 @@ export default auth(async (req: NextRequest & { auth: unknown }) => {
     return oauthFrameProtection(NextResponse.next(), pathname);
   }
 
-  // Tenant (custom) host: one organization's storefront, no staff surface
+  // Tenant host (custom domain or store subdomain): one organization's storefront, no staff surface
   const orgId = await resolveTenantHost(host);
   if (!orgId) return notFound(req);
 

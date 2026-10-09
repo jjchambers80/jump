@@ -48,7 +48,7 @@ export function GET(request: Request) {
   const { orgId, exp } = claims(token);
   if (!orgId || !/^[A-Za-z0-9_-]{1,64}$/.test(orgId)) return new NextResponse('Invalid preview link', { status: 400 });
   const target = publicUrl('/', request);
-  const home = isPlatformHost(target.host, PLATFORM_HOSTS) ? `/organizations/${orgId}` : '/';
+  const home = isPlatformHost(target.host, PLATFORM_HOSTS, process.env.NEXT_PUBLIC_STOREFRONT_ROOT_DOMAIN) ? `/organizations/${orgId}` : '/';
   const response = NextResponse.redirect(new URL(home, target));
   response.cookies.set(PREVIEW_COOKIE, token, {
     httpOnly: true,

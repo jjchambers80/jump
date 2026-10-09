@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals';
-import { resolveSlug, slugify, uniqueSlug } from '../../src/utils/slug.js';
+import { RESERVED_ORGANIZATION_SLUGS, resolveUniqueSlug, resolveSlug, slugify, uniqueSlug } from '../../src/utils/slug.js';
 
 describe('shared URL slug utilities', () => {
   it('normalizes punctuation, accents and repeated whitespace', () => {
@@ -65,5 +65,15 @@ describe('shared URL slug utilities', () => {
     const model = { findFirst: jest.fn().mockResolvedValue(null) };
 
     await expect(uniqueSlug(model, { raw: '東京', fallback: 'org' })).resolves.toBe('org');
+  });
+
+  it('skips reserved organization slugs and refuses a typed one', async () => {
+    const model = { findFirst: jest.fn().mockResolvedValue(null) };
+    const reserved = RESERVED_ORGANIZATION_SLUGS;
+    await expect(uniqueSlug(model, { raw: 'Admin', reserved })).resolves.toBe('admin-2');
+    await expect(
+      resolveUniqueSlug(model, { title: 'Anything', customSlug: 'www', reserved })
+    ).rejects.toThrow('reserved');
+    await expect(uniqueSlug(model, { raw: 'Admin' })).resolves.toBe('admin'); // other models unaffected
   });
 });

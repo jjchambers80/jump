@@ -1,5 +1,5 @@
 // Menu hrefs come from the backend in platform form (/organizations/:id/...).
-// On a tenant host (custom domain) the same pages live at short paths, so
+// On a tenant host (custom domain or store subdomain) the same pages live at short paths, so
 // links are rewritten client-side; platform hosts keep them as-is.
 
 import { isPlatformHost, platformHostsFromEnv } from './storefrontHost';
@@ -12,7 +12,7 @@ const PLATFORM_HOSTS = platformHostsFromEnv({
 
 export function isTenantHost(host: string | null | undefined) {
   if (!host) return false;
-  return !isPlatformHost(host, PLATFORM_HOSTS);
+  return !isPlatformHost(host, PLATFORM_HOSTS, process.env.NEXT_PUBLIC_STOREFRONT_ROOT_DOMAIN);
 }
 
 export function storefrontHref(href: string, orgId: string, host?: string | null) {
