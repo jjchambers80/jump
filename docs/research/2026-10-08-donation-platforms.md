@@ -464,7 +464,9 @@ Consequences of putting R4 in v1:
 
 ### DV. Nonprofit verification and charity agreement (new; before D1)
 
-Who may take gifts, and what may be said about them. SYSTEM_ADMIN and org-admin UI only. Nothing changes on the storefront.
+Who may take gifts, and what may be said about them. SYSTEM_ADMIN and org-admin UI only.
+
+- **3% ticket rate (decision 2, 2026-10-09).** Verification sets `Organization.platformFeeRate = 0.03`; revocation clears it (back to `FEE_CONFIG`, 5%). The rate flows into both fee libraries per line and into every all-in price surface (`computeTierAllInPrice`, `TierStub`, `EventDetailClient`, `addOns.ts`, the map page, Settings › Payments rates). This is DV's one storefront change: verified organizations' listed all-in prices drop. Pending orders keep the fee they were created with.
 
 - **Deductibility status** (§5 #1, L4):
   - `Organization.deductibilityStatus` (`NOT_VERIFIED` | `DEDUCTIBLE_170C` | `EXEMPT_NOT_DEDUCTIBLE` | `NOT_EXEMPT`);
@@ -730,7 +732,7 @@ There is deliberately **no** `Donation` money table. The gift's money is the Ord
 ## 10. Open decisions for the owner
 
 1. **Who pays processing on uncovered gifts?** Option (a), the nonprofit (recommended for launch), or option (b), Jump absorbs it, funded by subscription or by an opt-in tip (section 7.3).
-2. **Nonprofit ticket rate.** 3% is recommended because it beats Eventbrite at every price. Choose between a flat 3% and keeping 5%, and decide whether the rate is gated on `deductibilityStatus = DEDUCTIBLE_170C` or on the STARTER plan.
+2. **Nonprofit ticket rate.** **Decided 2026-10-09: a flat 3% for every verified nonprofit** (`DEDUCTIBLE_170C` or `EXEMPT_NOT_DEDUCTIBLE`), not plan-gated. Built in DV (spec 047).
 3. **Do donations count in dashboard "revenue"?** Recommendation: show them as a separate "Gifts" figure, never merged into ticket sales, and never in the tax report.
 4. ~~When to do `Order.organizationId` / nullable `eventId`.~~ **Settled 2026-10-09:** in D0, because monthly gifts (R4) are in v1 and have no event.
 5. **Cover-fees default on standalone forms.** Start unchecked (recommended) or pre-checked. The FTC rule forbids pre-checked only in ticket checkouts.
