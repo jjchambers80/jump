@@ -46,7 +46,7 @@ D0-B, D0-C and D0-D change nothing visible. D0-S is the one card with a visible 
 
 **Out of D0** (each was in the earlier sketch):
 
-- **The 3% nonprofit ticket rate** (`Organization.platformFeeRate`). It changes the all-in price shown on every public tier (`computeTierAllInPrice`, `TierStub`, `EventDetailClient`, `addOns.ts`, the map page) and needs owner decision 2 (flat 3% or plan-gated) plus DV verification. D0-B makes it a one-field change later: the fee libraries already take a per-line rate.
+- **The 3% nonprofit ticket rate** (`Organization.platformFeeRate`). It changes the all-in price shown on every public tier (`computeTierAllInPrice`, `TierStub`, `EventDetailClient`, `addOns.ts`, the map page) **Decided 2026-10-09: a flat 3% for every verified nonprofit** (any `deductibilityStatus` other than `NOT_VERIFIED` / `NOT_EXEMPT`), not tied to a plan. It ships with DV, because verification is what turns it on. D0-B makes it a small change: the fee libraries already take a per-line rate; DV adds `Organization.platformFeeRate`, sets it on verification and clears it on revocation, and passes it to every all-in price surface.
 - `OrderKind.DONATION` / `OrderItemKind.DONATION`, `GiftReceipt`, `RecurringGift`, `DonationCampaign`: added by the phase that first writes them (D1, D3, D2).
 - `Organization.deductibilityStatus` and the other DV fields: DV.
 
