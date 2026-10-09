@@ -39,13 +39,13 @@ export const MODEL_FEATURES = {
   EventRsvp: { feature: 'RSVPs', org: 'event.venue' },
 
   // Orders and money
-  Order: { feature: 'Orders', org: 'event.venue' },
-  OrderItem: { feature: 'Orders', org: 'order.event.venue' },
-  OrderAddOn: { feature: 'Orders', label: 'name', org: 'order.event.venue' },
+  Order: { feature: 'Orders' },
+  OrderItem: { feature: 'Orders', org: 'order' },
+  OrderAddOn: { feature: 'Orders', label: 'name', org: 'order' },
   Ticket: { feature: 'Orders', org: 'event.venue' },
-  PaymentTransaction: { feature: 'Orders', org: 'order.event.venue' },
-  Refund: { feature: 'Orders', org: 'order.event.venue' },
-  Dispute: { feature: 'Orders', org: 'order.event.venue' },
+  PaymentTransaction: { feature: 'Orders', org: 'order' },
+  Refund: { feature: 'Orders', org: 'order' },
+  Dispute: { feature: 'Orders', org: 'order' },
 
   // Customers
   Contact: { feature: 'Customers', label: 'email' },
