@@ -4,6 +4,18 @@ export function organizationPath(organizationSlug: string) {
   return `/organizations/${segment(organizationSlug)}`;
 }
 
+/**
+ * The store's public homepage: `<slug>.<root>` when store subdomains are on
+ * (NEXT_PUBLIC_STOREFRONT_ROOT_DOMAIN), else the platform path. Keeps the
+ * current page's scheme and port, so `acme.localhost:3001` works in dev.
+ */
+export function storefrontUrl(organizationSlug: string) {
+  const root = process.env.NEXT_PUBLIC_STOREFRONT_ROOT_DOMAIN?.trim();
+  if (!root || typeof window === 'undefined') return organizationPath(organizationSlug);
+  const port = window.location.port ? `:${window.location.port}` : '';
+  return `${window.location.protocol}//${organizationSlug}.${root}${port}/`;
+}
+
 export function organizationAccountPath(organizationSlug: string) {
   return `${organizationPath(organizationSlug)}/account`;
 }

@@ -4,6 +4,7 @@
 // rollout (spec 038): public storefront settings (store name, handle, theme,
 // branding) for the organization picked in the header org switcher.
 
+import { storefrontUrl } from '@/lib/publicPaths';
 import React, { useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { useOrg } from '@/components/OrgContext';
@@ -40,7 +41,7 @@ export default function LegacyOnlineStore({ rollout }: { rollout?: React.ReactNo
       <div className="flex items-center justify-between gap-4 mb-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Online store</h1>
         <a
-          href={`/organizations/${org.id}`}
+          href={storefrontUrl(org.slug || org.id)}
           target="_blank"
           rel="noreferrer"
           className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-accent-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"

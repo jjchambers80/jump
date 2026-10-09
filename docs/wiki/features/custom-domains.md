@@ -37,6 +37,7 @@ An organization can point a subdomain it owns (for example `tickets.venue.com`) 
 | `STOREFRONT_CNAME_TARGET` | No | Hostname organizations CNAME to. Default: host of the first `FRONTEND_URL`. Set it to the frontend's public Railway host in production |
 | `PLATFORM_HOSTS` (backend) / `NEXT_PUBLIC_PLATFORM_HOSTS` (frontend) | No | Comma-separated platform hostnames that can never be claimed and never route as a tenant. `localhost`, `127.0.0.1`, `*.up.railway.app`, and the hosts of `FRONTEND_URL` / `AUTH_URL` are always platform |
 | `RAILWAY_API_TOKEN`, `RAILWAY_FRONTEND_SERVICE_ID` | No | Together with Railway-injected `RAILWAY_PROJECT_ID` and `RAILWAY_ENVIRONMENT_ID`, enables automatic custom-domain creation on the frontend service so Railway issues the certificate. Unset: a DNS-verified domain goes straight to ACTIVE and the operator adds it in the Railway dashboard |
+| `STOREFRONT_ROOT_DOMAIN` (backend) / `NEXT_PUBLIC_STOREFRONT_ROOT_DOMAIN` (frontend, build-time) | No | Store subdomains: every organization is served at `<slug>.<root>` (e.g. `raleigh-retro-gamers.eventimus.net`). Unset: off |
 | `DOMAIN_SWEEP_INTERVAL_MS` | No | Re-check interval for the background sweep (default 600000) |
 | `DOMAIN_VERIFY_COOLDOWN_MS` | No | User-initiated re-checks closer together than this return the stored result without resolving DNS (default 15000; tests set 0). The sweep is exempt |
 
@@ -77,7 +78,21 @@ An organization can point a subdomain it owns (for example `tickets.venue.com`) 
 
 `OrganizationDomain`: `id, organizationId (FK cascade), hostname (unique), status DomainStatus, verificationHost (default `_jump-verify`), verificationToken (full TXT value), cnameTarget, isPrimary, railwayDomainId?, certificateStatus?, dnsProvider?, lastDnsSnapshot? (JSON), verifiedAt?, lastCheckedAt?, failingSince?, lastError?, createdAt, updatedAt`; indexes on `organizationId`, `status`. `DomainStatus`: `PENDING | VERIFIED | ACTIVE | FAILED`. Migrations `20260913120000_organization_domains` (additive) and `20260913200000_domain_setup_details` (adds the four columns and rewrites existing tokens to `jump-verify=<token>` so published records keep verifying). See [Database Architecture](database-architecture.md).
 
+## Store subdomains
+
+With `STOREFRONT_ROOT_DOMAIN=eventimus.net` every organization has a free storefront at `<slug>.eventimus.net`, no setup needed (the Shopify `myshopify.com` idea). It is a tenant host like a custom domain, so everything in **How It Works** step 5 applies unchanged; only two things are new:
+
+- **Routing.** `isPlatformHost(host, configured, storeRoot)` returns false for `<label>.<root>` before the configured-host suffix match, so the subdomains route as tenants even though the root itself is a platform host. The root and `www.<root>` stay platform (the Eventimus homepage).
+- **Resolution.** `DomainService.resolveHost` tries the ACTIVE `OrganizationDomain` row first, then `storeSubdomainSlug(host)`: a single label that passes `SLUG_PATTERN` and is not in `RESERVED_ORGANIZATION_SLUGS` (`backend/src/utils/slug.js`: `www`, `api`, `admin`, `mcp`, …) is looked up as `Organization.slug`. `isActiveOrigin` allows a subdomain origin when it resolves.
+
+Links: `storefrontFor` uses the subdomain whenever the organization has no ACTIVE custom domain, so emails and Stripe redirects use it; the Domains page "Jump URL" row (`platformUrlFor`) shows it; admin **View store** links use `storefrontUrl(slug)` (`frontend/src/lib/publicPaths.ts`). `/organizations/<slug>` on the platform host keeps working.
+
+Ops: wildcard DNS `*.<root>` CNAME to the frontend service, and the wildcard domain on the Railway frontend service (Railway asks for an `_acme-challenge` CNAME for the wildcard certificate).
+
 ## Gotchas
+
+- **Renaming a store's slug moves its subdomain.** There is no slug history, so the old `<slug>.<root>` answers 404 (as does the old `/organizations/<slug>`). Organization slugs are never allocated from `RESERVED_ORGANIZATION_SLUGS`, and typing one is a 409.
+- **Local store subdomains.** Chrome resolves `*.localhost` to 127.0.0.1: set both root variables to `localhost` and open `http://<slug>.localhost:3001/`.
 
 - URL redirects (spec 028): on a tenant host the middleware consults `GET /organizations/:id/public/redirect?path=` only for paths its own routing marks `notFound`, then answers 301 — see `docs/wiki/features/url-redirects.md`.
 

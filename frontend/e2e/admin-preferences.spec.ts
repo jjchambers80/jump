@@ -182,7 +182,7 @@ test('search engine listing saves the homepage title and meta description with a
   const seo = page.getByTestId('homepage-seo');
   const preview = page.getByTestId('seo-preview');
   await expect(preview).toContainText('Raleigh Retro Gamers');
-  await expect(preview).toContainText(`/organizations/${ORG_ID}`);
+  await expect(preview).toContainText('/organizations/raleigh-retro-gamers');
   await expect(page.getByTestId('seo-save')).toBeDisabled();
 
   await seo.getByLabel('Homepage title').fill('Retro Nights in Raleigh');

@@ -7,7 +7,7 @@ import logger from '../utils/logger.js';
 import storefrontPreferencesService from './StorefrontPreferencesService.js';
 import { NotFoundError } from '../middleware/errorHandler.js';
 import { formatEventSummary } from '../utils/eventSummary.js';
-import { rethrowSlugConflict, resolveUniqueSlug, uniqueSlug } from '../utils/slug.js';
+import { RESERVED_ORGANIZATION_SLUGS, rethrowSlugConflict, resolveUniqueSlug, uniqueSlug } from '../utils/slug.js';
 import { findByPublicIdentifier } from '../utils/publicIdentifier.js';
 
 export const serializeBusinessDetails = (organization) => {
@@ -72,6 +72,7 @@ class OrganizationService {
       exceptId: exceptOrganizationId,
       fallback: 'org',
       maxAttempts: 999,
+      reserved: RESERVED_ORGANIZATION_SLUGS,
     });
   }
 
@@ -89,6 +90,7 @@ class OrganizationService {
       title: data.name,
       customSlug: data.slug,
       fallback: 'org',
+      reserved: RESERVED_ORGANIZATION_SLUGS,
     });
     let organization;
     try {
@@ -202,6 +204,7 @@ class OrganizationService {
           slugCustomized: existing.slugCustomized,
           exceptId: id,
           fallback: 'org',
+          reserved: RESERVED_ORGANIZATION_SLUGS,
         })
       );
     }

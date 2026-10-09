@@ -6,6 +6,7 @@
 // preview and share preview links). Thumbnails are the live home page in
 // scaled iframes (ThemeScreenshot); import comes later.
 
+import { storefrontUrl } from '@/lib/publicPaths';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -59,6 +60,7 @@ export default function ThemesOverview() {
 
   if (!org) return null;
   const storeUrl = `/organizations/${org.slug || org.id}`;
+  const liveStoreUrl = storefrontUrl(org.slug || org.id);
   const live = themes?.find((t) => t.role === 'MAIN') ?? null;
   const drafts = themes?.filter((t) => t.role !== 'MAIN') ?? [];
 
@@ -100,7 +102,7 @@ export default function ThemesOverview() {
   };
   const themeActions = (theme: ThemeSummary) => [
     ...(theme.role === 'MAIN'
-      ? [{ label: 'View', href: storeUrl, external: true }]
+      ? [{ label: 'View', href: liveStoreUrl, external: true }]
       : [
           { label: 'Preview', onSelect: () => void preview(theme) },
           { label: 'Share preview', onSelect: () => void sharePreview(theme) },
@@ -181,7 +183,7 @@ export default function ThemesOverview() {
             <option value="public">Public</option>
             <option value="private">Password protected</option>
           </select>
-          <a href={storeUrl} target="_blank" rel="noreferrer" className={secondary}>
+          <a href={liveStoreUrl} target="_blank" rel="noreferrer" className={secondary}>
             View store
             <ExternalLink className="h-4 w-4" aria-hidden />
           </a>

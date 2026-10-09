@@ -356,7 +356,7 @@ router.get('/settings/domains', async (req, res, next) => {
     const organizationId = await activeOrgFor(req);
     res.json({
       domains: await domainService.listForOrganization(organizationId),
-      platformUrl: domainService.platformUrlFor(organizationId),
+      platformUrl: await domainService.platformUrlFor(organizationId),
     });
   } catch (error) {
     next(error);

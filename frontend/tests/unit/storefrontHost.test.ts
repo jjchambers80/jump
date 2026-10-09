@@ -29,6 +29,15 @@ describe('isPlatformHost', () => {
     expect(isPlatformHost('tickets.venue.com', configured)).toBe(false);
     expect(isPlatformHost('jump.events.evil.com', configured)).toBe(false);
   });
+  it('treats <slug>.<store root> as a tenant while the root and www stay platform', () => {
+    const withRoot = [...configured, 'eventimus.net'];
+    expect(isPlatformHost('acme.eventimus.net', withRoot, 'eventimus.net')).toBe(false);
+    expect(isPlatformHost('acme.localhost:3001', withRoot, 'localhost')).toBe(false);
+    expect(isPlatformHost('eventimus.net', withRoot, 'eventimus.net')).toBe(true);
+    expect(isPlatformHost('www.eventimus.net', withRoot, 'eventimus.net')).toBe(true);
+    expect(isPlatformHost('frontend-production-43e9.up.railway.app', withRoot, 'eventimus.net')).toBe(true);
+    expect(isPlatformHost('acme.eventimus.net', withRoot)).toBe(true);
+  });
 });
 
 describe('platformHostsFromEnv', () => {

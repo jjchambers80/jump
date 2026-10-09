@@ -13,8 +13,9 @@ const db = {
   updateMany: jest.fn(),
   delete: jest.fn(),
 };
+const orgDb = { findUnique: jest.fn() };
 jest.unstable_mockModule('@jump/db', () => ({
-  prisma: { organizationDomain: db, $transaction: (ops) => Promise.all(ops) },
+  prisma: { organizationDomain: db, organization: orgDb, $transaction: (ops) => Promise.all(ops) },
 }));
 jest.unstable_mockModule('../../src/utils/logger.js', () => ({
   default: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
@@ -296,6 +297,47 @@ describe('DomainService', () => {
       expect(await service.isActiveOrigin('https://tickets.example.com')).toBe(true);
       expect(await service.isActiveOrigin('https://other.example.com')).toBe(false);
       expect(await service.isActiveOrigin('garbage')).toBe(false);
+    });
+  });
+
+  describe('store subdomains (STOREFRONT_ROOT_DOMAIN)', () => {
+    const OLD = { root: process.env.STOREFRONT_ROOT_DOMAIN, url: process.env.FRONTEND_URL };
+    beforeEach(() => {
+      process.env.STOREFRONT_ROOT_DOMAIN = 'eventimus.net';
+      process.env.FRONTEND_URL = 'https://eventimus.net';
+      db.findFirst.mockResolvedValue(null);
+      orgDb.findUnique.mockImplementation(async ({ where }) =>
+        where.slug === 'acme' || where.id === 'org-acme' ? { id: 'org-acme', slug: 'acme' } : null
+      );
+    });
+    afterAll(() => {
+      process.env.STOREFRONT_ROOT_DOMAIN = OLD.root;
+      process.env.FRONTEND_URL = OLD.url;
+    });
+
+    it('resolves <slug>.<root> to the organization by slug', async () => {
+      expect(await service.resolveHost('ACME.eventimus.net:443')).toBe('org-acme');
+      expect(orgDb.findUnique).toHaveBeenCalledWith({ where: { slug: 'acme' }, select: { id: true } });
+    });
+    it('never resolves the apex, reserved labels, multi-label or unknown slugs', async () => {
+      for (const host of ['eventimus.net', 'www.eventimus.net', 'mcp.eventimus.net', 'a.acme.eventimus.net', 'nope.eventimus.net']) {
+        expect(await service.resolveHost(host)).toBeNull();
+      }
+      expect(orgDb.findUnique).toHaveBeenCalledTimes(1); // only `nope` is a slug lookup
+    });
+    it('lets an ACTIVE custom domain row win over the slug lookup', async () => {
+      db.findFirst.mockResolvedValueOnce({ organizationId: 'org-other' });
+      expect(await service.resolveHost('acme.eventimus.net')).toBe('org-other');
+      expect(orgDb.findUnique).not.toHaveBeenCalled();
+    });
+    it('allows CORS from store subdomains that resolve', async () => {
+      db.findMany.mockResolvedValue([]);
+      expect(await service.isActiveOrigin('https://acme.eventimus.net')).toBe(true);
+      expect(await service.isActiveOrigin('https://nope.eventimus.net')).toBe(false);
+    });
+    it('refuses store subdomains as custom domains and gives the store URL as the Jump URL', async () => {
+      expect(() => normalizeHostname('acme.eventimus.net')).toThrow('belongs to the platform');
+      expect(await service.platformUrlFor('org-acme')).toBe('https://acme.eventimus.net');
     });
   });
 });

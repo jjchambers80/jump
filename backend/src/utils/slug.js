@@ -7,6 +7,13 @@ import { ConflictError, ValidationError } from '../middleware/errorHandler.js';
 export const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 export const SLUG_MAX_LENGTH = 60;
 
+// Organization slugs double as storefront subdomains (<slug>.STOREFRONT_ROOT_DOMAIN),
+// so labels the platform uses or may use for itself are never allocated.
+export const RESERVED_ORGANIZATION_SLUGS = new Set([
+  'www', 'api', 'app', 'admin', 'mcp', 'mail', 'email', 'auth', 'static', 'cdn',
+  'help', 'support', 'status', 'docs', 'blog', 'store', 'shop',
+]);
+
 export function normalizeCustomSlug(value, field = 'slug') {
   if (value === undefined || value === null) return value;
   if (typeof value !== 'string') throw new ValidationError(`${field} must be a string or null`);
@@ -65,13 +72,14 @@ function suffixedSlug(base, suffix) {
 /** Allocate the first free slug in a model and route scope. */
 export async function uniqueSlug(
   model,
-  { scope = {}, raw, exceptId = null, field = 'slug', fallback = null, maxAttempts = 100 }
+  { scope = {}, raw, exceptId = null, field = 'slug', fallback = null, maxAttempts = 100, reserved = null }
 ) {
   const base = slugify(raw) || slugify(fallback);
   if (!base) throw new ValidationError('URL slug must contain letters or numbers');
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const slug = attempt === 1 ? base : suffixedSlug(base, attempt);
+    if (reserved?.has(slug)) continue;
     const where = { ...scope, [field]: slug };
     if (exceptId) where.NOT = { id: exceptId };
     const clash = await model.findFirst({ where, select: { id: true } });
@@ -93,11 +101,15 @@ export async function resolveUniqueSlug(
     exceptId = null,
     field = 'slug',
     fallback = null,
+    reserved = null,
   }
 ) {
   const resolved = resolveSlug({ title, customSlug, currentSlug, slugCustomized });
 
   if (resolved.slugCustomized) {
+    if (reserved?.has(resolved.slug) && resolved.slug !== currentSlug) {
+      throw new ConflictError('That URL slug is reserved', { field: 'slug' });
+    }
     const where = { ...scope, [field]: resolved.slug };
     if (exceptId) where.NOT = { id: exceptId };
     const clash = await model.findFirst({ where, select: { id: true } });
@@ -112,6 +124,7 @@ export async function resolveUniqueSlug(
       exceptId,
       field,
       fallback,
+      reserved,
     }),
     slugCustomized: false,
   };
