@@ -158,7 +158,7 @@ describe('RSVP events contract', () => {
 
   it('locks both admission-mode switch directions', async () => {
     const contact = await prisma.contact.create({ data: { organizationId: org.id, email: `order@${TAG}.test`, firstName: 'Order', lastName: 'Buyer' } });
-    await prisma.order.create({ data: { eventId: ticketedEvent.id, contactId: contact.id, orderRef: `JMP-${Date.now().toString(36).toUpperCase().slice(-6).padStart(6, 'A')}`, totalAmount: 0, quantity: 1 } });
+    await prisma.order.create({ data: { eventId: ticketedEvent.id, organizationId: contact.organizationId, contactId: contact.id, orderRef: `JMP-${Date.now().toString(36).toUpperCase().slice(-6).padStart(6, 'A')}`, totalAmount: 0, quantity: 1 } });
     const toRsvp = await request(app).patch(`/organizations/${org.id}/events/${ticketedEvent.id}`).set('Authorization', `Bearer ${token}`).send({ admissionMode: 'RSVP', rsvpLimit: 10 });
     expect(toRsvp.status).toBe(409);
     expect(toRsvp.body.code).toBe('ADMISSION_MODE_LOCKED');

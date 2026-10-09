@@ -56,7 +56,7 @@ async function fixture(name) {
   const order = await prisma.order.create({
     data: {
       eventId: event.id,
-      contactId: contact.id,
+      organizationId: contact.organizationId, contactId: contact.id,
       orderRef: `${TAG}-${name}`,
       totalAmount: 10,
       subtotalAmount: 10,

@@ -36,7 +36,7 @@ describe('Self-serve refund policy', () => {
     const e = eventOverride || event;
     const order = await prisma.order.create({
       data: {
-        eventId: e.id, contactId: contact.id, orderRef: `${TAG}-${seq}`, totalAmount: pricePaid, subtotalAmount: pricePaid, quantity: 1, status: 'COMPLETED',
+        eventId: e.id, organizationId: contact.organizationId, contactId: contact.id, orderRef: `${TAG}-${seq}`, totalAmount: pricePaid, subtotalAmount: pricePaid, quantity: 1, status: 'COMPLETED',
         items: { create: [{ priceTierId: t.id, quantity: 1, unitPrice: pricePaid }] },
         payment: { create: { stripePaymentIntentId: `pi_${TAG}_${seq}`, amount: pricePaid, currency: 'usd', status: 'SUCCEEDED' } },
       },

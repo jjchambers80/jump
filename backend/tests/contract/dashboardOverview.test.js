@@ -35,7 +35,7 @@ describe('Dashboard overview contract', () => {
     return prisma.order.create({
       data: {
         eventId: event.id,
-        contactId: contact.id,
+        organizationId: contact.organizationId, contactId: contact.id,
         orderRef: `${TAG.toUpperCase()}-${seq}`,
         totalAmount: total,
         subtotalAmount: total,

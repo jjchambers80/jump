@@ -106,7 +106,7 @@ export default function OrderLookupPage() {
     setOrderRef('');
   }
 
-  const eventUpcoming = order ? isUpcoming(order.event.date) : false;
+  const eventUpcoming = order?.event ? isUpcoming(order.event.date) : false;
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-950 transition-colors">
@@ -195,12 +195,14 @@ export default function OrderLookupPage() {
             {/* Order header */}
             <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-6 mb-6">
               <h2 className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-1">
-                {order.event.name}
+                {order.event?.name ?? order.organization?.name ?? '—'}
               </h2>
-              <p className="text-sm text-gray-500 dark:text-slate-400">
-                {formatEventDate(order.event.date, order.event.venue?.timezone, { weekday: 'long', month: 'long' })} at {formatEventTime(order.event.date, order.event.venue?.timezone)}
-              </p>
-              {order.event.venue && (
+              {order.event && (
+                <p className="text-sm text-gray-500 dark:text-slate-400">
+                  {formatEventDate(order.event.date, order.event.venue?.timezone, { weekday: 'long', month: 'long' })} at {formatEventTime(order.event.date, order.event.venue?.timezone)}
+                </p>
+              )}
+              {order.event?.venue && (
                 <p className="text-sm text-gray-500 dark:text-slate-400">
                   📍 {order.event.venue.name}
                   {order.event.venue.address ? ` — ${order.event.venue.address}` : ''}

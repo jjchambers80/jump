@@ -163,7 +163,7 @@ describe('Spec 007 phase 4 cleanup', () => {
       const contact = await prisma.contact.create({ data: { organizationId: A.id, email: `refund@${TAG}.test`, firstName: 'R', lastName: 'R', accountCreatedAt: new Date() } });
       const order = await prisma.order.create({
         data: {
-          eventId: event.id, contactId: contact.id, orderRef: `${TAG}-R1`, totalAmount: 20, subtotalAmount: 20, quantity: 1, status: 'COMPLETED',
+          eventId: event.id, organizationId: contact.organizationId, contactId: contact.id, orderRef: `${TAG}-R1`, totalAmount: 20, subtotalAmount: 20, quantity: 1, status: 'COMPLETED',
           items: { create: [{ priceTierId: tier.id, quantity: 1, unitPrice: 20 }] },
           payment: { create: { stripePaymentIntentId: 'pi_p4', amount: 20, currency: 'usd', status: 'SUCCEEDED' } },
         },

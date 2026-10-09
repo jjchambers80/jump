@@ -107,7 +107,7 @@ describe('Event Analytics API Contract Tests', () => {
     const vipOrder = await prisma.order.create({
       data: {
         eventId: testEventId,
-        contactId: contact.id,
+        organizationId: contact.organizationId, contactId: contact.id,
         orderRef: 'ANA-VIP001',
         totalAmount: 30000,
         currency: 'usd',
@@ -139,7 +139,7 @@ describe('Event Analytics API Contract Tests', () => {
     const gaOrder = await prisma.order.create({
       data: {
         eventId: testEventId,
-        contactId: contact.id,
+        organizationId: contact.organizationId, contactId: contact.id,
         orderRef: 'ANA-GA001',
         totalAmount: 17500,
         currency: 'usd',

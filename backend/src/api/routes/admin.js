@@ -1066,10 +1066,12 @@ router.get('/dashboard/stats', async (req, res, next) => {
     });
     const salesRate = Math.round(recentSales / 60);
 
-    // Calculate payment success rate (scoped to org via event → venue)
+    // Payment success rate, scoped to the org on the order (spec 047 D0-C:
+    // an order need not have an event; unscoped = every order).
+    const orderScope = scope.organizationId ? { organizationId: scope.organizationId } : {};
     const [completedOrders, failedOrders] = await Promise.all([
-      prisma.order.count({ where: { status: 'COMPLETED', event: venueFilter } }),
-      prisma.order.count({ where: { status: 'FAILED', event: venueFilter } }),
+      prisma.order.count({ where: { status: 'COMPLETED', ...orderScope } }),
+      prisma.order.count({ where: { status: 'FAILED', ...orderScope } }),
     ]);
     const totalOrders = completedOrders + failedOrders;
     const paymentSuccessRate =
@@ -1078,11 +1080,11 @@ router.get('/dashboard/stats', async (req, res, next) => {
     // Gross revenue by source (spec 018 phase 2; one ledger since spec 024).
     const [orderRevenue, applicationRevenue] = await Promise.all([
       prisma.order.aggregate({
-        where: { kind: 'TICKET', status: { in: PAID_ORDER_STATUSES }, event: venueFilter },
+        where: { kind: 'TICKET', status: { in: PAID_ORDER_STATUSES }, ...orderScope },
         _sum: { totalAmount: true },
       }),
       prisma.order.aggregate({
-        where: { kind: 'APPLICATION', status: { in: PAID_ORDER_STATUSES }, event: venueFilter },
+        where: { kind: 'APPLICATION', status: { in: PAID_ORDER_STATUSES }, ...orderScope },
         _sum: { totalAmount: true },
       }),
     ]);
@@ -1389,15 +1391,8 @@ router.get('/orders/:orderId', async (req, res, next) => {
     const order = await orderService.getOrderById(req.params.orderId);
 
     // Verify order belongs to this organizer's organization (SYSTEM_ADMIN skips)
-    if (!isUnscoped(scope)) {
-      const event = await prisma.event.findUnique({
-        where: { id: order.event.id },
-        include: { venue: { select: { organizationId: true } } },
-      });
-
-      if (!event || event.venue.organizationId !== scope.organizationId) {
-        throw new NotFoundError('Order not found');
-      }
+    if (!isUnscoped(scope) && order.organization?.id !== scope.organizationId) {
+      throw new NotFoundError('Order not found');
     }
 
     res.json(order);
@@ -1421,15 +1416,8 @@ router.post('/orders/:orderId/resend-confirmation', async (req, res, next) => {
     const order = await orderService.getOrderById(req.params.orderId);
 
     // Verify order belongs to this organization (SYSTEM_ADMIN skips)
-    if (!isUnscoped(scope)) {
-      const event = await prisma.event.findUnique({
-        where: { id: order.event.id },
-        include: { venue: { select: { organizationId: true } } },
-      });
-
-      if (!event || event.venue.organizationId !== scope.organizationId) {
-        throw new NotFoundError('Order not found');
-      }
+    if (!isUnscoped(scope) && order.organization?.id !== scope.organizationId) {
+      throw new NotFoundError('Order not found');
     }
 
     if (order.status !== 'COMPLETED') {
@@ -1466,13 +1454,11 @@ router.post('/orders/:orderId/refund', requireAdmin, async (req, res, next) => {
 
     // Verify order belongs to this organization (SYSTEM_ADMIN skips)
     if (!isUnscoped(scope)) {
-      const order = await orderService.getOrderById(req.params.orderId);
-      const event = await prisma.event.findUnique({
-        where: { id: order.event.id },
-        include: { venue: { select: { organizationId: true } } },
+      const order = await prisma.order.findUnique({
+        where: { id: req.params.orderId },
+        select: { organizationId: true },
       });
-
-      if (!event || event.venue.organizationId !== scope.organizationId) {
+      if (!order || order.organizationId !== scope.organizationId) {
         throw new NotFoundError('Order not found');
       }
     }
@@ -1545,9 +1531,9 @@ router.post('/orders/:orderId/add-ons/:orderAddOnId/refund', requireAdmin, async
 
     const line = await prisma.orderAddOn.findFirst({
       where: { id: req.params.orderAddOnId, orderId: req.params.orderId },
-      include: { order: { include: { event: { include: { venue: { select: { organizationId: true } } } } } } },
+      include: { order: { select: { organizationId: true } } },
     });
-    if (!line || (!isUnscoped(scope) && line.order.event.venue.organizationId !== scope.organizationId)) {
+    if (!line || (!isUnscoped(scope) && line.order.organizationId !== scope.organizationId)) {
       throw new NotFoundError('Order not found');
     }
 
@@ -1575,13 +1561,11 @@ router.get('/orders/:orderId/refunds', async (req, res, next) => {
     }
 
     if (!isUnscoped(scope)) {
-      const order = await orderService.getOrderById(req.params.orderId);
-      const event = await prisma.event.findUnique({
-        where: { id: order.event.id },
-        include: { venue: { select: { organizationId: true } } },
+      const order = await prisma.order.findUnique({
+        where: { id: req.params.orderId },
+        select: { organizationId: true },
       });
-
-      if (!event || event.venue.organizationId !== scope.organizationId) {
+      if (!order || order.organizationId !== scope.organizationId) {
         throw new NotFoundError('Order not found');
       }
     }

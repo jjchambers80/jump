@@ -210,6 +210,7 @@ describe('Orders API Contract Tests', () => {
         include: { items: { orderBy: { createdAt: 'asc' } } },
       });
       expect(order.quantity).toBe(3);
+      expect(order.organizationId).toBe(testOrgId); // spec 047 D0-C
       // All-in pricing: subtotal is the ticket price; total adds platform + processing fees
       expect(Number(order.subtotalAmount)).toBe(125);
       expect(Number(order.totalAmount)).toBeGreaterThan(125);

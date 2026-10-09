@@ -49,7 +49,7 @@ describe('Refund completeness against the amount actually charged', () => {
     const order = await prisma.order.create({
       data: {
         eventId: event.id,
-        contactId: contact.id,
+        organizationId: contact.organizationId, contactId: contact.id,
         orderRef: `${TAG}-${seq}`,
         totalAmount: total,
         subtotalAmount: subtotal,

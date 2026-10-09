@@ -35,7 +35,7 @@ async function seedBuyer(fixture, { note = null } = {}) {
   const order = await prisma.order.create({
     data: {
       eventId: fixture.event.id,
-      contactId: contact.id,
+      organizationId: contact.organizationId, contactId: contact.id,
       orderRef: `X040-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
       quantity: 1,
       subtotalAmount: 20,

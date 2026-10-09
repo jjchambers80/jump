@@ -85,7 +85,7 @@ describe('storefront logo in payloads', () => {
   it('the order detail carries it for the confirmation page', async () => {
     const contact = await prisma.contact.create({ data: { organizationId: themed.id, email: `${TAG}@example.test`, firstName: 'Ada', lastName: 'Lovelace' } });
     const order = await prisma.order.create({
-      data: { contactId: contact.id, eventId: themedEvent.id, quantity: 0, totalAmount: 0, orderRef: `${TAG}`.slice(0, 20) },
+      data: { organizationId: contact.organizationId, contactId: contact.id, eventId: themedEvent.id, quantity: 0, totalAmount: 0, orderRef: `${TAG}`.slice(0, 20) },
     });
     const detail = await orderService.getOrderById(order.id);
     expect(detail.event.organizationStorefrontLogo).toMatchObject({ desktopWidth: 180, mobileWidth: 110 });

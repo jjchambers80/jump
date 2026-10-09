@@ -266,6 +266,7 @@ describe('Application orders contract (spec 024 phase 1)', () => {
     const order = await orderRow(id);
     expect(order).toMatchObject({
       kind: 'APPLICATION',
+      organizationId: org.id, // spec 047 D0-C
       status: 'PENDING',
       orderRef: chosen.body.orderRef,
       quantity: 1,
@@ -619,7 +620,7 @@ describe('Application orders contract (spec 024 phase 1)', () => {
     const ticketOrder = await prisma.order.create({
       data: {
         eventId,
-        contactId: contact.id,
+        organizationId: contact.organizationId, contactId: contact.id,
         orderRef: `${TAG.toUpperCase()}-T1`,
         totalAmount: 20,
         subtotalAmount: 20,

@@ -174,7 +174,7 @@ describe('Patron account (spec 040 card B)', () => {
       const order = await prisma.order.create({
         data: {
           eventId: A.event.id,
-          contactId: contact.id,
+          organizationId: contact.organizationId, contactId: contact.id,
           orderRef: `R040-${Date.now().toString(36).toUpperCase()}`,
           quantity: 2,
           subtotalAmount: 40,
@@ -186,7 +186,7 @@ describe('Patron account (spec 040 card B)', () => {
         },
       });
       const pending = await prisma.order.create({
-        data: { eventId: A.event.id, contactId: contact.id, orderRef: `P040-${Date.now().toString(36).toUpperCase()}`, quantity: 1, totalAmount: 10, status: 'PENDING' },
+        data: { eventId: A.event.id, organizationId: contact.organizationId, contactId: contact.id, orderRef: `P040-${Date.now().toString(36).toUpperCase()}`, quantity: 1, totalAmount: 10, status: 'PENDING' },
       });
 
       const res = await request(app).get(`/buyer/me/orders/${order.id}/receipt`).set(auth);

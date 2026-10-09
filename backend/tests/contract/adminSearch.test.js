@@ -88,7 +88,7 @@ describe('Administration search contract', () => {
     order = await prisma.order.create({
       data: {
         eventId: event.id,
-        contactId: contact.id,
+        organizationId: contact.organizationId, contactId: contact.id,
         orderRef: 'NEEDLE-ORDER-001',
         stripeSessionId: `cs_${TAG}_needle`,
         totalAmount: 20,

@@ -86,7 +86,7 @@ describe('Customer source filter contract (spec 044C)', () => {
     await prisma.order.create({
       data: {
         eventId: event.id,
-        contactId: paidOrderContact.id,
+        organizationId: paidOrderContact.organizationId, contactId: paidOrderContact.id,
         orderRef: `JMP-${TAG}-${RUN_ID}-PAID`,
         kind: 'TICKET',
         status: 'COMPLETED',
@@ -134,7 +134,7 @@ describe('Customer source filter contract (spec 044C)', () => {
     await prisma.order.create({
       data: {
         eventId: event.id,
-        contactId: multiContact.id,
+        organizationId: multiContact.organizationId, contactId: multiContact.id,
         orderRef: `JMP-${TAG}-${RUN_ID}-MULTI`,
         kind: 'TICKET',
         status: 'COMPLETED',

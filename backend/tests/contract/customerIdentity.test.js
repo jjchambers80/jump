@@ -199,7 +199,7 @@ describe('Customer identity (spec 037 phase 0)', () => {
       seq += 1;
       const contact = await prisma.contact.create({ data: { organizationId: org.id, email, firstName: 'Tess', lastName: 'Ticket' } });
       const order = await prisma.order.create({
-        data: { eventId: event.id, contactId: contact.id, orderRef: `${TAG.toUpperCase()}-T${seq}`, totalAmount: 10 * tickets, quantity: tickets, status: 'COMPLETED', paidAt: new Date() },
+        data: { eventId: event.id, organizationId: contact.organizationId, contactId: contact.id, orderRef: `${TAG.toUpperCase()}-T${seq}`, totalAmount: 10 * tickets, quantity: tickets, status: 'COMPLETED', paidAt: new Date() },
       });
       const ticketRows = [];
       for (let i = 0; i < tickets; i += 1) {

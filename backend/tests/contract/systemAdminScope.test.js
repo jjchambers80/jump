@@ -43,7 +43,7 @@ async function seedOrg(adminToken, name) {
     data: { organizationId: org.id, email: `buyer@${TAG}-${org.id}.test`, firstName: 'Buyer', lastName: name },
   });
   const order = await prisma.order.create({
-    data: { eventId: event.id, contactId: contact.id, orderRef: `${TAG}-${org.id}`, totalAmount: 1000, quantity: 1, status: 'COMPLETED' },
+    data: { eventId: event.id, organizationId: contact.organizationId, contactId: contact.id, orderRef: `${TAG}-${org.id}`, totalAmount: 1000, quantity: 1, status: 'COMPLETED' },
   });
   const ticket = await prisma.ticket.create({
     data: {

@@ -194,7 +194,7 @@ describe('Storefront domains contract (spec 007 phase 3)', () => {
     const venue = await prisma.venue.create({ data: { organizationId: orgA.id, name: 'Owner V', address: '1' } });
     const event = await prisma.event.create({ data: { venueId: venue.id, name: 'Owner E', date: new Date(Date.now() + 86400e3), capacity: 5, status: 'PUBLISHED' } });
     const contact = await prisma.contact.create({ data: { organizationId: orgA.id, email: `owner@${TAG}.test`, firstName: 'O', lastName: 'W' } });
-    const order = await prisma.order.create({ data: { eventId: event.id, contactId: contact.id, orderRef: `${TAG}-OWN`, totalAmount: 1, subtotalAmount: 1, quantity: 1, status: 'PENDING' } });
+    const order = await prisma.order.create({ data: { eventId: event.id, organizationId: contact.organizationId, contactId: contact.id, orderRef: `${TAG}-OWN`, totalAmount: 1, subtotalAmount: 1, quantity: 1, status: 'PENDING' } });
     try {
       for (const q of [`eventId=${event.id}`, `orderId=${order.id}`, `venueId=${venue.id}`]) {
         const res = await request(app).get(`/domains/owner?${q}`);

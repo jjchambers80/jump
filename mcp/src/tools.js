@@ -239,12 +239,12 @@ async function getTheme(orgId, { themeId }) {
 
 async function getSalesSummary(orgId) {
   // Ticket orders only: application orders (spec 024) have their own money view.
-  const paid = { kind: 'TICKET', status: { in: PAID_ORDER_STATUSES }, event: { venue: { organizationId: orgId } } };
+  const paid = { kind: 'TICKET', status: { in: PAID_ORDER_STATUSES }, organizationId: orgId };
   const [byEvent, refunds, events] = await Promise.all([
     prisma.order.groupBy({ by: ['eventId'], where: paid, _sum: { totalAmount: true, quantity: true }, _count: { _all: true } }),
     prisma.refund.groupBy({
       by: ['orderId'],
-      where: { status: 'SUCCEEDED', order: { kind: 'TICKET', event: { venue: { organizationId: orgId } } } },
+      where: { status: 'SUCCEEDED', order: { kind: 'TICKET', organizationId: orgId } },
       _sum: { amount: true },
     }),
     prisma.event.findMany({ where: { venue: { organizationId: orgId } }, select: { id: true, name: true } }),
@@ -259,7 +259,9 @@ async function getSalesSummary(orgId) {
     refundByEvent.set(eventId, (refundByEvent.get(eventId) || 0) + Number(r._sum.amount || 0));
   }
   const salesByEvent = new Map(byEvent.map((g) => [g.eventId, g]));
-  const rows = events.map((e) => {
+  // Spec 047 D0-C: orders without an event (gifts, D1) get one row of their own.
+  const hasEventless = salesByEvent.has(null) || refundByEvent.has(null);
+  const rows = [...events, ...(hasEventless ? [{ id: null, name: 'Organization (no event)' }] : [])].map((e) => {
     const g = salesByEvent.get(e.id);
     const revenue = Number(g?._sum.totalAmount || 0);
     const refunded = refundByEvent.get(e.id) || 0;

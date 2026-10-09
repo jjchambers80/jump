@@ -139,6 +139,7 @@ describe('Ticket Redemption Integration Flow', () => {
     // Orders
     const order = await prisma.order.create({
       data: {
+        organizationId: testOrgId,
         eventId: testEventId,
         contactId: testContactId,
         orderRef: `QRINTEG-${Date.now()}`,
@@ -151,6 +152,7 @@ describe('Ticket Redemption Integration Flow', () => {
 
     const expOrd = await prisma.order.create({
       data: {
+        organizationId: testOrgId,
         eventId: expiredEventId,
         contactId: testContactId,
         orderRef: `QRINTEG-EXP-${Date.now()}`,

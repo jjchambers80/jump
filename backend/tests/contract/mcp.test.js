@@ -136,7 +136,7 @@ beforeAll(async () => {
   });
   await prisma.order.create({
     data: {
-      eventId: event.id, contactId: contact.id, orderRef: `${TAG}-1`, status: 'COMPLETED',
+      eventId: event.id, organizationId: contact.organizationId, contactId: contact.id, orderRef: `${TAG}-1`, status: 'COMPLETED',
       totalAmount: 50, subtotalAmount: 50, quantity: 2,
     },
   });

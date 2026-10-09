@@ -435,15 +435,12 @@ class DisputeService {
         orderRef: true,
         totalAmount: true,
         contact: { select: { firstName: true, lastName: true, email: true } },
-        event: {
-          select: {
-            name: true,
-            venue: { select: { organization: { select: { id: true, name: true } } } },
-          },
-        },
+        event: { select: { name: true } },
+        // Spec 047 D0-C: from the order, so a dispute on an event-less order still alerts.
+        organization: { select: { id: true, name: true } },
       },
     });
-    const organization = order?.event?.venue?.organization;
+    const organization = order?.organization;
     if (!organization) return;
 
     const recipients = await applicationDigestService.recipients(organization.id);
@@ -516,7 +513,7 @@ class DisputeService {
    */
   async reconcile({ organizationId = null } = {}) {
     const where = organizationId
-      ? { order: { event: { venue: { organizationId } } } }
+      ? { order: { organizationId } }
       : {};
     const disputes = await prisma.dispute.findMany({
       where,

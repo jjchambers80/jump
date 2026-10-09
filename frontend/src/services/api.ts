@@ -233,8 +233,9 @@ class ApiClient {
 export interface OrderSummary {
   id: string;
   orderRef: string;
-  eventName: string;
-  eventDate: string;
+  /** Null for an order without an event (spec 047 D0-C). */
+  eventName: string | null;
+  eventDate: string | null;
   quantity: number;
   totalAmount: number;
   currency: string;
@@ -256,6 +257,7 @@ export interface OrderTicket {
 export interface OrderDetail {
   id: string;
   orderRef: string;
+  /** Null for an order without an event (spec 047 D0-C); `organization` is always set. */
   event: {
     id: string;
     name: string;
@@ -267,7 +269,8 @@ export interface OrderDetail {
       /** IANA zone of the event's venue (spec 033). */
       timezone?: string | null;
     };
-  };
+  } | null;
+  organization?: { id: string; name: string; logoUrl: string | null; brandColor: string | null; themeMode: string } | null;
   contact: {
     firstName: string;
     lastName: string;

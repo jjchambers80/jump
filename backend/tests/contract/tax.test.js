@@ -281,7 +281,7 @@ describe('Settings › Tax contract (spec 009)', () => {
         data: {
           orderRef: ref,
           eventId: event.id,
-          contactId: contact.id,
+          organizationId: contact.organizationId, contactId: contact.id,
           status,
           quantity: 1,
           currency: 'usd',

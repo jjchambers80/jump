@@ -172,6 +172,7 @@ describe('Ticket Redemption API Contract Tests — POST /tickets/redeem', () => 
     // Create a dummy order for main event tickets
     const order = await prisma.order.create({
       data: {
+        organizationId: testOrgId,
         eventId: testEventId,
         contactId: testContactId,
         orderRef: `REDEEM-TEST-${Date.now()}`,
@@ -185,6 +186,7 @@ describe('Ticket Redemption API Contract Tests — POST /tickets/redeem', () => 
     // Create a dummy order for expired event tickets
     const expOrder = await prisma.order.create({
       data: {
+        organizationId: testOrgId,
         eventId: expiredEventId,
         contactId: testContactId,
         orderRef: `REDEEM-EXP-${Date.now()}`,

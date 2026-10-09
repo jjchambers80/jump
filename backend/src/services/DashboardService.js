@@ -51,14 +51,16 @@ class DashboardService {
     // One day of slack either side of the window so zone offsets never drop an edge order.
     const since = new Date(now.getTime() - (TREND_DAYS + 1) * 86_400_000);
     const eventWhere = venueFilter;
+    // Org scope on the order itself (spec 047 D0-C): `event: {}` would drop event-less orders.
     const applicationScope = venueFilter.venue ? { organizationId: venueFilter.venue.organizationId } : {};
+    const orderScope = applicationScope;
 
     const [windowOrders, upcomingEvents, recentOrders, draftEvents, toReview, checkedInToday] = await Promise.all([
       // ponytail: per-row bucketing in JS; move to a date_trunc GROUP BY if a 14-day window outgrows memory.
       prisma.order.findMany({
         where: {
           status: { in: PAID_ORDER_STATUSES },
-          event: eventWhere,
+          ...orderScope,
           OR: [{ paidAt: { gte: since } }, { paidAt: null, createdAt: { gte: since } }],
         },
         select: { kind: true, totalAmount: true, quantity: true, paidAt: true, createdAt: true },
@@ -80,7 +82,7 @@ class DashboardService {
         },
       }),
       prisma.order.findMany({
-        where: { status: { in: PAID_ORDER_STATUSES }, event: eventWhere },
+        where: { status: { in: PAID_ORDER_STATUSES }, ...orderScope },
         orderBy: { createdAt: 'desc' },
         take: RECENT_ORDERS_LIMIT,
         select: {

@@ -276,7 +276,7 @@ describe('Signup onboarding (spec 022)', () => {
       const tier = await prisma.priceTier.create({ data: { eventId: event.id, name: 'GA', price: 10, quantityTotal: 10, displayOrder: 1 } });
       const contact = await prisma.contact.create({ data: { organizationId: orgA.id, email: 'buyer@signup-test.com', firstName: 'Buy', lastName: 'Er' } });
       const order = await prisma.order.create({
-        data: { orderRef: `SIGNUP-${Date.now()}`, eventId: event.id, contactId: contact.id, quantity: 1, totalAmount: 10, status: 'COMPLETED' },
+        data: { orderRef: `SIGNUP-${Date.now()}`, eventId: event.id, organizationId: contact.organizationId, contactId: contact.id, quantity: 1, totalAmount: 10, status: 'COMPLETED' },
       });
       barcode = `JUMP-SIGNUP${Date.now().toString().slice(-6)}`;
       const ticket = await prisma.ticket.create({
