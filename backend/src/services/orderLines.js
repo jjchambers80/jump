@@ -37,10 +37,12 @@ export function tierItem(order) {
  * What the applicant pays for one line. PASS: the all-in allocation
  * (listed price plus the line's fee and tax shares). ABSORB: the listed
  * price, plus tax on top unless the organization prices tax-inclusive.
+ * `feeMode` is the order's; a line's own `feeMode` (OrderItem, spec 047
+ * D0-B) wins when set, so callers pass `order.feeMode` and nothing else.
  */
 export function buyerLineTotal(line, feeMode, { taxInclusive = false } = {}) {
   const listed = round(Number(line.unitPrice) * (line.quantity ?? 1));
-  if (feeMode === 'ABSORB') return round(listed + (taxInclusive ? 0 : Number(line.tax || 0)));
+  if ((line.feeMode ?? feeMode) === 'ABSORB') return round(listed + (taxInclusive ? 0 : Number(line.tax || 0)));
   return round(
     listed + Number(line.platformFee || 0) + Number(line.processingFee || 0) + Number(line.tax || 0)
   );

@@ -1,0 +1,1306 @@
+{
+  "_comment": [
+    "Fee parity fixtures (spec 047 D0-B). Asserted by BOTH backend/tests/unit/feeService.test.js",
+    "(Jest, backend/src/services/FeeService.js) and frontend/tests/unit/fees.test.ts (Vitest,",
+    "frontend/src/lib/fees.ts), so the two fee libraries cannot drift apart silently (Gotcha 12).",
+    "Items use the backend shape (unitPrice); the frontend suite maps it to `price` and `lineTotal` to `total`.",
+    "Every order and line field is asserted, plus the invariants Σ lineTotal = total and",
+    "total − orgReceives = platformFee + processingFee + tax."
+  ],
+  "cases": [
+    {
+      "name": "single item, two tickets",
+      "items": [
+        {
+          "unitPrice": 50,
+          "quantity": 2
+        }
+      ],
+      "taxRate": 0,
+      "taxInclusive": false,
+      "order": {
+        "subtotal": 100,
+        "platformFee": 5,
+        "processingFee": 3.35,
+        "tax": 0,
+        "absorbedFees": 0,
+        "orgReceives": 100,
+        "total": 108.35
+      },
+      "lines": [
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 100,
+          "platformFee": 5,
+          "processingFee": 3.35,
+          "tax": 0,
+          "absorbedFees": 0,
+          "lineTotal": 108.35
+        }
+      ]
+    },
+    {
+      "name": "two lines of equal value split fees 50/50",
+      "items": [
+        {
+          "unitPrice": 50,
+          "quantity": 2
+        },
+        {
+          "unitPrice": 25,
+          "quantity": 4
+        }
+      ],
+      "taxRate": 0,
+      "taxInclusive": false,
+      "order": {
+        "subtotal": 200,
+        "platformFee": 10,
+        "processingFee": 6.39,
+        "tax": 0,
+        "absorbedFees": 0,
+        "orgReceives": 200,
+        "total": 216.39
+      },
+      "lines": [
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 100,
+          "platformFee": 5,
+          "processingFee": 3.19,
+          "tax": 0,
+          "absorbedFees": 0,
+          "lineTotal": 108.19
+        },
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 100,
+          "platformFee": 5,
+          "processingFee": 3.2,
+          "tax": 0,
+          "absorbedFees": 0,
+          "lineTotal": 108.2
+        }
+      ]
+    },
+    {
+      "name": "empty cart charges nothing",
+      "items": [],
+      "taxRate": 0,
+      "taxInclusive": false,
+      "order": {
+        "subtotal": 0,
+        "platformFee": 0,
+        "processingFee": 0,
+        "tax": 0,
+        "absorbedFees": 0,
+        "orgReceives": 0,
+        "total": 0
+      },
+      "lines": []
+    },
+    {
+      "name": "empty cart with a tax rate charges nothing",
+      "items": [],
+      "taxRate": 0.08,
+      "taxInclusive": false,
+      "order": {
+        "subtotal": 0,
+        "platformFee": 0,
+        "processingFee": 0,
+        "tax": 0,
+        "absorbedFees": 0,
+        "orgReceives": 0,
+        "total": 0
+      },
+      "lines": []
+    },
+    {
+      "name": "free tickets still carry the fixed Stripe fee",
+      "items": [
+        {
+          "unitPrice": 0,
+          "quantity": 5
+        }
+      ],
+      "taxRate": 0,
+      "taxInclusive": false,
+      "order": {
+        "subtotal": 0,
+        "platformFee": 0,
+        "processingFee": 0.3,
+        "tax": 0,
+        "absorbedFees": 0,
+        "orgReceives": 0,
+        "total": 0.3
+      },
+      "lines": [
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 0,
+          "platformFee": 0,
+          "processingFee": 0.3,
+          "tax": 0,
+          "absorbedFees": 0,
+          "lineTotal": 0.3
+        }
+      ]
+    },
+    {
+      "name": "free tier, two tickets",
+      "items": [
+        {
+          "unitPrice": 0,
+          "quantity": 2
+        }
+      ],
+      "taxRate": 0,
+      "taxInclusive": false,
+      "order": {
+        "subtotal": 0,
+        "platformFee": 0,
+        "processingFee": 0.3,
+        "tax": 0,
+        "absorbedFees": 0,
+        "orgReceives": 0,
+        "total": 0.3
+      },
+      "lines": [
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 0,
+          "platformFee": 0,
+          "processingFee": 0.3,
+          "tax": 0,
+          "absorbedFees": 0,
+          "lineTotal": 0.3
+        }
+      ]
+    },
+    {
+      "name": "single ticket",
+      "items": [
+        {
+          "unitPrice": 65,
+          "quantity": 1
+        }
+      ],
+      "taxRate": 0,
+      "taxInclusive": false,
+      "order": {
+        "subtotal": 65,
+        "platformFee": 3.25,
+        "processingFee": 2.28,
+        "tax": 0,
+        "absorbedFees": 0,
+        "orgReceives": 65,
+        "total": 70.53
+      },
+      "lines": [
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 65,
+          "platformFee": 3.25,
+          "processingFee": 2.28,
+          "tax": 0,
+          "absorbedFees": 0,
+          "lineTotal": 70.53
+        }
+      ]
+    },
+    {
+      "name": "rounding at edge amounts",
+      "items": [
+        {
+          "unitPrice": 19.99,
+          "quantity": 3
+        }
+      ],
+      "taxRate": 0,
+      "taxInclusive": false,
+      "order": {
+        "subtotal": 59.97,
+        "platformFee": 3,
+        "processingFee": 2.13,
+        "tax": 0,
+        "absorbedFees": 0,
+        "orgReceives": 59.97,
+        "total": 65.1
+      },
+      "lines": [
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 59.97,
+          "platformFee": 3,
+          "processingFee": 2.13,
+          "tax": 0,
+          "absorbedFees": 0,
+          "lineTotal": 65.1
+        }
+      ]
+    },
+    {
+      "name": "tax on top",
+      "items": [
+        {
+          "unitPrice": 50,
+          "quantity": 2
+        }
+      ],
+      "taxRate": 0.08,
+      "taxInclusive": false,
+      "order": {
+        "subtotal": 100,
+        "platformFee": 5,
+        "processingFee": 3.35,
+        "tax": 8,
+        "absorbedFees": 0,
+        "orgReceives": 100,
+        "total": 116.35
+      },
+      "lines": [
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 100,
+          "platformFee": 5,
+          "processingFee": 3.35,
+          "tax": 8,
+          "absorbedFees": 0,
+          "lineTotal": 116.35
+        }
+      ]
+    },
+    {
+      "name": "one ticket, fixed fee once",
+      "items": [
+        {
+          "unitPrice": 10,
+          "quantity": 1
+        }
+      ],
+      "taxRate": 0,
+      "taxInclusive": false,
+      "order": {
+        "subtotal": 10,
+        "platformFee": 0.5,
+        "processingFee": 0.6,
+        "tax": 0,
+        "absorbedFees": 0,
+        "orgReceives": 10,
+        "total": 11.1
+      },
+      "lines": [
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 10,
+          "platformFee": 0.5,
+          "processingFee": 0.6,
+          "tax": 0,
+          "absorbedFees": 0,
+          "lineTotal": 11.1
+        }
+      ]
+    },
+    {
+      "name": "three tickets, fixed fee once",
+      "items": [
+        {
+          "unitPrice": 10,
+          "quantity": 3
+        }
+      ],
+      "taxRate": 0,
+      "taxInclusive": false,
+      "order": {
+        "subtotal": 30,
+        "platformFee": 1.5,
+        "processingFee": 1.21,
+        "tax": 0,
+        "absorbedFees": 0,
+        "orgReceives": 30,
+        "total": 32.71
+      },
+      "lines": [
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 30,
+          "platformFee": 1.5,
+          "processingFee": 1.21,
+          "tax": 0,
+          "absorbedFees": 0,
+          "lineTotal": 32.71
+        }
+      ]
+    },
+    {
+      "name": "zero tax rate",
+      "items": [
+        {
+          "unitPrice": 40,
+          "quantity": 1
+        }
+      ],
+      "taxRate": 0,
+      "taxInclusive": false,
+      "order": {
+        "subtotal": 40,
+        "platformFee": 2,
+        "processingFee": 1.52,
+        "tax": 0,
+        "absorbedFees": 0,
+        "orgReceives": 40,
+        "total": 43.52
+      },
+      "lines": [
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 40,
+          "platformFee": 2,
+          "processingFee": 1.52,
+          "tax": 0,
+          "absorbedFees": 0,
+          "lineTotal": 43.52
+        }
+      ]
+    },
+    {
+      "name": "two lines with tax on top",
+      "items": [
+        {
+          "unitPrice": 25,
+          "quantity": 2
+        },
+        {
+          "unitPrice": 99.99,
+          "quantity": 1
+        }
+      ],
+      "taxRate": 0.0725,
+      "taxInclusive": false,
+      "order": {
+        "subtotal": 149.99,
+        "platformFee": 7.5,
+        "processingFee": 4.87,
+        "tax": 10.87,
+        "absorbedFees": 0,
+        "orgReceives": 149.99,
+        "total": 173.23
+      },
+      "lines": [
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 50,
+          "platformFee": 2.5,
+          "processingFee": 1.62,
+          "tax": 3.62,
+          "absorbedFees": 0,
+          "lineTotal": 57.74
+        },
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 99.99,
+          "platformFee": 5,
+          "processingFee": 3.25,
+          "tax": 7.25,
+          "absorbedFees": 0,
+          "lineTotal": 115.49
+        }
+      ]
+    },
+    {
+      "name": "three equal thirds, no tax",
+      "items": [
+        {
+          "unitPrice": 33.33,
+          "quantity": 1
+        },
+        {
+          "unitPrice": 33.33,
+          "quantity": 1
+        },
+        {
+          "unitPrice": 33.33,
+          "quantity": 1
+        }
+      ],
+      "taxRate": 0,
+      "taxInclusive": false,
+      "order": {
+        "subtotal": 99.99,
+        "platformFee": 5,
+        "processingFee": 3.34,
+        "tax": 0,
+        "absorbedFees": 0,
+        "orgReceives": 99.99,
+        "total": 108.33
+      },
+      "lines": [
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 33.33,
+          "platformFee": 1.66,
+          "processingFee": 1.12,
+          "tax": 0,
+          "absorbedFees": 0,
+          "lineTotal": 36.11
+        },
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 33.33,
+          "platformFee": 1.67,
+          "processingFee": 1.11,
+          "tax": 0,
+          "absorbedFees": 0,
+          "lineTotal": 36.11
+        },
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 33.33,
+          "platformFee": 1.67,
+          "processingFee": 1.11,
+          "tax": 0,
+          "absorbedFees": 0,
+          "lineTotal": 36.11
+        }
+      ]
+    },
+    {
+      "name": "three lines at 8.25%",
+      "items": [
+        {
+          "unitPrice": 12.5,
+          "quantity": 3
+        },
+        {
+          "unitPrice": 7.25,
+          "quantity": 5
+        },
+        {
+          "unitPrice": 100,
+          "quantity": 1
+        }
+      ],
+      "taxRate": 0.0825,
+      "taxInclusive": false,
+      "order": {
+        "subtotal": 173.75,
+        "platformFee": 8.69,
+        "processingFee": 5.59,
+        "tax": 14.33,
+        "absorbedFees": 0,
+        "orgReceives": 173.75,
+        "total": 202.36
+      },
+      "lines": [
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 37.5,
+          "platformFee": 1.88,
+          "processingFee": 1.21,
+          "tax": 3.09,
+          "absorbedFees": 0,
+          "lineTotal": 43.68
+        },
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 36.25,
+          "platformFee": 1.81,
+          "processingFee": 1.17,
+          "tax": 2.99,
+          "absorbedFees": 0,
+          "lineTotal": 42.22
+        },
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 100,
+          "platformFee": 5,
+          "processingFee": 3.21,
+          "tax": 8.25,
+          "absorbedFees": 0,
+          "lineTotal": 116.46
+        }
+      ]
+    },
+    {
+      "name": "a penny line and a large line at 10%",
+      "items": [
+        {
+          "unitPrice": 0.01,
+          "quantity": 1
+        },
+        {
+          "unitPrice": 999.99,
+          "quantity": 4
+        }
+      ],
+      "taxRate": 0.1,
+      "taxInclusive": false,
+      "order": {
+        "subtotal": 3999.97,
+        "platformFee": 200,
+        "processingFee": 122.1,
+        "tax": 400,
+        "absorbedFees": 0,
+        "orgReceives": 3999.97,
+        "total": 4722.07
+      },
+      "lines": [
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 0.01,
+          "platformFee": 0,
+          "processingFee": 0,
+          "tax": 0,
+          "absorbedFees": 0,
+          "lineTotal": 0.01
+        },
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 3999.96,
+          "platformFee": 200,
+          "processingFee": 122.1,
+          "tax": 400,
+          "absorbedFees": 0,
+          "lineTotal": 4722.06
+        }
+      ]
+    },
+    {
+      "name": "one line at 6%",
+      "items": [
+        {
+          "unitPrice": 19.99,
+          "quantity": 7
+        }
+      ],
+      "taxRate": 0.06,
+      "taxInclusive": false,
+      "order": {
+        "subtotal": 139.93,
+        "platformFee": 7,
+        "processingFee": 4.56,
+        "tax": 8.4,
+        "absorbedFees": 0,
+        "orgReceives": 139.93,
+        "total": 159.89
+      },
+      "lines": [
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 139.93,
+          "platformFee": 7,
+          "processingFee": 4.56,
+          "tax": 8.4,
+          "absorbedFees": 0,
+          "lineTotal": 159.89
+        }
+      ]
+    },
+    {
+      "name": "platform and processing drift land on the largest line",
+      "items": [
+        {
+          "unitPrice": 33.33,
+          "quantity": 1
+        },
+        {
+          "unitPrice": 33.33,
+          "quantity": 1
+        },
+        {
+          "unitPrice": 33.34,
+          "quantity": 1
+        }
+      ],
+      "taxRate": 0,
+      "taxInclusive": false,
+      "order": {
+        "subtotal": 100,
+        "platformFee": 5,
+        "processingFee": 3.35,
+        "tax": 0,
+        "absorbedFees": 0,
+        "orgReceives": 100,
+        "total": 108.35
+      },
+      "lines": [
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 33.33,
+          "platformFee": 1.67,
+          "processingFee": 1.12,
+          "tax": 0,
+          "absorbedFees": 0,
+          "lineTotal": 36.12
+        },
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 33.33,
+          "platformFee": 1.67,
+          "processingFee": 1.12,
+          "tax": 0,
+          "absorbedFees": 0,
+          "lineTotal": 36.12
+        },
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 33.34,
+          "platformFee": 1.66,
+          "processingFee": 1.11,
+          "tax": 0,
+          "absorbedFees": 0,
+          "lineTotal": 36.11
+        }
+      ]
+    },
+    {
+      "name": "tax-inclusive: tax backed out of the listed price",
+      "items": [
+        {
+          "unitPrice": 50,
+          "quantity": 1
+        }
+      ],
+      "taxRate": 0.0825,
+      "taxInclusive": true,
+      "order": {
+        "subtotal": 46.19,
+        "platformFee": 2.31,
+        "processingFee": 1.71,
+        "tax": 3.81,
+        "absorbedFees": 0,
+        "orgReceives": 46.19,
+        "total": 54.02
+      },
+      "lines": [
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 46.19,
+          "platformFee": 2.31,
+          "processingFee": 1.71,
+          "tax": 3.81,
+          "absorbedFees": 0,
+          "lineTotal": 54.02
+        }
+      ]
+    },
+    {
+      "name": "tax-inclusive at 0% equals tax on top",
+      "items": [
+        {
+          "unitPrice": 20,
+          "quantity": 2
+        }
+      ],
+      "taxRate": 0,
+      "taxInclusive": true,
+      "order": {
+        "subtotal": 40,
+        "platformFee": 2,
+        "processingFee": 1.52,
+        "tax": 0,
+        "absorbedFees": 0,
+        "orgReceives": 40,
+        "total": 43.52
+      },
+      "lines": [
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 40,
+          "platformFee": 2,
+          "processingFee": 1.52,
+          "tax": 0,
+          "absorbedFees": 0,
+          "lineTotal": 43.52
+        }
+      ]
+    },
+    {
+      "name": "tax-inclusive, two lines",
+      "items": [
+        {
+          "unitPrice": 25,
+          "quantity": 2
+        },
+        {
+          "unitPrice": 99.99,
+          "quantity": 1
+        }
+      ],
+      "taxRate": 0.07,
+      "taxInclusive": true,
+      "order": {
+        "subtotal": 140.18,
+        "platformFee": 7.01,
+        "processingFee": 4.57,
+        "tax": 9.81,
+        "absorbedFees": 0,
+        "orgReceives": 140.18,
+        "total": 161.57
+      },
+      "lines": [
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 46.73,
+          "platformFee": 2.34,
+          "processingFee": 1.52,
+          "tax": 3.27,
+          "absorbedFees": 0,
+          "lineTotal": 53.86
+        },
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 93.45,
+          "platformFee": 4.67,
+          "processingFee": 3.05,
+          "tax": 6.54,
+          "absorbedFees": 0,
+          "lineTotal": 107.71
+        }
+      ]
+    },
+    {
+      "name": "tax added on top by default",
+      "items": [
+        {
+          "unitPrice": 50,
+          "quantity": 1
+        }
+      ],
+      "taxRate": 0.0825,
+      "taxInclusive": false,
+      "order": {
+        "subtotal": 50,
+        "platformFee": 2.5,
+        "processingFee": 1.82,
+        "tax": 4.13,
+        "absorbedFees": 0,
+        "orgReceives": 50,
+        "total": 58.45
+      },
+      "lines": [
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 50,
+          "platformFee": 2.5,
+          "processingFee": 1.82,
+          "tax": 4.13,
+          "absorbedFees": 0,
+          "lineTotal": 58.45
+        }
+      ]
+    },
+    {
+      "name": "untaxed add-on: tax on taxable lines only, fees on the whole subtotal",
+      "items": [
+        {
+          "unitPrice": 100,
+          "quantity": 1
+        },
+        {
+          "unitPrice": 20,
+          "quantity": 2,
+          "taxable": false
+        }
+      ],
+      "taxRate": 0.1,
+      "taxInclusive": false,
+      "order": {
+        "subtotal": 140,
+        "platformFee": 7,
+        "processingFee": 4.56,
+        "tax": 10,
+        "absorbedFees": 0,
+        "orgReceives": 140,
+        "total": 161.56
+      },
+      "lines": [
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 100,
+          "platformFee": 5,
+          "processingFee": 3.26,
+          "tax": 10,
+          "absorbedFees": 0,
+          "lineTotal": 118.26
+        },
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": false,
+          "base": 40,
+          "platformFee": 2,
+          "processingFee": 1.3,
+          "tax": 0,
+          "absorbedFees": 0,
+          "lineTotal": 43.3
+        }
+      ]
+    },
+    {
+      "name": "untaxed add-on, tax-inclusive",
+      "items": [
+        {
+          "unitPrice": 110,
+          "quantity": 1
+        },
+        {
+          "unitPrice": 25,
+          "quantity": 1,
+          "taxable": false
+        }
+      ],
+      "taxRate": 0.1,
+      "taxInclusive": true,
+      "order": {
+        "subtotal": 125,
+        "platformFee": 6.25,
+        "processingFee": 4.11,
+        "tax": 10,
+        "absorbedFees": 0,
+        "orgReceives": 125,
+        "total": 145.36
+      },
+      "lines": [
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 100,
+          "platformFee": 5.09,
+          "processingFee": 3.35,
+          "tax": 10,
+          "absorbedFees": 0,
+          "lineTotal": 118.44
+        },
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": false,
+          "base": 25,
+          "platformFee": 1.16,
+          "processingFee": 0.76,
+          "tax": 0,
+          "absorbedFees": 0,
+          "lineTotal": 26.92
+        }
+      ]
+    },
+    {
+      "name": "tax drift lands on the largest taxable line",
+      "items": [
+        {
+          "unitPrice": 33.33,
+          "quantity": 1
+        },
+        {
+          "unitPrice": 33.33,
+          "quantity": 1
+        },
+        {
+          "unitPrice": 50,
+          "quantity": 1,
+          "taxable": false
+        }
+      ],
+      "taxRate": 0.0725,
+      "taxInclusive": false,
+      "order": {
+        "subtotal": 116.66,
+        "platformFee": 5.83,
+        "processingFee": 3.85,
+        "tax": 4.83,
+        "absorbedFees": 0,
+        "orgReceives": 116.66,
+        "total": 131.17
+      },
+      "lines": [
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 33.33,
+          "platformFee": 1.67,
+          "processingFee": 1.1,
+          "tax": 2.41,
+          "absorbedFees": 0,
+          "lineTotal": 38.51
+        },
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 33.33,
+          "platformFee": 1.67,
+          "processingFee": 1.1,
+          "tax": 2.42,
+          "absorbedFees": 0,
+          "lineTotal": 38.52
+        },
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": false,
+          "base": 50,
+          "platformFee": 2.49,
+          "processingFee": 1.65,
+          "tax": 0,
+          "absorbedFees": 0,
+          "lineTotal": 54.14
+        }
+      ]
+    },
+    {
+      "name": "D0-B 1: donation only, 0% rate, PASS (donor covers)",
+      "items": [
+        {
+          "unitPrice": 50,
+          "quantity": 1,
+          "taxable": false,
+          "platformFeeRate": 0
+        }
+      ],
+      "taxRate": 0.0725,
+      "taxInclusive": false,
+      "order": {
+        "subtotal": 50,
+        "platformFee": 0,
+        "processingFee": 1.75,
+        "tax": 0,
+        "absorbedFees": 0,
+        "orgReceives": 50,
+        "total": 51.75
+      },
+      "lines": [
+        {
+          "platformFeeRate": 0,
+          "feeMode": "PASS",
+          "taxable": false,
+          "base": 50,
+          "platformFee": 0,
+          "processingFee": 1.75,
+          "tax": 0,
+          "absorbedFees": 0,
+          "lineTotal": 51.75
+        }
+      ]
+    },
+    {
+      "name": "D0-B 2: donation only, 0% rate, ABSORB",
+      "items": [
+        {
+          "unitPrice": 50,
+          "quantity": 1,
+          "taxable": false,
+          "platformFeeRate": 0,
+          "feeMode": "ABSORB"
+        }
+      ],
+      "taxRate": 0.0725,
+      "taxInclusive": false,
+      "order": {
+        "subtotal": 50,
+        "platformFee": 0,
+        "processingFee": 1.75,
+        "tax": 0,
+        "absorbedFees": 1.75,
+        "orgReceives": 48.25,
+        "total": 50
+      },
+      "lines": [
+        {
+          "platformFeeRate": 0,
+          "feeMode": "ABSORB",
+          "taxable": false,
+          "base": 50,
+          "platformFee": 0,
+          "processingFee": 1.75,
+          "tax": 0,
+          "absorbedFees": 1.75,
+          "lineTotal": 50
+        }
+      ]
+    },
+    {
+      "name": "D0-B 3: ticket 5% PASS + donation 0% PASS",
+      "items": [
+        {
+          "unitPrice": 40,
+          "quantity": 2
+        },
+        {
+          "unitPrice": 25,
+          "quantity": 1,
+          "taxable": false,
+          "platformFeeRate": 0
+        }
+      ],
+      "taxRate": 0.0725,
+      "taxInclusive": false,
+      "order": {
+        "subtotal": 105,
+        "platformFee": 4,
+        "processingFee": 3.46,
+        "tax": 5.8,
+        "absorbedFees": 0,
+        "orgReceives": 105,
+        "total": 118.26
+      },
+      "lines": [
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 80,
+          "platformFee": 4,
+          "processingFee": 2.64,
+          "tax": 5.8,
+          "absorbedFees": 0,
+          "lineTotal": 92.44
+        },
+        {
+          "platformFeeRate": 0,
+          "feeMode": "PASS",
+          "taxable": false,
+          "base": 25,
+          "platformFee": 0,
+          "processingFee": 0.82,
+          "tax": 0,
+          "absorbedFees": 0,
+          "lineTotal": 25.82
+        }
+      ]
+    },
+    {
+      "name": "D0-B 4: ticket 5% PASS + donation 0% ABSORB",
+      "items": [
+        {
+          "unitPrice": 40,
+          "quantity": 2
+        },
+        {
+          "unitPrice": 25,
+          "quantity": 1,
+          "taxable": false,
+          "platformFeeRate": 0,
+          "feeMode": "ABSORB"
+        }
+      ],
+      "taxRate": 0.0725,
+      "taxInclusive": false,
+      "order": {
+        "subtotal": 105,
+        "platformFee": 4,
+        "processingFee": 3.46,
+        "tax": 5.8,
+        "absorbedFees": 0.82,
+        "orgReceives": 104.18,
+        "total": 117.44
+      },
+      "lines": [
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 80,
+          "platformFee": 4,
+          "processingFee": 2.64,
+          "tax": 5.8,
+          "absorbedFees": 0,
+          "lineTotal": 92.44
+        },
+        {
+          "platformFeeRate": 0,
+          "feeMode": "ABSORB",
+          "taxable": false,
+          "base": 25,
+          "platformFee": 0,
+          "processingFee": 0.82,
+          "tax": 0,
+          "absorbedFees": 0.82,
+          "lineTotal": 25
+        }
+      ]
+    },
+    {
+      "name": "D0-B 5: tax-inclusive ticket + donation 0% ABSORB",
+      "items": [
+        {
+          "unitPrice": 55,
+          "quantity": 1
+        },
+        {
+          "unitPrice": 50,
+          "quantity": 1,
+          "taxable": false,
+          "platformFeeRate": 0,
+          "feeMode": "ABSORB"
+        }
+      ],
+      "taxRate": 0.1,
+      "taxInclusive": true,
+      "order": {
+        "subtotal": 100,
+        "platformFee": 2.5,
+        "processingFee": 3.27,
+        "tax": 5,
+        "absorbedFees": 1.56,
+        "orgReceives": 98.44,
+        "total": 109.21
+      },
+      "lines": [
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 50,
+          "platformFee": 2.5,
+          "processingFee": 1.71,
+          "tax": 5,
+          "absorbedFees": 0,
+          "lineTotal": 59.21
+        },
+        {
+          "platformFeeRate": 0,
+          "feeMode": "ABSORB",
+          "taxable": false,
+          "base": 50,
+          "platformFee": 0,
+          "processingFee": 1.56,
+          "tax": 0,
+          "absorbedFees": 1.56,
+          "lineTotal": 50
+        }
+      ]
+    },
+    {
+      "name": "D0-B 6: mixed rates, platform drift lands on the largest non-zero-rate line",
+      "items": [
+        {
+          "unitPrice": 12.5,
+          "quantity": 1,
+          "platformFeeRate": 0.05
+        },
+        {
+          "unitPrice": 21.5,
+          "quantity": 1,
+          "platformFeeRate": 0.03
+        },
+        {
+          "unitPrice": 100,
+          "quantity": 1,
+          "taxable": false,
+          "platformFeeRate": 0
+        }
+      ],
+      "taxRate": 0.0725,
+      "taxInclusive": false,
+      "order": {
+        "subtotal": 134,
+        "platformFee": 1.27,
+        "processingFee": 4.22,
+        "tax": 2.47,
+        "absorbedFees": 0,
+        "orgReceives": 134,
+        "total": 141.96
+      },
+      "lines": [
+        {
+          "platformFeeRate": 0.05,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 12.5,
+          "platformFee": 0.63,
+          "processingFee": 0.39,
+          "tax": 0.91,
+          "absorbedFees": 0,
+          "lineTotal": 14.43
+        },
+        {
+          "platformFeeRate": 0.03,
+          "feeMode": "PASS",
+          "taxable": true,
+          "base": 21.5,
+          "platformFee": 0.64,
+          "processingFee": 0.68,
+          "tax": 1.56,
+          "absorbedFees": 0,
+          "lineTotal": 24.38
+        },
+        {
+          "platformFeeRate": 0,
+          "feeMode": "PASS",
+          "taxable": false,
+          "base": 100,
+          "platformFee": 0,
+          "processingFee": 3.15,
+          "tax": 0,
+          "absorbedFees": 0,
+          "lineTotal": 103.15
+        }
+      ]
+    }
+  ]
+}
