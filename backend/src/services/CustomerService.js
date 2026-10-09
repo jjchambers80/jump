@@ -444,7 +444,7 @@ class CustomerService {
     // state. The client groups these by event for the upcoming-tickets card.
     const now = new Date();
     const upcomingTickets = contact.orders
-      .filter((order) => order.event.date >= now)
+      .filter((order) => order.event && order.event.date >= now)
       .flatMap((order) => order.tickets.map((ticket) => ({
         id: ticket.id,
         ticketNumber: ticket.ticketNumber,

@@ -41,7 +41,7 @@ class BuyerDataExportService {
 
     const [orders, tickets, rsvps, applications, profiles, acceptances, comments] = await Promise.all([
       prisma.order.findMany({
-        where: { contactId, event: { venue: { organizationId } } },
+        where: { contactId, organizationId },
         orderBy: { createdAt: 'asc' },
         include: {
           event: { select: { id: true, name: true, date: true, venue: { select: { name: true, timezone: true } } } },

@@ -43,24 +43,28 @@ interface OrderDetail {
     lastName: string;
     email: string;
   };
+  /** Null for an order without an event (spec 047 D0-C). */
   event: {
     id: string;
     name: string;
     date: string;
     logoUrl?: string | null;
-    organizationId?: string | null;
-    organizationName?: string | null;
-    organizationLogoUrl?: string | null;
-    organizationStorefrontLogo?: StorefrontLogo | null;
-    organizationBrandColor?: string | null;
-    organizationThemeMode?: ThemeMode | null;
     venue: {
       name: string;
       address: string;
       /** IANA zone the show's wall clock belongs to (spec 033). */
       timezone?: string | null;
     } | null;
-  };
+  } | null;
+  /** Org identity and branding, from the order itself (spec 047 D0-C). */
+  organization?: {
+    id: string;
+    name: string;
+    logoUrl?: string | null;
+    storefrontLogo?: StorefrontLogo | null;
+    brandColor?: string | null;
+    themeMode?: ThemeMode | null;
+  } | null;
   priceTier?: {
     name: string;
     price: number;
@@ -113,7 +117,7 @@ function ConfirmationContent() {
       }
       setOrder(data);
       // Paid: the cart kept for Stripe's cancel path is no longer needed.
-      if (data.status !== 'FAILED') clearCheckoutDraft(data.event.id);
+      if (data.status !== 'FAILED' && data.event) clearCheckoutDraft(data.event.id);
 
       // If still PENDING, poll verify-payment a few times
       // (Stripe webhook / session retrieval may take a moment)
@@ -238,30 +242,32 @@ function ConfirmationContent() {
   }
 
   // Spec 033: a confirmation gets printed and forwarded, so it names the venue's zone.
-  const zone = order.event.venue?.timezone;
-  const formattedDate = formatEventDate(order.event.date, zone, { weekday: 'long', month: 'long' });
-  const formattedTime = formatEventTime(order.event.date, zone);
+  const event = order.event;
+  const org = order.organization ?? null;
+  const zone = event?.venue?.timezone;
+  const formattedDate = event ? formatEventDate(event.date, zone, { weekday: 'long', month: 'long' }) : null;
+  const formattedTime = event ? formatEventTime(event.date, zone) : null;
 
   const isCompleted = order.status === 'COMPLETED';
   const isPending = order.status === 'PENDING';
   const tierNames = Array.from(new Set((order.tickets ?? []).map((ticket) => ticket.priceTierName).filter(Boolean))).join(', ');
-  const organizationId = order.event.organizationId;
+  const organizationId = org?.id;
   const moreEventsHref = organizationId ? storefrontHref(`/organizations/${organizationId}`, organizationId) : '/events';
 
   return (
     <BrandScope
-      color={order.event.organizationBrandColor}
-      themeMode={order.event.organizationThemeMode}
-      buttonRadius={order.event.organizationStorefrontLogo?.buttonRadius}
+      color={org?.brandColor}
+      themeMode={org?.themeMode}
+      buttonRadius={org?.storefrontLogo?.buttonRadius}
       className="min-h-screen bg-gray-50 dark:bg-slate-900"
     >
-      {order.event.organizationName && (
+      {org?.name && (
         <OrganizationHeader
           organization={{
-            id: order.event.organizationId,
-            name: order.event.organizationName,
-            logoUrl: order.event.organizationLogoUrl,
-            storefrontLogo: order.event.organizationStorefrontLogo,
+            id: org.id,
+            name: org.name,
+            logoUrl: org.logoUrl,
+            storefrontLogo: org.storefrontLogo,
           }}
         />
       )}
@@ -365,10 +371,10 @@ function ConfirmationContent() {
               Order Details
             </h2>
             <div className="bg-gray-50 dark:bg-slate-900 rounded-lg p-6">
-              {order.event.logoUrl && (
+              {event?.logoUrl && (
                 <img
-                  src={resolveAssetUrl(order.event.logoUrl) || undefined}
-                  alt={order.event.name}
+                  src={resolveAssetUrl(event.logoUrl) || undefined}
+                  alt={event.name}
                   className="mb-5 max-h-[65px] w-auto max-w-full rounded-lg object-contain"
                 />
               )}
@@ -376,20 +382,22 @@ function ConfirmationContent() {
                 <div className="flex justify-between">
                   <span className="text-gray-600 dark:text-slate-400">Event</span>
                   <span className="font-semibold text-gray-900 dark:text-slate-100">
-                    {order.event.name}
+                    {event?.name ?? org?.name ?? '—'}
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600 dark:text-slate-400">Date</span>
-                  <span className="text-gray-900 dark:text-slate-100">
-                    {formattedDate} at {formattedTime}
-                  </span>
-                </div>
-                {order.event.venue && (
+                {event && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-slate-400">Date</span>
+                    <span className="text-gray-900 dark:text-slate-100">
+                      {formattedDate} at {formattedTime}
+                    </span>
+                  </div>
+                )}
+                {event?.venue && (
                   <div className="flex justify-between">
                     <span className="text-gray-600 dark:text-slate-400">Venue</span>
                     <span className="text-gray-900 dark:text-slate-100">
-                      {order.event.venue.name}
+                      {event.venue.name}
                     </span>
                   </div>
                 )}
@@ -509,7 +517,7 @@ function ConfirmationContent() {
               href={moreEventsHref}
               className="inline-block bg-brand hover:bg-brand-hover text-brand-fg font-bold py-3 px-8 rounded-[var(--theme-button-radius,8px)] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2"
             >
-              {order.event.organizationName ? `More events from ${order.event.organizationName}` : 'Browse more events'}
+              {org?.name ? `More events from ${org.name}` : 'Browse more events'}
             </Link>
           </div>
         </div>

@@ -66,7 +66,7 @@ describe('Org-wide order list contract (spec 024 phase 2)', () => {
     return prisma.order.create({
       data: {
         eventId: ev.id,
-        contactId: contact.id,
+        organizationId: contact.organizationId, contactId: contact.id,
         orderRef: ref,
         totalAmount: total,
         subtotalAmount: subtotal ?? total,
@@ -153,7 +153,7 @@ describe('Org-wide order list contract (spec 024 phase 2)', () => {
       data: {
         kind: 'APPLICATION',
         eventId: event.id,
-        contactId: contact.id,
+        organizationId: contact.organizationId, contactId: contact.id,
         applicationId: app.id,
         orderRef: `${TAG.toUpperCase()}-A${String(seq).padStart(2, '0')}`,
         totalAmount: total,
@@ -363,7 +363,7 @@ describe('Org-wide order list contract (spec 024 phase 2)', () => {
     await prisma.order.create({
       data: {
         eventId: otherEvent.id,
-        contactId: contacts.stranger.id,
+        organizationId: contacts.stranger.organizationId, contactId: contacts.stranger.id,
         orderRef: `${TAG.toUpperCase()}-X1`,
         totalAmount: 20,
         subtotalAmount: 20,

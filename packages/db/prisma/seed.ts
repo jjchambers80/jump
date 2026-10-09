@@ -301,6 +301,7 @@ async function main() {
 
   const order = await prisma.order.create({
     data: {
+      organizationId: org.id,
       eventId: event2.id,
       contactId: contact1.id,
       orderRef: "JMP-A1B2C3",

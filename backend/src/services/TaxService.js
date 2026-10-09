@@ -227,7 +227,9 @@ class TaxService {
     const orders = await prisma.order.findMany({
       where: {
         status: { in: PAID_ORDER_STATUSES },
-        event: { venue: { organizationId: orgId } },
+        organizationId: orgId,
+        // Spec 047 D0-C: the report is per venue state; event-less orders (gifts) are never taxed.
+        eventId: { not: null },
         AND: [
           {
             OR: [

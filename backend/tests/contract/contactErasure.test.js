@@ -50,14 +50,14 @@ async function seedBuyer(f, { email, stripeCustomerId = null } = {}) {
   });
   const order = await prisma.order.create({
     data: {
-      eventId: f.upcoming.id, contactId: contact.id, orderRef: `E040-${n}-${Date.now().toString(36).toUpperCase()}`, quantity: 1,
+      eventId: f.upcoming.id, organizationId: contact.organizationId, contactId: contact.id, orderRef: `E040-${n}-${Date.now().toString(36).toUpperCase()}`, quantity: 1,
       subtotalAmount: 20, totalAmount: 22.5, status: 'COMPLETED', paidAt: new Date(),
       items: { create: [{ priceTierId: f.tier.id, description: 'GA', quantity: 1, unitPrice: 20 }] },
       payment: { create: { amount: 22.5, currency: 'usd', status: 'SUCCEEDED' } },
     },
   });
   const pastOrder = await prisma.order.create({
-    data: { eventId: f.past.id, contactId: contact.id, orderRef: `P040-${n}-${Date.now().toString(36).toUpperCase()}`, quantity: 1, subtotalAmount: 20, totalAmount: 22.5, status: 'COMPLETED', paidAt: new Date() },
+    data: { eventId: f.past.id, organizationId: contact.organizationId, contactId: contact.id, orderRef: `P040-${n}-${Date.now().toString(36).toUpperCase()}`, quantity: 1, subtotalAmount: 20, totalAmount: 22.5, status: 'COMPLETED', paidAt: new Date() },
   });
   const upcomingTicket = await prisma.ticket.create({ data: { orderId: order.id, eventId: f.upcoming.id, priceTierId: f.tier.id, contactId: contact.id, ticketNumber: 100 + n, pricePaid: 20, barcode: `${TAG}-u-${n}-${Date.now()}`, qrCodeJwt: 'jump://qr' } });
   const pastTicket = await prisma.ticket.create({ data: { orderId: pastOrder.id, eventId: f.past.id, priceTierId: f.pastTier.id, contactId: contact.id, ticketNumber: 100 + n, pricePaid: 20, barcode: `${TAG}-p-${n}-${Date.now()}`, qrCodeJwt: 'jump://qr2' } });
@@ -133,7 +133,7 @@ describe('Delete my data (spec 040 card D)', () => {
 
   it('money in flight or an approved application blocks the request with the reasons', async () => {
     const b = await seedBuyer(F, { email: `blocked@${TAG}.test` });
-    await prisma.order.create({ data: { eventId: F.upcoming.id, contactId: b.contact.id, orderRef: `B040-${Date.now().toString(36).toUpperCase()}`, quantity: 1, totalAmount: 20, status: 'PENDING' } });
+    await prisma.order.create({ data: { eventId: F.upcoming.id, organizationId: b.contact.organizationId, contactId: b.contact.id, orderRef: `B040-${Date.now().toString(36).toUpperCase()}`, quantity: 1, totalAmount: 20, status: 'PENDING' } });
     await prisma.application.update({ where: { id: b.application.id }, data: { status: 'APPROVED' } });
     const res = await request(app).post('/buyer/me/erasure/request').set(b.auth);
     expect(res.status).toBe(409);
@@ -230,7 +230,7 @@ describe('Delete my data (spec 040 card D)', () => {
   it('a blocker that appears during the grace period postpones the sweep by a day', async () => {
     const b = await seedBuyer(F, { email: `postpone@${TAG}.test` });
     await prisma.contact.update({ where: { id: b.contact.id }, data: { erasureScheduledAt: new Date(Date.now() - 1000) } });
-    await prisma.order.create({ data: { eventId: F.upcoming.id, contactId: b.contact.id, orderRef: `Q040-${Date.now().toString(36).toUpperCase()}`, quantity: 1, totalAmount: 20, status: 'PENDING' } });
+    await prisma.order.create({ data: { eventId: F.upcoming.id, organizationId: b.contact.organizationId, contactId: b.contact.id, orderRef: `Q040-${Date.now().toString(36).toUpperCase()}`, quantity: 1, totalAmount: 20, status: 'PENDING' } });
     await contactErasureService.sweep();
     const contact = await prisma.contact.findUnique({ where: { id: b.contact.id } });
     expect(contact.anonymizedAt).toBeNull();

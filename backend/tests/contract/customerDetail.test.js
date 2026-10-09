@@ -52,7 +52,7 @@ async function makePaidCustomer({ orgId, eventId, overrides = {}, refSuffix }) {
   });
   await prisma.order.create({
     data: {
-      contactId: c.id,
+      organizationId: c.organizationId, contactId: c.id,
       eventId,
       status: 'COMPLETED',
       totalAmount: '25.00',
@@ -594,7 +594,7 @@ describe('Customer detail Phase 1 contract', () => {
       // Add a second paid order for the repeat contact
       await prisma.order.create({
         data: {
-          contactId: contactWithTwoOrders.id,
+          organizationId: contactWithTwoOrders.organizationId, contactId: contactWithTwoOrders.id,
           eventId: seed.event.id,
           status: 'COMPLETED',
           totalAmount: '35.00',

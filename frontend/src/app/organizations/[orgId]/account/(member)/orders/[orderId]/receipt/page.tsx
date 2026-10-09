@@ -135,7 +135,7 @@ export default function AccountReceiptPage({ params }: { params: { orderId: stri
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-500 dark:text-slate-400 print:text-gray-600">
               {receipt.kind === 'APPLICATION' ? 'Application for' : 'Event'}
             </p>
-            <p className="mt-1 font-medium">{receipt.event.name}</p>
+            <p className="mt-1 font-medium">{receipt.event.name ?? receipt.organization.name ?? '—'}</p>
             {receipt.event.date && (
               <p className="text-gray-600 dark:text-slate-300 print:text-gray-700">{formatEventDateTime(receipt.event.date, receipt.event.timezone)}</p>
             )}

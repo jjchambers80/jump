@@ -271,7 +271,8 @@ function OrderDetailContent() {
     );
   }
 
-  const eventUpcoming = isUpcoming(order.event.date);
+  const event = order.event;
+  const eventUpcoming = event ? isUpcoming(event.date) : false;
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-950 transition-colors">
@@ -289,12 +290,14 @@ function OrderDetailContent() {
           <div className="flex items-start justify-between mb-4">
             <div>
               <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100">
-                {order.event.name}
+                {order.event?.name ?? order.organization?.name ?? '—'}
               </h1>
-              <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
-                {formatEventDate(order.event.date, order.event.venue?.timezone, { weekday: 'long', month: 'long' })} at {formatEventTime(order.event.date, order.event.venue?.timezone)}
-              </p>
-              {order.event.venue && (
+              {order.event && (
+                <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
+                  {formatEventDate(order.event.date, order.event.venue?.timezone, { weekday: 'long', month: 'long' })} at {formatEventTime(order.event.date, order.event.venue?.timezone)}
+                </p>
+              )}
+              {order.event?.venue && (
                 <p className="text-sm text-gray-500 dark:text-slate-400">
                   📍 {order.event.venue.name}
                   {order.event.venue.address ? ` — ${order.event.venue.address}` : ''}

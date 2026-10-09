@@ -121,9 +121,11 @@ class EmailService {
     let attempt = 0;
     let lastError;
 
-    const viewTicketsUrl = await orderUrl(order.id, order.event?.organizationId);
-    const b = emailBrand(order.event?.organizationBrandColor);
-    const orgName = order.event?.organizationName || 'the organizer';
+    // Spec 047 D0-C: org identity comes from the order, which may have no event.
+    const org = order.organization || {};
+    const viewTicketsUrl = await orderUrl(order.id, org.id);
+    const b = emailBrand(org.brandColor);
+    const orgName = org.name || 'the organizer';
     const manageTicketsHtml = manageTicketsUrl
       ? `
                   <div style="background: #f8f9fa; border-radius: 8px; padding: 16px 20px; margin: 0 0 24px;">
@@ -155,13 +157,13 @@ class EmailService {
 
         const msg = {
           to: [order.contact?.email || order.contactEmail],
-          from: fromAs(order.event?.organizationName),
+          from: fromAs(org.name),
           subject: `Order Confirmed — ${order.event?.name || 'Your Event'} (${order.orderRef})`,
           html: `
             <html>
               <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
                 <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
-                  ${orgLogoHtml(order.event?.organizationLogoUrl, order.event?.organizationName)}
+                  ${orgLogoHtml(org.logoUrl, org.name)}
                   <h1 style="color: #333;">🎟️ Order Confirmed!</h1>
                 </div>
                 <div style="padding: 20px;">

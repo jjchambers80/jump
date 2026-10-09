@@ -168,9 +168,10 @@ async function main() {
 async function cleanup() {
   if (!org) return;
   const where = { event: { venue: { organizationId: org.id } } };
-  await prisma.orderItem.deleteMany({ where: { order: where } }).catch(() => {});
-  await prisma.paymentTransaction.deleteMany({ where: { order: where } }).catch(() => {});
-  await prisma.order.deleteMany({ where }).catch(() => {});
+  const orderWhere = { organizationId: org.id };
+  await prisma.orderItem.deleteMany({ where: { order: orderWhere } }).catch(() => {});
+  await prisma.paymentTransaction.deleteMany({ where: { order: orderWhere } }).catch(() => {});
+  await prisma.order.deleteMany({ where: orderWhere }).catch(() => {});
   await prisma.priceTier.deleteMany({ where }).catch(() => {});
   await prisma.event.deleteMany({ where: { venue: { organizationId: org.id } } }).catch(() => {});
   await prisma.contact.deleteMany({ where: { organizationId: org.id } }).catch(() => {});

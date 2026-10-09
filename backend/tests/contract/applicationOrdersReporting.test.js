@@ -49,7 +49,7 @@ describe('Application orders reporting contract (spec 024)', () => {
     const row = await prisma.order.create({
       data: {
         eventId: event.id,
-        contactId: contact.id,
+        organizationId: contact.organizationId, contactId: contact.id,
         orderRef: `${TAG.toUpperCase()}-${seq}`,
         totalAmount: total,
         subtotalAmount: subtotal ?? total,
@@ -93,7 +93,7 @@ describe('Application orders reporting contract (spec 024)', () => {
       data: {
         kind: 'APPLICATION',
         eventId: event.id,
-        contactId: contact.id,
+        organizationId: contact.organizationId, contactId: contact.id,
         applicationId: row.id,
         orderRef: `${TAG.toUpperCase()}-A${seq}`,
         totalAmount: applicantPays,

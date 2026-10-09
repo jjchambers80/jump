@@ -22,7 +22,8 @@ import { PAID_ORDER_STATUSES } from './paidStatuses.js';
 
 /** Include for org-wide order rows (spec 024 phase 2): enough to describe either kind without a second query. */
 const LIST_INCLUDE = {
-  event: { select: { id: true, name: true, date: true, venue: { select: { timezone: true, organization: { select: { id: true, name: true } } } } } },
+  event: { select: { id: true, name: true, date: true, venue: { select: { timezone: true } } } },
+  organization: { select: { id: true, name: true } },
   contact: { select: { id: true, firstName: true, lastName: true, email: true } },
   payment: { select: { source: true, stripePaymentIntentId: true, stripeAccountId: true, status: true } },
   items: { select: { kind: true, quantity: true, description: true, unitPrice: true, priceTier: { select: { name: true } } }, orderBy: { createdAt: 'asc' } },
@@ -126,6 +127,7 @@ class OrderService {
     return tx.order.create({
       data: {
         kind: 'APPLICATION',
+        organizationId: application.organizationId,
         eventId: application.eventId,
         contactId: application.contactId,
         applicationId: application.id,
@@ -332,6 +334,7 @@ class OrderService {
       const order = await tx.order.create({
         data: {
           kind: 'TICKET',
+          organizationId,
           eventId,
           contactId: contactRecord.id,
           orderRef,
@@ -538,11 +541,12 @@ class OrderService {
                 name: true,
                 address: true,
                 timezone: true,
-                organization: { select: { id: true, name: true, logoUrl: true, brandColor: true, themeMode: true, themesEnabled: true } },
               },
             },
           },
         },
+        // Spec 047 D0-C: org identity comes from the order (an order may have no event).
+        organization: { select: { id: true, name: true, logoUrl: true, brandColor: true, themeMode: true, themesEnabled: true } },
         contact: {
           select: { firstName: true, lastName: true, email: true },
         },
@@ -620,11 +624,11 @@ class OrderService {
                 city: true,
                 state: true,
                 timezone: true,
-                organization: { select: { name: true, logoUrl: true, brandColor: true } },
               },
             },
           },
         },
+        organization: { select: { name: true, logoUrl: true, brandColor: true } },
         contact: { select: { firstName: true, lastName: true, email: true } },
         items: { include: { priceTier: { select: { name: true } }, applicationTier: { select: { name: true } } }, orderBy: { createdAt: 'asc' } },
         addOns: { include: { addOn: { select: { name: true } } }, orderBy: { createdAt: 'asc' } },
@@ -643,7 +647,7 @@ class OrderService {
       orderRef: order.orderRef,
       kind: order.kind,
       status: order.status,
-      organization: { name: venue?.organization?.name ?? null, logoUrl: venue?.organization?.logoUrl ?? null },
+      organization: { name: order.organization?.name ?? null, logoUrl: order.organization?.logoUrl ?? null },
       event: {
         name: order.event?.name ?? null,
         date: order.event?.date ?? null,
@@ -734,11 +738,12 @@ class OrderService {
                 name: true,
                 address: true,
                 timezone: true,
-                organization: { select: { id: true, name: true, logoUrl: true, brandColor: true, themeMode: true, themesEnabled: true } },
               },
             },
           },
         },
+        // Spec 047 D0-C: org identity comes from the order (an order may have no event).
+        organization: { select: { id: true, name: true, logoUrl: true, brandColor: true, themeMode: true, themesEnabled: true } },
         contact: {
           select: { firstName: true, lastName: true, email: true },
         },
@@ -791,15 +796,15 @@ class OrderService {
   }
 
   /**
-   * Prisma `where` for the org-wide order list (spec 024 phase 2). Both kinds
-   * scope through `event.venue.organizationId`. `status` omitted hides FAILED
+   * Prisma `where` for the org-wide order list (spec 024 phase 2). Every kind
+   * scopes through `Order.organizationId` (spec 047 D0-C). `status` omitted hides FAILED
    * and CANCELLED; a Stripe id (`pi_`, `re_`, `pyr_`, `cs_`) is matched by
    * equality against the payment, the refunds and the Checkout sessions, any
    * other search term by ILIKE on the order ref, the contact and the business.
    */
   _orgOrdersWhere(organizationId, { kind, status, eventId, from, to, search } = {}) {
     const where = {
-      ...(organizationId && { event: { venue: { organizationId } } }),
+      ...(organizationId && { organizationId }),
       ...(kind && { kind }),
       status: status && status.length ? { in: status } : { notIn: ['FAILED', 'CANCELLED'] },
       ...(eventId && { eventId }),
@@ -1201,32 +1206,47 @@ class OrderService {
       });
     }
 
+    const org = order.organization;
+    const storefrontLogo = await storefrontLogoFor(org);
     return {
       id: order.id,
       orderRef: order.orderRef,
-      event: {
-        id: order.event.id,
-        name: order.event.name,
-        date: order.event.date,
-        logoUrl: order.event.logoUrl ?? null,
-        // Org branding so checkout/confirmation pages can render inside a BrandScope
-        organizationId: order.event.venue?.organization?.id || null,
-        organizationName: order.event.venue?.organization?.name || null,
-        organizationLogoUrl: order.event.venue?.organization?.logoUrl || null,
-        // Theme logo image + widths: the confirmation header matches the themed pages.
-        organizationStorefrontLogo: await storefrontLogoFor(order.event.venue?.organization),
-        organizationBrandColor: order.event.venue?.organization?.brandColor || null,
-        organizationThemeMode: order.event.venue?.organization?.themeMode || 'SYSTEM',
-        venue: order.event.venue
-          ? {
-              id: order.event.venue.id,
-              name: order.event.venue.name,
-              address: order.event.venue.address,
-              // Spec 033: the zone the event's wall clock belongs to.
-              timezone: order.event.venue.timezone ?? null,
-            }
-          : undefined,
-      },
+      // Spec 047 D0-C: null for an order without an event (gifts, D1).
+      event: order.event
+        ? {
+            id: order.event.id,
+            name: order.event.name,
+            date: order.event.date,
+            logoUrl: order.event.logoUrl ?? null,
+            // Org branding so checkout/confirmation pages can render inside a BrandScope
+            organizationId: org?.id || null,
+            organizationName: org?.name || null,
+            organizationLogoUrl: org?.logoUrl || null,
+            // Theme logo image + widths: the confirmation header matches the themed pages.
+            organizationStorefrontLogo: storefrontLogo,
+            organizationBrandColor: org?.brandColor || null,
+            organizationThemeMode: org?.themeMode || 'SYSTEM',
+            venue: order.event.venue
+              ? {
+                  id: order.event.venue.id,
+                  name: order.event.venue.name,
+                  address: order.event.venue.address,
+                  // Spec 033: the zone the event's wall clock belongs to.
+                  timezone: order.event.venue.timezone ?? null,
+                }
+              : undefined,
+          }
+        : null,
+      organization: org
+        ? {
+            id: org.id,
+            name: org.name,
+            logoUrl: org.logoUrl || null,
+            storefrontLogo,
+            brandColor: org.brandColor || null,
+            themeMode: org.themeMode || 'SYSTEM',
+          }
+        : null,
       contact: order.contact,
       kind: order.kind,
       quantity: order.quantity,
@@ -1332,7 +1352,7 @@ class OrderService {
           })()
         : null,
       application: application ? { id: application.id, status: application.status, paymentStatus: application.paymentStatus, formName: application.form?.name ?? null, tierName: application.tier?.name ?? null } : null,
-      ...(unscoped && order.event?.venue?.organization ? { organization: order.event.venue.organization } : {}),
+      ...(unscoped && order.organization ? { organization: order.organization } : {}),
     };
   }
 

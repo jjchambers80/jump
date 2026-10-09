@@ -37,7 +37,8 @@ interface CustomerOrder {
   status: string;
   createdAt: string;
   ticketCount: number;
-  event: OrderEvent;
+  /** Null for an order without an event (spec 047 D0-C). */
+  event: OrderEvent | null;
 }
 
 interface CustomerApplication {
@@ -749,7 +750,7 @@ function CustomerDetailPageContent() {
                   >
                     {/* Event logo */}
                     <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-slate-700 flex-shrink-0 overflow-hidden flex items-center justify-center">
-                      {order.event.logoUrl ? (
+                      {order.event?.logoUrl ? (
                         <img src={resolveAssetUrl(order.event.logoUrl) || undefined} alt="" className="w-full h-full object-contain" />
                       ) : (
                         <svg className="w-5 h-5 text-gray-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -770,7 +771,7 @@ function CustomerDetailPageContent() {
                         )}
                       </div>
                       <p className="text-xs text-gray-500 dark:text-slate-400 truncate">
-                        {order.event.name} &middot; {formatEventDateTime(order.event.date, order.event.timezone)}
+                        {order.event ? <>{order.event.name} &middot; {formatEventDateTime(order.event.date, order.event.timezone)}</> : '—'}
                       </p>
                     </div>
 

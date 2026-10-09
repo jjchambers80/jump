@@ -49,7 +49,7 @@ interface OrderDetail {
     name: string;
     date: string;
     venue?: { id: string; name: string; address: string; timezone?: string | null };
-  };
+  } | null; // null for an order without an event (spec 047 D0-C)
   contact: { firstName: string; lastName: string; email: string };
   quantity: number;
   items: OrderItem[];
@@ -380,13 +380,19 @@ export default function AdminOrderDetailPage() {
 
       {/* Event */}
       <Section title="Event">
-        <InfoRow label="Event" value={order.event.name} />
-        <InfoRow label="Date" value={formatEventDateTime(order.event.date, order.event.venue?.timezone)} />
-        {order.event.venue && (
+        {order.event ? (
           <>
-            <InfoRow label="Venue" value={order.event.venue.name} />
-            <InfoRow label="Address" value={order.event.venue.address} />
+            <InfoRow label="Event" value={order.event.name} />
+            <InfoRow label="Date" value={formatEventDateTime(order.event.date, order.event.venue?.timezone)} />
+            {order.event.venue && (
+              <>
+                <InfoRow label="Venue" value={order.event.venue.name} />
+                <InfoRow label="Address" value={order.event.venue.address} />
+              </>
+            )}
           </>
+        ) : (
+          <InfoRow label="Event" value="—" />
         )}
       </Section>
 

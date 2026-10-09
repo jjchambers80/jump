@@ -18,9 +18,10 @@ export interface OrderRow {
   orderRef: string;
   kind: OrderKind;
   applicationId: string | null;
-  eventId: string;
-  eventName: string;
-  eventDate: string;
+  /** Null for an order without an event (spec 047 D0-C). */
+  eventId: string | null;
+  eventName: string | null;
+  eventDate: string | null;
   quantity: number;
   description: string;
   businessName: string | null;

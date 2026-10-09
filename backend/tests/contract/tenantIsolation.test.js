@@ -68,7 +68,7 @@ async function createOrgWithOrder(name, contactFields) {
   const order = await prisma.order.create({
     data: {
       eventId: event.id,
-      contactId: contact.id,
+      organizationId: contact.organizationId, contactId: contact.id,
       orderRef: `${TAG}-${org.id.slice(-6)}`,
       totalAmount: 10,
       subtotalAmount: 10,

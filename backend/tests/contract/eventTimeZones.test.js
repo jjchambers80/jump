@@ -68,7 +68,7 @@ describe('Event time zones contract (spec 033 phase 1)', () => {
     const order = await prisma.order.create({
       data: {
         eventId,
-        contactId: contact.id,
+        organizationId: contact.organizationId, contactId: contact.id,
         kind: 'TICKET',
         orderRef: 'JMP-TZ0001',
         quantity: 1,

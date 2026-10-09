@@ -59,13 +59,13 @@ describe('Event overview API', () => {
     });
     const order = await prisma.order.create({
       data: {
-        eventId: event.id, contactId: buyer.id, orderRef: `${TAG}-1`, totalAmount: 66, subtotalAmount: 60,
+        eventId: event.id, organizationId: buyer.organizationId, contactId: buyer.id, orderRef: `${TAG}-1`, totalAmount: 66, subtotalAmount: 60,
         orgReceives: 60, quantity: 3, status: 'COMPLETED',
       },
     });
     // A pending checkout is not money collected.
     await prisma.order.create({
-      data: { eventId: event.id, contactId: buyer.id, orderRef: `${TAG}-2`, totalAmount: 22, quantity: 1, status: 'PENDING' },
+      data: { eventId: event.id, organizationId: buyer.organizationId, contactId: buyer.id, orderRef: `${TAG}-2`, totalAmount: 22, quantity: 1, status: 'PENDING' },
     });
     for (let i = 0; i < 3; i += 1) {
       await prisma.ticket.create({

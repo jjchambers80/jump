@@ -99,7 +99,7 @@ describe('Stripe disputes contract (spec 037)', () => {
     const order = await prisma.order.create({
       data: {
         eventId: event.id,
-        contactId: contact.id,
+        organizationId: contact.organizationId, contactId: contact.id,
         orderRef: `${TAG}-${key}`,
         totalAmount: total,
         subtotalAmount: total,
@@ -461,7 +461,7 @@ describe('Stripe disputes contract (spec 037)', () => {
         kind: 'APPLICATION',
         applicationId: application.id,
         eventId: event.id,
-        contactId: contact.id,
+        organizationId: contact.organizationId, contactId: contact.id,
         orderRef: `${TAG}-booth`,
         totalAmount: 100,
         subtotalAmount: 100,

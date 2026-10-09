@@ -68,7 +68,7 @@ class AdminSearchService {
         }),
         prisma.order.findMany({
           where: {
-            ...(organizationId && { event: { venue: { organizationId } } }),
+            ...(organizationId && { organizationId }),
             OR: stripeId
               ? [
                   { payment: { stripePaymentIntentId: term } },

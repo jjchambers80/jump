@@ -98,7 +98,7 @@ describe('Stripe webhook replay safety (EVE-3)', () => {
     order = await prisma.order.create({
       data: {
         eventId: event.id,
-        contactId: contact.id,
+        organizationId: contact.organizationId, contactId: contact.id,
         orderRef: `${TAG.toUpperCase()}-${RUN}`.slice(0, 40),
         totalAmount: 40,
         subtotalAmount: 40,
