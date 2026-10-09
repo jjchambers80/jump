@@ -4,8 +4,9 @@
 // organizers or outsiders is wrapped as { untrusted_text } (plan §6).
 
 import { z } from 'zod';
-import { prisma } from '@jump/db';
+import { prisma, auditContext } from '@jump/db';
 import agentAuditService from '../../backend/src/services/AgentAuditService.js';
+import auditLogService from '../../backend/src/audit/AuditLogService.js';
 import { PAID_ORDER_STATUSES } from '../../backend/src/services/paidStatuses.js';
 
 const MAX_RESULT_CHARS = 100_000;
@@ -339,7 +340,16 @@ export function registerTool(server, auth, { name, title, description, shape, an
     });
     try {
       if (!auth.scopes.includes(scope)) throw new ToolError(`This connection does not have the ${scope} permission`);
-      const data = await run(auth.organizationId, args || {}, auth);
+      // Audit trail (spec 048): changes a write tool makes are attributed to
+      // the agent and the person who connected it, and kept only on success.
+      const store = {
+        source: `mcp:${name}`,
+        organizationId: auth.organizationId,
+        actor: { type: 'AGENT', userId: auth.userId, label: auth.clientName, grantId: auth.grantId, clientName: auth.clientName, organizationId: auth.organizationId },
+        events: [],
+      };
+      const data = await auditContext.run(store, async () => await run(auth.organizationId, args || {}, auth));
+      await auditLogService.flush(store);
       const text = JSON.stringify(data);
       if (text.length > MAX_RESULT_CHARS) {
         await audit('error', 'Result too large');

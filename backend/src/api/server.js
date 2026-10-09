@@ -62,6 +62,7 @@ import boothService from '../services/BoothService.js';
 import rsvpReminderService from '../services/RsvpReminderService.js';
 import { BOOTH_SWEEP_INTERVAL_MS } from '../config/applications.js';
 import { auditContextMiddleware } from '../audit/middleware.js';
+import auditLogService from '../audit/AuditLogService.js';
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -232,22 +233,27 @@ if (process.env.NODE_ENV !== 'test') {
     console.log(`💚 Health check at http://localhost:${PORT}/health`);
   });
 
+  // Audit trail (spec 048): every sweep's changes are recorded as the system.
+  const asSystem = (source, label, job) => () =>
+    auditLogService.runAsSystem(source, label, job).catch(() => {});
+
   // Storefront domain sweep (spec 007 phase 3): re-check DNS/TLS for pending
   // domains every 10 minutes, active ones daily. unref so it never holds the
   // process open.
   const DOMAIN_SWEEP_MS = Number(process.env.DOMAIN_SWEEP_INTERVAL_MS) || 10 * 60 * 1000;
-  setTimeout(() => domainService.checkAll().catch(() => {}), 15 * 1000).unref();
-  setInterval(() => domainService.checkAll().catch(() => {}), DOMAIN_SWEEP_MS).unref();
+  const domainSweep = asSystem('sweep:domains', 'Domain check', () => domainService.checkAll());
+  setTimeout(domainSweep, 15 * 1000).unref();
+  setInterval(domainSweep, DOMAIN_SWEEP_MS).unref();
 
   // Application overdue sweep (spec 011 phase 2): approved applications whose
   // pay-now deadline passed are withdrawn (WITHDRAW policy) or flagged (HOLD).
   const APPLICATION_SWEEP_MS = Number(process.env.APPLICATION_SWEEP_INTERVAL_MS) || 60 * 60 * 1000;
   // The same tick sends organizer daily digests of new submissions (phase 3);
   // ApplicationDigestService only sends once a ~day per organization.
-  const applicationSweep = async () => {
+  const applicationSweep = asSystem('sweep:applications', 'Application payment sweep', async () => {
     await applicationPaymentService.sweepOverdue().catch(() => {});
     await applicationDigestService.sendDue().catch(() => {});
-  };
+  });
   setTimeout(applicationSweep, 30 * 1000).unref();
   setInterval(applicationSweep, APPLICATION_SWEEP_MS).unref();
 
@@ -255,10 +261,10 @@ if (process.env.NODE_ENV !== 'test') {
   // space (booth or category slot, add-ons, order) lapses as a whole after 15
   // minutes; then stray booth holds. Holds whose payment is still PROCESSING
   // are left to their Checkout session.
-  const holdSweep = async () => {
+  const holdSweep = asSystem('sweep:holds', 'Space hold sweep', async () => {
     await applicationPaymentService.sweepExpiredSelections().catch(() => {});
     await boothService.sweepExpiredHolds().catch(() => {});
-  };
+  });
   setTimeout(holdSweep, BOOTH_SWEEP_INTERVAL_MS).unref();
   setInterval(holdSweep, BOOTH_SWEEP_INTERVAL_MS).unref();
 
@@ -266,21 +272,24 @@ if (process.env.NODE_ENV !== 'test') {
   // Checkout session lifetime + grace are settled against Stripe (hold
   // released, or completed if the webhook was missed).
   const ORDER_SWEEP_MS = Number(process.env.ORDER_SWEEP_INTERVAL_MS) || 5 * 60 * 1000;
-  setTimeout(() => orderService.sweepAbandoned().catch(() => {}), 60 * 1000).unref();
-  setInterval(() => orderService.sweepAbandoned().catch(() => {}), ORDER_SWEEP_MS).unref();
+  const orderSweep = asSystem('sweep:orders', 'Abandoned-checkout sweep', () => orderService.sweepAbandoned());
+  setTimeout(orderSweep, 60 * 1000).unref();
+  setInterval(orderSweep, ORDER_SWEEP_MS).unref();
 
   // Onboarding sweep (spec 022 phase 3): unfinished signups older than
   // ONBOARDING_ABANDON_AFTER_MS (7 d) with no events and no subscription are
   // deleted so pending organizations never pile up.
   const ONBOARDING_SWEEP_MS = Number(process.env.ONBOARDING_SWEEP_INTERVAL_MS) || 60 * 60 * 1000;
-  setTimeout(() => onboardingService.sweepAbandoned().catch(() => {}), 45 * 1000).unref();
-  setInterval(() => onboardingService.sweepAbandoned().catch(() => {}), ONBOARDING_SWEEP_MS).unref();
+  const onboardingSweep = asSystem('sweep:onboarding', 'Abandoned-signup sweep', () => onboardingService.sweepAbandoned());
+  setTimeout(onboardingSweep, 45 * 1000).unref();
+  setInterval(onboardingSweep, ONBOARDING_SWEEP_MS).unref();
 
   // Erasure sweep (spec 040 card D): contacts whose "Delete my data" grace
   // period ended are anonymized; sign-in tokens a week past expiry are purged.
   const ERASURE_SWEEP_MS = Number(process.env.ERASURE_SWEEP_INTERVAL_MS) || 60 * 60 * 1000;
-  setTimeout(() => contactErasureService.sweep().catch(() => {}), 75 * 1000).unref();
-  setInterval(() => contactErasureService.sweep().catch(() => {}), ERASURE_SWEEP_MS).unref();
+  const erasureSweep = asSystem('sweep:erasure', 'Data erasure sweep', () => contactErasureService.sweep());
+  setTimeout(erasureSweep, 75 * 1000).unref();
+  setInterval(erasureSweep, ERASURE_SWEEP_MS).unref();
 
   // Session sweep (spec 030 D): rows revoked or idle past the JWT lifetime
   // can never authenticate again and are deleted daily.
@@ -291,8 +300,9 @@ if (process.env.NODE_ENV !== 'test') {
   // RSVP reminder sweep (spec 034 §9.2): send reminder emails ~24 h before
   // an RSVP event starts. Idempotent per RSVP via remindedAt stamp.
   const RSVP_REMINDER_MS = Number(process.env.RSVP_REMINDER_SWEEP_INTERVAL_MS) || 60 * 60 * 1000;
-  setTimeout(() => rsvpReminderService.sendDue().catch(() => {}), 60 * 1000).unref();
-  setInterval(() => rsvpReminderService.sendDue().catch(() => {}), RSVP_REMINDER_MS).unref();
+  const rsvpReminders = asSystem('sweep:rsvp-reminders', 'RSVP reminders', () => rsvpReminderService.sendDue());
+  setTimeout(rsvpReminders, 60 * 1000).unref();
+  setInterval(rsvpReminders, RSVP_REMINDER_MS).unref();
 }
 
 export default app;

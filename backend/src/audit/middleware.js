@@ -10,9 +10,30 @@
 import { auditContext } from '@jump/db';
 import auditLogService from './AuditLogService.js';
 
+// Every file a staff user downloads (CSV exports, customer data, map PDFs) is
+// an EXPORT row, without each route having to remember to log it.
+function recordDownload(req, res, store) {
+  if (!req.user || res.statusCode >= 400) return;
+  const disposition = String(res.getHeader('Content-Disposition') || '');
+  if (!/^attachment/i.test(disposition)) return;
+  const filename = /filename="?([^";]+)"?/i.exec(disposition)?.[1] ?? null;
+  store.events.push({
+    model: 'Export',
+    operation: 'EXPORT',
+    action: 'data.exported',
+    feature: 'Exports',
+    entityId: null,
+    entityLabel: filename,
+    changes: null,
+    row: null,
+    meta: { query: req.query, params: req.params },
+  });
+}
+
 export function auditContextMiddleware(req, res, next) {
   const store = { req, events: [] };
   res.on('finish', () => {
+    recordDownload(req, res, store);
     if (!store.events.length) return;
     if (res.statusCode >= 400) {
       store.events.length = 0;

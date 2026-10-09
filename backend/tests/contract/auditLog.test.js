@@ -125,3 +125,48 @@ describe('Audit log capture (048-A)', () => {
     ).rejects.toThrow(/append-only/);
   });
 });
+
+describe('Audit log actors and exports (048-B)', () => {
+  const B_TAG = 'audit-log-b-ct';
+  const adminEmail = `admin@${B_TAG}.test`;
+  let organization;
+  let adminToken;
+  const eventId = `evt_${B_TAG}_${Date.now()}`;
+
+  beforeAll(async () => {
+    await prisma.organization.deleteMany({ where: { name: { startsWith: `${B_TAG} ` } } }).catch(() => {});
+    adminToken = await staffToken({ email: adminEmail, role: 'ADMIN' });
+    organization = await prisma.organization.create({ data: { name: `${B_TAG} Store` } });
+    await joinOrgByToken(adminToken, organization.id, 'ADMIN');
+  });
+
+  afterAll(async () => {
+    await prisma.auditLog.deleteMany({ where: { organizationId: organization.id } });
+    await prisma.stripeWebhookEvent.deleteMany({ where: { stripeEventId: eventId } }).catch(() => {});
+    await prisma.organization.deleteMany({ where: { id: organization.id } }).catch(() => {});
+    await cleanupStaff([adminEmail]);
+  });
+
+  it('records a staff download as an EXPORT row', async () => {
+    const response = await request(app)
+      .get('/admin/orders/export.csv')
+      .set(...auth(adminToken));
+    expect(response.status).toBe(200);
+    const [row] = await rowsFor({ organizationId: organization.id, operation: 'EXPORT' });
+    expect(row).toMatchObject({ action: 'data.exported', feature: 'Exports', actorType: 'USER' });
+    expect(row.entityLabel).toMatch(/^orders-.*\.csv$/);
+  });
+
+  it('attributes webhook deliveries to Stripe', async () => {
+    const { default: auditLogService } = await import('../../src/audit/AuditLogService.js');
+    const { auditContext } = await import('@jump/db');
+    const store = { req: { id: 'r1', method: 'POST', get: () => null, headers: {} }, events: [] };
+    await auditContext.run(store, async () => {
+      auditLogService.markSystemActor('webhook:stripe:platform', 'Stripe');
+      await prisma.organization.update({ where: { id: organization.id }, data: { seoTitle: 'from stripe' } });
+    });
+    await auditLogService.flush(store);
+    const [row] = await rowsFor({ organizationId: organization.id, source: 'webhook:stripe:platform' });
+    expect(row).toMatchObject({ actorType: 'SYSTEM', actorLabel: 'Stripe', action: 'organization.updated' });
+  });
+});
