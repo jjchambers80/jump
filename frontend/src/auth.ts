@@ -7,12 +7,18 @@ import { PrismaAdapter } from '@auth/prisma-adapter';
 import { prisma } from '@jump/db';
 import jwt from 'jsonwebtoken';
 import Credentials from 'next-auth/providers/credentials';
+import { CredentialsSignin } from 'next-auth';
 import authConfig from './auth.config';
-import { applyUserClaims, shouldRefreshClaims, type UserClaims } from '@/lib/sessionClaims';
+import { applyUserClaims, isTwoStepSetupRequired, shouldRefreshClaims, type UserClaims } from '@/lib/sessionClaims';
 import { resolveSessionId, revokeSessionOnSignOut } from '@/lib/userSessions';
 import { consumeBridgeToken, recordSecurityEvent, resolveMfaState, verifyPasswordWithBackend } from '@/lib/staffAuth';
 
 const AUTH_SECRET = process.env.AUTH_SECRET!;
+
+/** Surfaces as `code` on the client signIn() result so the sign-in page can say why. */
+class AccountDeactivated extends CredentialsSignin {
+  code = 'account_deactivated';
+}
 
 // Build providers: start with auth.config providers, add the spec 030 B
 // Credentials providers and, in development, the instant dev sign-in.
@@ -32,7 +38,9 @@ const providers: NextAuthConfig['providers'] = [
       const email = credentials?.email;
       const password = credentials?.password;
       if (typeof email !== 'string' || typeof password !== 'string' || !email || !password) return null;
-      return verifyPasswordWithBackend(email, password, request);
+      const result = await verifyPasswordWithBackend(email, password, request);
+      if (result === 'deactivated') throw new AccountDeactivated();
+      return result;
     },
   }),
   // One-time bridge token minted by the backend after a passkey assertion
@@ -69,7 +77,7 @@ if (process.env.NODE_ENV === 'development') {
   );
 }
 
-/** Snapshot of the User row that becomes JWT claims; null when the account is gone. */
+/** Snapshot of the User row that becomes JWT claims; null when the account is gone or deactivated. */
 async function loadUserClaims(userId: string): Promise<UserClaims | null> {
   const dbUser = await prisma.user.findUnique({
     where: { id: userId },
@@ -82,6 +90,7 @@ async function loadUserClaims(userId: string): Promise<UserClaims | null> {
       timeZone: true,
       twoStepEnabledAt: true,
       deletedAt: true,
+      isActive: true,
       // Spec 030: uploaded photo wins over the provider picture
       avatarImage: { select: { id: true, file: { select: { hash: true } } } },
       // Active org = oldest membership; the admin org switcher overrides via X-Jump-Org (spec 007)
@@ -96,7 +105,7 @@ async function loadUserClaims(userId: string): Promise<UserClaims | null> {
       _count: { select: { memberships: { where: { requireTwoStep: true } } } },
     },
   });
-  if (!dbUser || dbUser.deletedAt) return null;
+  if (!dbUser || dbUser.deletedAt || !dbUser.isActive) return null;
   return {
     role: dbUser.role,
     name: dbUser.name,
@@ -108,7 +117,7 @@ async function loadUserClaims(userId: string): Promise<UserClaims | null> {
       ? `/images/${dbUser.avatarImage.id}/${dbUser.avatarImage.file.hash}/thumb`
       : dbUser.image ?? null,
     twoStepEnabled: Boolean(dbUser.twoStepEnabledAt),
-    twoStepSetupRequired: !dbUser.twoStepEnabledAt && dbUser._count.memberships > 0,
+    twoStepSetupRequired: isTwoStepSetupRequired(dbUser.role, Boolean(dbUser.twoStepEnabledAt), dbUser._count.memberships),
   };
 }
 
@@ -124,7 +133,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // useSession().update() (trigger === 'update' — the signup flow does this right
       // after promoting the user, spec 022), and whenever the snapshot is older than
       // CLAIMS_REFRESH_MS so role changes and new memberships take effect without a
-      // re-login. A missing or soft-deleted user invalidates the session.
+      // re-login. A missing, soft-deleted or deactivated user invalidates the session.
       const now = Date.now();
       const userId = user?.id ?? token.sub;
       if (!userId) return token;

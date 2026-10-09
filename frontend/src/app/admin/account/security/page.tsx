@@ -57,7 +57,7 @@ export default function AccountSecurityPage() {
           <div role="status" className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
             <p className="font-semibold">Turn on two-step authentication to continue</p>
             <p className="mt-1">
-              Your organization requires a secure sign-in method. Set up two-step authentication below — the rest of the admin
+              Your account requires a secure sign-in method. Set up two-step authentication below — the rest of the admin
               opens as soon as it&apos;s on.
             </p>
           </div>

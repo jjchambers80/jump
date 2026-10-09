@@ -227,6 +227,8 @@ export default function TwoStepCard({ onChanged, onError }: Props) {
   const [busy, setBusy] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
+  // The backend refuses to turn it off for this role (TWO_STEP_REQUIRED_BY_ROLE)
+  const requiredByRole = (useSession().data?.user as { role?: string } | undefined)?.role === 'SYSTEM_ADMIN';
   const codesRef = useRef<HTMLButtonElement>(null);
 
   const load = useCallback(async () => {
@@ -289,7 +291,11 @@ export default function TwoStepCard({ onChanged, onError }: Props) {
         </div>
         {status && (
           status.enabled ? (
-            <button ref={toggleRef} type="button" onClick={() => setDialog('disable')} disabled={busy !== null} className={dangerButton}>Turn off</button>
+            requiredByRole ? (
+              <p className="text-sm text-gray-600 dark:text-slate-400">Required for system administrators</p>
+            ) : (
+              <button ref={toggleRef} type="button" onClick={() => setDialog('disable')} disabled={busy !== null} className={dangerButton}>Turn off</button>
+            )
           ) : (
             <button ref={toggleRef} type="button" onClick={() => setDialog('enable')} disabled={busy !== null} className={primaryButton}>Turn on</button>
           )

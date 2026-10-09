@@ -5,7 +5,7 @@
 // logged; every change writes a SecurityEvent and emails a notice.
 
 import { prisma } from '@jump/db';
-import { AuthenticationError, ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
+import { AuthenticationError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import { issueReauthProof } from '../middleware/recentAuth.js';
 import emailService from './EmailService.js';
 import passkeyService from './PasskeyService.js';
@@ -185,10 +185,17 @@ class SecurityService {
   async verifyPasswordSignIn(email, password, req) {
     const normalized = typeof email === 'string' ? email.trim().toLowerCase() : '';
     const user = normalized ? await prisma.user.findUnique({ where: { email: normalized } }) : null;
-    const ok = Boolean(user && !user.deletedAt && user.isActive && user.passwordHash && (await verifyPassword(password, user.passwordHash)));
+    const ok = Boolean(user && !user.deletedAt && user.passwordHash && (await verifyPassword(password, user.passwordHash)));
     if (!ok) {
       if (user) await securityEventService.record(user.id, 'SIGN_IN_FAILED', { req, meta: { method: 'password' } });
       throw new AuthenticationError('Wrong email or password');
+    }
+    // Only after the password matched, so it never reveals the account to a guesser
+    if (!user.isActive) {
+      await securityEventService.record(user.id, 'SIGN_IN_FAILED', { req, meta: { method: 'password', reason: 'deactivated' } });
+      const error = new ForbiddenError('This account has been deactivated. Contact an administrator.');
+      error.code = 'ACCOUNT_DEACTIVATED';
+      throw error;
     }
     await securityEventService.record(user.id, 'SIGN_IN', { req, meta: { method: 'password' } });
     return { id: user.id, email: user.email, name: user.name };

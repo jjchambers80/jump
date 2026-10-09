@@ -69,7 +69,7 @@ export const requireAuth = async (req, res, next) => {
     }
 
     if (decoded.twoStepSetup === 'required' && !allowedBeforeTwoStepSetup(req)) {
-      const error = new ForbiddenError('Your organization requires two-step authentication. Turn it on under Account › Security.');
+      const error = new ForbiddenError('Your account requires two-step authentication. Turn it on under Account › Security.');
       error.code = 'TWO_STEP_SETUP_REQUIRED';
       throw error;
     }

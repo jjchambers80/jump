@@ -211,10 +211,18 @@ describe('Settings › Users contract', () => {
     await prisma.organization.delete({ where: { id: lone.id } });
   });
 
-  test('deactivate only a user who belongs to this org alone', async () => {
+  test('deactivate only a user who belongs to this org alone; it revokes their sessions', async () => {
+    const live = await prisma.userSession.create({ data: { userId: organizerId, provider: 'resend' } });
     const res = await request(app).patch(`/admin/settings/users/${organizerId}`).set(...auth(adminToken)).send({ isActive: false });
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('INACTIVE');
+    const revoked = await prisma.userSession.findUnique({ where: { id: live.id } });
+    expect(revoked.revokedAt).not.toBeNull();
+    expect(revoked.revokedBy).toBe('deactivated');
+    const liveToken = jwt.sign({ ...jwt.decode(organizerToken), sid: live.id }, process.env.AUTH_SECRET, { algorithm: 'HS256' });
+    const refused = await request(app).get('/account/sessions').set(...auth(liveToken));
+    expect(refused.status).toBe(401);
+    expect(refused.body.code).toBe('SESSION_REVOKED');
     await request(app).patch(`/admin/settings/users/${organizerId}`).set(...auth(adminToken)).send({ isActive: true });
 
     await joinOrgByToken(organizerToken, otherOrg.id, 'ORGANIZER');

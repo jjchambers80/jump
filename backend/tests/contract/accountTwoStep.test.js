@@ -20,7 +20,7 @@ const { hashToken } = await import('../../src/utils/oneTimeTokens.js');
 
 const RUN = `${process.pid}-${Date.now()}`;
 const TAG = `two-step-ct-${RUN}`;
-const emails = [`me@${TAG}.test`];
+const emails = [`me@${TAG}.test`, `sys@${TAG}.test`];
 const auth = (token) => ['Authorization', `Bearer ${token}`];
 const AUTH_SECRET = process.env.AUTH_SECRET;
 const waitForEmails = async (n) => {
@@ -169,5 +169,12 @@ describe('Two-step authentication contract', () => {
     // With 2FA off, a stray pending token completes without a factor
     const stray = await request(app).post('/account/two-step/verify').set(...auth(pending)).send({ code: '123456' }).expect(200);
     expect(stray.body.method).toBeNull();
+  });
+
+  it('a SYSTEM_ADMIN cannot turn two-step off (409 TWO_STEP_REQUIRED_BY_ROLE)', async () => {
+    const sysToken = await staffToken({ email: emails[1], role: 'SYSTEM_ADMIN', name: 'Sys' });
+    const sysProof = await reauthViaEmail(sysToken);
+    const res = await request(app).post('/account/two-step/disable').set(...auth(sysToken)).set(...sysProof).send({ code: '123456' }).expect(409);
+    expect(res.body.code).toBe('TWO_STEP_REQUIRED_BY_ROLE');
   });
 });

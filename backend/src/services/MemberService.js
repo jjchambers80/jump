@@ -11,6 +11,7 @@
 import { prisma } from '@jump/db';
 import { ConflictError, ForbiddenError, NotFoundError } from '../middleware/errorHandler.js';
 import emailService from './EmailService.js';
+import sessionService from './SessionService.js';
 import { platformBaseUrl } from '../utils/storefrontUrl.js';
 import logger from '../utils/logger.js';
 
@@ -149,6 +150,9 @@ class MemberService {
       }
       if (role !== undefined) await this._syncGlobalRole(tx, userId);
     });
+    // The frontend claims refresh also drops an inactive user, but only within
+    // 60 s; revoking the sessions makes the backend refuse them at once.
+    if (isActive === false) await sessionService.revokeAll(userId, 'deactivated');
     return format(await this._member(organizationId, userId));
   }
 

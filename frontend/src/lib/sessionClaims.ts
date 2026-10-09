@@ -18,7 +18,7 @@ export interface UserClaims {
   picture?: string | null;
   /** Whether the account has two-step authentication on (spec 030 C). */
   twoStepEnabled?: boolean;
-  /** An organization requires two-step ("secure sign-in method") and it is off. */
+  /** Two-step is required (by an organization or the SYSTEM_ADMIN role) and it is off. */
   twoStepSetupRequired?: boolean;
 }
 
@@ -50,6 +50,14 @@ export function shouldRefreshClaims(token: ClaimsToken, now: number): boolean {
   if (!token.sub) return false;
   const last = typeof token.claimsRefreshedAt === 'number' ? token.claimsRefreshedAt : 0;
   return now - last >= CLAIMS_REFRESH_MS;
+}
+
+/**
+ * Two-step must be set up before anything else: it is off and either the
+ * account is a SYSTEM_ADMIN or a membership requires it ("secure sign-in method").
+ */
+export function isTwoStepSetupRequired(role: string, twoStepEnabled: boolean, requiringMemberships: number): boolean {
+  return !twoStepEnabled && (role === 'SYSTEM_ADMIN' || requiringMemberships > 0);
 }
 
 /** Copy fresh DB claims onto the token and stamp the refresh time. */
