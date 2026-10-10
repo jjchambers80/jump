@@ -93,6 +93,23 @@ class VenueService {
     });
   }
 
+  /**
+   * Admin venue details page: the venue plus every event held there, newest
+   * date first, with what the page needs to list them. Read-only.
+   */
+  async getVenueDetails(orgId, id) {
+    return prisma.venue.findFirst({
+      where: { id, organizationId: orgId },
+      include: {
+        _count: { select: { events: true } },
+        events: {
+          orderBy: { date: 'desc' },
+          select: { id: true, slug: true, name: true, date: true, status: true, admissionMode: true, logoUrl: true },
+        },
+      },
+    });
+  }
+
   /** Get public venue fields and published event summaries. */
   async getPublicVenueById(identifier) {
     const venue = await findByPublicIdentifier(prisma.venue, identifier, {

@@ -89,7 +89,7 @@ export function OverviewSection({
 }
 
 /** Definition rows: label left, value right, hairline between. */
-function Facts({ rows }: { rows: [string, React.ReactNode][] }) {
+export function Facts({ rows }: { rows: [string, React.ReactNode][] }) {
   return (
     <dl className="divide-y divide-gray-100 text-sm dark:divide-slate-700/70">
       {rows.map(([label, value]) => (
@@ -102,7 +102,7 @@ function Facts({ rows }: { rows: [string, React.ReactNode][] }) {
   );
 }
 
-function Empty({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
+export function Empty({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
   return (
     <div className="rounded-lg border border-dashed border-gray-300 px-4 py-6 text-center dark:border-slate-600">
       <p className="text-sm text-gray-600 dark:text-slate-400">{children}</p>

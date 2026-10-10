@@ -63,11 +63,11 @@ orgRouter.get('/', requireAuth, requireOrganizer, verifyOrgOwnership, async (req
 
 /**
  * GET /organizations/:orgId/venues/:id
- * Get venue details (organizer/admin)
+ * Get venue details with the events held there (organizer/admin)
  */
 orgRouter.get('/:id', requireAuth, requireOrganizer, verifyOrgOwnership, async (req, res, next) => {
   try {
-    const venue = await venueService.getVenueById(req.params.orgId, req.params.id);
+    const venue = await venueService.getVenueDetails(req.params.orgId, req.params.id);
     if (!venue) {
       throw new NotFoundError('Venue not found');
     }

@@ -186,7 +186,7 @@ class AdminSearchService {
         id: venue.id,
         title: venue.name,
         subtitle: [venue.address, venue.city, venue.state].filter(Boolean).join(', '),
-        href: '/admin/venues',
+        href: `/admin/venues/${venue.id}`,
       })),
       ...customers.map((contact) => ({
         type: 'CUSTOMER',

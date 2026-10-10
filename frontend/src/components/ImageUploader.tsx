@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState, useCallback } from 'react';
+import { ImageUp } from 'lucide-react';
 
 export const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 export const MAX_SIZE_MB = 5;
@@ -77,19 +78,7 @@ export default function ImageUploader({
           />
         ) : (
           <div className="mb-3 flex justify-center">
-            <svg
-              className="h-10 w-10 text-gray-400 dark:text-slate-500"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"
-              />
-            </svg>
+            <ImageUp className="h-10 w-10 text-gray-400 dark:text-slate-500" aria-hidden />
           </div>
         )}
 
@@ -133,7 +122,7 @@ export default function ImageUploader({
         )}
       </div>
 
-      {error && <p className="mt-1 text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {error && <p role="alert" className="mt-1 text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
         JPG, PNG, GIF, or WebP up to {MAX_SIZE_MB} MB.
