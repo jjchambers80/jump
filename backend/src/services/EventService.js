@@ -8,7 +8,8 @@ import { NotFoundError, ValidationError, ConflictError } from '../middleware/err
 import logger from '../utils/logger.js';
 import { formatEventSummary } from '../utils/eventSummary.js';
 import taxService from './TaxService.js';
-import applicationFormService from './ApplicationFormService.js';
+import applicationFormService, { paymentsEnabled as applicationPaymentsEnabled } from './ApplicationFormService.js';
+import eventReadinessService from './EventReadinessService.js';
 import addOnService from './AddOnService.js';
 import mapService from './MapService.js';
 import { PAID_ORDER_STATUSES } from './paidStatuses.js';
@@ -482,7 +483,7 @@ class EventService {
    * @param {string} eventId - Event ID
    * @returns {Promise<Object>} Published event
    */
-  async publishEvent(orgId, eventId) {
+  async publishEvent(orgId, eventId, { openFormIds = [] } = {}) {
     const existing = await prisma.event.findFirst({
       where: {
         id: eventId,
@@ -500,26 +501,31 @@ class EventService {
       );
     }
 
-    if (existing.admissionMode === 'TICKETED') {
-      const tierCount = await prisma.priceTier.count({ where: { eventId, isActive: true } });
-      if (tierCount === 0)
-        throw new ValidationError('At least one active price tier is required to publish');
-      // Wizard drafts may not have a capacity yet (spec 050); the DB CHECK refuses it too.
-      if (existing.capacity === null) {
-        const error = new ValidationError('Set a capacity before publishing');
-        error.code = 'CAPACITY_REQUIRED';
-        throw error;
-      }
+    // Spec 050 §7.2: one readiness check, the same blockers GET …/readiness shows.
+    const readiness = await eventReadinessService.check(orgId, eventId);
+    if (!readiness.ready) {
+      const error = new Error('This event is not ready to publish');
+      error.name = 'UnprocessableEntityError';
+      error.statusCode = 422;
+      error.code = 'EVENT_NOT_READY';
+      error.details = { blockers: readiness.blockers, warnings: readiness.warnings };
+      throw error;
     }
 
-    const event = await prisma.event.update({
-      where: { id: eventId },
-      data: { status: 'PUBLISHED' },
-      include: {
-        venue: true,
-        priceTiers: { orderBy: { displayOrder: 'asc' } },
-      },
-    });
+    const formResults = await this._formsToOpen(eventId, openFormIds);
+    const openIds = formResults.filter((r) => r.status === 'OPEN').map((r) => r.formId);
+
+    const [event] = await prisma.$transaction([
+      prisma.event.update({
+        where: { id: eventId },
+        data: { status: 'PUBLISHED', ...(existing.setupCompletedAt === null && { setupCompletedAt: new Date() }) },
+        include: {
+          venue: true,
+          priceTiers: { orderBy: { displayOrder: 'asc' } },
+        },
+      }),
+      prisma.applicationForm.updateMany({ where: { id: { in: openIds }, eventId, status: 'DRAFT' }, data: { status: 'OPEN' } }),
+    ]);
 
     // Refresh tax rate on publish to ensure accuracy
     await this._refreshTaxRate(event);
@@ -529,9 +535,42 @@ class EventService {
       orgId,
       eventId: event.id,
       eventName: event.name,
+      openedForms: openIds.length,
     });
 
-    return this._formatEventDetail(event);
+    return { ...this._formatEventDetail(event), formResults };
+  }
+
+  /**
+   * Spec 050 §3: publish opens only the listed DRAFT forms of this event. A
+   * form that cannot open (PAID while the payments gate is off, no active
+   * tier, map not ready) is reported per form and never fails the publish.
+   */
+  async _formsToOpen(eventId, openFormIds) {
+    const ids = [...new Set((Array.isArray(openFormIds) ? openFormIds : []).filter((id) => typeof id === 'string'))];
+    if (!ids.length) return [];
+    const forms = await prisma.applicationForm.findMany({ where: { id: { in: ids }, eventId }, include: { tiers: true } });
+    const byId = new Map(forms.map((f) => [f.id, f]));
+    const results = [];
+    for (const formId of ids) {
+      const form = byId.get(formId);
+      if (!form || form.status !== 'DRAFT') {
+        results.push({ formId, status: 'REFUSED', code: 'FORM_NOT_DRAFT', message: 'Only draft forms of this event can be opened on publish' });
+        continue;
+      }
+      if (form.kind === 'PAID' && !applicationPaymentsEnabled()) {
+        results.push({ formId, status: 'REFUSED', code: 'PAID_FORMS_DISABLED', message: `${form.name} charges applicants, and paid applications are not available yet` });
+        continue;
+      }
+      try {
+        await applicationFormService._assertCanOpen(form);
+        results.push({ formId, status: 'OPEN' });
+      } catch (error) {
+        if (!error.statusCode || error.statusCode >= 500) throw error;
+        results.push({ formId, status: 'REFUSED', code: error.code || 'FORM_NOT_READY', message: error.message });
+      }
+    }
+    return results;
   }
 
   /**

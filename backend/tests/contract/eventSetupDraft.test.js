@@ -180,8 +180,10 @@ describe('Event setup drafts (spec 050-A)', () => {
       const { body: draft } = await setupCreate({ priceTiers: [{ name: 'GA', price: 10, quantityTotal: 5 }] });
       expect(draft.capacity).toBeNull();
       const res = await request(app).post(`${base()}/${draft.id}/publish`).set('Authorization', `Bearer ${token}`);
-      expect(res.status).toBe(400);
-      expect(res.body.code).toBe('CAPACITY_REQUIRED');
+      // Spec 050-C: the readiness check replaces 050-A's 400 CAPACITY_REQUIRED.
+      expect(res.status).toBe(422);
+      expect(res.body.code).toBe('EVENT_NOT_READY');
+      expect(res.body.details.blockers.map((b) => b.code)).toEqual(['CAPACITY_MISSING']);
     });
 
     it('the events summary and list treat null capacity as 0 / null', async () => {
