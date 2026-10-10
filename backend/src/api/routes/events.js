@@ -138,11 +138,17 @@ orgRouter.get('/export.csv', requireAuth, requireOrganizer, requireOrgMembership
 
 /**
  * POST /organizations/:orgId/events
- * Create a new event with price tiers (org-scoped)
+ * Create a new event with price tiers (org-scoped). `setup: true` creates a
+ * wizard DRAFT (spec 050): name, venueId, date required; capacity, tiers optional.
  */
 orgRouter.post('/', requireAuth, requireOrganizer, requireOrgMembership(), validateCreateEvent, async (req, res, next) => {
   try {
     const { orgId } = req.params;
+    if (req.body.setup === true) {
+      // Wizard create (spec 050 §7.1): a replay of the same Idempotency-Key returns the row, 200.
+      const { event, replayed } = await eventService.createSetupEvent(orgId, req.body, req.get('Idempotency-Key'));
+      return res.status(replayed ? 200 : 201).json(event);
+    }
     const result = await eventService.createEvent(orgId, req.body);
     res.status(201).json(result);
   } catch (error) {

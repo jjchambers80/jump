@@ -33,7 +33,7 @@ interface EventAnalytics {
     name: string;
     date: string;
     status: string;
-    capacity: number;
+    capacity: number | null;
     admissionMode: 'TICKETED' | 'RSVP';
     rsvpLimit: number | null;
     venue: { id: string; name: string; timezone?: string | null } | null;
@@ -203,7 +203,7 @@ export default function EventAnalyticsPage() {
                   <span>
                     {isRsvp
                       ? `RSVP limit: ${analytics.event.rsvpLimit ?? 'Unlimited'}`
-                      : `Capacity: ${analytics.event.capacity}`}
+                      : analytics.event.capacity === null ? 'Capacity not set' : `Capacity: ${analytics.event.capacity}`}
                   </span>
                 </div>
               </div>
@@ -229,7 +229,7 @@ export default function EventAnalyticsPage() {
                 ))
               : (
                 <>
-                  <StatCard label="Tickets Sold" value={analytics.totals.sold} subtext={`of ${analytics.event.capacity} capacity`} color="indigo" />
+                  <StatCard label="Tickets Sold" value={analytics.totals.sold} subtext={analytics.event.capacity === null ? 'Capacity not set' : `of ${analytics.event.capacity} capacity`} color="indigo" />
                   <StatCard
                     label="Redeemed"
                     value={analytics.totals.redeemed}

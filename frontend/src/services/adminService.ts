@@ -25,7 +25,7 @@ export interface AdminEvent {
   date: string;
   venue: { id: string; name: string; timezone?: string | null };
   organization?: { id: string; name: string };
-  capacity: number;
+  capacity: number | null;
   status: 'DRAFT' | 'PUBLISHED';
   ticketsSold: number;
   priceTiers: {
@@ -62,7 +62,7 @@ export interface DashboardOverview {
     venueName: string | null;
     timezone: string | null;
     sold: number;
-    capacity: number;
+    capacity: number | null;
   }[];
   recentOrders: {
     id: string;

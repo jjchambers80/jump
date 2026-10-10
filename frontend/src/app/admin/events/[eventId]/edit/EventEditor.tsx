@@ -144,7 +144,7 @@ interface EventDetail {
   description: string | null;
   logoUrl: string | null;
   date: string;
-  capacity: number;
+  capacity: number | null;
   category: string | null;
   status: string;
   admissionMode: AdmissionMode;
@@ -294,7 +294,7 @@ function EditEventContent({ scope }: { scope: EditorScope }) {
         setDescription(event.description || '');
         setVenueId(event.venue?.id || '');
         setDate(toDatetimeLocal(event.date, event.venue?.timezone));
-        setCapacity(String(event.capacity));
+        setCapacity(event.capacity === null ? '' : String(event.capacity));
         setCategory(event.category || '');
         setLogoUrl(event.logoUrl || null);
         setSlug(event.slug || '');
@@ -520,14 +520,14 @@ function EditEventContent({ scope }: { scope: EditorScope }) {
       }
 
       if (admissionMode === 'RSVP') {
-        if (capacity !== String(eventData?.capacity))
+        if (capacity !== String(eventData?.capacity ?? ''))
           payload.capacity = rsvpLimitEnabled && rsvpLimit ? parseInt(rsvpLimit) : 0;
         const newRsvpLimit = rsvpLimitEnabled && rsvpLimit ? parseInt(rsvpLimit) : null;
         if (newRsvpLimit !== eventData?.rsvpLimit) payload.rsvpLimit = newRsvpLimit;
         const newRsvpMax = parseInt(rsvpMaxPartySize) || 1;
         if (newRsvpMax !== eventData?.rsvpMaxPartySize) payload.rsvpMaxPartySize = newRsvpMax;
       } else {
-        if (capacity !== String(eventData?.capacity)) payload.capacity = parseInt(capacity);
+        if (capacity !== String(eventData?.capacity ?? '')) payload.capacity = capacity ? parseInt(capacity) : null;
       }
 
       // Save tier changes
@@ -897,7 +897,7 @@ function EditEventContent({ scope }: { scope: EditorScope }) {
               zone={venueZone}
               venueName={selectedVenue?.name ?? null}
               admissionMode={admissionMode}
-              capacity={capacityNum}
+              capacity={capacity === '' ? null : capacityNum}
               tiers={priceTiers.map((t) => ({
                 key: t.key,
                 name: t.name,

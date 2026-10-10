@@ -16,7 +16,7 @@ interface EventSummary {
   name: string;
   date: string;
   status: string;
-  capacity: number;
+  capacity: number | null;
   venue: { id: string; name: string; timezone?: string | null } | null;
   priceTiers: {
     id: string;
@@ -87,7 +87,7 @@ export default function AnalyticsOverviewPage() {
     (sum, e) => sum + e.priceTiers.reduce((s, t) => s + t.quantitySold, 0),
     0
   );
-  const totalCapacity = publishedEvents.reduce((sum, e) => sum + e.capacity, 0);
+  const totalCapacity = publishedEvents.reduce((sum, e) => sum + (e.capacity ?? 0), 0);
   const totalRevenue = publishedEvents.reduce(
     (sum, e) => sum + e.priceTiers.reduce((s, t) => s + t.quantitySold * t.price, 0),
     0
@@ -225,7 +225,7 @@ export default function AnalyticsOverviewPage() {
                         0
                       );
                       const pct =
-                        event.capacity > 0 ? Math.round((sold / event.capacity) * 100) : 0;
+                        event.capacity ? Math.round((sold / event.capacity) * 100) : 0;
 
                       return (
                         <tr key={event.id} className="text-gray-900 dark:text-slate-100">

@@ -23,6 +23,10 @@ function DateTile({ date, zone }: { date: string; zone: string | null }) {
 
 function FillMeter({ event }: { event: Upcoming }) {
   const noun = event.admissionMode === 'RSVP' ? 'going' : 'sold';
+  // Wizard drafts (spec 050) have no capacity yet: say so instead of a meter.
+  if (event.capacity === null) {
+    return <p className="mt-2 text-xs text-gray-600 dark:text-slate-300">Capacity not set</p>;
+  }
   const pct = event.capacity > 0 ? Math.min(100, Math.round((event.sold / event.capacity) * 100)) : 0;
   const label = `${event.sold.toLocaleString('en-US')} of ${event.capacity.toLocaleString('en-US')} ${noun}`;
   return (
