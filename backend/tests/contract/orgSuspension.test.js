@@ -77,7 +77,7 @@ describe('Organization suspension', () => {
       data: { organizationId: org.id, email: 'buyer@suspension-test.com', firstName: 'B', lastName: 'Uyer' },
     });
     const order = await prisma.order.create({
-      data: { eventId: event.id, contactId: contact.id, orderRef: `SUSP-${Date.now()}`, totalAmount: 1000, quantity: 1, status: 'COMPLETED' },
+      data: { organizationId: org.id, eventId: event.id, contactId: contact.id, orderRef: `SUSP-${Date.now()}`, totalAmount: 1000, quantity: 1, status: 'COMPLETED' },
     });
     ticket = await prisma.ticket.create({
       data: {

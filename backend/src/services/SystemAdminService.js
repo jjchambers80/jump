@@ -75,7 +75,7 @@ class SystemAdminService {
     if (!existing) throw new NotFoundError('Organization not found');
     if (existing.status !== status) {
       await prisma.organization.update({ where: { id }, data: { status } });
-      domainService._invalidate();
+      domainService.clearCache();
       await securityEventService.record(actor.id, status === 'INACTIVE' ? 'ORG_SUSPENDED' : 'ORG_REACTIVATED', {
         req,
         meta: { organizationId: id },
