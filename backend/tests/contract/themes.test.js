@@ -222,6 +222,17 @@ describe('Online store themes contract', () => {
       expect(Object.keys(res.body.details.errors)).toEqual(['documents.events']);
     });
 
+    it('refuses an invalid scheme accent with a path the editor can name', async () => {
+      const bad = {
+        colors: {
+          schemes: [{ id: 'scheme-1', name: 'Page', background: 'auto', foreground: 'auto', accent: 'auto', accentForeground: 'auto', secondaryButtonLabel: 'auto', border: 'auto', muted: 'auto', shadow: 'auto' }],
+        },
+      };
+      const res = await save({ themeVersion: 2, settings: bad });
+      expect(res.status).toBe(400);
+      expect(res.body.details.errors).toMatchObject({ 'colors.schemes[0].accent': 'must be a #rrggbb color or "brand"' });
+    });
+
     it('data: null deletes a document so the preset default applies again', async () => {
       const res = await save({ themeVersion: 2, documents: { events: { data: null, version: await docVersion('events') } } });
       expect(res.status).toBe(200);

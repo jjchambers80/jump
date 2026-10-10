@@ -1,6 +1,7 @@
 // Theme settings → CSS (spec 038 §6.3). Every value is range-checked by the
 // backend; numbers are re-checked here so nothing but a number or a #rrggbb
-// color can reach a style. Card 038F wires the remaining groups.
+// color can reach a style. Card 038F wires the remaining groups; spec 049
+// card C adds typography (fonts come from theme/fonts.ts).
 
 import { BRAND_DEFAULTS } from '@/lib/color';
 import type { ThemeSettings } from './types';
@@ -8,10 +9,20 @@ import type { ThemeSettings } from './types';
 const HEX = /^#[0-9a-f]{6}$/i;
 const num = (value: unknown, fallback: number) => (typeof value === 'number' && Number.isFinite(value) ? value : fallback);
 
+const SYSTEM_STACK = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+const FONT_KEY = /^[a-z][a-z-]{1,30}$/;
+const LETTER_SPACING: Record<string, string> = { tight: '-0.02em', normal: 'normal', wide: '0.05em' };
+
+/** A FONTS key → font-family. `--theme-font-<key>` is set by the font's class (theme/fonts.ts). */
+export function fontStack(key: unknown): string {
+  return typeof key === 'string' && key !== 'system' && FONT_KEY.test(key) ? `var(--theme-font-${key}), ${SYSTEM_STACK}` : SYSTEM_STACK;
+}
+
 export function settingsVars(settings: ThemeSettings): Record<string, string> {
   const layout = settings.layout ?? {};
   const logo = settings.logo ?? {};
   const buttons = settings.buttons ?? {};
+  const type = settings.typography ?? {};
   const radius = buttons.shape === 'pill' ? 9999 : buttons.shape === 'square' ? 0 : num(buttons.radius, 8);
   return {
     '--theme-page-width': `${num(layout.pageWidth, 1280)}px`,
@@ -19,6 +30,13 @@ export function settingsVars(settings: ThemeSettings): Record<string, string> {
     '--theme-logo-width': `${num(logo.desktopWidth, 120)}px`,
     '--theme-logo-width-mobile': `${num(logo.mobileWidth, 90)}px`,
     '--theme-button-radius': `${radius}px`,
+    '--font-heading': fontStack(type.headingFont ?? 'inter'),
+    '--font-body': fontStack(type.bodyFont ?? 'inter'),
+    '--heading-scale': String(num(type.headingScale, 100) / 100),
+    '--body-scale': String(num(type.bodyScale, 100) / 100),
+    '--letter-spacing': LETTER_SPACING[type.letterSpacing] ?? 'normal',
+    // Unset for "as typed": text-transform then inherits (globals.css).
+    ...(type.headingCase === 'uppercase' ? { '--heading-case': 'uppercase' } : {}),
   };
 }
 

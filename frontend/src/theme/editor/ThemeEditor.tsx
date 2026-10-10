@@ -8,9 +8,9 @@ import { storefrontUrl } from '@/lib/publicPaths';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
-import { FULL_WIDTH_TEMPLATE, getPreset, presetDocument, validateDocument, withBrand } from '@jump/theme';
-import { describeDocumentError, describeSaveError } from './errors';
+import { ArrowLeft, Settings } from 'lucide-react';
+import { FULL_WIDTH_TEMPLATE, getPreset, presetDocument, resolveSettings, schemesUsed, validateDocument, validateSettings, withBrand } from '@jump/theme';
+import { describeDocumentError, describeSaveError, describeSettingsError } from './errors';
 import ActionsMenu from '@/components/ActionsMenu';
 import { useThemeMode } from '@/components/ThemeProvider';
 import { useOrg } from '@/components/OrgContext';
@@ -21,18 +21,22 @@ import { codeHref, themesApi, type ThemeDetail, type ThemeDocumentData } from '@
 import api, { type OnlineStorePage } from '@/services/api';
 import type { PublicPage } from '@/components/storefront/StorefrontPageBody';
 import type { SectionContext } from '../sections/context';
-import type { ResolvedData } from '../types';
+import type { ResolvedData, ThemeSettings } from '../types';
 import { Puck, blocksPlugin, usePuck, type Data, type Plugin } from './puck';
 import { buildEditorConfig } from './config';
-import { fromEditorData, sameDocument, toEditorData, TEMPLATE_KEYS, TEMPLATE_LABELS, type TemplateKey } from './data';
+import { fromEditorData, sameDocument, stableJson, toEditorData, TEMPLATE_KEYS, TEMPLATE_LABELS, type TemplateKey } from './data';
 import { EditorServicesContext } from './EditorServices';
 import RevisionsDialog from './RevisionsDialog';
 import SectionsOutline from './SectionsOutline';
+import ThemeSettingsPanel, { ThemeSettingsInfoContext } from './ThemeSettingsPanel';
+import { schemesOf, type StoredSettings } from './settingsDraft';
 
 // Fixed documents, plus `page:<id>` for each full-width Content page once opened.
 type DocKey = string;
 const DOC_KEYS: DocKey[] = ['header', 'footer', 'home', 'events'];
 type Docs = Record<DocKey, ThemeDocumentData>;
+/** sessionStorage backup after a 409: unsaved documents and theme settings. */
+type Backup = { docs: Docs; settings?: StoredSettings };
 
 const DOC_LABELS: Record<string, string> = { header: 'Header', footer: 'Footer', home: 'Home page', events: 'Events page' };
 const isPageKey = (key: string) => key.startsWith('page:');
@@ -91,12 +95,22 @@ function InspectorToggle() {
   );
 }
 
+/** Set by Puck's onAction when undo/redo restores a UI without the settings panel open. */
+const reopenSettings = { current: false };
+
 // Puck's plugin rail is mouse-only in 0.23 (contracts C12); these buttons
 // reach the same panels from the keyboard.
 function PanelButtons() {
   const { appState, dispatch } = usePuck();
   const current = appState.ui.plugin?.current;
   const open = (plugin: string) => dispatch({ type: 'setUi', ui: { leftSideBarVisible: true, plugin: { current: plugin } } as any });
+  // Undo/redo restore Puck's whole UI state, which closed the settings panel
+  // when undoing a settings edit: open it again.
+  useEffect(() => {
+    if (!reopenSettings.current) return;
+    reopenSettings.current = false;
+    if (current !== 'theme-settings') open('theme-settings');
+  }); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div role="group" aria-label="Left panel" className="flex gap-1">
       <button type="button" aria-pressed={current === 'outline'} onClick={() => open('outline')} className={headerButton}>
@@ -105,14 +119,50 @@ function PanelButtons() {
       <button type="button" aria-pressed={current === 'blocks'} onClick={() => open('blocks')} className={headerButton}>
         Add
       </button>
+      <button
+        type="button"
+        aria-pressed={current === 'theme-settings'}
+        aria-label="Theme settings"
+        title="Theme settings"
+        onClick={() => open('theme-settings')}
+        className={`${headerButton} inline-flex items-center`}
+      >
+        <Settings className="h-4 w-4" aria-hidden />
+      </button>
     </div>
   );
 }
+
+// Module constants, not inline literals: Puck's viewport effect depends on
+// them and, while history holds one entry, overwrites that entry with the
+// current state each time it runs, so a re-render after the first edit
+// made that edit impossible to undo.
+// Never wait for the host's stylesheets: one that never finishes loading (a
+// browser extension's, a blocked font CSS) left the canvas spinning forever.
+const IFRAME = { enabled: true, waitForStyles: false };
+const VIEWPORTS = [
+  { width: '100%' as const, label: 'Desktop', icon: 'Monitor' as any },
+  { width: 390, height: 'auto' as const, label: 'Mobile', icon: 'Smartphone' as any },
+];
 
 const sectionsPlugin: Plugin = {
   name: 'outline', // replaces Puck's own outline (plugins are keyed by name)
   label: 'Sections',
   render: () => <SectionsOutline />,
+};
+
+const settingsPlugin: Plugin = {
+  name: 'theme-settings',
+  label: 'Theme settings',
+  icon: <Settings />,
+  render: () => <ThemeSettingsPanel />,
+};
+
+const PLUGINS = [sectionsPlugin, blocksPlugin({ label: 'Add' }), settingsPlugin];
+
+// Puck's history back/forward dispatch `set`.
+const onAction = (action: { type: string }, _state: unknown, prev: { ui: { plugin?: { current?: string | null } } }) => {
+  if (action.type === 'set' && prev.ui.plugin?.current === 'theme-settings') reopenSettings.current = true;
 };
 
 export default function ThemeEditor({ themeId }: { themeId: string }) {
@@ -136,6 +186,9 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [docs, setDocs] = useState<Docs | null>(null);
   const [saved, setSaved] = useState<Docs | null>(null);
+  // Stored (partial) theme settings: the draft rides root.props.themeSettings in Puck.
+  const [settings, setSettings] = useState<StoredSettings>({});
+  const [savedSettings, setSavedSettings] = useState<StoredSettings>({});
   const [versions, setVersions] = useState<Record<DocKey, number> | null>(null);
   const [themeVersion, setThemeVersion] = useState(1);
   const [page, setPage] = useState<TemplateKey>(initialPage);
@@ -151,7 +204,7 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
   const [conflict, setConflict] = useState(false);
   const [liveNote, setLiveNote] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [backup, setBackup] = useState<Docs | null>(null);
+  const [backup, setBackup] = useState<Backup | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const resetKeys = useRef(new Set<DocKey>());
 
@@ -166,6 +219,8 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
       setLoaded(next);
       setDocs(next.docs);
       setSaved(next.docs);
+      setSettings(next.theme.settings ?? {});
+      setSavedSettings(next.theme.settings ?? {});
       setVersions(next.versions);
       setThemeVersion(next.theme.version);
       setFiles(next.resolved.files ?? {});
@@ -207,7 +262,8 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
     () => (docs && saved ? Object.keys(docs).filter((key) => resetKeys.current.has(key) || !sameDocument(docs[key], saved[key])) : []),
     [docs, saved],
   );
-  const dirty = dirtyKeys.length > 0;
+  const settingsDirty = stableJson(settings) !== stableJson(savedSettings);
+  const dirty = dirtyKeys.length > 0 || settingsDirty;
 
   useEffect(() => {
     if (!dirty) return;
@@ -219,10 +275,13 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [dirty]);
 
+  const presetSettings = useMemo(() => getPreset(loaded?.theme.presetKey ?? 'eventimus-default')?.settings, [loaded]);
+  // Editor-side resolution of the draft (same rule as the server's resolvedSettings).
+  const resolvedSettings = useMemo(() => resolveSettings(settings, presetSettings) as ThemeSettings, [settings, presetSettings]);
+  const schemesKey = JSON.stringify(schemesOf(settings, presetSettings).map((s) => [s.id, s.name]));
   const schemes = useMemo(
-    () => ((loaded?.theme.resolvedSettings?.colors?.schemes as { id: string; name: string }[] | undefined) ??
-      (getPreset(loaded?.theme.presetKey ?? 'eventimus-default')?.settings.colors.schemes ?? [])).map((s: { id: string; name: string }) => ({ id: s.id, name: s.name })),
-    [loaded],
+    () => (JSON.parse(schemesKey) as [string, string][]).map(([id, name]) => ({ id, name })),
+    [schemesKey],
   );
   const config = useMemo(() => buildEditorConfig({ schemes, menus, galleries }, page), [schemes, menus, galleries, page]);
 
@@ -232,11 +291,8 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
       organization: loaded.organization,
       resolved: { ...loaded.resolved, files, page: pagePayloads[page] },
       // Spec 049: the canvas inherits the org brand like the live render does;
-      // resolvedSettings itself stays the theme's own values (what the editor saves).
-      settings: withBrand(
-        { ...loaded.theme.resolvedSettings, colors: { schemes: loaded.theme.resolvedSettings?.colors?.schemes ?? getPreset(loaded.theme.presetKey)?.settings.colors.schemes } },
-        loaded.organization,
-      ),
+      // the draft settings themselves stay the theme's own values (what the editor saves).
+      settings: withBrand(resolvedSettings, loaded.organization),
       content: loaded.content,
       host: null,
       nameIsHeading: true,
@@ -245,7 +301,7 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
       editing: true,
     };
     return { ctx };
-  }, [loaded, files, pagePayloads, page]);
+  }, [loaded, files, pagePayloads, page, resolvedSettings]);
 
   const services = useMemo(
     () => ({
@@ -259,6 +315,7 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
   const onChange = useCallback(
     (data: Data) => {
       const split = fromEditorData(data as any);
+      setSettings((data.root.props as any)?.themeSettings ?? {});
       setDocs((prev) => (prev ? { ...prev, header: split.header, footer: split.footer, [page]: split.template } : prev));
     },
     [page],
@@ -291,6 +348,15 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
   const pageLabel = (key: string) =>
     TEMPLATE_LABELS[key] ?? DOC_LABELS[key] ?? `Page: ${contentPages.find((p) => p.key === key)?.title ?? pagePayloads[key]?.title ?? 'untitled'}`;
 
+  // Which loaded pages use each scheme: those schemes cannot be removed.
+  const settingsInfo = useMemo(() => {
+    const usedSchemes: Record<string, string[]> = {};
+    for (const [key, doc] of Object.entries(docs ?? {})) {
+      for (const id of schemesUsed(doc)) (usedSchemes[id] ??= []).push(pageLabel(key));
+    }
+    return { presetSettings, usedSchemes, brandColor: loaded?.organization.brandColor ?? null };
+  }, [docs, presetSettings, loaded]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const resetPage = () => {
     const preset = presetDocument(loaded?.theme.presetKey ?? 'eventimus-default', page);
     if (!preset || !window.confirm(`Reset the ${pageLabel(page).toLowerCase()} to the theme default? Save to keep the change.`)) return;
@@ -307,11 +373,16 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
     // Same validator the server runs: catch problems here, name them in
     // words, and skip the round trip.
     const schemeIds = new Set(schemes.map((s: { id: string }) => s.id));
-    const problems = dirtyKeys.flatMap((key) =>
-      Object.entries(validateDocument(key, docs[key], { schemeIds }).errors).map(([path, message]) =>
-        describeDocumentError(key, path, message as string, docs[key]),
+    const problems = [
+      ...(settingsDirty
+        ? Object.entries(validateSettings(settings).errors).map(([path, message]) => describeSettingsError(path, message as string, settings))
+        : []),
+      ...dirtyKeys.flatMap((key) =>
+        Object.entries(validateDocument(key, docs[key], { schemeIds }).errors).map(([path, message]) =>
+          describeDocumentError(key, path, message as string, docs[key]),
+        ),
       ),
-    );
+    ];
     if (problems.length) {
       setSaveError({ message: 'Fix these before saving:', details: problems });
       setSaving(false);
@@ -325,8 +396,13 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
       }),
     );
     try {
-      const result = await themesApi.save(themeId, { themeVersion, documents });
+      const result = await themesApi.save(themeId, {
+        themeVersion,
+        ...(dirtyKeys.length ? { documents } : {}),
+        ...(settingsDirty ? { settings } : {}),
+      });
       setSaved(docs);
+      setSavedSettings(settings);
       setVersions((prev) => ({ ...(prev as Record<DocKey, number>), ...(result.documents as Record<DocKey, number>) }));
       setThemeVersion(result.theme.version);
       resetKeys.current.clear();
@@ -339,7 +415,7 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
     } catch (err: any) {
       if (err?.status === 409) {
         try {
-          window.sessionStorage.setItem(BACKUP_KEY + themeId, JSON.stringify(docs));
+          window.sessionStorage.setItem(BACKUP_KEY + themeId, JSON.stringify({ docs, settings } satisfies Backup));
         } catch {
           /* storage full: the dialog still explains */
         }
@@ -348,7 +424,7 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
         const errors = err?.details?.errors as Record<string, string> | undefined;
         setSaveError({
           message: err?.message || 'Could not save',
-          details: errors ? Object.entries(errors).map(([path, message]) => describeSaveError(path, message, docs)) : undefined,
+          details: errors ? Object.entries(errors).map(([path, message]) => describeSaveError(path, message, docs, settings)) : undefined,
         });
       }
     } finally {
@@ -358,7 +434,9 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
 
   const applyBackup = () => {
     if (!backup) return;
-    setDocs(backup);
+    // Backups from before settings were kept are a bare Docs map.
+    setDocs('docs' in backup && backup.docs ? backup.docs : (backup as unknown as Docs));
+    if (backup.settings) setSettings(backup.settings);
     setBackup(null);
     window.sessionStorage.removeItem(BACKUP_KEY + themeId);
     setMountKey((k) => k + 1);
@@ -382,11 +460,12 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
     return <div className="min-h-screen animate-pulse bg-gray-100" aria-busy="true" aria-label="Loading the theme editor" />;
   }
 
-  const data = toEditorData({ header: docs.header, footer: docs.footer, template: docs[page] });
+  const data = toEditorData({ header: docs.header, footer: docs.footer, template: docs[page] }, settings);
   const badge = loaded.theme.role === 'MAIN' ? 'Active' : 'Draft';
 
   return (
     <EditorServicesContext.Provider value={services}>
+      <ThemeSettingsInfoContext.Provider value={settingsInfo}>
       <div className="flex h-screen flex-col bg-white text-gray-900">
         {(liveNote || backup || saveError || status) && (
           <div className="space-y-1 border-b border-gray-200 bg-white px-4 py-2 text-sm">
@@ -432,15 +511,10 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
             data={data as Data}
             metadata={metadata}
             onChange={onChange}
-            plugins={[sectionsPlugin, blocksPlugin({ label: 'Add' })]}
-            // Never wait for the host's stylesheets: one that never finishes
-            // loading (a browser extension's, a blocked font CSS) left the
-            // canvas spinning forever. Styles apply as they arrive.
-            iframe={{ enabled: true, waitForStyles: false }}
-            viewports={[
-              { width: '100%', label: 'Desktop', icon: 'Monitor' as any },
-              { width: 390, height: 'auto', label: 'Mobile', icon: 'Smartphone' as any },
-            ]}
+            plugins={PLUGINS}
+            onAction={onAction}
+            iframe={IFRAME}
+            viewports={VIEWPORTS}
             headerTitle={`${loaded.theme.name} · ${badge}`}
             renderHeaderActions={() => (
               <div className="flex flex-wrap items-center justify-end gap-1.5" data-testid="editor-actions">
@@ -497,7 +571,7 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
                 </button>
                 {dirty && (
                   <span id="unsaved-summary" className="sr-only">
-                    Unsaved changes: {dirtyKeys.map(pageLabel).join(', ')}
+                    Unsaved changes: {[...dirtyKeys.map(pageLabel), ...(settingsDirty ? ['Theme settings'] : [])].join(', ')}
                   </span>
                 )}
               </div>
@@ -553,6 +627,7 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
           </div>
         </div>
       )}
+      </ThemeSettingsInfoContext.Provider>
     </EditorServicesContext.Provider>
   );
 }

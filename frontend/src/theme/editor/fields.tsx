@@ -46,20 +46,20 @@ const OPTION_LABELS: Record<string, string> = {
   screen: 'Fill the window',
 };
 
-function optionLabel(value: unknown) {
+export function optionLabel(value: unknown) {
   const s = String(value);
   return OPTION_LABELS[s] ?? s.charAt(0).toUpperCase() + s.slice(1).replace(/-/g, ' ');
 }
 
-const input =
+export const input =
   'block w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500/30';
 const small = 'mt-1 text-xs text-gray-500';
-const button =
-  'rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500';
+export const button =
+  'rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:cursor-not-allowed disabled:opacity-50';
 
 type ImageValue = { fileId: string; alt?: string; decorative?: boolean } | null;
 
-function ImageFieldControl({ label, value, onChange }: { label: string; value: ImageValue; onChange: (v: ImageValue) => void }) {
+export function ImageFieldControl({ label, value, onChange }: { label: string; value: ImageValue; onChange: (v: ImageValue) => void }) {
   const [open, setOpen] = useState(false);
   const chooseRef = useRef<HTMLButtonElement>(null);
   const services = useEditorServices();

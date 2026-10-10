@@ -2,7 +2,7 @@
 // "documents.home.content[0].props.image" + "needs alt text…" becomes
 // "Home page › Hero › Image: needs alt text…".
 
-import { BLOCKS, COMMON_SECTION_FIELDS, SECTIONS } from '@jump/theme';
+import { BLOCKS, COMMON_SECTION_FIELDS, SECTIONS, SETTINGS_GROUPS } from '@jump/theme';
 import type { ThemeDocumentData } from '@/lib/themes';
 
 const DOC_LABELS: Record<string, string> = { header: 'Header', footer: 'Footer', home: 'Home page', events: 'Events page' };
@@ -45,11 +45,40 @@ export function describeDocumentError(key: string, path: string, message: string
   return `${parts.join(' › ')}: ${message}`;
 }
 
-/** Server errors are keyed "documents.<key>.<path>"; anything else is shown as sent. */
-export function describeSaveError(fullPath: string, message: string, docs: Record<string, ThemeDocumentData | null | undefined>) {
+const SLOT_LABELS: Record<string, string> = { foreground: 'Text', accentForeground: 'Text on accent', secondaryButtonLabel: 'Secondary button label', muted: 'Muted text' };
+
+/**
+ * Settings validator paths: "colors.schemes[1].accent" → "Theme settings ›
+ * Colors › Inverse › Accent", "typography.headingFont" → "… › Typography › Heading font".
+ */
+export function describeSettingsError(path: string, message: string, settings?: Record<string, any> | null) {
+  const parts = ['Theme settings'];
+  const scheme = path.match(/^colors\.schemes\[(\d+)\](?:\.(\w+))?/);
+  const field = path.match(/^(\w+)(?:\.(\w+))?$/);
+  if (scheme) {
+    parts.push('Colors', settings?.colors?.schemes?.[Number(scheme[1])]?.name || `Scheme ${Number(scheme[1]) + 1}`);
+    const slot = scheme[2];
+    if (slot) parts.push(SLOT_LABELS[slot] ?? slot.charAt(0).toUpperCase() + slot.slice(1));
+  } else if (field && (SETTINGS_GROUPS as any)[field[1]]) {
+    const group = (SETTINGS_GROUPS as any)[field[1]];
+    parts.push(group.label);
+    if (field[2]) parts.push(group.fields?.[field[2]]?.label ?? field[2]);
+  } else parts.push(path);
+  return `${parts.join(' › ')}: ${message}`;
+}
+
+/** Server errors are keyed "documents.<key>.<path>" or a settings path; anything else is shown as sent. */
+export function describeSaveError(
+  fullPath: string,
+  message: string,
+  docs: Record<string, ThemeDocumentData | null | undefined>,
+  settings?: Record<string, any> | null,
+) {
   const m = fullPath.match(/^documents\.([a-z_:]+[A-Za-z0-9_-]*?)\.(content\[.*|root\..*)$/);
   if (m) return describeDocumentError(m[1], m[2], message, docs[m[1]]);
   const whole = fullPath.match(/^documents\.([^.]+)$/);
   if (whole) return `${DOC_LABELS[whole[1]] ?? whole[1]}: ${message}`;
+  if ((SETTINGS_GROUPS as any)[fullPath.split(/[.[]/)[0]])
+    return describeSettingsError(fullPath, message, settings);
   return `${fullPath}: ${message}`;
 }

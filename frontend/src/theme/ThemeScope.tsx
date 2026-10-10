@@ -37,6 +37,8 @@ export interface ThemeScopeProps {
   /** Thumbnails: no script and no client sync; the caller writes the mode class. */
   staticMode?: boolean;
   className?: string;
+  /** Theme font classes (theme/fonts.ts). Set: the theme typography rules in globals.css apply. */
+  fontClassName?: string;
   children: ReactNode;
 }
 
@@ -49,6 +51,7 @@ export default function ThemeScope({
   script = true,
   staticMode = false,
   className,
+  fontClassName,
   children,
 }: ThemeScopeProps) {
   const mode = isThemeMode(themeMode) ? themeMode : null;
@@ -57,8 +60,9 @@ export default function ThemeScope({
   const style = brand || secondary || vars ? ({ ...(brand ?? {}), ...(secondary ?? {}), ...(vars ?? {}) } as CSSProperties) : undefined;
   return (
     <div
-      className={className ? `brand-scope ${className}` : 'brand-scope'}
+      className={['brand-scope', className, fontClassName].filter(Boolean).join(' ')}
       style={style}
+      data-theme-type={fontClassName !== undefined ? '' : undefined}
       data-brand-color={brand ? brand['--brand'] : undefined}
       data-theme-mode={mode ?? undefined}
     >

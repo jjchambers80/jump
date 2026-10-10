@@ -10,6 +10,7 @@ import { BLOCKS, COMMON_SECTION_FIELDS, DOCUMENTS, SECTIONS, fieldDefaults, sect
 import { EyeOff } from 'lucide-react';
 import { renderConfig } from '../render/config';
 import ThemeScope from '../ThemeScope';
+import { themeFontClasses } from '../fonts';
 import RetroGridBackground from '../RetroGridBackground';
 import { pageWidthVars, schemeCss, settingsVars } from '../settingsCss';
 import { sectionContext } from '../sections/context';
@@ -193,6 +194,7 @@ export function buildEditorConfig(ctx: FieldContext, page = 'home'): Config {
               themeMode={section.organization.themeMode}
               vars={settingsVars(section.settings)}
               css={schemeCss(section.settings)}
+              fontClassName={themeFontClasses(section.settings)}
               staticMode
               className="min-h-screen bg-gray-50 dark:bg-slate-900"
             >

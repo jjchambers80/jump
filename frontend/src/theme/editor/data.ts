@@ -96,11 +96,16 @@ function clean(props: Record<string, any>) {
   return Object.fromEntries(Object.entries(props).filter(([, v]) => v !== null && v !== undefined));
 }
 
-export function toEditorData(docs: { header: ThemeDocumentData; footer: ThemeDocumentData; template: ThemeDocumentData }): EditorData {
+/** `themeSettings`: the stored theme settings, carried in root props so Puck's undo covers them (spike item 6). */
+export function toEditorData(
+  docs: { header: ThemeDocumentData; footer: ThemeDocumentData; template: ThemeDocumentData },
+  themeSettings?: Record<string, any>,
+): EditorData {
   return {
     root: {
       props: {
         ...(docs.template.root?.props ?? {}),
+        ...(themeSettings ? { themeSettings } : {}),
         header: docs.header.content.map(flattenItem),
         template: docs.template.content.map(flattenItem),
         footer: docs.footer.content.map(flattenItem),
@@ -126,7 +131,14 @@ export function fromEditorData(data: EditorData): { header: ThemeDocumentData; t
   };
 }
 
+/** JSON with object keys sorted: Puck reorders props (slot fields first), which is not a change. */
+export function stableJson(value: unknown): string {
+  return JSON.stringify(value ?? null, (_key, v) =>
+    v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, v[k]])) : v,
+  );
+}
+
 /** Stable comparison for dirty tracking. */
 export function sameDocument(a: ThemeDocumentData | null | undefined, b: ThemeDocumentData | null | undefined) {
-  return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  return stableJson(a) === stableJson(b);
 }
