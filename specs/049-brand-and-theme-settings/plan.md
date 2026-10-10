@@ -61,10 +61,10 @@ Decisions (from the owner):
 - Panel: an accordion with one group open at a time, rendering only `logo`, `colors` and `typography` from `SETTINGS_GROUPS` with a small field renderer keyed on the field types in `packages/theme/src/fields.js` (image → StoreFile picker already used by section fields; range → slider + number; select).
   - **Logo:** the image shows "Using brand logo" plus a link to Settings › Brand when empty; one logo size (phones get 3/4); no favicon (always the square logo).
   - **Colors:** a scheme list with add/duplicate/remove (removal blocked when in use; surface the backend error). Three colors per scheme only — background, text, accent (owner decision 2026-10-10; text on accent is derived, older slots dropped) — each `auto` / `brand` / `brand-secondary` (accent) / hex, with a contrast warning via `evaluateBrandColor`.
-  - **Typography:** one font family for the whole theme (owner decision 2026-10-10: no heading/body split, sizes, case or spacing; theme settings stay simple).
+  - **Typography:** heading font + body font, each applied across the whole theme (owner decisions 2026-10-10: no sizes, case or spacing; theme settings stay simple).
   - Each group has "Reset to theme defaults".
-- Typography CSS: `settingsVars` sets `--theme-font`; one rule on the theme scope sets `font-family`, inherited by the header, sections and footer. Legacy heading/body keys fold into `font` (`normalizeTypography`).
-- Fonts: one `frontend/src/theme/fonts.ts` that declares the 11 non-system `FONTS` with `next/font/google` (`preload: false`, `display: 'swap'`, a `variable` each), matching the existing `Inter` usage in `app/layout.tsx`. Map the font key → CSS variable; `ThemeScope` applies only the chosen font's class.
+- Typography CSS: `settingsVars` sets `--theme-font` (body, inherited by header, sections, footer) and `--theme-heading-font` (all h1–h6). The legacy one-font `font` fills both (`normalizeTypography`).
+- Fonts: one `frontend/src/theme/fonts.ts` that declares the 11 non-system `FONTS` with `next/font/google` (`preload: false`, `display: 'swap'`, a `variable` each), matching the existing `Inter` usage in `app/layout.tsx`. Map the font key → CSS variable; `ThemeScope` applies only the two chosen fonts' classes.
 - Live preview: the canvas `ThemeScope` reads `root.props.themeSettings`, so edits restyle at once.
 
 **Tests:**

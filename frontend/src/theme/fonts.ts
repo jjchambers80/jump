@@ -44,7 +44,8 @@ const FONT_CLASSES: Record<string, string> = {
   'libre-baskerville': libreBaskerville.variable,
 };
 
-/** The variable class of the theme's one font. */
+/** The variable classes of the theme's heading and body fonts. */
 export function themeFontClasses(settings: Record<string, any>): string {
-  return FONT_CLASSES[settings.typography?.font ?? 'inter'] ?? '';
+  const t = settings.typography ?? {};
+  return [...new Set([t.headingFont ?? 'inter', t.bodyFont ?? 'inter'])].map((key) => FONT_CLASSES[key]).filter(Boolean).join(' ');
 }
