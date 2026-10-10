@@ -1133,7 +1133,26 @@ export const systemAdminApi = {
     api.post<{ user: SystemUser; promoted: boolean; emailSent: boolean }>('/admin/system/users/invite', body),
   updateUser: (id: string, body: { role?: 'SYSTEM_ADMIN' | 'UNASSIGNED'; isActive?: boolean }) =>
     api.patch<SystemUser>(`/admin/system/users/${id}`, body),
+  roles: () => api.get<RoleMatrix>('/admin/system/roles'),
+  saveRoles: (body: { roles: RoleMatrix['roles']; disabled: string[] }) => api.put<RoleMatrix>('/admin/system/roles', body),
 };
+
+/** System › Roles & permissions (backend/src/permissions/catalog.js). */
+export type MemberRoleKey = 'ADMIN' | 'ORGANIZER';
+export interface RoleMatrix {
+  features: {
+    key: string;
+    label: string;
+    /** Always visible to both roles. */
+    locked: boolean;
+    /** Can be turned off platform-wide. */
+    switchable: boolean;
+    actions: { key: string; label: string; locked: Record<MemberRoleKey, boolean> | null }[];
+  }[];
+  roles: Record<MemberRoleKey, Record<string, boolean>>;
+  defaults: Record<MemberRoleKey, Record<string, boolean>>;
+  disabled: string[];
+}
 
 export const api = new ApiClient();
 export default api;

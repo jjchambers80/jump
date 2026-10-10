@@ -1,42 +1,71 @@
-# Role-Based Access Control (RBAC)
+# Roles & permissions (RBAC)
 
 **Status:** Implemented
-**Last Updated:** 2026-09-07
+**Last Updated:** 2026-10-10
 
 ## Overview
 
-Three roles govern access: CUSTOMER, ORGANIZER, and ADMIN. A middleware chain of `requireAuth` (JWT verification) followed by `requireRole` enforces authorization on backend routes. The frontend uses `session.user.role` for UI gating.
+Staff belong to organizations through `OrganizationMember` with a member role, **ADMIN** or **ORGANIZER**. What each role may see and do is a **permission catalog** that a system admin edits in **System administration › Roles** (`/admin/system/roles`):
+
+- **Features** (`customers`, `maps`, `analytics`, `finance`, `onlineStore`, `content`, `developer`, …). Hiding one for a role removes it from that role's menu, redirects its pages to the dashboard and makes its API answer 403. Turning it off **platform-wide** hides it from everyone, Admins and system admins included, and its API answers 404.
+- **Actions** (`orders.refund`, `settings.tax`, `customers.privacy`, …). These are privileged operations inside a feature.
+
+The defaults reproduce the rules from before the catalog existed:
+
+- both roles see every feature;
+- ADMIN has every action;
+- ORGANIZER has no actions.
+
+**SYSTEM_ADMIN** is an account-wide role with no memberships. It bypasses the matrix, though not the platform-wide switches. **UNASSIGNED** grants nothing.
+
+Authorization always uses the **role in the organization the request acts on**. `User.role` is ADMIN when *any* membership is ADMIN, so it never decides what someone may do inside one organization (fixed in PR #404).
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `backend/src/middleware/rbac.js` | Role-checking middleware (`requireRole`) |
-| `backend/src/middleware/auth.js` | JWT verification middleware (`requireAuth`) |
+| `backend/src/permissions/catalog.js` | The only list of keys: features (with `adminPaths`), actions, the locked ones and the defaults |
+| `backend/src/services/PermissionService.js` | `effective(role)`, `matrix()`, `save()`. Overrides live in `PlatformSetting` key `roles`, with a 30 s in-process cache |
+| `backend/src/middleware/rbac.js` | `orgRoleFor(req)`, `requireOrganizer`, `requireFeature(key)`, `requirePermission(key)`, `can(req, key)`, plus the account-wide `requireRole` / `requireSystemAdmin` |
+| `backend/src/api/routes/adminSystem.js` | `GET/PUT /admin/system/roles` |
+| `backend/src/api/routes/admin.js` | `GET /admin/permissions`: the caller's `granted` keys and `hiddenPaths` in the active org |
+| `frontend/src/components/OrgContext.tsx` | Loads permissions per selected org. Provides `useCan(key)`, `hasPermission`, `isHiddenPath` and `HiddenPathRedirect` |
+| `frontend/src/app/admin/system/roles/page.tsx` | The matrix editor and the platform feature switches |
 
 ## How It Works
 
-1. `requireAuth` verifies the JWT from the `Authorization: Bearer` header and attaches user context to the request.
-2. `requireRole('ORGANIZER'|'ADMIN')` checks `req.user.role` against the allowed roles.
-3. Routes are protected by chaining both middlewares: `requireAuth, requireRole('ADMIN')`.
+1. `requireAuth` verifies the JWT.
+2. `orgRoleFor(req)` resolves the membership role in the org named by the route's `:orgId`, or otherwise the active org (`X-Jump-Org` when the user belongs to it, else their first membership). This is the same org `activeOrgFor(req)` acts on. The result is memoised per request.
+3. `requireFeature(key)` / `requirePermission(key)` look the key up in `PermissionService.effective(role)`. An unknown key throws at boot.
+4. Handlers that only shape a response (`canEdit` flags, "see every token") call `can(req, key)`.
+5. The frontend fetches `GET /admin/permissions` whenever the org changes or the window regains focus. Until it answers, or if it fails, the account role stands in. That stand-in keeps mocked Playwright specs on the default behaviour.
 
-### Role Permissions
+### Storage
 
-| Role | Access |
-|------|--------|
-| **ADMIN** | `/users` CRUD, `/organizations` CRUD, all organizer capabilities |
-| **ORGANIZER** | Org-scoped event/venue management, settings, dashboard |
-| **CUSTOMER** | Order history, tickets |
-| **Public (unauthenticated)** | Event browsing, guest checkout |
+`PlatformSetting { key: 'roles', value: { ADMIN: {key: bool}, ORGANIZER: {key: bool}, disabled: [featureKey] } }` stores only values that differ from the defaults, so a key added to the catalog later gets its default automatically. Changes go into the audit trail (`Platform`), and each save also records a `ROLE_PERMISSIONS_CHANGED` security event.
+
+### Locked keys
+
+- Dashboard, Events, Venues, Orders and Settings are always visible, because the rest of the admin depends on them.
+- `settings.users` is fixed: ADMIN always has it and ORGANIZER never does. Otherwise an Organizer could make themselves Admin, or an organization could end up with nobody able to manage users.
+
+## Adding a feature or action
+
+1. Add the key to `catalog.js`. For a feature, include `adminPaths` (its `/admin/...` pages).
+2. Guard the routes: `router.use(requireFeature('x'))` on a feature router, or `requirePermission('x.y')` on a route. Never compare a role string.
+3. In the UI, call `useCan('x.y')`. Nav items under a feature's `adminPaths` hide themselves.
+4. `tests/unit/permissions.test.js` fails if an action is never enforced or a hideable feature is never gated.
 
 ## Gotchas
 
-- Organizer access is org-scoped — organizers can only manage resources belonging to their own organization.
-- Frontend role gating is for UX only; backend middleware is the actual enforcement layer.
-- `requireRole` must always follow `requireAuth` in the middleware chain.
+- Environment flags (`BILLING_ENABLED`, `AGENT_ACCESS_ENABLED`, `THEME_EDITOR_ENABLED`, …) stay separate. The platform switches cover only catalog features, so nothing has two off switches.
+- Other backend instances see a change up to 30 s late (per-instance cache).
+- Contract tests must not write the `roles` setting with overrides, because suites share one database. Pin `permissionService._cache` in the worker instead (see `tests/contract/orgRole.test.js`).
+- Staff with no membership get 403 on admin routes, not empty lists.
+- The frontend check is for UX only. The backend enforces every key.
 
 ## Related Features
 
-- [Auth.js Integration](authjs-integration.md) — provides the JWT and session that RBAC depends on.
-- [Admin Dashboard](admin-dashboard.md) — protected by ORGANIZER/ADMIN role requirement.
-- [Organization Settings](organization-settings.md) — org-scoped access for organizers.
+- [System Administration](system-administration.md) — where the Roles page lives.
+- [Staff users](staff-users.md) — who has which role in an organization.
+- [Org switcher](org-switcher.md) — how the active organization is chosen.

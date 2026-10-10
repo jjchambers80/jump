@@ -1,15 +1,16 @@
 # System Administration
 
 **Status**: Implemented
-**Last Updated**: 2026-10-09
+**Last Updated**: 2026-10-10
 
 ## Overview
 
-Users with the `SYSTEM_ADMIN` role get a platform-wide area at `/admin/system`. They open it from **System administration** in the user menu, and they land there after signing in. It has four pages:
+Users with the `SYSTEM_ADMIN` role get a platform-wide area at `/admin/system`. They open it from **System administration** in the user menu, and they land there after signing in. It has five pages:
 
 - **Overview:** platform counts and recent signups.
 - **Organizations:** search every organization, open one, suspend or reactivate it, and see its staff.
 - **Users:** every user on the platform. Invite or promote system admins, and deactivate accounts.
+- **Roles:** what Admins and Organizers can see and do in every organization, plus the platform-wide feature switches. See [Roles & permissions](rbac.md).
 - **Settings:** platform settings, moved here from the old Settings › Platform.
 
 System admins must use two-step sign-in. Every change asks the person to confirm it's them first (step-up auth).
@@ -34,6 +35,7 @@ Built in PRs #376–#383 (2026-10-09). The plan was `~/.claude/plans/create-the-
 | `frontend/src/app/admin/system/page.tsx` | Overview tiles + recent signups |
 | `frontend/src/app/admin/system/organizations/page.tsx`, `[id]/page.tsx`, `shared.tsx` | List (search, status filter, signup funnel, create), detail (members, Open, Suspend/Reactivate, Discard signup) |
 | `frontend/src/app/admin/system/users/page.tsx`, `UserDialogs.tsx` | Users list, Invite dialog, per-row actions with confirm dialogs |
+| `frontend/src/app/admin/system/roles/page.tsx` | Roles & permissions matrix (`GET/PUT /admin/system/roles`, `PermissionService`) and platform feature switches |
 | `frontend/src/app/admin/system/settings/page.tsx` | Platform settings (agent access switch), formerly `/admin/settings/platform` |
 | `frontend/src/components/AdminSidebar.tsx` | `systemNavItems`; system mode when the path starts with `/admin/system` (no setup guide, "Back to store admin") |
 | `frontend/src/components/OrgSwitcher.tsx` | User menu: a keyboard menu (`role="menu"`, arrows, Escape returns focus); **System administration** item for SYSTEM_ADMIN; "Suspended" label on org rows |

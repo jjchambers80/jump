@@ -78,3 +78,16 @@ export const validateSystemUserUpdate = wrap((req) => {
     throw new ValidationError('isActive must be a boolean');
   }
 });
+
+/** PUT /admin/system/roles — { roles: { ADMIN?: {key: bool}, ORGANIZER?: {…} }, disabled: string[] }. Keys are checked by PermissionService. */
+export const validateRolesUpdate = wrap((req) => {
+  const { roles, disabled } = req.body ?? {};
+  if (!roles || typeof roles !== 'object' || Array.isArray(roles)) throw new ValidationError('roles must be an object');
+  for (const value of Object.values(roles)) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ValidationError('each role must map permissions to true or false');
+  }
+  if (!Array.isArray(disabled) || disabled.some((k) => typeof k !== 'string')) {
+    throw new ValidationError('disabled must be a list of feature keys');
+  }
+  req.body = { roles, disabled };
+});
