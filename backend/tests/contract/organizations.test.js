@@ -367,6 +367,128 @@ describe('Organization Contract Tests', () => {
 
       expect(res.status).toBe(400);
     });
+
+    // Spec 049: brand identity fields (Settings › Brand).
+    it('sets the secondary color, slogan, short description and social links', async () => {
+      const res = await request(app)
+        .patch(`/organizations/${orgId}`)
+        .set('Authorization', `Bearer ${orgAdminToken}`)
+        .send({
+          brandSecondaryColor: '#F0A',
+          slogan: '  Retro games, every month  ',
+          shortDescription: 'A monthly market.',
+          socialLinks: { instagram: 'https://www.instagram.com/rrg', youtube: '', website: 'https://example.com' },
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.brandSecondaryColor).toBe('#ff00aa');
+      expect(res.body.slogan).toBe('Retro games, every month');
+      expect(res.body.shortDescription).toBe('A monthly market.');
+      expect(res.body.socialLinks).toEqual({ instagram: 'https://www.instagram.com/rrg', website: 'https://example.com' });
+    });
+
+    it('exposes the brand identity on the public organization endpoints', async () => {
+      const res = await request(app).get(`/organizations/${orgId}/public`).expect(200);
+      expect(res.body.organization).toMatchObject({
+        brandSecondaryColor: '#ff00aa',
+        slogan: 'Retro games, every month',
+        shortDescription: 'A monthly market.',
+        socialLinks: { instagram: 'https://www.instagram.com/rrg', website: 'https://example.com' },
+        squareLogoUrl: null,
+      });
+    });
+
+    it('clears brand text and social links with blanks and null', async () => {
+      const res = await request(app)
+        .patch(`/organizations/${orgId}`)
+        .set('Authorization', `Bearer ${orgAdminToken}`)
+        .send({ slogan: '   ', shortDescription: null, socialLinks: { instagram: '' } });
+
+      expect(res.status).toBe(200);
+      expect(res.body.slogan).toBeNull();
+      expect(res.body.shortDescription).toBeNull();
+      expect(res.body.socialLinks).toBeNull();
+    });
+
+    it.each([
+      ['a social link on the wrong host', { socialLinks: { instagram: 'https://evil.example/rrg' } }, /socialLinks\.instagram must be a link on instagram\.com/],
+      ['an unknown network', { socialLinks: { myspace: 'https://myspace.com/rrg' } }, /socialLinks\.myspace is not a known setting/],
+      ['a non-https link', { socialLinks: { website: 'http://example.com' } }, /must start with https/],
+      ['a social links array', { socialLinks: ['https://instagram.com/rrg'] }, /socialLinks must be an object/],
+      ['a 121-character slogan', { slogan: 'x'.repeat(121) }, /Slogan must be 120 characters or less/],
+      ['a 301-character short description', { shortDescription: 'x'.repeat(301) }, /Short description must be 300 characters or less/],
+      ['an invalid secondary color', { brandSecondaryColor: 'pink' }, /Secondary color/],
+    ])('returns 400 for %s', async (_label, body, message) => {
+      const res = await request(app)
+        .patch(`/organizations/${orgId}`)
+        .set('Authorization', `Bearer ${orgAdminToken}`)
+        .send(body);
+
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(message);
+    });
+
+    it('returns 403 when an admin of another org sets brand fields', async () => {
+      const res = await request(app)
+        .patch(`/organizations/${orgId}`)
+        .set('Authorization', `Bearer ${otherOrgAdminToken}`)
+        .send({ slogan: 'Not mine' });
+
+      expect(res.status).toBe(403);
+    });
+
+    describe('square logo', () => {
+      const square = async () => {
+        const sharp = (await import('sharp')).default;
+        return sharp({ create: { width: 40, height: 20, channels: 3, background: '#123456' } }).png().toBuffer();
+      };
+
+      it('uploads the square logo as a 512 px square crop', async () => {
+        const res = await request(app)
+          .post(`/organizations/${orgId}/square-logo`)
+          .set('Authorization', `Bearer ${orgAdminToken}`)
+          .attach('logo', await square(), { filename: 'square.png', contentType: 'image/png' });
+
+        expect(res.status).toBe(200);
+        expect(res.body.squareLogoUrl).toMatch(/^\/images\/[a-z0-9]+\/[a-f0-9]{64}\/square$/);
+        expect(res.body.squareLogoImageId).toBe(res.body.image.id);
+
+        const served = await request(app).get(res.body.squareLogoUrl).buffer(true).parse((r, cb) => {
+          const chunks = [];
+          r.on('data', (c) => chunks.push(c));
+          r.on('end', () => cb(null, Buffer.concat(chunks)));
+        });
+        expect(served.status).toBe(200);
+        const sharp = (await import('sharp')).default;
+        const meta = await sharp(served.body).metadata();
+        expect([meta.width, meta.height]).toEqual([512, 512]);
+      });
+
+      it('returns 403 to an admin of another org', async () => {
+        const res = await request(app)
+          .post(`/organizations/${orgId}/square-logo`)
+          .set('Authorization', `Bearer ${otherOrgAdminToken}`)
+          .attach('logo', await square(), { filename: 'square.png', contentType: 'image/png' });
+        expect(res.status).toBe(403);
+
+        const del = await request(app)
+          .delete(`/organizations/${orgId}/square-logo`)
+          .set('Authorization', `Bearer ${otherOrgAdminToken}`);
+        expect(del.status).toBe(403);
+      });
+
+      it('removes the square logo and its image', async () => {
+        const before = await prisma.organization.findUnique({ where: { id: orgId }, select: { squareLogoImageId: true } });
+        const res = await request(app)
+          .delete(`/organizations/${orgId}/square-logo`)
+          .set('Authorization', `Bearer ${orgAdminToken}`);
+
+        expect(res.status).toBe(200);
+        expect(res.body.squareLogoUrl).toBeNull();
+        expect(res.body.squareLogoImageId).toBeNull();
+        expect(await prisma.image.findUnique({ where: { id: before.squareLogoImageId } })).toBeNull();
+      });
+    });
   });
 
   describe('GET /admin/settings/business-details', () => {

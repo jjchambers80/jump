@@ -85,7 +85,6 @@ test('shows the active org and follows the switcher without leaving the page', a
   await expect(page.getByRole('heading', { name: 'Raleigh Retro Gamers' })).toBeVisible();
   await expect(page.getByLabel('Store name')).toHaveValue('Raleigh Retro Gamers');
   await expect(page.getByLabel('Handle')).toHaveValue('raleigh-retro-gamers');
-  await expect(page.getByRole('radio', { name: /System/ })).toBeChecked();
 
   const switcher = page.getByTestId('org-switcher-trigger');
   await switcher.click();
@@ -97,8 +96,8 @@ test('shows the active org and follows the switcher without leaving the page', a
   await expect(page.getByText('1 venue')).toBeVisible();
   await expect(page.getByLabel('Store name')).toHaveValue('Durham Pinball Society');
   await expect(page.getByLabel('Handle')).toHaveValue('durham-pinball-society');
-  await expect(page.getByRole('radio', { name: /Dark/ })).toBeChecked();
-  await expect(page.getByRole('heading', { name: 'Branding' })).toBeVisible();
+  // Spec 049: branding moved to Settings › Brand.
+  await expect(page.getByTestId('brand-settings-link')).toHaveAttribute('href', '/admin/settings/brand');
 });
 
 test('saves a normalized store handle through PATCH /organizations/:id', async ({ page }) => {

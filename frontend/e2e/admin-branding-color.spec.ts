@@ -43,6 +43,9 @@ async function mockOrgApi(page: Page) {
   );
 
   await page.route(`${API}/organizations/${org.id}`, async (route) => {
+    if (route.request().method() === 'GET') {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(current) });
+    }
     if (route.request().method() !== 'PATCH') return route.fallback();
     const body = route.request().postDataJSON() as Record<string, unknown>;
     patches.push(body);
@@ -98,39 +101,41 @@ test.beforeEach(async ({ page, baseURL }) => {
 
 test('picks a preset, sees a passing badge, and saves the normalized hex', async ({ page }) => {
   const api = await mockOrgApi(page);
-  await page.goto('/admin/online-store');
+  await page.goto('/admin/settings/brand');
+  const primary = page.getByTestId('primary-color');
 
-  await expect(page.getByTestId('brand-color-picker')).toBeVisible();
+  await expect(primary.getByTestId('brand-color-picker')).toBeVisible();
 
-  const verdict = page.getByTestId('contrast-verdict');
+  const verdict = primary.getByTestId('contrast-verdict');
   await expect(verdict).toHaveText('Passes WCAG AA');
 
-  await page.getByTestId('brand-preset-emerald').click();
-  await expect(page.getByTestId('brand-preset-emerald')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByTestId('brand-color-hex')).toHaveValue('#047857');
+  await primary.getByTestId('brand-preset-emerald').click();
+  await expect(primary.getByTestId('brand-preset-emerald')).toHaveAttribute('aria-pressed', 'true');
+  await expect(primary.getByTestId('brand-color-hex')).toHaveValue('#047857');
   await expect(verdict).toHaveAttribute('data-passes', 'true');
-  await expect(page.getByTestId('contrast-check-row')).toHaveCount(3);
-  await expect(page.getByTestId('brand-color-warning')).toHaveCount(0);
+  await expect(primary.getByTestId('contrast-check-row')).toHaveCount(3);
+  await expect(primary.getByTestId('brand-color-warning')).toHaveCount(0);
 
-  await page.getByTestId('brand-color-save').click();
+  await page.getByTestId('brand-colors-save').click();
   await expect.poll(() => api.patches.length).toBe(1);
   expect(api.patches[0]).toEqual({ brandColor: '#047857' });
 });
 
 test('flags a failing custom hex but still allows saving it', async ({ page }) => {
   const api = await mockOrgApi(page);
-  await page.goto('/admin/online-store');
+  await page.goto('/admin/settings/brand');
+  const primary = page.getByTestId('primary-color');
 
-  const hexInput = page.getByTestId('brand-color-hex');
+  const hexInput = primary.getByTestId('brand-color-hex');
   await hexInput.fill('#FFFF00');
 
-  const verdict = page.getByTestId('contrast-verdict');
+  const verdict = primary.getByTestId('contrast-verdict');
   await expect(verdict).toHaveText('Fails WCAG AA');
   await expect(hexInput).toHaveValue('#ffff00');
-  await expect(page.getByTestId('brand-color-warning')).toContainText('may not meet ADA requirements');
-  await expect(page.getByTestId('contrast-check-row').nth(1)).toContainText('✗');
+  await expect(primary.getByTestId('brand-color-warning')).toContainText('may not meet ADA requirements');
+  await expect(primary.getByTestId('contrast-check-row').nth(1)).toContainText('✗');
 
-  const save = page.getByTestId('brand-color-save');
+  const save = page.getByTestId('brand-colors-save');
   await expect(save).toBeEnabled();
   await save.click();
   await expect.poll(() => api.patches.length).toBe(1);
@@ -139,19 +144,21 @@ test('flags a failing custom hex but still allows saving it', async ({ page }) =
 
 test('rejects invalid text without sending a request', async ({ page }) => {
   const api = await mockOrgApi(page);
-  await page.goto('/admin/online-store');
+  await page.goto('/admin/settings/brand');
+  const primary = page.getByTestId('primary-color');
 
-  await page.getByTestId('brand-color-hex').fill('not-a-color');
-  await expect(page.getByTestId('brand-color-hex-error')).toContainText('Enter a hex color');
-  await expect(page.getByTestId('brand-color-save')).toBeDisabled();
+  await primary.getByTestId('brand-color-hex').fill('not-a-color');
+  await expect(primary.getByTestId('brand-color-hex-error')).toContainText('Enter a hex color');
+  await expect(page.getByTestId('brand-colors-save')).toBeDisabled();
   expect(api.patches).toHaveLength(0);
 });
 
 test('explains why contrast matters via a keyboard-accessible tooltip', async ({ page }) => {
   await mockOrgApi(page);
-  await page.goto('/admin/online-store');
+  await page.goto('/admin/settings/brand');
+  const primary = page.getByTestId('primary-color');
 
-  const trigger = page.getByRole('button', { name: 'Why contrast matters' });
+  const trigger = primary.getByRole('button', { name: 'Why contrast matters' });
   await trigger.focus();
   await expect(page.getByRole('tooltip')).toContainText('4.5:1');
   await page.keyboard.press('Escape');

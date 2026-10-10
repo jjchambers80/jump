@@ -1,7 +1,7 @@
 // Organization Service
 // CRUD operations for organizations per FR-048
 
-import { prisma } from '@jump/db';
+import { prisma, Prisma } from '@jump/db';
 import { storefrontLogoFor } from './storefrontLogo.js';
 import logger from '../utils/logger.js';
 import storefrontPreferencesService from './StorefrontPreferencesService.js';
@@ -46,6 +46,15 @@ const systemOrgRow = (org) => ({
   plan: org.platformCustomer?.plan ?? null,
   subscriptionStatus: org.platformCustomer?.subscriptionStatus ?? null,
 });
+
+/** Spec 049 brand identity fields carried by public organization payloads. */
+export const BRAND_IDENTITY_SELECT = {
+  squareLogoUrl: true,
+  brandSecondaryColor: true,
+  slogan: true,
+  shortDescription: true,
+  socialLinks: true,
+};
 
 /** Published events of an organization, as the storefront lists them. */
 export const PUBLIC_EVENTS_QUERY = {
@@ -240,7 +249,7 @@ class OrganizationService {
   /**
    * Update an organization
    * @param {string} id - Organization ID
-   * @param {Object} data - Fields to update { name?, slug?, status?, brandColor?, themeMode? }
+   * @param {Object} data - Fields to update { name?, slug?, status?, brandColor?, brandSecondaryColor?, themeMode?, slogan?, shortDescription?, socialLinks? }
    * @returns {Promise<Object>} Updated organization
    */
   async updateOrganization(id, data) {
@@ -268,6 +277,11 @@ class OrganizationService {
     if (data.status !== undefined) updateData.status = data.status;
     if (data.brandColor !== undefined) updateData.brandColor = data.brandColor;
     if (data.themeMode !== undefined) updateData.themeMode = data.themeMode;
+    for (const field of ['brandSecondaryColor', 'slogan', 'shortDescription']) {
+      if (data[field] !== undefined) updateData[field] = data[field];
+    }
+    // Prisma needs DbNull to clear a nullable Json column.
+    if (data.socialLinks !== undefined) updateData.socialLinks = data.socialLinks ?? Prisma.DbNull;
 
     let organization;
     try {
@@ -325,7 +339,7 @@ class OrganizationService {
       logoUrl: org.logoUrl,
       title: org.seoTitle || org.name,
       description: org.seoDescription,
-      // Social sharing image: the cover from Online store › Branding.
+      // Social sharing image: the cover from Settings › Brand.
       imageUrl: org.coverUrl,
     };
   }
@@ -348,6 +362,7 @@ class OrganizationService {
         coverUrl: true,
         brandColor: true,
         themeMode: true,
+        ...BRAND_IDENTITY_SELECT,
         storefrontPrivate: true,
         storefrontPasswordHash: true,
         storefrontMessage: true,
@@ -372,6 +387,11 @@ class OrganizationService {
       coverUrl: org.coverUrl,
       brandColor: org.brandColor,
       themeMode: org.themeMode,
+      squareLogoUrl: org.squareLogoUrl,
+      brandSecondaryColor: org.brandSecondaryColor,
+      slogan: org.slogan,
+      shortDescription: org.shortDescription,
+      socialLinks: org.socialLinks,
       // Spec 031: storefront header / checkout show the buyer sign-in link
       buyerSignInLinks: org.buyerSignInLinks,
       buyerSignInMethod: org.buyerSignInMethod,
@@ -407,6 +427,28 @@ class OrganizationService {
     });
 
     return { organization, previousLogoUrl: existing.logoUrl, previousLogoImageId: existing.logoImageId };
+  }
+
+  /** Set or clear the square logo (spec 049: favicon, social avatars). */
+  async setOrganizationSquareLogo(id, squareLogoUrl, imageId) {
+    const existing = await prisma.organization.findUnique({
+      where: { id },
+      select: { squareLogoImageId: true },
+    });
+    if (!existing) throw new NotFoundError('Organization not found');
+
+    const organization = await prisma.organization.update({
+      where: { id },
+      data: { squareLogoUrl, squareLogoImageId: imageId },
+    });
+
+    logger.info('Organization square logo updated', {
+      event: 'organization_square_logo_updated',
+      organizationId: id,
+      removed: squareLogoUrl === null,
+    });
+
+    return { organization, previousSquareLogoImageId: existing.squareLogoImageId };
   }
 
   /** Set or clear organization cover image. */

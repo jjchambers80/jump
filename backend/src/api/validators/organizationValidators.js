@@ -3,6 +3,7 @@
 
 import { ValidationError } from '../../middleware/errorHandler.js';
 import { normalizeCustomSlug } from '../../utils/slug.js';
+import { SETTINGS_GROUPS, checkFields } from '@jump/theme';
 
 export const BUSINESS_TYPES = [
   'SOLE_PROPRIETORSHIP',
@@ -110,7 +111,7 @@ export const validateCreateOrganization = (req, res, next) => {
  * Validate organization update payload
  */
 export const validateUpdateOrganization = (req, res, next) => {
-  const { name, slug, status, brandColor, themeMode } = req.body;
+  const { name, slug, status, brandColor, brandSecondaryColor, themeMode } = req.body;
 
   if (name !== undefined) {
     if (typeof name !== 'string' || name.trim().length === 0) {
@@ -145,6 +146,33 @@ export const validateUpdateOrganization = (req, res, next) => {
       return next(new ValidationError('Brand color must be a hex value like #1d4ed8'));
     }
     req.body.brandColor = normalized;
+  }
+
+  if (brandSecondaryColor !== undefined && brandSecondaryColor !== null) {
+    const normalized = normalizeHexColor(brandSecondaryColor);
+    if (!normalized) {
+      return next(new ValidationError('Secondary color must be a hex value like #1d4ed8'));
+    }
+    req.body.brandSecondaryColor = normalized;
+  }
+
+  // Spec 049 brand text: trimmed, blank clears.
+  for (const [field, label, max] of [['slogan', 'Slogan', 120], ['shortDescription', 'Short description', 300]]) {
+    const value = req.body[field];
+    if (value === undefined || value === null) continue;
+    if (typeof value !== 'string') return next(new ValidationError(`${label} must be text`));
+    const trimmed = value.trim();
+    if (trimmed.length > max) return next(new ValidationError(`${label} must be ${max} characters or less`));
+    req.body[field] = trimmed || null;
+  }
+
+  // socialLinks: the theme's social field rules (keys + hosts), one rule set.
+  if (req.body.socialLinks !== undefined && req.body.socialLinks !== null) {
+    const { value, errors } = checkFields(SETTINGS_GROUPS.social.fields, req.body.socialLinks, {}, 'socialLinks');
+    const [path, message] = Object.entries(errors)[0] ?? [];
+    if (path) return next(new ValidationError(`${path === '.' ? 'socialLinks' : path} ${message}`));
+    const links = Object.fromEntries(Object.entries(value).filter(([, url]) => url));
+    req.body.socialLinks = Object.keys(links).length ? links : null;
   }
 
   // themeMode: enum value, case-insensitive input normalized to uppercase

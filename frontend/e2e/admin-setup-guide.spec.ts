@@ -26,7 +26,7 @@ const freshGuide = (): Guide => ({
   dismissedAt: null,
   tasks: [
     { id: 'event', done: false, href: '/admin/create-event', shown: true },
-    { id: 'design', done: true, href: '/admin/online-store', shown: true },
+    { id: 'design', done: true, href: '/admin/settings/brand', shown: true },
     { id: 'payments', done: false, href: '/admin/settings/payments', state: 'connect', shown: true },
     { id: 'business', done: false, href: '/admin/settings', shown: true },
     { id: 'domain', done: false, href: '/admin/settings/domains', shown: true },

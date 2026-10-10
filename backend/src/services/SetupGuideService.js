@@ -46,7 +46,7 @@ class SetupGuideService {
       {
         id: 'design',
         done: Boolean(org.brandColor || org.logoImageId || org.themeMode !== 'SYSTEM'),
-        href: '/admin/online-store',
+        href: '/admin/settings/brand',
         shown: true,
       },
       {
