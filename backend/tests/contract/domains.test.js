@@ -51,7 +51,7 @@ describe('Storefront domains contract (spec 007 phase 3)', () => {
     await prisma.organizationDomain.deleteMany({ where: { organizationId: { in: [orgA.id, orgB.id] } } }).catch(() => {});
     await prisma.user.deleteMany({ where: { email: { endsWith: `@${TAG}.test` } } }).catch(() => {});
     await prisma.organization.deleteMany({ where: { id: { in: [orgA.id, orgB.id] } } }).catch(() => {});
-    domainService._invalidate();
+    domainService.clearCache();
   });
 
   let domain;

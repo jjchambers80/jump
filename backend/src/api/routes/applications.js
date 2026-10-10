@@ -22,7 +22,7 @@ import { NotFoundError, ValidationError } from '../../middleware/errorHandler.js
 import storefrontPreferencesService from '../../services/StorefrontPreferencesService.js';
 import { LIMITS, makeLimiter } from '../../middleware/rateLimit.js';
 import { requestMeta } from '../../services/LegalAcceptanceService.js';
-import { gateByEventParam, gateStorefront } from '../../middleware/storefrontGate.js';
+import { activeOrgByApplicationParam, gateByEventParam, gateStorefront } from '../../middleware/storefrontGate.js';
 import { validateSelectionBody } from '../validators/applicationValidators.js';
 
 export const eventApplicationsRouter = express.Router({ mergeParams: true });
@@ -169,7 +169,7 @@ applicationStatusRouter.get('/:id/status', async (req, res, next) => {
   }
 });
 
-applicationStatusRouter.post('/:id/resume', submitLimiter, async (req, res, next) => {
+applicationStatusRouter.post('/:id/resume', submitLimiter, activeOrgByApplicationParam, async (req, res, next) => {
   try {
     res.json(await applicationService.resumeCheckout(req.params.id, req.query.token));
   } catch (error) {
@@ -177,7 +177,7 @@ applicationStatusRouter.post('/:id/resume', submitLimiter, async (req, res, next
   }
 });
 
-applicationStatusRouter.post('/:id/pay', submitLimiter, async (req, res, next) => {
+applicationStatusRouter.post('/:id/pay', submitLimiter, activeOrgByApplicationParam, async (req, res, next) => {
   try {
     res.json(await applicationService.payNow(req.params.id, req.query.token));
   } catch (error) {
@@ -195,7 +195,7 @@ applicationStatusRouter.post('/:id/cancel-checkout', boothLimiter, async (req, r
   }
 });
 
-applicationStatusRouter.post('/:id/booth', boothLimiter, async (req, res, next) => {
+applicationStatusRouter.post('/:id/booth', boothLimiter, activeOrgByApplicationParam, async (req, res, next) => {
   try {
     res.json(await applicationService.chooseBooth(req.params.id, req.query.token, req.body?.boothId));
   } catch (error) {
@@ -209,7 +209,7 @@ applicationStatusRouter.post('/:id/booth', boothLimiter, async (req, res, next) 
  * Holds it for 15 minutes and opens the order; with `useSavedCard` the card
  * on file is charged at once, otherwise `POST …/pay` opens Checkout.
  */
-applicationStatusRouter.post('/:id/select', boothLimiter, validateSelectionBody, async (req, res, next) => {
+applicationStatusRouter.post('/:id/select', boothLimiter, activeOrgByApplicationParam, validateSelectionBody, async (req, res, next) => {
   try {
     res.json(await applicationService.selectByToken(req.params.id, req.query.token, req.body));
   } catch (error) {

@@ -170,7 +170,8 @@ class StorefrontPreferencesService {
    * Throw StorefrontLockedError (403) unless the request may see this
    * organization's storefront. Used by every public storefront route
    * (event, venue, checkout, application forms) so private mode is a full
-   * lockout, not just the home page.
+   * lockout, not just the home page. A suspended organization (status
+   * INACTIVE) is a NotFoundError for everyone: its storefront is gone.
    */
   async assertAccess(organizationId, req) {
     if (!organizationId) return;
@@ -178,6 +179,7 @@ class StorefrontPreferencesService {
       where: { id: organizationId },
       select: {
         id: true,
+        status: true,
         name: true,
         logoUrl: true,
         brandColor: true,
@@ -187,9 +189,17 @@ class StorefrontPreferencesService {
         storefrontMessage: true,
       },
     });
+    if (org && org.status !== 'ACTIVE') throw new NotFoundError('Organization not found');
     if (!org || this.hasAccess(org, req.get('x-storefront-access'))) return;
     const { id, name, logoUrl, brandColor, themeMode } = org;
     throw new StorefrontLockedError({ id, name, logoUrl, brandColor, themeMode }, org.storefrontMessage);
+  }
+
+  /** NotFoundError when the organization is suspended (status INACTIVE). Unknown ids pass. */
+  async assertActive(organizationId) {
+    if (!organizationId) return;
+    const org = await prisma.organization.findUnique({ where: { id: organizationId }, select: { status: true } });
+    if (org && org.status !== 'ACTIVE') throw new NotFoundError('Organization not found');
   }
 
   /** Organization behind a public event / venue id (null when unknown). */

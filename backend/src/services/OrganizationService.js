@@ -230,7 +230,7 @@ class OrganizationService {
    */
   async listOrganizationsForUser(userId) {
     const memberships = await prisma.organizationMember.findMany({
-      where: { userId, organization: { onboardingCompletedAt: { not: null } } },
+      where: { userId, organization: { onboardingCompletedAt: { not: null }, status: 'ACTIVE' } },
       orderBy: { createdAt: 'asc' },
       include: { organization: { include: { _count: { select: { venues: true, members: true } } } } },
     });

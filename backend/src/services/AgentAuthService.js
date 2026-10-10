@@ -69,7 +69,7 @@ class AgentAuthService {
         grant: {
           include: {
             client: { select: { name: true } },
-            organization: { select: { agentAccessEnabled: true } },
+            organization: { select: { agentAccessEnabled: true, status: true } },
             user: { select: { isActive: true, deletedAt: true } },
           },
         },
@@ -78,7 +78,8 @@ class AgentAuthService {
 
     // The org switch is available only after the opaque token lookup, but is
     // checked before any token validity detail is exposed or tool work begins.
-    if (row && !row.grant.organization.agentAccessEnabled) {
+    // A suspended store (status INACTIVE) is closed to agents like it is to staff.
+    if (row && (!row.grant.organization.agentAccessEnabled || row.grant.organization.status === 'INACTIVE')) {
       throw new AgentAuthorizationError('agent_access_disabled', 'Agent access is disabled for this store', 403);
     }
     if (row) await this._assertPlanAllows(row.grant.organizationId);
