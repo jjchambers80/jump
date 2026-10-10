@@ -137,7 +137,7 @@ test('map form: approving requires a category, previews the choose-your-space em
   await expect(dialog.getByRole('option', { name: 'Let the vendor choose' })).toHaveCount(0);
   await expect(dialog.getByLabel('Subject')).toHaveValue('You are approved for Street Food Fest: choose your space');
   await expect(dialog.getByLabel('Message')).toHaveValue(/approved as Food truck/);
-  expect(calls.filter((c) => c.path.endsWith('/preview')).at(-1)?.body).toEqual({ decision: 'APPROVE', tierId: 't-truck' });
+  await expect.poll(() => calls.filter((c) => c.path.endsWith('/preview')).at(-1)?.body).toEqual({ decision: 'APPROVE', tierId: 't-truck' });
 
   await dialog.getByRole('button', { name: 'Approve' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -188,12 +188,12 @@ test('tier form: "Let the vendor choose" is the default and sends tierId null; p
   await expect(picker).toHaveValue('__vendor');
   await expect(dialog.getByTestId('decision-category-hint')).toContainText('The vendor picks from your active tiers and pays. Nothing is reserved until they pay');
   await expect(dialog.getByLabel('Message')).toHaveValue(/Pick the space type that fits you/);
-  expect(calls.filter((c) => c.path.endsWith('/preview')).at(-1)?.body).toEqual({ decision: 'APPROVE', tierId: null });
+  await expect.poll(() => calls.filter((c) => c.path.endsWith('/preview')).at(-1)?.body).toEqual({ decision: 'APPROVE', tierId: null });
 
   // Locking a tier previews and would send it.
   await picker.selectOption('t-truck');
   await expect(dialog.getByTestId('decision-category-hint')).toContainText('Approving reserves a space in this tier');
-  expect(calls.filter((c) => c.path.endsWith('/preview')).at(-1)?.body).toEqual({ decision: 'APPROVE', tierId: 't-truck' });
+  await expect.poll(() => calls.filter((c) => c.path.endsWith('/preview')).at(-1)?.body).toEqual({ decision: 'APPROVE', tierId: 't-truck' });
 
   await picker.selectOption('__vendor');
   await dialog.getByRole('button', { name: 'Approve' }).click();

@@ -92,3 +92,19 @@ test('filters by area through the API', async ({ page }) => {
   await expect(page.getByText('Summer Fest')).toHaveCount(0);
   expect(queries.some((q) => q.includes('feature=Orders'))).toBe(true);
 });
+
+test('event workspace History tab shows only that event, for admins', async ({ page }) => {
+  const { queries } = await mockApi(page);
+  await page.route(`${API}/organizations/${ORG_ID}/events/evt1/workspace`, (route) =>
+    route.fulfill(json({
+      id: 'evt1', name: 'Summer Fest', slug: 'summer-fest', status: 'PUBLISHED', date: '2027-06-01T23:00:00.000Z',
+      admissionMode: 'TICKETED', venue: { name: 'Hall', timezone: 'America/New_York' }, mapId: null, formCount: 0, toReview: 0,
+    })),
+  );
+  await page.goto('/admin/events/evt1/history');
+
+  await expect(page.getByRole('heading', { name: 'History', level: 1 })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'History' })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByText('Ada Admin updated event Summer Fest').first()).toBeVisible();
+  expect(queries.some((q) => q.includes('eventId=evt1'))).toBe(true);
+});

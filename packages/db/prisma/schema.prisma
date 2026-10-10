@@ -2378,6 +2378,7 @@ model AuditLog {
   entityType       String
   entityId         String?
   entityLabel      String?
+  eventId          String? // the event the change belongs to (History tab, spec 048-D)
   changes          Json?
   meta             Json?
   source           String
@@ -2391,6 +2392,7 @@ model AuditLog {
   @@index([organizationId, createdAt])
   @@index([organizationId, entityType, entityId, createdAt])
   @@index([organizationId, actorUserId, createdAt])
+  @@index([organizationId, eventId, createdAt])
   @@index([requestId])
   @@index([createdAt])
 }

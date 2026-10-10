@@ -27,7 +27,7 @@ export const validateAuditLogQuery = (req, res, next) => {
     if (!OPERATIONS.has(q.operation)) return next(new ValidationError('Unknown operation'));
     out.operation = q.operation;
   }
-  for (const key of ['actorUserId', 'feature', 'entityType', 'entityId', 'q']) {
+  for (const key of ['actorUserId', 'feature', 'entityType', 'entityId', 'eventId', 'q']) {
     if (!present(key)) continue;
     if (typeof q[key] !== 'string' || q[key].length > SHORT) return next(new ValidationError(`${key} is too long`));
     out[key] = q[key];

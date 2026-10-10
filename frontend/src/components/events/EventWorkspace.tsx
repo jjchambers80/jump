@@ -2,7 +2,7 @@
 
 // The event workspace (spec 037 phase 2): every admin page of one event —
 // Overview, Applications, Map, Attendees / Guest list, Analytics, Door
-// check-in — shares one breadcrumb, title row and tab bar, so the event reads
+// check-in, History (admins) — shares one breadcrumb, title row and tab bar, so the event reads
 // as one place instead of six disconnected pages. Facts come from
 // GET /organizations/:orgId/events/:eventId/workspace.
 
@@ -10,6 +10,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import api from '@/services/api';
+import { useSession } from 'next-auth/react';
 import { useOrg } from '@/components/OrgContext';
 import { formatEventDateTime } from '@/lib/eventTime';
 import { EventStatusPill } from '@/components/events/EventEditSummary';
@@ -27,7 +28,7 @@ export interface EventWorkspaceFacts {
   toReview: number;
 }
 
-export type WorkspaceTab = 'overview' | 'applications' | 'map' | 'attendees' | 'rsvps' | 'analytics' | 'check-in';
+export type WorkspaceTab = 'overview' | 'applications' | 'map' | 'attendees' | 'rsvps' | 'analytics' | 'check-in' | 'history';
 
 const focusRing =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900';
@@ -74,6 +75,13 @@ export function WorkspaceTabs({
   tabs: ReturnType<typeof workspaceTabs>;
   current: WorkspaceTab;
 }) {
+  // History (spec 048-D) reads the audit trail: store admins only, like
+  // Settings › Activity log. Added here so every page's tab bar has it.
+  const { data: session } = useSession();
+  if (['ADMIN', 'SYSTEM_ADMIN'].includes((session?.user as any)?.role)) {
+    const base = tabs[0].href.split('?')[0];
+    tabs = [...tabs, { key: 'history', label: 'History', href: `${base}/history` }];
+  }
   return (
     <nav aria-label="Event pages" className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
       <ul className="flex min-w-max gap-1 border-b border-gray-200 dark:border-slate-700">

@@ -1,7 +1,7 @@
 # Settings › Activity log — the audit trail
 
 **Status:** Implemented
-**Last Updated:** 2026-10-09
+**Last Updated:** 2026-10-10
 **Spec:** 048 (plan in the PR description)
 
 ## Overview
@@ -15,6 +15,14 @@ Each row records:
 - **What:** `action` (`event.updated`), `operation`, the feature area, and the record's type, id and name snapshot.
 - **The field diff:** `{ field: [before, after] }`.
 - **Where:** the source (`admin`, `cli`, `mcp:<tool>`, `webhook:stripe:<endpoint>`, `sweep:<name>`), the request id, method and route pattern, the hashed IP, the user agent, and a city/region/country when `GEOIP_ENABLED`.
+
+## Event history (048-D)
+
+Store admins also see an event's own trail under the event workspace's **History** tab (`/admin/events/:id/history`), next to Overview, Applications, Map and the rest. It covers the event, its tiers, add-ons, forms, applications, map, RSVPs and orders.
+
+- `AuditLog.eventId` is resolved at flush time: the event's own id, else the row's `eventId`, else the `event` relation path in `features.js` (for example `OrderItem → order`, `Booth → map`).
+- The tab reuses the Settings list (`ActivityLog` with `eventId`) and `GET /admin/audit-log?eventId=`.
+- `WorkspaceTabs` adds the tab for ADMIN and SYSTEM_ADMIN only.
 
 ## How capture works
 
@@ -50,6 +58,7 @@ Each row records:
 - The before-read runs outside an interactive transaction.
 - A write that committed before the request then failed (status ≥ 400) is dropped.
 - Staff sign-in and security events stay in `SecurityEvent`.
+- A deleted child row whose parent lookup is gone (for example a deleted application tier) has no `eventId`. Rows from before 048-D have no `eventId` either.
 
 ## Key files
 
@@ -61,5 +70,6 @@ Each row records:
 | `backend/src/audit/redact.js` | Secret-field and size rules |
 | `backend/src/audit/middleware.js` | Per-request context, download capture, flush on success |
 | `backend/src/api/routes/admin.js` | `GET /admin/audit-log`, `GET /admin/audit-log/export.csv` (store ADMIN by membership, or SYSTEM_ADMIN) |
-| `frontend/src/app/admin/settings/activity/` | The page and `ActivityEntry` (sentence, badges, diff table) |
+| `frontend/src/app/admin/settings/activity/` | The page, `ActivityLog` (list, filters, export; `eventId` for the History tab) and `ActivityEntry` (sentence, badges, diff table) |
+| `frontend/src/app/admin/events/[eventId]/history/page.tsx` | Event workspace › History |
 | `backend/tests/contract/auditLog.test.js`, `backend/tests/unit/auditLog.test.js`, `frontend/e2e/admin-activity-log.spec.ts` | Tests |

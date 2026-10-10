@@ -46,6 +46,7 @@ function whereFor(organizationId, f = {}) {
   if (f.operation) where.operation = f.operation;
   if (f.entityType) where.entityType = f.entityType;
   if (f.entityId) where.entityId = f.entityId;
+  if (f.eventId) where.eventId = f.eventId;
   if (f.q) where.entityLabel = { contains: f.q, mode: 'insensitive' };
   if (f.from || f.to) where.createdAt = { ...(f.from && { gte: new Date(f.from) }), ...(f.to && { lte: new Date(f.to) }) };
   return where;
@@ -69,6 +70,7 @@ function serialize(row) {
     entityType: row.entityType,
     entityId: row.entityId,
     entityLabel: row.entityLabel,
+    eventId: row.eventId,
     changes: row.changes,
     meta: row.meta,
     source: row.source,
@@ -101,17 +103,27 @@ async function contextOrganization(store) {
   }
 }
 
-// Walk `org` ("event.venue") from the row to an organizationId.
-async function organizationVia(model, entityId, path) {
+// Walk a relation path ("event.venue") from the row to `field` on the last hop.
+async function fieldVia(model, entityId, path, field) {
   if (!path || !entityId) return null;
-  const select = path.split('.').reduceRight((inner, key) => ({ [key]: { select: inner } }), { organizationId: true });
+  const select = path.split('.').reduceRight((inner, key) => ({ [key]: { select: inner } }), { [field]: true });
   try {
     let node = await prisma[model.charAt(0).toLowerCase() + model.slice(1)].findUnique({ where: { id: entityId }, select });
     for (const key of path.split('.')) node = node?.[key];
-    return node?.organizationId ?? null;
+    return node?.[field] ?? null;
   } catch {
     return null;
   }
+}
+
+// The event a change belongs to, for the event workspace's History tab.
+// ponytail: a deleted child row (e.g. an application tier) can no longer be
+// walked to its parent, so it lands with no event; store the parent key on
+// the event before the delete if that gap matters.
+async function eventFor(event, info) {
+  if (event.model === 'Event') return event.entityId;
+  if (event.row?.eventId) return event.row.eventId;
+  return fieldVia(event.model, event.entityId, info.event, 'eventId');
 }
 
 async function requestFields(req) {
@@ -144,10 +156,11 @@ class AuditLogService {
           ?? event.row?.organizationId
           ?? (event.model === 'Organization' ? event.entityId : null)
           ?? fallbackOrg
-          ?? (await organizationVia(event.model, event.entityId, info.org));
+          ?? (await fieldVia(event.model, event.entityId, info.org, 'organizationId'));
         const label = event.entityLabel ?? (info.label ? event.row?.[info.label] : null);
         rows.push({
           organizationId,
+          eventId: await eventFor(event, info),
           actorType: actor.type,
           actorUserId: actor.userId ?? null,
           actorLabel: String(actor.label).slice(0, LABEL_MAX),
