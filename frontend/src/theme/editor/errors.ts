@@ -45,7 +45,7 @@ export function describeDocumentError(key: string, path: string, message: string
   return `${parts.join(' › ')}: ${message}`;
 }
 
-const SLOT_LABELS: Record<string, string> = { foreground: 'Text', accentForeground: 'Text on accent', secondaryButtonLabel: 'Secondary button label', muted: 'Muted text' };
+const SLOT_LABELS: Record<string, string> = { foreground: 'Text' };
 
 /**
  * Settings validator paths: "colors.schemes[1].accent" → "Theme settings ›

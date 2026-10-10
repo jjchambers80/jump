@@ -15,18 +15,12 @@ const SLOT_LABELS: Record<string, string> = {
   background: 'Background',
   foreground: 'Text',
   accent: 'Accent (buttons and links)',
-  accentForeground: 'Text on accent',
-  secondaryButtonLabel: 'Secondary button label',
-  border: 'Border',
-  muted: 'Muted text',
-  shadow: 'Shadow',
 };
 const SPECIAL_LABELS: Record<string, string> = { auto: 'Automatic (follows light/dark mode)', brand: 'Brand color', 'brand-secondary': 'Secondary brand color' };
 const HEX = /^#[0-9a-f]{6}$/i;
 
 const CONTRAST_PAIRS: [string, string, string][] = [
   ['foreground', 'background', 'Text on the background'],
-  ['accentForeground', 'accent', 'Text on accent buttons'],
   ['accent', 'background', 'Accent links on the background'],
 ];
 

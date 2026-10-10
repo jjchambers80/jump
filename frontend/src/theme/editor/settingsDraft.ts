@@ -41,11 +41,6 @@ export function newScheme(id: string, from?: ThemeScheme): ThemeScheme {
     background: 'auto',
     foreground: 'auto',
     accent: 'brand',
-    accentForeground: 'auto',
-    secondaryButtonLabel: 'auto',
-    border: 'auto',
-    muted: 'auto',
-    shadow: 'auto',
   };
   const name = from ? `${from.name} copy`.slice(0, 30) : `Scheme ${id.slice('scheme-'.length)}`;
   return { ...base, id, name };

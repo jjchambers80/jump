@@ -39,11 +39,6 @@ export interface ThemeScheme {
   background: string;
   foreground: string;
   accent: string;
-  accentForeground: string;
-  secondaryButtonLabel: string;
-  border: string;
-  muted: string;
-  shadow: string;
 }
 
 export type ThemeSettings = Record<string, Record<string, any>> & {

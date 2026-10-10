@@ -9,6 +9,7 @@ import { pageWidthVars, schemeCss, schemeClass, settingsVars } from '@/theme/set
 import { sectionWidthStyle } from '@/theme/sections/context';
 import { secondaryCssVars } from '@/theme/ThemeScope';
 import { faviconMetadata } from '@/lib/storefrontMeta';
+import { bestForeground } from '@/lib/color';
 
 const SECTIONS_DIR = path.join(__dirname, '../../src/theme/sections');
 // Chromatic Tailwind palettes: a raw `bg-blue-600` would ignore the org's brand.
@@ -54,7 +55,7 @@ describe('settings → CSS', () => {
         ],
       },
     } as any);
-    expect(css).toBe('.jump-scheme-2{background-color:#111827;--brand:#FF0000;--brand-hover:#FF0000;--brand-link:#FF0000}');
+    expect(css).toBe(`.jump-scheme-2{background-color:#111827;--brand:#FF0000;--brand-hover:#FF0000;--brand-link:#FF0000;--brand-fg:${bestForeground('#FF0000')}}`);
     expect(schemeClass('scheme-3')).toBe('jump-scheme-3');
     expect(schemeClass('scheme-9')).toBe('');
   });
@@ -68,8 +69,8 @@ describe('spec 049 brand secondary + favicon', () => {
       '.jump-scheme-3{--brand:var(--brand-secondary,#2563eb);--brand-hover:var(--brand-secondary-hover,#1d4ed8);--brand-fg:var(--brand-secondary-fg,#ffffff);--brand-link:var(--brand-secondary-link-light,#2563eb)}' +
         '.dark .jump-scheme-3{--brand-link:var(--brand-secondary-link-dark,#818cf8)}',
     );
-    // An explicit accent foreground still wins (declared after).
-    expect(schemeCss({ colors: { schemes: [{ ...scheme, accentForeground: '#000000' }] } } as any)).toContain('--brand-fg:var(--brand-secondary-fg,#ffffff);--brand-link:var(--brand-secondary-link-light,#2563eb);--brand-fg:#000000');
+    // Slots stored before the three-color rule are ignored.
+    expect(schemeCss({ colors: { schemes: [{ ...scheme, accentForeground: '#000000', border: '#111111' }] } } as any)).not.toMatch(/#000000|#111111/);
   });
 
   it('secondary vars come from the secondary color, else the brand color, with a readable foreground', () => {
