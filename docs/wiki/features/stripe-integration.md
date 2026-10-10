@@ -24,7 +24,7 @@ Jump uses Stripe SDK v17 (API version `2024-11-20.acacia`) for payment processin
 |----------|-------------|
 | `STRIPE_SECRET_KEY` | Required. Stripe secret API key. Throws on startup if missing. |
 | `STRIPE_WEBHOOK_SECRET` | Webhook signing secret. If unset, signature verification is skipped (dev only). |
-| `STRIPE_CONNECT_ENABLED` | `true` routes charges for organizations with an active Connect account as destination charges — [Connect Payouts](connect-payouts.md). |
+| `STRIPE_CONNECT_ENABLED` | `true` creates charges for organizations with an active connected account **on that account** (direct charges, spec 047) — [Connect Payouts](connect-payouts.md). |
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | Signing secret for `POST /webhooks/stripe/connect` (connected-account events). Separate endpoint and secret. |
 | `AUTH_SECRET` | Used for QR JWT signing, not Stripe-specific. |
 
@@ -33,7 +33,7 @@ Jump uses Stripe SDK v17 (API version `2024-11-20.acacia`) for payment processin
 ### Checkout Session Creation (OrderService)
 
 1. After order and inventory reservation, `stripe.checkout.sessions.create` is called with:
-   - `mode: 'payment'`, plus `PaymentSettingsService.checkoutOptionsFor(organization, { fees, lineItems })` — `payment_method_types` (`card` + the organization's enabled optional methods), `payment_intent_data.statement_descriptor_suffix` (see [Payments Settings](payments-settings.md)) and, for an organization with an active Connect account, `payment_intent_data.transfer_data.destination` + `application_fee_amount` making it a **destination charge** (see [Connect Payouts](connect-payouts.md))
+   - `mode: 'payment'`, plus `PaymentSettingsService.checkoutOptionsFor(organization, { fees, lineItems })` — `payment_method_types` (`card` + the organization's enabled optional methods), `payment_intent_data.statement_descriptor_suffix` (see [Payments Settings](payments-settings.md)) and, for an organization with an active connected account, `stripeAccount` (passed as the request option, making it a **direct charge** on that account, no descriptor suffix) + `payment_intent_data.application_fee_amount` = the platform fee (see [Connect Payouts](connect-payouts.md))
    - `customer_email` from Contact
    - `line_items` with all-in unit pricing per tier
    - `metadata: { orderId, orderRef, eventId }`
@@ -76,7 +76,8 @@ Jump uses Stripe SDK v17 (API version `2024-11-20.acacia`) for payment processin
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | `/webhooks/stripe` | Stripe signature | Handle Stripe webhook events (platform account, including destination charges) |
+| POST | `/webhooks/stripe` | Stripe signature | Handle Stripe webhook events (charges on the platform account) |
+| POST | `/webhooks/stripe/connect` | Stripe signature (`STRIPE_CONNECT_WEBHOOK_SECRET`) | Connected-account events, including the money events of direct charges (spec 047) |
 | POST | `/webhooks/stripe/connect` | Stripe signature (`STRIPE_CONNECT_WEBHOOK_SECRET`) | Connected-account events: `account.updated`, `capability.updated`, `account.application.deauthorized`, external accounts, `payout.paid/failed` |
 
 ## Gotchas

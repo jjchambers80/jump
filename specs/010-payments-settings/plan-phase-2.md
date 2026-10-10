@@ -338,7 +338,7 @@ Human steps, in order (add to the launch checklist):
 2. Stripe Dashboard › Connect › **Get started** on the live account: platform profile, business type "marketplace/platform", accept Connect terms.
 3. Connect › Settings › **Branding** (name, icon, colour) — this is what organizers see on Express onboarding and their dashboard.
 4. Connect › Settings › **Express dashboard features**: payouts, bank account editing on; payment details visible.
-5. Connect › **Tax forms**: enable 1099-K filing by Stripe (platform is merchant of record; Stripe files for Express accounts when enabled).
+5. ~~Connect › **Tax forms**: enable 1099-K filing by Stripe (platform is merchant of record; Stripe files for Express accounts when enabled).~~ Superseded 2026-10-09 by spec 047 option C: organizations take direct charges on their own accounts and, with `controller.fees.payer = account`, Stripe — not Jump — files the 1099-K. Current steps: `docs/wiki/config/production-launch-checklist.md` › Stripe Connect.
 6. Add a **Connect webhook endpoint** `https://<backend>/webhooks/stripe/connect` (listen on *connected accounts*) with the §2.7 events; set `STRIPE_CONNECT_WEBHOOK_SECRET`.
 7. Set `STRIPE_CONNECT_ENABLED=true`, redeploy backend.
 8. Verify with one internal organization: onboard → test charge → refund → payout schedule change, checking the ledger row and the Express dashboard.

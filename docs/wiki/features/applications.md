@@ -105,7 +105,7 @@ In-flight rows from before the change move with `npm run db:backfill:037-applica
 
 ### Refunds and the overdue sweep
 
-`POST …/applications/:id/refund { amount?, reason? }` (ADMIN) — partial or the remaining balance, a `Refund` row on the application's order (spec 024; `RefundService.refundOrder`), Stripe refund via `createStripeRefund` with `reverse_transfer` + `refund_application_fee` when the charge was routed to a connected account; `paymentStatus` becomes `PARTIALLY_REFUNDED` / `REFUNDED`, review status untouched (withdraw separately to free the slot). Refunds made in the Stripe dashboard arrive as `charge.refunded` and are reconciled by `stripeRefundId`.
+`POST …/applications/:id/refund { amount?, reason? }` (ADMIN) — partial or the remaining balance, a `Refund` row on the application's order (spec 024; `RefundService.refundOrder`), Stripe refund via `createStripeRefund` — on the organization's own account with `refund_application_fee` when the charge was a direct charge there (spec 047); `paymentStatus` becomes `PARTIALLY_REFUNDED` / `REFUNDED`, review status untouched (withdraw separately to free the slot). Refunds made in the Stripe dashboard arrive as `charge.refunded` and are reconciled by `stripeRefundId`.
 
 `sweepOverdue()` (hourly, `unref`) finds `APPROVED + PAYMENT_DUE` rows past `paymentDueAt`: form policy `WITHDRAW` → `WITHDRAWN` by `SYSTEM` (`payment_overdue`), slot released, WITHDRAWN email; `HOLD` → `overdue = true`, shown in red on the admin detail; organizer decides.
 
@@ -212,7 +212,7 @@ ORGANIZER+ views forms/applications and decides; ADMIN/SYSTEM_ADMIN configures f
 
 - [Buyer Accounts](buyer-accounts.md) — applicant sign-in and account page
 - [Fee Calculation](fee-calculation.md) — fee mode math
-- [Connect Payouts](connect-payouts.md) — application charges become destination charges the same way ticket orders do
+- [Connect Payouts](connect-payouts.md) — application charges are direct charges on the organization's account the same way ticket orders are (spec 047)
 - [Payments Settings](payments-settings.md) — statement descriptor suffix and enabled methods apply to application checkouts
 - [Refunds](refunds.md) — order/ticket refunds share `stripeRefund.js`
 - [Email Notifications](email-notifications.md) — transport and branding shell

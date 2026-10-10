@@ -1,11 +1,15 @@
 # Tax Settings
 
-**Status**: Implemented (spec 009, phases 1–3 in production 2026-09-14)
-**Last Updated**: 2026-09-14
+**Status**: Implemented (spec 009, phases 1–3 in production 2026-09-14; seller of record = the organization on its own Stripe account, spec 047 D0-S, 2026-10-09, dark behind `STRIPE_CONNECT_ENABLED`)
+**Last Updated**: 2026-10-09
 
 ## Overview
 
-**Settings › Tax** (`/admin/settings/tax`) lets an organization decide, per US state it has a venue in, whether it collects sales tax and by which source — an automatic **Stripe Tax** lookup or a flat **manual rate** — and see what the last lookup produced. It also carries the organization's **tax-inclusive pricing** switch and a **collected tax report** for remittance. The page is modelled on Shopify's *Taxes and duties* screen, keeping only the sections that apply to event ticketing (no duties, customs, shipping tax or VAT on digital goods).
+**Settings › Tax** (`/admin/settings/tax`) lets an organization decide, per US state it has a venue in, whether it collects sales tax and by which source — an automatic **Stripe Tax** lookup or a flat **manual rate** — and see what the last lookup produced. It also carries the organization's **tax-inclusive pricing** switch and a **collected tax report** for remittance.
+
+**Seller of record (spec 047 option C):** once an organization has connected its own Stripe account, every charge is a direct charge on that account, so **the organization is the seller of record**: the tax it collects stays in its Stripe balance (it is not part of Jump's application fee) and the organization files and remits it. Stripe Tax lookups and the service card read **the organization's own account** — its Stripe Tax activation and registrations — and the page says so (`service.seller = 'ORGANIZATION'`). Organizations not yet connected are still charged on the platform account, which stays the seller for those orders. `MANUAL` rates are unchanged either way.
+
+The page is modelled on Shopify's *Taxes and duties* screen, keeping only the sections that apply to event ticketing (no duties, customs, shipping tax or VAT on digital goods).
 
 ## Key Files
 
@@ -28,21 +32,21 @@
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `STRIPE_SECRET_KEY` | Yes | Platform Stripe key. Stripe Tax must be **activated** on this account and **registered** per state for the `STRIPE` source to return a non-zero rate; the page shows `Pending setup` / `No registration` otherwise |
+| `STRIPE_SECRET_KEY` | Yes | Platform Stripe key. Stripe Tax must be **activated** and **registered** per state on the seller's account — the organization's connected account (spec 047), else the platform's — for the `STRIPE` source to return a non-zero rate; the page shows `Pending setup` / `No registration` otherwise |
 
-No new environment variables. Stripe Tax status and registrations are read live (`stripe.tax.settings.retrieve`, `stripe.tax.registrations.list`) and cached in-process for 5 minutes.
+No new environment variables. Stripe Tax status and registrations are read live (`stripe.tax.settings.retrieve`, `stripe.tax.registrations.list`, with `{ stripeAccount }` for a connected organization) and cached in-process for 5 minutes per account.
 
 ## How It Works
 
 ### Page
 
-1. **Tax service card** — `Stripe Tax` with a pill: `Active`, `Pending setup` (Tax not activated on the platform account) or `Unavailable` (Stripe unreachable). Shows the count of active US registrations. SYSTEM_ADMIN also gets a **Manage** link to the Stripe dashboard (`manageUrl` is only returned for that role).
+1. **Tax service card** — `Stripe Tax` with a pill: `Active`, `Pending setup` (Tax not activated on the seller's account) or `Unavailable` (Stripe unreachable). Shows the count of active US registrations. A connected organization (seller of record) sees a line saying it collects and remits the tax, and a **Manage** link to its own Stripe Tax settings; otherwise only SYSTEM_ADMIN gets **Manage** (the platform's dashboard).
 2. **Tax regions** — one row per US state the organization has a venue in, alphabetical. Regions are *derived from venues*, not created by hand: add a venue in a new state to get a region. Columns: Region (+ venue count), Collecting (`Collecting` / `Not collecting` / `Not set`), Tax service (`Stripe Tax` with last rate, `Manual · 5.3%`, or `—`) with amber badges `No registration`, `Lookup failed`, `Stripe Tax inactive`.
    - **Action needed** banner lists states that have venues but no `TaxRegion` row — those events collect no tax until an admin decides.
    - **Needs address** row lists venues whose `state` is not a two-letter US code, with a link to `/admin/venues`.
 3. **Edit tax region** dialog (row click; ADMIN / SYSTEM_ADMIN can save, ORGANIZER sees it read-only):
    - *Collect sales tax in X* toggle.
-   - *Tax service*: **Stripe Tax (automatic)** — warns when Stripe Tax is inactive or the platform account has no registration for that state — or **Manual rate** with a percent input (0–50, stored as a fraction to 5 decimals).
+   - *Tax service*: **Stripe Tax (automatic)** — warns when Stripe Tax is inactive or the seller's account (the organization's own once connected) has no registration for that state — or **Manual rate** with a percent input (0–50, stored as a fraction to 5 decimals).
    - *Last lookup* line (rate + source + date, or the error) and "N upcoming events use this region".
    - **Recalculate now** — re-runs the lookup for the region's upcoming events with the *saved* setting (disabled while the form is dirty); the outcome is shown inline and the row updates without closing.
    - Saving recalculates the cached `Event.taxRate` on every upcoming DRAFT/PUBLISHED event in that state. Orders already placed are untouched.
@@ -85,7 +89,7 @@ Migrations: `20260914010000_tax_regions` (table + enum + `Event.taxRateSource`; 
 
 ## Gotchas
 
-- Stripe Tax registrations belong to the **platform** Stripe account, not the organization. An organization registered in a state the platform is not must pick **Manual rate** — the dialog says so when no registration is found.
+- Stripe Tax registrations belong to the **seller's** Stripe account: the organization's own once it is connected (spec 047), the platform's before. A state without a registration on that account returns 0% — pick **Manual rate** or add the registration in the organization's Stripe dashboard; the dialog says so when no registration is found.
 - Regions that appear after launch (first venue in a new state) default to **Not set**: no tax until an admin chooses. Existing organization/state pairs were backfilled as collecting via Stripe Tax.
 - `Venue.state` must be a state code for the venue to belong to a region; otherwise it sits under *Needs address* and its events collect nothing.
 - Region saves, **Recalculate now** and venue state/postal-code edits refresh **upcoming** DRAFT/PUBLISHED events only. Past events and placed orders keep their numbers.
