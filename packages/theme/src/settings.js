@@ -139,8 +139,14 @@ export function normalizeTypography(values) {
   return out;
 }
 
-/** Scheme color slots: `auto` follows the page's light/dark tokens, `brand` / `brand-secondary` (accent only) the org brand colors. */
-export const SCHEME_COLORS = ['background', 'foreground', 'accent', 'accentForeground', 'secondaryButtonLabel', 'border', 'muted', 'shadow'];
+/**
+ * Scheme color slots: `auto` follows the page's light/dark tokens, `brand` /
+ * `brand-secondary` (accent only) the org brand colors. Three on purpose
+ * (owner rule: theme settings stay simple); text on the accent is derived.
+ * Slots stored before that rule are dropped.
+ */
+export const SCHEME_COLORS = ['background', 'foreground', 'accent'];
+const LEGACY_SCHEME_COLORS = ['accentForeground', 'secondaryButtonLabel', 'border', 'muted', 'shadow'];
 const HEX_RE = /^#[0-9a-f]{6}$/i;
 
 function checkSchemes(schemes, errors) {
@@ -155,7 +161,7 @@ function checkSchemes(schemes, errors) {
       errors[at] = 'must be a color scheme';
       return scheme;
     }
-    const extra = Object.keys(scheme).filter((k) => !['id', 'name', ...SCHEME_COLORS].includes(k));
+    const extra = Object.keys(scheme).filter((k) => !['id', 'name', ...SCHEME_COLORS, ...LEGACY_SCHEME_COLORS].includes(k));
     if (extra.length) errors[at] = `has unknown keys: ${extra.join(', ')}`;
     if (typeof scheme.id !== 'string' || !/^scheme-[1-8]$/.test(scheme.id)) errors[`${at}.id`] = 'must be scheme-1 … scheme-8';
     else if (ids.has(scheme.id)) errors[`${at}.id`] = `duplicates ${scheme.id}`;

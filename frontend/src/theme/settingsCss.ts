@@ -3,7 +3,7 @@
 // color can reach a style. Card 038F wires the remaining groups; spec 049
 // card C adds typography (fonts come from theme/fonts.ts).
 
-import { BRAND_DEFAULTS } from '@/lib/color';
+import { BRAND_DEFAULTS, bestForeground } from '@/lib/color';
 import type { ThemeSettings } from './types';
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -60,12 +60,11 @@ export function schemeCss(settings: ThemeSettings): string | null {
     const decl: string[] = [];
     if (HEX.test(scheme.background)) decl.push(`background-color:${scheme.background}`);
     if (HEX.test(scheme.foreground)) decl.push(`color:${scheme.foreground}`, `--foreground:${scheme.foreground}`);
-    if (HEX.test(scheme.accent)) decl.push(`--brand:${scheme.accent}`, `--brand-hover:${scheme.accent}`, `--brand-link:${scheme.accent}`);
+    // Text on a custom accent is derived, never picked (three slots only).
+    if (HEX.test(scheme.accent)) decl.push(`--brand:${scheme.accent}`, `--brand-hover:${scheme.accent}`, `--brand-link:${scheme.accent}`, `--brand-fg:${bestForeground(scheme.accent)}`);
     // Spec 049: the org secondary color, from ThemeScope's --brand-secondary-* vars.
     const secondary = scheme.accent === 'brand-secondary';
     if (secondary) decl.push(...SECONDARY_DECL);
-    if (HEX.test(scheme.accentForeground)) decl.push(`--brand-fg:${scheme.accentForeground}`);
-    if (HEX.test(scheme.border)) decl.push(`--scheme-border:${scheme.border}`);
     if (decl.length) rules.push(`.jump-${scheme.id}{${decl.join(';')}}`);
     if (secondary) rules.push(`.dark .jump-${scheme.id}{--brand-link:var(--brand-secondary-link-dark,${BRAND_DEFAULTS.linkDark})}`);
   }
