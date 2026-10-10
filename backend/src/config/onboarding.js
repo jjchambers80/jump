@@ -46,6 +46,7 @@ export const SEED_TEMPLATES = [
     name: 'Vendor booth',
     kind: 'PAID',
     definition: {
+      purpose: 'VENDOR',
       intro: 'Tell us about your business and pick a booth. Booths are confirmed on approval; your card is charged then.',
       chargeTiming: 'APPROVAL',
       feeMode: 'PASS',
@@ -68,6 +69,7 @@ export const SEED_TEMPLATES = [
     name: 'Press & media',
     kind: 'FREE',
     definition: {
+      purpose: 'PRESS',
       intro: 'Apply for a press badge. Tell us who you cover for and what you plan to publish.',
       questions: [
         { label: 'Outlet or channel', type: 'SHORT_TEXT', required: true, pinned: true },

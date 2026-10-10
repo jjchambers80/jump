@@ -1554,6 +1554,17 @@ enum ApplicationFormKind {
   FREE
 }
 
+/// Spec 050 §6.2: what a form is for. Places it in a wizard step and labels it on the storefront.
+enum ApplicationFormPurpose {
+  VENDOR
+  SPONSOR
+  PRESS
+  PANEL
+  SPECIAL_GUEST
+  VOLUNTEER
+  OTHER
+}
+
 // Spec 039: how an approved vendor on a PAID form chooses their space.
 // TIERS: pick one of the form's tiers (or the one the organizer locked);
 // MAP: pick a spot on the event's floor map within the approved category.
@@ -1765,6 +1776,7 @@ model ApplicationForm {
   buttonLabel           String?
   successMessage        String?
   spaceSelection        SpaceSelectionMode    @default(TIERS) // spec 039; PAID forms only
+  purpose               ApplicationFormPurpose @default(OTHER) // spec 050 §6.2; fixed once the form has submissions
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

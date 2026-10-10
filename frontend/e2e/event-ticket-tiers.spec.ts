@@ -92,8 +92,8 @@ test('a tier in the cart is marked selected', async ({ page }) => {
 
 test('application forms show as short links in the event header', async ({ page }) => {
   await mockEvent(page);
-  const form = (id: string, name: string, slug: string, acceptance: object) => ({
-    id, name, slug, kind: 'PAID', intro: null, acceptance, chargeTiming: null, feeMode: null, tiers: [], questions: [],
+  const form = (id: string, name: string, slug: string, acceptance: object, purpose: string) => ({
+    id, name, slug, purpose, kind: 'PAID', intro: null, acceptance, chargeTiming: null, feeMode: null, tiers: [], questions: [],
   });
   await page.route(`${API}/events/${EVENT_ID}/applications/forms`, (route) =>
     route.fulfill({
@@ -101,8 +101,8 @@ test('application forms show as short links in the event header', async ({ page 
       contentType: 'application/json',
       body: JSON.stringify({
         data: [
-          form('f-vendor', '2026 Ticket Tiers Vendor Application', 'vendors', { open: true }),
-          form('f-sponsor', 'Sponsorship Packages', 'sponsors', { open: false, reason: 'closed' }),
+          form('f-vendor', '2026 Ticket Tiers Vendor Application', 'vendors', { open: true }, 'VENDOR'),
+          form('f-sponsor', 'Sponsorship Packages', 'sponsors', { open: false, reason: 'closed' }, 'SPONSOR'),
         ],
       }),
     })

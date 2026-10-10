@@ -312,8 +312,7 @@ orgRouter.get('/:eventId/preview-payload', requireAuth, requireOrganizer, requir
     const event = await eventService.getPreviewEvent(orgId, eventId);
     const [organization, forms] = await Promise.all([
       publicOrganizationIdentity(orgId),
-      // 050-B adds `purpose` to each form in ApplicationFormService._serializePublicForm.
-      applicationFormService.publicForms(eventId, { anyEventStatus: true }),
+      applicationFormService.publicForms(eventId, { preview: true }),
     ]);
     // Ticket add-ons ride on event.addOns; application add-ons on each form's tiers.
     // ponytail: gifts (047 D1) and guests (050-Q) join this payload when those cards land.
