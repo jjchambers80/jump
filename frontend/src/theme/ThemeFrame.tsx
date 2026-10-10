@@ -8,6 +8,7 @@ import { Render } from '@puckeditor/core/rsc';
 import { renderConfig, renderable } from './render/config';
 import RetroGridBackground from './RetroGridBackground';
 import ThemeScope from './ThemeScope';
+import { themeFontClasses } from './fonts';
 import PreviewBar, { ClearPreviewCookie } from './PreviewBar';
 import { pageWidthVars, schemeCss, settingsVars } from './settingsCss';
 import type { SectionContext } from './sections/context';
@@ -82,6 +83,7 @@ export default function ThemeFrame({
       themeMode={data.organization.themeMode}
       vars={settingsVars(data.settings)}
       css={schemeCss(data.settings)}
+      fontClassName={themeFontClasses(data.settings)}
       className="min-h-screen bg-gray-50 dark:bg-slate-900"
     >
       {data.previewInvalid && <ClearPreviewCookie />}
