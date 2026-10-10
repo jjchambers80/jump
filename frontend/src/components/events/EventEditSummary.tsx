@@ -98,7 +98,7 @@ export function EventEditSummary({
   zone: string | null | undefined;
   venueName: string | null;
   admissionMode: AdmissionMode;
-  capacity: number;
+  capacity: number | null;
   tiers: SummaryTier[];
   rsvpLimit: number | null;
   sections: SummarySection[];
@@ -286,7 +286,10 @@ function SaveState({ dirty }: { dirty: boolean }) {
  * One bar for the whole event: each tier's allocation as a segment (sold part
  * solid, the rest tinted), then any capacity no tier holds yet, hatched.
  */
-export function CapacityMeter({ capacity, tiers }: { capacity: number; tiers: SummaryTier[] }) {
+export function CapacityMeter({ capacity: rawCapacity, tiers }: { capacity: number | null; tiers: SummaryTier[] }) {
+  // Null = a wizard draft without a capacity yet (spec 050): no ceiling to draw against.
+  const unset = rawCapacity === null;
+  const capacity = rawCapacity ?? 0;
   const allocated = tiers.reduce((sum, t) => sum + t.quantityTotal, 0);
   const sold = tiers.reduce((sum, t) => sum + t.quantitySold, 0);
   const scale = Math.max(capacity, allocated, 1);
@@ -298,15 +301,25 @@ export function CapacityMeter({ capacity, tiers }: { capacity: number; tiers: Su
       <div className="flex items-baseline justify-between gap-3">
         <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-500 dark:text-slate-400">Capacity</p>
         <p className="text-xs tabular-nums text-gray-600 dark:text-slate-300">
-          <span className="font-semibold text-gray-900 dark:text-white">{n(allocated)}</span>
-          {' / '}
-          {capacity > 0 ? n(capacity) : '—'} in tiers
+          {unset ? (
+            'Capacity not set'
+          ) : (
+            <>
+              <span className="font-semibold text-gray-900 dark:text-white">{n(allocated)}</span>
+              {' / '}
+              {capacity > 0 ? n(capacity) : '—'} in tiers
+            </>
+          )}
         </p>
       </div>
 
       <div
         role="img"
-        aria-label={`${n(allocated)} of ${n(capacity)} capacity assigned to tiers, ${n(sold)} sold${over ? '. Tiers exceed capacity' : ''}`}
+        aria-label={
+          unset
+            ? `Capacity not set, ${n(allocated)} in tiers, ${n(sold)} sold`
+            : `${n(allocated)} of ${n(capacity)} capacity assigned to tiers, ${n(sold)} sold${over ? '. Tiers exceed capacity' : ''}`
+        }
         className={`mt-2 flex h-2.5 w-full gap-px overflow-hidden rounded-full bg-gray-100 dark:bg-slate-900 ${over ? 'ring-2 ring-red-500/70 ring-offset-1 ring-offset-white dark:ring-offset-slate-800' : ''}`}
       >
         {tiers.map((tier, i) =>

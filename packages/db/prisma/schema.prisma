@@ -938,7 +938,12 @@ model Event {
   logoUrl          String?
   imageId          String?
   date             DateTime
-  capacity         Int
+  // Spec 050: null only while a TICKETED event is a DRAFT (CHECK Event_capacity_draft_check).
+  capacity         Int?
+  endDate          DateTime? // spec 050: optional end, venue wall clock, after `date`
+  setupStep        String? // spec 050: last wizard step key reached (resume point)
+  setupCompletedAt DateTime? @default(now()) // spec 050: null = wizard create still running
+  setupRequestId   String?   @unique // spec 050: Idempotency-Key of the wizard create
   category         String?
   status           EventStatus   @default(DRAFT)
   admissionMode    AdmissionMode @default(TICKETED)
