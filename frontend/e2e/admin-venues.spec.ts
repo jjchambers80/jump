@@ -4,6 +4,9 @@ import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { signInAsStaff } from './helpers/session';
 
+// Cards fade in (motion-safe); axe would read text contrast mid-fade.
+test.use({ contextOptions: { reducedMotion: 'reduce' } });
+
 const API = 'http://localhost:3002';
 const ORG_ID = 'org-1';
 const json = (body: unknown, status = 200) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
