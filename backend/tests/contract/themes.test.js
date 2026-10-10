@@ -230,7 +230,7 @@ describe('Online store themes contract', () => {
       };
       const res = await save({ themeVersion: 2, settings: bad });
       expect(res.status).toBe(400);
-      expect(res.body.details.errors).toMatchObject({ 'colors.schemes[0].accent': 'must be a #rrggbb color or "brand"' });
+      expect(res.body.details.errors).toMatchObject({ 'colors.schemes[0].accent': 'must be a #rrggbb color or "brand" or "brand-secondary"' });
     });
 
     it('data: null deletes a document so the preset default applies again', async () => {
