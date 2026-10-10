@@ -67,7 +67,7 @@ interface Event {
   description?: string;
   logoUrl?: string | null;
   date: string;
-  capacity: number;
+  capacity: number | null;
   category?: string;
   status: string;
   admissionMode?: 'TICKETED' | 'RSVP';

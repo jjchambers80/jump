@@ -45,11 +45,11 @@ export function describeDocumentError(key: string, path: string, message: string
   return `${parts.join(' › ')}: ${message}`;
 }
 
-const SLOT_LABELS: Record<string, string> = { foreground: 'Text', accentForeground: 'Text on accent', secondaryButtonLabel: 'Secondary button label', muted: 'Muted text' };
+const SLOT_LABELS: Record<string, string> = { foreground: 'Text' };
 
 /**
  * Settings validator paths: "colors.schemes[1].accent" → "Theme settings ›
- * Colors › Inverse › Accent", "typography.headingFont" → "… › Typography › Heading font".
+ * Colors › Inverse › Accent", "typography.font" → "… › Typography › Font".
  */
 export function describeSettingsError(path: string, message: string, settings?: Record<string, any> | null) {
   const parts = ['Theme settings'];

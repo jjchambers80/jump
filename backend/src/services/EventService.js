@@ -59,9 +59,11 @@ class EventService {
    * @param {Object} data - Event data including priceTiers array
    * @returns {Promise<Object>} Created event with venue and price tiers
    */
-  async createEvent(orgId, data) {
+  async createEvent(orgId, data, { setupRequestId = null } = {}) {
     const { venueId, name, description, date, capacity, category, priceTiers } = data;
     const admissionMode = data.admissionMode || 'TICKETED';
+    // Spec 050 §7.1: the wizard creates a DRAFT before capacity and tiers are known.
+    const setup = data.setup === true;
 
     // Validate venue belongs to org
     const venue = await prisma.venue.findFirst({
@@ -77,8 +79,9 @@ class EventService {
       throw new ValidationError('RSVP limit must be between 1 and 100,000');
     if (admissionMode === 'RSVP' && (isNaN(rsvpMaxPartySize) || rsvpMaxPartySize < 1 || rsvpMaxPartySize > 10))
       throw new ValidationError('RSVP maximum party size must be between 1 and 10');
-    const capacityNum = admissionMode === 'RSVP' ? (rsvpLimit ?? 0) : parseInt(capacity);
-    if (admissionMode === 'TICKETED' && (isNaN(capacityNum) || capacityNum < 1 || capacityNum > 100000)) {
+    const capacityUnset = setup && (capacity === undefined || capacity === null);
+    const capacityNum = admissionMode === 'RSVP' ? (rsvpLimit ?? 0) : capacityUnset ? null : parseInt(capacity);
+    if (admissionMode === 'TICKETED' && !capacityUnset && (isNaN(capacityNum) || capacityNum < 1 || capacityNum > 100000)) {
       throw new ValidationError('Capacity must be between 1 and 100,000');
     }
 
@@ -91,8 +94,14 @@ class EventService {
       throw new ValidationError('Event date must be in the future');
     }
 
-    // Validate price tier capacity sum
-    if (admissionMode === 'TICKETED' && priceTiers && priceTiers.length > 0) {
+    let endDate;
+    if (setup && data.endDate !== undefined && data.endDate !== null) {
+      endDate = new Date(data.endDate);
+      if (isNaN(endDate.getTime()) || endDate <= eventDate) throw new ValidationError('End time must be after the start time');
+    }
+
+    // Validate price tier capacity sum (skipped while capacity is not set; updateEvent checks it when set)
+    if (admissionMode === 'TICKETED' && capacityNum !== null && priceTiers && priceTiers.length > 0) {
       const totalTierQuantity = priceTiers.reduce(
         (sum, t) => sum + (parseInt(t.quantityTotal) || 0),
         0
@@ -125,6 +134,7 @@ class EventService {
         rsvpMaxPartySize,
         category: category || null,
         status: 'DRAFT',
+        ...(setup && { setupCompletedAt: null, setupRequestId, endDate: endDate ?? null }),
         priceTiers: {
           create: (admissionMode === 'TICKETED' ? priceTiers || [] : []).map((tier, index) => ({
             name: tier.name,
@@ -165,6 +175,45 @@ class EventService {
   }
 
   /**
+   * Wizard create (spec 050 §4): `createEvent` with `setup: true`, made
+   * idempotent by the client's `Idempotency-Key`, stored as `setupRequestId`
+   * (a column, not process memory: the backend runs more than one instance).
+   * @returns {Promise<{ event: Object, replayed: boolean }>}
+   */
+  async createSetupEvent(orgId, data, requestKey) {
+    const replay = async () => {
+      const row = await prisma.event.findUnique({
+        where: { setupRequestId: requestKey },
+        include: { venue: { select: { organizationId: true } } },
+      });
+      if (!row) return null;
+      if (row.venue.organizationId !== orgId) throw new ConflictError('Idempotency-Key already used');
+      return { event: await this._adminEventDetail(row.id), replayed: true };
+    };
+    if (requestKey) {
+      const existing = await replay();
+      if (existing) return existing;
+    }
+    try {
+      return { event: await this.createEvent(orgId, { ...data, setup: true }, { setupRequestId: requestKey || null }), replayed: false };
+    } catch (error) {
+      // A concurrent request with the same key won the race (its insert may
+      // surface as either unique index, setupRequestId or slug).
+      const existing = requestKey ? await replay() : null;
+      if (existing) return existing;
+      throw error;
+    }
+  }
+
+  async _adminEventDetail(eventId) {
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: { venue: true, priceTiers: { orderBy: { displayOrder: 'asc' } } },
+    });
+    return this._formatEventDetail(event);
+  }
+
+  /**
    * Duplicate an event as a new DRAFT (spec 011 phase 3): same venue,
    * description, image, capacity, category and price tiers (inventory reset,
    * sale windows cleared), plus every application form with its tiers and
@@ -197,6 +246,8 @@ class EventService {
           logoUrl: source.logoUrl,
           imageId: source.imageId,
           date: eventDate,
+          // Same length as the source event (spec 050 §6.1).
+          endDate: source.endDate ? new Date(eventDate.getTime() + (source.endDate - source.date)) : null,
           capacity: source.capacity,
           admissionMode: source.admissionMode,
           rsvpLimit: source.rsvpLimit,
@@ -332,7 +383,30 @@ class EventService {
       updateData.date = eventDate;
     }
 
-    if (updates.capacity !== undefined && nextMode === 'TICKETED') {
+    if (updates.endDate !== undefined) {
+      if (updates.endDate === null) updateData.endDate = null;
+      else {
+        const endDate = new Date(updates.endDate);
+        if (isNaN(endDate.getTime()) || endDate <= (updateData.date ?? existing.date))
+          throw new ValidationError('End time must be after the start time');
+        updateData.endDate = endDate;
+      }
+    } else if (updateData.date && existing.endDate && existing.endDate <= updateData.date) {
+      throw new ValidationError('End time must be after the start time');
+    }
+
+    if (updates.setupStep !== undefined) updateData.setupStep = updates.setupStep;
+    if (updates.setupCompleted === true && !existing.setupCompletedAt) updateData.setupCompletedAt = new Date();
+
+    if (updates.capacity === null) {
+      // Spec 050 §7.1: only a draft may go back to "capacity not set".
+      if (existing.status !== 'DRAFT') {
+        const error = new ConflictError('Capacity is required once an event is published');
+        error.code = 'CAPACITY_REQUIRED';
+        throw error;
+      }
+      if (nextMode === 'TICKETED') updateData.capacity = null;
+    } else if (updates.capacity !== undefined && nextMode === 'TICKETED') {
       const cap = parseInt(updates.capacity);
       if (isNaN(cap) || cap < 1 || cap > 100000) {
         throw new ValidationError('Capacity must be between 1 and 100,000');
@@ -430,6 +504,12 @@ class EventService {
       const tierCount = await prisma.priceTier.count({ where: { eventId, isActive: true } });
       if (tierCount === 0)
         throw new ValidationError('At least one active price tier is required to publish');
+      // Wizard drafts may not have a capacity yet (spec 050); the DB CHECK refuses it too.
+      if (existing.capacity === null) {
+        const error = new ValidationError('Set a capacity before publishing');
+        error.code = 'CAPACITY_REQUIRED';
+        throw error;
+      }
     }
 
     const event = await prisma.event.update({
@@ -783,7 +863,7 @@ class EventService {
       select: { capacity: true, id: true },
     });
     const publishedCount = publishedEvents.length;
-    const publishedCapacity = publishedEvents.reduce((sum, e) => sum + e.capacity, 0);
+    const publishedCapacity = publishedEvents.reduce((sum, e) => sum + (e.capacity ?? 0), 0);
 
     // Draft count
     const draftsCount = counts.DRAFT || 0;
@@ -874,7 +954,7 @@ class EventService {
     return {
       ...event,
       soldTickets: event._count.tickets,
-      availableTickets: event.admissionMode === 'RSVP' ? 0 : event.capacity - event._count.tickets,
+      availableTickets: event.admissionMode === 'RSVP' ? 0 : (event.capacity ?? 0) - event._count.tickets,
     };
   }
 
@@ -1401,9 +1481,12 @@ class EventService {
       description: event.description,
       logoUrl: event.logoUrl || null,
       date: event.date,
-      capacity: event.capacity,
+      endDate: event.endDate ?? null,
+      capacity: event.capacity ?? null,
       category: event.category,
       status: event.status,
+      // Wizard state (spec 050) is admin-only; the public payload stays minimal.
+      ...(!publicView && { setupStep: event.setupStep ?? null, setupCompletedAt: event.setupCompletedAt ?? null }),
       admissionMode: event.admissionMode || 'TICKETED',
       rsvpLimit: event.rsvpLimit ?? null,
       rsvpMaxPartySize: event.rsvpMaxPartySize ?? 1,

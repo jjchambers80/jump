@@ -49,7 +49,12 @@ export interface AdminEvent {
   /** Event image (Media section); the `original` serving URL. */
   logoUrl?: string | null;
   date: string;
-  capacity: number;
+  capacity: number | null;
+  /** Spec 050: optional end on the venue's wall clock. */
+  endDate?: string | null;
+  /** Spec 050 wizard: last step reached; `setupCompletedAt` null = create still running. */
+  setupStep?: string | null;
+  setupCompletedAt?: string | null;
   category?: string;
   status: string;
   venue: EventVenue | null;

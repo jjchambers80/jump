@@ -3,7 +3,7 @@
 // color can reach a style. Card 038F wires the remaining groups; spec 049
 // card C adds typography (fonts come from theme/fonts.ts).
 
-import { BRAND_DEFAULTS } from '@/lib/color';
+import { BRAND_DEFAULTS, bestForeground } from '@/lib/color';
 import type { ThemeSettings } from './types';
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -11,7 +11,6 @@ const num = (value: unknown, fallback: number) => (typeof value === 'number' && 
 
 const SYSTEM_STACK = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 const FONT_KEY = /^[a-z][a-z-]{1,30}$/;
-const LETTER_SPACING: Record<string, string> = { tight: '-0.02em', normal: 'normal', wide: '0.05em' };
 
 /** A FONTS key → font-family. `--theme-font-<key>` is set by the font's class (theme/fonts.ts). */
 export function fontStack(key: unknown): string {
@@ -30,13 +29,8 @@ export function settingsVars(settings: ThemeSettings): Record<string, string> {
     '--theme-logo-width': `${num(logo.desktopWidth, 120)}px`,
     '--theme-logo-width-mobile': `${num(logo.mobileWidth, 90)}px`,
     '--theme-button-radius': `${radius}px`,
-    '--font-heading': fontStack(type.headingFont ?? 'inter'),
-    '--font-body': fontStack(type.bodyFont ?? 'inter'),
-    '--heading-scale': String(num(type.headingScale, 100) / 100),
-    '--body-scale': String(num(type.bodyScale, 100) / 100),
-    '--letter-spacing': LETTER_SPACING[type.letterSpacing] ?? 'normal',
-    // Unset for "as typed": text-transform then inherits (globals.css).
-    ...(type.headingCase === 'uppercase' ? { '--heading-case': 'uppercase' } : {}),
+    // One font for everything in the theme: header, body, footer (globals.css).
+    '--theme-font': fontStack(type.font ?? 'inter'),
   };
 }
 
@@ -66,12 +60,11 @@ export function schemeCss(settings: ThemeSettings): string | null {
     const decl: string[] = [];
     if (HEX.test(scheme.background)) decl.push(`background-color:${scheme.background}`);
     if (HEX.test(scheme.foreground)) decl.push(`color:${scheme.foreground}`, `--foreground:${scheme.foreground}`);
-    if (HEX.test(scheme.accent)) decl.push(`--brand:${scheme.accent}`, `--brand-hover:${scheme.accent}`, `--brand-link:${scheme.accent}`);
+    // Text on a custom accent is derived, never picked (three slots only).
+    if (HEX.test(scheme.accent)) decl.push(`--brand:${scheme.accent}`, `--brand-hover:${scheme.accent}`, `--brand-link:${scheme.accent}`, `--brand-fg:${bestForeground(scheme.accent)}`);
     // Spec 049: the org secondary color, from ThemeScope's --brand-secondary-* vars.
     const secondary = scheme.accent === 'brand-secondary';
     if (secondary) decl.push(...SECONDARY_DECL);
-    if (HEX.test(scheme.accentForeground)) decl.push(`--brand-fg:${scheme.accentForeground}`);
-    if (HEX.test(scheme.border)) decl.push(`--scheme-border:${scheme.border}`);
     if (decl.length) rules.push(`.jump-${scheme.id}{${decl.join(';')}}`);
     if (secondary) rules.push(`.dark .jump-${scheme.id}{--brand-link:var(--brand-secondary-link-dark,${BRAND_DEFAULTS.linkDark})}`);
   }

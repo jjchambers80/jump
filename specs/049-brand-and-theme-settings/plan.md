@@ -60,11 +60,11 @@ Decisions (from the owner):
 - `theme/editor/ThemeEditor.tsx`: add a gear button to `PanelButtons` (:96-110) and a `ThemeSettingsPanel` plugin. Hold the settings in Puck `root.props.themeSettings` so undo/redo covers them (validated in `spike.md` item 6). Save (:323) sends `{ themeVersion, documents, settings }`; the backend already validates (`ThemeService.js:269`).
 - Panel: an accordion with one group open at a time, rendering only `logo`, `colors` and `typography` from `SETTINGS_GROUPS` with a small field renderer keyed on the field types in `packages/theme/src/fields.js` (image → StoreFile picker already used by section fields; range → slider + number; select).
   - **Logo:** the image shows "Using brand logo" plus a link to Settings › Brand when empty; widths; favicon ("defaults to square logo").
-  - **Colors:** a scheme list with add/duplicate/remove (removal blocked when in use; surface the backend error). Per-slot control: `auto` / `brand` / `brand-secondary` / hex, with a contrast warning via `evaluateBrandColor`.
-  - **Typography:** heading/body font, scale, case, letter spacing.
+  - **Colors:** a scheme list with add/duplicate/remove (removal blocked when in use; surface the backend error). Three colors per scheme only — background, text, accent (owner decision 2026-10-10; text on accent is derived, older slots dropped) — each `auto` / `brand` / `brand-secondary` (accent) / hex, with a contrast warning via `evaluateBrandColor`.
+  - **Typography:** one font family for the whole theme (owner decision 2026-10-10: no heading/body split, sizes, case or spacing; theme settings stay simple).
   - Each group has "Reset to theme defaults".
-- Typography CSS: extend `settingsVars` in `settingsCss.ts` with `--font-heading`, `--font-body`, `--heading-scale`, `--body-scale`, `--heading-case` and `--letter-spacing`. Add the matching rules in the theme scope CSS (headings in sections use `var(--font-heading)`).
-- Fonts: one `frontend/src/theme/fonts.ts` that declares the 11 non-system `FONTS` with `next/font/google` (`preload: false`, `display: 'swap'`, a `variable` each), matching the existing `Inter` usage in `app/layout.tsx`. Map the font key → CSS variable; `ThemeScope` applies only the two chosen font classes.
+- Typography CSS: `settingsVars` sets `--theme-font`; one rule on the theme scope sets `font-family`, inherited by the header, sections and footer. Legacy heading/body keys fold into `font` (`normalizeTypography`).
+- Fonts: one `frontend/src/theme/fonts.ts` that declares the 11 non-system `FONTS` with `next/font/google` (`preload: false`, `display: 'swap'`, a `variable` each), matching the existing `Inter` usage in `app/layout.tsx`. Map the font key → CSS variable; `ThemeScope` applies only the chosen font's class.
 - Live preview: the canvas `ThemeScope` reads `root.props.themeSettings`, so edits restyle at once.
 
 **Tests:**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getPreset, settingsDefaults, validateSettings } from '@jump/theme';
+import { getPreset, normalizeTypography, resolveSettings, settingsDefaults, validateSettings } from '@jump/theme';
 import { fontStack, settingsVars } from '@/theme/settingsCss';
 import { describeSaveError, describeSettingsError } from '@/theme/editor/errors';
 import { newScheme, nextSchemeId, resetGroup, schemesOf, setSetting } from '@/theme/editor/settingsDraft';
@@ -7,32 +7,29 @@ import { newScheme, nextSchemeId, resetGroup, schemesOf, setSetting } from '@/th
 const preset = getPreset('eventimus-default')!.settings;
 
 describe('theme settings → CSS variables (spec 049 card C)', () => {
-  it('maps typography to fonts, scales, case and letter spacing', () => {
-    const vars = settingsVars({
-      typography: { headingFont: 'playfair-display', bodyFont: 'system', headingScale: 120, bodyScale: 95, headingCase: 'uppercase', letterSpacing: 'wide' },
-    });
-    expect(vars['--font-heading']).toMatch(/^var\(--theme-font-playfair-display\), system-ui/);
-    expect(vars['--font-body']).toMatch(/^system-ui/);
-    expect(vars['--heading-scale']).toBe('1.2');
-    expect(vars['--body-scale']).toBe('0.95');
-    expect(vars['--heading-case']).toBe('uppercase');
-    expect(vars['--letter-spacing']).toBe('0.05em');
+  it('maps the one theme font to --theme-font', () => {
+    expect(settingsVars({ typography: { font: 'playfair-display' } })['--theme-font']).toMatch(/^var\(--theme-font-playfair-display\), system-ui/);
+    expect(settingsVars({ typography: { font: 'system' } })['--theme-font']).toMatch(/^system-ui/);
   });
 
-  it('falls back to the defaults and never passes text through', () => {
-    const vars = settingsVars({ typography: { headingFont: 'x);}body{', headingScale: '200' as any, letterSpacing: 'evil' } });
-    expect(vars['--font-heading']).not.toContain('}');
-    expect(vars['--heading-scale']).toBe('1');
-    expect(vars['--heading-case']).toBeUndefined();
-    expect(vars['--letter-spacing']).toBe('normal');
-    expect(settingsVars(settingsDefaults() as any)['--font-body']).toBe(fontStack('inter'));
+  it('falls back to the default and never passes text through', () => {
+    expect(settingsVars({ typography: { font: 'x);}body{' } })['--theme-font']).not.toContain('}');
+    expect(settingsVars(settingsDefaults() as any)['--theme-font']).toBe(fontStack('inter'));
+  });
+
+  it('folds the old heading/body keys into the one font', () => {
+    const old = { headingFont: 'oswald', bodyFont: 'lora', headingScale: 120, headingCase: 'uppercase', letterSpacing: 'wide' };
+    expect(normalizeTypography(old)).toEqual({ font: 'lora' });
+    expect(normalizeTypography({ headingFont: 'oswald' })).toEqual({ font: 'oswald' });
+    expect(validateSettings({ typography: old })).toEqual({ value: { typography: { font: 'lora' } }, errors: {} });
+    expect((resolveSettings({ typography: { headingFont: 'oswald' } }, preset) as any).typography).toEqual({ font: 'oswald' });
   });
 });
 
 describe('theme settings draft', () => {
   it('sets one key and resets a whole group to the theme default', () => {
-    const stored = setSetting({ logo: { desktopWidth: 200 } }, 'typography', 'headingFont', 'oswald');
-    expect(stored).toEqual({ logo: { desktopWidth: 200 }, typography: { headingFont: 'oswald' } });
+    const stored = setSetting({ logo: { desktopWidth: 200 } }, 'typography', 'font', 'oswald');
+    expect(stored).toEqual({ logo: { desktopWidth: 200 }, typography: { font: 'oswald' } });
     expect(resetGroup(stored, 'typography')).toEqual({ logo: { desktopWidth: 200 } });
   });
 
@@ -56,6 +53,6 @@ describe('settings error messages', () => {
     );
   });
   it('names the group and field', () => {
-    expect(describeSettingsError('typography.headingFont', 'must be one of …')).toBe('Theme settings › Typography › Heading font: must be one of …');
+    expect(describeSettingsError('typography.font', 'must be one of …')).toBe('Theme settings › Typography › Font: must be one of …');
   });
 });

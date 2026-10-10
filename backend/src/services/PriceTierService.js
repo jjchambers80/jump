@@ -36,7 +36,8 @@ class PriceTierService {
 
     // Capacity validation: sum of all tier quantities must not exceed event capacity
     const existingTotal = event.priceTiers.reduce((sum, t) => sum + t.quantityTotal, 0);
-    if (existingTotal + quantityTotal > event.capacity) {
+    // Skipped while capacity is not set (spec 050 draft): setting it later checks the tier sum.
+    if (event.capacity !== null && existingTotal + quantityTotal > event.capacity) {
       throw new ValidationError(
         `Total tier inventory (${existingTotal + quantityTotal}) would exceed event capacity (${event.capacity})`
       );
@@ -122,7 +123,7 @@ class PriceTierService {
         .filter((t) => t.id !== tierId)
         .reduce((sum, t) => sum + t.quantityTotal, 0);
 
-      if (otherTiersTotal + newQuantity > event.capacity) {
+      if (event.capacity !== null && otherTiersTotal + newQuantity > event.capacity) {
         throw new ValidationError(
           `Total tier inventory (${otherTiersTotal + newQuantity}) would exceed event capacity (${event.capacity})`
         );
