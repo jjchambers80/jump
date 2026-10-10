@@ -31,7 +31,7 @@ hermes kanban --board jump specify <task-id>
 hermes kanban --board jump decompose <task-id>
 ```
 
-A ready implementation card must include the outcome, scope, acceptance criteria, dependencies, affected paths, test commands, non-goals, and the source spec or decision link.
+A ready implementation card must include the outcome, scope, acceptance criteria, dependencies, affected paths, test commands, non-goals, and the source spec or decision link. A card that adds a feature also names its **visibility setting**: the catalog feature key (or the existing feature it extends) and any new actions, built per root `AGENTS.md` › New feature. When a feature is decomposed, that work belongs to the first card that adds a page or route, never a trailing follow-up card.
 
 ### Implementation handoff
 
@@ -91,4 +91,5 @@ A Jump card is done when:
 2. The PR is reviewed and merged into `main`.
 3. Required migrations and deployment checks are complete.
 4. Shipped-behavior documentation is updated where needed.
-5. The Kanban card records the PR, merge commit, and verification evidence.
+5. A new feature has its visibility setting: a catalog feature in `backend/src/permissions/catalog.js` that gates its routes and owns its admin pages, so System › Roles can hide it per role or turn it off platform-wide.
+6. The Kanban card records the PR, merge commit, and verification evidence.

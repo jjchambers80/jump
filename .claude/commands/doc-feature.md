@@ -15,6 +15,7 @@ Read the relevant source files to understand:
 - Database models/migrations involved
 - API endpoints (method, path, auth requirements)
 - How it integrates with other features
+- Its visibility setting: the catalog feature key and actions in `backend/src/permissions/catalog.js`. If the feature has none, stop and flag it — every feature ships with one (root `AGENTS.md` › New feature)
 
 ### Step 3: Generate the wiki page
 Create or update a markdown file at `docs/wiki/features/<feature-name>.md` using this template:
