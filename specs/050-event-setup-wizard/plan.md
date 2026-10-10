@@ -472,6 +472,7 @@ Each card is one PR with green required CI (`backend tests`, `frontend typecheck
 **050-D Unpublish and close sales** · parent: none (rebase on PR #180 if it merged; §7.4)
 - Scope: §6.1 close-sales migration, §7.4 endpoints and enforcement, `salesClosed` in the public payload, event page / apply page / `GetInvolved` closed states, `EventActionsMenu` items + confirm dialogs, Details hero status ("Sales closed" pill with text).
 - Files: schema, migration, `EventService.js`, `OrderService.js`, `RsvpService.js`, `ApplicationService.js`, `routes/events.js`, `EventActionsMenu.tsx`, `EventDetailClient.tsx`, apply page, `GetInvolved.tsx`, events list card.
+- Also (owner, §14 #1): "Delete draft…" for DRAFT events under the unpublish guards, confirmed in a dialog, with a contract test per guard.
 - Acceptance: unpublish refused with reasons for an order, a GOING RSVP, a submitted application; allowed otherwise and the public page 404s; close sales blocks checkout (409 `SALES_CLOSED`), RSVP and new applications, not approved-vendor selection or scanning; reopen restores; idempotent calls.
 - Tests: contract per guard and per enforcement point; Playwright `admin-event-close-sales.spec.ts` + `event-sales-closed.spec.ts` (mocked, axe, 390 px).
 
@@ -537,6 +538,7 @@ Each card is one PR with green required CI (`backend tests`, `frontend typecheck
 
 **050-Q Special guest lineup** · parent: 050-B, 050-G, 050-L
 - Phase 1, built after or alongside 050-O; it does not gate the flip. Why phase 1: the owner asked for it as part of special guests (§5.5 #7), and it is self-contained: one table, CRUD, one public section, no money, capacity or checkout paths.
+- Owner (§14 #2): guests can be added by hand without any special guest form.
 - Scope: §6.3 model, §7.6 routes, "Add to lineup" on the application detail of an APPROVED SPECIAL_GUEST, lineup editor in the Special guests step (list, reorder buttons, image, visibility), `EventGuests` section on the event page (brand tokens, `alt` = guest name), export/erasure, audit mapping.
 - Tests: contract (CRUD, add-to-lineup, org guard, public payload hides invisible rows), unit (erasure removes linked rows, export lists them), Playwright `event-guest-lineup.spec.ts` (storefront section and wizard editor, 390 px, axe). Load `frontend-ui-engineering`.
 
@@ -589,5 +591,7 @@ Phase 2 because shifts reach into the apply form, approval, capacity, CSV, diges
 
 ## 14. Open questions (new only)
 
-1. **Delete an unsold draft.** Zeffy's ⋯ menu has Delete (research §2.3), and the wizard will create more abandoned drafts. Add "Delete draft" (DRAFT, nothing sold or submitted) to the actions menu, or leave abandoned drafts to the dashboard attention list? Default if unanswered: add it in 050-D using the unpublish guards.
-2. **Lineup without a form.** Can an organizer add guests to the lineup by hand with no special-guest form (default: yes, the form is optional)?
+None. Both were answered by the owner on 2026-10-10, choosing the defaults:
+
+1. **Delete an unsold draft: yes, in 050-D.** `DELETE …/:eventId` is allowed for a DRAFT under the same guards as unpublish (no live order, GOING RSVP or submitted application). It appears as "Delete draft…" in `EventActionsMenu` with a confirm dialog.
+2. **Lineup without a form: yes, in 050-Q.** Organizers can add guests by hand in the Special guests step. A special guest form is optional.
