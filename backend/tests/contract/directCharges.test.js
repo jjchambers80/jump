@@ -154,6 +154,28 @@ describe('Direct charges on the organization account (spec 047 D0-S)', () => {
 
   // ─── Paused account: refuse, never fall back to the platform ────────────
 
+  it('refuses paid checkout when Connect is on and the organization has no account', async () => {
+    await prisma.organizationStripeAccount.delete({ where: { stripeAccountId: ACCT } });
+    try {
+      const before = await prisma.priceTier.findUnique({ where: { id: tierId } });
+      const res = await request(app)
+        .post('/orders')
+        .send({ eventId, priceTierId: tierId, quantity: 1, contact: { email: `not-connected@${TAG}.test`, firstName: 'Not', lastName: 'Connected' } });
+      expect(res.status).toBe(409);
+      expect(res.body).toMatchObject({
+        code: 'PAYMENTS_UNAVAILABLE',
+        message: "This organizer can't take payments right now. Please try again later.",
+      });
+      expect(mockSessionsCreate).not.toHaveBeenCalled();
+      const after = await prisma.priceTier.findUnique({ where: { id: tierId } });
+      expect(after.quantityReserved).toBe(before.quantityReserved);
+    } finally {
+      await prisma.organizationStripeAccount.create({
+        data: { organizationId: org.id, mode: 'test', stripeAccountId: ACCT, chargesEnabled: true, detailsSubmitted: true, activeCapabilities: ['card_payments'] },
+      });
+    }
+  });
+
   it('refuses checkout (409 PAYMENTS_UNAVAILABLE) and releases the reservation when the account cannot take charges', async () => {
     await prisma.organizationStripeAccount.update({ where: { stripeAccountId: ACCT }, data: { chargesEnabled: false } });
     try {

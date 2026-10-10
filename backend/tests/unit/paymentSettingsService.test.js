@@ -282,7 +282,7 @@ describe('checkoutOptionsFor with a connected account (spec 047 D0-S: direct cha
     expect(options.payment_method_types).toEqual(['card', 'link', 'klarna']);
   });
 
-  test('platform account when the organization never connected or no charge context is given; inconsistent cents refuse', async () => {
+  test('platform account on the flag-off routing path or with no charge context; inconsistent cents refuse', async () => {
     const { fees, lineItems } = charge();
     expect(await service.checkoutOptionsFor(org(), { fees, lineItems })).toEqual({
       payment_method_types: ['card'],

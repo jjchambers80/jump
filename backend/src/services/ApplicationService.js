@@ -575,6 +575,9 @@ class ApplicationService {
     if (application.status !== 'APPROVED' || application.paymentStatus !== 'PAYMENT_DUE') {
       throw new ConflictError('There is no outstanding balance on this application');
     }
+    // Refuse before protecting the hold as PROCESSING. payNowUrl checks again
+    // when it builds Checkout, closing the race if the account changes.
+    await applicationPaymentService._chargeAccount(application);
     // Spec 037 phase 5: paying for a chosen space. The hold must still run;
     // PROCESSING protects it (booth and category slot) from the sweep while
     // the vendor is on Stripe's page.
@@ -593,7 +596,7 @@ class ApplicationService {
     } catch (error) {
       // Only a failure to mint the Checkout session undoes the PROCESSING
       // guard; the space stays held so the vendor can try again.
-      if (held && !(error instanceof ConflictError)) {
+      if (held && (!(error instanceof ConflictError) || error.code === 'PAYMENTS_UNAVAILABLE')) {
         await prisma
           .$transaction((tx) => this._transition(tx, application.id, { paymentStatus: 'PAYMENT_DUE' }, { include: null }))
           .catch(() => {});
@@ -812,9 +815,12 @@ class ApplicationService {
       holdExpiresAt,
     });
 
-    const current = await prisma.application.findUnique({ where: { id: applicationId }, select: { stripePaymentMethodId: true, chargeAttempts: true } });
+    const current = await prisma.application.findUnique({ where: { id: applicationId }, select: { organizationId: true, stripePaymentMethodId: true, chargeAttempts: true } });
     let paymentStatus = 'PAYMENT_DUE';
     if (useSavedCard === true && current?.stripePaymentMethodId) {
+      // Keep the newly-created hold retryable if Connect is not ready; only
+      // enter PROCESSING when a charge account exists.
+      await applicationPaymentService._chargeAccount(current);
       await prisma.$transaction(async (tx) => {
         const rows = await tx.$queryRaw`SELECT * FROM "Application" WHERE "id" = ${applicationId} FOR UPDATE`;
         const locked = rows[0];
@@ -1440,6 +1446,9 @@ class ApplicationService {
         throw new ConflictError('Only approved applications with a payment due can be charged');
       if (!application.stripePaymentMethodId)
         throw new ConflictError('No card on file; ask the applicant to pay from their status page');
+      // Fail before changing booth/application state. chargeOnApproval checks
+      // again immediately before creating the PaymentIntent.
+      await applicationPaymentService._chargeAccount(application);
       // A held booth must still be held while the card is charged.
       const booth = await boothService.boothForApplication(applicationId, { tx });
       if (booth?.status === 'HELD') {

@@ -262,10 +262,10 @@ class PaymentSettingsService {
   // ---------------------------------------------------------------------------
 
   /**
-   * Direct-charge routing (spec 047 D0-S). Null = the organization never
-   * connected (legacy platform charge). Throws 409 PAYMENTS_UNAVAILABLE for a
-   * connected account that cannot take charges, and an error for inconsistent
-   * cents: refusing beats charging on the wrong account or with a wrong fee.
+   * Direct-charge routing (spec 047 D0-S). Null is the flag-off legacy
+   * platform path. With Connect enabled, an organization without a chargeable
+   * account gets 409 PAYMENTS_UNAVAILABLE. Inconsistent cents also refuse:
+   * failing beats charging on the wrong account or with a wrong fee.
    */
   async _connectRouting(organization, charge) {
     const account = await connectService.chargeAccountFor(organization.id);

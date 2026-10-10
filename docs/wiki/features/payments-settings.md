@@ -1,13 +1,13 @@
 # Payments Settings
 
 **Status**: Implemented (spec 010 phase 1, 2026-09-14; phase 2 Stripe Connect payouts 2026-09-16; direct charges on the organization's own account, spec 047 D0-S, 2026-10-09 — both dark behind `STRIPE_CONNECT_ENABLED`, see [Connect Payouts](connect-payouts.md)).
-**Last Updated**: 2026-10-09
+**Last Updated**: 2026-10-10
 
 ## Overview
 
 **Settings › Payments** (`/admin/settings/payments`) shows an organization what the platform's Stripe account is doing for it and lets it configure the two things Checkout reads per organization: the **name buyers see on their card statement** (a dynamic suffix after the platform prefix, e.g. `JUMP* ROMAN SKIN`) and which **optional payment methods** checkout offers beyond cards and wallets. It also shows the buyer-paid **rates** and the **fraud screening** posture. Modelled on Shopify's *Payments* screens, keeping only what applies to a ticketing platform (no capture method, manual payment methods, gift cards, Tap to Pay or per-org test mode). With Stripe Connect enabled the provider card also shows whether the organization's own Stripe account is **connected** and links to it — [Connect Payouts](connect-payouts.md).
 
-**Once an organization has connected its own Stripe account (spec 047 D0-S) its charges are direct charges on that account**, so two settings on this page change meaning for it: the statement descriptor is the organization's own (set in its Stripe dashboard; the suffix here is not sent), and the optional payment methods are filtered by **its** account's capabilities (`OrganizationStripeAccount.activeCapabilities`) as well as Jump's allowlist. Charges for organizations that are not connected behave exactly as below.
+**With `STRIPE_CONNECT_ENABLED=true`, every paid charge must be a direct charge on the organization's own Stripe account.** If there is no account, onboarding is incomplete, it was disconnected, or Stripe has paused charges, checkout and application card setup return 409 `PAYMENTS_UNAVAILABLE`; Jump does not charge on the platform account. Once chargeable, the statement descriptor is the organization's own (set in its Stripe dashboard; the suffix here is not sent), and optional payment methods are filtered by **its** account's capabilities (`OrganizationStripeAccount.activeCapabilities`) as well as Jump's allowlist. With the flag off, legacy platform-account behavior remains unchanged.
 
 ## Key Files
 
@@ -83,6 +83,7 @@ Every staff role can open the page. `canEdit` (ADMIN, SYSTEM_ADMIN) gates the PA
 - **Provider status is cached 5 minutes** per backend process; a capability enabled in Stripe shows as `Unavailable` until the cache rolls (or restart).
 - **Contract tests pin the cache** (`paymentSettingsService._statusCache`) instead of mocking the Stripe module, because `server.js` is imported once per suite.
 - With `STRIPE_CONNECT_ENABLED` off (or an older backend without `connect` in the payload) the page renders exactly as phase 1 and says the platform settles with organizations outside Jump.
+- Turning Connect on is a hard cutover for paid sales: every organization must finish Stripe onboarding first. Missing, onboarding, disconnected, and charges-paused accounts receive `PAYMENTS_UNAVAILABLE`; there is no platform-account fallback.
 
 ## Related Features
 

@@ -20,7 +20,8 @@ const stripe = {
 jest.unstable_mockModule('../../src/config/stripe.js', () => ({ default: stripe, stripe }));
 // Spec 047: which account is the seller is ConnectService's answer; null = platform.
 const chargeAccountFor = jest.fn(async () => null);
-jest.unstable_mockModule('../../src/services/ConnectService.js', () => ({ default: { chargeAccountFor } }));
+const accountFor = jest.fn(async () => null);
+jest.unstable_mockModule('../../src/services/ConnectService.js', () => ({ default: { chargeAccountFor, accountFor } }));
 
 const { default: service, StripeTaxError } = await import('../../src/services/TaxService.js');
 
@@ -52,6 +53,8 @@ const activeStatus = () => {
 describe('TaxService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    chargeAccountFor.mockResolvedValue(null);
+    accountFor.mockResolvedValue(null);
     service._invalidate();
     taxRegion.update.mockResolvedValue({});
   });
@@ -202,6 +205,25 @@ describe('TaxService', () => {
       chargeAccountFor.mockResolvedValue(null);
       expect((await service.getServiceStatus('org-2')).seller).toBe('PLATFORM');
       expect(stripe.tax.settings.retrieve).toHaveBeenLastCalledWith();
+    });
+
+    it('keeps an onboarding or paused connected account as the tax seller', async () => {
+      chargeAccountFor.mockRejectedValueOnce(Object.assign(new Error('payments unavailable'), { code: 'PAYMENTS_UNAVAILABLE' }));
+      accountFor.mockResolvedValueOnce({ stripeAccountId: 'acct_seller', disconnectedAt: null });
+      taxRegion.findUnique.mockResolvedValue(row());
+      stripe.tax.calculations.create.mockResolvedValue(calculation(725));
+
+      await expect(service.rateForVenue('org-1', ncVenue)).resolves.toMatchObject({ rate: 0.0725, source: 'STRIPE' });
+      expect(stripe.tax.calculations.create).toHaveBeenLastCalledWith(expect.objectContaining({ currency: 'usd' }), { stripeAccount: 'acct_seller' });
+    });
+
+    it('does not use the platform for tax when a Connect seller is missing', async () => {
+      const unavailable = Object.assign(new Error('payments unavailable'), { code: 'PAYMENTS_UNAVAILABLE' });
+      chargeAccountFor.mockRejectedValueOnce(unavailable);
+      accountFor.mockResolvedValueOnce(null);
+
+      await expect(service.getServiceStatus('org-1')).resolves.toMatchObject({ status: 'unavailable', seller: 'ORGANIZATION' });
+      expect(stripe.tax.settings.retrieve).not.toHaveBeenCalled();
     });
   });
 

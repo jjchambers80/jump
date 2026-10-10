@@ -300,10 +300,21 @@ describe('Application orders contract (spec 024 phase 1)', () => {
       orderRef: order.orderRef,
     });
 
-    const free = await submit(freeForm.slug, undefined, `press@${TAG}.test`);
+    // Connect's charge-account gate applies only when money reaches Stripe.
+    // A FREE form remains available without a connected account and creates no
+    // Checkout Session or order.
+    const sessionCount = mockSessionsCreate.mock.calls.length;
+    process.env.STRIPE_CONNECT_ENABLED = 'true';
+    let free;
+    try {
+      free = await submit(freeForm.slug, undefined, `press@${TAG}.test`);
+    } finally {
+      delete process.env.STRIPE_CONNECT_ENABLED;
+    }
     expect(free.status).toBe(201);
     expect(free.body.orderRef).toBeNull();
     expect(await orderRow(free.body.applicationId)).toBeNull();
+    expect(mockSessionsCreate).toHaveBeenCalledTimes(sessionCount);
     const detail = await request(app)
       .get(`${adminBase()}/applications/${free.body.applicationId}`)
       .set(...auth(adminToken));

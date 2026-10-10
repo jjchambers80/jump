@@ -178,21 +178,18 @@ class ConnectService {
   /**
    * Routing decision for a new charge (spec 047 D0-S): the organization's
    * connected account when the flag is on and the account can take charges,
-   * else null (the platform account). One row read; never throws.
+   * or a refusal when Connect is enabled but the organization cannot take
+   * charges. Null is reserved for the flag-off legacy platform path.
    * @returns {Promise<{ stripeAccountId: string, activeCapabilities: string[] } | null>}
    */
   async chargeAccountFor(organizationId) {
-    if (!this.enabled() || !organizationId) return null;
+    if (!this.enabled()) return null;
+    if (!organizationId) throw paymentsUnavailable(organizationId);
     const row = await this.accountFor(organizationId);
-    // Never connected (or disconnected): legacy platform charge.
-    if (!row || row.disconnectedAt) return null;
-    if (!row.chargesEnabled) {
-      // Still onboarding: keep selling on the platform account until Stripe
-      // enables charges, so starting onboarding never stops ticket sales.
-      if (!row.detailsSubmitted) return null;
-      // Onboarded but Stripe has paused charges: refuse rather than fall back
-      // to the platform account, which would make Jump the merchant of record
-      // again (spec 047 option C).
+    // Once Connect is enabled, every buyer charge must run on the
+    // organization's account. Missing, disconnected, onboarding and paused
+    // accounts all refuse instead of making Jump the merchant of record.
+    if (!row || row.disconnectedAt || !row.detailsSubmitted || !row.chargesEnabled) {
       throw paymentsUnavailable(organizationId);
     }
     return { stripeAccountId: row.stripeAccountId, activeCapabilities: row.activeCapabilities || [] };

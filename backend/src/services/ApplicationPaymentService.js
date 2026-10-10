@@ -82,8 +82,9 @@ class ApplicationPaymentService {
 
   /**
    * The Stripe account an application's new money runs on (spec 047 D0-S):
-   * the organization's own connected account when it can take charges, else
-   * the platform account (null).
+   * the organization's own connected account when Connect is enabled, or the
+   * platform account (null) only while the flag is off. A missing or
+   * unchargeable connected account throws PAYMENTS_UNAVAILABLE.
    */
   async _chargeAccount(application) {
     const account = await connectService.chargeAccountFor(application.organizationId ?? application.event?.venue?.organizationId);
@@ -352,7 +353,17 @@ class ApplicationPaymentService {
     if (!application.stripePaymentMethodId) return this._markPaymentDue(application, 'No card on file');
 
     const organization = application.event.venue.organization;
-    const { stripeAccount = null, ...options } = await paymentSettingsService.checkoutOptionsFor(organization, this._chargeFor(application));
+    let stripeAccount;
+    let options;
+    try {
+      ({ stripeAccount = null, ...options } = await paymentSettingsService.checkoutOptionsFor(organization, this._chargeFor(application)));
+    } catch (error) {
+      // A Connect account can become unavailable after the caller marked the
+      // row PROCESSING. No Stripe object exists, so restore a retryable state
+      // (or release a held selection) rather than stranding inventory forever.
+      if (error.code === 'PAYMENTS_UNAVAILABLE') await this._markPaymentDue(application, error.message);
+      throw error;
+    }
     // The saved card lives on the Customer of the account it was set up on.
     const customer = await this.ensureCustomer(application.contact, stripeAccount);
     const routing = options.payment_intent_data || {};

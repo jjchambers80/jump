@@ -1,7 +1,7 @@
 # Connect Payouts
 
 **Status**: Implemented (spec 010 phase 2, 2026-09-16; Finance section + Payout bank account page 2026-09-19; **direct charges on the organization's own account, spec 047 D0-S, 2026-10-09**) — deploys dark behind `STRIPE_CONNECT_ENABLED`; not yet enabled in production. Plans: `specs/047-donations/plan-d0.md` §3 (current model), `specs/010-payments-settings/plan-phase-2.md` (history).
-**Last Updated**: 2026-10-09
+**Last Updated**: 2026-10-10
 
 ## Overview
 
@@ -9,7 +9,7 @@ Each organization takes payments on **its own Stripe account** (spec 047 option 
 
 Organizations connect from **Settings › Payments › Payout bank account**, and watch balance and payout history under **Finance › Payouts** (`/admin/finance/payouts`, live from Stripe). Bank changes happen in the organization's Stripe dashboard (`account.dashboardUrl`); Jump stores no bank numbers beyond a `last4` snapshot.
 
-Until an organization has a connected account that can take charges (or while the flag is off) nothing changes: charges land on the platform account exactly as before (`PaymentTransaction.stripeAccountId = null`).
+While the flag is off, charges land on the platform account exactly as before (`PaymentTransaction.stripeAccountId = null`). Once `STRIPE_CONNECT_ENABLED=true`, an organization must have a connected account with charges enabled: otherwise paid checkout and application card setup are refused with 409 `PAYMENTS_UNAVAILABLE`. Jump never falls back to its platform account for buyer money.
 
 ## Key Files
 
@@ -80,7 +80,7 @@ A new charge is created on the organization's account only when all of:
 3. `chargesEnabled` (Stripe `charges_enabled`)
 4. not `disconnectedAt`
 
-`payoutsEnabled` and the `transfers` capability are **not** conditions. Optional payment methods are filtered by the connected account's own `activeCapabilities` (and Jump's allowlist), not the platform's; no statement descriptor suffix is sent (the account's own descriptor applies). Orders never move between accounts after creation: `PaymentTransaction.stripeAccountId` records the account (null = platform) and every later call for that payment — session reads, refunds, dispute lookups, receipts — uses it.
+With Connect on, a missing row, incomplete onboarding, disconnected account, or `chargesEnabled=false` all produce 409 `PAYMENTS_UNAVAILABLE`; only the flag-off legacy path returns null for a platform charge. `payoutsEnabled` and the `transfers` capability are **not** conditions. Optional payment methods are filtered by the connected account's own `activeCapabilities` (and Jump's allowlist), not the platform's; no statement descriptor suffix is sent (the account's own descriptor applies). Orders never move between accounts after creation: `PaymentTransaction.stripeAccountId` records the account (null = a legacy flag-off platform payment) and every later call for that payment — session reads, refunds, dispute lookups, receipts — uses it. A paused or onboarding account remains the seller for Stripe Tax discovery; a missing or disconnected account makes tax status unavailable rather than reading the platform's registrations.
 
 ### Account lifecycle
 
@@ -179,7 +179,7 @@ Alternatives considered (2026-09-19, research note in the vault: `jump--research
 - **Stripe objects do not cross accounts.** A Customer, PaymentMethod or session created on the platform cannot be used on the organization's account and vice versa; `ensureCustomer` re-creates the Customer on the current account and a card saved before the switch must be collected again.
 - **Connected accounts are per Stripe mode.** Rows for the other mode are invisible; re-connect every organization after go-live.
 - **Two webhook endpoints, two secrets**, and since spec 047 the Connect endpoint needs the money events too (launch checklist).
-- **An onboarded account whose charges Stripe has paused is refused** (409 `PAYMENTS_UNAVAILABLE`, "This organizer can't take payments right now"; the tier reservation is released), never charged on the platform account, so the organization stays the merchant of record. An organization that never connected, or is still onboarding (`detailsSubmitted` false), keeps selling on the platform account so starting onboarding never stops sales.
+- **Every unavailable account state is refused** (409 `PAYMENTS_UNAVAILABLE`, "This organizer can't take payments right now"; the tier reservation is released): not connected, onboarding, disconnected, or charges paused. Once Connect is enabled, Jump never becomes merchant of record as a fallback.
 - **Account Link URLs are single-use and expire in minutes**; `?onboarding=refresh` exists for the expired case. **OAuth codes are single use and expire in 5 minutes**; redeeming one twice revokes the connection.
 - **Reconciliation**: `SELECT "stripeAccountId", "applicationFee", amount FROM "PaymentTransaction" WHERE "stripeAccountId" IS NOT NULL` against Connect › Collected fees in the Stripe dashboard.
 

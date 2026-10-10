@@ -179,16 +179,32 @@ describe('chargeAccountFor (routing rule, spec 047 direct charges)', () => {
     expect(mockFindUnique).not.toHaveBeenCalled();
   });
 
-  test('platform account when the organization never connected, is still onboarding, or disconnected', async () => {
-    mockFindUnique.mockResolvedValueOnce(row({ chargesEnabled: false, detailsSubmitted: false }));
-    expect(await service.chargeAccountFor('org_1')).toBeNull();
-    mockFindUnique.mockResolvedValueOnce(null);
-    expect(await service.chargeAccountFor('org_1')).toBeNull();
-    mockFindUnique.mockResolvedValueOnce(row({ disconnectedAt: new Date() }));
-    expect(await service.chargeAccountFor('org_1')).toBeNull();
+  test('refuses a missing organization id while Connect is enabled', async () => {
+    await expect(service.chargeAccountFor(null)).rejects.toMatchObject({ statusCode: 409, code: 'PAYMENTS_UNAVAILABLE' });
+    expect(mockFindUnique).not.toHaveBeenCalled();
   });
 
-  test('refuses (409 PAYMENTS_UNAVAILABLE) a connected account that cannot take charges', async () => {
+  test('refuses when the organization has no account row', async () => {
+    mockFindUnique.mockResolvedValueOnce(null);
+    await expect(service.chargeAccountFor('org_1')).rejects.toMatchObject({ statusCode: 409, code: 'PAYMENTS_UNAVAILABLE' });
+  });
+
+  test('refuses a disconnected account', async () => {
+    mockFindUnique.mockResolvedValueOnce(row({ disconnectedAt: new Date() }));
+    await expect(service.chargeAccountFor('org_1')).rejects.toMatchObject({ statusCode: 409, code: 'PAYMENTS_UNAVAILABLE' });
+  });
+
+  test('refuses while onboarding is incomplete', async () => {
+    mockFindUnique.mockResolvedValueOnce(row({ chargesEnabled: false, detailsSubmitted: false }));
+    await expect(service.chargeAccountFor('org_1')).rejects.toMatchObject({ statusCode: 409, code: 'PAYMENTS_UNAVAILABLE' });
+  });
+
+  test('refuses incomplete onboarding even if Stripe reports charges enabled', async () => {
+    mockFindUnique.mockResolvedValueOnce(row({ chargesEnabled: true, detailsSubmitted: false }));
+    await expect(service.chargeAccountFor('org_1')).rejects.toMatchObject({ statusCode: 409, code: 'PAYMENTS_UNAVAILABLE' });
+  });
+
+  test('refuses when details were submitted but charges are paused', async () => {
     mockFindUnique.mockResolvedValueOnce(row({ chargesEnabled: false, detailsSubmitted: true }));
     await expect(service.chargeAccountFor('org_1')).rejects.toMatchObject({ statusCode: 409, code: 'PAYMENTS_UNAVAILABLE' });
   });
