@@ -127,7 +127,7 @@ export const SETTINGS_GROUPS = {
   },
 };
 
-/** Scheme color slots: `auto` follows the page's light/dark tokens, `brand` the org brand color. */
+/** Scheme color slots: `auto` follows the page's light/dark tokens, `brand` / `brand-secondary` (accent only) the org brand colors. */
 export const SCHEME_COLORS = ['background', 'foreground', 'accent', 'accentForeground', 'secondaryButtonLabel', 'border', 'muted', 'shadow'];
 const HEX_RE = /^#[0-9a-f]{6}$/i;
 
@@ -153,9 +153,10 @@ function checkSchemes(schemes, errors) {
     const out = { id: scheme.id, name: scheme.name };
     for (const slot of SCHEME_COLORS) {
       const value = scheme[slot];
-      const special = slot === 'accent' ? 'brand' : 'auto';
-      if (value === special || (typeof value === 'string' && HEX_RE.test(value))) out[slot] = value === special ? value : value.toLowerCase();
-      else errors[`${at}.${slot}`] = `must be a #rrggbb color or "${special}"`;
+      const special = slot === 'accent' ? ['brand', 'brand-secondary'] : ['auto'];
+      if (special.includes(value)) out[slot] = value;
+      else if (typeof value === 'string' && HEX_RE.test(value)) out[slot] = value.toLowerCase();
+      else errors[`${at}.${slot}`] = `must be a #rrggbb color or ${special.map((v) => `"${v}"`).join(' or ')}`;
     }
     return out;
   });
@@ -218,4 +219,28 @@ export function resolveSettings(stored, presetSettings) {
     out[group] = { ...(base[group] ?? {}), ...(stored?.[group] ?? {}) };
   }
   return out;
+}
+
+const inherit = (theme, org) => ((theme == null || theme === '') && typeof org === 'string' && org ? org : theme);
+
+/**
+ * Spec 049: resolved settings where an empty theme value inherits the
+ * organization's brand identity (headline ← slogan, description ←
+ * shortDescription, social.* ← socialLinks.*). A non-empty theme value wins.
+ * For rendering only: stored settings stay partial overrides.
+ */
+export function withBrand(resolved, org) {
+  if (!resolved || !org) return resolved;
+  const links = isPlainObject(org.socialLinks) ? org.socialLinks : {};
+  const social = { ...(resolved.social ?? {}) };
+  for (const key of Object.keys(SETTINGS_GROUPS.social.fields)) {
+    const value = inherit(social[key], links[key]);
+    if (value !== undefined) social[key] = value;
+  }
+  const brand = resolved.brand ?? {};
+  return {
+    ...resolved,
+    brand: { ...brand, headline: inherit(brand.headline, org.slogan), description: inherit(brand.description, org.shortDescription) },
+    social,
+  };
 }

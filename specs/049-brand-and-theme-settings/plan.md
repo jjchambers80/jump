@@ -1,6 +1,6 @@
 # Spec 049 — Brand settings + Theme settings panel
 
-**Status:** Card A in progress (2026-10-09). Cards B and C planned.
+**Status:** Card A PR #392 (2026-10-09). Card B built 2026-10-10 (stacked on #392). Card C in progress.
 **Supersedes:** spec 038 D16 ("Brand card under Preferences"). Partially delivers 038F (F1: identity, colors, type) through card C.
 
 ## Context
@@ -50,6 +50,7 @@ Decisions (from the owner):
 - Update e2e specs `admin-branding-color`, `admin-org-theme-mode`, `admin-preferences` and `admin-online-store` to the new location. Add `admin-settings-brand.spec.ts` (`signInAsStaff`, `page.route` mocks).
 
 ## Card B — Theme inherits brand (storefront resolution)
+**Built 2026-10-10.** As planned, with one change: `GET /admin/themes/:id` `resolvedSettings` stays the theme's own values (the Card C panel edits them; inheriting there would save the org values into the theme). The editor canvas applies `withBrand` client-side instead, so the preview still matches live. Draft previews render through `ThemeService.render`, so `ThemePreviewService` needed no change. Favicon ships through `app/organizations/[orgId]/layout.tsx` and `faviconUrl` on `/public/meta`.
 - `packages/theme/src/settings.js`: add `withBrand(resolved, org)`. When a theme value is empty, it fills `brand.headline` ← `org.slogan`, `brand.description` ← `org.shortDescription` and `social.*` ← `org.socialLinks.*`. Call it wherever `resolvedSettings` is produced for render (ThemeService GET/render, ThemePreviewService) and in the editor canvas, so the preview matches live. `FooterSection` stays unchanged.
 - Scheme accent: allow `brand-secondary` alongside `brand` in `checkSchemes`. In `frontend/src/theme/settingsCss.ts`, `schemeCss` maps it to the org secondary. `ThemeScope` adds `--brand-secondary` from `brandCssVars`-style helpers in `lib/color.ts`.
 - Favicon: theme `logo.favicon` ?? org square logo ?? none. Emit it via the `icons` metadata on the storefront route segments that already build metadata (`getPublicMeta` path). Non-theme pages use the square logo only.

@@ -9,7 +9,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
-import { FULL_WIDTH_TEMPLATE, getPreset, presetDocument, validateDocument } from '@jump/theme';
+import { FULL_WIDTH_TEMPLATE, getPreset, presetDocument, validateDocument, withBrand } from '@jump/theme';
 import { describeDocumentError, describeSaveError } from './errors';
 import ActionsMenu from '@/components/ActionsMenu';
 import { useThemeMode } from '@/components/ThemeProvider';
@@ -231,7 +231,12 @@ export default function ThemeEditor({ themeId }: { themeId: string }) {
     const ctx: SectionContext = {
       organization: loaded.organization,
       resolved: { ...loaded.resolved, files, page: pagePayloads[page] },
-      settings: { ...loaded.theme.resolvedSettings, colors: { schemes: loaded.theme.resolvedSettings?.colors?.schemes ?? getPreset(loaded.theme.presetKey)?.settings.colors.schemes } },
+      // Spec 049: the canvas inherits the org brand like the live render does;
+      // resolvedSettings itself stays the theme's own values (what the editor saves).
+      settings: withBrand(
+        { ...loaded.theme.resolvedSettings, colors: { schemes: loaded.theme.resolvedSettings?.colors?.schemes ?? getPreset(loaded.theme.presetKey)?.settings.colors.schemes } },
+        loaded.organization,
+      ),
       content: loaded.content,
       host: null,
       nameIsHeading: true,

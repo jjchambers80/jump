@@ -7,6 +7,8 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { pageWidthVars, schemeCss, schemeClass, settingsVars } from '@/theme/settingsCss';
 import { sectionWidthStyle } from '@/theme/sections/context';
+import { secondaryCssVars } from '@/theme/ThemeScope';
+import { faviconMetadata } from '@/lib/storefrontMeta';
 
 const SECTIONS_DIR = path.join(__dirname, '../../src/theme/sections');
 // Chromatic Tailwind palettes: a raw `bg-blue-600` would ignore the org's brand.
@@ -55,5 +57,29 @@ describe('settings → CSS', () => {
     expect(css).toBe('.jump-scheme-2{background-color:#111827;--brand:#FF0000;--brand-hover:#FF0000;--brand-link:#FF0000}');
     expect(schemeClass('scheme-3')).toBe('jump-scheme-3');
     expect(schemeClass('scheme-9')).toBe('');
+  });
+});
+
+describe('spec 049 brand secondary + favicon', () => {
+  const scheme = { id: 'scheme-3', name: 'Alt', background: 'auto', foreground: 'auto', accent: 'brand-secondary', accentForeground: 'auto', secondaryButtonLabel: 'auto', border: 'auto', muted: 'auto', shadow: 'auto' };
+
+  it('a brand-secondary accent points the brand tokens at the secondary vars', () => {
+    expect(schemeCss({ colors: { schemes: [scheme] } } as any)).toBe(
+      '.jump-scheme-3{--brand:var(--brand-secondary,#2563eb);--brand-hover:var(--brand-secondary-hover,#1d4ed8);--brand-fg:var(--brand-secondary-fg,#ffffff);--brand-link:var(--brand-secondary-link-light,#2563eb)}' +
+        '.dark .jump-scheme-3{--brand-link:var(--brand-secondary-link-dark,#818cf8)}',
+    );
+    // An explicit accent foreground still wins (declared after).
+    expect(schemeCss({ colors: { schemes: [{ ...scheme, accentForeground: '#000000' }] } } as any)).toContain('--brand-fg:var(--brand-secondary-fg,#ffffff);--brand-link:var(--brand-secondary-link-light,#2563eb);--brand-fg:#000000');
+  });
+
+  it('secondary vars come from the secondary color, else the brand color, with a readable foreground', () => {
+    expect(secondaryCssVars('#FFEE00', '#111111')).toMatchObject({ '--brand-secondary': '#ffee00', '--brand-secondary-fg': '#111827' });
+    expect(secondaryCssVars(null, '#111111')).toMatchObject({ '--brand-secondary': '#111111', '--brand-secondary-fg': '#ffffff' });
+    expect(secondaryCssVars('nope', null)).toBeUndefined();
+  });
+
+  it('favicon metadata: the resolved URL as icon and apple icon, or nothing', () => {
+    expect(faviconMetadata('https://api.test/files/f1/h1/icon.png').icons).toEqual({ icon: 'https://api.test/files/f1/h1/icon.png', apple: 'https://api.test/files/f1/h1/icon.png' });
+    expect(faviconMetadata(null)).toEqual({});
   });
 });

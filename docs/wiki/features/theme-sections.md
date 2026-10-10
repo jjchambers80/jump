@@ -1,7 +1,7 @@
 # Storefront Theme Sections
 
 **Status:** Implemented
-**Last Updated:** 2026-09-30
+**Last Updated:** 2026-10-10
 **Specs:** [038 theme editor](../../../specs/038-theme-editor/plan.md), [041 hero carousel + FAQ](../../../specs/041-carousel-faq-sections/spec.md)
 
 ## Overview
@@ -97,6 +97,7 @@ A Content page (Online store › Pages) whose **Template** is **Full width** (bu
 
 - **Slot children get no props from their section.** Pass section-wide settings as CSS variables on the slot element or apply them from a client island that finds the children in the DOM (spec 041).
 - **Constants shared by a server section and a client island** live in a plain module (`theme/sections/islandClasses.ts`). Exported from a `'use client'` file they reach the server component as a client reference and render as `[object Object]`. Vitest does not catch this; Playwright against the fixture does.
+- **`settings` is brand-filled (spec 049).** `ctx.settings.brand.headline` / `.description` and `ctx.settings.social` already fall back to the organization's slogan, short description and social links (`withBrand`, applied in `ThemeService.render` and the editor canvas). Sections read `settings` and never `organization.slogan` directly. A scheme accent can be `brand-secondary` (the org secondary color); sections keep using the `brand` tokens. See [Organization branding](organization-branding.md).
 - **Blocks cannot hold blocks.** Put a slide's button on the slide as fields.
 - In the editor, Puck wraps each slot child in its own element: style a track's children with `[&>*]:` selectors, not classes on the block.
 

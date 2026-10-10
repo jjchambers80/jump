@@ -18,6 +18,37 @@ export function themesEnabledFor(organization) {
   return themesMasterSwitch() && Boolean(organization?.themesEnabled);
 }
 
+async function mainThemeSettings(organizationId) {
+  const theme = await prisma.theme.findFirst({
+    where: { organizationId, role: 'MAIN' },
+    select: { presetKey: true, settings: true },
+  });
+  const preset = getPreset(theme?.presetKey ?? DEFAULT_PRESET_KEY)?.settings;
+  return resolveSettings(theme?.settings ?? {}, preset) ?? {};
+}
+
+function storeFileRow(organizationId, fileId) {
+  return fileId
+    ? prisma.storeFile.findFirst({ where: { id: fileId, organizationId }, include: { file: true, image: true } })
+    : null;
+}
+
+/**
+ * Spec 049 favicon: the live theme's Logo › Favicon, else the organization's
+ * square logo, else null (the platform default). Organizations not on themes
+ * use the square logo only.
+ *
+ * @param {{ id: string, themesEnabled?: boolean, squareLogoUrl?: string | null }} organization
+ */
+export async function faviconUrlFor(organization) {
+  if (organization?.id && themesEnabledFor(organization)) {
+    const settings = await mainThemeSettings(organization.id);
+    const row = await storeFileRow(organization.id, settings.logo?.favicon?.fileId);
+    if (row) return storeFileService.url(row);
+  }
+  return organization?.squareLogoUrl ?? null;
+}
+
 const num = (value, fallback) => (typeof value === 'number' && Number.isFinite(value) ? value : fallback);
 
 /**
@@ -27,21 +58,10 @@ const num = (value, fallback) => (typeof value === 'number' && Number.isFinite(v
  */
 export async function storefrontLogoFor(organization) {
   if (!organization?.id || !themesEnabledFor(organization)) return null;
-  const theme = await prisma.theme.findFirst({
-    where: { organizationId: organization.id, role: 'MAIN' },
-    select: { presetKey: true, settings: true },
-  });
-  const preset = getPreset(theme?.presetKey ?? DEFAULT_PRESET_KEY)?.settings;
-  const settings = resolveSettings(theme?.settings ?? {}, preset) ?? {};
+  const settings = await mainThemeSettings(organization.id);
   const logo = settings.logo ?? {};
   const buttons = settings.buttons ?? {};
-  const fileId = logo.image?.fileId;
-  const row = fileId
-    ? await prisma.storeFile.findFirst({
-        where: { id: fileId, organizationId: organization.id },
-        include: { file: true, image: true },
-      })
-    : null;
+  const row = await storeFileRow(organization.id, logo.image?.fileId);
   const url = row ? storeFileService.url(row) : null;
   return {
     url: url && row.width && row.height ? `${url}${url.includes('?') ? '&' : '?'}w=${row.width}&h=${row.height}` : url,

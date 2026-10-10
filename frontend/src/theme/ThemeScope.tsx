@@ -17,8 +17,16 @@ function modeScript(mode: ThemeMode) {
   return `(function(){try{var d=${dark};var h=document.documentElement;h.dataset.jumpForced=${forced};h.classList.toggle('dark',d);h.classList.toggle('light',!d);h.style.colorScheme=d?'dark':'light';}catch(e){}})();`;
 }
 
+/** `--brand-secondary`, `-hover`, `-fg`, `-link-light`, `-link-dark` (spec 049). */
+export function secondaryCssVars(secondary: string | null | undefined, brand: string | null | undefined) {
+  const vars = brandCssVars(secondary) ?? brandCssVars(brand);
+  return vars && Object.fromEntries(Object.entries(vars).map(([k, v]) => [k.replace('--brand', '--brand-secondary'), v]));
+}
+
 export interface ThemeScopeProps {
   brandColor: string | null | undefined;
+  /** Spec 049: org secondary color for `brand-secondary` scheme accents; unset follows `brandColor`. */
+  brandSecondaryColor?: string | null;
   themeMode: ThemeMode | null | undefined;
   /** Extra CSS variables (theme settings, spec 038 §6.3). */
   vars?: Record<string, string>;
@@ -34,6 +42,7 @@ export interface ThemeScopeProps {
 
 export default function ThemeScope({
   brandColor,
+  brandSecondaryColor,
   themeMode,
   vars,
   css,
@@ -44,7 +53,8 @@ export default function ThemeScope({
 }: ThemeScopeProps) {
   const mode = isThemeMode(themeMode) ? themeMode : null;
   const brand = brandCssVars(brandColor);
-  const style = brand || vars ? ({ ...(brand ?? {}), ...(vars ?? {}) } as CSSProperties) : undefined;
+  const secondary = secondaryCssVars(brandSecondaryColor, brandColor);
+  const style = brand || secondary || vars ? ({ ...(brand ?? {}), ...(secondary ?? {}), ...(vars ?? {}) } as CSSProperties) : undefined;
   return (
     <div
       className={className ? `brand-scope ${className}` : 'brand-scope'}

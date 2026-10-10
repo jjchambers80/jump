@@ -2,6 +2,7 @@
 // backend; numbers are re-checked here so nothing but a number or a #rrggbb
 // color can reach a style. Card 038F wires the remaining groups.
 
+import { BRAND_DEFAULTS } from '@/lib/color';
 import type { ThemeSettings } from './types';
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -24,13 +25,21 @@ export function settingsVars(settings: ThemeSettings): Record<string, string> {
 /**
  * `.jump-scheme-N` classes for schemes with explicit colors. `auto` slots set
  * nothing, so they follow the page's light/dark tokens (D7); `brand` accent
- * keeps the brand variables from BrandScope.
+ * keeps the brand variables from BrandScope; `brand-secondary` swaps in the
+ * org secondary color (ThemeScope `--brand-secondary-*`).
  */
 /** A template's own page width (root.props.pageWidth) over the theme's, for its whole frame. */
 export function pageWidthVars(root: { props?: Record<string, unknown> } | null | undefined): Record<string, string> | undefined {
   const width = root?.props?.pageWidth;
   return typeof width === 'number' && Number.isFinite(width) ? { '--theme-page-width': `${width}px` } : undefined;
 }
+
+const SECONDARY_DECL = [
+  `--brand:var(--brand-secondary,${BRAND_DEFAULTS.brand})`,
+  `--brand-hover:var(--brand-secondary-hover,${BRAND_DEFAULTS.hover})`,
+  `--brand-fg:var(--brand-secondary-fg,${BRAND_DEFAULTS.fg})`,
+  `--brand-link:var(--brand-secondary-link-light,${BRAND_DEFAULTS.linkLight})`,
+];
 
 export function schemeCss(settings: ThemeSettings): string | null {
   const rules: string[] = [];
@@ -40,9 +49,13 @@ export function schemeCss(settings: ThemeSettings): string | null {
     if (HEX.test(scheme.background)) decl.push(`background-color:${scheme.background}`);
     if (HEX.test(scheme.foreground)) decl.push(`color:${scheme.foreground}`, `--foreground:${scheme.foreground}`);
     if (HEX.test(scheme.accent)) decl.push(`--brand:${scheme.accent}`, `--brand-hover:${scheme.accent}`, `--brand-link:${scheme.accent}`);
+    // Spec 049: the org secondary color, from ThemeScope's --brand-secondary-* vars.
+    const secondary = scheme.accent === 'brand-secondary';
+    if (secondary) decl.push(...SECONDARY_DECL);
     if (HEX.test(scheme.accentForeground)) decl.push(`--brand-fg:${scheme.accentForeground}`);
     if (HEX.test(scheme.border)) decl.push(`--scheme-border:${scheme.border}`);
     if (decl.length) rules.push(`.jump-${scheme.id}{${decl.join(';')}}`);
+    if (secondary) rules.push(`.dark .jump-${scheme.id}{--brand-link:var(--brand-secondary-link-dark,${BRAND_DEFAULTS.linkDark})}`);
   }
   return rules.length ? rules.join('') : null;
 }

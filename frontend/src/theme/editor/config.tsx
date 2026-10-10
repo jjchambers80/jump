@@ -189,6 +189,7 @@ export function buildEditorConfig(ctx: FieldContext, page = 'home'): Config {
           <div className={dark ? 'dark' : undefined}>
             <ThemeScope
               brandColor={section.organization.brandColor}
+              brandSecondaryColor={section.organization.brandSecondaryColor}
               themeMode={section.organization.themeMode}
               vars={settingsVars(section.settings)}
               css={schemeCss(section.settings)}

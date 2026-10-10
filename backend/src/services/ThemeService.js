@@ -29,6 +29,7 @@ import {
   validateContent,
   validateDocument,
   validateSettings,
+  withBrand,
   DEFAULT_PRESET_KEY,
   FULL_WIDTH_TEMPLATE,
   pageIdOfKey,
@@ -40,7 +41,7 @@ import storeFileService from './StoreFileService.js';
 import menuService from './MenuService.js';
 import galleryService from './GalleryService.js';
 import pageService from './PageService.js';
-import { publicEventSummaries } from './OrganizationService.js';
+import { BRAND_IDENTITY_SELECT, publicEventSummaries } from './OrganizationService.js';
 
 import { themesEnabledFor, themesMasterSwitch } from './storefrontLogo.js';
 
@@ -73,6 +74,8 @@ const ORGANIZATION_IDENTITY = {
   brandColor: true,
   themeMode: true,
   buyerSignInLinks: true,
+  // Spec 049: empty theme brand/social values inherit these (withBrand).
+  ...BRAND_IDENTITY_SELECT,
 };
 
 const BLOCKS_ONLY = new Set(['AnnouncementBar', 'HeroCarousel', 'Faq']);
@@ -601,7 +604,7 @@ class ThemeService {
       template: templateKey === 'frame' ? null : read(templateKey),
       footer: read('footer'),
     };
-    const settings = resolveSettings(theme.settings, getPreset(theme.presetKey)?.settings);
+    const settings = withBrand(resolveSettings(theme.settings, getPreset(theme.presetKey)?.settings), organization);
     return {
       renderer: 'theme',
       page: templateKey,

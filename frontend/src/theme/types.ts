@@ -25,6 +25,12 @@ export interface RenderOrganization {
   brandColor: string | null;
   themeMode: ThemeMode | null;
   buyerSignInLinks: boolean;
+  /** Spec 049 brand identity: empty theme brand/social settings inherit these (withBrand). */
+  squareLogoUrl?: string | null;
+  brandSecondaryColor?: string | null;
+  slogan?: string | null;
+  shortDescription?: string | null;
+  socialLinks?: Record<string, string> | null;
 }
 
 export interface ThemeScheme {
