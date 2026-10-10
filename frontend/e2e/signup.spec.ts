@@ -277,6 +277,6 @@ test.describe('org switcher', () => {
     // The original tab refetched and selected the new organization
     await expect(page.getByTestId('org-switcher-trigger')).toContainText('Raleigh Retro Gamers');
     await page.getByTestId('org-switcher-trigger').click();
-    await expect(page.getByRole('button', { name: /Durham Pinball Society/ })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /Durham Pinball Society/ })).toBeVisible();
   });
 });

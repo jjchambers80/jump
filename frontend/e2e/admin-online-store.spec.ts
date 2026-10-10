@@ -89,7 +89,7 @@ test('shows the active org and follows the switcher without leaving the page', a
 
   const switcher = page.getByTestId('org-switcher-trigger');
   await switcher.click();
-  await page.getByRole('button', { name: 'Durham Pinball Society' }).click();
+  await page.getByRole('menuitem', { name: 'Durham Pinball Society' }).click();
 
   await expect(page).toHaveURL(/\/admin\/online-store$/);
   await expect(switcher).toContainText('Durham Pinball Society');
