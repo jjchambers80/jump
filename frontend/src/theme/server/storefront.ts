@@ -5,6 +5,7 @@
 import { cookies, headers } from 'next/headers';
 import { API_URL } from '@/lib/assets';
 import type { StorefrontLockInfo, ThemeRender } from '../types';
+import { EVENT_PREVIEW_COOKIE, EVENT_PREVIEW_HEADER } from '@/lib/eventPreview';
 
 const SERVER_API_URL = process.env.INTERNAL_API_URL || API_URL;
 const ACCESS_COOKIE_PREFIX = 'jump_store_access_';
@@ -53,12 +54,15 @@ export interface StorefrontResponse<T> {
 export async function storefrontGet<T>(path: string, { thumbnail }: { thumbnail?: string } = {}): Promise<StorefrontResponse<T>> {
   const access = thumbnail ? null : accessHeader();
   const preview = thumbnail ? null : cookies().get(PREVIEW_COOKIE)?.value;
+  // Draft event preview (spec 050 F): the backend honours it only for this org's theme frame.
+  const eventPreview = thumbnail ? null : cookies().get(EVENT_PREVIEW_COOKIE)?.value;
   try {
     const res = await fetch(`${SERVER_API_URL}${path}`, {
       cache: 'no-store',
       headers: {
         ...(access && { 'X-Storefront-Access': access }),
         ...(preview && { 'X-Theme-Preview': preview }),
+        ...(eventPreview && { [EVENT_PREVIEW_HEADER]: eventPreview }),
         ...(thumbnail && { 'X-Theme-Thumbnail': thumbnail }),
       },
       signal: AbortSignal.timeout(5000),

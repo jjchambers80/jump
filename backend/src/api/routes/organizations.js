@@ -29,6 +29,7 @@ import { findByPublicIdentifier } from '../../utils/publicIdentifier.js';
 import { clientIpForRateLimit } from '../../utils/clientIp.js';
 import themeService, { themesEnabledFor } from '../../services/ThemeService.js';
 import themePreviewService, { THUMBNAIL_AUDIENCE } from '../../services/ThemePreviewService.js';
+import eventPreviewService from '../../services/EventPreviewService.js';
 import contactInquiryService from '../../services/ContactInquiryService.js';
 import { validateContactInquiry } from '../validators/contactInquiryValidators.js';
 import { LIMITS, makeLimiter } from '../../middleware/rateLimit.js';
@@ -177,7 +178,7 @@ router.get('/:id/public/meta', async (req, res, next) => {
  * page. Gated by private store mode; hidden / scheduled records are 404.
  * Each payload carries the organization identity for the storefront shell.
  */
-async function publicOrganizationIdentity(identifier) {
+export async function publicOrganizationIdentity(identifier) {
   const org = await findByPublicIdentifier(prisma.organization, identifier, {
     where: { status: 'ACTIVE' },
     select: { id: true, slug: true, name: true, logoUrl: true, coverUrl: true, brandColor: true, themeMode: true, buyerSignInLinks: true, ...BRAND_IDENTITY_SELECT },
@@ -283,13 +284,17 @@ router.get(
       const previewToken = req.get('X-Theme-Preview');
       if (thumbnailToken) req.themePreview = themePreviewService.verify(thumbnailToken, organization.id, THUMBNAIL_AUDIENCE) ?? false;
       else if (previewToken) req.themePreview = themePreviewService.verify(previewToken, organization.id) ?? false;
+      // A draft event preview (spec 050 F) needs only the theme's header and footer around it.
+      req.eventPreviewFrame =
+        req.query.page === 'frame' && Boolean(eventPreviewService.verifyOrganization(req.get('X-Event-Preview'), organization.id));
       next();
     } catch (error) {
       next(error);
     }
   },
   // A staff preview renders past the store password; a share link does not (contracts C7).
-  (req, res, next) => (req.themePreview && !req.themePreview.share ? next() : gateByOrgParam(req, res, next)),
+  (req, res, next) =>
+    (req.themePreview && !req.themePreview.share) || req.eventPreviewFrame ? next() : gateByOrgParam(req, res, next),
   async (req, res, next) => {
     try {
       const result = await themeService.renderPublic(req.themeOrganizationId, String(req.query.page || 'home'), {

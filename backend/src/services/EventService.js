@@ -39,6 +39,19 @@ function admissionConflict(message) {
   return error;
 }
 
+// Everything the public event page renders (getEventById, preview payload).
+const PUBLIC_EVENT_INCLUDE = {
+  venue: { include: { organization: { select: { id: true, slug: true, name: true, logoUrl: true, brandColor: true, themeMode: true, taxInclusivePricing: true, buyerSignInLinks: true, themesEnabled: true } } } },
+  priceTiers: { orderBy: { displayOrder: 'asc' } },
+  // Add-ons a ticket checkout may offer (spec 012); the storefront picks
+  // per cart tier via `allTiers` / `priceTierIds`.
+  addOns: {
+    where: { isActive: true, scope: { in: ['TICKET', 'BOTH'] } },
+    include: { priceTiers: { select: { priceTierId: true } } },
+    orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
+  },
+};
+
 class EventService {
   /**
    * Create a new event in DRAFT status with price tiers
@@ -638,29 +651,34 @@ class EventService {
   }
 
   /**
-   * Get single event by ID (public, published only)
-   * @param {string} eventId - Event ID
-   * @returns {Promise<Object>} Event detail with venue and price tiers
+   * Get single event by ID (public, published only). `preview` (a verified
+   * X-Event-Preview for this event, spec 050 F) also serves a DRAFT and marks
+   * the answer `preview: true` so the page disables checkout, RSVP and apply.
    */
-  async getEventById(identifier) {
-    const event = await findByPublicIdentifier(prisma.event, identifier, {
-      include: {
-        venue: { include: { organization: { select: { id: true, slug: true, name: true, logoUrl: true, brandColor: true, themeMode: true, taxInclusivePricing: true, buyerSignInLinks: true, themesEnabled: true } } } },
-        priceTiers: { orderBy: { displayOrder: 'asc' } },
-        // Add-ons a ticket checkout may offer (spec 012); the storefront picks
-        // per cart tier via `allTiers` / `priceTierIds`.
-        addOns: {
-          where: { isActive: true, scope: { in: ['TICKET', 'BOTH'] } },
-          include: { priceTiers: { select: { priceTierId: true } } },
-          orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
-        },
-      },
-    });
-
-    if (!event || event.status !== 'PUBLISHED') {
+  async getEventById(identifier, { preview = false } = {}) {
+    const event = await findByPublicIdentifier(prisma.event, identifier, { include: PUBLIC_EVENT_INCLUDE });
+    if (!event || (event.status !== 'PUBLISHED' && !(preview && event.status === 'DRAFT'))) {
       throw new NotFoundError('Event not found');
     }
+    const detail = await this._publicDetail(event);
+    if (preview) detail.preview = true;
+    return detail;
+  }
 
+  /**
+   * GET /organizations/:orgId/events/:eventId/preview-payload (spec 050 §7.5):
+   * the public event shape whatever the status, for the wizard's live preview.
+   */
+  async getPreviewEvent(organizationId, eventId) {
+    const event = await prisma.event.findFirst({
+      where: { id: eventId, venue: { organizationId } },
+      include: PUBLIC_EVENT_INCLUDE,
+    });
+    if (!event) throw new NotFoundError('Event not found');
+    return this._publicDetail(event);
+  }
+
+  async _publicDetail(event) {
     if (event.admissionMode === 'RSVP') {
       const { headcount } = await rsvpService.headcount(event.id);
       event.rsvpHeadcount = headcount;
@@ -672,9 +690,9 @@ class EventService {
   }
 
   /** Canonical public route data; intentionally bypasses the private-store gate. */
-  async getPublicRoute(identifier) {
+  async getPublicRoute(identifier, { preview = false } = {}) {
     const event = await findByPublicIdentifier(prisma.event, identifier, {
-      where: { status: 'PUBLISHED', venue: { organization: { status: 'ACTIVE' } } },
+      where: { status: preview ? { in: ['PUBLISHED', 'DRAFT'] } : 'PUBLISHED', venue: { organization: { status: 'ACTIVE' } } },
       select: { id: true, slug: true, venue: { select: { organizationId: true } } },
     });
     if (!event) throw new NotFoundError('Event not found');

@@ -7,11 +7,12 @@ import { API_URL, resolveAssetUrl } from './assets';
 // Server-only, like theme/server/storefront.ts: the private backend URL when set.
 const SERVER_API_URL = process.env.INTERNAL_API_URL || API_URL;
 
-export async function fetchPublicJson<T>(path: string): Promise<T | null> {
+/** `headers` (a per-visitor answer, e.g. a draft preview) skips the shared 60 s cache. */
+export async function fetchPublicJson<T>(path: string, headers?: Record<string, string>): Promise<T | null> {
   try {
     const res = await fetch(`${SERVER_API_URL}${path}`, {
       signal: AbortSignal.timeout(2000),
-      next: { revalidate: 60 },
+      ...(headers ? { headers, cache: 'no-store' as const } : { next: { revalidate: 60 } }),
     });
     if (!res.ok) return null;
     return (await res.json()) as T;

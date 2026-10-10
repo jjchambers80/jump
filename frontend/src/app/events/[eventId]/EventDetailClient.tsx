@@ -34,6 +34,8 @@ import { dateTile } from '@/lib/dateTile';
 import { CalendarDays, ChevronRight, Clock, Info, Lock, MapPin, ShoppingCart, X } from 'lucide-react';
 import { fetchLegalVersions, type LegalVersions } from '@/lib/legal';
 import ContentHtml from '@/components/storefront/ContentHtml';
+import EventPreviewBar from '@/components/storefront/EventPreviewBar';
+import { EVENT_PREVIEW_HEADER } from '@/lib/eventPreview';
 
 interface EventVenue {
   id: string;
@@ -87,6 +89,8 @@ interface Event {
   priceTiers: PriceTier[];
   /** Ticket-scope add-ons (spec 012); offered per cart tier. */
   addOns?: AddOn[];
+  /** Staff draft preview (spec 050 F): set by the backend after it verified X-Event-Preview. */
+  preview?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -94,10 +98,13 @@ interface Event {
 export default function EventDetailPage({
   params,
   chrome = true,
+  previewToken,
 }: {
   params: { eventId: string };
   /** False when the theme frame (spec 038) already renders the header and footer around this page. */
   chrome?: boolean;
+  /** Draft preview token from the httpOnly cookie, forwarded unverified (spec 050 F). */
+  previewToken?: string;
 }) {
   const router = useRouter();
   const [event, setEvent] = useState<Event | null>(null);
@@ -156,7 +163,10 @@ export default function EventDetailPage({
       setLoading(true);
       setError(null);
 
-      const data = await api.get<Event>(`/events/${params.eventId}`);
+      const data = await api.get<Event>(
+        `/events/${params.eventId}`,
+        previewToken ? { headers: { [EVENT_PREVIEW_HEADER]: previewToken } } : undefined
+      );
       setEvent(data);
       setLock(null);
       restoreCancelledCheckout(data);
@@ -174,6 +184,8 @@ export default function EventDetailPage({
   };
 
   const isRsvpMode = event?.admissionMode === 'RSVP';
+  // Only the backend's verified answer turns preview mode on.
+  const isPreview = event?.preview === true;
 
   const totalAvailable =
     isRsvpMode ? 0 : event?.priceTiers?.reduce((sum, t) => sum + (t.isActive ? t.quantityAvailable : 0), 0) ?? 0;
@@ -223,6 +235,7 @@ export default function EventDetailPage({
     setAddOnQuantities((current) => ({ ...current, [addOnId]: quantity }));
 
   const handleProceedToCheckout = () => {
+    if (isPreview) return;
     if (cartItems.length > 0) {
       const search = new URLSearchParams({ items: JSON.stringify(cartItems) });
       if (addOnLines.length > 0) search.set('addOns', JSON.stringify(addOnLines));
@@ -352,6 +365,7 @@ export default function EventDetailPage({
 
   return (
     <BrandScope color={event.organizationBrandColor} themeMode={event.organizationThemeMode} className={`${chrome ? 'min-h-screen' : ''} bg-gray-50 dark:bg-slate-900 pb-24 lg:pb-0`}>
+      {isPreview && <EventPreviewBar organizationId={event.organizationId} />}
       {chrome && event.organizationName && (
         <OrganizationHeader
           organization={{ id: event.organizationId, name: event.organizationName, logoUrl: event.organizationLogoUrl, storefrontLogo: event.organizationStorefrontLogo }}
@@ -464,7 +478,7 @@ export default function EventDetailPage({
                   {/* Floor map (spec 014): opens full screen; renders only once a map is published */}
                   <FloorMapButton eventId={event.id} eventName={event.name} />
                   {/* Applications (spec 011): vendors, sponsors, press, panels — above the fold */}
-                  <GetInvolved eventId={event.id} />
+                  <GetInvolved eventId={event.id} preview={isPreview} />
                 </div>
               </div>
 
@@ -523,6 +537,7 @@ export default function EventDetailPage({
                     <RsvpPass
                       event={event}
                       isPastEvent={isPastEvent}
+                      preview={isPreview}
                       legalVersions={legalVersions}
                       onLegalStale={() => fetchLegalVersions().then(setLegalVersions).catch(() => {})}
                       onSubmitted={() => setRsvpSubmitted(true)}
@@ -672,7 +687,8 @@ export default function EventDetailPage({
 
                     <button
                       onClick={handleProceedToCheckout}
-                      className="group flex w-full items-center justify-center gap-2 rounded-[var(--theme-button-radius,0.75rem)] bg-brand px-6 py-3.5 text-lg font-bold text-brand-fg transition-colors duration-200 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800"
+                      disabled={isPreview}
+                      className="group flex disabled:cursor-not-allowed disabled:opacity-60 w-full items-center justify-center gap-2 rounded-[var(--theme-button-radius,0.75rem)] bg-brand px-6 py-3.5 text-lg font-bold text-brand-fg transition-colors duration-200 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800"
                     >
                       Proceed to Checkout
                       <ChevronRight className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-0.5 motion-reduce:transition-none" aria-hidden />
@@ -748,7 +764,7 @@ export default function EventDetailPage({
 
                 <button
                   onClick={handleProceedToCheckout}
-                  disabled={cartItems.length === 0}
+                  disabled={cartItems.length === 0 || isPreview}
                   className="flex-1 bg-brand hover:bg-brand-hover disabled:bg-gray-400 disabled:cursor-not-allowed text-brand-fg disabled:text-white font-bold py-3 px-4 rounded-[var(--theme-button-radius,8px)] transition-colors duration-200 text-base flex items-center justify-center gap-2"
                 >
                   <span>Checkout {formatPrice(totalAmount)}</span>
@@ -822,7 +838,8 @@ export default function EventDetailPage({
                 <button
                   type="button"
                   onClick={handleProceedToCheckout}
-                  className="flex w-full items-center justify-center gap-2 rounded-[var(--theme-button-radius,8px)] bg-brand px-4 py-3 text-base font-bold text-brand-fg transition-colors duration-200 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2"
+                  disabled={isPreview}
+                  className="disabled:cursor-not-allowed disabled:opacity-60 flex w-full items-center justify-center gap-2 rounded-[var(--theme-button-radius,8px)] bg-brand px-4 py-3 text-base font-bold text-brand-fg transition-colors duration-200 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2"
                 >
                   Checkout {formatPrice(totalAmount)}
                   <ChevronRight className="h-5 w-5" aria-hidden />

@@ -59,6 +59,11 @@ createServer(async (req, res) => {
 
   const eventMeta = url.pathname.match(/^\/events\/([^/]+)\/meta$/);
   if (eventMeta) {
+    // Draft event preview (spec 050 F): a DRAFT of a themed org resolves only with the forwarded token.
+    if (eventMeta[1] === 'draft-preview-event')
+      return req.headers['x-event-preview'] === 'fixture-event-preview'
+        ? send(res, 200, { id: 'draft-preview-event', slug: 'draft-preview-event', organizationId: 'theme-light' })
+        : send(res, 404, { error: 'NotFoundError', message: 'Event not found' });
     const meta = Object.prototype.hasOwnProperty.call(EVENT_ROUTES, eventMeta[1]) ? EVENT_ROUTES[eventMeta[1]] : null;
     return meta ? send(res, 200, meta) : send(res, 404, { error: 'NotFoundError', message: 'No fixture' });
   }

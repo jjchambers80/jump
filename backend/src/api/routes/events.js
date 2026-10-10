@@ -18,9 +18,36 @@ import imageService from '../../services/ImageService.js';
 import { validateCreateEvent, validateUpdateEvent } from '../validators/eventValidators.js';
 import { gateByEventParam } from '../../middleware/storefrontGate.js';
 import mapService from '../../services/MapService.js';
+import eventPreviewService from '../../services/EventPreviewService.js';
+import applicationFormService from '../../services/ApplicationFormService.js';
+import { findByPublicIdentifier } from '../../utils/publicIdentifier.js';
+import { publicOrganizationIdentity } from './organizations.js';
 
 // ── Public routes (mounted at /events) ──
 const publicRouter = express.Router();
+
+/**
+ * Staff draft preview (spec 050 F): req.eventPreview is true only when
+ * X-Event-Preview verifies for this very event and its organization. The
+ * cookie behind it is never trusted anywhere else.
+ */
+async function resolveEventPreview(req, res, next) {
+  const token = req.get('X-Event-Preview');
+  if (!token) return next();
+  try {
+    const event = await findByPublicIdentifier(prisma.event, req.params.eventId, {
+      select: { id: true, venue: { select: { organizationId: true } } },
+    });
+    req.eventPreview = Boolean(event && eventPreviewService.verify(token, event.venue.organizationId, event.id));
+    if (req.eventPreview) res.set({ 'Cache-Control': 'private, no-store', 'X-Robots-Tag': 'noindex' });
+    next();
+  } catch (error) {
+    next(error);
+  }
+}
+
+// A verified staff preview passes a private store's password, as staff theme previews do.
+const gateUnlessPreview = (req, res, next) => (req.eventPreview ? next() : gateByEventParam(req, res, next));
 
 /**
  * GET /events
@@ -43,9 +70,9 @@ publicRouter.get('/', async (req, res, next) => {
 });
 
 /** Canonical route lookup used by the frontend's permanent legacy redirect. */
-publicRouter.get('/:eventId/meta', async (req, res, next) => {
+publicRouter.get('/:eventId/meta', resolveEventPreview, async (req, res, next) => {
   try {
-    res.json(await eventService.getPublicRoute(req.params.eventId));
+    res.json(await eventService.getPublicRoute(req.params.eventId, { preview: req.eventPreview === true }));
   } catch (error) {
     next(error);
   }
@@ -55,9 +82,9 @@ publicRouter.get('/:eventId/meta', async (req, res, next) => {
  * GET /events/:eventId
  * Get single published event details (public, no auth required)
  */
-publicRouter.get('/:eventId', gateByEventParam, async (req, res, next) => {
+publicRouter.get('/:eventId', resolveEventPreview, gateUnlessPreview, async (req, res, next) => {
   try {
-    const result = await eventService.getEventById(req.params.eventId);
+    const result = await eventService.getEventById(req.params.eventId, { preview: req.eventPreview === true });
     res.json(result);
   } catch (error) {
     next(error);
@@ -257,6 +284,40 @@ orgRouter.get('/:eventId/overview', requireAuth, requireOrganizer, requireOrgMem
   try {
     const { orgId, eventId } = req.params;
     res.json(await eventService.getEventOverview(orgId, eventId));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /organizations/:orgId/events/:eventId/preview-link (spec 050 F)
+ * → { url, expiresAt }: a 1 h staff link to the real, themed event page, DRAFT included.
+ */
+orgRouter.post('/:eventId/preview-link', requireAuth, requireOrganizer, requireOrgMembership(), async (req, res, next) => {
+  try {
+    res.json(await eventPreviewService.mint(req.params.orgId, req.params.eventId));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /organizations/:orgId/events/:eventId/preview-payload (spec 050 §7.5)
+ * Public event shape whatever the status, plus what the page around it needs.
+ * The wizard (050-H) overlays unsaved field values on it.
+ */
+orgRouter.get('/:eventId/preview-payload', requireAuth, requireOrganizer, requireOrgMembership(), async (req, res, next) => {
+  try {
+    const { orgId, eventId } = req.params;
+    const event = await eventService.getPreviewEvent(orgId, eventId);
+    const [organization, forms] = await Promise.all([
+      publicOrganizationIdentity(orgId),
+      // 050-B adds `purpose` to each form in ApplicationFormService._serializePublicForm.
+      applicationFormService.publicForms(eventId, { anyEventStatus: true }),
+    ]);
+    // Ticket add-ons ride on event.addOns; application add-ons on each form's tiers.
+    // ponytail: gifts (047 D1) and guests (050-Q) join this payload when those cards land.
+    res.json({ event, organization, forms });
   } catch (error) {
     next(error);
   }

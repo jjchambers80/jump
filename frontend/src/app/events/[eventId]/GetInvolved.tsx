@@ -25,7 +25,16 @@ function shortLabel(name: string): string {
   return ROLES.find(([pattern]) => pattern.test(name))?.[1] ?? 'Apply';
 }
 
-export default function GetInvolved({ eventId, className = '' }: { eventId: string; className?: string }) {
+export default function GetInvolved({
+  eventId,
+  className = '',
+  preview = false,
+}: {
+  eventId: string;
+  className?: string;
+  /** Staff draft preview (spec 050 F): pills show, but nothing opens the form. */
+  preview?: boolean;
+}) {
   const [forms, setForms] = useState<PublicForm[]>([]);
 
   useEffect(() => {
@@ -52,7 +61,7 @@ export default function GetInvolved({ eventId, className = '' }: { eventId: stri
   return (
     <ul className={`flex flex-wrap gap-2 ${className}`} aria-label="Get involved" data-testid="get-involved">
       {forms.map((form, i) => {
-        const closed = acceptanceLine(form.acceptance);
+        const closed = preview ? 'Preview' : acceptanceLine(form.acceptance);
         const label = ambiguous ? form.name : labels[i];
         return (
           <li key={form.id}>
