@@ -694,6 +694,7 @@ class ApplicationPaymentService {
   async handleEvent(event) {
     const object = event.data.object;
     const applicationId = object.metadata?.applicationId;
+    if (!(await this._eventAccountAllowed(applicationId, event.account || null, event.type))) return;
     switch (event.type) {
       case 'checkout.session.completed':
         return this._onCheckoutCompleted(applicationId, object);
@@ -724,6 +725,40 @@ class ApplicationPaymentService {
       default:
         logger.info('Unhandled application Stripe event', { type: event.type, applicationId });
     }
+  }
+
+  /**
+   * Spec 047 D0-S: an event from a connected account (`event.account`) may
+   * only touch an application of the organization that owns that account,
+   * and never one whose payment was created on a different account. Card
+   * setup has no payment row yet, so ownership of the account is the check
+   * there. Platform events (no account) keep today's behaviour.
+   */
+  async _eventAccountAllowed(applicationId, account, type) {
+    if (!applicationId) return true;
+    const application = await prisma.application.findUnique({
+      where: { id: applicationId },
+      select: { organizationId: true, order: { select: { payment: { select: { stripeAccountId: true } } } } },
+    });
+    if (!application) return true; // handlers no-op on an unknown id
+    const recorded = application.order?.payment?.stripeAccountId ?? null;
+    let allowed;
+    if (!account) {
+      allowed = recorded === null;
+    } else {
+      const owner = await prisma.organizationStripeAccount.findUnique({ where: { stripeAccountId: account }, select: { organizationId: true } });
+      allowed = owner?.organizationId === application.organizationId && (recorded === null || recorded === account);
+    }
+    if (!allowed) {
+      logger.error('Application webhook refused: Stripe account does not match the application', {
+        event: 'stripe_webhook_account_mismatch',
+        applicationId,
+        type,
+        expectedAccount: recorded,
+        eventAccount: account,
+      });
+    }
+    return allowed;
   }
 
   async _onCheckoutCompleted(applicationId, session) {

@@ -8,6 +8,7 @@
 
 import { prisma } from '@jump/db';
 import { createStripeRefund, refundIdempotencyKey } from './stripeRefund.js';
+import { sameAccount } from './stripeAccount.js';
 import addOnService from './AddOnService.js';
 import { returnTicketsToSale } from './ticketInventory.js';
 import logger from '../utils/logger.js';
@@ -579,8 +580,9 @@ class RefundService {
    *
    * @param {string} paymentIntentId
    * @param {Object} stripeRefund - Stripe refund object from webhook
+   * @param {string|null} [account] - `event.account` (null = platform account)
    */
-  async handleExternalRefund(paymentIntentId, stripeRefund) {
+  async handleExternalRefund(paymentIntentId, stripeRefund, account = null) {
     // Check if we already recorded this refund
     const existing = await prisma.refund.findFirst({
       where: { stripeRefundId: stripeRefund.id },
@@ -603,6 +605,17 @@ class RefundService {
 
     if (!payment || !payment.order) {
       logger.warn('External refund: payment not found', { paymentIntentId });
+      return;
+    }
+    // Spec 047: only the account the charge lives on may report its refunds.
+    if (!sameAccount(payment.stripeAccountId, account)) {
+      logger.error('External refund refused: Stripe account does not match the order payment', {
+        event: 'stripe_webhook_account_mismatch',
+        orderId: payment.orderId,
+        paymentIntentId,
+        expectedAccount: payment.stripeAccountId ?? null,
+        eventAccount: account || null,
+      });
       return;
     }
 

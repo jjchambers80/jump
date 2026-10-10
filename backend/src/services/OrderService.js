@@ -1111,6 +1111,8 @@ class OrderService {
       include: {
         event: true,
         contact: true,
+        // Spec 047: the account the session was created on (webhook account check)
+        payment: { select: { stripeAccountId: true } },
       },
     });
   }

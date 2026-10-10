@@ -99,6 +99,101 @@ async function verifyAndClaim(req, res, { secretName, label, endpoint }) {
 }
 
 /**
+ * The money events (orders, applications, refunds, disputes), shared by the
+ * platform endpoint (charges on Jump's account: every order before spec 047
+ * option C) and the Connect endpoint (direct charges on an organization's
+ * own account, with `event.account`). One switch, never two copies. Every
+ * handler refuses an event whose account is not the one the order's payment
+ * was created on (`sameAccount`), so one organization's account can never
+ * settle another's order.
+ *
+ * @returns {Promise<'PROCESSED'|'IGNORED'>}
+ */
+export async function dispatchMoneyEvent(event) {
+  const account = event.account || null;
+
+  // Application payments (spec 011 phase 2) share these endpoints. Dispatch
+  // strictly on metadata.applicationId (ticket sessions never carry it).
+  // charge.refunded is not dispatched here: every refund resolves through
+  // the order's PaymentTransaction in RefundService (spec 024), whatever
+  // the order kind.
+  if (ApplicationPaymentService.isApplicationEvent(event)) {
+    await ApplicationPaymentService.handleEvent(event);
+    return 'PROCESSED';
+  }
+
+  switch (event.type) {
+    case 'checkout.session.completed': {
+      const session = event.data.object;
+      logger.info('Stripe checkout session completed', {
+        sessionId: session.id,
+        paymentStatus: session.payment_status,
+        ...(account && { account }),
+      });
+
+      if (session.payment_status === 'paid') {
+        await PaymentService.handleCheckoutCompleted(session.id, session.payment_intent, account);
+      }
+      return 'PROCESSED';
+    }
+
+    case 'checkout.session.async_payment_succeeded': {
+      const session = event.data.object;
+      logger.info('Stripe async payment succeeded', { sessionId: session.id, ...(account && { account }) });
+      await PaymentService.handleCheckoutCompleted(session.id, session.payment_intent, account);
+      return 'PROCESSED';
+    }
+
+    case 'checkout.session.async_payment_failed': {
+      const session = event.data.object;
+      logger.warn('Stripe async payment failed', { sessionId: session.id, ...(account && { account }) });
+      await PaymentService.handleCheckoutFailed(session.id, 'Async payment failed', account);
+      return 'PROCESSED';
+    }
+
+    case 'checkout.session.expired': {
+      const session = event.data.object;
+      logger.info('Stripe checkout session expired', { sessionId: session.id, ...(account && { account }) });
+      await PaymentService.handleCheckoutFailed(session.id, 'Session expired', account);
+      return 'PROCESSED';
+    }
+
+    case 'charge.refunded': {
+      const charge = event.data.object;
+      logger.info('Stripe charge refunded', {
+        chargeId: charge.id,
+        paymentIntentId: charge.payment_intent,
+        ...(account && { account }),
+      });
+
+      // Process each refund on the charge
+      if (charge.refunds?.data) {
+        for (const refund of charge.refunds.data) {
+          await RefundService.handleExternalRefund(charge.payment_intent, refund, account);
+        }
+      }
+      return 'PROCESSED';
+    }
+
+    // Chargebacks (spec 037). Every event in the family carries the whole
+    // dispute object, so they all land on one handler that derives the full
+    // state — safe to redeliver and safe out of order, which matters because
+    // `.closed` can arrive before `.funds_withdrawn`.
+    case 'charge.dispute.created':
+    case 'charge.dispute.updated':
+    case 'charge.dispute.funds_withdrawn':
+    case 'charge.dispute.funds_reinstated':
+    case 'charge.dispute.closed': {
+      await DisputeService.applyFromEvent(event);
+      return 'PROCESSED';
+    }
+
+    default:
+      return 'IGNORED';
+  }
+}
+
+/**
  * POST /webhooks/stripe
  * Handle Stripe webhook events for order status transitions.
  * Idempotent: safe to receive the same event multiple times.
@@ -121,85 +216,11 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
       return res.json({ received: true, ignored: true });
     }
 
-    // Application payments (spec 011 phase 2) share this endpoint. Dispatch
-    // strictly on metadata.applicationId (ticket sessions never carry it).
-    // charge.refunded is not dispatched here: every refund resolves through
-    // the order's PaymentTransaction in RefundService (spec 024), whatever
-    // the order kind.
-    if (ApplicationPaymentService.isApplicationEvent(event)) {
-      await ApplicationPaymentService.handleEvent(event);
-      await WebhookEventService.settle(recordId, 'PROCESSED');
+    const outcome = await dispatchMoneyEvent(event);
+    if (outcome === 'IGNORED') {
+      logger.info('Unhandled Stripe webhook event', { type: event.type });
+      await WebhookEventService.settle(recordId, 'IGNORED');
       return res.json({ received: true });
-    }
-
-    switch (event.type) {
-      case 'checkout.session.completed': {
-        const session = event.data.object;
-        logger.info('Stripe checkout session completed', {
-          sessionId: session.id,
-          paymentStatus: session.payment_status,
-        });
-
-        if (session.payment_status === 'paid') {
-          await PaymentService.handleCheckoutCompleted(session.id, session.payment_intent);
-        }
-        break;
-      }
-
-      case 'checkout.session.async_payment_succeeded': {
-        const session = event.data.object;
-        logger.info('Stripe async payment succeeded', { sessionId: session.id });
-        await PaymentService.handleCheckoutCompleted(session.id, session.payment_intent);
-        break;
-      }
-
-      case 'checkout.session.async_payment_failed': {
-        const session = event.data.object;
-        logger.warn('Stripe async payment failed', { sessionId: session.id });
-        await PaymentService.handleCheckoutFailed(session.id, 'Async payment failed');
-        break;
-      }
-
-      case 'checkout.session.expired': {
-        const session = event.data.object;
-        logger.info('Stripe checkout session expired', { sessionId: session.id });
-        await PaymentService.handleCheckoutFailed(session.id, 'Session expired');
-        break;
-      }
-
-      case 'charge.refunded': {
-        const charge = event.data.object;
-        logger.info('Stripe charge refunded', {
-          chargeId: charge.id,
-          paymentIntentId: charge.payment_intent,
-        });
-
-        // Process each refund on the charge
-        if (charge.refunds?.data) {
-          for (const refund of charge.refunds.data) {
-            await RefundService.handleExternalRefund(charge.payment_intent, refund);
-          }
-        }
-        break;
-      }
-
-      // Chargebacks (spec 037). Every event in the family carries the whole
-      // dispute object, so they all land on one handler that derives the full
-      // state — safe to redeliver and safe out of order, which matters because
-      // `.closed` can arrive before `.funds_withdrawn`.
-      case 'charge.dispute.created':
-      case 'charge.dispute.updated':
-      case 'charge.dispute.funds_withdrawn':
-      case 'charge.dispute.funds_reinstated':
-      case 'charge.dispute.closed': {
-        await DisputeService.applyFromEvent(event);
-        break;
-      }
-
-      default:
-        logger.info('Unhandled Stripe webhook event', { type: event.type });
-        await WebhookEventService.settle(recordId, 'IGNORED');
-        return res.json({ received: true });
     }
 
     await WebhookEventService.settle(recordId, 'PROCESSED');
@@ -226,9 +247,11 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
  * POST /webhooks/stripe/connect — events from connected accounts (spec 010
  * phase 2). A separate Stripe endpoint ("listen to events on connected
  * accounts") with its own signing secret, STRIPE_CONNECT_WEBHOOK_SECRET.
- * Destination-charge events (checkout.session.*, charge.refunded) still arrive
- * on the platform endpoint above. Every event carries `event.account`, the
- * connected account id, which is the only key the handlers use.
+ * Every event carries `event.account`, the connected account id. Account
+ * lifecycle and payouts are handled here; since spec 047 (direct charges on
+ * the organization's own account) the money events — checkout.session.*,
+ * payment_intent.*, setup_intent.* for applications, charge.refunded,
+ * charge.dispute.* — arrive here too and go through `dispatchMoneyEvent`.
  */
 router.post('/stripe/connect', express.raw({ type: 'application/json' }), async (req, res) => {
   const claimed = await verifyAndClaim(req, res, {
@@ -272,9 +295,11 @@ router.post('/stripe/connect', express.raw({ type: 'application/json' }), async 
         break;
 
       default:
-        logger.info('Unhandled Stripe Connect webhook event', { type: event.type, account: accountId });
-        await WebhookEventService.settle(recordId, 'IGNORED');
-        return res.json({ received: true });
+        if ((await dispatchMoneyEvent(event)) === 'IGNORED') {
+          logger.info('Unhandled Stripe Connect webhook event', { type: event.type, account: accountId });
+          await WebhookEventService.settle(recordId, 'IGNORED');
+          return res.json({ received: true });
+        }
     }
 
     await WebhookEventService.settle(recordId, 'PROCESSED');
@@ -288,7 +313,8 @@ router.post('/stripe/connect', express.raw({ type: 'application/json' }), async 
       account: accountId,
       error: error.message,
     });
-    // 200 so Stripe does not retry; the page's Sync button is the recovery path
+    // 200 so Stripe does not retry, as on the platform endpoint: the page's
+    // Sync button and the order / application sweeps are the recovery paths
     await WebhookEventService.settle(recordId, 'FAILED', error.message);
     res.json({ received: true, error: error.message });
   }
