@@ -19,6 +19,16 @@ const auth = (token) => ['Authorization', `Bearer ${token}`];
 const tokenOf = (url) => new URL(url).searchParams.get('token');
 const future = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
+// Venue → Organization and PriceTier → Event are RESTRICT: children go first.
+async function cleanup(orgWhere) {
+  const orgs = await prisma.organization.findMany({ where: orgWhere, select: { id: true } });
+  const organizationId = { in: orgs.map((o) => o.id) };
+  await prisma.priceTier.deleteMany({ where: { event: { venue: { organizationId } } } });
+  await prisma.event.deleteMany({ where: { venue: { organizationId } } });
+  await prisma.venue.deleteMany({ where: { organizationId } });
+  await prisma.organization.deleteMany({ where: { id: organizationId } });
+}
+
 describe('Event preview contract (050-F)', () => {
   let orgA;
   let orgB;
@@ -39,7 +49,7 @@ describe('Event preview contract (050-F)', () => {
   };
 
   beforeAll(async () => {
-    await prisma.organization.deleteMany({ where: { name: { startsWith: `${TAG} ` } } }).catch(() => {});
+    await cleanup({ name: { startsWith: `${TAG} ` } });
     organizerToken = await staffToken({ email: emails[0], role: 'ORGANIZER' });
     otherToken = await staffToken({ email: emails[1], role: 'ORGANIZER' });
     adminToken = await staffToken({ email: emails[2], role: 'ADMIN' });
@@ -64,7 +74,7 @@ describe('Event preview contract (050-F)', () => {
   });
 
   afterAll(async () => {
-    await prisma.organization.deleteMany({ where: { id: { in: [orgA.id, orgB.id] } } }).catch(() => {});
+    await cleanup({ id: { in: [orgA?.id, orgB?.id].filter(Boolean) } });
     await cleanupStaff(emails);
   });
 
