@@ -135,7 +135,7 @@ describe('Application form templates (spec 019 phase 2)', () => {
   // ─── CRUD + RBAC ──────────────────────────────────────────────────────────
 
   describe('templates CRUD', () => {
-    it('ORGANIZER lists and reads; only ADMIN writes; other organizations and no-membership staff see nothing', async () => {
+    it('ORGANIZER lists and reads; only ADMIN writes; other organizations see nothing, no-membership staff are refused', async () => {
       const list = await request(app).get('/admin/application-templates').set(...auth(organizerToken));
       expect(list.status).toBe(200);
       expect(list.body.data).toEqual([expect.objectContaining({ id: template.id, name: 'Exhibitor booths', kind: 'PAID', tierCount: 2, questionCount: 2 })]);
@@ -154,8 +154,8 @@ describe('Application form templates (spec 019 phase 2)', () => {
       expect((await request(app).put(`/admin/application-templates/${template.id}`).set(...auth(adminBToken)).send({ name: 'Stolen' })).status).toBe(404);
 
       const orphan = await staffToken({ email: `orphan@${TAG}.test`, role: 'ADMIN' });
-      expect((await request(app).get('/admin/application-templates').set(...auth(orphan))).body).toEqual({ data: [] });
-      expect((await request(app).get(`/admin/application-templates/${template.id}`).set(...auth(orphan))).status).toBe(404);
+      expect((await request(app).get('/admin/application-templates').set(...auth(orphan))).status).toBe(403);
+      expect((await request(app).get(`/admin/application-templates/${template.id}`).set(...auth(orphan))).status).toBe(403);
       await cleanupStaff([`orphan@${TAG}.test`]);
     });
 

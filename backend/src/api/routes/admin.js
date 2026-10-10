@@ -4,7 +4,7 @@
 import express from 'express';
 import { prisma } from '@jump/db';
 import { requireAuth } from '../../middleware/auth.js';
-import { requireOrganizer, requireAdmin, requireSystemAdmin } from '../../middleware/rbac.js';
+import { requireOrganizer, requireAdmin, requireSystemAdmin, isOrgAdmin, orgRoleFor } from '../../middleware/rbac.js';
 import { NotFoundError, ValidationError, ForbiddenError } from '../../middleware/errorHandler.js';
 import { resolveOrgScope, isUnscoped } from '../../middleware/orgScope.js';
 import {
@@ -268,7 +268,7 @@ router.patch('/setup-guide', async (req, res, next) => {
 router.get('/settings/plan', async (req, res, next) => {
   try {
     const status = await billingService.statusFor(await activeOrgFor(req));
-    res.json({ ...status, canEdit: ['ADMIN', 'SYSTEM_ADMIN'].includes(req.user.role) });
+    res.json({ ...status, canEdit: await isOrgAdmin(req) });
   } catch (error) {
     next(error);
   }
@@ -439,7 +439,7 @@ router.get('/settings/tax', async (req, res, next) => {
       regions,
       needsAddress,
       settings,
-      canEdit: ['ADMIN', 'SYSTEM_ADMIN'].includes(req.user.role),
+      canEdit: await isOrgAdmin(req),
     });
   } catch (error) {
     next(error);
@@ -532,7 +532,7 @@ router.get('/settings/payments', async (req, res, next) => {
       settings,
       // Spec 010 phase 2: `{ enabled: false }` until STRIPE_CONNECT_ENABLED is on
       connect,
-      canEdit: ['ADMIN', 'SYSTEM_ADMIN'].includes(req.user.role),
+      canEdit: await isOrgAdmin(req),
     });
   } catch (error) {
     next(error);
@@ -568,40 +568,35 @@ const wrap = (fn) => async (req, res, next) => {
   }
 };
 
-// Settings › Users: staff of the active organization. requireAdmin checks the
-// global role; assertOrgAdmin checks the role in *this* organization.
-async function orgAdminScope(req) {
-  const organizationId = await activeOrgFor(req);
-  await memberService.assertOrgAdmin(req.user, organizationId);
-  return organizationId;
-}
+// Settings › Users: staff of the active organization (requireAdmin checks the
+// caller's role in that same organization).
 const memberInviteLimiter = makeLimiter('MEMBER_INVITE', LIMITS.MEMBER_INVITE);
 
 /** GET /admin/settings/users?role=&status= */
 router.get('/settings/users', requireAdmin, wrap(async (req, res) => {
   const { role, status } = req.query;
-  res.json({ users: await memberService.list(await orgAdminScope(req), { role, status }) });
+  res.json({ users: await memberService.list(await activeOrgFor(req), { role, status }) });
 }));
 
 /** POST /admin/settings/users — add users by email and send each an invite */
 router.post('/settings/users', requireAdmin, memberInviteLimiter, validateInviteMembers, wrap(async (req, res) => {
-  res.status(201).json(await memberService.invite(req.user, await orgAdminScope(req), req.body));
+  res.status(201).json(await memberService.invite(req.user, await activeOrgFor(req), req.body));
 }));
 
 /** PATCH /admin/settings/users/:userId — role, requireTwoStep, isActive */
 router.patch('/settings/users/:userId', requireAdmin, validateUpdateMember, wrap(async (req, res) => {
-  res.json(await memberService.update(req.user, await orgAdminScope(req), req.params.userId, req.body));
+  res.json(await memberService.update(req.user, await activeOrgFor(req), req.params.userId, req.body));
 }));
 
 /** DELETE /admin/settings/users/:userId — remove from this organization */
 router.delete('/settings/users/:userId', requireAdmin, wrap(async (req, res) => {
-  await memberService.remove(req.user, await orgAdminScope(req), req.params.userId);
+  await memberService.remove(req.user, await activeOrgFor(req), req.params.userId);
   res.status(204).end();
 }));
 
 /** POST /admin/settings/users/:userId/resend — re-send a pending invite */
 router.post('/settings/users/:userId/resend', requireAdmin, memberInviteLimiter, wrap(async (req, res) => {
-  await memberService.resend(req.user, await orgAdminScope(req), req.params.userId);
+  await memberService.resend(req.user, await activeOrgFor(req), req.params.userId);
   res.status(204).end();
 }));
 
@@ -1024,7 +1019,7 @@ router.get('/finance/payouts', async (req, res, next) => {
       connectService.statusFor(organizationId),
       connectService.payoutActivity(organizationId),
     ]);
-    res.json({ connect, activity, canEdit: ['ADMIN', 'SYSTEM_ADMIN'].includes(req.user.role) });
+    res.json({ connect, activity, canEdit: await isOrgAdmin(req) });
   } catch (error) {
     next(error);
   }
@@ -1796,7 +1791,7 @@ router.delete('/customers/:contactId/comments/:commentId', async (req, res, next
       req.params.contactId,
       req.params.commentId,
       scope.organizationId,
-      req.user
+      { ...req.user, role: await orgRoleFor(req) }
     );
     res.status(204).end();
   } catch (error) {
@@ -1816,7 +1811,7 @@ router.patch(
       }
 
       // Email change is ADMIN-only
-      if (req.body.email !== undefined && req.user.role !== 'ADMIN' && req.user.role !== 'SYSTEM_ADMIN') {
+      if (req.body.email !== undefined && !(await isOrgAdmin(req))) {
         throw new ForbiddenError('Only administrators can change a customer email address');
       }
 
@@ -1950,25 +1945,13 @@ router.post(
 
 // ── Agent access (spec 045C) ──
 
-// D3: only an ADMIN *member* of the active store manages its agent access.
-// requireAdmin alone checks the account-wide role, which an ADMIN of another
-// store also has.
-async function agentAdminOrg(req) {
-  const organizationId = await activeOrgFor(req);
-  if (req.user.role !== 'SYSTEM_ADMIN') {
-    const membership = await prisma.organizationMember.findUnique({
-      where: { userId_organizationId: { userId: req.user.id, organizationId } },
-      select: { role: true },
-    });
-    if (membership?.role !== 'ADMIN') throw new ForbiddenError('Only an Admin of this store can manage agent access');
-  }
-  return organizationId;
-}
+// D3: only an ADMIN member of the active store manages its agent access —
+// requireAdmin checks the role in that store.
 
 /** GET /admin/agent-access/settings — the store's agent access switch. ADMIN+. */
 router.get('/agent-access/settings', requireAdmin, async (req, res, next) => {
   try {
-    res.json(await agentAccessService.getSettings(await agentAdminOrg(req)));
+    res.json(await agentAccessService.getSettings(await activeOrgFor(req)));
   } catch (error) {
     next(error);
   }
@@ -1977,7 +1960,7 @@ router.get('/agent-access/settings', requireAdmin, async (req, res, next) => {
 /** PATCH /admin/agent-access/settings — ADMIN toggles the switch. Needs step-up proof. */
 router.patch('/agent-access/settings', requireAdmin, requireRecentAuth, async (req, res, next) => {
   try {
-    const orgId = await agentAdminOrg(req);
+    const orgId = await activeOrgFor(req);
     res.json(await agentAccessService.toggleSettings(orgId, !!req.body.enabled, req.user.id));
   } catch (error) {
     next(error);
@@ -1987,7 +1970,7 @@ router.patch('/agent-access/settings', requireAdmin, requireRecentAuth, async (r
 /** GET /admin/agent-access/grants — list every grant for the active org. ADMIN+. */
 router.get('/agent-access/grants', requireAdmin, async (req, res, next) => {
   try {
-    res.json({ grants: await agentAccessService.listGrants(await agentAdminOrg(req)) });
+    res.json({ grants: await agentAccessService.listGrants(await activeOrgFor(req)) });
   } catch (error) {
     next(error);
   }
@@ -1996,7 +1979,7 @@ router.get('/agent-access/grants', requireAdmin, async (req, res, next) => {
 /** POST /admin/agent-access/grants/:id/revoke — revoke one grant. ADMIN+. Needs step-up. */
 router.post('/agent-access/grants/:id/revoke', requireAdmin, requireRecentAuth, async (req, res, next) => {
   try {
-    const result = await agentAccessService.revokeGrant(await agentAdminOrg(req), req.params.id);
+    const result = await agentAccessService.revokeGrant(await activeOrgFor(req), req.params.id);
     if (!result) return res.status(404).json({ message: 'Grant not found' });
     res.json(result);
   } catch (error) {
@@ -2007,7 +1990,7 @@ router.post('/agent-access/grants/:id/revoke', requireAdmin, requireRecentAuth, 
 /** POST /admin/agent-access/grants/revoke-all — ADMIN revokes every grant for the org. Needs step-up. */
 router.post('/agent-access/grants/revoke-all', requireAdmin, requireRecentAuth, async (req, res, next) => {
   try {
-    res.json(await agentAccessService.revokeAllGrants(await agentAdminOrg(req)));
+    res.json(await agentAccessService.revokeAllGrants(await activeOrgFor(req)));
   } catch (error) {
     next(error);
   }
@@ -2016,7 +1999,7 @@ router.post('/agent-access/grants/revoke-all', requireAdmin, requireRecentAuth, 
 /** GET /admin/agent-access/audit-log — filtered audit log for the active org. ADMIN+. */
 router.get('/agent-access/audit-log', requireAdmin, async (req, res, next) => {
   try {
-    res.json(await agentAccessService.listAuditLog(await agentAdminOrg(req), {
+    res.json(await agentAccessService.listAuditLog(await activeOrgFor(req), {
       grantId: req.query.grantId,
       tool: req.query.tool,
       offset: parseInt(req.query.offset, 10) || 0,
@@ -2030,31 +2013,20 @@ router.get('/agent-access/audit-log', requireAdmin, async (req, res, next) => {
 // ── Activity log (spec 048) — the organization's audit trail ──
 
 // Store ADMINs (by membership in the active org) and SYSTEM_ADMIN.
-async function auditAdminOrg(req) {
-  const organizationId = await activeOrgFor(req);
-  if (req.user.role !== 'SYSTEM_ADMIN') {
-    const membership = await prisma.organizationMember.findUnique({
-      where: { userId_organizationId: { userId: req.user.id, organizationId } },
-      select: { role: true },
-    });
-    if (membership?.role !== 'ADMIN') throw new ForbiddenError('Only an Admin of this store can view the activity log');
-  }
-  return organizationId;
-}
 
 /** GET /admin/audit-log — filtered, paged activity log for the active org. */
-router.get('/audit-log', validateAuditLogQuery, async (req, res, next) => {
+router.get('/audit-log', requireAdmin, validateAuditLogQuery, async (req, res, next) => {
   try {
-    res.json(await auditLogService.list(await auditAdminOrg(req), req.auditQuery));
+    res.json(await auditLogService.list(await activeOrgFor(req), req.auditQuery));
   } catch (error) {
     next(error);
   }
 });
 
 /** GET /admin/audit-log/export.csv — the same filters, every row. Logged as an export itself. */
-router.get('/audit-log/export.csv', validateAuditLogQuery, async (req, res, next) => {
+router.get('/audit-log/export.csv', requireAdmin, validateAuditLogQuery, async (req, res, next) => {
   try {
-    const organizationId = await auditAdminOrg(req);
+    const organizationId = await activeOrgFor(req);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="activity-log-${new Date().toISOString().slice(0, 10)}.csv"`);
     await auditLogService.exportCsv(organizationId, req.auditQuery, (chunk) => res.write(chunk));

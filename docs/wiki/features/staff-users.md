@@ -17,7 +17,7 @@ Shopify-style channels (POS-only users) don't exist in Jump, so there is no user
 
 | File | Purpose |
 |------|---------|
-| `backend/src/services/MemberService.js` | `assertOrgAdmin` (role in *this* org, not the global claim), `list`, `invite`, `update`, `remove`, `resend`, `_syncGlobalRole` |
+| `backend/src/services/MemberService.js` | `list`, `invite`, `update`, `remove`, `resend`, `_syncGlobalRole` |
 | `backend/src/api/routes/admin.js` | `GET/POST /admin/settings/users`, `PATCH/DELETE /admin/settings/users/:userId`, `POST …/:userId/resend`. Scoped by `activeOrgFor` |
 | `backend/src/api/validators/memberValidators.js` | Invite body (1–20 emails, `ADMIN`/`ORGANIZER`, boolean `requireTwoStep`); partial PATCH whitelist |
 | `backend/src/services/EmailService.js` | `sendStaffInvite`: Eventimus-branded (platform sender and colors, no store logo), subject "<Org> invited you to Eventimus", link to `/auth/signin?callbackUrl=/admin&invite=<orgId>&email=<invitee>` |

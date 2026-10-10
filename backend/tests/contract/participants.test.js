@@ -160,12 +160,10 @@ describe('Participants contract (spec 019 phase 1)', () => {
       expect(ours.find((r) => r.businessName === 'Other Org Outlet').organization).toEqual({ id: orgB.id, name: orgB.name });
     });
 
-    it('a staff user with no membership gets an empty list, summary and forms', async () => {
-      const res = await list(orphanToken);
-      expect(res.status).toBe(200);
-      expect(res.body).toEqual({ data: [], total: 0, page: 1, pageSize: 0, summary: {} });
-      expect((await request(app).get('/admin/applications/summary').set(...auth(orphanToken))).body).toEqual({});
-      expect((await request(app).get('/admin/application-forms').set(...auth(orphanToken))).body).toEqual({ data: [] });
+    it('a staff user with no membership is refused the list, summary and forms', async () => {
+      expect((await list(orphanToken)).status).toBe(403);
+      expect((await request(app).get('/admin/applications/summary').set(...auth(orphanToken))).status).toBe(403);
+      expect((await request(app).get('/admin/application-forms').set(...auth(orphanToken))).status).toBe(403);
     });
 
     it('route ordering: /admin/applications/summary is the org summary, not an event id', async () => {
@@ -311,8 +309,7 @@ describe('Participants contract (spec 019 phase 1)', () => {
 
     it('a staff user with no membership decides nothing', async () => {
       const res = await request(app).post('/admin/applications/bulk').set(...auth(orphanToken)).send({ ids: [apps.approved.id], decision: 'WITHDRAW' });
-      expect(res.status).toBe(200);
-      expect(res.body).toEqual({ results: [{ id: apps.approved.id, ok: false, error: 'Application not found' }], succeeded: 0, failed: 1 });
+      expect(res.status).toBe(403);
     });
   });
 
@@ -335,10 +332,9 @@ describe('Participants contract (spec 019 phase 1)', () => {
       expect(sysLines[1].startsWith(`${orgB.name},${eventB.name},`)).toBe(true);
     });
 
-    it('a member with no organization exports an empty file', async () => {
+    it('a staff user with no organization cannot export', async () => {
       const res = await request(app).get('/admin/applications/export.csv').set(...auth(orphanToken));
-      expect(res.status).toBe(200);
-      expect(res.text).toBe('');
+      expect(res.status).toBe(403);
     });
   });
 

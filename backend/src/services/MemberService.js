@@ -55,16 +55,6 @@ function format(member) {
 }
 
 class MemberService {
-  /** The caller must be an ADMIN of this organization (SYSTEM_ADMIN always is). */
-  async assertOrgAdmin(actor, organizationId) {
-    if (actor.role === 'SYSTEM_ADMIN') return;
-    const membership = await prisma.organizationMember.findUnique({
-      where: { userId_organizationId: { userId: actor.id, organizationId } },
-      select: { role: true },
-    });
-    if (membership?.role !== 'ADMIN') throw new ForbiddenError('Admin role required to manage users');
-  }
-
   async list(organizationId, { role, status } = {}) {
     const members = await prisma.organizationMember.findMany({
       where: { organizationId, user: { deletedAt: null }, ...(role ? { role } : {}) },

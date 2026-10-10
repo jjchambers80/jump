@@ -111,7 +111,7 @@ describe('Participants tags and check-in (spec 019 phase 3)', () => {
       expect(names(await request(app).get(`/admin/events/${expo.id}/applications?tag=Sponsor`).set(...auth(organizerToken)))).toEqual(['Pixel Pins']);
     });
 
-    it('distinct tags: organization-wide, per event, other organization, SYSTEM_ADMIN across all, no membership empty', async () => {
+    it('distinct tags: organization-wide, per event, other organization, SYSTEM_ADMIN across all, no membership refused', async () => {
       const mine = await request(app).get('/admin/applications/tags').set(...auth(organizerToken));
       expect(mine.status).toBe(200);
       // One spelling per tag (case-insensitive), alphabetical.
@@ -121,7 +121,7 @@ describe('Participants tags and check-in (spec 019 phase 3)', () => {
       const all = (await request(app).get('/admin/applications/tags').set(...auth(sysToken))).body.data;
       expect(all.map((t) => t.toLowerCase())).toEqual(expect.arrayContaining(['b only', 'media row 3', 'returning', 'sponsor']));
       const orphan = await staffToken({ email: `orphan@${TAG}.test`, role: 'ORGANIZER' });
-      expect((await request(app).get('/admin/applications/tags').set(...auth(orphan))).body).toEqual({ data: [] });
+      expect((await request(app).get('/admin/applications/tags').set(...auth(orphan))).status).toBe(403);
       await cleanupStaff([`orphan@${TAG}.test`]);
       // Per-event tags outside the org are a 404 like the event itself.
       expect((await request(app).get(`/admin/events/${expo.id}/applications/tags`).set(...auth(adminBToken))).status).toBe(404);

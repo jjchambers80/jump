@@ -598,14 +598,14 @@ describe('Organization Contract Tests', () => {
       expect(res.status).toBe(403);
     });
 
-    it('returns 404 when the user has no assigned organization', async () => {
+    it('returns 403 when the user has no assigned organization', async () => {
       const token = generateToken({ id: noOrgUser.id, email: settingsEmails[3], role: 'ADMIN' });
 
       const res = await request(app)
         .get('/admin/settings/business-details')
         .set('Authorization', `Bearer ${token}`);
 
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(403);
     });
 
     it('ignores X-Jump-Org for an org the member does not belong to', async () => {
@@ -616,7 +616,7 @@ describe('Organization Contract Tests', () => {
         .set('Authorization', `Bearer ${token}`)
         .set('X-Jump-Org', settingsOrganization.id);
 
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(403);
     });
 
     it('lets SYSTEM_ADMIN read the org chosen in the switcher (X-Jump-Org)', async () => {

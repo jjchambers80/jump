@@ -171,7 +171,7 @@ class DeveloperTokenService {
     };
   }
 
-  /** Settings › Developers: ADMIN sees every token of the organization, others their own. */
+  /** Settings › Developers: ADMIN sees every token of the organization, others their own. `user.role` is the role in this organization. */
   async list(organizationId, user) {
     const mine = !['ADMIN', 'SYSTEM_ADMIN'].includes(user.role);
     const rows = await prisma.developerToken.findMany({
