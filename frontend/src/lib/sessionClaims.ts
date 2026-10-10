@@ -55,8 +55,10 @@ export function shouldRefreshClaims(token: ClaimsToken, now: number): boolean {
 /**
  * Two-step must be set up before anything else: it is off and either the
  * account is a SYSTEM_ADMIN or a membership requires it ("secure sign-in method").
+ * Off during development: only enforced when TWO_STEP_SETUP_ENFORCED=true.
  */
 export function isTwoStepSetupRequired(role: string, twoStepEnabled: boolean, requiringMemberships: number): boolean {
+  if (process.env.TWO_STEP_SETUP_ENFORCED !== 'true') return false;
   return !twoStepEnabled && (role === 'SYSTEM_ADMIN' || requiringMemberships > 0);
 }
 

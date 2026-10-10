@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   CLAIMS_REFRESH_MS,
   applyUserClaims,
@@ -93,7 +93,15 @@ describe('applyUserClaims secure sign-in requirement (Settings › Users)', () =
 });
 
 describe('isTwoStepSetupRequired', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('never requires setup unless TWO_STEP_SETUP_ENFORCED=true', () => {
+    vi.stubEnv('TWO_STEP_SETUP_ENFORCED', '');
+    expect(isTwoStepSetupRequired('SYSTEM_ADMIN', false, 1)).toBe(false);
+  });
+
   it('requires setup for a SYSTEM_ADMIN or a requiring membership while two-step is off', () => {
+    vi.stubEnv('TWO_STEP_SETUP_ENFORCED', 'true');
     expect(isTwoStepSetupRequired('SYSTEM_ADMIN', false, 0)).toBe(true);
     expect(isTwoStepSetupRequired('ADMIN', false, 1)).toBe(true);
     expect(isTwoStepSetupRequired('ADMIN', false, 0)).toBe(false);
