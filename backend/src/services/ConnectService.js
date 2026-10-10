@@ -9,9 +9,9 @@
 // Rules (specs/010-payments-settings/plan-phase-2.md §2):
 // - one account per organization per Stripe mode; rows for the other mode are
 //   invisible, so test-mode onboarding cannot leak into live charges
-// - a charge is routed to the connected account only when the flag is on, the
-//   account has the `transfers` capability active and is not disconnected;
-//   payouts being paused does not block sales
+// - a charge is created on the connected account (direct charge) only when the
+//   flag is on, the account can take charges (`charges_enabled`) and is not
+//   disconnected; payouts being paused does not block sales
 // - row state is written only from Stripe (retrieve or webhook), never guessed
 
 import { createHmac, timingSafeEqual } from 'crypto';
@@ -116,7 +116,7 @@ export function connectStatus(row) {
   if (!row) return 'not_started';
   if (row.disconnectedAt) return 'disconnected';
   if (!row.detailsSubmitted) return 'onboarding';
-  if (!row.transfersEnabled || row.disabledReason || (row.currentlyDue || []).length > 0) return 'restricted';
+  if (!row.chargesEnabled || row.disabledReason || (row.currentlyDue || []).length > 0) return 'restricted';
   return 'active';
 }
 
@@ -135,6 +135,9 @@ export function accountToRow(account) {
     detailsSubmitted: account.details_submitted === true,
     disabledReason: account.requirements?.disabled_reason || null,
     currentlyDue: account.requirements?.currently_due || [],
+    activeCapabilities: Object.entries(account.capabilities || {})
+      .filter(([, status]) => status === 'active')
+      .map(([name]) => name),
     bankName: bank?.bank_name || null,
     bankLast4: bank?.last4 || null,
     currency: bank?.currency || account.default_currency || null,
@@ -166,16 +169,17 @@ class ConnectService {
   }
 
   /**
-   * Routing decision for a new charge (plan-phase-2 §2.2). Synchronous apart
-   * from one row read; never throws.
-   * @returns {Promise<{ stripeAccountId: string } | null>}
+   * Routing decision for a new charge (spec 047 D0-S): the organization's
+   * connected account when the flag is on and the account can take charges,
+   * else null (the platform account). One row read; never throws.
+   * @returns {Promise<{ stripeAccountId: string, activeCapabilities: string[] } | null>}
    */
-  async destinationFor(organizationId) {
+  async chargeAccountFor(organizationId) {
     if (!this.enabled() || !organizationId) return null;
     try {
       const row = await this.accountFor(organizationId);
-      if (!row || row.disconnectedAt || !row.transfersEnabled) return null;
-      return { stripeAccountId: row.stripeAccountId };
+      if (!row || row.disconnectedAt || !row.chargesEnabled) return null;
+      return { stripeAccountId: row.stripeAccountId, activeCapabilities: row.activeCapabilities || [] };
     } catch (error) {
       logger.error('Connect routing lookup failed; charging on the platform account', {
         event: 'connect_routing_skipped',

@@ -645,29 +645,30 @@ model PageTemplate {
 // organization per Stripe mode (test/live); rows for the other mode are ignored.
 // State is written only from Stripe Account objects (sync + Connect webhook).
 model OrganizationStripeAccount {
-  id                String    @id @default(cuid())
-  organizationId    String
-  mode              String // 'test' | 'live' — stripeMode() when created
-  stripeAccountId   String    @unique // acct_…
-  chargesEnabled    Boolean   @default(false)
-  transfersEnabled  Boolean   @default(false) // capabilities.transfers === 'active' — the routing gate
-  payoutsEnabled    Boolean   @default(false)
-  detailsSubmitted  Boolean   @default(false)
-  disabledReason    String? // requirements.disabled_reason
-  currentlyDue      String[]  @default([]) // requirements.currently_due (field names only)
-  bankName          String? // display snapshot from external_accounts (default_for_currency)
-  bankLast4         String?
-  currency          String?
-  payoutInterval    String? // daily | weekly | monthly | manual
-  payoutAnchor      String? // weekly_anchor or monthly_anchor
-  payoutDelayDays   Int?
-  payoutDescriptor  String? // settings.payouts.statement_descriptor
-  lastPayoutAt      DateTime?
-  lastPayoutFailure String?
-  disconnectedAt    DateTime?
-  lastSyncedAt      DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id                 String    @id @default(cuid())
+  organizationId     String
+  mode               String // 'test' | 'live' — stripeMode() when created
+  stripeAccountId    String    @unique // acct_…
+  chargesEnabled     Boolean   @default(false)
+  transfersEnabled   Boolean   @default(false) // capabilities.transfers === 'active' (informational since spec 047; chargesEnabled is the routing gate)
+  payoutsEnabled     Boolean   @default(false)
+  detailsSubmitted   Boolean   @default(false)
+  disabledReason     String? // requirements.disabled_reason
+  currentlyDue       String[]  @default([]) // requirements.currently_due (field names only)
+  activeCapabilities String[]  @default([]) // capabilities with status 'active' (spec 047: what Checkout may offer on a direct charge)
+  bankName           String? // display snapshot from external_accounts (default_for_currency)
+  bankLast4          String?
+  currency           String?
+  payoutInterval     String? // daily | weekly | monthly | manual
+  payoutAnchor       String? // weekly_anchor or monthly_anchor
+  payoutDelayDays    Int?
+  payoutDescriptor   String? // settings.payouts.statement_descriptor
+  lastPayoutAt       DateTime?
+  lastPayoutFailure  String?
+  disconnectedAt     DateTime?
+  lastSyncedAt       DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
@@ -1186,10 +1187,12 @@ model PaymentTransaction {
   currency              String                @default("usd")
   status                PaymentStatus         @default(PENDING)
   failureReason         String?
-  // Spec 010 phase 2: destination charge routing, set at creation only.
-  // null stripeAccountId = charged on the platform account (every pre-Connect order).
+  // Spec 047 D0-S: the connected account the charge was created on (direct
+  // charge), written at session creation. null = charged on the platform
+  // account (every order before option C). Refunds, disputes, session reads
+  // and webhook account checks all key on it.
   stripeAccountId       String?
-  applicationFee        Decimal?              @db.Decimal(10, 2) // dollars kept by the platform (fees + tax)
+  applicationFee        Decimal?              @db.Decimal(10, 2) // dollars Jump takes as application_fee_amount (= platform fee)
   // Spec 024: a payment recorded outside Stripe (cheque, cash, comped) on an
   // application order has no Stripe id and carries the method instead.
   source                PaymentSource         @default(STRIPE)

@@ -571,7 +571,7 @@ describe('Application payments contract (spec 011 phase 2, spec 037 phase 5)', (
 
   // ─── Connect routing ─────────────────────────────────────────────────────
 
-  it('with an active connected account the saved-card charge is a destination charge; refunds reverse the transfer', async () => {
+  it('with an active connected account the saved-card charge stays on the platform until spec 047 S5', async () => {
     process.env.STRIPE_CONNECT_ENABLED = 'true';
     await prisma.organizationStripeAccount.create({
       data: { organizationId: org.id, mode: 'test', stripeAccountId: ACCT, chargesEnabled: true, transfersEnabled: true, payoutsEnabled: true, detailsSubmitted: true },
@@ -580,16 +580,10 @@ describe('Application payments contract (spec 011 phase 2, spec 037 phase 5)', (
     await giveSavedCard(id);
     const res = await select(id, { useSavedCard: true });
     expect(res.body.paymentStatus).toBe('PAID');
-    const row = await appRow(id);
-    const expectedFee = Math.round(Number(row.applicantPays) * 100) - Math.round(Number(row.orgReceives) * 100);
     const params = mockIntentsCreate.mock.calls.at(-1)[0];
-    expect(params.transfer_data).toEqual({ destination: ACCT });
-    expect(params.application_fee_amount).toBe(expectedFee);
-    expect(row).toMatchObject({ stripeAccountId: ACCT, applicationFee: expectedFee / 100 });
-
-    const refund = await request(app).post(`${adminBase()}/applications/${id}/refund`).set(...auth(adminToken)).send({ amount: 50 });
-    expect(refund.status).toBe(200);
-    expect(mockRefundsCreate.mock.calls.at(-1)[0]).toMatchObject({ amount: 5000, reverse_transfer: true, refund_application_fee: true });
+    expect(params.transfer_data).toBeUndefined();
+    expect(params.application_fee_amount).toBeUndefined();
+    expect(await appRow(id)).toMatchObject({ stripeAccountId: null, applicationFee: null });
     await prisma.organizationStripeAccount.deleteMany({ where: { organizationId: org.id } });
     delete process.env.STRIPE_CONNECT_ENABLED;
   });

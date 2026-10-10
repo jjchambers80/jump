@@ -174,7 +174,9 @@ class ApplicationPaymentService {
     const organization = application.event.venue.organization;
     const customer = await this.ensureCustomer(application.contact);
     const charge = this._chargeFor(application);
-    const checkoutOptions = await paymentSettingsService.checkoutOptionsFor(organization, charge);
+    // Interim (spec 047 D0-S S2): application payments stay on the platform
+    // account until S5 moves them onto the organization's account.
+    const checkoutOptions = await paymentSettingsService.checkoutOptionsFor(organization);
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       ...checkoutOptions,
@@ -321,7 +323,7 @@ class ApplicationPaymentService {
 
     const organization = application.event.venue.organization;
     const customer = await this.ensureCustomer(application.contact);
-    const options = await paymentSettingsService.checkoutOptionsFor(organization, this._chargeFor(application));
+    const options = await paymentSettingsService.checkoutOptionsFor(organization);
     const routing = options.payment_intent_data || {};
     const amount = cents(application.order.totalAmount);
     let intent;

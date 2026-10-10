@@ -70,17 +70,19 @@ export function deriveDescriptorSuffix(name, prefix) {
 }
 
 /**
- * Cents the platform keeps on a destination charge: every cent Stripe collects
- * beyond the organization's ex-tax subtotal. Null when the numbers cannot be
- * right (missing inputs, negative fee, subtotal above the charge).
+ * `application_fee_amount` for a direct charge (spec 047 §4.3): Jump's
+ * platform fee in cents — not processing (Stripe bills that to the
+ * organization's account) and not tax (the organization collects and remits
+ * it). Null when the numbers cannot be right (missing inputs, a fee that is
+ * negative or not below the amount Stripe will charge).
  *
- * @param {{ fees: { subtotal: number }, lineItems: Array<{ price_data: { unit_amount: number }, quantity: number }> }} charge
+ * @param {{ fees: { platformFee: number }, lineItems: Array<{ price_data: { unit_amount: number }, quantity: number }> }} charge
  * @returns {number|null}
  */
 export function applicationFeeCents(charge) {
   const items = charge?.lineItems;
-  const subtotal = charge?.fees?.subtotal;
-  if (!Array.isArray(items) || items.length === 0 || typeof subtotal !== 'number' || !Number.isFinite(subtotal)) return null;
+  const platformFee = charge?.fees?.platformFee;
+  if (!Array.isArray(items) || items.length === 0 || typeof platformFee !== 'number' || !Number.isFinite(platformFee)) return null;
   let totalCents = 0;
   for (const item of items) {
     const unit = item?.price_data?.unit_amount;
@@ -88,9 +90,11 @@ export function applicationFeeCents(charge) {
     if (!Number.isInteger(unit) || unit < 0 || !Number.isInteger(qty) || qty <= 0) return null;
     totalCents += unit * qty;
   }
-  const subtotalCents = Math.round(subtotal * 100);
-  if (subtotalCents < 0 || subtotalCents > totalCents) return null;
-  return totalCents - subtotalCents;
+  const feeCents = Math.round(platformFee * 100);
+  // Stripe: "must be positive and less than the amount of the charge". A zero
+  // fee is sent as no fee at all (see checkoutOptionsFor).
+  if (feeCents < 0 || (feeCents > 0 && feeCents >= totalCents)) return null;
+  return feeCents;
 }
 
 class PaymentSettingsService {
@@ -193,24 +197,41 @@ class PaymentSettingsService {
   /**
    * Checkout Session params for an organization. Never throws and never sends a
    * value Stripe would reject: a suffix that no longer fits the platform prefix
-   * is dropped, a method the platform lost the capability for is filtered out.
+   * is dropped, a method the account lost the capability for is filtered out.
    *
-   * With `charge` (spec 010 phase 2) the session becomes a destination charge
-   * when the organization has an active Connect account: the organization
-   * receives exactly the ex-tax subtotal and the platform keeps fees + tax.
-   * `application_fee_amount` is total cents minus subtotal cents, computed from
-   * the exact line-item cents Stripe will charge so per-unit rounding never
-   * moves a cent between the parties. Callers read the routing outcome back
-   * from `payment_intent_data.transfer_data` / `application_fee_amount`.
+   * With `charge` (spec 047 D0-S, option C) the session becomes a **direct
+   * charge** when the organization has an active connected account: the
+   * result carries `stripeAccount` — the caller passes it as the request
+   * option `{ stripeAccount }` on every call for this payment, never as a
+   * param — and `payment_intent_data.application_fee_amount` = Jump's platform
+   * fee in cents (omitted when 0). No `transfer_data`: the money never passes
+   * through Jump's balance. On the organization's own account its statement
+   * descriptor and capabilities apply, so no suffix is sent and the optional
+   * methods are filtered by the connected account's active capabilities
+   * (Jump's allowlist still applies).
    *
    * @param {{ id: string, name: string, statementDescriptorSuffix?: string|null, enabledPaymentMethods?: string[] }} organization
-   * @param {{ fees: { subtotal: number }, lineItems: Array<{ price_data: { unit_amount: number }, quantity: number }> }} [charge]
-   * @returns {Promise<{ payment_method_types: string[], payment_intent_data?: { statement_descriptor_suffix?: string, transfer_data?: { destination: string }, application_fee_amount?: number } }>}
+   * @param {{ fees: { platformFee: number }, lineItems: Array<{ price_data: { unit_amount: number }, quantity: number }> }} [charge]
+   * @returns {Promise<{ payment_method_types: string[], payment_intent_data?: { statement_descriptor_suffix?: string, application_fee_amount?: number }, stripeAccount?: string }>}
    */
   async checkoutOptionsFor(organization, charge = null) {
     const fallback = { payment_method_types: ['card'] };
     if (!organization) return fallback;
     try {
+      const routing = charge ? await this._connectRouting(organization, charge) : null;
+      if (routing) {
+        const active = new Set(routing.activeCapabilities);
+        const extras = (organization.enabledPaymentMethods || []).filter((type) => {
+          const method = PAYMENT_METHOD_ALLOWLIST.find((m) => m.type === type);
+          return method && active.has(method.capability);
+        });
+        return {
+          payment_method_types: ['card', ...extras],
+          ...(routing.applicationFeeCents > 0 && { payment_intent_data: { application_fee_amount: routing.applicationFeeCents } }),
+          stripeAccount: routing.stripeAccountId,
+        };
+      }
+
       const provider = await this.getProviderStatus();
       const extras = (organization.enabledPaymentMethods || []).filter(
         (type) => PAYMENT_METHOD_TYPES.has(type) && provider.capabilities[type] === 'active'
@@ -227,15 +248,6 @@ class PaymentSettingsService {
           prefix: provider.statementDescriptorPrefix,
         });
       }
-
-      const routing = charge ? await this._connectRouting(organization, charge) : null;
-      if (routing) {
-        options.payment_intent_data = {
-          ...options.payment_intent_data,
-          transfer_data: { destination: routing.stripeAccountId },
-          application_fee_amount: routing.applicationFeeCents,
-        };
-      }
       return options;
     } catch (error) {
       logger.error('Checkout options failed; using defaults', { organizationId: organization.id, error: error.message });
@@ -248,14 +260,14 @@ class PaymentSettingsService {
   // ---------------------------------------------------------------------------
 
   /**
-   * Destination-charge routing (plan-phase-2 §2.1–2.2). Null = platform account.
-   * Any inconsistency in the cents falls back to the platform account rather
-   * than risking a mis-split; the log line is the reconciliation breadcrumb.
+   * Direct-charge routing (spec 047 D0-S). Null = platform account. Inconsistent
+   * cents fall back to the platform account rather than risk a wrong fee; the
+   * log line is the reconciliation breadcrumb.
    */
   async _connectRouting(organization, charge) {
-    let destination;
+    let account;
     try {
-      destination = await connectService.destinationFor(organization.id);
+      account = await connectService.chargeAccountFor(organization.id);
     } catch (error) {
       logger.error('Connect routing skipped: lookup failed', {
         event: 'connect_routing_skipped',
@@ -264,17 +276,17 @@ class PaymentSettingsService {
       });
       return null;
     }
-    if (!destination) return null;
+    if (!account) return null;
     const cents = applicationFeeCents(charge);
     if (cents === null) {
       logger.error('Connect routing skipped: inconsistent charge amounts', {
         event: 'connect_routing_skipped',
         organizationId: organization.id,
-        stripeAccountId: destination.stripeAccountId,
+        stripeAccountId: account.stripeAccountId,
       });
       return null;
     }
-    return { stripeAccountId: destination.stripeAccountId, applicationFeeCents: cents };
+    return { ...account, applicationFeeCents: cents };
   }
 
   /** Stored suffix when it still fits the platform prefix, else the derived one. */

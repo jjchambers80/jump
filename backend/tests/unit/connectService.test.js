@@ -104,6 +104,7 @@ beforeEach(() => {
 describe('accountToRow', () => {
   test('maps an active account with a default bank and weekly schedule', () => {
     expect(accountToRow(stripeAccount())).toMatchObject({
+      activeCapabilities: ['card_payments', 'transfers'],
       chargesEnabled: true,
       transfersEnabled: true,
       payoutsEnabled: true,
@@ -134,6 +135,7 @@ describe('accountToRow', () => {
       })
     );
     expect(mapped).toMatchObject({
+      activeCapabilities: [],
       transfersEnabled: false,
       detailsSubmitted: false,
       disabledReason: 'requirements.past_due',
@@ -151,8 +153,9 @@ describe('accountToRow', () => {
 describe('connectStatus', () => {
   test.each([
     ['not_started', null],
-    ['onboarding', row({ detailsSubmitted: false, transfersEnabled: false })],
-    ['restricted', row({ transfersEnabled: false })],
+    ['onboarding', row({ detailsSubmitted: false, chargesEnabled: false })],
+    ['restricted', row({ chargesEnabled: false })],
+    ['active', row({ transfersEnabled: false })], // direct charges: transfers do not gate anything
     ['restricted', row({ disabledReason: 'requirements.past_due' })],
     ['restricted', row({ currentlyDue: ['external_account'] })],
     ['active', row()],
@@ -162,37 +165,37 @@ describe('connectStatus', () => {
   });
 });
 
-describe('destinationFor (routing rule)', () => {
-  test('routes to the account when the flag is on and transfers are active', async () => {
-    mockFindUnique.mockResolvedValueOnce(row());
-    expect(await service.destinationFor('org_1')).toEqual({ stripeAccountId: 'acct_1' });
+describe('chargeAccountFor (routing rule, spec 047 direct charges)', () => {
+  test('routes to the account when the flag is on and it can take charges', async () => {
+    mockFindUnique.mockResolvedValueOnce(row({ activeCapabilities: ['card_payments'] }));
+    expect(await service.chargeAccountFor('org_1')).toEqual({ stripeAccountId: 'acct_1', activeCapabilities: ['card_payments'] });
     expect(mockFindUnique).toHaveBeenCalledWith({ where: { organizationId_mode: { organizationId: 'org_1', mode: 'test' } } });
   });
 
   test('platform account when the flag is off (no DB read)', async () => {
     process.env.STRIPE_CONNECT_ENABLED = 'false';
     expect(connectEnabled()).toBe(false);
-    expect(await service.destinationFor('org_1')).toBeNull();
+    expect(await service.chargeAccountFor('org_1')).toBeNull();
     expect(mockFindUnique).not.toHaveBeenCalled();
   });
 
-  test('platform account when there is no row for this mode, transfers are inactive, or disconnected', async () => {
+  test('platform account when there is no row for this mode, charges are disabled, or disconnected', async () => {
     mockFindUnique.mockResolvedValueOnce(null);
-    expect(await service.destinationFor('org_1')).toBeNull();
-    mockFindUnique.mockResolvedValueOnce(row({ transfersEnabled: false }));
-    expect(await service.destinationFor('org_1')).toBeNull();
+    expect(await service.chargeAccountFor('org_1')).toBeNull();
+    mockFindUnique.mockResolvedValueOnce(row({ chargesEnabled: false }));
+    expect(await service.chargeAccountFor('org_1')).toBeNull();
     mockFindUnique.mockResolvedValueOnce(row({ disconnectedAt: new Date() }));
-    expect(await service.destinationFor('org_1')).toBeNull();
+    expect(await service.chargeAccountFor('org_1')).toBeNull();
   });
 
-  test('payouts being paused does not block routing', async () => {
-    mockFindUnique.mockResolvedValueOnce(row({ payoutsEnabled: false }));
-    expect(await service.destinationFor('org_1')).toEqual({ stripeAccountId: 'acct_1' });
+  test('payouts paused or transfers inactive do not block routing', async () => {
+    mockFindUnique.mockResolvedValueOnce(row({ payoutsEnabled: false, transfersEnabled: false }));
+    expect(await service.chargeAccountFor('org_1')).toEqual({ stripeAccountId: 'acct_1', activeCapabilities: [] });
   });
 
   test('never throws: a DB failure charges on the platform account', async () => {
     mockFindUnique.mockRejectedValueOnce(new Error('db down'));
-    expect(await service.destinationFor('org_1')).toBeNull();
+    expect(await service.chargeAccountFor('org_1')).toBeNull();
   });
 });
 
@@ -362,12 +365,12 @@ describe('OAuth (connect an existing account)', () => {
 
 describe('syncAccount / applyAccount', () => {
   test('syncAccount retrieves with external accounts expanded and writes the mapping', async () => {
-    mockFindUnique.mockResolvedValueOnce(row({ transfersEnabled: false, detailsSubmitted: false }));
+    mockFindUnique.mockResolvedValueOnce(row({ chargesEnabled: false, detailsSubmitted: false }));
     mockAccountsRetrieve.mockResolvedValueOnce(stripeAccount());
-    mockFindUnique.mockResolvedValueOnce(row({ transfersEnabled: false, detailsSubmitted: false }));
+    mockFindUnique.mockResolvedValueOnce(row({ chargesEnabled: false, detailsSubmitted: false }));
     const state = await service.syncAccount('org_1');
     expect(mockAccountsRetrieve).toHaveBeenCalledWith('acct_1', { expand: ['external_accounts'] });
-    expect(mockUpdate).toHaveBeenCalledWith({ where: { stripeAccountId: 'acct_1' }, data: expect.objectContaining({ transfersEnabled: true, detailsSubmitted: true }) });
+    expect(mockUpdate).toHaveBeenCalledWith({ where: { stripeAccountId: 'acct_1' }, data: expect.objectContaining({ chargesEnabled: true, detailsSubmitted: true }) });
     expect(state.status).toBe('active');
   });
 

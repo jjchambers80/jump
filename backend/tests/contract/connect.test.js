@@ -1,7 +1,9 @@
-// Contract tests for Stripe Connect routing and the Connect webhook (spec 010 phase 2)
-// - POST /orders becomes a destination charge only for an organization with an
-//   active connected account in the current mode, and the ledger records it
-// - the flag off / no account / transfers inactive all keep the platform account
+// Contract tests for Stripe Connect routing and the Connect webhook (spec 010 phase 2, spec 047 D0-S)
+// - POST /orders becomes a direct charge on the organization's own account only
+//   when it has an active connected account in the current mode (request option
+//   stripeAccount, application fee = platform fee, no transfer_data), and the
+//   ledger records it
+// - the flag off / no account / charges disabled all keep the platform account
 // - POST /webhooks/stripe/connect syncs, disconnects and records payouts
 // - GET /admin/settings/payments carries the `connect` block
 // Stripe is mocked; Postgres is real.
@@ -362,10 +364,11 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
       data: { organizationId: org.id, mode: 'test', stripeAccountId: ACCT, detailsSubmitted: false },
     });
 
-    // Transfers not yet active → still the platform account
+    // Charges not yet enabled → still the platform account
     const before = await placeOrder(eventId, tierId, `onboarding@${TAG}.test`);
     expect(before.status).toBe(201);
-    expect(mockSessionsCreate.mock.calls[0][0].payment_intent_data.transfer_data).toBeUndefined();
+    expect(mockSessionsCreate.mock.calls[0][0].payment_intent_data.application_fee_amount).toBeUndefined();
+    expect(mockSessionsCreate.mock.calls[0][1]).toBeUndefined();
 
     const hook = await request(app)
       .post('/webhooks/stripe/connect')
@@ -386,34 +389,31 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
     mockSessionsCreate.mockClear();
     const routed = await placeOrder(eventId, tierId, `routed@${TAG}.test`);
     expect(routed.status).toBe(201);
-    const params = mockSessionsCreate.mock.calls[0][0];
-    const totalCents = params.line_items.reduce((s, i) => s + i.price_data.unit_amount * i.quantity, 0);
+    const [params, requestOptions] = mockSessionsCreate.mock.calls[0];
     const order = await prisma.order.findUnique({ where: { id: routed.body.orderId } });
-    const subtotalCents = Math.round(Number(order.subtotalAmount) * 100);
-    expect(params.payment_intent_data).toEqual({
-      statement_descriptor_suffix: 'CONNECT CT ORG',
-      transfer_data: { destination: ACCT },
-      application_fee_amount: totalCents - subtotalCents,
-    });
+    const platformFeeCents = Math.round(Number(order.platformFeeAmount) * 100);
+    // Direct charge: on the organization's account, Jump's platform fee only
+    expect(requestOptions).toEqual({ stripeAccount: ACCT });
+    expect(params.payment_intent_data).toEqual({ application_fee_amount: platformFeeCents });
+    expect(params.payment_intent_data.transfer_data).toBeUndefined();
+    expect(params.stripeAccount).toBeUndefined();
     expect(params.metadata.stripeAccountId).toBe(ACCT);
 
     const tx = await prisma.paymentTransaction.findUnique({ where: { orderId: routed.body.orderId } });
     expect(tx.stripeAccountId).toBe(ACCT);
-    expect(Number(tx.applicationFee)).toBeCloseTo((totalCents - subtotalCents) / 100, 2);
-    // What the platform keeps is fees + tax, within per-unit rounding
-    const expectedKeep = Number(order.platformFeeAmount) + Number(order.processingFeeAmount) + Number(order.taxAmount);
-    expect(Math.abs(Number(tx.applicationFee) - expectedKeep)).toBeLessThanOrEqual(0.02);
+    expect(Number(tx.applicationFee)).toBeCloseTo(Number(order.platformFeeAmount), 2);
   });
 
   it('capability.updated re-reads the account; payout.failed is recorded', async () => {
-    mockAccountsRetrieve.mockResolvedValueOnce(stripeAccount({ capabilities: { transfers: 'inactive' } }));
+    mockAccountsRetrieve.mockResolvedValueOnce(stripeAccount({ charges_enabled: false, capabilities: { card_payments: 'inactive', transfers: 'inactive' } }));
     await request(app)
       .post('/webhooks/stripe/connect')
       .set('Content-Type', 'application/json')
       .send(JSON.stringify({ type: 'capability.updated', account: ACCT, data: { object: { id: 'transfers', status: 'inactive' } } }));
     expect(mockAccountsRetrieve).toHaveBeenCalledWith(ACCT, { expand: ['external_accounts'] });
     let row = await prisma.organizationStripeAccount.findUnique({ where: { stripeAccountId: ACCT } });
-    expect(row.transfersEnabled).toBe(false);
+    expect(row.chargesEnabled).toBe(false);
+    expect(row.activeCapabilities).toEqual([]);
 
     await request(app)
       .post('/webhooks/stripe/connect')
@@ -422,10 +422,10 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
     row = await prisma.organizationStripeAccount.findUnique({ where: { stripeAccountId: ACCT } });
     expect(row.lastPayoutFailure).toBe('Bank account closed');
 
-    // Restricted account → platform account again
+    // Charges disabled → platform account again
     const order = await placeOrder(eventId, tierId, `restricted@${TAG}.test`);
     expect(order.status).toBe(201);
-    expect(mockSessionsCreate.mock.calls[0][0].payment_intent_data.transfer_data).toBeUndefined();
+    expect(mockSessionsCreate.mock.calls[0][1]).toBeUndefined();
   });
 
   it('account.application.deauthorized disconnects and stops routing', async () => {
@@ -435,7 +435,7 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
       .set('Content-Type', 'application/json')
       .send(JSON.stringify({ type: 'capability.updated', account: ACCT, data: { object: {} } }));
     let row = await prisma.organizationStripeAccount.findUnique({ where: { stripeAccountId: ACCT } });
-    expect(row.transfersEnabled).toBe(true);
+    expect(row.chargesEnabled).toBe(true);
 
     await request(app)
       .post('/webhooks/stripe/connect')
@@ -449,7 +449,7 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
     expect(status.body.connect.status).toBe('disconnected');
 
     const order = await placeOrder(eventId, tierId, `deauth@${TAG}.test`);
-    expect(mockSessionsCreate.mock.calls[0][0].payment_intent_data.transfer_data).toBeUndefined();
+    expect(mockSessionsCreate.mock.calls[0][1]).toBeUndefined();
     expect(order.status).toBe(201);
   });
 
