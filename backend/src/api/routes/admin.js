@@ -427,14 +427,15 @@ router.get('/settings/tax', async (req, res, next) => {
   try {
     const organizationId = await activeOrgFor(req);
     const [service, { regions, needsAddress }, settings] = await Promise.all([
-      taxService.getServiceStatus(),
+      taxService.getServiceStatus(organizationId),
       taxService.listRegions(organizationId),
       taxService.getTaxSettings(organizationId),
     ]);
-    // The Stripe dashboard link is only useful to whoever owns the platform account.
+    // The Stripe dashboard link is only useful to whoever owns the account:
+    // the organization itself once it is the seller (spec 047), else the platform.
     const { manageUrl, ...serviceForRole } = service;
     res.json({
-      service: req.user.role === 'SYSTEM_ADMIN' ? service : serviceForRole,
+      service: req.user.role === 'SYSTEM_ADMIN' || service.seller === 'ORGANIZATION' ? service : serviceForRole,
       regions,
       needsAddress,
       settings,

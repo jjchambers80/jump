@@ -109,7 +109,7 @@ async function webhook(event) {
   return request(app).post('/webhooks/stripe').set('Content-Type', 'application/json').send(JSON.stringify(event));
 }
 
-const checkoutCompleted = (session) => ({ id: `evt_${Math.random()}`, type: 'checkout.session.completed', data: { object: session } });
+const checkoutCompleted = (session, account) => ({ id: `evt_${Math.random()}`, type: 'checkout.session.completed', ...(account && { account }), data: { object: session } });
 
 describe('Application payments contract (spec 011 phase 2, spec 037 phase 5)', () => {
   let adminToken;
@@ -571,21 +571,65 @@ describe('Application payments contract (spec 011 phase 2, spec 037 phase 5)', (
 
   // ─── Connect routing ─────────────────────────────────────────────────────
 
-  it('with an active connected account the saved-card charge stays on the platform until spec 047 S5', async () => {
+  it('with an active connected account the saved-card charge is a direct charge on it; refunds run there too (spec 047)', async () => {
     process.env.STRIPE_CONNECT_ENABLED = 'true';
     await prisma.organizationStripeAccount.create({
       data: { organizationId: org.id, mode: 'test', stripeAccountId: ACCT, chargesEnabled: true, transfersEnabled: true, payoutsEnabled: true, detailsSubmitted: true },
     });
     const id = await approved('vendor-space', `connected@${TAG}.test`, 'Routed Co', tierOf(vendorForm, '10x10').id);
     await giveSavedCard(id);
+    mockCustomersCreate.mockClear();
     const res = await select(id, { useSavedCard: true });
     expect(res.body.paymentStatus).toBe('PAID');
-    const params = mockIntentsCreate.mock.calls.at(-1)[0];
+    const row = await appRow(id);
+    const order = await prisma.order.findUnique({ where: { id: row.orderId } });
+    const feeCents = Math.round(Number(order.platformFeeAmount) * 100);
+
+    // A platform-account Customer is never reused on the organization's account
+    expect(mockCustomersCreate.mock.calls.at(-1)[1]).toEqual({ stripeAccount: ACCT });
+    const contact = await prisma.contact.findUnique({ where: { id: row.contactId } });
+    expect(contact.stripeCustomerAccountId).toBe(ACCT);
+
+    const [params, options] = mockIntentsCreate.mock.calls.at(-1);
     expect(params.transfer_data).toBeUndefined();
-    expect(params.application_fee_amount).toBeUndefined();
-    expect(await appRow(id)).toMatchObject({ stripeAccountId: null, applicationFee: null });
+    expect(params.statement_descriptor_suffix).toBeUndefined();
+    expect(params.application_fee_amount).toBe(feeCents);
+    expect(options).toMatchObject({ stripeAccount: ACCT, idempotencyKey: expect.stringMatching(/^application:/) });
+    expect(row).toMatchObject({ stripeAccountId: ACCT, applicationFee: feeCents / 100 });
+
+    const refund = await request(app).post(`${adminBase()}/applications/${id}/refund`).set(...auth(adminToken)).send({ amount: 50 });
+    expect(refund.status).toBe(200);
+    const [refundBody, refundOptions] = mockRefundsCreate.mock.calls.at(-1);
+    expect(refundBody).toMatchObject({ amount: 5000, refund_application_fee: true });
+    expect(refundBody.reverse_transfer).toBeUndefined();
+    expect(refundOptions).toMatchObject({ stripeAccount: ACCT });
+
+    // Its webhooks: only from the organization's own account
+    const before = (await appRow(id)).refunds.length;
+    const refundedFrom = (account) => ({
+      id: `${EVT}_direct_refund_${account}`,
+      type: 'charge.refunded',
+      account,
+      data: { object: { id: 'ch_direct', payment_intent: row.stripePaymentIntentId, refunds: { data: [{ id: `re_${TAG}_ext_${account}`, amount: 100, reason: null }] } } },
+    });
+    await request(app).post('/webhooks/stripe/connect').set('Content-Type', 'application/json').send(JSON.stringify(refundedFrom('acct_someone_else')));
+    expect((await appRow(id)).refunds).toHaveLength(before);
+    await request(app).post('/webhooks/stripe/connect').set('Content-Type', 'application/json').send(JSON.stringify(refundedFrom(ACCT)));
+    expect((await appRow(id)).refunds).toHaveLength(before + 1);
+
     await prisma.organizationStripeAccount.deleteMany({ where: { organizationId: org.id } });
     delete process.env.STRIPE_CONNECT_ENABLED;
+  });
+
+  it('a Connect event for an application is refused unless the account belongs to its organization', async () => {
+    const id = await approved('vendor-space', `foreign-acct@${TAG}.test`, 'Foreign Co', tierOf(vendorForm, '10x10').id);
+    const res = await request(app)
+      .post('/webhooks/stripe/connect')
+      .set('Content-Type', 'application/json')
+      .send(JSON.stringify(checkoutCompleted({ id: 'cs_foreign', mode: 'setup', setup_intent: 'seti_foreign', customer: 'cus_foreign', metadata: { applicationId: id, purpose: 'update_card' } }, 'acct_not_this_org')));
+    expect(res.status).toBe(200);
+    expect(mockSetupIntentsRetrieve).not.toHaveBeenCalledWith('seti_foreign', expect.anything());
+    expect((await prisma.application.findUnique({ where: { id } })).stripePaymentMethodId).toBeNull();
   });
 
   // ─── Webhook dispatch + state guards ─────────────────────────────────────

@@ -36,6 +36,8 @@ import { orderStatusFor } from './applicationOrderStatus.js';
 import logger from '../utils/logger.js';
 import { createStripeRefund, refundIdempotencyKey } from './stripeRefund.js';
 import { dueAtEndOfDay, selectionDueAt } from './applicationSelection.js';
+import connectService from './ConnectService.js';
+import { onAccount } from './stripeAccount.js';
 
 const SESSION_TTL_SECONDS = 30 * 60;
 /** Saved-card brand / last four by payment method id (a card never changes). */
@@ -78,15 +80,43 @@ class ApplicationPaymentService {
   // Stripe customer
   // ---------------------------------------------------------------------------
 
-  /** Platform-account Customer holding the applicant's saved card; created once per Contact. */
-  async ensureCustomer(contact) {
-    if (contact.stripeCustomerId) return contact.stripeCustomerId;
-    const customer = await stripe.customers.create({
-      email: contact.email,
-      name: [contact.firstName, contact.lastName].filter(Boolean).join(' ') || undefined,
-      metadata: { contactId: contact.id, organizationId: contact.organizationId, source: 'jump-applications' },
-    });
-    await prisma.contact.update({ where: { id: contact.id }, data: { stripeCustomerId: customer.id } });
+  /**
+   * The Stripe account an application's new money runs on (spec 047 D0-S):
+   * the organization's own connected account when it can take charges, else
+   * the platform account (null).
+   */
+  async _chargeAccount(application) {
+    const account = await connectService.chargeAccountFor(application.organizationId ?? application.event?.venue?.organizationId);
+    return account?.stripeAccountId ?? null;
+  }
+
+  /**
+   * The account the application's latest Checkout session was created on: the
+   * applicant's Customer is (re)created on the charge account for every
+   * session, so the Contact records it (spec 047 D0-S).
+   */
+  async _sessionAccount(applicationId) {
+    if (!applicationId) return null;
+    const row = await prisma.application.findUnique({ where: { id: applicationId }, select: { contact: { select: { stripeCustomerAccountId: true } } } });
+    return row?.contact?.stripeCustomerAccountId ?? null;
+  }
+
+  /**
+   * Customer holding the applicant's saved card, on `account` (null = the
+   * platform). Created once per Contact and account: a Customer from before
+   * the organization connected its own account is never reused there.
+   */
+  async ensureCustomer(contact, account = null) {
+    if (contact.stripeCustomerId && (contact.stripeCustomerAccountId ?? null) === account) return contact.stripeCustomerId;
+    const customer = await stripe.customers.create(
+      {
+        email: contact.email,
+        name: [contact.firstName, contact.lastName].filter(Boolean).join(' ') || undefined,
+        metadata: { contactId: contact.id, organizationId: contact.organizationId, source: 'jump-applications' },
+      },
+      ...onAccount(account)
+    );
+    await prisma.contact.update({ where: { id: contact.id }, data: { stripeCustomerId: customer.id, stripeCustomerAccountId: account } });
     return customer.id;
   }
 
@@ -134,13 +164,13 @@ class ApplicationPaymentService {
    * four of a saved card, cached per payment method; `{ brand: null, last4:
    * null }` when Stripe cannot be asked (the card is still offered).
    */
-  async savedCardSummary(paymentMethodId) {
+  async savedCardSummary(paymentMethodId, account = null) {
     if (!paymentMethodId) return null;
     if (CARD_SUMMARY_CACHE.has(paymentMethodId)) return CARD_SUMMARY_CACHE.get(paymentMethodId);
     let summary = { brand: null, last4: null };
     try {
       const method = await Promise.race([
-        stripe.paymentMethods.retrieve(paymentMethodId),
+        stripe.paymentMethods.retrieve(paymentMethodId, ...onAccount(account)),
         new Promise((_resolve, reject) => setTimeout(() => reject(new Error('timeout')), 3000).unref?.()),
       ]);
       if (method?.card?.last4) {
@@ -154,7 +184,8 @@ class ApplicationPaymentService {
   }
 
   async _setupSession(application, statusUrl, { purpose = 'submit' } = {}) {
-    const customer = await this.ensureCustomer(application.contact);
+    const account = await this._chargeAccount(application);
+    const customer = await this.ensureCustomer(application.contact, account);
     return stripe.checkout.sessions.create({
       mode: 'setup',
       customer,
@@ -167,16 +198,16 @@ class ApplicationPaymentService {
       ),
       cancel_url: this._returnUrl(statusUrl, 'cancelled'),
       expires_at: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
-    });
+    }, ...onAccount(account));
   }
 
   async _paymentSession(application, statusUrl, purpose) {
     const organization = application.event.venue.organization;
-    const customer = await this.ensureCustomer(application.contact);
     const charge = this._chargeFor(application);
-    // Interim (spec 047 D0-S S2): application payments stay on the platform
-    // account until S5 moves them onto the organization's account.
-    const checkoutOptions = await paymentSettingsService.checkoutOptionsFor(organization);
+    // Spec 047 D0-S: a direct charge on the organization's own account when it
+    // has one (`stripeAccount`), Jump's platform fee as the application fee.
+    const { stripeAccount = null, ...checkoutOptions } = await paymentSettingsService.checkoutOptionsFor(organization, charge);
+    const customer = await this.ensureCustomer(application.contact, stripeAccount);
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       ...checkoutOptions,
@@ -190,18 +221,17 @@ class ApplicationPaymentService {
       success_url: this._returnUrl(statusUrl, purpose === 'pay_now' ? 'paid' : 'submitted'),
       cancel_url: this._returnUrl(statusUrl, 'cancelled'),
       expires_at: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
-    });
+    }, ...onAccount(stripeAccount));
     // The pending payment row, as OrderService.createOrder writes for a ticket
     // checkout; the webhook fills in the intent id and the outcome.
-    const routedTo = checkoutOptions.payment_intent_data?.transfer_data?.destination || null;
-    const applicationFeeCents = checkoutOptions.payment_intent_data?.application_fee_amount;
+    const applicationFeeCents = checkoutOptions.payment_intent_data?.application_fee_amount ?? 0;
     await this._upsertPayment(prisma, application.order, {
       stripePaymentIntentId:
         typeof session.payment_intent === 'string' ? session.payment_intent : null,
       status: 'PENDING',
       failureReason: null,
-      stripeAccountId: routedTo,
-      applicationFee: routedTo && applicationFeeCents != null ? applicationFeeCents / 100 : null,
+      stripeAccountId: stripeAccount,
+      applicationFee: stripeAccount ? applicationFeeCents / 100 : null,
     });
     return session;
   }
@@ -232,8 +262,8 @@ class ApplicationPaymentService {
   }
 
   /**
-   * The spec 010 charge shape: all-in line items, subtotal = what the
-   * organization receives. The tier line carries whatever the add-on lines
+   * The charge shape `checkoutOptionsFor` takes: all-in line items plus the
+   * order's platform fee (the application fee on a direct charge, spec 047). The tier line carries whatever the add-on lines
    * (spec 012) do not, so the Stripe page itemises exactly the snapshot total.
    */
   _chargeFor(application) {
@@ -265,7 +295,7 @@ class ApplicationPaymentService {
       ),
     ].filter((l) => l.price_data.unit_amount > 0);
     return {
-      fees: { subtotal: Number(order.orgReceives) },
+      fees: { platformFee: Number(order.platformFeeAmount) },
       lineItems: lineItems.length
         ? lineItems
         : [line(this._tierLabel(application), Number(order.totalAmount))],
@@ -293,7 +323,7 @@ class ApplicationPaymentService {
    */
   async expireSession(application, sessionId) {
     try {
-      await stripe.checkout.sessions.expire(sessionId);
+      await stripe.checkout.sessions.expire(sessionId, ...onAccount(await this._sessionAccount(application.id)));
     } catch (error) {
       logger.info('Application checkout session not expired', { applicationId: application.id, sessionId, error: error.message });
     }
@@ -322,8 +352,9 @@ class ApplicationPaymentService {
     if (!application.stripePaymentMethodId) return this._markPaymentDue(application, 'No card on file');
 
     const organization = application.event.venue.organization;
-    const customer = await this.ensureCustomer(application.contact);
-    const options = await paymentSettingsService.checkoutOptionsFor(organization);
+    const { stripeAccount = null, ...options } = await paymentSettingsService.checkoutOptionsFor(organization, this._chargeFor(application));
+    // The saved card lives on the Customer of the account it was set up on.
+    const customer = await this.ensureCustomer(application.contact, stripeAccount);
     const routing = options.payment_intent_data || {};
     const amount = cents(application.order.totalAmount);
     let intent;
@@ -341,13 +372,11 @@ class ApplicationPaymentService {
           ...(routing.statement_descriptor_suffix && {
             statement_descriptor_suffix: routing.statement_descriptor_suffix,
           }),
-          ...(routing.transfer_data && {
-            transfer_data: routing.transfer_data,
-            application_fee_amount: routing.application_fee_amount,
-          }),
+          // Spec 047 D0-S: direct charge on the organization's account
+          ...(routing.application_fee_amount && { application_fee_amount: routing.application_fee_amount }),
           metadata: metadataFor(application, 'approval'),
         },
-        { idempotencyKey: `application:${application.id}:charge:${application.chargeAttempts}` }
+        { idempotencyKey: `application:${application.id}:charge:${application.chargeAttempts}`, ...(stripeAccount && { stripeAccount }) }
       );
     } catch (error) {
       const intentId = error?.raw?.payment_intent?.id || error?.payment_intent?.id || null;
@@ -368,13 +397,12 @@ class ApplicationPaymentService {
       return this._markPaymentDue(application, error.message, intentId);
     }
 
-    const routedTo = routing.transfer_data?.destination || null;
     await this._upsertPayment(prisma, application.order, {
       stripePaymentIntentId: intent.id,
       status: intent.status === 'succeeded' ? 'SUCCEEDED' : 'PENDING',
       failureReason: null,
-      stripeAccountId: routedTo,
-      applicationFee: routedTo ? routing.application_fee_amount / 100 : null,
+      stripeAccountId: stripeAccount,
+      applicationFee: stripeAccount ? (routing.application_fee_amount ?? 0) / 100 : null,
     });
     if (intent.status === 'succeeded') {
       await this._markPaid(application.id, intent.id, { source: 'approval' });
@@ -483,16 +511,20 @@ class ApplicationPaymentService {
   /** Best-effort expiry of a session the application no longer waits on (never throws). */
   async expireSupersededSession(applicationId, sessionId) {
     try {
-      await this.expireCheckoutSession(sessionId);
+      await this.expireCheckoutSession(sessionId, { applicationId });
     } catch (error) {
       logger.warn('Superseded application checkout session not expired', { applicationId, sessionId, error: error.message });
     }
   }
 
-  /** Expire a hosted Checkout session the vendor walked away from; already-expired sessions are fine. */
-  async expireCheckoutSession(sessionId) {
+  /**
+   * Expire a hosted Checkout session the vendor walked away from; already-expired
+   * sessions are fine. With `applicationId` the session is expired on the
+   * account it was created on (spec 047); without, on the platform account.
+   */
+  async expireCheckoutSession(sessionId, { applicationId = null } = {}) {
     try {
-      await stripe.checkout.sessions.expire(sessionId);
+      await stripe.checkout.sessions.expire(sessionId, ...onAccount(await this._sessionAccount(applicationId)));
     } catch (error) {
       if (error?.code !== 'resource_missing' && !/already|expired|complete/i.test(String(error?.message))) throw error;
     }
@@ -637,17 +669,19 @@ class ApplicationPaymentService {
     const settleBy = new Date(now.getTime() - (SESSION_TTL_SECONDS + 5 * 60) * 1000);
     const stale = await prisma.application.findMany({
       where: { status: 'APPROVED', paymentStatus: 'PROCESSING', selectionHeldUntil: { lte: settleBy }, stripeCheckoutSessionId: { not: null } },
-      select: { id: true, stripeCheckoutSessionId: true },
+      select: { id: true, stripeCheckoutSessionId: true, order: { select: { payment: { select: { stripeAccountId: true } } } } },
       take: 100,
     });
     for (const row of stale) {
       try {
-        const session = await stripe.checkout.sessions.retrieve(row.stripeCheckoutSessionId);
+        // A payment session lives on the account its payment row was created on (spec 047)
+        const account = row.order?.payment?.stripeAccountId ?? null;
+        const session = await stripe.checkout.sessions.retrieve(row.stripeCheckoutSessionId, ...onAccount(account));
         if (!session) continue;
         if (session.payment_status === 'paid' || session.status === 'complete') {
-          await this._onCheckoutCompleted(row.id, { ...session, mode: 'payment', payment_status: 'paid', metadata: { ...(session.metadata || {}), applicationId: row.id } });
+          await this._onCheckoutCompleted(row.id, { ...session, mode: 'payment', payment_status: 'paid', metadata: { ...(session.metadata || {}), applicationId: row.id } }, account);
         } else if (session.status === 'expired' || Number(session.expires_at || 0) * 1000 < now.getTime()) {
-          if (session.status === 'open') await this.expireCheckoutSession(row.stripeCheckoutSessionId);
+          if (session.status === 'open') await stripe.checkout.sessions.expire(row.stripeCheckoutSessionId, ...onAccount(account)).catch(() => {});
           if (await this.releaseSelection(row.id, { reason: 'Checkout ended without payment', force: true })) released += 1;
         }
       } catch (error) {
@@ -659,11 +693,11 @@ class ApplicationPaymentService {
   }
 
   /** Setup complete: the card is on file and the application is submitted. */
-  async _markCardOnFile(applicationId, paymentMethodId, customerId, { purpose }) {
+  async _markCardOnFile(applicationId, paymentMethodId, customerId, { purpose, account = null }) {
     return prisma.$transaction(async (tx) => {
       const application = await tx.application.findUnique({ where: { id: applicationId }, select: { id: true, status: true, paymentStatus: true, contactId: true } });
       if (!application) return null;
-      if (customerId) await tx.contact.update({ where: { id: application.contactId }, data: { stripeCustomerId: customerId } }).catch(() => {});
+      if (customerId) await tx.contact.update({ where: { id: application.contactId }, data: { stripeCustomerId: customerId, stripeCustomerAccountId: account } }).catch(() => {});
       const data = { stripePaymentMethodId: paymentMethodId };
       let transition = null;
       if (application.status === 'DRAFT') {
@@ -697,9 +731,9 @@ class ApplicationPaymentService {
     if (!(await this._eventAccountAllowed(applicationId, event.account || null, event.type))) return;
     switch (event.type) {
       case 'checkout.session.completed':
-        return this._onCheckoutCompleted(applicationId, object);
+        return this._onCheckoutCompleted(applicationId, object, event.account || null);
       case 'checkout.session.async_payment_succeeded':
-        return this._onCheckoutCompleted(applicationId, { ...object, payment_status: 'paid' });
+        return this._onCheckoutCompleted(applicationId, { ...object, payment_status: 'paid' }, event.account || null);
       case 'checkout.session.expired':
         if (object.metadata?.purpose === 'pay_now') {
           const application = await prisma.application.findUnique({
@@ -761,17 +795,18 @@ class ApplicationPaymentService {
     return allowed;
   }
 
-  async _onCheckoutCompleted(applicationId, session) {
+  /** @param {string|null} account - the account the session lives on (`event.account`; null = platform) */
+  async _onCheckoutCompleted(applicationId, session, account = null) {
     if (session.mode === 'setup') {
       const setupIntentId = typeof session.setup_intent === 'string' ? session.setup_intent : session.setup_intent?.id;
-      const setupIntent = setupIntentId ? await stripe.setupIntents.retrieve(setupIntentId) : null;
+      const setupIntent = setupIntentId ? await stripe.setupIntents.retrieve(setupIntentId, ...onAccount(account)) : null;
       const paymentMethodId = typeof setupIntent?.payment_method === 'string' ? setupIntent.payment_method : setupIntent?.payment_method?.id;
       if (!paymentMethodId) {
         logger.warn('Setup session completed without a payment method', { applicationId, sessionId: session.id });
         return;
       }
       const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id;
-      const transition = await this._markCardOnFile(applicationId, paymentMethodId, customerId, { purpose: session.metadata?.purpose });
+      const transition = await this._markCardOnFile(applicationId, paymentMethodId, customerId, { purpose: session.metadata?.purpose, account });
       if (transition === 'SUBMITTED') await this._sendReceived(applicationId);
       return;
     }
@@ -780,34 +815,16 @@ class ApplicationPaymentService {
       typeof session.payment_intent === 'string'
         ? session.payment_intent
         : session.payment_intent?.id;
-    if (await this._refundSupersededSession(applicationId, session, paymentIntentId)) return;
+    if (await this._refundSupersededSession(applicationId, session, paymentIntentId, account)) return;
     const before = await prisma.application.findUnique({
       where: { id: applicationId },
       select: {
         status: true,
-        order: {
-          select: {
-            id: true,
-            totalAmount: true,
-            currency: true,
-            payment: { select: { stripeAccountId: true } },
-          },
-        },
       },
     });
     if (!before) return;
-    if (session.payment_intent && before.order && before.order.payment?.stripeAccountId == null) {
-      // Destination routing chosen at session time; read it back for the ledger.
-      const intent = await stripe.paymentIntents.retrieve(paymentIntentId).catch(() => null);
-      const destination = intent?.transfer_data?.destination || null;
-      if (destination) {
-        await this._upsertPayment(prisma, before.order, {
-          stripeAccountId: destination,
-          applicationFee:
-            intent.application_fee_amount != null ? intent.application_fee_amount / 100 : null,
-        });
-      }
-    }
+    // The account and application fee were recorded when the session was
+    // created (spec 047 D0-S); the webhook account check already matched them.
     const changed = await this._markPaid(applicationId, paymentIntentId, { source: session.metadata?.purpose || 'checkout' });
     if (!changed) return;
     if (before.status === 'DRAFT') await this._sendReceived(applicationId);
@@ -823,7 +840,7 @@ class ApplicationPaymentService {
    * A replay of the session that actually paid is left alone.
    * @returns {Promise<boolean>} true when the session was superseded (handled here)
    */
-  async _refundSupersededSession(applicationId, session, paymentIntentId) {
+  async _refundSupersededSession(applicationId, session, paymentIntentId, account = null) {
     const current = await prisma.application.findUnique({
       where: { id: applicationId },
       select: { stripeCheckoutSessionId: true, order: { select: { payment: { select: { stripePaymentIntentId: true } } } } },
@@ -834,12 +851,12 @@ class ApplicationPaymentService {
       logger.error('Superseded application checkout completed without a refundable payment', { applicationId, sessionId: session.id });
       return true;
     }
-    const intent = await stripe.paymentIntents.retrieve(paymentIntentId).catch(() => null);
     await createStripeRefund({
       paymentIntentId,
       amount: session.amount_total / 100,
       reason: 'superseded',
-      connected: Boolean(intent?.transfer_data?.destination),
+      // The paid session lives on the account the event came from (spec 047)
+      stripeAccountId: account,
       metadata: { applicationId, reason: 'superseded_checkout_session', sessionId: session.id },
       // A paid session is refunded in full at most once; webhook redeliveries replay it.
       idempotencyKey: refundIdempotencyKey(`superseded-session:${session.id}`),
@@ -1037,7 +1054,7 @@ class ApplicationPaymentService {
       ];
       let paymentMethod = null;
       if (order.payment?.source !== 'OFFLINE' && order.payment?.stripePaymentIntentId) {
-        const intent = await stripe.paymentIntents.retrieve(order.payment.stripePaymentIntentId, { expand: ['payment_method'] }).catch(() => null);
+        const intent = await stripe.paymentIntents.retrieve(order.payment.stripePaymentIntentId, { expand: ['payment_method'] }, ...onAccount(order.payment.stripeAccountId)).catch(() => null);
         const card = intent?.payment_method?.card;
         if (card?.brand && card?.last4) paymentMethod = `${card.brand.charAt(0).toUpperCase()}${card.brand.slice(1)} •••• ${card.last4}`;
       }

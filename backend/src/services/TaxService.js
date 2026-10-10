@@ -9,6 +9,8 @@ import logger from '../utils/logger.js';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import { US_STATES, stateName } from '../utils/usStates.js';
 import { PAID_ORDER_STATUSES } from './paidStatuses.js';
+import connectService from './ConnectService.js';
+import { onAccount } from './stripeAccount.js';
 
 // Stripe product tax code for general event admissions
 const ADMISSIONS_TAX_CODE = 'txcd_20060057';
@@ -28,6 +30,9 @@ export class StripeTaxError extends Error {
 class TaxService {
   constructor() {
     this._statusCache = { value: null, expiresAt: 0 };
+    // Spec 047: an organization with a connected account is the seller, so its
+    // own account's Stripe Tax settings and registrations apply. Keyed by acct_.
+    this._accountStatusCache = new Map();
   }
 
   // ---------------------------------------------------------------------------
@@ -56,7 +61,7 @@ class TaxService {
         orderBy: { name: 'asc' },
       }),
       prisma.taxRegion.findMany({ where: { organizationId: orgId } }),
-      this.getServiceStatus(),
+      this.getServiceStatus(orgId),
       this._upcomingEventsByState(orgId),
     ]);
 
@@ -139,7 +144,7 @@ class TaxService {
   async _regionResponse(orgId, rowId, country, region) {
     const [fresh, service, venueCount, upcoming] = await Promise.all([
       prisma.taxRegion.findUnique({ where: { id: rowId } }),
-      this.getServiceStatus(),
+      this.getServiceStatus(orgId),
       prisma.venue.count({ where: { organizationId: orgId, state: region } }),
       this._upcomingEventsByState(orgId),
     ]);
@@ -349,7 +354,7 @@ class TaxService {
     }
 
     try {
-      const rate = await this.getTaxRateForVenue(venue.postalCode, key.country);
+      const rate = await this.getTaxRateForVenue(venue.postalCode, key.country, { stripeAccount: await this._sellerAccount(orgId) });
       await this._recordLookup(row.id, { rate, source: 'STRIPE', error: null });
       return { rate, source: 'STRIPE', error: null };
     } catch (error) {
@@ -369,9 +374,12 @@ class TaxService {
    *
    * @param {string} postalCode - Venue postal code
    * @param {string} [country='US'] - ISO country code
+   * @param {{ stripeAccount?: string|null }} [options] - spec 047: the
+   *   organization's connected account (it is the seller, so its Stripe Tax
+   *   registrations decide); null = the platform account
    * @returns {Promise<number>} Effective rate as a decimal (0.08875 for 8.875%)
    */
-  async getTaxRateForVenue(postalCode, country = 'US') {
+  async getTaxRateForVenue(postalCode, country = 'US', { stripeAccount = null } = {}) {
     if (!postalCode) throw new StripeTaxError('Venue has no postal code', { reason: 'no_postal_code' });
 
     const referenceAmountCents = 10000;
@@ -391,7 +399,7 @@ class TaxService {
             tax_code: ADMISSIONS_TAX_CODE,
           },
         ],
-      });
+      }, ...onAccount(stripeAccount));
     } catch (error) {
       logger.error('Stripe Tax calculation failed', {
         event: 'tax_rate_error',
@@ -423,20 +431,26 @@ class TaxService {
   // ---------------------------------------------------------------------------
 
   /**
-   * Whether Stripe Tax is usable on the platform account and where it is registered.
-   * Cached in-process for 5 minutes. Never throws: failures report `unavailable`.
+   * Whether Stripe Tax is usable and where it is registered — on the
+   * organization's own connected account when it has one (spec 047: the
+   * organization is the seller and remits the tax), else on the platform
+   * account. Cached in-process for 5 minutes per account. Never throws:
+   * failures report `unavailable`.
    *
-   * @returns {Promise<{ provider: 'STRIPE_TAX', status: 'active'|'pending'|'unavailable', registrations: Array<{country: string, region: string|null}>, manageUrl: string, error: string|null }>}
+   * @param {string} [organizationId]
+   * @returns {Promise<{ provider: 'STRIPE_TAX', status: 'active'|'pending'|'unavailable', registrations: Array<{country: string, region: string|null}>, manageUrl: string, error: string|null, seller: 'ORGANIZATION'|'PLATFORM' }>}
    */
-  async getServiceStatus() {
+  async getServiceStatus(organizationId = null) {
+    const stripeAccount = organizationId ? await this._sellerAccount(organizationId) : null;
     const now = Date.now();
-    if (this._statusCache.value && this._statusCache.expiresAt > now) return this._statusCache.value;
+    const cached = stripeAccount ? this._accountStatusCache.get(stripeAccount) : this._statusCache;
+    if (cached?.value && cached.expiresAt > now) return cached.value;
 
     let value;
     try {
       const [settings, registrations] = await Promise.all([
-        stripe.tax.settings.retrieve(),
-        stripe.tax.registrations.list({ status: 'active', limit: 100 }),
+        stripe.tax.settings.retrieve(...onAccount(stripeAccount)),
+        stripe.tax.registrations.list({ status: 'active', limit: 100 }, ...onAccount(stripeAccount)),
       ]);
       value = {
         provider: 'STRIPE_TAX',
@@ -449,16 +463,26 @@ class TaxService {
         error: null,
       };
     } catch (error) {
-      logger.warn('Stripe Tax status unavailable', { event: 'tax_status_unavailable', error: error.message });
+      logger.warn('Stripe Tax status unavailable', { event: 'tax_status_unavailable', stripeAccount, error: error.message });
       value = { provider: 'STRIPE_TAX', status: 'unavailable', registrations: [], manageUrl: STRIPE_TAX_DASHBOARD_URL, error: error.message };
     }
-    this._statusCache = { value, expiresAt: now + SERVICE_STATUS_TTL_MS };
+    value.seller = stripeAccount ? 'ORGANIZATION' : 'PLATFORM';
+    const entry = { value, expiresAt: now + SERVICE_STATUS_TTL_MS };
+    if (stripeAccount) this._accountStatusCache.set(stripeAccount, entry);
+    else this._statusCache = entry;
     return value;
+  }
+
+  /** The organization's connected account when charges run on it (spec 047), else null. */
+  async _sellerAccount(organizationId) {
+    const account = await connectService.chargeAccountFor(organizationId);
+    return account?.stripeAccountId ?? null;
   }
 
   /** Drop the cached service status (tests). */
   _invalidate() {
     this._statusCache = { value: null, expiresAt: 0 };
+    this._accountStatusCache.clear();
   }
 
   // ---------------------------------------------------------------------------
