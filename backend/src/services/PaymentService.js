@@ -16,6 +16,24 @@ import { buyerVerifyUrl } from '../utils/storefrontUrl.js';
 import EmailService from './EmailService.js';
 import { recordPaymentStatus } from '../utils/metrics.js';
 import logger from '../utils/logger.js';
+import { sameAccount } from './stripeAccount.js';
+
+/**
+ * Spec 047 D0-S: a webhook may only settle an order whose payment was created
+ * on the account the event came from (`event.account`; null = platform).
+ */
+function accountRefused(order, account, stripeSessionId) {
+  const expected = order.payment?.stripeAccountId ?? null;
+  if (sameAccount(expected, account)) return false;
+  logger.error('Webhook refused: Stripe account does not match the order payment', {
+    event: 'stripe_webhook_account_mismatch',
+    orderId: order.id,
+    stripeSessionId,
+    expectedAccount: expected,
+    eventAccount: account || null,
+  });
+  return true;
+}
 
 class PaymentService {
   /**
@@ -32,14 +50,16 @@ class PaymentService {
    *
    * @param {string} stripeSessionId
    * @param {string|null} paymentIntentId
+   * @param {string|null} [account] - `event.account` (null = platform account)
    */
-  async handleCheckoutCompleted(stripeSessionId, paymentIntentId = null) {
+  async handleCheckoutCompleted(stripeSessionId, paymentIntentId = null, account = null) {
     const order = await OrderService.getOrderByStripeSession(stripeSessionId);
 
     if (!order) {
       logger.warn('Webhook: order not found for session', { stripeSessionId });
       return;
     }
+    if (accountRefused(order, account, stripeSessionId)) return;
 
     // Idempotent: already processed
     if (order.status === 'COMPLETED') {
@@ -148,14 +168,16 @@ class PaymentService {
    *
    * @param {string} stripeSessionId
    * @param {string} reason
+   * @param {string|null} [account] - `event.account` (null = platform account)
    */
-  async handleCheckoutFailed(stripeSessionId, reason = 'Payment failed') {
+  async handleCheckoutFailed(stripeSessionId, reason = 'Payment failed', account = null) {
     const order = await OrderService.getOrderByStripeSession(stripeSessionId);
 
     if (!order) {
       logger.warn('Webhook: order not found for failed session', { stripeSessionId });
       return;
     }
+    if (accountRefused(order, account, stripeSessionId)) return;
 
     // Idempotent: already processed
     if (order.status === 'FAILED') {

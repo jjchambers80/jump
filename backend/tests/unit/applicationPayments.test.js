@@ -1,6 +1,6 @@
 // Unit tests for the application payment pieces that need no database
 // (spec 011 phase 2): derived status tokens, the application-fee identity
-// between the amount snapshot and spec 010's applicationFeeCents, and
+// between the amount snapshot and applicationFeeCents (spec 047: the platform fee), and
 // webhook dispatch on metadata.applicationId.
 
 import { jest } from '@jest/globals';
@@ -44,7 +44,7 @@ describe('application fee identity', () => {
 
   /** The charge shape ApplicationPaymentService hands to checkoutOptionsFor. */
   const chargeFor = (amounts) => ({
-    fees: { subtotal: amounts.orgReceives },
+    fees: { platformFee: amounts.platformFee },
     lineItems: [{ price_data: { unit_amount: cents(amounts.applicantPays) }, quantity: 1 }],
   });
 
@@ -54,17 +54,18 @@ describe('application fee identity', () => {
     ['ABSORB, untaxed', { feeMode: 'ABSORB', taxable: false }, 1000],
     ['ABSORB, taxed', { feeMode: 'ABSORB', taxable: true }, 1000],
     ['odd cents', { feeMode: 'PASS', taxable: true }, 33.33],
-  ])('%s: fee cents = applicantPays − orgReceives, never null', (_label, form, price) => {
+  ])('%s: direct charge (spec 047 §4.3) — fee cents = platform fee, below the charge, never null', (_label, form, price) => {
     const amounts = tierAmounts(price, form, event, org);
     const fee = applicationFeeCents(chargeFor(amounts));
-    expect(fee).toBe(cents(amounts.applicantPays) - cents(amounts.orgReceives));
-    expect(fee).toBeGreaterThanOrEqual(0);
+    expect(fee).toBe(cents(amounts.platformFee));
+    expect(fee).toBeGreaterThan(0);
+    expect(fee).toBeLessThan(cents(amounts.applicantPays));
   });
 
   it('tax-inclusive ABSORB keeps the listed price as the applicant total', () => {
     const amounts = tierAmounts(100, { feeMode: 'ABSORB', taxable: true }, event, { taxInclusivePricing: true });
     expect(amounts.applicantPays).toBe(100);
-    expect(applicationFeeCents(chargeFor(amounts))).toBe(10000 - cents(amounts.orgReceives));
+    expect(applicationFeeCents(chargeFor(amounts))).toBe(cents(amounts.platformFee));
   });
 });
 

@@ -7,9 +7,15 @@ export interface TaxServiceStatus {
   provider: 'STRIPE_TAX';
   status: TaxServiceState;
   registrations: Array<{ country: string; region: string | null }>;
-  /** Only present for SYSTEM_ADMIN (link to the platform's Stripe dashboard). */
+  /** Stripe Tax settings link: for SYSTEM_ADMIN, or for everyone once the organization's own account is the seller. */
   manageUrl?: string;
   error: string | null;
+  /**
+   * Spec 047: whose Stripe account is the seller of record. ORGANIZATION = the
+   * organization's own connected account (its registrations apply; it remits);
+   * PLATFORM = charges still run on the platform account. Absent on older backends.
+   */
+  seller?: 'ORGANIZATION' | 'PLATFORM';
 }
 
 export interface TaxRegionRow {
@@ -26,7 +32,7 @@ export interface TaxRegionRow {
   source: TaxSource | null;
   /** Decimal fraction, e.g. 0.0825. */
   manualRate: number | null;
-  /** The platform's Stripe account has an active registration for this state. */
+  /** The seller's Stripe account (the organization's own, else the platform's) has an active registration for this state. */
   registrationFound: boolean;
   lastRate: number | null;
   lastSource: TaxSource | null;

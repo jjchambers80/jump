@@ -427,14 +427,15 @@ router.get('/settings/tax', async (req, res, next) => {
   try {
     const organizationId = await activeOrgFor(req);
     const [service, { regions, needsAddress }, settings] = await Promise.all([
-      taxService.getServiceStatus(),
+      taxService.getServiceStatus(organizationId),
       taxService.listRegions(organizationId),
       taxService.getTaxSettings(organizationId),
     ]);
-    // The Stripe dashboard link is only useful to whoever owns the platform account.
+    // The Stripe dashboard link is only useful to whoever owns the account:
+    // the organization itself once it is the seller (spec 047), else the platform.
     const { manageUrl, ...serviceForRole } = service;
     res.json({
-      service: req.user.role === 'SYSTEM_ADMIN' ? service : serviceForRole,
+      service: req.user.role === 'SYSTEM_ADMIN' || service.seller === 'ORGANIZATION' ? service : serviceForRole,
       regions,
       needsAddress,
       settings,
@@ -950,7 +951,7 @@ router.patch('/settings/application-digest', requireAdmin, wrap(async (req, res)
 // ─── Stripe Connect (spec 010 phase 2) ────────────────────────────────────
 // All 404 while STRIPE_CONNECT_ENABLED is off (ConnectService._assertEnabled).
 
-/** POST /admin/settings/payments/connect/onboard → { url } Account Link (create account on first call). */
+/** POST /admin/settings/payments/connect/onboard → { url } Account Link (create the organization's own account on first call). */
 router.post('/settings/payments/connect/onboard', requireAdmin, async (req, res, next) => {
   try {
     const organizationId = await activeOrgFor(req);
@@ -960,11 +961,29 @@ router.post('/settings/payments/connect/onboard', requireAdmin, async (req, res,
   }
 });
 
-/** POST /admin/settings/payments/connect/login-link → { url } Express dashboard (after onboarding). */
-router.post('/settings/payments/connect/login-link', requireAdmin, async (req, res, next) => {
+/**
+ * POST /admin/settings/payments/connect/oauth → { url } "Connect with Stripe"
+ * for an organization that already has a Stripe account (spec 047 S1). 404
+ * when STRIPE_CONNECT_CLIENT_ID is unset.
+ */
+router.post('/settings/payments/connect/oauth', requireAdmin, async (req, res, next) => {
   try {
     const organizationId = await activeOrgFor(req);
-    res.json(await connectService.loginLink(organizationId));
+    res.json(await connectService.oauthUrl(organizationId, { userId: req.user.id }));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** POST /admin/settings/payments/connect/oauth/complete { code, state } → { connect } after Stripe's redirect. */
+router.post('/settings/payments/connect/oauth/complete', requireAdmin, async (req, res, next) => {
+  try {
+    const { code, state } = req.body || {};
+    if (typeof code !== 'string' || !code || typeof state !== 'string' || !state) {
+      throw new ValidationError('code and state are required');
+    }
+    const organizationId = await activeOrgFor(req);
+    res.json({ connect: await connectService.completeOAuth(organizationId, { userId: req.user.id, code, state }) });
   } catch (error) {
     next(error);
   }

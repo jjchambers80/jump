@@ -1,8 +1,12 @@
-// Unit tests for PaymentSettingsService (spec 010 phase 1)
+// Unit tests for PaymentSettingsService (spec 010 phase 1, spec 047 D0-S)
 // Descriptor derivation and validation, method allowlist ∩ capabilities, and
-// the checkout options Stripe receives — Prisma and Stripe mocked.
+// the checkout options Stripe receives (direct charge: application fee =
+// platform fee, from the shared fee fixtures) — Prisma and Stripe mocked.
 
 import { jest } from '@jest/globals';
+import { readFileSync } from 'fs';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 
 const mockOrgFindUnique = jest.fn();
 const mockOrgUpdate = jest.fn();
@@ -17,10 +21,10 @@ jest.unstable_mockModule('../../src/config/stripe.js', () => ({
 jest.unstable_mockModule('../../src/utils/logger.js', () => ({
   default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }));
-// Connect routing (phase 2) is decided by ConnectService; pin its answer here.
-const mockDestinationFor = jest.fn();
+// Connect routing is decided by ConnectService; pin its answer here.
+const mockChargeAccountFor = jest.fn();
 jest.unstable_mockModule('../../src/services/ConnectService.js', () => ({
-  default: { destinationFor: mockDestinationFor },
+  default: { chargeAccountFor: mockChargeAccountFor },
 }));
 
 process.env.STRIPE_SECRET_KEY = 'sk_test_unit';
@@ -48,7 +52,7 @@ const org = (over = {}) => ({
 beforeEach(() => {
   jest.clearAllMocks();
   service._invalidate();
-  mockDestinationFor.mockResolvedValue(null);
+  mockChargeAccountFor.mockResolvedValue(null);
   mockAccountsRetrieve.mockResolvedValue(account());
   mockOrgUpdate.mockImplementation(({ data }) => Promise.resolve(org(data)));
 });
@@ -215,81 +219,86 @@ function lineItemsFor(items, taxRate, taxInclusive = false) {
   return { fees, lineItems };
 }
 
-describe('applicationFeeCents (spec 010 phase 2)', () => {
-  const totalCents = (lineItems) => lineItems.reduce((s, i) => s + i.price_data.unit_amount * i.quantity, 0);
+const fixtures = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../fixtures/fees.fixtures.json'), 'utf8'));
+const ALL_PASS_TICKET = fixtures.cases.find((c) => c.name === 'tax on top');
+const D0B_CASES = fixtures.cases.filter((c) => c.name.startsWith('D0-B '));
 
-  test.each([
-    ['single tier, tax on top', [{ unitPrice: 25, quantity: 2 }], 0.0725, false],
-    ['single tier, no tax', [{ unitPrice: 25, quantity: 2 }], 0, false],
-    ['tax-inclusive listing', [{ unitPrice: 25, quantity: 2 }], 0.0725, true],
-    ['three tiers with rounding drift', [{ unitPrice: 19.99, quantity: 3 }, { unitPrice: 75, quantity: 1 }, { unitPrice: 5.55, quantity: 7 }], 0.08875, false],
-    ['three tiers tax-inclusive', [{ unitPrice: 19.99, quantity: 3 }, { unitPrice: 75, quantity: 1 }, { unitPrice: 5.55, quantity: 7 }], 0.08875, true],
-    ['one-cent ticket', [{ unitPrice: 0.01, quantity: 1 }], 0.07, false],
-    ['free ticket', [{ unitPrice: 0, quantity: 3 }], 0.07, false],
-  ])('%s: organization receives exactly the ex-tax subtotal', (_name, items, taxRate, taxInclusive) => {
-    const { fees, lineItems } = lineItemsFor(items, taxRate, taxInclusive);
-    const cents = applicationFeeCents({ fees, lineItems });
-    expect(Number.isInteger(cents)).toBe(true);
-    expect(cents).toBeGreaterThanOrEqual(0);
-    expect(totalCents(lineItems) - cents).toBe(Math.round(fees.subtotal * 100));
+describe('applicationFeeCents (spec 047 §4.3: platform fee only)', () => {
+  test.each([ALL_PASS_TICKET, ...D0B_CASES].map((c) => [c.name, c]))('%s: application fee = platformFee cents', (_name, fixture) => {
+    const { fees, lineItems } = lineItemsFor(fixture.items, fixture.taxRate, fixture.taxInclusive);
+    expect(fees.platformFee).toBe(fixture.order.platformFee);
+    expect(applicationFeeCents({ fees, lineItems })).toBe(Math.round(fixture.order.platformFee * 100));
   });
 
-  test('platform keeps fees plus tax within per-unit rounding', () => {
+  test('never includes processing or tax', () => {
     const { fees, lineItems } = lineItemsFor([{ unitPrice: 25, quantity: 2 }], 0.0725);
-    const expected = Math.round((fees.platformFee + fees.processingFee + fees.tax) * 100);
-    expect(Math.abs(applicationFeeCents({ fees, lineItems }) - expected)).toBeLessThanOrEqual(lineItems.length);
+    expect(applicationFeeCents({ fees, lineItems })).toBe(250);
+    expect(fees.processingFee + fees.tax).toBeGreaterThan(0);
   });
 
   test('null for anything that cannot be right', () => {
     const { fees, lineItems } = lineItemsFor([{ unitPrice: 25, quantity: 2 }], 0);
     expect(applicationFeeCents(null)).toBeNull();
     expect(applicationFeeCents({ fees, lineItems: [] })).toBeNull();
-    expect(applicationFeeCents({ fees: { subtotal: 'x' }, lineItems })).toBeNull();
-    expect(applicationFeeCents({ fees: { subtotal: 999 }, lineItems })).toBeNull(); // subtotal above the charge
+    expect(applicationFeeCents({ fees: { platformFee: 'x' }, lineItems })).toBeNull();
+    expect(applicationFeeCents({ fees: { platformFee: 999 }, lineItems })).toBeNull(); // fee not below the charge
+    expect(applicationFeeCents({ fees: { platformFee: -1 }, lineItems })).toBeNull();
     expect(applicationFeeCents({ fees, lineItems: [{ price_data: { unit_amount: 12.5 }, quantity: 1 }] })).toBeNull();
     expect(applicationFeeCents({ fees, lineItems: [{ price_data: { unit_amount: 1250 }, quantity: 0 }] })).toBeNull();
   });
 });
 
-describe('checkoutOptionsFor with Connect routing (spec 010 phase 2)', () => {
+describe('checkoutOptionsFor with a connected account (spec 047 D0-S: direct charge)', () => {
   const charge = () => lineItemsFor([{ unitPrice: 25, quantity: 2 }], 0.0725);
+  const connected = (activeCapabilities = ['card_payments', 'transfers']) => ({ stripeAccountId: 'acct_1', activeCapabilities });
 
-  test('adds transfer_data and application_fee_amount when the organization has an active account', async () => {
-    mockDestinationFor.mockResolvedValueOnce({ stripeAccountId: 'acct_1' });
+  test('returns the account and the platform fee as application fee; no transfer_data, no suffix', async () => {
+    mockChargeAccountFor.mockResolvedValueOnce(connected());
     const { fees, lineItems } = charge();
     const options = await service.checkoutOptionsFor(org(), { fees, lineItems });
-    expect(options.payment_intent_data).toEqual({
-      statement_descriptor_suffix: 'ROMAN SKIN CARE',
-      transfer_data: { destination: 'acct_1' },
-      application_fee_amount: applicationFeeCents({ fees, lineItems }),
+    expect(options).toEqual({
+      payment_method_types: ['card'],
+      payment_intent_data: { application_fee_amount: Math.round(fees.platformFee * 100) },
+      stripeAccount: 'acct_1',
     });
-    expect(mockDestinationFor).toHaveBeenCalledWith('org_1');
+    expect(mockChargeAccountFor).toHaveBeenCalledWith('org_1');
+    // The organization's own account decides: the platform account is not asked
+    expect(mockAccountsRetrieve).not.toHaveBeenCalled();
   });
 
-  test('routes even when the platform has no descriptor prefix', async () => {
-    mockAccountsRetrieve.mockResolvedValueOnce(account({ prefix: null }));
-    mockDestinationFor.mockResolvedValueOnce({ stripeAccountId: 'acct_1' });
-    const options = await service.checkoutOptionsFor(org(), charge());
-    expect(options.payment_intent_data).toEqual({ transfer_data: { destination: 'acct_1' }, application_fee_amount: expect.any(Number) });
+  test.each(D0B_CASES.map((c) => [c.name, c]))('%s', async (_name, fixture) => {
+    mockChargeAccountFor.mockResolvedValueOnce(connected());
+    const options = await service.checkoutOptionsFor(org(), lineItemsFor(fixture.items, fixture.taxRate, fixture.taxInclusive));
+    const cents = Math.round(fixture.order.platformFee * 100);
+    expect(options.stripeAccount).toBe('acct_1');
+    // A 0% gift line has no platform fee: Stripe requires a positive fee, so none is sent
+    expect(options.payment_intent_data?.application_fee_amount).toBe(cents > 0 ? cents : undefined);
+    expect(options.payment_intent_data?.transfer_data).toBeUndefined();
   });
 
-  test('platform account when routing says no, when no charge context is given, or when the cents are inconsistent', async () => {
+  test('optional methods follow the connected account capabilities, still within the allowlist', async () => {
+    mockChargeAccountFor.mockResolvedValueOnce(connected(['card_payments', 'klarna_payments', 'link_payments']));
+    const options = await service.checkoutOptionsFor(org({ enabledPaymentMethods: ['link', 'cashapp', 'klarna', 'bogus'] }), charge());
+    expect(options.payment_method_types).toEqual(['card', 'link', 'klarna']);
+  });
+
+  test('platform account when the organization never connected or no charge context is given; inconsistent cents refuse', async () => {
     const { fees, lineItems } = charge();
-    expect((await service.checkoutOptionsFor(org(), { fees, lineItems })).payment_intent_data).toEqual({ statement_descriptor_suffix: 'ROMAN SKIN CARE' });
-
-    expect((await service.checkoutOptionsFor(org())).payment_intent_data).toEqual({ statement_descriptor_suffix: 'ROMAN SKIN CARE' });
-    expect(mockDestinationFor).toHaveBeenCalledTimes(1); // no charge → no routing lookup
-
-    mockDestinationFor.mockResolvedValueOnce({ stripeAccountId: 'acct_1' });
-    const bad = await service.checkoutOptionsFor(org(), { fees: { subtotal: 9999 }, lineItems });
-    expect(bad.payment_intent_data).toEqual({ statement_descriptor_suffix: 'ROMAN SKIN CARE' });
-  });
-
-  test('a routing failure keeps the phase 1 options and charges on the platform account', async () => {
-    mockDestinationFor.mockRejectedValueOnce(new Error('boom'));
-    expect(await service.checkoutOptionsFor(org(), charge())).toEqual({
+    expect(await service.checkoutOptionsFor(org(), { fees, lineItems })).toEqual({
       payment_method_types: ['card'],
       payment_intent_data: { statement_descriptor_suffix: 'ROMAN SKIN CARE' },
     });
+
+    expect((await service.checkoutOptionsFor(org())).stripeAccount).toBeUndefined();
+    expect(mockChargeAccountFor).toHaveBeenCalledTimes(1); // no charge → no routing lookup
+
+    mockChargeAccountFor.mockResolvedValueOnce(connected());
+    await expect(service.checkoutOptionsFor(org(), { fees: { platformFee: 9999 }, lineItems })).rejects.toThrow('Inconsistent charge amounts');
+  });
+
+  test('a routing refusal propagates: never a platform charge for a connected organization', async () => {
+    const refused = Object.assign(new Error('paused'), { statusCode: 409, code: 'PAYMENTS_UNAVAILABLE' });
+    mockChargeAccountFor.mockRejectedValueOnce(refused);
+    await expect(service.checkoutOptionsFor(org(), charge())).rejects.toBe(refused);
   });
 });

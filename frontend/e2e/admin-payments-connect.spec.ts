@@ -1,4 +1,5 @@
-// Settings › Payments — Stripe Connect payouts (spec 010 phase 2): provider
+// Settings › Payments — Stripe Connect payouts (spec 010 phase 2; spec 047 S1:
+// the organization's own account, OAuth or create, full Stripe dashboard): provider
 // card states, the Payout bank account page (empty state, onboarding return
 // flows, schedule dialog), Finance › Payouts and the dashboard banner. Backend mocked at the network layer.
 
@@ -32,7 +33,10 @@ interface MockAccount {
   };
   disconnectedAt: string | null;
   lastSyncedAt: string | null;
+  dashboardUrl: string;
 }
+
+const DASHBOARD_URL = 'https://dashboard.stripe.com/test/dashboard';
 
 function account(status: ConnectStatus, over: Partial<MockAccount> = {}): MockAccount {
   const base: MockAccount = {
@@ -49,6 +53,7 @@ function account(status: ConnectStatus, over: Partial<MockAccount> = {}): MockAc
     payouts: { interval: 'daily', anchor: null, delayDays: 2, statementDescriptor: 'ROMAN SKIN', lastPayoutAt: '2026-09-12T00:00:00.000Z', lastPayoutFailure: null },
     disconnectedAt: status === 'disconnected' ? '2026-09-10T00:00:00.000Z' : null,
     lastSyncedAt: '2026-09-15T00:00:00.000Z',
+    dashboardUrl: DASHBOARD_URL,
   };
   return { ...base, ...over };
 }
@@ -62,6 +67,8 @@ interface MockOptions {
   /** What sync returns (defaults to the current state). */
   afterSync?: { status: ConnectStatus; account: MockAccount | null };
   payoutsError?: string;
+  /** STRIPE_CONNECT_CLIENT_ID set: "Connect existing Stripe account" is offered. */
+  oauthAvailable?: boolean;
   /** GET /admin/finance/payouts activity once onboarding is complete. */
   activity?: {
     balance: { available: number; pending: number; currency: string } | null;
@@ -107,7 +114,7 @@ async function mockPaymentsApi(page: Page, options: MockOptions = {}) {
     status: options.status ?? 'not_started',
     account: options.account === undefined ? (options.status && options.status !== 'not_started' ? account(options.status) : null) : options.account,
   };
-  const connect = () => ({ enabled: state.enabled, status: state.status, account: state.account });
+  const connect = () => ({ enabled: state.enabled, status: state.status, account: state.account, oauthAvailable: options.oauthAvailable ?? false });
   const provider = { provider: 'STRIPE', mode: 'test', charges: 'active', statementDescriptorPrefix: 'JUMP', capabilities: {}, error: null };
   const settings = {
     organization: { name: 'Roman Skin Care', phoneCountryCode: '+1', phoneNumber: null },
@@ -129,13 +136,18 @@ async function mockPaymentsApi(page: Page, options: MockOptions = {}) {
     const req = route.request();
     const path = new URL(req.url()).pathname;
     const method = req.method();
-    calls.push({ method, path, body: method === 'PATCH' ? req.postDataJSON() : undefined });
+    calls.push({ method, path, body: method === 'PATCH' || path.endsWith('/oauth/complete') ? req.postDataJSON() : undefined });
 
     if (path === '/admin/settings/payments' && method === 'GET') {
       return route.fulfill(json({ provider, settings, connect: connect(), canEdit: options.canEdit ?? true }));
     }
     if (path.endsWith('/connect/onboard')) return route.fulfill(json({ url: 'https://connect.stripe.com/setup/e/acct_e2e/link' }));
-    if (path.endsWith('/connect/login-link')) return route.fulfill(json({ url: 'https://connect.stripe.com/express/acct_e2e/login' }));
+    if (path.endsWith('/connect/oauth')) return route.fulfill(json({ url: 'https://connect.stripe.com/oauth/authorize?response_type=code&client_id=ca_e2e&state=s' }));
+    if (path.endsWith('/connect/oauth/complete')) {
+      state.status = 'active';
+      state.account = account('active');
+      return route.fulfill(json({ connect: connect() }));
+    }
     if (path.endsWith('/connect/sync')) {
       if (options.afterSync) {
         state.status = options.afterSync.status;
@@ -163,6 +175,8 @@ async function mockPaymentsApi(page: Page, options: MockOptions = {}) {
 
   // Stripe-hosted pages are never reached in tests; stop the navigation.
   await page.route('https://connect.stripe.com/**', (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '<title>Stripe</title>' }));
+  // The dashboard opens in a new tab: route it on the context so the popup never hits the network.
+  await page.context().route('https://dashboard.stripe.com/**', (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '<title>Stripe</title>' }));
 
   return { calls, state };
 }
@@ -185,12 +199,12 @@ test('flag off: no payouts pill, row or page content, phase 1 footer stays', asy
   await expect(page.getByTestId('finance-payouts-disabled')).toBeVisible();
 });
 
-test('not started: pill, action starts onboarding and redirects to Stripe', async ({ page, baseURL }) => {
+test('not started: pill, action leads to the connect choice', async ({ page, baseURL }) => {
   await mockSession(page, baseURL!);
-  const api = await mockPaymentsApi(page);
+  await mockPaymentsApi(page);
   await page.goto('/admin/settings/payments');
 
-  await expect(page.getByTestId('payments-payouts-pill')).toHaveText('Set up payouts');
+  await expect(page.getByTestId('payments-payouts-pill')).toHaveText('Not connected');
   await expect(page.getByTestId('payments-payouts-row')).toContainText('Not connected');
   await expect(page.getByText('coming with Stripe Connect')).toHaveCount(0);
   await expect(page.getByTestId('payments-connect-manage')).toHaveCount(0);
@@ -199,16 +213,16 @@ test('not started: pill, action starts onboarding and redirects to Stripe', asyn
   expect(a11y.violations).toEqual([]);
 
   await page.getByTestId('payments-connect-action').click();
-  await page.waitForURL('https://connect.stripe.com/setup/e/acct_e2e/link');
-  expect(api.calls.some((c) => c.method === 'POST' && c.path.endsWith('/connect/onboard'))).toBe(true);
+  await expect(page).toHaveURL(/\/admin\/settings\/payments\/payout-bank-account$/);
+  await expect(page.getByTestId('payouts-connect-card')).toBeVisible();
 });
 
-test('active: receiving payouts pill, Manage opens the Express dashboard, bank on the row', async ({ page, baseURL, context }) => {
+test('active: connected pill, Stripe dashboard opens the organization\'s own dashboard, bank on the row', async ({ page, baseURL, context }) => {
   await mockSession(page, baseURL!);
   await mockPaymentsApi(page, { status: 'active' });
   await page.goto('/admin/settings/payments');
 
-  await expect(page.getByTestId('payments-payouts-pill')).toHaveText('Receiving payouts');
+  await expect(page.getByTestId('payments-payouts-pill')).toHaveText('Connected');
   await expect(page.getByTestId('payments-connect-action')).toHaveCount(0);
   await expect(page.getByTestId('payments-payouts-row')).toContainText('Wells Fargo •••• 3544');
 
@@ -216,7 +230,7 @@ test('active: receiving payouts pill, Manage opens the Express dashboard, bank o
   await page.getByTestId('payments-connect-manage').click();
   const tab = await popup;
   await tab.waitForLoadState();
-  expect(tab.url()).toBe('https://connect.stripe.com/express/acct_e2e/login');
+  expect(tab.url()).toBe(DASHBOARD_URL);
 });
 
 test('restricted: action required pill and guidance; ORGANIZER sees state but no actions', async ({ page, baseURL }) => {
@@ -224,7 +238,7 @@ test('restricted: action required pill and guidance; ORGANIZER sees state but no
   await mockPaymentsApi(page, { status: 'restricted', canEdit: false, role: 'ORGANIZER' });
   await page.goto('/admin/settings/payments');
   await expect(page.getByTestId('payments-payouts-pill')).toHaveText('Action required');
-  await expect(page.getByTestId('payments-connect-restricted')).toContainText('Sales still go through');
+  await expect(page.getByTestId('payments-connect-restricted')).toContainText('checkout and payouts may be paused');
   await expect(page.getByTestId('payments-connect-action')).toHaveCount(0);
 
   await page.goto('/admin/settings/payments/payout-bank-account');
@@ -245,7 +259,7 @@ test('payouts page: active account shows bank, schedule, on-hold and failure sta
   await page.goto('/admin/settings/payments/payout-bank-account');
 
   await expect(page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Payments' })).toHaveAttribute('href', '/admin/settings/payments');
-  await expect(page.getByTestId('payouts-status-pill')).toHaveText('Receiving payouts');
+  await expect(page.getByTestId('payouts-status-pill')).toHaveText('Connected');
   await expect(page.getByTestId('payouts-on-hold')).toContainText('on hold');
   await expect(page.getByTestId('payouts-failure')).toContainText('Bank account closed');
   await expect(page.getByTestId('payouts-bank')).toHaveText('Wells Fargo •••• 3544');
@@ -305,7 +319,7 @@ test('returning from Stripe with ?onboarding=complete syncs and reports the outc
   await page.goto('/admin/settings/payments/payout-bank-account?onboarding=complete');
 
   await expect(page.getByTestId('payouts-notice')).toContainText('Stripe setup complete');
-  await expect(page.getByTestId('payouts-status-pill')).toHaveText('Receiving payouts');
+  await expect(page.getByTestId('payouts-status-pill')).toHaveText('Connected');
   await expect(page).toHaveURL(/\/admin\/settings\/payments\/payout-bank-account$/);
   expect(api.calls.filter((c) => c.path.endsWith('/connect/sync'))).toHaveLength(1);
 });
@@ -349,14 +363,17 @@ test('dashboard banner is absent when active or when Connect is off', async ({ p
   await expect(page.getByTestId('payouts-banner')).toHaveCount(0);
 });
 
-test('bank account page: empty state connects the bank through Stripe onboarding', async ({ page, baseURL }) => {
+test('bank account page: empty state creates a Stripe account through Stripe onboarding', async ({ page, baseURL }) => {
   await mockSession(page, baseURL!);
   const api = await mockPaymentsApi(page);
   await page.goto('/admin/settings/payments/payout-bank-account');
 
   const card = page.getByTestId('payouts-connect-card');
-  await expect(card).toContainText('Connect your bank account');
-  await expect(card).toContainText('Add your external bank account to transfer funds');
+  await expect(card).toContainText('Connect your Stripe account');
+  await expect(card).toContainText('You are the merchant buyers see on their statement');
+  // No client id on the platform: only "create" is offered
+  await expect(page.getByTestId('payouts-connect-existing')).toHaveCount(0);
+  await expect(page.getByTestId('payouts-action')).toHaveText('Create a Stripe account');
   await expect(page.getByTestId('payouts-bank-card')).toHaveCount(0);
   await expect(page.getByTestId('payouts-about-card')).toContainText('What are payouts?');
 
@@ -381,7 +398,36 @@ test('bank account page: active account shows last four and Change bank opens th
   await page.getByTestId('payouts-change-bank').click();
   const tab = await popup;
   await tab.waitForLoadState();
-  expect(tab.url()).toBe('https://connect.stripe.com/express/acct_e2e/login');
+  expect(tab.url()).toBe(DASHBOARD_URL);
+});
+
+test('bank account page: connect an existing Stripe account with OAuth, then finish on return', async ({ page, baseURL }) => {
+  await mockSession(page, baseURL!);
+  const api = await mockPaymentsApi(page, { oauthAvailable: true });
+  await page.goto('/admin/settings/payments/payout-bank-account');
+
+  await expect(page.getByTestId('payouts-action')).toHaveText('Create a Stripe account');
+  const a11y = await new AxeBuilder({ page }).include('main').analyze();
+  expect(a11y.violations).toEqual([]);
+
+  await page.getByTestId('payouts-connect-existing').click();
+  await page.waitForURL(/https:\/\/connect\.stripe\.com\/oauth\/authorize/);
+  expect(api.calls.some((c) => c.method === 'POST' && c.path.endsWith('/connect/oauth'))).toBe(true);
+
+  // Stripe redirects back with the code and our state
+  await page.goto('/admin/settings/payments/payout-bank-account?code=ac_e2e&state=signed.state');
+  await expect(page.getByTestId('payouts-notice')).toContainText('Your Stripe account is connected');
+  await expect(page.getByTestId('payouts-status-pill')).toHaveText('Connected');
+  await expect(page).toHaveURL(/\/admin\/settings\/payments\/payout-bank-account$/);
+  expect(api.calls.find((c) => c.path.endsWith('/oauth/complete'))?.body).toEqual({ code: 'ac_e2e', state: 'signed.state' });
+});
+
+test('bank account page: a cancelled OAuth return explains and calls nothing', async ({ page, baseURL }) => {
+  await mockSession(page, baseURL!);
+  const api = await mockPaymentsApi(page, { oauthAvailable: true });
+  await page.goto('/admin/settings/payments/payout-bank-account?error=access_denied&error_description=The+user+denied');
+  await expect(page.getByTestId('payouts-notice')).toContainText('Stripe account not connected');
+  expect(api.calls.some((c) => c.path.endsWith('/oauth/complete'))).toBe(false);
 });
 
 test('finance: sidebar entry, landing links, and the payouts page before a bank is connected', async ({ page, baseURL }) => {

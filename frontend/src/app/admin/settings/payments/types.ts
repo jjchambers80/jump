@@ -51,7 +51,7 @@ export interface PaymentSettings {
   updatedAt: string | null;
 }
 
-// ─── Stripe Connect (spec 010 phase 2) ─────────────────────────────────────
+// ─── Stripe Connect (spec 010 phase 2; spec 047: the organization's own account) ──
 
 export type ConnectStatus = 'not_started' | 'onboarding' | 'restricted' | 'active' | 'disconnected';
 
@@ -78,6 +78,8 @@ export interface ConnectAccount {
   };
   disconnectedAt: string | null;
   lastSyncedAt: string | null;
+  /** The organization's own Stripe dashboard (it signs in with its own Stripe login). */
+  dashboardUrl: string;
 }
 
 export interface ConnectState {
@@ -85,6 +87,8 @@ export interface ConnectState {
   enabled: boolean;
   status: ConnectStatus;
   account: ConnectAccount | null;
+  /** "Connect existing Stripe account" (OAuth) is configured on the platform (STRIPE_CONNECT_CLIENT_ID). */
+  oauthAvailable?: boolean;
 }
 
 export interface UpdatePayoutSettingsBody {
@@ -195,20 +199,24 @@ export function formatPercent(fraction: number): string {
 }
 
 export const CONNECT_PILL: Record<ConnectStatus, { label: string; style: string }> = {
-  not_started: { label: 'Set up payouts', style: 'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-300' },
+  not_started: { label: 'Not connected', style: 'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-300' },
   onboarding: { label: 'Finish setup', style: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300' },
   restricted: { label: 'Action required', style: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' },
-  active: { label: 'Receiving payouts', style: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' },
+  active: { label: 'Connected', style: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' },
   disconnected: { label: 'Disconnected', style: 'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-300' },
 };
 
-/** Button label for the onboarding action per state (null = no onboarding action). */
+/**
+ * Account Link action per state (null = none). Not started / disconnected
+ * offer a choice instead (connect an existing account or create one), on the
+ * payout bank account page.
+ */
 export const CONNECT_ACTION: Record<ConnectStatus, string | null> = {
-  not_started: 'Set up payouts',
+  not_started: null,
   onboarding: 'Continue setup',
   restricted: 'Update details',
   active: null,
-  disconnected: 'Reconnect',
+  disconnected: null,
 };
 
 export const WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;

@@ -36,25 +36,24 @@ describe('_createStripeRefund', () => {
     );
   });
 
-  test('destination charge: reverse the transfer and refund the application fee', async () => {
-    await service._createStripeRefund('pi_1', 12.34, 'changed plans', { connected: true, ...KEY });
+  test('direct charge (spec 047): refund on the organization account and return the platform fee; nothing to reverse', async () => {
+    await service._createStripeRefund('pi_1', 12.34, 'changed plans', { stripeAccountId: 'acct_1', ...KEY });
     expect(mockRefundsCreate).toHaveBeenCalledWith(
       {
         payment_intent: 'pi_1',
         amount: 1234,
         reason: 'requested_by_customer',
-        reverse_transfer: true,
         refund_application_fee: true,
         metadata: { source: 'jump-platform' },
       },
-      { idempotencyKey: 'jump:refund:ticket:tkt_1' }
+      { idempotencyKey: 'jump:refund:ticket:tkt_1', stripeAccount: 'acct_1' }
     );
   });
 
   test('Stripe failures surface as a validation error', async () => {
     mockRefundsCreate.mockRejectedValueOnce(new Error('charge_already_refunded'));
     await expect(
-      service._createStripeRefund('pi_1', 1, null, { connected: true, ...KEY })
+      service._createStripeRefund('pi_1', 1, null, { stripeAccountId: 'acct_1', ...KEY })
     ).rejects.toThrow(/Stripe refund failed: charge_already_refunded/);
   });
 

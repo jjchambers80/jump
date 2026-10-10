@@ -121,22 +121,16 @@ export default function PaymentsSettingsPage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h3 className="text-base font-semibold text-gray-900 dark:text-white">Stripe</h3>
               <div className="flex flex-wrap items-center gap-2">
-                {/* Express dashboard for the organization's own account (phase 2) */}
-                {connect.enabled && connect.status === 'active' && canEdit && (
-                  <button
-                    type="button"
-                    className={secondaryBtn}
-                    data-testid="payments-connect-manage"
-                    disabled={connectActions.busy !== null}
-                    onClick={connectActions.openDashboard}
-                  >
-                    {connectActions.busy === 'login' ? 'Opening…' : 'Manage'}
+                {/* The organization's own Stripe dashboard (spec 047: it owns the account) */}
+                {connect.enabled && connect.account && connect.status !== 'disconnected' && canEdit && (
+                  <a href={connect.account.dashboardUrl} target="_blank" rel="noreferrer" className={secondaryBtn} data-testid="payments-connect-manage">
+                    Stripe dashboard
                     <ExternalLinkIcon />
-                  </button>
+                  </a>
                 )}
                 {provider?.manageUrl && (
                   <a href={provider.manageUrl} target="_blank" rel="noreferrer" className={secondaryBtn}>
-                    {connect.enabled && connect.status === 'active' && canEdit ? 'Platform dashboard' : 'Manage'}
+                    {connect.enabled && connect.account && canEdit ? 'Platform dashboard' : 'Manage'}
                     <ExternalLinkIcon />
                   </a>
                 )}
@@ -175,6 +169,15 @@ export default function PaymentsSettingsPage() {
                     <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${connect.status === 'not_started' ? 'border border-current' : 'bg-current'}`} />
                     {CONNECT_PILL[connect.status].label}
                   </span>
+                  {canEdit && (connect.status === 'not_started' || connect.status === 'disconnected') && (
+                    <Link
+                      href="/admin/settings/payments/payout-bank-account"
+                      data-testid="payments-connect-action"
+                      className="text-sm font-semibold text-accent-600 hover:underline dark:text-accent-300"
+                    >
+                      Connect Stripe
+                    </Link>
+                  )}
                   {connectAction && canEdit && (
                     <button
                       type="button"
@@ -192,7 +195,7 @@ export default function PaymentsSettingsPage() {
             {connect.enabled && connect.status === 'restricted' && (
               <p className="mt-3 flex items-start gap-1.5 text-sm text-red-700 dark:text-red-300" data-testid="payments-connect-restricted">
                 <WarningIcon className="mt-0.5 h-4 w-4 shrink-0" />
-                Stripe needs more information before payouts can continue. Sales still go through.
+                Stripe needs more information about your account. Until it has it, checkout and payouts may be paused.
               </p>
             )}
             {provider?.mode === 'test' && (

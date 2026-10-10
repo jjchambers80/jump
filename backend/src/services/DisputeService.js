@@ -25,6 +25,7 @@ import emailService from './EmailService.js';
 import applicationDigestService from './ApplicationDigestService.js';
 import { orderStatusFor } from './applicationOrderStatus.js';
 import logger from '../utils/logger.js';
+import { onAccount, sameAccount } from './stripeAccount.js';
 
 const round = (v) => Math.round((v + Number.EPSILON) * 100) / 100;
 const centsToMajor = (c) => round(Number(c || 0) / 100);
@@ -55,7 +56,7 @@ class DisputeService {
 
     // The order never changes for a dispute, so a known dispute keeps its
     // resolution even if Stripe later sends a payload we could not resolve.
-    const orderId = existing?.orderId ?? (await this._resolveOrderId(dispute));
+    const orderId = existing?.orderId ?? (await this._resolveOrderId(dispute, event.account || null));
     if (!orderId) {
       // Not ours (another platform's charge, or a payment Jump never recorded).
       // Loud, because a real dispute that lands here is money leaving with no
@@ -151,8 +152,13 @@ class DisputeService {
       : dispute.payment_intent?.id ?? null;
   }
 
-  /** PaymentTransaction → Order, the same resolution path as an external refund. */
-  async _resolveOrderId(dispute) {
+  /**
+   * PaymentTransaction → Order, the same resolution path as an external refund.
+   * Spec 047: the charge lives on the account the event came from (`account`,
+   * null = platform), and only a payment recorded on that account resolves —
+   * one organization's account can never open a dispute on another's order.
+   */
+  async _resolveOrderId(dispute, account = null) {
     let paymentIntentId = this._paymentIntentId(dispute);
     if (!paymentIntentId) {
       // Older payloads carry only the charge; Stripe is the source of truth for
@@ -163,7 +169,7 @@ class DisputeService {
         // Imported here, not at the top: `reconcile` below is read-only and
         // must run (npm run report:disputes) without a Stripe key.
         const { default: stripe } = await import('../config/stripe.js');
-        const charge = await stripe.charges.retrieve(chargeId);
+        const charge = await stripe.charges.retrieve(chargeId, ...onAccount(account));
         paymentIntentId = typeof charge?.payment_intent === 'string' ? charge.payment_intent : charge?.payment_intent?.id ?? null;
       } catch (error) {
         logger.warn('Dispute charge lookup failed', { chargeId, error: error.message });
@@ -173,8 +179,18 @@ class DisputeService {
     if (!paymentIntentId) return null;
     const payment = await prisma.paymentTransaction.findUnique({
       where: { stripePaymentIntentId: paymentIntentId },
-      select: { orderId: true },
+      select: { orderId: true, stripeAccountId: true },
     });
+    if (payment && !sameAccount(payment.stripeAccountId, account)) {
+      logger.error('Dispute refused: Stripe account does not match the order payment', {
+        event: 'stripe_webhook_account_mismatch',
+        orderId: payment.orderId,
+        stripeDisputeId: dispute.id,
+        expectedAccount: payment.stripeAccountId ?? null,
+        eventAccount: account,
+      });
+      return null;
+    }
     return payment?.orderId ?? null;
   }
 

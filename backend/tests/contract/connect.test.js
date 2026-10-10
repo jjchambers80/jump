@@ -1,7 +1,9 @@
-// Contract tests for Stripe Connect routing and the Connect webhook (spec 010 phase 2)
-// - POST /orders becomes a destination charge only for an organization with an
-//   active connected account in the current mode, and the ledger records it
-// - the flag off / no account / transfers inactive all keep the platform account
+// Contract tests for Stripe Connect routing and the Connect webhook (spec 010 phase 2, spec 047 D0-S)
+// - POST /orders becomes a direct charge on the organization's own account only
+//   when it has an active connected account in the current mode (request option
+//   stripeAccount, application fee = platform fee, no transfer_data), and the
+//   ledger records it
+// - the flag off / no account / charges disabled all keep the platform account
 // - POST /webhooks/stripe/connect syncs, disconnects and records payouts
 // - GET /admin/settings/payments carries the `connect` block
 // Stripe is mocked; Postgres is real.
@@ -14,7 +16,7 @@ const mockSessionsCreate = jest.fn();
 const mockAccountsRetrieve = jest.fn();
 const mockAccountsCreate = jest.fn();
 const mockAccountsUpdate = jest.fn();
-const mockCreateLoginLink = jest.fn();
+const mockOAuthToken = jest.fn();
 const mockAccountLinksCreate = jest.fn();
 const mockConstructEvent = jest.fn();
 const mockBalanceRetrieve = jest.fn();
@@ -29,7 +31,8 @@ jest.unstable_mockModule('../../src/config/stripe.js', () => {
   return {
     default: {
       checkout: { sessions: { create: mockSessionsCreate, retrieve: jest.fn() } },
-      accounts: { retrieve: mockAccountsRetrieve, create: mockAccountsCreate, update: mockAccountsUpdate, createLoginLink: mockCreateLoginLink },
+      accounts: { retrieve: mockAccountsRetrieve, create: mockAccountsCreate, update: mockAccountsUpdate },
+      oauth: { token: mockOAuthToken },
       accountLinks: { create: mockAccountLinksCreate },
       webhooks: { constructEvent: mockConstructEvent },
       balance: { retrieve: mockBalanceRetrieve },
@@ -135,7 +138,7 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
 
   it('flag on, no account: not_started and the order charges on the platform account', async () => {
     const res = await request(app).get('/admin/settings/payments').set('Authorization', `Bearer ${adminToken}`);
-    expect(res.body.connect).toEqual({ enabled: true, status: 'not_started', account: null });
+    expect(res.body.connect).toEqual({ enabled: true, status: 'not_started', account: null, oauthAvailable: false });
 
     const order = await placeOrder(eventId, tierId, `platform@${TAG}.test`);
     expect(order.status).toBe(201);
@@ -171,7 +174,8 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
       const auth = ['Authorization', `Bearer ${adminToken}`];
       for (const call of [
         request(app).post('/admin/settings/payments/connect/onboard').set(...auth),
-        request(app).post('/admin/settings/payments/connect/login-link').set(...auth),
+        request(app).post('/admin/settings/payments/connect/oauth').set(...auth),
+        request(app).post('/admin/settings/payments/connect/oauth/complete').set(...auth).send({ code: 'ac_x', state: 'x.y' }),
         request(app).post('/admin/settings/payments/connect/sync').set(...auth),
         request(app).patch('/admin/settings/payments/connect/payouts').set(...auth).send({ interval: 'daily' }),
       ]) {
@@ -182,7 +186,8 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
     it('ORGANIZER is refused (403) on every Connect route', async () => {
       const auth = ['Authorization', `Bearer ${organizerToken}`];
       expect((await request(app).post('/admin/settings/payments/connect/onboard').set(...auth)).status).toBe(403);
-      expect((await request(app).post('/admin/settings/payments/connect/login-link').set(...auth)).status).toBe(403);
+      expect((await request(app).post('/admin/settings/payments/connect/oauth').set(...auth)).status).toBe(403);
+      expect((await request(app).post('/admin/settings/payments/connect/oauth/complete').set(...auth).send({ code: 'ac_x', state: 'x.y' })).status).toBe(403);
       expect((await request(app).post('/admin/settings/payments/connect/sync').set(...auth)).status).toBe(403);
       expect((await request(app).patch('/admin/settings/payments/connect/payouts').set(...auth).send({ interval: 'daily' })).status).toBe(403);
     });
@@ -197,7 +202,7 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
       expect(first.body).toEqual({ url: 'https://connect.stripe.com/setup/e/acct_onboard_ct/link' });
       expect(mockAccountsCreate).toHaveBeenCalledTimes(1);
       expect(mockAccountsCreate.mock.calls[0][0]).toMatchObject({
-        controller: { stripe_dashboard: { type: 'express' } },
+        controller: { stripe_dashboard: { type: 'full' }, fees: { payer: 'account' }, losses: { payments: 'stripe' }, requirement_collection: 'stripe' },
         metadata: { organizationId: org.id, mode: 'test' },
       });
 
@@ -209,12 +214,11 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
       const status = await request(app).get('/admin/settings/payments').set(...auth);
       expect(status.body.connect).toMatchObject({ enabled: true, status: 'onboarding', account: { stripeAccountId: 'acct_onboard_ct' } });
 
-      // Before onboarding completes: no login link, no payout settings
-      expect((await request(app).post('/admin/settings/payments/connect/login-link').set(...auth)).status).toBe(409);
+      // Before onboarding completes: no payout settings
       expect((await request(app).patch('/admin/settings/payments/connect/payouts').set(...auth).send({ interval: 'daily' })).status).toBe(409);
     });
 
-    it('sync pulls the account from Stripe; login link and payout settings work once details are submitted', async () => {
+    it('sync pulls the account from Stripe; dashboard link and payout settings work once details are submitted', async () => {
       const auth = ['Authorization', `Bearer ${adminToken}`];
       mockAccountsRetrieve.mockResolvedValueOnce(stripeAccount({ id: 'acct_onboard_ct' }));
       const synced = await request(app).post('/admin/settings/payments/connect/sync').set(...auth);
@@ -222,11 +226,8 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
       expect(synced.body.connect.status).toBe('active');
       expect(synced.body.connect.account.bank).toEqual({ name: 'Wells Fargo', last4: '3544', currency: 'usd' });
 
-      mockCreateLoginLink.mockResolvedValueOnce({ url: 'https://connect.stripe.com/express/acct_onboard_ct/login' });
-      const login = await request(app).post('/admin/settings/payments/connect/login-link').set(...auth);
-      expect(login.status).toBe(200);
-      expect(login.body).toEqual({ url: 'https://connect.stripe.com/express/acct_onboard_ct/login' });
-      expect(mockCreateLoginLink).toHaveBeenCalledWith('acct_onboard_ct');
+      // The organization owns a full-dashboard account: a plain link, no login-link call
+      expect(synced.body.connect.account.dashboardUrl).toBe('https://dashboard.stripe.com/test/dashboard');
 
       mockAccountsUpdate.mockImplementationOnce((id, params) =>
         Promise.resolve(stripeAccount({ id, settings: { payouts: { ...params.settings.payouts } } }))
@@ -240,6 +241,46 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
         settings: { payouts: { schedule: { interval: 'weekly', weekly_anchor: 'friday' }, statement_descriptor: 'CONNECT CT' } },
       });
       expect(payouts.body.connect.account.payouts).toMatchObject({ interval: 'weekly', anchor: 'friday', statementDescriptor: 'CONNECT CT' });
+    });
+
+    it('OAuth: authorize URL needs a client id; completion binds the account to this organization only', async () => {
+      const auth = ['Authorization', `Bearer ${adminToken}`];
+      expect((await request(app).post('/admin/settings/payments/connect/oauth').set(...auth)).status).toBe(404);
+
+      process.env.STRIPE_CONNECT_CLIENT_ID = 'ca_connect_ct';
+      try {
+        const status = await request(app).get('/admin/settings/payments').set('Authorization', `Bearer ${adminBToken}`);
+        expect(status.body.connect.oauthAvailable).toBe(true);
+
+        const start = await request(app).post('/admin/settings/payments/connect/oauth').set('Authorization', `Bearer ${adminBToken}`);
+        expect(start.status).toBe(200);
+        const state = new URL(start.body.url).searchParams.get('state');
+
+        // Org A cannot redeem org B's state
+        const swapped = await request(app).post('/admin/settings/payments/connect/oauth/complete').set(...auth).send({ code: 'ac_ct', state });
+        expect(swapped.status).toBe(400);
+        expect(mockOAuthToken).not.toHaveBeenCalled();
+        expect((await request(app).post('/admin/settings/payments/connect/oauth/complete').set(...auth).send({})).status).toBe(400);
+
+        mockOAuthToken.mockResolvedValueOnce({ stripe_user_id: 'acct_oauth_ct', livemode: false });
+        mockAccountsRetrieve.mockResolvedValueOnce(stripeAccount({ id: 'acct_oauth_ct' }));
+        const done = await request(app)
+          .post('/admin/settings/payments/connect/oauth/complete')
+          .set('Authorization', `Bearer ${adminBToken}`)
+          .send({ code: 'ac_ct', state });
+        expect(done.status).toBe(200);
+        expect(done.body.connect).toMatchObject({ status: 'active', account: { stripeAccountId: 'acct_oauth_ct' } });
+
+        // The same account cannot be attached to a second organization
+        const startA = await request(app).post('/admin/settings/payments/connect/oauth').set(...auth);
+        const stateA = new URL(startA.body.url).searchParams.get('state');
+        mockOAuthToken.mockResolvedValueOnce({ stripe_user_id: 'acct_oauth_ct', livemode: false });
+        const dup = await request(app).post('/admin/settings/payments/connect/oauth/complete').set(...auth).send({ code: 'ac_ct2', state: stateA });
+        expect(dup.status).toBe(409);
+      } finally {
+        delete process.env.STRIPE_CONNECT_CLIENT_ID;
+        await prisma.organizationStripeAccount.deleteMany({ where: { stripeAccountId: 'acct_oauth_ct' } });
+      }
     });
 
     it('PATCH payouts validates the shape and the values', async () => {
@@ -323,10 +364,11 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
       data: { organizationId: org.id, mode: 'test', stripeAccountId: ACCT, detailsSubmitted: false },
     });
 
-    // Transfers not yet active → still the platform account
+    // Charges not yet enabled → still the platform account
     const before = await placeOrder(eventId, tierId, `onboarding@${TAG}.test`);
     expect(before.status).toBe(201);
-    expect(mockSessionsCreate.mock.calls[0][0].payment_intent_data.transfer_data).toBeUndefined();
+    expect(mockSessionsCreate.mock.calls[0][0].payment_intent_data.application_fee_amount).toBeUndefined();
+    expect(mockSessionsCreate.mock.calls[0][1]).toBeUndefined();
 
     const hook = await request(app)
       .post('/webhooks/stripe/connect')
@@ -347,34 +389,31 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
     mockSessionsCreate.mockClear();
     const routed = await placeOrder(eventId, tierId, `routed@${TAG}.test`);
     expect(routed.status).toBe(201);
-    const params = mockSessionsCreate.mock.calls[0][0];
-    const totalCents = params.line_items.reduce((s, i) => s + i.price_data.unit_amount * i.quantity, 0);
+    const [params, requestOptions] = mockSessionsCreate.mock.calls[0];
     const order = await prisma.order.findUnique({ where: { id: routed.body.orderId } });
-    const subtotalCents = Math.round(Number(order.subtotalAmount) * 100);
-    expect(params.payment_intent_data).toEqual({
-      statement_descriptor_suffix: 'CONNECT CT ORG',
-      transfer_data: { destination: ACCT },
-      application_fee_amount: totalCents - subtotalCents,
-    });
+    const platformFeeCents = Math.round(Number(order.platformFeeAmount) * 100);
+    // Direct charge: on the organization's account, Jump's platform fee only
+    expect(requestOptions).toEqual({ stripeAccount: ACCT });
+    expect(params.payment_intent_data).toEqual({ application_fee_amount: platformFeeCents });
+    expect(params.payment_intent_data.transfer_data).toBeUndefined();
+    expect(params.stripeAccount).toBeUndefined();
     expect(params.metadata.stripeAccountId).toBe(ACCT);
 
     const tx = await prisma.paymentTransaction.findUnique({ where: { orderId: routed.body.orderId } });
     expect(tx.stripeAccountId).toBe(ACCT);
-    expect(Number(tx.applicationFee)).toBeCloseTo((totalCents - subtotalCents) / 100, 2);
-    // What the platform keeps is fees + tax, within per-unit rounding
-    const expectedKeep = Number(order.platformFeeAmount) + Number(order.processingFeeAmount) + Number(order.taxAmount);
-    expect(Math.abs(Number(tx.applicationFee) - expectedKeep)).toBeLessThanOrEqual(0.02);
+    expect(Number(tx.applicationFee)).toBeCloseTo(Number(order.platformFeeAmount), 2);
   });
 
   it('capability.updated re-reads the account; payout.failed is recorded', async () => {
-    mockAccountsRetrieve.mockResolvedValueOnce(stripeAccount({ capabilities: { transfers: 'inactive' } }));
+    mockAccountsRetrieve.mockResolvedValueOnce(stripeAccount({ charges_enabled: false, capabilities: { card_payments: 'inactive', transfers: 'inactive' } }));
     await request(app)
       .post('/webhooks/stripe/connect')
       .set('Content-Type', 'application/json')
       .send(JSON.stringify({ type: 'capability.updated', account: ACCT, data: { object: { id: 'transfers', status: 'inactive' } } }));
     expect(mockAccountsRetrieve).toHaveBeenCalledWith(ACCT, { expand: ['external_accounts'] });
     let row = await prisma.organizationStripeAccount.findUnique({ where: { stripeAccountId: ACCT } });
-    expect(row.transfersEnabled).toBe(false);
+    expect(row.chargesEnabled).toBe(false);
+    expect(row.activeCapabilities).toEqual([]);
 
     await request(app)
       .post('/webhooks/stripe/connect')
@@ -383,10 +422,11 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
     row = await prisma.organizationStripeAccount.findUnique({ where: { stripeAccountId: ACCT } });
     expect(row.lastPayoutFailure).toBe('Bank account closed');
 
-    // Restricted account → platform account again
+    // Onboarded but charges paused → refused, never the platform account (spec 047)
     const order = await placeOrder(eventId, tierId, `restricted@${TAG}.test`);
-    expect(order.status).toBe(201);
-    expect(mockSessionsCreate.mock.calls[0][0].payment_intent_data.transfer_data).toBeUndefined();
+    expect(order.status).toBe(409);
+    expect(order.body.code).toBe('PAYMENTS_UNAVAILABLE');
+    expect(mockSessionsCreate).not.toHaveBeenCalled();
   });
 
   it('account.application.deauthorized disconnects and stops routing', async () => {
@@ -396,7 +436,7 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
       .set('Content-Type', 'application/json')
       .send(JSON.stringify({ type: 'capability.updated', account: ACCT, data: { object: {} } }));
     let row = await prisma.organizationStripeAccount.findUnique({ where: { stripeAccountId: ACCT } });
-    expect(row.transfersEnabled).toBe(true);
+    expect(row.chargesEnabled).toBe(true);
 
     await request(app)
       .post('/webhooks/stripe/connect')
@@ -410,7 +450,7 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
     expect(status.body.connect.status).toBe('disconnected');
 
     const order = await placeOrder(eventId, tierId, `deauth@${TAG}.test`);
-    expect(mockSessionsCreate.mock.calls[0][0].payment_intent_data.transfer_data).toBeUndefined();
+    expect(mockSessionsCreate.mock.calls[0][1]).toBeUndefined();
     expect(order.status).toBe(201);
   });
 

@@ -17,9 +17,19 @@ found out from their payout.
 | `charge.dispute.closed` (lost) | `state: LOST`, `closedAt` stamped, money stays out, organizer emailed |
 | `charge.dispute.closed` (won) / `charge.dispute.funds_reinstated` | The dispute's `Refund` row goes `FAILED` so the SUCCEEDED aggregates stop counting it; exactly the tickets and add-on lines this dispute closed are restored, with their prior status (a `REDEEMED` ticket comes back `REDEEMED`); `Order.status` back to `COMPLETED`; organizer emailed |
 
-Everything lands on one handler, `DisputeService.applyFromEvent`, through the
-existing signature-verified `POST /webhooks/stripe` route. There is no second
-write path into the ledger.
+Everything lands on one handler, `DisputeService.applyFromEvent`, through
+`dispatchMoneyEvent` — from the signature-verified `POST /webhooks/stripe` for
+charges on the platform account, and from `POST /webhooks/stripe/connect` for
+direct charges on an organization's own Stripe account (spec 047 D0-S). There is
+no other write path into the ledger.
+
+**Direct charges.** The dispute is the organization's in Stripe: the money
+leaves its balance and it responds in its own Stripe dashboard. Jump still
+mirrors it into `Dispute` / `Refund` rows and emails the organizer. The order is
+resolved only on the event's account: a payload with just the charge is looked
+up with `charges.retrieve` on `event.account`, and a payment recorded on a
+different account (or on the platform) is refused, so one organization's
+account can never dispute another's order.
 
 ## Idempotency and ordering
 

@@ -1,11 +1,13 @@
 # Payments Settings
 
-**Status**: Implemented (spec 010 phase 1, 2026-09-14; phase 2 Stripe Connect payouts 2026-09-16, dark behind `STRIPE_CONNECT_ENABLED` — see [Connect Payouts](connect-payouts.md)).
-**Last Updated**: 2026-09-19
+**Status**: Implemented (spec 010 phase 1, 2026-09-14; phase 2 Stripe Connect payouts 2026-09-16; direct charges on the organization's own account, spec 047 D0-S, 2026-10-09 — both dark behind `STRIPE_CONNECT_ENABLED`, see [Connect Payouts](connect-payouts.md)).
+**Last Updated**: 2026-10-09
 
 ## Overview
 
-**Settings › Payments** (`/admin/settings/payments`) shows an organization what the platform's Stripe account is doing for it and lets it configure the two things Checkout reads per organization: the **name buyers see on their card statement** (a dynamic suffix after the platform prefix, e.g. `JUMP* ROMAN SKIN`) and which **optional payment methods** checkout offers beyond cards and wallets. It also shows the buyer-paid **rates** and the **fraud screening** posture. Modelled on Shopify's *Payments* screens, keeping only what applies to a ticketing platform (no capture method, manual payment methods, gift cards, Tap to Pay or per-org test mode). With Stripe Connect enabled the provider card also shows whether the organization is **receiving payouts** and links to the Payouts page — [Connect Payouts](connect-payouts.md).
+**Settings › Payments** (`/admin/settings/payments`) shows an organization what the platform's Stripe account is doing for it and lets it configure the two things Checkout reads per organization: the **name buyers see on their card statement** (a dynamic suffix after the platform prefix, e.g. `JUMP* ROMAN SKIN`) and which **optional payment methods** checkout offers beyond cards and wallets. It also shows the buyer-paid **rates** and the **fraud screening** posture. Modelled on Shopify's *Payments* screens, keeping only what applies to a ticketing platform (no capture method, manual payment methods, gift cards, Tap to Pay or per-org test mode). With Stripe Connect enabled the provider card also shows whether the organization's own Stripe account is **connected** and links to it — [Connect Payouts](connect-payouts.md).
+
+**Once an organization has connected its own Stripe account (spec 047 D0-S) its charges are direct charges on that account**, so two settings on this page change meaning for it: the statement descriptor is the organization's own (set in its Stripe dashboard; the suffix here is not sent), and the optional payment methods are filtered by **its** account's capabilities (`OrganizationStripeAccount.activeCapabilities`) as well as Jump's allowlist. Charges for organizations that are not connected behave exactly as below.
 
 ## Key Files
 
@@ -37,7 +39,7 @@ No new environment variables. Platform account state is read live (`stripe.accou
 
 ### Page
 
-1. **Stripe card** — `Accepting payments` (platform `charges_enabled`) or `Unavailable`; amber `Test mode` badge on a test key. SYSTEM_ADMIN gets **Manage** (Stripe dashboard); `manageUrl`/`radarUrl` are stripped for other roles. `Payment methods` row shows brand badges for everything enabled (`+n` overflow) and links to the methods page. When `connect.enabled` the right half shows the payouts status pill (`Set up payouts` … `Receiving payouts`) with the onboarding action and **Manage** opens the organization's Express dashboard. The `Payout bank account` row under `Payment methods` is always present (`Coming soon` while the flag is off, `Not connected`, `No bank account yet`, or `Bank •••• last4`) and links to the bank account page.
+1. **Stripe card** — `Accepting payments` (platform `charges_enabled`) or `Unavailable`; amber `Test mode` badge on a test key. SYSTEM_ADMIN gets **Manage** (Stripe dashboard); `manageUrl`/`radarUrl` are stripped for other roles. `Payment methods` row shows brand badges for everything enabled (`+n` overflow) and links to the methods page. When `connect.enabled` the right half shows the connection status pill (`Not connected` … `Connected`) with *Connect Stripe* (→ the bank account page, where the organizer connects an existing account or creates one) or *Continue setup*, and **Stripe dashboard** links the organization's own Stripe dashboard. The `Payout bank account` row under `Payment methods` is always present (`Coming soon` while the flag is off, `Not connected`, `No bank account yet`, or `Bank •••• last4`) and links to the bank account page.
 2. **Customer billing statement** — the effective descriptor (`PREFIX* SUFFIX`), whether it is derived from the trade name, and the support phone (edited on General). **Edit** opens the dialog; ORGANIZER sees **View** (read-only).
 3. **Rates** — from `FEE_CONFIG` via the API so the page never drifts from `FeeService`: service fee 5%, processing 2.9% + $0.30, sales tax → Settings › Tax.
 4. **Fraud prevention** — static `Stripe Radar screens every card payment · Active` row; SYSTEM_ADMIN link to Radar rules. Radar has no status API, so the copy says "screens", not "blocks".
@@ -48,11 +50,12 @@ No new environment variables. Platform account state is read live (`stripe.accou
 - Server rule (`_validateSuffix`): uppercase, `[A-Z0-9 ]` only, at least one letter, within budget, prefix must exist on the platform account. `null`/empty clears the override.
 - **Derived default**: with no override, `deriveDescriptorSuffix(Organization.name, prefix)` sanitises the name and cuts it to the budget, so every organization gets a recognisable descriptor without doing anything.
 - **At checkout** (`checkoutOptionsFor`): a stored suffix that no longer fits (prefix changed) is dropped with a `statement_descriptor_dropped` warning and the derived one is used; with no platform prefix nothing is sent. Checkout never fails because of a descriptor.
+- **Direct charges** (spec 047): no suffix is sent; the charge is on the organization's own account and its own statement descriptor applies. The stored suffix stays as a hint for organizations still charged on the platform.
 
 ### Payment methods
 
 - `card` is always sent; Stripe-hosted Checkout adds Apple Pay / Google Pay itself (no domain registration needed for the hosted page).
-- Optional methods are the intersection of `PAYMENT_METHOD_ALLOWLIST` (`link`, `cashapp`, `affirm`, `klarna`, `afterpay_clearpay`) and the platform account's **active capabilities**. A method without the capability renders as `Unavailable` and is rejected on save; `checkoutOptionsFor` re-filters at session time so a capability lost later cannot break checkout.
+- Optional methods are the intersection of `PAYMENT_METHOD_ALLOWLIST` (`link`, `cashapp`, `affirm`, `klarna`, `afterpay_clearpay`) and the **active capabilities** of the account the charge runs on — the platform's, or (spec 047 direct charges) the organization's own connected account. A method without the capability renders as `Unavailable` and is rejected on save; `checkoutOptionsFor` re-filters at session time so a capability lost later cannot break checkout.
 - Shopify's *Managed payment methods* (Stripe "automatic payment methods") is deliberately not offered: it would silently enable whatever the dashboard has on for every organization.
 - Async methods (Cash App, BNPL) already complete through `checkout.session.async_payment_succeeded/failed`.
 
@@ -66,7 +69,7 @@ Every staff role can open the page. `canEdit` (ADMIN, SYSTEM_ADMIN) gates the PA
 |--------|------|------|-------------|
 | GET | `/admin/settings/payments` | organizer+ | `{ provider, settings, connect, canEdit }` — dashboard URLs only for SYSTEM_ADMIN; `connect` is `{ enabled: false, … }` until `STRIPE_CONNECT_ENABLED` |
 | PATCH | `/admin/settings/payments` | admin | `{ statementDescriptorSuffix?: string\|null, enabledPaymentMethods?: string[] }` → updated `settings` |
-| — | `/admin/settings/payments/connect/*` | admin | Onboarding, login link, sync, payout settings — [Connect Payouts](connect-payouts.md#api-endpoints) |
+| — | `/admin/settings/payments/connect/*` | admin | Create-account onboarding, OAuth connect, sync, payout settings — [Connect Payouts](connect-payouts.md#api-endpoints) |
 
 ## Testing
 
@@ -83,7 +86,7 @@ Every staff role can open the page. `canEdit` (ADMIN, SYSTEM_ADMIN) gates the PA
 
 ## Related Features
 
-- [Connect Payouts](connect-payouts.md) — phase 2: Express accounts, destination charges, payouts page
+- [Connect Payouts](connect-payouts.md) — the organization's own Stripe account, direct charges, payouts page
 - [Stripe Integration](stripe-integration.md) — Checkout Session creation and webhooks
 - [Tax Settings](tax-settings.md) — sibling Settings page and the pattern this one follows
 - [Fee Calculation](fee-calculation.md) — where the Rates card values come from

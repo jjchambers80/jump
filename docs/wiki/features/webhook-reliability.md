@@ -40,6 +40,8 @@ Three changes address them: the endpoints **fail closed in production**, every d
 
 All three endpoints behave identically, including `/webhooks/stripe/connect` and `/webhooks/stripe/billing` even when those features are flagged off. An unused endpoint that trusts unsigned bodies is still a write path.
 
+**Direct charges (spec 047 D0-S).** A charge created on an organization's own Stripe account is reported by Stripe on the **Connect** endpoint with `event.account`. Its money events (`checkout.session.*`, `payment_intent.*`, `charge.refunded`, `charge.dispute.*`) go through `dispatchMoneyEvent`, the one switch the platform endpoint also calls, and every handler refuses an event whose account is not the one the order's payment was created on (`PaymentTransaction.stripeAccountId`, null = platform; logged as `stripe_webhook_account_mismatch`). The Connect endpoint answers 200 on a handler error like the platform endpoint — the order and application sweeps are the recovery path. Dedup is per endpoint, so the same event id on two endpoints is two deliveries (Stripe never sends one event to both).
+
 ### The delivery ledger
 
 `WebhookEventService.claim(endpoint, event)` inserts one row per delivery before any handler runs. The unique index on `(endpoint, stripeEventId)` **is the lock** — a concurrent redelivery loses the insert rather than racing a handler.
@@ -113,6 +115,7 @@ Manual, against Stripe test mode (never in CI — the suite stays offline and de
 cd backend
 npm run verify:stripe                 # Connect / Tax / billing / endpoint configuration report
 npm run verify:stripe -- --charge     # real test-mode charge, refunded twice on one key
+npm run verify:stripe -- --direct acct_…  # direct charge on a test connected account: application fee, refund there (spec 047)
 npm run verify:checkout-tax           # real Checkout Session; order total == Stripe amount_total
 ```
 
@@ -128,7 +131,7 @@ Both scripts refuse to run against a key that is not `sk_test_`.
 
 ## Related Features
 
-- [Connect Payouts](connect-payouts.md) — destination charges and the liability table
+- [Connect Payouts](connect-payouts.md) — direct charges on the organization's account and the liability table
 - [Application Orders](application-orders.md) — the one money ledger
 - [Tax Settings](tax-settings.md) — what a 0% Stripe Tax rate actually means
 - `docs/wiki/config/stripe-live-activation.md` — the founder's live-mode runbook

@@ -8,6 +8,7 @@
 
 import { prisma } from '@jump/db';
 import { createStripeRefund, refundIdempotencyKey } from './stripeRefund.js';
+import { sameAccount } from './stripeAccount.js';
 import addOnService from './AddOnService.js';
 import { returnTicketsToSale } from './ticketInventory.js';
 import logger from '../utils/logger.js';
@@ -106,7 +107,7 @@ class RefundService {
           refundAmount,
           reason,
           {
-            connected: Boolean(order.stripeAccountId),
+            stripeAccountId: order.stripeAccountId ?? null,
             // Scoped to the order, not to the PENDING Refund row above: if this
             // transaction rolls back after Stripe succeeded, that row is gone
             // and a retry would mint a fresh id. "Refund the rest of this
@@ -245,7 +246,7 @@ class RefundService {
         paymentIntentId: order.stripePaymentIntentId,
         amount: value,
         reason,
-        connected: Boolean(order.stripeAccountId),
+        stripeAccountId: order.stripeAccountId ?? null,
         metadata: { orderId, applicationId: order.applicationId },
         // Not the Refund row id: an admin retrying after a lost response gets a
         // new row, so a row key would be fresh and Stripe would refund twice.
@@ -417,7 +418,7 @@ class RefundService {
           refundAmount,
           reason,
           {
-            connected: Boolean(order.payment.stripeAccountId),
+            stripeAccountId: order.payment.stripeAccountId ?? null,
             // A ticket is refunded at most once (it is VOIDED below), so the
             // ticket is the operation and survives a rolled-back retry.
             idempotencyKey: refundIdempotencyKey(`ticket:${ticket.id}`),
@@ -529,7 +530,7 @@ class RefundService {
       });
 
       const stripeRefund = await this._createStripeRefund(order.payment.stripePaymentIntentId, refundAmount, reason, {
-        connected: Boolean(order.payment.stripeAccountId),
+        stripeAccountId: order.payment.stripeAccountId ?? null,
         // An add-on line is refunded at most once (refundedAt is stamped below).
         idempotencyKey: refundIdempotencyKey(`order-add-on:${line.id}`),
       });
@@ -579,8 +580,9 @@ class RefundService {
    *
    * @param {string} paymentIntentId
    * @param {Object} stripeRefund - Stripe refund object from webhook
+   * @param {string|null} [account] - `event.account` (null = platform account)
    */
-  async handleExternalRefund(paymentIntentId, stripeRefund) {
+  async handleExternalRefund(paymentIntentId, stripeRefund, account = null) {
     // Check if we already recorded this refund
     const existing = await prisma.refund.findFirst({
       where: { stripeRefundId: stripeRefund.id },
@@ -603,6 +605,17 @@ class RefundService {
 
     if (!payment || !payment.order) {
       logger.warn('External refund: payment not found', { paymentIntentId });
+      return;
+    }
+    // Spec 047: only the account the charge lives on may report its refunds.
+    if (!sameAccount(payment.stripeAccountId, account)) {
+      logger.error('External refund refused: Stripe account does not match the order payment', {
+        event: 'stripe_webhook_account_mismatch',
+        orderId: payment.orderId,
+        paymentIntentId,
+        expectedAccount: payment.stripeAccountId ?? null,
+        eventAccount: account || null,
+      });
       return;
     }
 
@@ -745,14 +758,13 @@ class RefundService {
   // ─── Internal ─────────────────────────────────────
 
   /**
-   * @param {{ connected?: boolean }} [options] - `connected`: the charge was a
-   *   destination charge (spec 010 phase 2). Stripe then pulls the organization's
-   *   share back (`reverse_transfer`) and returns the platform's fee
-   *   (`refund_application_fee`), both pro rata for partial amounts, so the
-   *   buyer is made whole and the platform eats only Stripe's processing cost.
+   * @param {{ stripeAccountId?: string|null }} [options] - the account the charge
+   *   was created on (spec 047 direct charge). The refund runs on that account
+   *   and Jump returns its platform fee (`refund_application_fee`, pro rata);
+   *   null = a platform-account charge, refunded there as before.
    */
-  async _createStripeRefund(paymentIntentId, amount, reason, { connected = false, idempotencyKey } = {}) {
-    return createStripeRefund({ paymentIntentId, amount, reason, connected, idempotencyKey });
+  async _createStripeRefund(paymentIntentId, amount, reason, { stripeAccountId = null, idempotencyKey } = {}) {
+    return createStripeRefund({ paymentIntentId, amount, reason, stripeAccountId, idempotencyKey });
   }
 
   _formatRefund(refund, order) {

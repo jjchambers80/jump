@@ -339,6 +339,19 @@ test('pending Stripe Tax shows the warning, and SYSTEM_ADMIN gets the Manage lin
   await expect(page.getByTestId('tax-region-NC')).toContainText('Stripe Tax inactive');
 });
 
+test('organization account (spec 047): seller-of-record copy, its own Stripe Tax settings, Manage for the admin', async ({ page, baseURL }) => {
+  await mockSession(page, baseURL!);
+  await mockTaxApi(page, [region('NC', 'North Carolina', { configured: true, collecting: true, source: 'STRIPE' })], {
+    service: { provider: 'STRIPE_TAX', status: 'pending', registrations: [], manageUrl: 'https://dashboard.stripe.com/settings/tax', error: null, seller: 'ORGANIZATION' },
+  });
+  await page.goto('/admin/settings/tax');
+
+  const service = page.getByTestId('tax-service-card');
+  await expect(service.getByTestId('tax-seller-of-record')).toContainText('your organization is the seller of record');
+  await expect(service).toContainText('not activated on your Stripe account');
+  await expect(service.getByRole('link', { name: 'Manage' })).toHaveAttribute('href', 'https://dashboard.stripe.com/settings/tax');
+});
+
 test('Include sales tax in ticket prices asks for confirmation with a worked example, then saves', async ({ page, baseURL }) => {
   await mockSession(page, baseURL!);
   const api = await mockTaxApi(page, [region('NC', 'North Carolina', { configured: true, collecting: true, source: 'MANUAL', manualRate: 0.0825, lastRate: 0.0825, lastSource: 'MANUAL' })]);

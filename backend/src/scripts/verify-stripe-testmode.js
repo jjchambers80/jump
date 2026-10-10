@@ -8,6 +8,9 @@
  *
  *   npm run verify:stripe            # read-only configuration report
  *   npm run verify:stripe -- --charge  # also run a live test-mode charge + refund
+ *   npm run verify:stripe -- --direct acct_…  # spec 047: a direct charge on a
+ *                                      # test-mode connected account, its
+ *                                      # application fee, and a refund there
  *
  * REFUSES to run against a live key. Every id it prints is a test-mode object.
  * Nothing here is part of `npm test`: the suite must stay offline and
@@ -31,6 +34,12 @@ if (!key.startsWith('sk_test_') && !key.startsWith('rk_test_')) {
 
 const stripe = new Stripe(key, { apiVersion: '2024-11-20.acacia' });
 const doCharge = process.argv.includes('--charge');
+const directIdx = process.argv.indexOf('--direct');
+const directAccount = directIdx > -1 ? process.argv[directIdx + 1] : null;
+if (directIdx > -1 && !/^acct_/.test(directAccount || '')) {
+  console.error('--direct needs a test-mode connected account id: --direct acct_…');
+  process.exit(1);
+}
 
 const out = [];
 const log = (line = '') => {
@@ -66,7 +75,8 @@ async function account() {
 
 async function connect() {
   h('Stripe Connect');
-  log(`  STRIPE_CONNECT_ENABLED   ${process.env.STRIPE_CONNECT_ENABLED || '(unset — destination charges are off)'}`);
+  log(`  STRIPE_CONNECT_ENABLED   ${process.env.STRIPE_CONNECT_ENABLED || '(unset — direct charges are off)'}`);
+  log(`  STRIPE_CONNECT_CLIENT_ID ${process.env.STRIPE_CONNECT_CLIENT_ID ? 'set (OAuth "Connect existing Stripe account" offered)' : 'NOT SET (only "Create a Stripe account")'}`);
   const accounts = await safe('connected accounts', () => stripe.accounts.list({ limit: 5 }));
   if (!accounts) return;
   log(`  connected accounts       ${accounts.data.length}`);
@@ -245,6 +255,57 @@ async function chargeAndRefund() {
   if (!ok) process.exitCode = 1;
 }
 
+/**
+ * Spec 047 D0-S: the shape every Jump charge takes once an organization has
+ * connected its own account — created on that account (Stripe-Account
+ * header), Jump's platform fee as application_fee_amount, no transfer_data —
+ * then refunded on the same account with refund_application_fee.
+ */
+async function directCharge(stripeAccount) {
+  h(`Direct charge on ${stripeAccount}`);
+  const opts = { stripeAccount };
+  const acct = await stripe.accounts.retrieve(stripeAccount);
+  log(`  charges enabled    ${yn(acct.charges_enabled)}   dashboard ${acct.controller?.stripe_dashboard?.type ?? acct.type}`);
+  log(`  fees payer         ${acct.controller?.fees?.payer ?? '—'}   losses ${acct.controller?.losses?.payments ?? '—'}`);
+
+  const amount = 5000;
+  const fee = 250; // 5% platform fee on a $50 line, as FeeService computes it
+  const intent = await stripe.paymentIntents.create(
+    {
+      amount,
+      currency: 'usd',
+      payment_method: 'pm_card_visa',
+      confirm: true,
+      automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
+      application_fee_amount: fee,
+      description: 'Spec 047 direct-charge verification',
+      metadata: { source: 'jump-platform', purpose: 'spec-047-verification' },
+    },
+    { ...opts, idempotencyKey: `jump:verify:direct:${Date.now()}` }
+  );
+  log(`  payment intent     ${intent.id}  ${money(intent.amount)}  status=${intent.status}`);
+  const charge = await stripe.charges.retrieve(intent.latest_charge, { expand: ['application_fee'] }, opts);
+  log(`  application fee    ${charge.application_fee?.id ?? '—'}  ${money(charge.application_fee_amount ?? 0)}`);
+  log(`  transfer_data      ${intent.transfer_data ? 'SET (wrong for a direct charge)' : 'none'}`);
+
+  const idempotencyKey = refundIdempotencyKey(`order:verify_${intent.id}:full`);
+  const refund = await stripe.refunds.create({ payment_intent: intent.id, amount, refund_application_fee: true, metadata: { source: 'jump-platform' } }, { ...opts, idempotencyKey });
+  const replay = await stripe.refunds.create({ payment_intent: intent.id, amount, refund_application_fee: true, metadata: { source: 'jump-platform' } }, { ...opts, idempotencyKey });
+  const fees = charge.application_fee ? await stripe.applicationFees.retrieve(charge.application_fee.id) : null;
+  log(`  refund             ${refund.id}  ${money(refund.amount)}  status=${refund.status}  (retry → ${replay.id})`);
+  log(`  fee refunded       ${fees ? money(fees.amount_refunded) : '—'} of ${money(fee)}`);
+
+  const ok =
+    intent.status === 'succeeded' &&
+    charge.application_fee_amount === fee &&
+    !intent.transfer_data &&
+    refund.id === replay.id &&
+    (!fees || fees.amount_refunded === fee);
+  log('');
+  log(ok ? '  ✅ PASS — charged on the account, fee to the platform, refunded there with the fee returned once.' : '  ❌ FAIL — see the lines above.');
+  if (!ok) process.exitCode = 1;
+}
+
 async function main() {
   log(`Stripe test-mode verification — ${new Date().toISOString()}`);
   log(`API version 2024-11-20.acacia · key mode: TEST`);
@@ -254,6 +315,7 @@ async function main() {
   await taxCalculation();
   await billing();
   await webhooks();
+  if (directAccount) await directCharge(directAccount);
   if (doCharge) await chargeAndRefund();
   else {
     h('Skipped');

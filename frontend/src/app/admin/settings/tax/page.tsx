@@ -1,7 +1,9 @@
 // Settings › Tax (spec 009)
 // Shopify-style tax configuration for an organization: which engine computes
-// rates (Stripe Tax on the platform account), and per US state whether the
-// organization collects sales tax and by which source. Regions derive from the
+// rates (Stripe Tax — on the organization's own Stripe account once it is
+// connected, spec 047, where it is the seller of record and remits the tax;
+// otherwise the platform account), and per US state whether the organization
+// collects sales tax and by which source. Regions derive from the
 // organization's venues — tax is venue-based, not customer-based.
 'use client';
 
@@ -150,11 +152,17 @@ export default function TaxSettingsPage() {
                 </span>
               )}
             </div>
+            {service?.seller === 'ORGANIZATION' && (
+              <p className="mt-3 text-sm text-gray-600 dark:text-slate-400" data-testid="tax-seller-of-record">
+                Payments are made to your own Stripe account, so your organization is the seller of record: the sales tax you collect stays in your Stripe balance and
+                you file and remit it. Stripe Tax uses the registrations on your Stripe account.
+              </p>
+            )}
             {service && service.status !== 'active' && (
               <p className="mt-3 flex items-start gap-1.5 text-sm text-amber-700 dark:text-amber-300">
                 <WarningIcon className="mt-0.5 h-4 w-4 shrink-0" />
                 {service.status === 'pending'
-                  ? 'Stripe Tax is not activated on the platform account. Regions set to Stripe Tax calculate 0% until it is; use a manual rate in the meantime.'
+                  ? `Stripe Tax is not activated on ${service.seller === 'ORGANIZATION' ? 'your Stripe account' : 'the platform account'}. Regions set to Stripe Tax calculate 0% until it is; use a manual rate in the meantime.`
                   : 'Stripe Tax could not be reached. Regions set to Stripe Tax keep their last rate; manual rates are unaffected.'}
               </p>
             )}

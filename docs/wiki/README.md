@@ -58,7 +58,7 @@ Generated and maintained by running `/doc-feature` after completing feature work
 - [Tax Settings](features/tax-settings.md) — Settings › Tax: Stripe Tax status, per-state tax regions (collect / not, Stripe Tax or manual rate, Recalculate now), collected tax report, tax-inclusive pricing
 - [Payments Settings](features/payments-settings.md) — Settings › Payments: Stripe status + test-mode badge, statement descriptor suffix (`PREFIX* ORG`), optional payment methods allowlist, rates, Radar (spec 010 phase 1)
 - [Webhook Reliability](features/webhook-reliability.md) — Stripe webhooks fail closed in production; the `StripeWebhookEvent` delivery ledger (dedup, replay safety, out-of-order and stale-delivery logging); refund idempotency keys; the test-mode verification scripts
-- [Connect Payouts](features/connect-payouts.md) — Stripe Connect Express per organization: destination charges (org receives the subtotal, platform keeps fees + tax), Settings › Payments › Payout bank account (connect / last four / change bank / schedule), Finance › Payouts (live balance + history), Connect webhook, bank-connection options research; dark behind `STRIPE_CONNECT_ENABLED` (spec 010 phase 2)
+- [Connect Payouts](features/connect-payouts.md) — each organization's own Stripe account (OAuth connect or a new full-dashboard account): direct charges with Jump's platform fee as the application fee, the organization as merchant and seller of record (spec 047 D0-S), Settings › Payments › Payout bank account (connect / last four / change bank / schedule), Finance › Payouts (live balance + history), Connect webhook, bank-connection options research; dark behind `STRIPE_CONNECT_ENABLED` (spec 010 phase 2)
 - [Organization Branding](features/organization-branding.md) — Logo, cover image, brand color with WCAG AA contrast checker
 - [Organization Theme Mode](features/organization-theme-mode.md) — Per-org light/dark/system enforcement on public org pages
 - [Organization Storefront Page](features/organization-storefront.md) — Public store home: cover band with a Next up link, events as ticket stubs grouped by month in the venue zone, scarcity only at ≤ 10 left, `#events` scroll, skeleton loading (PR #201)
@@ -105,6 +105,7 @@ Generated and maintained by running `/doc-feature` after completing feature work
 - [Environment Variables](config/environment-variables.md)
 - [Stripe Setup](config/stripe-setup.md)
 - [Stripe Live Activation](config/stripe-live-activation.md) — The founder's ordered runbook for the live-mode changes only they can make: account activation, live webhook endpoint + signing secret, statement descriptor, Stripe Tax, Connect, subscription billing, and how to undo each
+- [Stripe Test Mode: Direct Charges](config/stripe-test-mode-direct-charges.md) — Local runbook for spec 047 D0-S in Stripe test mode: private DB, `stripe listen` for both endpoints, onboarding test values, test cards (success, decline, dispute), what to check after purchase, refund and a paused account
 - [Production Launch Checklist](config/production-launch-checklist.md) — Human steps before taking real money: Stripe Tax activation/registrations, tax backfill review, open tax decisions, live Stripe keys
 - [Database Setup](config/database-setup.md)
 

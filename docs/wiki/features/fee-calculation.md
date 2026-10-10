@@ -37,10 +37,10 @@ Implements FTC all-in pricing. FeeService calculates the full cost breakdown: su
 - Tax rate is cached per event from Stripe Tax API — see [Tax Calculation](tax-calculation.md).
 - Processing fee has both a percentage component and a fixed per-transaction component.
 - Per-unit fee storage means rounding is applied at the unit level.
-- **Stripe Connect (spec 010 phase 2)**: on a destination charge the platform keeps `application_fee_amount = total cents − subtotal cents`, i.e. platform fee + processing fee + tax, computed from the exact Checkout line-item cents so the organization receives precisely the ex-tax `subtotal`. See [Connect Payouts](connect-payouts.md).
+- **Stripe Connect (spec 047 D0-S, direct charges)**: the whole `total` is charged on the organization's own Stripe account and Jump takes `application_fee_amount = platformFee` cents only (§4.3; none when 0) — not processing (Stripe bills its actual fee to the organization; `processingFee` here is the buyer-facing estimate) and not tax (the organization remits it). See [Connect Payouts](connect-payouts.md).
 
 ## Related Features
 
 - [Tax Calculation](tax-calculation.md) — provides the venue-based tax rate used in fee breakdown.
 - [Cart Line-Item Breakdown](cart-line-item-breakdown.md) — customer-facing per-line view of this math.
-- [Connect Payouts](connect-payouts.md) — how the breakdown splits between platform and organization on destination charges.
+- [Connect Payouts](connect-payouts.md) — how the breakdown splits between platform and organization on direct charges.

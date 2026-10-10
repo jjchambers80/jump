@@ -152,7 +152,7 @@ export default function EditTaxRegionDialog({ region, service, canEdit, returnFo
               {stripeUnavailable ? (
                 <span className="mt-2 flex items-start gap-1.5 text-sm text-amber-700 dark:text-amber-300">
                   <WarningIcon className="mt-0.5 h-4 w-4 shrink-0" />
-                  Stripe Tax is {service.status === 'pending' ? 'not activated on the platform account' : 'unavailable'}; this region will calculate 0% until it is.
+                  Stripe Tax is {service.status === 'pending' ? `not activated on ${service.seller === 'ORGANIZATION' ? 'your Stripe account' : 'the platform account'}` : 'unavailable'}; this region will calculate 0% until it is.
                 </span>
               ) : !region.registrationFound ? (
                 <span className="mt-2 flex items-start gap-1.5 text-sm text-amber-700 dark:text-amber-300">

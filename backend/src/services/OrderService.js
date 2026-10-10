@@ -6,6 +6,7 @@ import { prisma } from '@jump/db';
 import { storefrontLogoFor } from './storefrontLogo.js';
 import { randomBytes } from 'crypto';
 import stripe from '../config/stripe.js';
+import { onAccount } from './stripeAccount.js';
 import logger from '../utils/logger.js';
 import { NotFoundError, ConflictError, ValidationError } from '../middleware/errorHandler.js';
 import qrService from './QRService.js';
@@ -430,35 +431,43 @@ class OrderService {
 
     // Payment methods and the statement descriptor come from the organization's
     // Settings › Payments (spec 010); defaults to cards only. With an active
-    // Connect account (phase 2) the same call turns this into a destination
-    // charge; the routing outcome is read back below for the ledger.
-    const checkoutOptions = await PaymentSettingsService.checkoutOptionsFor(event.venue.organization, {
-      fees,
-      lineItems,
-    });
-    const routedTo = checkoutOptions.payment_intent_data?.transfer_data?.destination || null;
-    const applicationFeeCents = checkoutOptions.payment_intent_data?.application_fee_amount;
+    // connected account (spec 047 D0-S) the session is a direct charge on that
+    // account: `stripeAccount` is the request option, Jump's platform fee the
+    // application fee. The outcome is recorded on the payment row below.
+    // Inside the try: a refused routing (409 PAYMENTS_UNAVAILABLE) releases the
+    // reservation exactly like a Stripe failure.
+    let routedTo = null;
+    let applicationFeeCents = 0;
     let stripeSession;
     try {
-      stripeSession = await stripe.checkout.sessions.create({
-        mode: 'payment',
-        ...checkoutOptions,
-        customer_email: contactRecord.email,
-        line_items: lineItems,
-        metadata: {
-          orderId: order.id,
-          orderRef: order.orderRef,
-          eventId: event.id,
-          ...(routedTo && { stripeAccountId: routedTo }),
-        },
-        // Return the buyer to the storefront they started on (custom domain when active)
-        success_url: await confirmationUrl(order.id, event.venue.organizationId),
-        cancel_url: await eventUrl(event.id, event.venue.organizationId, '?status=cancelled'),
-        expires_at: Math.floor(Date.now() / 1000) + 1800, // 30 minutes from now
+      const { stripeAccount = null, ...checkoutOptions } = await PaymentSettingsService.checkoutOptionsFor(event.venue.organization, {
+        fees,
+        lineItems,
       });
+      routedTo = stripeAccount;
+      applicationFeeCents = checkoutOptions.payment_intent_data?.application_fee_amount ?? 0;
+      stripeSession = await stripe.checkout.sessions.create(
+        {
+          mode: 'payment',
+          ...checkoutOptions,
+          customer_email: contactRecord.email,
+          line_items: lineItems,
+          metadata: {
+            orderId: order.id,
+            orderRef: order.orderRef,
+            eventId: event.id,
+            ...(routedTo && { stripeAccountId: routedTo }),
+          },
+          // Return the buyer to the storefront they started on (custom domain when active)
+          success_url: await confirmationUrl(order.id, event.venue.organizationId),
+          cancel_url: await eventUrl(event.id, event.venue.organizationId, '?status=cancelled'),
+          expires_at: Math.floor(Date.now() / 1000) + 1800, // 30 minutes from now
+        },
+        ...onAccount(routedTo)
+      );
     } catch (stripeError) {
       // Roll back reservation if Stripe fails
-      logger.error('Stripe session creation failed, rolling back reservation', {
+      logger.error('Checkout session not created, rolling back reservation', {
         orderId: order.id,
         error: stripeError.message,
       });
@@ -498,7 +507,7 @@ class OrderService {
     });
 
     if (routedTo) {
-      logger.info('Order charge routed to connected account', {
+      logger.info('Order charged on the connected account', {
         event: 'connect_charge_routed',
         orderId: order.id,
         stripeAccountId: routedTo,
@@ -957,7 +966,7 @@ class OrderService {
   async failOrder(orderId, reason) {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      include: { items: true, addOns: true },
+      include: { items: true, addOns: true, payment: { select: { stripeAccountId: true } } },
     });
 
     if (!order || order.status !== 'PENDING') {
@@ -971,7 +980,7 @@ class OrderService {
     let orderItems = order.items;
     if (orderItems.length === 0 && order.stripeSessionId) {
       try {
-        const session = await stripe.checkout.sessions.retrieve(order.stripeSessionId);
+        const session = await stripe.checkout.sessions.retrieve(order.stripeSessionId, ...onAccount(order.payment?.stripeAccountId));
         if (session.metadata?.priceTierId) {
           orderItems = [{ priceTierId: session.metadata.priceTierId, quantity: order.quantity }];
         }
@@ -1016,7 +1025,7 @@ class OrderService {
   async verifyAndCompleteOrder(orderId) {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      include: { event: true, contact: true },
+      include: { event: true, contact: true, payment: { select: { stripeAccountId: true } } },
     });
 
     if (!order) {
@@ -1033,14 +1042,15 @@ class OrderService {
       return this.getOrderById(orderId);
     }
 
-    // Check Stripe session status directly
-    const session = await stripe.checkout.sessions.retrieve(order.stripeSessionId);
+    // Check Stripe session status directly, on the account the session lives on
+    const stripeAccountId = order.payment?.stripeAccountId ?? null;
+    const session = await stripe.checkout.sessions.retrieve(order.stripeSessionId, ...onAccount(stripeAccountId));
 
     if (session.payment_status === 'paid') {
       // Delegate to PaymentService for the full completion flow
       // (update payment transaction, create tickets, send email)
       const PaymentService = (await import('./PaymentService.js')).default;
-      await PaymentService.handleCheckoutCompleted(order.stripeSessionId, session.payment_intent);
+      await PaymentService.handleCheckoutCompleted(order.stripeSessionId, session.payment_intent, stripeAccountId);
       logger.info('Order verified and completed via direct Stripe check', {
         orderId: order.id,
         orderRef: order.orderRef,
@@ -1065,14 +1075,14 @@ class OrderService {
     const cutoff = new Date(now.getTime() - SESSION_TTL_MS - sweepGraceMs());
     const stale = await prisma.order.findMany({
       where: { status: 'PENDING', kind: 'TICKET', createdAt: { lt: cutoff }, stripeSessionId: { not: null } },
-      select: { id: true, orderRef: true, stripeSessionId: true },
+      select: { id: true, orderRef: true, stripeSessionId: true, payment: { select: { stripeAccountId: true } } },
       orderBy: { createdAt: 'asc' },
       take: 100,
     });
     const result = { scanned: stale.length, failed: 0, completed: 0, skipped: 0 };
     for (const order of stale) {
       try {
-        const session = await stripe.checkout.sessions.retrieve(order.stripeSessionId);
+        const session = await stripe.checkout.sessions.retrieve(order.stripeSessionId, ...onAccount(order.payment?.stripeAccountId));
         const expired = session.status === 'expired' || (session.status === 'open' && Number(session.expires_at || 0) * 1000 < now.getTime());
         if (session.status === 'complete' || session.payment_status === 'paid') {
           await this.verifyAndCompleteOrder(order.id);
@@ -1105,6 +1115,8 @@ class OrderService {
       include: {
         event: true,
         contact: true,
+        // Spec 047: the account the session was created on (webhook account check)
+        payment: { select: { stripeAccountId: true } },
       },
     });
   }

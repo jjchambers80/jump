@@ -17,6 +17,7 @@
 import { createHash } from 'crypto';
 import { prisma, Prisma } from '@jump/db';
 import stripe from '../config/stripe.js';
+import { onAccount } from './stripeAccount.js';
 import logger from '../utils/logger.js';
 import { buyerAccountUrl } from '../utils/storefrontUrl.js';
 import { ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
@@ -58,6 +59,7 @@ export function anonymizedContactData(contact, now = new Date()) {
     emailUnsubscribedAt: contact.emailSubscribed ? now : contact.emailUnsubscribedAt ?? null,
     accountCreatedAt: null,
     stripeCustomerId: null,
+    stripeCustomerAccountId: null,
     buyerSessionsValidAfter: now,
     erasureScheduledAt: null,
     anonymizedAt: now,
@@ -245,10 +247,12 @@ class ContactErasureService {
       });
     }
 
-    // The saved card lives on the platform Stripe account (spec 011): delete the Customer with it.
+    // The saved card (spec 011) lives on the Customer: delete it on the account
+    // it was created on — the organization's own account under spec 047, the
+    // platform account (null) before.
     if (contact.stripeCustomerId) {
       try {
-        await stripe.customers.del(contact.stripeCustomerId);
+        await stripe.customers.del(contact.stripeCustomerId, ...onAccount(contact.stripeCustomerAccountId));
       } catch (error) {
         if (error?.code !== 'resource_missing') throw error; // retry on the next sweep
       }

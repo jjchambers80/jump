@@ -144,7 +144,7 @@ function csvCell(value) {
 }
 
 const DETAIL_INCLUDE = {
-  contact: { select: { id: true, organizationId: true, email: true, firstName: true, lastName: true, accountCreatedAt: true, stripeCustomerId: true } },
+  contact: { select: { id: true, organizationId: true, email: true, firstName: true, lastName: true, accountCreatedAt: true, stripeCustomerId: true, stripeCustomerAccountId: true } },
   profile: { include: { images: { include: { image: { include: { file: true } } }, orderBy: { displayOrder: 'asc' } } } },
   tier: true,
   form: {
@@ -627,7 +627,7 @@ class ApplicationService {
     if (application.status !== 'APPROVED' || application.paymentStatus !== 'PROCESSING' || !application.stripeCheckoutSessionId) {
       return { cancelled: false, paymentStatus: application.paymentStatus };
     }
-    await applicationPaymentService.expireCheckoutSession(application.stripeCheckoutSessionId);
+    await applicationPaymentService.expireCheckoutSession(application.stripeCheckoutSessionId, { applicationId: application.id });
     if (application.selectionHeldUntil && new Date(application.selectionHeldUntil) > new Date()) {
       await prisma.$transaction((tx) =>
         this._transition(tx, application.id, { paymentStatus: 'PAYMENT_DUE', stripeCheckoutSessionId: null }, { include: null })
@@ -907,7 +907,8 @@ class ApplicationService {
         addOns: offered.map((addOn) => applicationFormService._serializePublicAddOn(addOn, a.form, event, organization)),
       };
     };
-    const card = a.stripePaymentMethodId ? await applicationPaymentService.savedCardSummary(a.stripePaymentMethodId) : null;
+    // The card lives on the Customer's account (spec 047: the organization's own)
+    const card = a.stripePaymentMethodId ? await applicationPaymentService.savedCardSummary(a.stripePaymentMethodId, a.contact?.stripeCustomerAccountId ?? null) : null;
     const base = {
       mode,
       state: holding ? 'HELD' : 'CHOOSE',

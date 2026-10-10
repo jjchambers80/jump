@@ -163,7 +163,7 @@ describe('Settings › Tax contract (spec 009)', () => {
       .set('Authorization', `Bearer ${tokenFor(adminA)}`)
       .send({ collecting: true, source: 'STRIPE' });
     expect(res.status).toBe(200);
-    expect(stripeLookup).toHaveBeenCalledWith('73301', 'US');
+    expect(stripeLookup).toHaveBeenCalledWith('73301', 'US', { stripeAccount: null }); // no connected account: the platform is the seller
     expect(res.body.region).toMatchObject({ source: 'STRIPE', manualRate: null, lastRate: 0.0825, lastSource: 'STRIPE' });
     const updated = await prisma.event.findUnique({ where: { id: event.id } });
     expect(Number(updated.taxRate)).toBe(0.0825);

@@ -18,6 +18,9 @@ const stripe = {
   },
 };
 jest.unstable_mockModule('../../src/config/stripe.js', () => ({ default: stripe, stripe }));
+// Spec 047: which account is the seller is ConnectService's answer; null = platform.
+const chargeAccountFor = jest.fn(async () => null);
+jest.unstable_mockModule('../../src/services/ConnectService.js', () => ({ default: { chargeAccountFor } }));
 
 const { default: service, StripeTaxError } = await import('../../src/services/TaxService.js');
 
@@ -168,6 +171,37 @@ describe('TaxService', () => {
       stripe.tax.settings.retrieve.mockRejectedValue(new Error('No such API key'));
       stripe.tax.registrations.list.mockResolvedValue({ data: [] });
       await expect(service.getServiceStatus()).resolves.toMatchObject({ status: 'unavailable', error: 'No such API key' });
+    });
+  });
+
+  describe('seller of record (spec 047 D0-S)', () => {
+    afterEach(() => {
+      chargeAccountFor.mockResolvedValue(null);
+      service._invalidate();
+    });
+
+    it('looks the rate up on the organization account when it has one', async () => {
+      chargeAccountFor.mockResolvedValue({ stripeAccountId: 'acct_seller', activeCapabilities: [] });
+      taxRegion.findUnique.mockResolvedValue(row());
+      stripe.tax.calculations.create.mockResolvedValue(calculation(725));
+      await expect(service.rateForVenue('org-1', ncVenue)).resolves.toMatchObject({ rate: 0.0725, source: 'STRIPE' });
+      expect(stripe.tax.calculations.create).toHaveBeenLastCalledWith(expect.objectContaining({ currency: 'usd' }), { stripeAccount: 'acct_seller' });
+      expect(chargeAccountFor).toHaveBeenCalledWith('org-1');
+    });
+
+    it('reads Stripe Tax status and registrations on the organization account, cached per account', async () => {
+      chargeAccountFor.mockResolvedValue({ stripeAccountId: 'acct_seller', activeCapabilities: [] });
+      activeStatus();
+      const status = await service.getServiceStatus('org-1');
+      expect(status).toMatchObject({ status: 'active', seller: 'ORGANIZATION' });
+      expect(stripe.tax.settings.retrieve).toHaveBeenLastCalledWith({ stripeAccount: 'acct_seller' });
+      expect(stripe.tax.registrations.list).toHaveBeenLastCalledWith({ status: 'active', limit: 100 }, { stripeAccount: 'acct_seller' });
+      await service.getServiceStatus('org-1');
+      expect(stripe.tax.settings.retrieve).toHaveBeenCalledTimes(1);
+
+      chargeAccountFor.mockResolvedValue(null);
+      expect((await service.getServiceStatus('org-2')).seller).toBe('PLATFORM');
+      expect(stripe.tax.settings.retrieve).toHaveBeenLastCalledWith();
     });
   });
 

@@ -1,18 +1,20 @@
-// Connect Service (spec 010 phase 2)
-// Stripe Connect Express accounts per organization: onboarding, state sync from
-// Stripe Account objects, payout settings, and the routing decision for
-// destination charges. Money movement itself happens in Checkout (see
+// Connect Service (spec 010 phase 2, spec 047 D0-S)
+// The organization's own Stripe account: onboarding (connect an existing
+// account with OAuth, or create a new one it owns with the full Stripe
+// dashboard), state sync from Stripe Account objects, payout settings, and the
+// routing decision for charges. Money movement itself happens in Checkout (see
 // PaymentSettingsService.checkoutOptionsFor) and refunds (RefundService); this
 // file owns the account row and nothing else.
 //
 // Rules (specs/010-payments-settings/plan-phase-2.md §2):
 // - one account per organization per Stripe mode; rows for the other mode are
 //   invisible, so test-mode onboarding cannot leak into live charges
-// - a charge is routed to the connected account only when the flag is on, the
-//   account has the `transfers` capability active and is not disconnected;
-//   payouts being paused does not block sales
+// - a charge is created on the connected account (direct charge) only when the
+//   flag is on, the account can take charges (`charges_enabled`) and is not
+//   disconnected; payouts being paused does not block sales
 // - row state is written only from Stripe (retrieve or webhook), never guessed
 
+import { createHmac, timingSafeEqual } from 'crypto';
 import { prisma } from '@jump/db';
 import stripe from '../config/stripe.js';
 import { ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
@@ -55,9 +57,60 @@ export function serializePayout(payout) {
   };
 }
 
+// A Connect OAuth round trip (authorize → Stripe → back) takes minutes, not hours.
+const OAUTH_STATE_TTL_MS = 30 * 60 * 1000;
+const OAUTH_AUTHORIZE_URL = 'https://connect.stripe.com/oauth/authorize';
+
 const ORG_SELECT = { id: true, name: true, email: true, phoneCountryCode: true, phoneNumber: true };
 
+/** Platform Connect client id (`ca_…`) for "Connect with Stripe" (OAuth); unset hides that option. */
+export function oauthClientId() {
+  return process.env.STRIPE_CONNECT_CLIENT_ID || null;
+}
+
+/** The organization signs in to its own full Stripe dashboard; there is no per-account login link. */
+export function dashboardUrl(mode = stripeMode()) {
+  return `https://dashboard.stripe.com/${mode === 'test' ? 'test/' : ''}dashboard`;
+}
+
+function stateSignature(body) {
+  return createHmac('sha256', String(process.env.AUTH_SECRET || '')).update(`connect-oauth:${body}`).digest('base64url');
+}
+
+/**
+ * OAuth `state`: binds the round trip to the organization and the staff user
+ * who started it, so a code minted for one organization can never be attached
+ * to another (CSRF / account-swap). Signed with AUTH_SECRET, expires in 30 min.
+ */
+export function signOAuthState({ organizationId, userId }, now = Date.now()) {
+  const body = Buffer.from(JSON.stringify({ o: organizationId, u: userId, e: now + OAUTH_STATE_TTL_MS })).toString('base64url');
+  return `${body}.${stateSignature(body)}`;
+}
+
+/** @returns {{ organizationId: string, userId: string } | null} null when forged, malformed or expired */
+export function readOAuthState(state, now = Date.now()) {
+  if (typeof state !== 'string' || !state.includes('.')) return null;
+  const [body, sig] = state.split('.');
+  const expected = Buffer.from(stateSignature(body));
+  const given = Buffer.from(String(sig));
+  if (expected.length !== given.length || !timingSafeEqual(expected, given)) return null;
+  try {
+    const { o, u, e } = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+    if (!o || !u || typeof e !== 'number' || e < now) return null;
+    return { organizationId: o, userId: u };
+  } catch {
+    return null;
+  }
+}
+
 /** Master gate. Off: routes 404, checkout never routes, page hides payouts. */
+/** 409 for a connected organization whose Stripe account cannot take charges. */
+export function paymentsUnavailable(organizationId) {
+  const error = new ConflictError("This organizer can't take payments right now. Please try again later.", { organizationId });
+  error.code = 'PAYMENTS_UNAVAILABLE';
+  return error;
+}
+
 export function connectEnabled() {
   return String(process.env.STRIPE_CONNECT_ENABLED || '').toLowerCase() === 'true';
 }
@@ -70,7 +123,7 @@ export function connectStatus(row) {
   if (!row) return 'not_started';
   if (row.disconnectedAt) return 'disconnected';
   if (!row.detailsSubmitted) return 'onboarding';
-  if (!row.transfersEnabled || row.disabledReason || (row.currentlyDue || []).length > 0) return 'restricted';
+  if (!row.chargesEnabled || row.disabledReason || (row.currentlyDue || []).length > 0) return 'restricted';
   return 'active';
 }
 
@@ -89,6 +142,9 @@ export function accountToRow(account) {
     detailsSubmitted: account.details_submitted === true,
     disabledReason: account.requirements?.disabled_reason || null,
     currentlyDue: account.requirements?.currently_due || [],
+    activeCapabilities: Object.entries(account.capabilities || {})
+      .filter(([, status]) => status === 'active')
+      .map(([name]) => name),
     bankName: bank?.bank_name || null,
     bankLast4: bank?.last4 || null,
     currency: bank?.currency || account.default_currency || null,
@@ -112,32 +168,34 @@ class ConnectService {
     });
   }
 
-  /** Page payload: `{ enabled, status, account }`. Never calls Stripe. */
+  /** Page payload: `{ enabled, status, account, oauthAvailable }`. Never calls Stripe. */
   async statusFor(organizationId) {
     if (!this.enabled()) return { enabled: false, status: 'not_started', account: null };
     const row = await this.accountFor(organizationId);
-    return { enabled: true, status: connectStatus(row), account: this._serialize(row) };
+    return { enabled: true, status: connectStatus(row), account: this._serialize(row), oauthAvailable: Boolean(oauthClientId()) };
   }
 
   /**
-   * Routing decision for a new charge (plan-phase-2 §2.2). Synchronous apart
-   * from one row read; never throws.
-   * @returns {Promise<{ stripeAccountId: string } | null>}
+   * Routing decision for a new charge (spec 047 D0-S): the organization's
+   * connected account when the flag is on and the account can take charges,
+   * else null (the platform account). One row read; never throws.
+   * @returns {Promise<{ stripeAccountId: string, activeCapabilities: string[] } | null>}
    */
-  async destinationFor(organizationId) {
+  async chargeAccountFor(organizationId) {
     if (!this.enabled() || !organizationId) return null;
-    try {
-      const row = await this.accountFor(organizationId);
-      if (!row || row.disconnectedAt || !row.transfersEnabled) return null;
-      return { stripeAccountId: row.stripeAccountId };
-    } catch (error) {
-      logger.error('Connect routing lookup failed; charging on the platform account', {
-        event: 'connect_routing_skipped',
-        organizationId,
-        error: error.message,
-      });
-      return null;
+    const row = await this.accountFor(organizationId);
+    // Never connected (or disconnected): legacy platform charge.
+    if (!row || row.disconnectedAt) return null;
+    if (!row.chargesEnabled) {
+      // Still onboarding: keep selling on the platform account until Stripe
+      // enables charges, so starting onboarding never stops ticket sales.
+      if (!row.detailsSubmitted) return null;
+      // Onboarded but Stripe has paused charges: refuse rather than fall back
+      // to the platform account, which would make Jump the merchant of record
+      // again (spec 047 option C).
+      throw paymentsUnavailable(organizationId);
     }
+    return { stripeAccountId: row.stripeAccountId, activeCapabilities: row.activeCapabilities || [] };
   }
 
   // ---------------------------------------------------------------------------
@@ -145,8 +203,10 @@ class ConnectService {
   // ---------------------------------------------------------------------------
 
   /**
-   * Create the Express account on first call, then mint a single-use Account
-   * Link. A disconnected row is replaced by a fresh account.
+   * No Stripe account yet: create one the organization owns (full Stripe
+   * dashboard, Stripe collects requirements, carries losses and bills fees to
+   * the account) on first call, then mint a single-use Account Link. A
+   * disconnected row is replaced by a fresh account.
    * @returns {Promise<{ url: string }>}
    */
   async startOnboarding(organizationId, { actorId = null } = {}) {
@@ -184,22 +244,98 @@ class ConnectService {
       });
     }
 
-    const link = await stripe.accountLinks.create({
-      account: row.stripeAccountId,
-      type: 'account_onboarding',
-      return_url: `${base}/admin/settings/payments/payout-bank-account?onboarding=complete`,
-      refresh_url: `${base}/admin/settings/payments/payout-bank-account?onboarding=refresh`,
-    });
+    let link;
+    try {
+      link = await stripe.accountLinks.create({
+        account: row.stripeAccountId,
+        type: 'account_onboarding',
+        return_url: `${base}/admin/settings/payments/payout-bank-account?onboarding=complete`,
+        refresh_url: `${base}/admin/settings/payments/payout-bank-account?onboarding=refresh`,
+      });
+    } catch (error) {
+      // An account connected with OAuth belongs to the organization, not to
+      // Jump: Stripe refuses Account Links for it. Its owner finishes any
+      // outstanding requirement in the Stripe dashboard.
+      throw new ConflictError(`Finish setting up this account in your Stripe dashboard (${error.message})`);
+    }
     return { url: link.url };
   }
 
-  /** Express dashboard login link; Stripe refuses it before onboarding completes. */
-  async loginLink(organizationId) {
+  /**
+   * "Connect with Stripe" for an organization that already has a Stripe
+   * account: the OAuth authorize URL. Stripe sends the browser back to the
+   * payout page with `code` + `state`, which `completeOAuth` exchanges.
+   * The redirect URI must be registered in the platform's Connect settings.
+   * @returns {Promise<{ url: string }>}
+   */
+  async oauthUrl(organizationId, { userId }) {
     this._assertEnabled();
-    const row = await this._requireRow(organizationId);
-    if (!row.detailsSubmitted) throw new ConflictError('Finish Stripe onboarding before opening the Express dashboard');
-    const link = await stripe.accounts.createLoginLink(row.stripeAccountId);
-    return { url: link.url };
+    const clientId = oauthClientId();
+    if (!clientId) throw new NotFoundError('Connecting an existing Stripe account is not configured');
+    const organization = await prisma.organization.findUnique({ where: { id: organizationId }, select: ORG_SELECT });
+    if (!organization) throw new NotFoundError('Organization not found');
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: clientId,
+      scope: 'read_write',
+      redirect_uri: this._oauthRedirectUri(),
+      state: signOAuthState({ organizationId, userId }),
+      'stripe_user[country]': 'US',
+      'stripe_user[business_name]': organization.name,
+      ...(organization.email && { 'stripe_user[email]': organization.email }),
+    });
+    return { url: `${OAUTH_AUTHORIZE_URL}?${params}` };
+  }
+
+  /**
+   * Finish OAuth: verify `state` names this organization and user, exchange
+   * the single-use code for the account id, and store it. Replaces a previous
+   * account for the organization in this mode; refuses an account another
+   * organization already uses (one account, one organization).
+   */
+  async completeOAuth(organizationId, { userId, code, state }) {
+    this._assertEnabled();
+    const claims = readOAuthState(state);
+    if (!claims || claims.organizationId !== organizationId || claims.userId !== userId) {
+      throw new ValidationError('This Stripe connection link is invalid or has expired. Start again from Settings › Payments.');
+    }
+    let token;
+    try {
+      token = await stripe.oauth.token({ grant_type: 'authorization_code', code });
+    } catch (error) {
+      throw new ValidationError(`Stripe could not connect the account: ${error.message}`);
+    }
+    const stripeAccountId = token.stripe_user_id;
+    if (!stripeAccountId) throw new ValidationError('Stripe did not return an account id');
+    if (Boolean(token.livemode) !== (stripeMode() === 'live')) {
+      throw new ValidationError('The Stripe account was connected in a different mode (test vs live) than this platform');
+    }
+
+    const taken = await prisma.organizationStripeAccount.findUnique({ where: { stripeAccountId } });
+    if (taken && taken.organizationId !== organizationId) {
+      throw new ConflictError('This Stripe account is already connected to another organization');
+    }
+    const account = await stripe.accounts.retrieve(stripeAccountId, { expand: ['external_accounts'] });
+    const mode = stripeMode();
+    await prisma.$transaction(async (tx) => {
+      await tx.organizationStripeAccount.deleteMany({ where: { organizationId, mode, stripeAccountId: { not: stripeAccountId } } });
+      await tx.organizationStripeAccount.upsert({
+        where: { stripeAccountId },
+        create: { organizationId, mode, stripeAccountId, ...accountToRow(account) },
+        update: { ...accountToRow(account), disconnectedAt: null },
+      });
+    });
+    logger.info('Connect account connected with OAuth', {
+      event: 'connect_oauth_connected',
+      organizationId,
+      stripeAccountId,
+      actorId: userId,
+    });
+    return this.statusFor(organizationId);
+  }
+
+  _oauthRedirectUri() {
+    return `${platformBaseUrl()}/admin/settings/payments/payout-bank-account`;
   }
 
   // ---------------------------------------------------------------------------
@@ -241,7 +377,7 @@ class ConnectService {
     return this._serialize(row);
   }
 
-  /** The organization revoked the platform from its Express dashboard. */
+  /** The organization revoked the platform from its Stripe dashboard. */
   async markDisconnected(stripeAccountId) {
     const existing = await prisma.organizationStripeAccount.findUnique({ where: { stripeAccountId } });
     if (!existing) return null;
@@ -360,7 +496,13 @@ class ConnectService {
     return row;
   }
 
-  /** Express account via the `controller` spelling (plan-phase-2 §2.4). */
+  /**
+   * A new account the organization owns (spec 047 §3 S1): full Stripe
+   * dashboard, so Stripe — not Jump — bills its processing fees, carries
+   * negative balances, collects requirements and files the 1099-K. Stripe
+   * requests the default capabilities (card_payments, transfers) for a
+   * full-dashboard account; none are requested here.
+   */
   _createParams(organization, url) {
     const supportPhone =
       organization.phoneNumber ? `${organization.phoneCountryCode || '+1'}${organization.phoneNumber}`.replace(/[^\d+]/g, '') : undefined;
@@ -368,12 +510,11 @@ class ConnectService {
       country: 'US',
       ...(organization.email && { email: organization.email }),
       controller: {
-        fees: { payer: 'application' },
-        losses: { payments: 'application' },
-        stripe_dashboard: { type: 'express' },
+        fees: { payer: 'account' },
+        losses: { payments: 'stripe' },
+        stripe_dashboard: { type: 'full' },
         requirement_collection: 'stripe',
       },
-      capabilities: { card_payments: { requested: true }, transfers: { requested: true } },
       business_profile: {
         name: organization.name,
         ...(supportPhone && { support_phone: supportPhone }),
@@ -438,6 +579,7 @@ class ConnectService {
       },
       disconnectedAt: row.disconnectedAt,
       lastSyncedAt: row.lastSyncedAt,
+      dashboardUrl: dashboardUrl(row.mode),
     };
   }
 }
