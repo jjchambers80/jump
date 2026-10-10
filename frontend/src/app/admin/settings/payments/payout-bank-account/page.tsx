@@ -1,12 +1,13 @@
-// Settings › Payments › Payout bank account (spec 010 phase 2)
-// Where an organization connects the bank account its ticket revenue is paid
-// out to. The bank itself is collected and verified by Stripe (Connect Express
-// onboarding, then the Express dashboard for changes) — Jump never sees
+// Settings › Payments › Payout bank account (spec 010 phase 2, spec 047 S1)
+// Where an organization connects its own Stripe account — every charge is
+// created on it and paid out to its bank. Two ways in: connect an existing
+// Stripe account (OAuth) or create a new one the organization owns (Stripe
+// onboarding, full Stripe dashboard). The bank is collected and verified by
+// Stripe and changed in the organization's Stripe dashboard — Jump never sees
 // account or routing numbers, only the `last4` snapshot Stripe returns.
-// No bank yet: a single "Connect your bank account" call to action. Bank on
-// file: bank name + last four, "Change bank", and the payout schedule.
-// Stripe returns here with ?onboarding=complete (pull the account state) or
-// ?onboarding=refresh (the Account Link expired; mint a new one).
+// Stripe returns here with ?onboarding=complete (pull the account state),
+// ?onboarding=refresh (the Account Link expired; mint a new one), or — from
+// OAuth — ?code=&state= (finish the connection) / ?error= (cancelled).
 'use client';
 
 import Link from 'next/link';
@@ -41,6 +42,9 @@ function PayoutBankAccountContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const onboardingReturn = searchParams.get('onboarding');
+  const oauthCode = searchParams.get('code');
+  const oauthState = searchParams.get('state');
+  const oauthError = searchParams.get('error');
   const paymentsApi = usePaymentsApi();
   const [data, setData] = useState<PaymentSettingsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -77,11 +81,24 @@ function PayoutBankAccountContent() {
   // `refresh` → the link expired, send them straight back into onboarding.
   const handledReturn = useRef(false);
   useEffect(() => {
-    if (!data || !onboardingReturn || handledReturn.current) return;
+    if (!data || !(onboardingReturn || oauthCode || oauthError) || handledReturn.current) return;
     handledReturn.current = true;
     const connect = data.connect ?? CONNECT_DISABLED;
     if (!connect.enabled || !data.canEdit) return;
     const clearQuery = () => router.replace(BANK_ACCOUNT_PATH);
+    // Back from "Connect with Stripe" (OAuth)
+    if (oauthError) {
+      clearQuery();
+      setNotice({ tone: 'warn', text: 'Stripe account not connected. You can try again or create a new Stripe account.' });
+      return;
+    }
+    if (oauthCode && oauthState) {
+      actions.completeOAuth(oauthCode, oauthState).then((next) => {
+        clearQuery();
+        if (next) setNotice({ tone: 'ok', text: 'Your Stripe account is connected. Payments are now made to it directly.' });
+      });
+      return;
+    }
     if (onboardingReturn === 'refresh') {
       actions.onboard();
       return;
@@ -98,7 +115,7 @@ function PayoutBankAccountContent() {
       return;
     }
     clearQuery();
-  }, [data, onboardingReturn, actions, router]);
+  }, [data, onboardingReturn, oauthCode, oauthState, oauthError, actions, router]);
 
   const connect = data?.connect ?? CONNECT_DISABLED;
   const account = connect.account;
@@ -170,8 +187,10 @@ function PayoutBankAccountContent() {
                     <Plus className="h-5 w-5" strokeWidth={3} />
                   </span>
                 </div>
-                <h3 className="mt-6 text-lg font-semibold text-gray-900 dark:text-white">Connect your bank account</h3>
-                <p className="mt-1 max-w-md text-sm text-gray-600 dark:text-slate-400">Add your external bank account to transfer funds</p>
+                <h3 className="mt-6 text-lg font-semibold text-gray-900 dark:text-white">Connect your Stripe account</h3>
+                <p className="mt-1 max-w-md text-sm text-gray-600 dark:text-slate-400">
+                  Payments are made to your own Stripe account and paid out to your bank. You are the merchant buyers see on their statement.
+                </p>
                 {connect.status === 'onboarding' && (
                   <p className="mt-3 max-w-md text-sm text-amber-700 dark:text-amber-300">Setup was started but not finished. Continue where you left off.</p>
                 )}
@@ -185,17 +204,35 @@ function PayoutBankAccountContent() {
                   </p>
                 )}
                 {connect.status === 'disconnected' && (
-                  <p className="mt-3 max-w-md text-sm text-gray-600 dark:text-slate-400">This Stripe account no longer allows Jump to send payouts. Reconnect to start a new setup.</p>
+                  <p className="mt-3 max-w-md text-sm text-gray-600 dark:text-slate-400">This Stripe account was disconnected from Jump. Connect an account again to take payments.</p>
                 )}
-                {canEdit ? (
+                {canEdit && action ? (
                   <button type="button" className={`${primaryBtn} mt-6 px-5 py-2`} disabled={actions.busy !== null} onClick={actions.onboard} data-testid="payouts-action">
-                    {actions.busy === 'onboard' ? 'Redirecting…' : connect.status === 'not_started' ? 'Connect account' : action}
+                    {actions.busy === 'onboard' ? 'Redirecting…' : action}
                   </button>
+                ) : canEdit ? (
+                  <div className="mt-6 flex flex-col items-center gap-3 sm:flex-row">
+                    {connect.oauthAvailable && (
+                      <button type="button" className={`${primaryBtn} px-5 py-2`} disabled={actions.busy !== null} onClick={actions.connectExisting} data-testid="payouts-connect-existing">
+                        {actions.busy === 'oauth' ? 'Redirecting…' : 'Connect existing Stripe account'}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className={connect.oauthAvailable ? `${secondaryBtn} px-5 py-2` : `${primaryBtn} px-5 py-2`}
+                      disabled={actions.busy !== null}
+                      onClick={actions.onboard}
+                      data-testid="payouts-action"
+                    >
+                      {actions.busy === 'onboard' ? 'Redirecting…' : 'Create a Stripe account'}
+                    </button>
+                  </div>
                 ) : (
                   <p className="mt-6 text-sm text-gray-500 dark:text-slate-400">An admin of your organization can connect the bank account.</p>
                 )}
                 <p className="mt-4 max-w-md text-xs text-gray-500 dark:text-slate-400">
-                  Stripe collects and verifies your business and bank details on a secure page. Jump never stores account or routing numbers.
+                  Stripe collects and verifies your business and bank details on a secure page. You manage refunds, disputes and payouts in your own Stripe dashboard. Jump never stores
+                  account or routing numbers.
                 </p>
               </div>
             </div>
@@ -220,10 +257,10 @@ function PayoutBankAccountContent() {
                       </button>
                     )}
                     {canEdit && account.detailsSubmitted && (
-                      <button type="button" className={secondaryBtn} disabled={actions.busy !== null} onClick={actions.openDashboard} data-testid="payouts-change-bank">
-                        {actions.busy === 'login' ? 'Opening…' : 'Change bank'}
+                      <a href={account.dashboardUrl} target="_blank" rel="noreferrer" className={secondaryBtn} data-testid="payouts-change-bank">
+                        Change bank
                         <ExternalLinkIcon />
-                      </button>
+                      </a>
                     )}
                     {action && canEdit && (
                       <button type="button" className={primaryBtn} disabled={actions.busy !== null} onClick={actions.onboard} data-testid="payouts-action">
@@ -272,10 +309,10 @@ function PayoutBankAccountContent() {
                       Last payout failed: {account.payouts.lastPayoutFailure}
                     </span>
                     {canEdit && (
-                      <button type="button" className={secondaryBtn} disabled={actions.busy !== null} onClick={actions.openDashboard}>
+                      <a href={account.dashboardUrl} target="_blank" rel="noreferrer" className={secondaryBtn}>
                         Fix in Stripe
                         <ExternalLinkIcon />
-                      </button>
+                      </a>
                     )}
                   </div>
                 )}
@@ -336,8 +373,8 @@ function PayoutBankAccountContent() {
                 <div>
                   <dt className="font-medium text-gray-900 dark:text-white">What are payouts?</dt>
                   <dd>
-                    Payouts are transfers of your ticket revenue to your bank account. After a customer pays for an order, the funds go through a settlement period before
-                    being deposited.
+                    Payouts are transfers from your Stripe balance to your bank account. Customers pay into your own Stripe account; Jump's platform fee is deducted as an
+                    application fee, and the funds go through a settlement period before being deposited.
                   </dd>
                 </div>
                 <div>

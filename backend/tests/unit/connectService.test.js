@@ -13,7 +13,10 @@ const mockOrgFindUnique = jest.fn();
 const mockAccountsCreate = jest.fn();
 const mockAccountsRetrieve = jest.fn();
 const mockAccountsUpdate = jest.fn();
-const mockCreateLoginLink = jest.fn();
+const mockOAuthToken = jest.fn();
+const mockTransaction = jest.fn();
+const mockDeleteMany = jest.fn();
+const mockUpsert = jest.fn();
 const mockAccountLinksCreate = jest.fn();
 const mockBalanceRetrieve = jest.fn();
 const mockPayoutsList = jest.fn();
@@ -22,6 +25,7 @@ jest.unstable_mockModule('@jump/db', () => ({
   prisma: {
     organizationStripeAccount: { findUnique: mockFindUnique, create: mockCreate, update: mockUpdate, delete: mockDelete },
     organization: { findUnique: mockOrgFindUnique },
+    $transaction: mockTransaction,
   },
 }));
 jest.unstable_mockModule('../../src/config/stripe.js', () => ({
@@ -30,8 +34,8 @@ jest.unstable_mockModule('../../src/config/stripe.js', () => ({
       create: mockAccountsCreate,
       retrieve: mockAccountsRetrieve,
       update: mockAccountsUpdate,
-      createLoginLink: mockCreateLoginLink,
     },
+    oauth: { token: mockOAuthToken },
     accountLinks: { create: mockAccountLinksCreate },
     balance: { retrieve: mockBalanceRetrieve },
     payouts: { list: mockPayoutsList },
@@ -46,8 +50,9 @@ jest.unstable_mockModule('../../src/utils/storefrontUrl.js', () => ({
 }));
 
 process.env.STRIPE_SECRET_KEY = 'sk_test_unit';
+process.env.AUTH_SECRET = 'unit-secret-unit-secret-unit-secret!!';
 
-const { default: service, accountToRow, connectStatus, connectEnabled, serializePayout } = await import('../../src/services/ConnectService.js');
+const { default: service, accountToRow, connectStatus, connectEnabled, serializePayout, signOAuthState, readOAuthState } = await import('../../src/services/ConnectService.js');
 
 const stripeAccount = (over = {}) => ({
   id: 'acct_1',
@@ -93,6 +98,7 @@ beforeEach(() => {
   delete process.env.TEST_BASE_URL;
   mockUpdate.mockImplementation(({ data }) => Promise.resolve(row(data)));
   mockCreate.mockImplementation(({ data }) => Promise.resolve(row(data)));
+  mockTransaction.mockImplementation((fn) => fn({ organizationStripeAccount: { deleteMany: mockDeleteMany, upsert: mockUpsert } }));
 });
 
 describe('accountToRow', () => {
@@ -206,14 +212,16 @@ describe('statusFor', () => {
       status: 'active',
       bank: { name: 'Wells Fargo', last4: '3544', currency: 'usd' },
       payouts: { interval: 'weekly', anchor: 'friday', delayDays: 2, statementDescriptor: 'ROMAN SKIN' },
+      dashboardUrl: 'https://dashboard.stripe.com/test/dashboard',
     });
+    expect(state.oauthAvailable).toBe(false);
   });
 });
 
 describe('startOnboarding', () => {
   const organization = { id: 'org_1', name: 'Roman Skin Care', email: 'owner@roman.test', phoneCountryCode: '+1', phoneNumber: '(919) 555-0100' };
 
-  test('creates an Express account then mints an Account Link', async () => {
+  test('creates an account the organization owns (full dashboard) then mints an Account Link', async () => {
     mockOrgFindUnique.mockResolvedValueOnce(organization);
     mockFindUnique.mockResolvedValueOnce(null);
     mockAccountsCreate.mockResolvedValueOnce(stripeAccount({ id: 'acct_new', details_submitted: false }));
@@ -226,12 +234,11 @@ describe('startOnboarding', () => {
       country: 'US',
       email: 'owner@roman.test',
       controller: {
-        fees: { payer: 'application' },
-        losses: { payments: 'application' },
-        stripe_dashboard: { type: 'express' },
+        fees: { payer: 'account' },
+        losses: { payments: 'stripe' },
+        stripe_dashboard: { type: 'full' },
         requirement_collection: 'stripe',
       },
-      capabilities: { card_payments: { requested: true }, transfers: { requested: true } },
       business_profile: { name: 'Roman Skin Care', support_phone: '+19195550100', url: 'https://tickets.example.com/organizations/org_1' },
       settings: { payouts: { statement_descriptor: 'ROMAN SKIN CARE' } },
       metadata: { organizationId: 'org_1', mode: 'test' },
@@ -265,6 +272,14 @@ describe('startOnboarding', () => {
     await service.startOnboarding('org_1');
     expect(mockDelete).toHaveBeenCalledWith({ where: { id: 'osa_1' } });
     expect(mockAccountsCreate).toHaveBeenCalledTimes(1);
+    expect(mockAccountsCreate.mock.calls[0][0].capabilities).toBeUndefined();
+  });
+
+  test('409 when Stripe refuses an Account Link (an account connected with OAuth)', async () => {
+    mockOrgFindUnique.mockResolvedValueOnce(organization);
+    mockFindUnique.mockResolvedValueOnce(row({ detailsSubmitted: false }));
+    mockAccountLinksCreate.mockRejectedValueOnce(new Error('You cannot create an account link for this account'));
+    await expect(service.startOnboarding('org_1')).rejects.toMatchObject({ statusCode: 409 });
   });
 
   test('404 when the flag is off; 400 for a non-https base URL in live mode', async () => {
@@ -278,17 +293,74 @@ describe('startOnboarding', () => {
   });
 });
 
-describe('loginLink / syncAccount / applyAccount', () => {
-  test('login link only after onboarding completed', async () => {
-    mockFindUnique.mockResolvedValueOnce(row({ detailsSubmitted: false }));
-    await expect(service.loginLink('org_1')).rejects.toMatchObject({ statusCode: 409 });
+describe('OAuth (connect an existing account)', () => {
+  const organization = { id: 'org_1', name: 'Roman Skin Care', email: 'owner@roman.test' };
 
-    mockFindUnique.mockResolvedValueOnce(row());
-    mockCreateLoginLink.mockResolvedValueOnce({ url: 'https://connect.stripe.com/express/acct_1/login' });
-    expect(await service.loginLink('org_1')).toEqual({ url: 'https://connect.stripe.com/express/acct_1/login' });
-    expect(mockCreateLoginLink).toHaveBeenCalledWith('acct_1');
+  afterEach(() => {
+    delete process.env.STRIPE_CONNECT_CLIENT_ID;
   });
 
+  test('state round-trips, and is refused when tampered with or expired', () => {
+    const state = signOAuthState({ organizationId: 'org_1', userId: 'user_1' }, 1_000);
+    expect(readOAuthState(state, 2_000)).toEqual({ organizationId: 'org_1', userId: 'user_1' });
+    expect(readOAuthState(state, 1_000 + 31 * 60 * 1000)).toBeNull();
+    const [body] = state.split('.');
+    const forged = Buffer.from(JSON.stringify({ o: 'org_2', u: 'user_1', e: 9e15 })).toString('base64url');
+    expect(readOAuthState(`${forged}.${state.split('.')[1]}`, 2_000)).toBeNull();
+    expect(readOAuthState(`${body}.x`, 2_000)).toBeNull();
+    expect(readOAuthState('garbage', 2_000)).toBeNull();
+  });
+
+  test('oauthUrl: 404 without a client id; otherwise the authorize URL with a signed state', async () => {
+    await expect(service.oauthUrl('org_1', { userId: 'user_1' })).rejects.toMatchObject({ statusCode: 404 });
+    process.env.STRIPE_CONNECT_CLIENT_ID = 'ca_unit';
+    mockOrgFindUnique.mockResolvedValueOnce(organization);
+    const { url } = await service.oauthUrl('org_1', { userId: 'user_1' });
+    const parsed = new URL(url);
+    expect(`${parsed.origin}${parsed.pathname}`).toBe('https://connect.stripe.com/oauth/authorize');
+    expect(parsed.searchParams.get('response_type')).toBe('code');
+    expect(parsed.searchParams.get('client_id')).toBe('ca_unit');
+    expect(parsed.searchParams.get('scope')).toBe('read_write');
+    expect(parsed.searchParams.get('redirect_uri')).toBe('http://localhost:3001/admin/settings/payments/payout-bank-account');
+    expect(parsed.searchParams.get('stripe_user[email]')).toBe('owner@roman.test');
+    expect(readOAuthState(parsed.searchParams.get('state'))).toEqual({ organizationId: 'org_1', userId: 'user_1' });
+  });
+
+  test('completeOAuth exchanges the code and stores the account for this organization', async () => {
+    const state = signOAuthState({ organizationId: 'org_1', userId: 'user_1' });
+    mockOAuthToken.mockResolvedValueOnce({ stripe_user_id: 'acct_own', livemode: false });
+    mockFindUnique.mockResolvedValueOnce(null); // not used by another organization
+    mockAccountsRetrieve.mockResolvedValueOnce(stripeAccount({ id: 'acct_own' }));
+    mockFindUnique.mockResolvedValueOnce(row({ stripeAccountId: 'acct_own' })); // statusFor
+    const state2 = await service.completeOAuth('org_1', { userId: 'user_1', code: 'ac_123', state });
+    expect(mockOAuthToken).toHaveBeenCalledWith({ grant_type: 'authorization_code', code: 'ac_123' });
+    expect(mockAccountsRetrieve).toHaveBeenCalledWith('acct_own', { expand: ['external_accounts'] });
+    expect(mockDeleteMany).toHaveBeenCalledWith({ where: { organizationId: 'org_1', mode: 'test', stripeAccountId: { not: 'acct_own' } } });
+    expect(mockUpsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { stripeAccountId: 'acct_own' },
+      create: expect.objectContaining({ organizationId: 'org_1', mode: 'test', stripeAccountId: 'acct_own', chargesEnabled: true }),
+    }));
+    expect(state2.account.stripeAccountId).toBe('acct_own');
+  });
+
+  test('completeOAuth refuses a state for another organization or user, a mode mismatch, and an account in use elsewhere', async () => {
+    const other = signOAuthState({ organizationId: 'org_2', userId: 'user_1' });
+    await expect(service.completeOAuth('org_1', { userId: 'user_1', code: 'ac_1', state: other })).rejects.toMatchObject({ statusCode: 400 });
+    const mine = signOAuthState({ organizationId: 'org_1', userId: 'user_1' });
+    await expect(service.completeOAuth('org_1', { userId: 'user_2', code: 'ac_1', state: mine })).rejects.toMatchObject({ statusCode: 400 });
+    expect(mockOAuthToken).not.toHaveBeenCalled();
+
+    mockOAuthToken.mockResolvedValueOnce({ stripe_user_id: 'acct_live', livemode: true });
+    await expect(service.completeOAuth('org_1', { userId: 'user_1', code: 'ac_2', state: mine })).rejects.toMatchObject({ statusCode: 400 });
+
+    mockOAuthToken.mockResolvedValueOnce({ stripe_user_id: 'acct_taken', livemode: false });
+    mockFindUnique.mockResolvedValueOnce(row({ organizationId: 'org_9', stripeAccountId: 'acct_taken' }));
+    await expect(service.completeOAuth('org_1', { userId: 'user_1', code: 'ac_3', state: mine })).rejects.toMatchObject({ statusCode: 409 });
+    expect(mockUpsert).not.toHaveBeenCalled();
+  });
+});
+
+describe('syncAccount / applyAccount', () => {
   test('syncAccount retrieves with external accounts expanded and writes the mapping', async () => {
     mockFindUnique.mockResolvedValueOnce(row({ transfersEnabled: false, detailsSubmitted: false }));
     mockAccountsRetrieve.mockResolvedValueOnce(stripeAccount());

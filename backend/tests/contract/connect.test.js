@@ -14,7 +14,7 @@ const mockSessionsCreate = jest.fn();
 const mockAccountsRetrieve = jest.fn();
 const mockAccountsCreate = jest.fn();
 const mockAccountsUpdate = jest.fn();
-const mockCreateLoginLink = jest.fn();
+const mockOAuthToken = jest.fn();
 const mockAccountLinksCreate = jest.fn();
 const mockConstructEvent = jest.fn();
 const mockBalanceRetrieve = jest.fn();
@@ -29,7 +29,8 @@ jest.unstable_mockModule('../../src/config/stripe.js', () => {
   return {
     default: {
       checkout: { sessions: { create: mockSessionsCreate, retrieve: jest.fn() } },
-      accounts: { retrieve: mockAccountsRetrieve, create: mockAccountsCreate, update: mockAccountsUpdate, createLoginLink: mockCreateLoginLink },
+      accounts: { retrieve: mockAccountsRetrieve, create: mockAccountsCreate, update: mockAccountsUpdate },
+      oauth: { token: mockOAuthToken },
       accountLinks: { create: mockAccountLinksCreate },
       webhooks: { constructEvent: mockConstructEvent },
       balance: { retrieve: mockBalanceRetrieve },
@@ -135,7 +136,7 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
 
   it('flag on, no account: not_started and the order charges on the platform account', async () => {
     const res = await request(app).get('/admin/settings/payments').set('Authorization', `Bearer ${adminToken}`);
-    expect(res.body.connect).toEqual({ enabled: true, status: 'not_started', account: null });
+    expect(res.body.connect).toEqual({ enabled: true, status: 'not_started', account: null, oauthAvailable: false });
 
     const order = await placeOrder(eventId, tierId, `platform@${TAG}.test`);
     expect(order.status).toBe(201);
@@ -171,7 +172,8 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
       const auth = ['Authorization', `Bearer ${adminToken}`];
       for (const call of [
         request(app).post('/admin/settings/payments/connect/onboard').set(...auth),
-        request(app).post('/admin/settings/payments/connect/login-link').set(...auth),
+        request(app).post('/admin/settings/payments/connect/oauth').set(...auth),
+        request(app).post('/admin/settings/payments/connect/oauth/complete').set(...auth).send({ code: 'ac_x', state: 'x.y' }),
         request(app).post('/admin/settings/payments/connect/sync').set(...auth),
         request(app).patch('/admin/settings/payments/connect/payouts').set(...auth).send({ interval: 'daily' }),
       ]) {
@@ -182,7 +184,8 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
     it('ORGANIZER is refused (403) on every Connect route', async () => {
       const auth = ['Authorization', `Bearer ${organizerToken}`];
       expect((await request(app).post('/admin/settings/payments/connect/onboard').set(...auth)).status).toBe(403);
-      expect((await request(app).post('/admin/settings/payments/connect/login-link').set(...auth)).status).toBe(403);
+      expect((await request(app).post('/admin/settings/payments/connect/oauth').set(...auth)).status).toBe(403);
+      expect((await request(app).post('/admin/settings/payments/connect/oauth/complete').set(...auth).send({ code: 'ac_x', state: 'x.y' })).status).toBe(403);
       expect((await request(app).post('/admin/settings/payments/connect/sync').set(...auth)).status).toBe(403);
       expect((await request(app).patch('/admin/settings/payments/connect/payouts').set(...auth).send({ interval: 'daily' })).status).toBe(403);
     });
@@ -197,7 +200,7 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
       expect(first.body).toEqual({ url: 'https://connect.stripe.com/setup/e/acct_onboard_ct/link' });
       expect(mockAccountsCreate).toHaveBeenCalledTimes(1);
       expect(mockAccountsCreate.mock.calls[0][0]).toMatchObject({
-        controller: { stripe_dashboard: { type: 'express' } },
+        controller: { stripe_dashboard: { type: 'full' }, fees: { payer: 'account' }, losses: { payments: 'stripe' }, requirement_collection: 'stripe' },
         metadata: { organizationId: org.id, mode: 'test' },
       });
 
@@ -209,12 +212,11 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
       const status = await request(app).get('/admin/settings/payments').set(...auth);
       expect(status.body.connect).toMatchObject({ enabled: true, status: 'onboarding', account: { stripeAccountId: 'acct_onboard_ct' } });
 
-      // Before onboarding completes: no login link, no payout settings
-      expect((await request(app).post('/admin/settings/payments/connect/login-link').set(...auth)).status).toBe(409);
+      // Before onboarding completes: no payout settings
       expect((await request(app).patch('/admin/settings/payments/connect/payouts').set(...auth).send({ interval: 'daily' })).status).toBe(409);
     });
 
-    it('sync pulls the account from Stripe; login link and payout settings work once details are submitted', async () => {
+    it('sync pulls the account from Stripe; dashboard link and payout settings work once details are submitted', async () => {
       const auth = ['Authorization', `Bearer ${adminToken}`];
       mockAccountsRetrieve.mockResolvedValueOnce(stripeAccount({ id: 'acct_onboard_ct' }));
       const synced = await request(app).post('/admin/settings/payments/connect/sync').set(...auth);
@@ -222,11 +224,8 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
       expect(synced.body.connect.status).toBe('active');
       expect(synced.body.connect.account.bank).toEqual({ name: 'Wells Fargo', last4: '3544', currency: 'usd' });
 
-      mockCreateLoginLink.mockResolvedValueOnce({ url: 'https://connect.stripe.com/express/acct_onboard_ct/login' });
-      const login = await request(app).post('/admin/settings/payments/connect/login-link').set(...auth);
-      expect(login.status).toBe(200);
-      expect(login.body).toEqual({ url: 'https://connect.stripe.com/express/acct_onboard_ct/login' });
-      expect(mockCreateLoginLink).toHaveBeenCalledWith('acct_onboard_ct');
+      // The organization owns a full-dashboard account: a plain link, no login-link call
+      expect(synced.body.connect.account.dashboardUrl).toBe('https://dashboard.stripe.com/test/dashboard');
 
       mockAccountsUpdate.mockImplementationOnce((id, params) =>
         Promise.resolve(stripeAccount({ id, settings: { payouts: { ...params.settings.payouts } } }))
@@ -240,6 +239,46 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
         settings: { payouts: { schedule: { interval: 'weekly', weekly_anchor: 'friday' }, statement_descriptor: 'CONNECT CT' } },
       });
       expect(payouts.body.connect.account.payouts).toMatchObject({ interval: 'weekly', anchor: 'friday', statementDescriptor: 'CONNECT CT' });
+    });
+
+    it('OAuth: authorize URL needs a client id; completion binds the account to this organization only', async () => {
+      const auth = ['Authorization', `Bearer ${adminToken}`];
+      expect((await request(app).post('/admin/settings/payments/connect/oauth').set(...auth)).status).toBe(404);
+
+      process.env.STRIPE_CONNECT_CLIENT_ID = 'ca_connect_ct';
+      try {
+        const status = await request(app).get('/admin/settings/payments').set('Authorization', `Bearer ${adminBToken}`);
+        expect(status.body.connect.oauthAvailable).toBe(true);
+
+        const start = await request(app).post('/admin/settings/payments/connect/oauth').set('Authorization', `Bearer ${adminBToken}`);
+        expect(start.status).toBe(200);
+        const state = new URL(start.body.url).searchParams.get('state');
+
+        // Org A cannot redeem org B's state
+        const swapped = await request(app).post('/admin/settings/payments/connect/oauth/complete').set(...auth).send({ code: 'ac_ct', state });
+        expect(swapped.status).toBe(400);
+        expect(mockOAuthToken).not.toHaveBeenCalled();
+        expect((await request(app).post('/admin/settings/payments/connect/oauth/complete').set(...auth).send({})).status).toBe(400);
+
+        mockOAuthToken.mockResolvedValueOnce({ stripe_user_id: 'acct_oauth_ct', livemode: false });
+        mockAccountsRetrieve.mockResolvedValueOnce(stripeAccount({ id: 'acct_oauth_ct' }));
+        const done = await request(app)
+          .post('/admin/settings/payments/connect/oauth/complete')
+          .set('Authorization', `Bearer ${adminBToken}`)
+          .send({ code: 'ac_ct', state });
+        expect(done.status).toBe(200);
+        expect(done.body.connect).toMatchObject({ status: 'active', account: { stripeAccountId: 'acct_oauth_ct' } });
+
+        // The same account cannot be attached to a second organization
+        const startA = await request(app).post('/admin/settings/payments/connect/oauth').set(...auth);
+        const stateA = new URL(startA.body.url).searchParams.get('state');
+        mockOAuthToken.mockResolvedValueOnce({ stripe_user_id: 'acct_oauth_ct', livemode: false });
+        const dup = await request(app).post('/admin/settings/payments/connect/oauth/complete').set(...auth).send({ code: 'ac_ct2', state: stateA });
+        expect(dup.status).toBe(409);
+      } finally {
+        delete process.env.STRIPE_CONNECT_CLIENT_ID;
+        await prisma.organizationStripeAccount.deleteMany({ where: { stripeAccountId: 'acct_oauth_ct' } });
+      }
     });
 
     it('PATCH payouts validates the shape and the values', async () => {

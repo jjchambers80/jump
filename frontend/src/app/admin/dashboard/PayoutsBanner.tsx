@@ -14,10 +14,10 @@ import type { ConnectState, PaymentSettingsResponse } from '../settings/payments
 const DISMISS_KEY = 'jump.payoutsBanner.dismissed';
 
 const COPY: Record<ConnectState['status'], { title: string; body: string; cta: string } | null> = {
-  not_started: { title: 'Set up payouts', body: 'Connect a bank account to receive ticket revenue directly.', cta: 'Set up payouts' },
+  not_started: { title: 'Set up payouts', body: 'Connect your Stripe account so payments go straight to it.', cta: 'Set up payouts' },
   onboarding: { title: 'Finish payout setup', body: 'Stripe setup was started but not completed.', cta: 'Continue setup' },
   restricted: { title: 'Payouts need attention', body: 'Stripe needs more information before payouts can continue.', cta: 'Update details' },
-  disconnected: { title: 'Payouts disconnected', body: 'Reconnect your Stripe account to receive payouts.', cta: 'Reconnect' },
+  disconnected: { title: 'Payouts disconnected', body: 'Connect a Stripe account again to take payments.', cta: 'Reconnect' },
   active: null,
 };
 

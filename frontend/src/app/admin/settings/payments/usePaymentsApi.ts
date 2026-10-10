@@ -19,7 +19,9 @@ export function usePaymentsApi() {
       update: (body: UpdatePaymentSettingsBody) => api.patch<PaymentSettings>(`/admin/settings/payments${qs}`, body),
       // Stripe Connect (spec 010 phase 2)
       onboard: () => api.post<{ url: string }>(`/admin/settings/payments/connect/onboard${qs}`, {}),
-      loginLink: () => api.post<{ url: string }>(`/admin/settings/payments/connect/login-link${qs}`, {}),
+      // Spec 047: connect an existing Stripe account with OAuth
+      oauth: () => api.post<{ url: string }>(`/admin/settings/payments/connect/oauth${qs}`, {}),
+      completeOAuth: (body: { code: string; state: string }) => api.post<{ connect: ConnectState }>(`/admin/settings/payments/connect/oauth/complete${qs}`, body),
       sync: () => api.post<{ connect: ConnectState }>(`/admin/settings/payments/connect/sync${qs}`, {}),
       updatePayouts: (body: UpdatePayoutSettingsBody) => api.patch<{ connect: ConnectState }>(`/admin/settings/payments/connect/payouts${qs}`, body),
       // Finance › Payouts: live balance + recent payouts of the connected account

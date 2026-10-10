@@ -11,7 +11,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Landmark } from 'lucide-react';
 import { useOrg } from '@/components/OrgContext';
 import { ExternalLinkIcon, WarningIcon } from '../../settings/icons';
-import { useConnectActions } from '../../settings/payments/useConnectActions';
 import { describeError, usePaymentsApi } from '../../settings/payments/usePaymentsApi';
 import {
   CONNECT_DISABLED,
@@ -19,7 +18,6 @@ import {
   PAYOUT_STATUS,
   describeSchedule,
   formatMoney,
-  type ConnectState,
   type FinancePayoutsResponse,
   type PayoutRow,
 } from '../../settings/payments/types';
@@ -77,11 +75,7 @@ export default function FinancePayoutsPage() {
     load();
   }, [orgLoading, selectedOrgId, load]);
 
-  // "View in Stripe" opens the Express dashboard for the full history.
-  const applyConnect = useCallback((next: ConnectState) => setData((prev) => (prev ? { ...prev, connect: next } : prev)), []);
-  const showError = useCallback((message: string) => setError(message), []);
-  const actions = useConnectActions(applyConnect, showError);
-
+  // "View in Stripe" opens the organization's own Stripe dashboard for the full history.
   const connect = data?.connect ?? CONNECT_DISABLED;
   const account = connect.account;
   const activity = data?.activity ?? null;
@@ -104,10 +98,10 @@ export default function FinancePayoutsPage() {
             </button>
           )}
           {connect.enabled && hasBank && canEdit && account?.detailsSubmitted && (
-            <button type="button" className={secondaryBtn} disabled={actions.busy !== null} onClick={actions.openDashboard} data-testid="finance-payouts-stripe">
-              {actions.busy === 'login' ? 'Opening…' : 'View in Stripe'}
+            <a href={account.dashboardUrl} target="_blank" rel="noreferrer" className={secondaryBtn} data-testid="finance-payouts-stripe">
+              View in Stripe
               <ExternalLinkIcon />
-            </button>
+            </a>
           )}
         </div>
       </div>
