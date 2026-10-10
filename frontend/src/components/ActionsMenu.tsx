@@ -31,7 +31,8 @@ export default function ActionsMenu({ label, items, align = 'right' }: { label: 
       if (!menuRef.current?.contains(e.target as Node) && !buttonRef.current?.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener('mousedown', onDocClick);
-    menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]:not([disabled])')?.focus();
+    // Every item disabled (e.g. a locked row): focus the menu itself so Escape still closes it.
+    (menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]:not([disabled])') ?? menuRef.current)?.focus();
     return () => document.removeEventListener('mousedown', onDocClick);
   }, [open]);
 
@@ -75,6 +76,7 @@ export default function ActionsMenu({ label, items, align = 'right' }: { label: 
           ref={menuRef}
           role="menu"
           aria-label={label}
+          tabIndex={-1}
           onKeyDown={onMenuKey}
           className={`absolute z-30 mt-1 min-w-[12rem] overflow-hidden rounded-md border border-gray-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800 ${
             align === 'right' ? 'right-0' : 'left-0'

@@ -1021,6 +1021,23 @@ export interface SystemOrganizationPage {
 /** PENDING = signup never finished, whatever the status. */
 export type SystemOrgFilter = SystemOrgStatus | 'PENDING';
 
+export interface SystemUser {
+  id: string;
+  email: string;
+  name: string | null;
+  role: 'UNASSIGNED' | 'ORGANIZER' | 'ADMIN' | 'SYSTEM_ADMIN';
+  isActive: boolean;
+  organizations: Array<{ id: string; name: string; role: string }>;
+  createdAt: string;
+}
+
+export interface SystemUserListParams {
+  q?: string;
+  role?: SystemUser['role'];
+  status?: 'ACTIVE' | 'INACTIVE';
+  page?: number;
+}
+
 export const systemAdminApi = {
   overview: () => api.get<SystemOverview>('/admin/system/overview'),
   organizations: (params: { q?: string; status?: SystemOrgFilter; page?: number } = {}) => {
@@ -1034,6 +1051,17 @@ export const systemAdminApi = {
     api.get<{ organization: SystemOrganization; members: OrgMember[] }>(`/admin/system/organizations/${id}`),
   setOrganizationStatus: (id: string, status: SystemOrgStatus) =>
     api.patch<SystemOrganization>(`/admin/system/organizations/${id}/status`, { status }),
+  users: (params: SystemUserListParams = {}) => {
+    const qs = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) if (value) qs.set(key, String(value));
+    return api.get<{ users: SystemUser[]; pagination: { page: number; limit: number; total: number; totalPages: number } }>(
+      `/admin/system/users${qs.size ? `?${qs}` : ''}`
+    );
+  },
+  inviteAdmin: (body: { email: string; name?: string }) =>
+    api.post<{ user: SystemUser; promoted: boolean; emailSent: boolean }>('/admin/system/users/invite', body),
+  updateUser: (id: string, body: { role?: 'SYSTEM_ADMIN' | 'UNASSIGNED'; isActive?: boolean }) =>
+    api.patch<SystemUser>(`/admin/system/users/${id}`, body),
 };
 
 export const api = new ApiClient();

@@ -93,10 +93,11 @@ const navItems: NavItem[] = [
 ];
 
 // System administration (SYSTEM_ADMIN, platform-wide). Organizations and
-// Users join this list as their pages land.
+// Platform-wide pages; none of them read the active org.
 const systemNavItems: NavItem[] = [
   { label: 'Overview', href: '/admin/system', icon: ShieldCheck },
   { label: 'Organizations', href: '/admin/system/organizations', icon: Store },
+  { label: 'Users', href: '/admin/system/users', icon: Users },
   { label: 'Settings', href: '/admin/system/settings', icon: Settings },
 ];
 
