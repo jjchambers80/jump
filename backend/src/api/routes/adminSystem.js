@@ -11,9 +11,12 @@ import { makeLimiter, LIMITS } from '../../middleware/rateLimit.js';
 import systemAdminService from '../../services/SystemAdminService.js';
 import organizationService from '../../services/OrganizationService.js';
 import userService from '../../services/UserService.js';
+import permissionService from '../../services/PermissionService.js';
+import securityEventService from '../../services/SecurityEventService.js';
 import {
   validateOrganizationListQuery,
   validateOrganizationStatus,
+  validateRolesUpdate,
   validateSystemAdminInvite,
   validateSystemUserUpdate,
   validateUserListQuery,
@@ -61,6 +64,21 @@ router.post('/users/invite', requireRecentAuth, inviteLimiter, validateSystemAdm
 
 router.patch('/users/:id', requireRecentAuth, validateSystemUserUpdate, wrap(async (req, res) => {
   res.json(await systemAdminService.updateUser(req.user, req.params.id, req.body, req));
+}));
+
+// Roles & permissions: what ADMIN / ORGANIZER members may see and do on every
+// organization, and features turned off platform-wide (PermissionService).
+router.get('/roles', wrap(async (req, res) => {
+  res.json(await permissionService.matrix());
+}));
+
+router.put('/roles', requireRecentAuth, validateRolesUpdate, wrap(async (req, res) => {
+  const matrix = await permissionService.save(req.body, req.user.id);
+  await securityEventService.record(req.user.id, 'ROLE_PERMISSIONS_CHANGED', {
+    req,
+    meta: { roles: req.body.roles, disabled: matrix.disabled },
+  });
+  res.json(matrix);
 }));
 
 export default router;

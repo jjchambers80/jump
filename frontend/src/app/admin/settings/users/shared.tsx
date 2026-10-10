@@ -6,8 +6,9 @@ import SettingsNav from '../SettingsNav';
 export const ROLE_LABEL: Record<MemberRole, string> = { ADMIN: 'Admin', ORGANIZER: 'Organizer' };
 
 export const ROLE_HELP: Record<MemberRole, string> = {
+  // Defaults: System administration › Roles can change what each role may do.
   ADMIN: 'Full access, including settings, payments, refunds and users.',
-  ORGANIZER: "Events, orders, customers and check-in. Can't change settings, issue refunds or manage users.",
+  ORGANIZER: "Events, orders, customers and check-in. By default can't change settings, issue refunds or manage users.",
 };
 
 const STATUS: Record<MemberStatus, { label: string; className: string }> = {

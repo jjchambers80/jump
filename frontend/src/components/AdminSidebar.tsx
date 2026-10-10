@@ -18,6 +18,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useOrg, isHiddenPath } from './OrgContext';
 import {
+  KeyRound,
   ArrowLeft,
   CalendarDays,
   ChartColumn,
@@ -96,6 +97,7 @@ const systemNavItems: NavItem[] = [
   { label: 'Overview', href: '/admin/system', icon: ShieldCheck },
   { label: 'Organizations', href: '/admin/system/organizations', icon: Store },
   { label: 'Users', href: '/admin/system/users', icon: Users },
+  { label: 'Roles', href: '/admin/system/roles', icon: KeyRound },
   { label: 'Settings', href: '/admin/system/settings', icon: Settings },
 ];
 
