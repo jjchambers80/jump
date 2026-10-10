@@ -13,6 +13,7 @@ import WebhookEventService, { ENDPOINTS } from '../../services/WebhookEventServi
 import { stripeMode } from '../../services/PaymentSettingsService.js';
 import DisputeService from '../../services/DisputeService.js';
 import logger from '../../utils/logger.js';
+import auditLogService from '../../audit/AuditLogService.js';
 
 const router = express.Router();
 
@@ -67,6 +68,8 @@ function readStripeEvent(req, secretName, label) {
  * webhook ledger. Returns null when the caller has already answered.
  */
 async function verifyAndClaim(req, res, { secretName, label, endpoint }) {
+  // Audit trail (spec 048): whatever this delivery changes, Stripe did it.
+  auditLogService.markSystemActor(`webhook:stripe:${endpoint}`.toLowerCase(), 'Stripe');
   let event;
   try {
     event = readStripeEvent(req, secretName, label);

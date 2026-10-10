@@ -903,6 +903,74 @@ export interface AgentPlatformStats {
   currentTokens: number;
 }
 
+// Spec 048: Settings › Activity — the organization's audit trail
+export type AuditActorType = 'USER' | 'DEVELOPER_TOKEN' | 'AGENT' | 'SYSTEM';
+export type AuditOperation = 'CREATE' | 'UPDATE' | 'DELETE' | 'BULK_CREATE' | 'BULK_UPDATE' | 'BULK_DELETE' | 'EXPORT' | 'OTHER';
+
+export interface AuditLogEntry {
+  id: string;
+  createdAt: string;
+  actor: {
+    type: AuditActorType;
+    userId: string | null;
+    label: string;
+    role: string | null;
+    viaPlatformAdmin: boolean;
+    clientName: string | null;
+  };
+  action: string;
+  operation: AuditOperation;
+  feature: string;
+  entityType: string;
+  entityId: string | null;
+  entityLabel: string | null;
+  /** { field: [before, after] }; secret fields read "[changed]". */
+  changes: Record<string, [unknown, unknown]> | null;
+  meta: Record<string, unknown> | null;
+  source: string;
+  requestId: string | null;
+  method: string | null;
+  route: string | null;
+  location: string | null;
+  device: string | null;
+}
+
+export interface AuditLogFilters {
+  q?: string;
+  feature?: string;
+  actorUserId?: string;
+  actorType?: AuditActorType;
+  operation?: AuditOperation;
+  entityType?: string;
+  entityId?: string;
+  from?: string;
+  to?: string;
+}
+
+export interface AuditLogResponse {
+  total: number;
+  offset: number;
+  limit: number;
+  rows: AuditLogEntry[];
+  facets: { actors: { userId: string | null; label: string; type: AuditActorType }[]; features: string[] };
+  retentionDays: number;
+}
+
+const auditQuery = (params: AuditLogFilters & { offset?: number; limit?: number }) => {
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== '' && value !== 0) qs.set(key, String(value));
+  }
+  return qs.toString();
+};
+
+export const auditLogApi = {
+  list: (params: AuditLogFilters & { offset?: number; limit?: number }) =>
+    api.get<AuditLogResponse>(`/admin/audit-log?${auditQuery(params)}`),
+  exportCsv: (filters: AuditLogFilters) =>
+    downloadCsv(`/admin/audit-log/export.csv?${auditQuery(filters)}`, 'activity-log.csv'),
+};
+
 // API methods for agent access
 export const agentAccessApi = {
   // Org-level (admin)

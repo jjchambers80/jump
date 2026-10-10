@@ -65,6 +65,8 @@ import { PAID_ORDER_STATUSES } from '../../services/paidStatuses.js';
 import { activeOrgFor } from './adminScope.js';
 import agentAccessService from '../../services/AgentAccessService.js';
 import dashboardService from '../../services/DashboardService.js';
+import auditLogService from '../../audit/AuditLogService.js';
+import { validateAuditLogQuery } from '../validators/auditLogValidators.js';
 
 const router = express.Router();
 
@@ -2002,6 +2004,47 @@ router.get('/agent-access/audit-log', requireAdmin, async (req, res, next) => {
       limit: Math.min(parseInt(req.query.limit, 10) || 50, 200),
     }));
   } catch (error) {
+    next(error);
+  }
+});
+
+// ── Activity log (spec 048) — the organization's audit trail ──
+
+// Store ADMINs (by membership in the active org) and SYSTEM_ADMIN.
+async function auditAdminOrg(req) {
+  const organizationId = await activeOrgFor(req);
+  if (req.user.role !== 'SYSTEM_ADMIN') {
+    const membership = await prisma.organizationMember.findUnique({
+      where: { userId_organizationId: { userId: req.user.id, organizationId } },
+      select: { role: true },
+    });
+    if (membership?.role !== 'ADMIN') throw new ForbiddenError('Only an Admin of this store can view the activity log');
+  }
+  return organizationId;
+}
+
+/** GET /admin/audit-log — filtered, paged activity log for the active org. */
+router.get('/audit-log', validateAuditLogQuery, async (req, res, next) => {
+  try {
+    res.json(await auditLogService.list(await auditAdminOrg(req), req.auditQuery));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** GET /admin/audit-log/export.csv — the same filters, every row. Logged as an export itself. */
+router.get('/audit-log/export.csv', validateAuditLogQuery, async (req, res, next) => {
+  try {
+    const organizationId = await auditAdminOrg(req);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="activity-log-${new Date().toISOString().slice(0, 10)}.csv"`);
+    await auditLogService.exportCsv(organizationId, req.auditQuery, (chunk) => res.write(chunk));
+    res.end();
+  } catch (error) {
+    if (res.headersSent) {
+      res.end();
+      return;
+    }
     next(error);
   }
 });
