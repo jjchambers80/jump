@@ -1,7 +1,8 @@
 // Spec 049 card B: the themed render inherits the organization brand where the
 // theme leaves a value empty (theme values win), the render organization
 // carries the brand fields the editor canvas needs, and /public/meta resolves
-// the favicon: theme Logo › Favicon ?? square logo ?? null.
+// the favicon: square logo ?? null (a theme favicon stored before the
+// one-logo rule is ignored).
 
 import { createHash } from 'crypto';
 import { afterAll, beforeAll, describe, expect, it } from '@jest/globals';
@@ -69,10 +70,10 @@ describe('theme inherits the organization brand (spec 049)', () => {
     expect(theme.settings.social).toEqual({ instagram: 'https://instagram.com/theme' });
   });
 
-  it('/public/meta favicon: theme favicon, else the square logo', async () => {
+  it('/public/meta favicon is the square logo, even when an old theme stored a favicon', async () => {
     const themedMeta = await request(app).get(`/organizations/${themed.slug}/public/meta`);
     expect(themedMeta.status).toBe(200);
-    expect(themedMeta.body.faviconUrl).toMatch(new RegExp(`/files/${iconFile.id}/`));
+    expect(themedMeta.body.faviconUrl).toBe(BRAND.squareLogoUrl);
     const plainMeta = await request(app).get(`/organizations/${plain.slug}/public/meta`);
     expect(plainMeta.body.faviconUrl).toBe(BRAND.squareLogoUrl);
   });

@@ -3,6 +3,7 @@
 // color can reach a style. Card 038F wires the remaining groups; spec 049
 // card C adds typography (fonts come from theme/fonts.ts).
 
+import { mobileLogoWidth } from '@jump/theme';
 import { BRAND_DEFAULTS, bestForeground } from '@/lib/color';
 import type { ThemeSettings } from './types';
 
@@ -26,8 +27,8 @@ export function settingsVars(settings: ThemeSettings): Record<string, string> {
   return {
     '--theme-page-width': `${num(layout.pageWidth, 1280)}px`,
     '--theme-section-gap': `${num(layout.sectionSpacing, 0)}px`,
-    '--theme-logo-width': `${num(logo.desktopWidth, 120)}px`,
-    '--theme-logo-width-mobile': `${num(logo.mobileWidth, 90)}px`,
+    '--theme-logo-width': `${num(logo.width, 120)}px`,
+    '--theme-logo-width-mobile': `${mobileLogoWidth(logo.width)}px`,
     '--theme-button-radius': `${radius}px`,
     // One font for everything in the theme: header, body, footer (globals.css).
     '--theme-font': fontStack(type.font ?? 'inter'),

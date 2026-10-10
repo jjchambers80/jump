@@ -6,7 +6,7 @@
 // Null when the organization is not on themes: those pages use the defaults.
 
 import { prisma } from '@jump/db';
-import { DEFAULT_PRESET_KEY, getPreset, resolveSettings } from '@jump/theme';
+import { DEFAULT_PRESET_KEY, getPreset, mobileLogoWidth, resolveSettings } from '@jump/theme';
 import storeFileService from './StoreFileService.js';
 
 /** Master switch (contracts C10). Off: every org renders the legacy storefront. */
@@ -34,18 +34,12 @@ function storeFileRow(organizationId, fileId) {
 }
 
 /**
- * Spec 049 favicon: the live theme's Logo › Favicon, else the organization's
- * square logo, else null (the platform default). Organizations not on themes
- * use the square logo only.
+ * Spec 049 favicon: the organization's square logo (Settings › Brand), else
+ * null (the platform default). Themes do not override it.
  *
- * @param {{ id: string, themesEnabled?: boolean, squareLogoUrl?: string | null }} organization
+ * @param {{ squareLogoUrl?: string | null }} organization
  */
-export async function faviconUrlFor(organization) {
-  if (organization?.id && themesEnabledFor(organization)) {
-    const settings = await mainThemeSettings(organization.id);
-    const row = await storeFileRow(organization.id, settings.logo?.favicon?.fileId);
-    if (row) return storeFileService.url(row);
-  }
+export function faviconUrlFor(organization) {
   return organization?.squareLogoUrl ?? null;
 }
 
@@ -65,8 +59,8 @@ export async function storefrontLogoFor(organization) {
   const url = row ? storeFileService.url(row) : null;
   return {
     url: url && row.width && row.height ? `${url}${url.includes('?') ? '&' : '?'}w=${row.width}&h=${row.height}` : url,
-    desktopWidth: num(logo.desktopWidth, 120),
-    mobileWidth: num(logo.mobileWidth, 90),
+    desktopWidth: num(logo.width, 120),
+    mobileWidth: mobileLogoWidth(logo.width),
     // Same rule as the theme frame's --theme-button-radius (frontend theme/settingsCss.ts).
     buttonRadius: buttons.shape === 'pill' ? 9999 : buttons.shape === 'square' ? 0 : num(buttons.radius, 8),
   };

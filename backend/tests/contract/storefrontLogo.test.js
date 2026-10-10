@@ -49,7 +49,7 @@ describe('storefront logo in payloads', () => {
         presetKey: 'eventimus-default',
         presetVersion: '1.0',
         role: 'MAIN',
-        settings: { logo: { desktopWidth: 180, mobileWidth: 110, image: { fileId: logoFile.id } }, buttons: { shape: 'pill' } },
+        settings: { logo: { width: 180, image: { fileId: logoFile.id } }, buttons: { shape: 'pill' } },
       },
     });
   });
@@ -65,7 +65,7 @@ describe('storefront logo in payloads', () => {
     expect(res.body.organizationStorefrontLogo).toEqual({
       url: expect.stringMatching(/\?w=300&h=100$/),
       desktopWidth: 180,
-      mobileWidth: 110,
+      mobileWidth: 135,
       buttonRadius: 9999,
     });
   });
@@ -79,7 +79,7 @@ describe('storefront logo in payloads', () => {
   it('GET /organizations/:id/public carries it for account pages', async () => {
     const res = await request(app).get(`/organizations/${themed.slug}/public`);
     expect(res.status).toBe(200);
-    expect(res.body.organization.storefrontLogo).toMatchObject({ desktopWidth: 180, mobileWidth: 110 });
+    expect(res.body.organization.storefrontLogo).toMatchObject({ desktopWidth: 180, mobileWidth: 135 });
   });
 
   it('the order detail carries it for the confirmation page', async () => {
@@ -88,6 +88,6 @@ describe('storefront logo in payloads', () => {
       data: { organizationId: contact.organizationId, contactId: contact.id, eventId: themedEvent.id, quantity: 0, totalAmount: 0, orderRef: `${TAG}`.slice(0, 20) },
     });
     const detail = await orderService.getOrderById(order.id);
-    expect(detail.event.organizationStorefrontLogo).toMatchObject({ desktopWidth: 180, mobileWidth: 110 });
+    expect(detail.event.organizationStorefrontLogo).toMatchObject({ desktopWidth: 180, mobileWidth: 135 });
   });
 });

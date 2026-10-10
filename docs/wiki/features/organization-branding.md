@@ -70,7 +70,7 @@ Uploads go through `uploadImage` (multer, field `logo`) → `ImageService.proces
 - `withBrand(resolved, organization)` (`@jump/theme`, `packages/theme/src/settings.js`) fills empty theme values at render time: `brand.headline` ← `slogan`, `brand.description` ← `shortDescription`, `social.<network>` ← `socialLinks.<network>`. A non-empty theme value wins. Stored theme settings stay partial overrides; nothing is written.
 - Applied by `ThemeService.render` (live storefront and draft previews, which render through it) and by the editor canvas (`ThemeEditor` metadata), so the preview matches live. `GET /admin/themes/:id` `resolvedSettings` stays the theme's own values, so a settings form never saves inherited values back into the theme. The render `organization` (and `previewData`'s) carries `brandSecondaryColor`, `slogan`, `shortDescription`, `socialLinks`, `squareLogoUrl`.
 - Scheme accent `brand-secondary` (accent slot only): `ThemeScope` sets `--brand-secondary`, `-hover`, `-fg`, `-link-light`, `-link-dark` from `brandSecondaryColor` (else `brandColor`) via `secondaryCssVars` (same math as `brandCssVars`), and `schemeCss` points the scheme's `--brand*` tokens at them, with the platform blue as the fallback.
-- Favicon: `GET /organizations/:id/public/meta` returns `faviconUrl` = live theme `logo.favicon` (orgs on themes) ?? `squareLogoUrl` ?? `null` (`faviconUrlFor` in `storefrontLogo.js`). `app/organizations/[orgId]/layout.tsx` emits it as Next `icons` metadata for every storefront page under the org (custom domains too); `null` keeps the platform default. Event, checkout and confirmation pages outside `/organizations/[orgId]` keep the platform icon.
+- Favicon: `GET /organizations/:id/public/meta` returns `faviconUrl` = `squareLogoUrl` ?? `null` (themes do not override the favicon) (`faviconUrlFor` in `storefrontLogo.js`). `app/organizations/[orgId]/layout.tsx` emits it as Next `icons` metadata for every storefront page under the org (custom domains too); `null` keeps the platform default. Event, checkout and confirmation pages outside `/organizations/[orgId]` keep the platform icon.
 - `FooterSection` is unchanged: its logo is still the organization logo.
 
 ## API Endpoints
@@ -78,7 +78,7 @@ Uploads go through `uploadImage` (multer, field `logo`) → `ImageService.proces
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | PATCH | `/organizations/:id` | Admin + org ownership (SYSTEM_ADMIN bypass) | Update `name`, `status`, `brandColor`, `brandSecondaryColor` (hex or `null`), `themeMode`, `slogan`, `shortDescription`, `socialLinks` |
-| GET | `/organizations/:id/public/meta` | None | Storefront `<title>` / description / sharing image, plus `faviconUrl` (theme favicon ?? square logo ?? `null`) |
+| GET | `/organizations/:id/public/meta` | None | Storefront `<title>` / description / sharing image, plus `faviconUrl` (square logo ?? `null`) |
 | GET | `/organizations/:id/public` | None | `{ organization: { id, name, logoUrl, coverUrl, brandColor, squareLogoUrl, brandSecondaryColor, slogan, shortDescription, socialLinks, … }, events }`; the public pages/blog payloads carry the same identity |
 | POST | `/organizations/:id/square-logo` | Admin + org ownership | Upload the square logo (multipart `logo`) |
 | DELETE | `/organizations/:id/square-logo` | Admin + org ownership | Remove the square logo |

@@ -45,7 +45,7 @@ export function articleMetadata(input: {
 
 /**
  * Spec 049 favicon for every storefront page of an organization: the backend
- * resolves theme Logo › Favicon ?? square logo (`/public/meta` faviconUrl).
+ * resolves the square logo (`/public/meta` faviconUrl).
  * None: no `icons`, so the platform default stays.
  */
 export function faviconMetadata(faviconUrl: string | null | undefined): Metadata {

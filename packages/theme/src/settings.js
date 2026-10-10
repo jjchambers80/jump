@@ -35,10 +35,10 @@ export const SETTINGS_GROUPS = {
   logo: {
     label: 'Logo',
     fields: {
+      // One size; phones get three quarters of it (mobileLogoWidth). The
+      // favicon is always the square logo from Settings › Brand.
       image: image('Logo (defaults to the organization logo)'),
-      desktopWidth: range('Desktop logo width', 50, 300, { unit: 'px', default: 120 }),
-      mobileWidth: range('Mobile logo width', 30, 150, { unit: 'px', default: 90 }),
-      favicon: image('Favicon'),
+      width: range('Logo size', 50, 300, { unit: 'px', default: 120 }),
     },
   },
   colors: { label: 'Colors', fields: {} }, // schemes: validated by checkSchemes
@@ -139,6 +139,23 @@ export function normalizeTypography(values) {
   return out;
 }
 
+/** Logo stored before the one-size rule: `width` ← desktop width; mobile width and favicon dropped. */
+export function normalizeLogo(values) {
+  if (!isPlainObject(values) || !['desktopWidth', 'mobileWidth', 'favicon'].some((k) => k in values)) return values;
+  const { desktopWidth, mobileWidth: _m, favicon: _f, ...out } = values;
+  if (out.width === undefined && desktopWidth !== undefined) out.width = desktopWidth;
+  return out;
+}
+
+/** Phone logo width from the one logo size (120 → 90, the old defaults), within 30–150px. */
+export function mobileLogoWidth(width) {
+  const w = typeof width === 'number' && Number.isFinite(width) ? width : 120;
+  return Math.min(150, Math.max(30, Math.round(w * 0.75)));
+}
+
+const NORMALIZERS = { typography: normalizeTypography, logo: normalizeLogo };
+const normalizeGroup = (group, values) => (NORMALIZERS[group] ? NORMALIZERS[group](values) : values);
+
 /**
  * Scheme color slots: `auto` follows the page's light/dark tokens, `brand` /
  * `brand-secondary` (accent only) the org brand colors. Three on purpose
@@ -212,7 +229,7 @@ export function validateSettings(settings) {
       out.colors = { schemes: checkSchemes(values.schemes, errors) };
       continue;
     }
-    const checked = checkFields(def.fields, group === 'typography' ? normalizeTypography(values) : values, { schemeIds }, group);
+    const checked = checkFields(def.fields, normalizeGroup(group, values), { schemeIds }, group);
     Object.assign(errors, checked.errors);
     out[group] = checked.value;
   }
@@ -234,7 +251,7 @@ export function resolveSettings(stored, presetSettings) {
   const base = { ...settingsDefaults(), ...(presetSettings ?? {}) };
   const out = {};
   for (const group of new Set([...Object.keys(base), ...Object.keys(stored ?? {})])) {
-    const own = group === 'typography' ? normalizeTypography(stored?.[group]) : stored?.[group];
+    const own = normalizeGroup(group, stored?.[group]);
     out[group] = { ...(base[group] ?? {}), ...(own ?? {}) };
   }
   return out;

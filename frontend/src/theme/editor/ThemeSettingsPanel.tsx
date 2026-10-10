@@ -34,7 +34,6 @@ const EMPTY_HINTS: Record<string, JSX.Element> = {
       </a>
     </>
   ),
-  'logo.favicon': <>Defaults to your square logo.</>,
 };
 
 function SettingField({ name, spec, value, onChange }: { name: string; spec: FieldSpec; value: any; onChange: (v: unknown) => void }) {

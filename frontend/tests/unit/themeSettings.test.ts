@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getPreset, normalizeTypography, resolveSettings, settingsDefaults, validateSettings } from '@jump/theme';
+import { getPreset, mobileLogoWidth, normalizeLogo, normalizeTypography, resolveSettings, settingsDefaults, validateSettings } from '@jump/theme';
 import { fontStack, settingsVars } from '@/theme/settingsCss';
 import { describeSaveError, describeSettingsError } from '@/theme/editor/errors';
 import { newScheme, nextSchemeId, resetGroup, schemesOf, setSetting } from '@/theme/editor/settingsDraft';
@@ -17,6 +17,14 @@ describe('theme settings → CSS variables (spec 049 card C)', () => {
     expect(settingsVars(settingsDefaults() as any)['--theme-font']).toBe(fontStack('inter'));
   });
 
+  it('one logo size: old desktop width folds in, mobile width and favicon drop, phones get 3/4', () => {
+    expect(normalizeLogo({ desktopWidth: 180, mobileWidth: 110, favicon: { fileId: 'f' } })).toEqual({ width: 180 });
+    expect(validateSettings({ logo: { desktopWidth: 180, favicon: { fileId: 'f' } } })).toEqual({ value: { logo: { width: 180 } }, errors: {} });
+    expect(settingsVars({ logo: { width: 200 } })).toMatchObject({ '--theme-logo-width': '200px', '--theme-logo-width-mobile': '150px' });
+    expect(settingsVars({})).toMatchObject({ '--theme-logo-width': '120px', '--theme-logo-width-mobile': '90px' });
+    expect(mobileLogoWidth(50)).toBe(38);
+  });
+
   it('folds the old heading/body keys into the one font', () => {
     const old = { headingFont: 'oswald', bodyFont: 'lora', headingScale: 120, headingCase: 'uppercase', letterSpacing: 'wide' };
     expect(normalizeTypography(old)).toEqual({ font: 'lora' });
@@ -28,9 +36,9 @@ describe('theme settings → CSS variables (spec 049 card C)', () => {
 
 describe('theme settings draft', () => {
   it('sets one key and resets a whole group to the theme default', () => {
-    const stored = setSetting({ logo: { desktopWidth: 200 } }, 'typography', 'font', 'oswald');
-    expect(stored).toEqual({ logo: { desktopWidth: 200 }, typography: { font: 'oswald' } });
-    expect(resetGroup(stored, 'typography')).toEqual({ logo: { desktopWidth: 200 } });
+    const stored = setSetting({ logo: { width: 200 } }, 'typography', 'font', 'oswald');
+    expect(stored).toEqual({ logo: { width: 200 }, typography: { font: 'oswald' } });
+    expect(resetGroup(stored, 'typography')).toEqual({ logo: { width: 200 } });
   });
 
   it('adds and duplicates schemes with free ids, valid for the server', () => {
