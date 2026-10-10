@@ -120,7 +120,7 @@ test('invite asks for step-up, posts the email and announces success', async ({ 
   await page.getByRole('button', { name: 'Invite system admin' }).click();
   const dialog = page.getByRole('dialog', { name: 'Invite system admin' });
   await expect(dialog).toContainText('full access to every organization');
-  await expect(dialog).toContainText('two-step');
+  await expect(dialog).toContainText('leaves their organizations');
   await dialog.getByLabel('Email').fill('new@test.com');
   await dialog.getByRole('button', { name: 'Send invite' }).click();
 

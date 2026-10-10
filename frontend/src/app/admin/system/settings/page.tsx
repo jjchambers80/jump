@@ -74,7 +74,7 @@ function PlatformSettingsPage() {
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
       <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Settings</h1>
       <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">
-        Platform-wide settings. Changes here affect all organizations on Jump.
+        Platform-wide settings. Changes here affect all organizations on Eventimus.
       </p>
       {error && (
         <p role="alert" className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">

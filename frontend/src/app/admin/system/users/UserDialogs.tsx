@@ -94,8 +94,8 @@ export function InviteDialog({
     >
       <div className="space-y-5">
         <p className="text-sm text-gray-700 dark:text-slate-300">
-          A system admin has full access to every organization on the platform. They must set up two-step authentication
-          when they first sign in. Someone who already has an account is promoted and leaves their organizations.
+          A system admin has full access to every organization on the platform. Someone who already has an account is
+          promoted and leaves their organizations.
         </p>
         {error && (
           <div role="alert" className={formAlertClass}>
@@ -156,7 +156,7 @@ function Explanation({ action, user }: { action: UserAction; user: SystemUser })
     return (
       <>
         <p>
-          {who} will get full access to every organization on the platform and must set up two-step authentication.
+          {who} will get full access to every organization on the platform.
         </p>
         {user.organizations.length > 0 ? (
           <>

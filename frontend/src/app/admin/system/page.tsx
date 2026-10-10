@@ -81,7 +81,7 @@ function RecentSignups({ signups }: { signups: NonNullable<SystemOverview['recen
         </ul>
       ) : signups.length === 0 ? (
         <p className="px-4 py-8 text-center text-sm text-gray-500 dark:text-slate-400 sm:px-5">
-          No organizations have signed up yet.
+          No signups yet. Organizations created before self-serve signup are not listed here.
         </p>
       ) : (
         <ul className="divide-y divide-gray-200 dark:divide-slate-700">
