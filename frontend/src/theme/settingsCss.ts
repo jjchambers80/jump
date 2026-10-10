@@ -30,8 +30,9 @@ export function settingsVars(settings: ThemeSettings): Record<string, string> {
     '--theme-logo-width': `${num(logo.width, 120)}px`,
     '--theme-logo-width-mobile': `${mobileLogoWidth(logo.width)}px`,
     '--theme-button-radius': `${radius}px`,
-    // One font for everything in the theme: header, body, footer (globals.css).
-    '--theme-font': fontStack(type.font ?? 'inter'),
+    // Body font for everything in the theme, heading font for h1–h6 (globals.css).
+    '--theme-font': fontStack(type.bodyFont ?? 'inter'),
+    '--theme-heading-font': fontStack(type.headingFont ?? 'inter'),
   };
 }
 

@@ -127,7 +127,7 @@ export default function HeroSection({
     <div className={`${centered ? 'mx-auto text-center' : ''} max-w-2xl ${onImage ? 'lg:max-w-6xl' : ''} ${bottom ? 'max-sm:flex max-sm:w-full max-sm:flex-1 max-sm:flex-col' : ''}`}>
       <div className={bottom ? 'max-sm:my-auto' : undefined}>
       {heading && (
-        <Heading id={headingId} style={retro ? { ...shadow, fontFamily: 'monospace' } : undefined} className={`text-4xl font-bold tracking-tight sm:text-5xl ${onImage ? 'lg:text-[4rem]' : ''} ${retro ? 'uppercase' : ''} ${onImage ? 'text-white' : 'text-gray-900 dark:text-slate-100'}`}>
+        <Heading id={headingId} style={shadow} className={`text-4xl font-bold tracking-tight sm:text-5xl ${onImage ? 'lg:text-[4rem]' : ''} ${retro ? 'uppercase' : ''} ${onImage ? 'text-white' : 'text-gray-900 dark:text-slate-100'}`}>
           {heading}
         </Heading>
       )}

@@ -49,7 +49,7 @@ const SLOT_LABELS: Record<string, string> = { foreground: 'Text' };
 
 /**
  * Settings validator paths: "colors.schemes[1].accent" → "Theme settings ›
- * Colors › Inverse › Accent", "typography.font" → "… › Typography › Font".
+ * Colors › Inverse › Accent", "typography.headingFont" → "… › Typography › Heading font".
  */
 export function describeSettingsError(path: string, message: string, settings?: Record<string, any> | null) {
   const parts = ['Theme settings'];

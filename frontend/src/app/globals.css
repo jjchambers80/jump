@@ -43,12 +43,16 @@
 }
 
 /*
- * Theme typography (spec 049): one font for the whole theme. settingsVars
- * sets --theme-font, ThemeScope marks the scope, and every element inside
- * (header, sections, footer, form controls via preflight) inherits it.
+ * Theme typography (spec 049): two fonts, each for the whole theme. The body
+ * font is inherited by everything in the scope (header, sections, footer,
+ * form controls via preflight); headings use the heading font.
  */
 :where([data-theme-type]) {
   font-family: var(--theme-font);
+}
+
+:where([data-theme-type]) :where(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--theme-heading-font, var(--theme-font));
 }
 
 body {

@@ -42,12 +42,13 @@ export const SETTINGS_GROUPS = {
     },
   },
   colors: { label: 'Colors', fields: {} }, // schemes: validated by checkSchemes
-  // One font family for the whole theme (owner rule: theme settings stay
-  // simple, no per-element picks). Older heading/body keys fold into it.
+  // Two fonts, each for the whole theme: headings (h1–h6) and everything
+  // else. No sizes, case or spacing (owner rule: theme settings stay simple).
   typography: {
     label: 'Typography',
     fields: {
-      font: select('Font', FONTS, 'inter'),
+      headingFont: select('Heading font', FONTS, 'inter'),
+      bodyFont: select('Body font', FONTS, 'inter'),
     },
   },
   layout: {
@@ -124,18 +125,20 @@ export const SETTINGS_GROUPS = {
   },
 };
 
-const LEGACY_TYPOGRAPHY = ['headingFont', 'bodyFont', 'headingScale', 'bodyScale', 'headingCase', 'letterSpacing'];
+const LEGACY_TYPOGRAPHY = ['font', 'headingScale', 'bodyScale', 'headingCase', 'letterSpacing'];
 
 /**
- * Typography stored before the single-font rule: `font` ← body font, else
- * heading font; the other old keys are dropped. Keeps old revisions,
- * settings.json uploads and CLI pushes valid.
+ * Typography stored under older rules: the one-font `font` fills whichever
+ * of heading/body font is missing; sizes, case and spacing are dropped.
+ * Keeps old revisions, settings.json uploads and CLI pushes valid.
  */
 export function normalizeTypography(values) {
   if (!isPlainObject(values) || !LEGACY_TYPOGRAPHY.some((k) => k in values)) return values;
   const out = Object.fromEntries(Object.entries(values).filter(([k]) => !LEGACY_TYPOGRAPHY.includes(k)));
-  const font = values.font ?? values.bodyFont ?? values.headingFont;
-  if (font !== undefined) out.font = font;
+  if (values.font !== undefined) {
+    out.headingFont ??= values.font;
+    out.bodyFont ??= values.font;
+  }
   return out;
 }
 

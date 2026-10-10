@@ -7,13 +7,14 @@ import { newScheme, nextSchemeId, resetGroup, schemesOf, setSetting } from '@/th
 const preset = getPreset('eventimus-default')!.settings;
 
 describe('theme settings → CSS variables (spec 049 card C)', () => {
-  it('maps the one theme font to --theme-font', () => {
-    expect(settingsVars({ typography: { font: 'playfair-display' } })['--theme-font']).toMatch(/^var\(--theme-font-playfair-display\), system-ui/);
-    expect(settingsVars({ typography: { font: 'system' } })['--theme-font']).toMatch(/^system-ui/);
+  it('maps the body font to --theme-font and the heading font to --theme-heading-font', () => {
+    const vars = settingsVars({ typography: { headingFont: 'playfair-display', bodyFont: 'system' } });
+    expect(vars['--theme-heading-font']).toMatch(/^var\(--theme-font-playfair-display\), system-ui/);
+    expect(vars['--theme-font']).toMatch(/^system-ui/);
   });
 
   it('falls back to the default and never passes text through', () => {
-    expect(settingsVars({ typography: { font: 'x);}body{' } })['--theme-font']).not.toContain('}');
+    expect(settingsVars({ typography: { headingFont: 'x);}body{' } })['--theme-heading-font']).not.toContain('}');
     expect(settingsVars(settingsDefaults() as any)['--theme-font']).toBe(fontStack('inter'));
   });
 
@@ -25,19 +26,18 @@ describe('theme settings → CSS variables (spec 049 card C)', () => {
     expect(mobileLogoWidth(50)).toBe(38);
   });
 
-  it('folds the old heading/body keys into the one font', () => {
-    const old = { headingFont: 'oswald', bodyFont: 'lora', headingScale: 120, headingCase: 'uppercase', letterSpacing: 'wide' };
-    expect(normalizeTypography(old)).toEqual({ font: 'lora' });
-    expect(normalizeTypography({ headingFont: 'oswald' })).toEqual({ font: 'oswald' });
-    expect(validateSettings({ typography: old })).toEqual({ value: { typography: { font: 'lora' } }, errors: {} });
-    expect((resolveSettings({ typography: { headingFont: 'oswald' } }, preset) as any).typography).toEqual({ font: 'oswald' });
+  it('folds the old one-font key into both fonts and drops sizes, case and spacing', () => {
+    expect(normalizeTypography({ font: 'lora', headingScale: 120, letterSpacing: 'wide' })).toEqual({ headingFont: 'lora', bodyFont: 'lora' });
+    expect(normalizeTypography({ font: 'lora', headingFont: 'oswald' })).toEqual({ headingFont: 'oswald', bodyFont: 'lora' });
+    expect(validateSettings({ typography: { font: 'lora', headingCase: 'uppercase' } })).toEqual({ value: { typography: { headingFont: 'lora', bodyFont: 'lora' } }, errors: {} });
+    expect((resolveSettings({ typography: { font: 'oswald' } }, preset) as any).typography).toEqual({ headingFont: 'oswald', bodyFont: 'oswald' });
   });
 });
 
 describe('theme settings draft', () => {
   it('sets one key and resets a whole group to the theme default', () => {
-    const stored = setSetting({ logo: { width: 200 } }, 'typography', 'font', 'oswald');
-    expect(stored).toEqual({ logo: { width: 200 }, typography: { font: 'oswald' } });
+    const stored = setSetting({ logo: { width: 200 } }, 'typography', 'headingFont', 'oswald');
+    expect(stored).toEqual({ logo: { width: 200 }, typography: { headingFont: 'oswald' } });
     expect(resetGroup(stored, 'typography')).toEqual({ logo: { width: 200 } });
   });
 
@@ -61,6 +61,6 @@ describe('settings error messages', () => {
     );
   });
   it('names the group and field', () => {
-    expect(describeSettingsError('typography.font', 'must be one of …')).toBe('Theme settings › Typography › Font: must be one of …');
+    expect(describeSettingsError('typography.headingFont', 'must be one of …')).toBe('Theme settings › Typography › Heading font: must be one of …');
   });
 });
