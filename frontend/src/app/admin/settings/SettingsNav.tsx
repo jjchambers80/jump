@@ -42,7 +42,11 @@ export default function SettingsNav() {
     <nav aria-label="Settings sections" className="w-full shrink-0 md:w-56">
       <ul className="space-y-1">
         {visible.map((s) => {
-          const isCurrent = s.href === '/admin/settings' ? pathname === s.href : pathname === s.href || pathname.startsWith(`${s.href}/`);
+          // Settings › Brand (spec 049) is a General sub-page.
+          const isCurrent =
+            s.href === '/admin/settings'
+              ? pathname === s.href || pathname === '/admin/settings/brand'
+              : pathname === s.href || pathname.startsWith(`${s.href}/`);
           return (
             <li key={s.href}>
               <Link

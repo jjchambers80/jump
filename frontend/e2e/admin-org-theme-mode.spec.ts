@@ -46,6 +46,9 @@ async function mockOrgApi(page: Page) {
   );
 
   await page.route(`${API}/organizations/${org.id}`, async (route) => {
+    if (route.request().method() === 'GET') {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(current) });
+    }
     if (route.request().method() !== 'PATCH') return route.fallback();
     const body = route.request().postDataJSON() as Record<string, unknown>;
     patches.push(body);
@@ -151,32 +154,30 @@ test.beforeEach(async ({ page, baseURL }) => {
   await mockAdminSession(page, baseURL!);
 });
 
-test('shows the Theme section above Branding with System selected by default', async ({ page }) => {
+test('shows Theme mode under the brand colors with System selected by default', async ({ page }) => {
   await mockOrgApi(page);
-  await page.goto('/admin/online-store');
+  await page.goto('/admin/settings/brand');
 
   const picker = page.getByTestId('theme-mode-picker');
   await expect(picker).toBeVisible();
   await expect(page.getByRole('radio')).toHaveCount(3);
   await expect(page.getByRole('radio', { name: /User choice/ })).toHaveCount(0);
   await expect(page.getByRole('radio', { name: /System/ })).toBeChecked();
-  await expect(page.getByTestId('theme-mode-save')).toBeDisabled();
+  await expect(page.getByTestId('brand-colors-save')).toBeDisabled();
 
-  const themeHeading = page.getByRole('heading', { name: 'Theme', exact: true });
-  const brandingHeading = page.getByRole('heading', { name: 'Branding' });
-  const themeBox = await themeHeading.boundingBox();
-  const brandingBox = await brandingHeading.boundingBox();
-  expect(themeBox!.y).toBeLessThan(brandingBox!.y);
+  const colorsBox = await page.getByTestId('secondary-color').boundingBox();
+  const pickerBox = await picker.boundingBox();
+  expect(colorsBox!.y).toBeLessThan(pickerBox!.y);
 });
 
 test('selects Dark and saves { themeMode: "DARK" }', async ({ page }) => {
   const api = await mockOrgApi(page);
-  await page.goto('/admin/online-store');
+  await page.goto('/admin/settings/brand');
 
   await page.getByTestId('theme-mode-dark').click();
   await expect(page.getByRole('radio', { name: /Dark/ })).toBeChecked();
 
-  const save = page.getByTestId('theme-mode-save');
+  const save = page.getByTestId('brand-colors-save');
   await expect(save).toBeEnabled();
   await save.click();
   await expect.poll(() => api.patches.length).toBe(1);
@@ -186,7 +187,7 @@ test('selects Dark and saves { themeMode: "DARK" }', async ({ page }) => {
 
 test('radio group is keyboard navigable', async ({ page }) => {
   await mockOrgApi(page);
-  await page.goto('/admin/online-store');
+  await page.goto('/admin/settings/brand');
 
   await page.getByRole('radio', { name: /System/ }).focus();
   await page.keyboard.press('ArrowRight');

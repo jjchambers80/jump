@@ -94,6 +94,9 @@ test('Preferences link sits under Online store and opens the three sections', as
   await expect(sidebar.getByRole('link', { name: 'Online store' })).not.toHaveAttribute('aria-current', 'page');
   await expect(page.getByRole('heading', { name: 'Preferences', level: 1 })).toBeVisible();
 
+  // Spec 049: branding is a link to Settings › Brand.
+  await expect(page.getByTestId('brand-settings-link')).toHaveAttribute('href', '/admin/settings/brand');
+
   const access = page.getByTestId('store-access');
   await expect(access.getByRole('heading', { name: 'Store access' })).toBeVisible();
   await expect(access.getByRole('switch', { name: 'Private mode' })).toHaveAttribute('aria-checked', 'false');

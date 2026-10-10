@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Palette } from 'lucide-react';
 import api from '@/services/api';
 import { useOrg } from '@/components/OrgContext';
 import BusinessDetailsDialog from './BusinessDetailsDialog';
@@ -41,6 +43,8 @@ export default function SettingsPage() {
   const contactRowRef = useRef<HTMLButtonElement>(null);
   const addressRowRef = useRef<HTMLButtonElement>(null);
   const businessRowRef = useRef<HTMLButtonElement>(null);
+  const brandRowRef = useRef<HTMLButtonElement>(null);
+  const router = useRouter();
 
   const loadBusinessDetails = useCallback(async () => {
     try {
@@ -178,6 +182,20 @@ export default function SettingsPage() {
                     secondary={formatAddress(details) || 'Add your store address'}
                     buttonRef={addressRowRef}
                     onClick={() => openEditor('address')}
+                  />
+                </div>
+              </div>
+
+              <div className={cardClass}>
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Store assets</h3>
+                <div className={listClass}>
+                  <SummaryRow
+                    label="Edit brand"
+                    leading={<Palette className="h-5 w-5" aria-hidden="true" />}
+                    primary="Brand"
+                    secondary="Logos, colors, slogan and social links"
+                    buttonRef={brandRowRef}
+                    onClick={() => router.push('/admin/settings/brand')}
                   />
                 </div>
               </div>

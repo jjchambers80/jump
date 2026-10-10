@@ -1,26 +1,18 @@
 'use client';
 
-// Online store settings editor for one organization: store name, handle
-// (slug), public theme mode, and branding (logo, cover image, brand color).
-// Shared by /admin/online-store and Online store › Preferences (active org).
+// Online store settings editor for one organization: store name and handle
+// (slug), on the legacy /admin/online-store page. Branding (logos, colors,
+// theme mode) lives in Settings › Brand (spec 049); BrandSettingsLink points there.
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { ChevronRight } from 'lucide-react';
 import api from '@/services/api';
-import ImageUploader from '@/components/ImageUploader';
-import BrandColorPicker from '@/components/BrandColorPicker';
-import ThemeModePicker from '@/components/ThemeModePicker';
-import { resolveAssetUrl } from '@/lib/assets';
-import { evaluateBrandColor } from '@/lib/color';
-import { DEFAULT_THEME_MODE, type ThemeMode } from '@/lib/theme';
 
 export interface OnlineStoreSettingsOrg {
   id: string;
   name: string;
   slug: string;
-  logoUrl?: string | null;
-  coverUrl?: string | null;
-  brandColor?: string | null;
-  themeMode?: ThemeMode;
   createdAt: string;
 }
 
@@ -37,18 +29,11 @@ export default function OnlineStoreSettings({ org, onSaved, onError }: OnlineSto
   const [saving, setSaving] = useState(false);
   const [editSlug, setEditSlug] = useState(org.slug ?? '');
   const [savingSlug, setSavingSlug] = useState(false);
-  const [uploading, setUploading] = useState<'logo' | 'cover' | null>(null);
-  const [editBrandColor, setEditBrandColor] = useState<string | null>(org.brandColor ?? null);
-  const [savingBrandColor, setSavingBrandColor] = useState(false);
-  const [editThemeMode, setEditThemeMode] = useState<ThemeMode>(org.themeMode ?? DEFAULT_THEME_MODE);
-  const [savingThemeMode, setSavingThemeMode] = useState(false);
 
   // Reset drafts when switching to a different organization.
   useEffect(() => {
     setEditName(org.name);
     setEditSlug(org.slug ?? '');
-    setEditBrandColor(org.brandColor ?? null);
-    setEditThemeMode(org.themeMode ?? DEFAULT_THEME_MODE);
   }, [org.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSaveName = async (e: React.FormEvent) => {
@@ -81,63 +66,6 @@ export default function OnlineStoreSettings({ org, onSaved, onError }: OnlineSto
       setSavingSlug(false);
     }
   };
-
-  const handleSaveThemeMode = async () => {
-    try {
-      setSavingThemeMode(true);
-      onError(null);
-      await api.patch(`/organizations/${org.id}`, { themeMode: editThemeMode });
-      await onSaved();
-    } catch (err: any) {
-      onError(err.message || 'Failed to update theme mode');
-    } finally {
-      setSavingThemeMode(false);
-    }
-  };
-
-  const handleSaveBrandColor = async () => {
-    try {
-      setSavingBrandColor(true);
-      onError(null);
-      await api.patch(`/organizations/${org.id}`, { brandColor: editBrandColor });
-      await onSaved();
-    } catch (err: any) {
-      onError(err.message || 'Failed to update brand color');
-    } finally {
-      setSavingBrandColor(false);
-    }
-  };
-
-  const handleImageUpload = async (type: 'logo' | 'cover', file: File) => {
-    try {
-      setUploading(type);
-      onError(null);
-      const formData = new FormData();
-      formData.append('logo', file);
-      await api.upload(`/organizations/${org.id}/${type}`, formData);
-      await onSaved();
-    } catch (err: any) {
-      onError(err.message || `Failed to upload ${type}`);
-    } finally {
-      setUploading(null);
-    }
-  };
-
-  const handleImageRemove = async (type: 'logo' | 'cover') => {
-    try {
-      setUploading(type);
-      onError(null);
-      await api.delete(`/organizations/${org.id}/${type}`);
-      await onSaved();
-    } catch (err: any) {
-      onError(err.message || `Failed to remove ${type}`);
-    } finally {
-      setUploading(null);
-    }
-  };
-
-  const brandColorDirty = editBrandColor !== (org.brandColor ?? null);
-  const brandColorPasses = editBrandColor ? evaluateBrandColor(editBrandColor).passesAA : true;
 
   return (
     <div>
@@ -196,78 +124,30 @@ export default function OnlineStoreSettings({ org, onSaved, onError }: OnlineSto
         Short URL-safe name for this store: lowercase letters, digits, and hyphens.
       </p>
 
-      {/* Theme */}
-      <h4 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1">Theme</h4>
-      <p className="text-xs text-gray-500 dark:text-slate-400 mb-3">
-        Controls light or dark mode on your public event, venue, and organization pages.
-      </p>
-      <ThemeModePicker value={editThemeMode} onChange={setEditThemeMode} />
-      <div className="mt-3 mb-6">
-        <button
-          type="button"
-          onClick={handleSaveThemeMode}
-          disabled={savingThemeMode || editThemeMode === (org.themeMode ?? DEFAULT_THEME_MODE)}
-          data-testid="theme-mode-save"
-          className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-500 disabled:opacity-50"
-        >
-          {savingThemeMode ? 'Saving…' : 'Save theme'}
-        </button>
-      </div>
-
-      {/* Branding */}
-      <h4 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-4">Branding</h4>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-600 dark:text-slate-400 mb-2">
-            Logo
-          </label>
-          <ImageUploader
-            currentPreview={resolveAssetUrl(org.logoUrl)}
-            onFileSelect={(file) => handleImageUpload('logo', file)}
-            onRemove={() => handleImageRemove('logo')}
-            uploading={uploading === 'logo'}
-            label="logo"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-600 dark:text-slate-400 mb-2">
-            Cover Image
-          </label>
-          <ImageUploader
-            currentPreview={resolveAssetUrl(org.coverUrl)}
-            onFileSelect={(file) => handleImageUpload('cover', file)}
-            onRemove={() => handleImageRemove('cover')}
-            uploading={uploading === 'cover'}
-            label="cover image"
-          />
-        </div>
-        <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-gray-600 dark:text-slate-400 mb-2">
-            Brand color
-          </label>
-          <BrandColorPicker value={editBrandColor} onChange={setEditBrandColor} />
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={handleSaveBrandColor}
-              disabled={savingBrandColor || !brandColorDirty}
-              data-testid="brand-color-save"
-              className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-500 disabled:opacity-50"
-            >
-              {savingBrandColor ? 'Saving…' : 'Save brand color'}
-            </button>
-            {!brandColorPasses && (
-              <span className="text-xs text-red-600 dark:text-red-400" data-testid="brand-color-warning">
-                You can save this color, but it may not meet ADA requirements.
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
+      <BrandSettingsLink />
 
       <div className="mt-4 text-xs text-gray-400 dark:text-slate-500">
         Created {new Date(org.createdAt).toLocaleDateString()}
       </div>
     </div>
+  );
+}
+
+/** Short row pointing to Settings › Brand, where branding moved in spec 049. */
+export function BrandSettingsLink() {
+  return (
+    <Link
+      href="/admin/settings/brand"
+      data-testid="brand-settings-link"
+      className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 px-4 py-3 text-sm hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:border-slate-700 dark:hover:bg-slate-700/40"
+    >
+      <span>
+        <span className="block font-medium text-gray-900 dark:text-white">Brand</span>
+        <span className="block text-gray-600 dark:text-slate-400">
+          Logos, colors, theme mode and social links are in Settings › Brand.
+        </span>
+      </span>
+      <ChevronRight className="h-4 w-4 shrink-0 text-gray-400 dark:text-slate-500" aria-hidden="true" />
+    </Link>
   );
 }

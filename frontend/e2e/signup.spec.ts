@@ -92,7 +92,7 @@ async function mockSignupApi(page: Page, opts: { pending?: Pending | null } = {}
         dismissedAt: null,
         tasks: [
           { id: 'event', done: false, href: '/admin/create-event', shown: true },
-          { id: 'design', done: false, href: '/admin/online-store', shown: true },
+          { id: 'design', done: false, href: '/admin/settings/brand', shown: true },
           { id: 'payments', done: false, href: '/admin/settings/payments', state: 'platform', shown: true },
           { id: 'business', done: false, href: '/admin/settings', shown: true },
           { id: 'domain', done: false, href: '/admin/settings/domains', shown: true },

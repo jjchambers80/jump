@@ -38,6 +38,8 @@ See `docs/wiki/features/applications.md` and `docs/wiki/features/vendor-space-se
 
 Online Store › Preferences: `Organization.storefrontPrivate` / `storefrontPasswordHash` / `storefrontMessage` / `seoTitle` / `seoDescription` (`20260929000000_online_store_preferences`), `autoRedirectLanguage` (`20260929100000_storefront_language_redirection`, stored only until the storefront is localized). The client in `src/index.{js,ts}` is built with `omit: { organization: { storefrontPasswordHash: true } }`, so the hash is absent from every query result unless it passes `omit: { storefrontPasswordHash: false }` or selects it explicitly. See `docs/wiki/features/online-store-preferences.md`.
 
+Brand identity (spec 049, `20261031100000_org_brand_identity`): `Organization.squareLogoUrl` / `squareLogoImageId` (relation `OrgSquareLogo` → `Image`), `brandSecondaryColor`, `slogan` (≤ 120), `shortDescription` (≤ 300), `socialLinks` (Json, keys and hosts of `@jump/theme` `SETTINGS_GROUPS.social`; clear it with `Prisma.DbNull`). The migration copied each MAIN theme's brand headline / description / social links into the empty columns once. See `docs/wiki/features/organization-branding.md`.
+
 Tax (spec 009): `TaxRegion` is unique on `(organizationId, country, region)` and keyed by `Venue.state` (two-letter US code, enforced by the venue validator). `Event.taxRate` / `taxRateSource` cache the resolved rate; `Organization.taxInclusivePricing` switches the fee math. `20260914010000_tax_regions` backfilled `collecting = true, source = STRIPE` for every existing organization/state. See `docs/wiki/features/tax-settings.md`.
 
 ## Seed Data

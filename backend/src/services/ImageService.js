@@ -17,6 +17,12 @@ const VARIANTS = {
 // files uploaded before galleries need no backfill. Never enlarged.
 export const WIDTH_VARIANTS = { w480: 480, w960: 960, w1600: 1600, w2400: 2400 };
 
+// Spec 049: square crop for the organization square logo (favicon, social
+// avatars). Built lazily like the width variants; the upload route warms it.
+export const SQUARE_VARIANT = 'square';
+const SQUARE_SIZE = 512;
+const isLazyVariant = (variant) => Boolean(WIDTH_VARIANTS[variant]) || variant === SQUARE_VARIANT;
+
 const MIME_TO_EXT = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
@@ -250,14 +256,14 @@ class ImageService {
     let key;
     if (variant === 'original') {
       key = originalKey(hash, image.file.mimeType);
-    } else if (VARIANTS[variant] || WIDTH_VARIANTS[variant]) {
+    } else if (VARIANTS[variant] || isLazyVariant(variant)) {
       key = variantKey(variant, hash);
     } else {
       return null;
     }
 
     let data = await this.storage.get(key);
-    if (!data && WIDTH_VARIANTS[variant]) data = await this._buildWidthVariant(image.file, variant, key);
+    if (!data && isLazyVariant(variant)) data = await this._buildWidthVariant(image.file, variant, key);
     if (!data) return null;
 
     return {
@@ -276,7 +282,11 @@ class ImageService {
     if (!original) return null;
     const buffer = await sharp(original.buffer)
       .rotate()
-      .resize({ width: WIDTH_VARIANTS[variant], fit: 'inside', withoutEnlargement: true })
+      .resize(
+        variant === SQUARE_VARIANT
+          ? { width: SQUARE_SIZE, height: SQUARE_SIZE, fit: 'cover' }
+          : { width: WIDTH_VARIANTS[variant], fit: 'inside', withoutEnlargement: true }
+      )
       .webp({ quality: 80 })
       .toBuffer();
     await this.storage.put(key, buffer, 'image/webp');
@@ -316,7 +326,7 @@ class ImageService {
     for (const file of orphans) {
       const origKey = originalKey(file.hash, file.mimeType);
       await this.storage.delete(origKey);
-      for (const variant of [...Object.keys(VARIANTS), ...Object.keys(WIDTH_VARIANTS)]) {
+      for (const variant of [...Object.keys(VARIANTS), ...Object.keys(WIDTH_VARIANTS), SQUARE_VARIANT]) {
         await this.storage.delete(variantKey(variant, file.hash));
       }
       // Content › Files documents (spec 025) live under documents/<hash>.<ext>.

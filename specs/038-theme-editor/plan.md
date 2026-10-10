@@ -142,6 +142,8 @@ Every theme (live or draft) has its own full set of documents, settings and cont
 - Wording that carries legal or payment meaning (consent text, refund policy text, fee and tax labels, checkout step text) is **not** in the catalog and cannot be overridden.
 
 **D16. Online Store page replaces the branding form.**
+> **Superseded by spec 049** (2026-10-09): branding (logos, colors, theme mode, slogan, short description, social links) lives in Settings › General › Brand (`/admin/settings/brand`), not in a Preferences card. Theme settings override the brand; empty theme values inherit it. See `specs/049-brand-and-theme-settings/plan.md`.
+
 - `/admin/online-store` becomes the themes overview.
 - The current branding form (`OnlineStoreSettings`: logo, cover, brand color, theme mode) moves to a **Brand** card on Online store › Preferences.
 - Logo and brand color stay organization identity, used by email and as the scheme-1 seed.

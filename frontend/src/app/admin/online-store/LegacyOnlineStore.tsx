@@ -1,8 +1,8 @@
 'use client';
 
 // Online store — /admin/online-store for organizations outside the themes
-// rollout (spec 038): public storefront settings (store name, handle, theme,
-// branding) for the organization picked in the header org switcher.
+// rollout (spec 038): store name and handle for the organization picked in
+// the header org switcher. Branding lives in Settings › Brand (spec 049).
 
 import { storefrontUrl } from '@/lib/publicPaths';
 import React, { useState } from 'react';

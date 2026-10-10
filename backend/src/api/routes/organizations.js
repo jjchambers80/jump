@@ -13,10 +13,10 @@ import {
   validateCreateOrganization,
   validateUpdateOrganization,
 } from '../validators/organizationValidators.js';
-import organizationService from '../../services/OrganizationService.js';
+import organizationService, { BRAND_IDENTITY_SELECT } from '../../services/OrganizationService.js';
 import { ForbiddenError, NotFoundError } from '../../middleware/errorHandler.js';
 import { uploadImage } from '../../middleware/imageUpload.js';
-import imageService, { dimensionQuery } from '../../services/ImageService.js';
+import imageService, { SQUARE_VARIANT, dimensionQuery } from '../../services/ImageService.js';
 import storefrontPreferencesService from '../../services/StorefrontPreferencesService.js';
 import { validateStorefrontUnlock } from '../validators/storefrontPreferencesValidators.js';
 import { gateByOrgParam } from '../../middleware/storefrontGate.js';
@@ -178,7 +178,7 @@ router.get('/:id/public/meta', async (req, res, next) => {
 async function publicOrganizationIdentity(identifier) {
   const org = await findByPublicIdentifier(prisma.organization, identifier, {
     where: { status: 'ACTIVE' },
-    select: { id: true, slug: true, name: true, logoUrl: true, coverUrl: true, brandColor: true, themeMode: true, buyerSignInLinks: true },
+    select: { id: true, slug: true, name: true, logoUrl: true, coverUrl: true, brandColor: true, themeMode: true, buyerSignInLinks: true, ...BRAND_IDENTITY_SELECT },
   });
   if (!org) throw new NotFoundError('Organization not found');
   return org;
@@ -403,6 +403,57 @@ router.delete('/:id/logo', requireAuth, requireAdmin, verifyOrgOwnership, async 
     );
     if (previousLogoImageId) {
       await imageService.deleteImage(previousLogoImageId).catch(() => {});
+    }
+    res.json(organization);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /organizations/:id/square-logo
+ * Upload the square logo (spec 049; admin only). Stored as the 512 px square crop.
+ */
+router.post('/:id/square-logo', requireAuth, requireAdmin, verifyOrgOwnership, uploadImage, async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded' });
+    }
+    const image = await imageService.processUpload(
+      req.file.buffer,
+      req.file.originalname,
+      req.file.mimetype,
+      'org_square_logo'
+    );
+    // Build the lazy square crop now, so a public bucket (direct URLs) has it too.
+    await imageService.getVariantData(image.id, SQUARE_VARIANT);
+    const { organization, previousSquareLogoImageId } = await organizationService.setOrganizationSquareLogo(
+      req.params.id,
+      imageService.servingUrl({ id: image.id, file: { hash: image.hash } }, SQUARE_VARIANT),
+      image.id
+    );
+    if (previousSquareLogoImageId && previousSquareLogoImageId !== image.id) {
+      await imageService.deleteImage(previousSquareLogoImageId).catch(() => {});
+    }
+    res.json({ ...organization, image });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * DELETE /organizations/:id/square-logo
+ * Remove the square logo (admin only)
+ */
+router.delete('/:id/square-logo', requireAuth, requireAdmin, verifyOrgOwnership, async (req, res, next) => {
+  try {
+    const { organization, previousSquareLogoImageId } = await organizationService.setOrganizationSquareLogo(
+      req.params.id,
+      null,
+      null
+    );
+    if (previousSquareLogoImageId) {
+      await imageService.deleteImage(previousSquareLogoImageId).catch(() => {});
     }
     res.json(organization);
   } catch (error) {

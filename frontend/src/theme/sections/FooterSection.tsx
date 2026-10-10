@@ -6,25 +6,12 @@ import Link from 'next/link';
 import ContentHtml from '@/components/storefront/ContentHtml';
 import FooterMenu from '@/components/storefront/FooterMenu';
 import LogoBox from '@/components/LogoBox';
-import SocialIcon from '@/components/storefront/SocialIcon';
+import SocialIcon, { SOCIAL_LABELS } from '@/components/storefront/SocialIcon';
 import { resolveAssetUrl } from '@/lib/assets';
 import { LEGAL_PAGES_ENABLED, LEGAL_PATHS } from '@/lib/legal';
 import { schemeClass } from '../settingsCss';
 import type { ThemeItem } from '../types';
 import { sectionWidthStyle, type SectionContext } from './context';
-
-const SOCIAL_LABELS: Record<string, string> = {
-  instagram: 'Instagram',
-  tiktok: 'TikTok',
-  facebook: 'Facebook',
-  x: 'X',
-  youtube: 'YouTube',
-  linkedin: 'LinkedIn',
-  threads: 'Threads',
-  reddit: 'Reddit',
-  twitch: 'Twitch',
-  website: 'Website',
-};
 
 export interface FooterSectionProps {
   showLegalLinks?: boolean;

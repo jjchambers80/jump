@@ -235,6 +235,7 @@ model Image {
   events                 Event[]
   organizationLogos      Organization[]          @relation("OrgLogo")
   organizationCovers     Organization[]          @relation("OrgCover")
+  organizationSquareLogos Organization[]         @relation("OrgSquareLogo")
   applicantProfileImages ApplicantProfileImage[]
   applicationAnswers     ApplicationAnswer[]
   storeFile              StoreFile?
@@ -498,6 +499,14 @@ model Organization {
   coverImageId               String?
   brandColor                 String?
   themeMode                  ThemeMode              @default(SYSTEM)
+  // Spec 049: brand identity (Settings › Brand). Theme settings override these;
+  // an empty theme value inherits them.
+  squareLogoUrl              String?
+  squareLogoImageId          String?
+  brandSecondaryColor        String?
+  slogan                     String? // <= 120 chars
+  shortDescription           String? // <= 300 chars
+  socialLinks                Json? // { instagram?, tiktok?, … } — keys/hosts of @jump/theme SETTINGS_GROUPS.social
   // Spec 009 phase 3: listed tier prices already include sales tax; tax is
   // backed out at the event's rate instead of added on top.
   taxInclusivePricing        Boolean                @default(false)
@@ -555,6 +564,7 @@ model Organization {
   platformCustomer         PlatformCustomer?
   logoImage                Image?                       @relation("OrgLogo", fields: [logoImageId], references: [id])
   coverImage               Image?                       @relation("OrgCover", fields: [coverImageId], references: [id])
+  squareLogoImage          Image?                       @relation("OrgSquareLogo", fields: [squareLogoImageId], references: [id])
   venues                   Venue[]
   members                  OrganizationMember[]
   contacts                 Contact[]

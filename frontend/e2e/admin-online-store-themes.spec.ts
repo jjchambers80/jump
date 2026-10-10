@@ -110,13 +110,13 @@ test.describe('Online Store page with themes (038J1)', () => {
     expect(calls.prefsPatches).toEqual([]);
   });
 
-  test('Preferences carries the Brand card while themes are on', async ({ page }) => {
+  test('Preferences links to Settings › Brand (spec 049)', async ({ page }) => {
     await mockApi(page);
     await page.goto('/admin/online-store/preferences');
-    await expect(page.getByRole('region', { name: 'Brand' })).toBeVisible();
+    await expect(page.getByTestId('brand-settings-link')).toHaveAttribute('href', '/admin/settings/brand');
   });
 
-  test('without themes the page stays today\'s branding page, with no Brand card in Preferences', async ({ page }) => {
+  test('without themes the page stays today\'s store page, with no Brand card in Preferences', async ({ page }) => {
     await mockApi(page, { enabled: false });
     await page.goto('/admin/online-store');
     await expect(page.getByRole('heading', { level: 1, name: 'Online store' })).toBeVisible();
