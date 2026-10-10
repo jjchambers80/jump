@@ -7,7 +7,7 @@
 
 - **D0-B / C / D**, merged and in prod. They give per-line `platformFeeRate` + `feeMode` in `FeeService.js` ↔ `fees.ts` with `backend/tests/fixtures/fees.fixtures.json`, `OrderItem.feeMode`, `Order.organizationId` + nullable `eventId` (CHECK: null only for non-TICKET/APPLICATION kinds), and the `DONATION_TERMS` / `RECURRING_GIFT` drafts.
 - **D0-S** (direct charges). Every money call carries `{ stripeAccount }`, `application_fee_amount` equals `platformFee` only, money webhooks arrive on the Connect endpoint, and refunds run on the org's account with `refund_application_fee` and no `reverse_transfer`.
-- **DV** (`specs/047-donations/plan-dv.md`, written in parallel). It adds `Organization.deductibilityStatus`, `legalName`, `ein` (already a column), `receiptSignatory`, `privacyPolicyUrl`, `stateDisclosures`, the org admin's `DONATION_TERMS` acceptance, and the flat 3% ticket rate (`Organization.platformFeeRate`). D1 reads all of these. Any name DV changes is renamed here, never duplicated.
+- **DV** (`specs/047-donations/plan-dv.md`, PR #386). It adds `Organization.deductibilityStatus`, `privacyPolicyUrl`, `stateDisclosures`, and reuses the existing `companyName` (the legal entity name; shown as "Legal name" below) and `ein` columns. DV has no `legalName` or `receiptSignatory` column (IRS Pub 1771 needs no signature). It also adds the org admin's `DONATION_TERMS` acceptance, and the flat 3% ticket rate (`Organization.platformFeeRate`). D1 reads all of these. Any name DV changes is renamed here, never duplicated.
 
 **Owner decisions used here (2026-10-09):**
 
@@ -91,8 +91,8 @@ model GiftReceipt {                       // append-only; reprints exactly as se
   fairMarketValue  Decimal  @db.Decimal(10, 2) @default(0)
   deductibleAmount Decimal  @db.Decimal(10, 2)   // amount when DEDUCTIBLE_170C, else 0
   textVersion      String                 // GIFT_RECEIPT_TEXT_VERSION at issue
-  orgSnapshot      Json                   // legalName, ein, address, deductibilityStatus,
-                                          // receiptSignatory, legends[], privacyPolicyUrl, paragraphs[]
+  orgSnapshot      Json                   // legalName (from companyName), ein, address,
+                                          // deductibilityStatus, legends[], privacyPolicyUrl, paragraphs[]
   issuedAt         DateTime @default(now())
   emailedAt        DateTime?
   voidedAt         DateTime?
@@ -178,8 +178,8 @@ Presets are not enforced by the server. Any amount in range is valid, and the pr
      feeMode: coverFees ? 'PASS' : 'ABSORB' }
    ```
    Ticket and add-on items carry the DV org rate. Write `orgReceives: fees.orgReceives` and stop hard-coding `fees.subtotal`. `Order.feeMode` stays `PASS` (the ticket's), and the gift's mode lives on `OrderItem.feeMode`.
-4. **The gift line** goes in `items.create` with `kind: 'DONATION'`, `description: 'Gift to <legalName>'` (snapshot), `feeMode`, and its fee breakdown. It is never part of `Order.quantity`.
-5. **Stripe line item.** `name: 'Gift to <legalName>'`, `unit_amount` = the line total in cents. When the donor covers, the description reads "Includes $0.73 to cover card processing". No line, anywhere, calls a fee a "donation" (compliance §2.7). Session `metadata.giftItemId`.
+4. **The gift line** goes in `items.create` with `kind: 'DONATION'`, `description: 'Gift to <companyName>'` (snapshot), `feeMode`, and its fee breakdown. It is never part of `Order.quantity`.
+5. **Stripe line item.** `name: 'Gift to <companyName>'`, `unit_amount` = the line total in cents. When the donor covers, the description reads "Includes $0.73 to cover card processing". No line, anywhere, calls a fee a "donation" (compliance §2.7). Session `metadata.giftItemId`.
 6. **`checkoutOptionsFor(org, charge, { gift: true })`:**
    - drops `affirm`, `klarna` and `afterpay_clearpay` (BNPL off);
    - the caller adds `billing_address_collection: 'required'`, so the completion handler can read the billing state (§3.6);
@@ -249,7 +249,7 @@ Order of steps, all idempotent on `order.status` as today:
 - Public event (`EventService.js:~1454`): `gifts` is `null` unless `DONATIONS_ENABLED`, `acceptGifts` and the org is eligible. Otherwise:
   ```js
   gifts: { presets, minimum, maximum, appeal, withoutTicket,
-           recipient: { legalName, ein, deductibilityStatus, privacyPolicyUrl, email, legends: [{ state, text }] },
+           recipient: { legalName /* Organization.companyName */, ein, deductibilityStatus, privacyPolicyUrl, email, legends: [{ state, text }] },
            blockedStates: ['CA','HI'] }
   ```
   It is present on RSVP events as well: `hideTicketInventory` hides tiers, not gifts.
@@ -372,7 +372,6 @@ Receipt paragraphs (`config/giftReceipt.js`), from IRS Pub 1771 and compliance �
 - **DEDUCTIBLE_170C.** "{Legal name} is a tax-exempt organization. Your gift is deductible as a charitable contribution to the extent allowed by law. Keep this receipt for your tax records."
 - **EXEMPT_NOT_DEDUCTIBLE.** §6113 safe harbour, its own paragraph: "Contributions or gifts to {Legal name} are not deductible as charitable contributions for Federal income tax purposes." Then "Keep this receipt for your records." No deductibility wording anywhere else (compliance §5 #1, #2).
 - **Recipient.** "This gift was made to {Legal name}. Eventimus processed the payment on {Legal name}'s behalf and is not the recipient."
-- **Signature.** "{receiptSignatory}, for {Legal name}" when set.
 - **Legends.** Each enabled `stateDisclosures` legend, rendered bold and bordered, at no less than body size. NC's text is per G.S. 131F-9(c) with the stored phone number.
 - No SSN or TIN is ever asked for or printed.
 
