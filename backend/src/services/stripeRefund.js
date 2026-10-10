@@ -1,4 +1,4 @@
-// Shared Stripe refund call (spec 010 phase 2 / spec 011 phase 2).
+// Shared Stripe refund call (spec 010 phase 2 / spec 011 phase 2 / spec 047 D0-S).
 // Used by RefundService (orders, tickets) and ApplicationPaymentService.
 // Throws ValidationError with Stripe's message so API callers see why.
 
@@ -15,10 +15,13 @@ export function refundIdempotencyKey(scope) {
 }
 
 /**
- * @param {{ paymentIntentId: string, amount: number, idempotencyKey: string, reason?: string|null, connected?: boolean, metadata?: object }} input
- *   `amount` in dollars. `connected`: the charge was a destination charge, so
- *   Stripe pulls the organization's share back (`reverse_transfer`) and returns
- *   the platform fee (`refund_application_fee`), both pro rata for partial amounts.
+ * @param {{ paymentIntentId: string, amount: number, idempotencyKey: string, reason?: string|null, stripeAccountId?: string|null, metadata?: object }} input
+ *   `amount` in dollars. `stripeAccountId` (the order's
+ *   PaymentTransaction.stripeAccountId): the charge is a direct charge on the
+ *   organization's own account (spec 047), so the refund is created on that
+ *   account and Jump returns its platform fee (`refund_application_fee`, pro
+ *   rata for partial amounts). There is no transfer to reverse. Null = a charge
+ *   on the platform account, refunded there exactly as before.
  *
  *   `idempotencyKey` is REQUIRED and deliberately has no default. The dangerous
  *   window is: Stripe refunds the money, then our transaction rolls back or the
@@ -39,7 +42,7 @@ export async function createStripeRefund({
   amount,
   idempotencyKey,
   reason = null,
-  connected = false,
+  stripeAccountId = null,
   metadata = {},
 }) {
   if (!idempotencyKey) {
@@ -53,13 +56,13 @@ export async function createStripeRefund({
         payment_intent: paymentIntentId,
         amount: Math.round(amount * 100), // Stripe uses cents
         ...(reason && { reason: 'requested_by_customer' }),
-        ...(connected && { reverse_transfer: true, refund_application_fee: true }),
+        ...(stripeAccountId && { refund_application_fee: true }),
         metadata: { source: 'jump-platform', ...metadata },
       },
-      { idempotencyKey }
+      { idempotencyKey, ...(stripeAccountId && { stripeAccount: stripeAccountId }) }
     );
   } catch (err) {
-    logger.error('Stripe refund failed', { paymentIntentId, amount, idempotencyKey, error: err.message });
+    logger.error('Stripe refund failed', { paymentIntentId, amount, idempotencyKey, stripeAccountId, error: err.message });
     throw new ValidationError(`Stripe refund failed: ${err.message}`);
   }
 }

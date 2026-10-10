@@ -825,7 +825,8 @@ model Contact {
   accountCreatedAt        DateTime? // null = guest checkout; set = login-enabled buyer account
   phone                   String?
   tags                    String[]               @default([])
-  stripeCustomerId        String?                @unique // spec 011: platform-account Customer holding the applicant's saved card
+  stripeCustomerId        String?                @unique // spec 011: Customer holding the applicant's saved card
+  stripeCustomerAccountId String? // spec 047: connected account the Customer lives on (null = platform account)
   // Spec 040: "Sign out of all devices" — buyer sessions issued before this are refused.
   buyerSessionsValidAfter DateTime?
   // Spec 040 card D: "Delete my data" is scheduled for this moment (grace period);

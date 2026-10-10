@@ -267,5 +267,30 @@ describe('Direct charges on the organization account (spec 047 D0-S)', () => {
     expect(unknown.body).toEqual({ received: true });
   });
 
-  void adminToken;
+  // ─── S4: refunds on the order's account ─────────────────────────────────
+
+  it('a staff refund of a direct charge runs on the account and returns the platform fee; a legacy order refunds on the platform', async () => {
+    let n = 0;
+    mockRefundsCreate.mockImplementation(async (params) => ({ id: `re_${TAG}_${RUN}_staff_${(n += 1)}`, amount: params.amount, status: 'succeeded' }));
+
+    const direct = await placeOrder(`refund-direct@${TAG}.test`);
+    await connectHook(completed(direct.stripeSessionId, `pi_${TAG}_${RUN}_rd`, ACCT));
+    const res = await request(app).post(`/admin/orders/${direct.id}/refund`).set('Authorization', `Bearer ${adminToken}`).send({ reason: 'Cancelled' });
+    expect(res.status).toBe(200);
+    const [body, options] = mockRefundsCreate.mock.calls[0];
+    expect(body).toMatchObject({ payment_intent: `pi_${TAG}_${RUN}_rd`, amount: Math.round(Number(direct.totalAmount) * 100), refund_application_fee: true });
+    expect(body.reverse_transfer).toBeUndefined();
+    expect(options).toEqual({ idempotencyKey: expect.stringMatching(/^jump:refund:/), stripeAccount: ACCT });
+
+    process.env.STRIPE_CONNECT_ENABLED = 'false';
+    const legacy = await placeOrder(`refund-legacy@${TAG}.test`);
+    process.env.STRIPE_CONNECT_ENABLED = 'true';
+    await platformHook(completed(legacy.stripeSessionId, `pi_${TAG}_${RUN}_rl`, null));
+    const legacyRes = await request(app).post(`/admin/orders/${legacy.id}/refund`).set('Authorization', `Bearer ${adminToken}`).send({ reason: 'Cancelled' });
+    expect(legacyRes.status).toBe(200);
+    const [legacyBody, legacyOptions] = mockRefundsCreate.mock.calls[1];
+    expect(legacyBody.refund_application_fee).toBeUndefined();
+    expect(legacyBody.reverse_transfer).toBeUndefined();
+    expect(legacyOptions).toEqual({ idempotencyKey: expect.stringMatching(/^jump:refund:/) });
+  });
 });

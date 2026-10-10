@@ -80,7 +80,7 @@ export async function loadLedgerRows() {
       refunds: { select: { id: true, amount: true, feeAmount: true, status: true, manual: true, stripeRefundId: true } },
       tickets: { select: { status: true } },
       addOns: { select: { refundedAt: true } },
-      payment: { select: { stripePaymentIntentId: true, status: true } },
+      payment: { select: { stripePaymentIntentId: true, status: true, stripeAccountId: true } },
     },
     orderBy: { createdAt: 'asc' },
   });
@@ -98,6 +98,8 @@ export async function loadLedgerRows() {
     kind: order.kind,
     createdAt: order.createdAt,
     paymentIntentId: order.payment?.stripePaymentIntentId ?? null,
+    // Spec 047: a direct charge (and its refunds) lives on the organization's account
+    stripeAccountId: order.payment?.stripeAccountId ?? null,
     refunds: order.refunds,
   }));
 }
@@ -129,7 +131,10 @@ async function stripeComparison(rows) {
       });
       continue;
     }
-    const list = await stripe.refunds.list({ payment_intent: row.paymentIntentId, limit: 100 });
+    const list = await stripe.refunds.list(
+      { payment_intent: row.paymentIntentId, limit: 100 },
+      ...(row.stripeAccountId ? [{ stripeAccount: row.stripeAccountId }] : [])
+    );
     perOrder.push({ orderRef: row.orderRef, result: reconcileRefunds({ dbRefunds, stripeRefunds: list.data }) });
   }
 
@@ -141,11 +146,17 @@ async function stripeComparison(rows) {
   );
   const unknownInStripe = [];
   let stripeSeen = 0;
-  for await (const refund of stripe.refunds.list({ limit: 100, created: { gte: Math.floor(SINCE.getTime() / 1000) } })) {
-    stripeSeen += 1;
-    if (refund.status !== 'succeeded') continue;
-    if (!known.has(refund.id)) {
-      unknownInStripe.push({ id: refund.id, amount: refund.amount, charge: refund.charge, created: refund.created });
+  // The platform account, then every connected account in this mode (spec 047 direct charges).
+  const { stripeMode } = await import('../services/PaymentSettingsService.js');
+  const accounts = await prisma.organizationStripeAccount.findMany({ where: { mode: stripeMode() }, select: { stripeAccountId: true } });
+  for (const account of [null, ...accounts.map((a) => a.stripeAccountId)]) {
+    const params = { limit: 100, created: { gte: Math.floor(SINCE.getTime() / 1000) } };
+    for await (const refund of stripe.refunds.list(params, ...(account ? [{ stripeAccount: account }] : []))) {
+      stripeSeen += 1;
+      if (refund.status !== 'succeeded') continue;
+      if (!known.has(refund.id)) {
+        unknownInStripe.push({ id: refund.id, amount: refund.amount, charge: refund.charge, created: refund.created, ...(account && { account }) });
+      }
     }
   }
 

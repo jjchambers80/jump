@@ -11,9 +11,10 @@ jest.unstable_mockModule('../../src/config/resend.js', () => ({
   default: { emails: { send: jest.fn(async (msg) => { sentEmails.push(msg); return { id: 'mock' }; }) } },
 }));
 const deletedCustomers = [];
+const deleteOptions = [];
 jest.unstable_mockModule('../../src/config/stripe.js', () => ({
   default: {
-    customers: { del: jest.fn(async (id) => { deletedCustomers.push(id); return { id, deleted: true }; }) },
+    customers: { del: jest.fn(async (id, opts) => { deletedCustomers.push(id); deleteOptions.push(opts); return { id, deleted: true }; }) },
     checkout: { sessions: { expire: jest.fn(async () => ({})) } },
   },
 }));
@@ -43,10 +44,10 @@ async function createOrg(name) {
 }
 
 /** A buyer with a paid order (one upcoming ticket, one past), an RSVP, a submitted application and a note. */
-async function seedBuyer(f, { email, stripeCustomerId = null } = {}) {
+async function seedBuyer(f, { email, stripeCustomerId = null, stripeCustomerAccountId = null } = {}) {
   const n = seq++;
   const contact = await prisma.contact.create({
-    data: { organizationId: f.org.id, email, firstName: 'Ada', lastName: 'Lovelace', phone: '+19195550100', location: 'Raleigh', note: 'VIP', tags: ['vip'], accountCreatedAt: new Date(), emailSubscribed: true, emailSubscribedAt: new Date(), emailSubscribedSource: 'CHECKOUT', stripeCustomerId },
+    data: { organizationId: f.org.id, email, firstName: 'Ada', lastName: 'Lovelace', phone: '+19195550100', location: 'Raleigh', note: 'VIP', tags: ['vip'], accountCreatedAt: new Date(), emailSubscribed: true, emailSubscribedAt: new Date(), emailSubscribedSource: 'CHECKOUT', stripeCustomerId, stripeCustomerAccountId },
   });
   const order = await prisma.order.create({
     data: {
@@ -169,7 +170,8 @@ describe('Delete my data (spec 040 card D)', () => {
   it('the sweep anonymizes: tickets voided and back on sale, ledger kept, applications withdrawn, sessions dead, Stripe Customer deleted', async () => {
     process.env.ERASURE_GRACE_DAYS = '0';
     const email = `erase@${TAG}.test`;
-    const b = await seedBuyer(F, { email, stripeCustomerId: `cus_${TAG}_${Date.now()}` });
+    // Spec 047: the Customer lives on the organization's own connected account
+    const b = await seedBuyer(F, { email, stripeCustomerId: `cus_${TAG}_${Date.now()}`, stripeCustomerAccountId: 'acct_erasure_ct' });
     const other = await seedBuyer(G, { email }); // same email at another organization
     const soldBefore = (await prisma.priceTier.findUnique({ where: { id: F.tier.id } })).quantitySold;
     const pastSoldBefore = (await prisma.priceTier.findUnique({ where: { id: F.pastTier.id } })).quantitySold;
@@ -189,6 +191,8 @@ describe('Delete my data (spec 040 card D)', () => {
     expect(contact.email).toMatch(/^deleted-.{8}@anonymized\.invalid$/);
     expect(contact.anonymizedAt).toBeInstanceOf(Date);
     expect(deletedCustomers).toContain(b.contact.stripeCustomerId);
+    expect(deleteOptions[deletedCustomers.indexOf(b.contact.stripeCustomerId)]).toEqual({ stripeAccount: 'acct_erasure_ct' });
+    expect(contact.stripeCustomerAccountId).toBeNull();
 
     expect((await prisma.ticket.findUnique({ where: { id: b.upcomingTicket.id } })).status).toBe('VOIDED');
     expect((await prisma.ticket.findUnique({ where: { id: b.pastTicket.id } })).status).toBe('VALID');
