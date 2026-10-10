@@ -28,6 +28,8 @@ export interface RsvpPassEvent {
 interface RsvpPassProps {
   event: RsvpPassEvent;
   isPastEvent: boolean;
+  /** Staff draft preview (spec 050 F): the form shows, but never submits. */
+  preview?: boolean;
   legalVersions: LegalVersions | null;
   onLegalStale: () => void;
   onSubmitted: () => void;
@@ -73,7 +75,7 @@ function downloadIcs(event: RsvpPassEvent) {
   URL.revokeObjectURL(url);
 }
 
-export default function RsvpPass({ event, isPastEvent, legalVersions, onLegalStale, onSubmitted }: RsvpPassProps) {
+export default function RsvpPass({ event, isPastEvent, preview = false, legalVersions, onLegalStale, onSubmitted }: RsvpPassProps) {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -94,7 +96,7 @@ export default function RsvpPass({ event, isPastEvent, legalVersions, onLegalSta
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!legalVersions) return;
+    if (!legalVersions || preview) return;
     try {
       setSubmitting(true);
       setError(null);
@@ -324,7 +326,7 @@ export default function RsvpPass({ event, isPastEvent, legalVersions, onLegalSta
 
               <button
                 type="submit"
-                disabled={submitting || !legalVersions}
+                disabled={submitting || !legalVersions || preview}
                 className="flex h-12 w-full items-center justify-center rounded-[var(--theme-button-radius,8px)] bg-brand text-base font-bold text-brand-fg transition-colors hover:bg-brand-hover disabled:opacity-50"
               >
                 {submitting ? 'Reserving…' : partySize > 1 ? `Reserve ${partySize} spots` : 'Reserve my spot'}

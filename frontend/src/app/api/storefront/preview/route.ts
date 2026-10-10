@@ -7,6 +7,7 @@
 import { NextResponse } from 'next/server';
 import { isPlatformHost, platformHostsFromEnv } from '@/lib/storefrontHost';
 import { PREVIEW_COOKIE } from '@/theme/server/storefront';
+import { publicUrl, safePath } from '@/lib/publicRequestUrl';
 
 const PLATFORM_HOSTS = platformHostsFromEnv(process.env as Record<string, string | undefined>);
 
@@ -16,24 +17,6 @@ function claims(token: string): { orgId?: string; exp?: number } {
   } catch {
     return {};
   }
-}
-
-/**
- * The address the browser used. Behind Railway's proxy `request.url` names the
- * server's own listener (localhost:3001), so redirects must come from the
- * forwarded / Host header instead.
- */
-function publicUrl(path: string, request: Request) {
-  const url = new URL(request.url);
-  const first = (name: string) => request.headers.get(name)?.split(',')[0].trim();
-  const host = first('x-forwarded-host') || first('host') || url.host;
-  const proto = first('x-forwarded-proto') || url.protocol.replace(':', '');
-  return new URL(path, `${proto}://${host}`);
-}
-
-/** Only same-site paths: never an open redirect. */
-function safePath(to: string | null) {
-  return to && to.startsWith('/') && !to.startsWith('//') ? to : '/';
 }
 
 export function GET(request: Request) {

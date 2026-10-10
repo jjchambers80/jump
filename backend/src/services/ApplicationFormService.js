@@ -635,10 +635,13 @@ class ApplicationFormService {
   // Public
   // ---------------------------------------------------------------------------
 
-  /** Forms a visitor can see for a published event: OPEN, and DRAFT-less upcoming windows. */
-  async publicForms(eventId) {
+  /**
+   * Forms a visitor can see for a published event: OPEN, and DRAFT-less upcoming windows.
+   * `anyEventStatus`: the staff preview payload (spec 050 F) on a draft event.
+   */
+  async publicForms(eventId, { anyEventStatus = false } = {}) {
     const event = await this.requireEvent(eventId);
-    if (event.status !== 'PUBLISHED') throw new NotFoundError('Event not found');
+    if (event.status !== 'PUBLISHED' && !anyEventStatus) throw new NotFoundError('Event not found');
     const forms = await prisma.applicationForm.findMany({
       where: { eventId, status: { in: ['OPEN', 'CLOSED'] } },
       include: FORM_INCLUDE,

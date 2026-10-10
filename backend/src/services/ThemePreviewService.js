@@ -24,7 +24,8 @@ export const THUMBNAIL_AUDIENCE = 'theme-thumbnail';
 const THUMBNAIL_TTL_S = 10 * 60;
 
 // Never the raw AUTH_SECRET: a session verifier must not accept a preview token.
-function secret() {
+// Shared with EventPreviewService (spec 050 F); the audience keeps them apart.
+export function previewSecret() {
   return (
     process.env.STOREFRONT_PREVIEW_SECRET ||
     createHmac('sha256', process.env.AUTH_SECRET || 'dev-secret').update('theme-preview').digest('hex')
@@ -38,7 +39,7 @@ class ThemePreviewService {
     if (!theme) throw new NotFoundError('Theme not found');
     if (theme.role === 'MAIN') throw new ValidationError('The live theme has no preview: view the store instead');
     const ttl = share ? SHARE_TTL_S : STAFF_TTL_S;
-    const token = jwt.sign({ orgId: organizationId, themeId, share: Boolean(share) }, secret(), {
+    const token = jwt.sign({ orgId: organizationId, themeId, share: Boolean(share) }, previewSecret(), {
       algorithm: 'HS256',
       audience: AUDIENCE,
       expiresIn: ttl,
@@ -56,7 +57,7 @@ class ThemePreviewService {
     const drafts = await prisma.theme.findMany({ where: { organizationId, role: 'UNPUBLISHED' }, select: { id: true } });
     const thumbnails = {};
     for (const { id } of drafts) {
-      const token = jwt.sign({ orgId: organizationId, themeId: id, page: 'home' }, secret(), {
+      const token = jwt.sign({ orgId: organizationId, themeId: id, page: 'home' }, previewSecret(), {
         algorithm: 'HS256',
         audience: THUMBNAIL_AUDIENCE,
         expiresIn: THUMBNAIL_TTL_S,
@@ -70,7 +71,7 @@ class ThemePreviewService {
   verify(token, organizationId, audience = AUDIENCE) {
     if (!token) return null;
     try {
-      const claims = jwt.verify(token, secret(), { algorithms: ['HS256'], audience });
+      const claims = jwt.verify(token, previewSecret(), { algorithms: ['HS256'], audience });
       if (claims.orgId !== organizationId || typeof claims.themeId !== 'string') return null;
       return {
         themeId: claims.themeId,
