@@ -74,7 +74,7 @@ test.describe('theme settings panel (spec 049 C)', () => {
     await expect(canvas(page).getByText('Welcome').first()).toBeVisible({ timeout: 60_000 });
     await page.getByRole('button', { name: 'Theme settings' }).click();
 
-    await panel(page).getByRole('spinbutton', { name: /Desktop logo width/ }).fill('200');
+    await panel(page).getByRole('spinbutton', { name: /Logo size/ }).fill('200');
     await expect(scope(page)).toHaveAttribute('style', /--theme-logo-width: 200px/);
     await panel(page).getByRole('button', { name: 'Reset to theme defaults' }).click();
     await expect(scope(page)).toHaveAttribute('style', /--theme-logo-width: 120px/);

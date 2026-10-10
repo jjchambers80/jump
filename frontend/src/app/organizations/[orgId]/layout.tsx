@@ -1,5 +1,5 @@
 // Every storefront page of an organization (and its custom domain) gets the
-// org favicon (spec 049): theme Logo › Favicon ?? square logo ?? platform default.
+// org favicon (spec 049): square logo (Settings › Brand) ?? platform default.
 
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';

@@ -341,8 +341,8 @@ class OrganizationService {
       description: org.seoDescription,
       // Social sharing image: the cover from Settings › Brand.
       imageUrl: org.coverUrl,
-      // Spec 049: theme favicon ?? square logo ?? null (platform default).
-      faviconUrl: await faviconUrlFor(org),
+      // Spec 049: square logo ?? null (platform default).
+      faviconUrl: faviconUrlFor(org),
     };
   }
 
