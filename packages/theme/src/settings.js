@@ -42,15 +42,12 @@ export const SETTINGS_GROUPS = {
     },
   },
   colors: { label: 'Colors', fields: {} }, // schemes: validated by checkSchemes
+  // One font family for the whole theme (owner rule: theme settings stay
+  // simple, no per-element picks). Older heading/body keys fold into it.
   typography: {
     label: 'Typography',
     fields: {
-      headingFont: select('Heading font', FONTS, 'inter'),
-      headingScale: range('Heading size', 90, 150, { step: 5, unit: '%', default: 100 }),
-      bodyFont: select('Body font', FONTS, 'inter'),
-      bodyScale: range('Body size', 90, 130, { step: 5, unit: '%', default: 100 }),
-      headingCase: select('Heading case', ['as-typed', 'uppercase']),
-      letterSpacing: select('Letter spacing', ['normal', 'tight', 'wide']),
+      font: select('Font', FONTS, 'inter'),
     },
   },
   layout: {
@@ -127,6 +124,21 @@ export const SETTINGS_GROUPS = {
   },
 };
 
+const LEGACY_TYPOGRAPHY = ['headingFont', 'bodyFont', 'headingScale', 'bodyScale', 'headingCase', 'letterSpacing'];
+
+/**
+ * Typography stored before the single-font rule: `font` ← body font, else
+ * heading font; the other old keys are dropped. Keeps old revisions,
+ * settings.json uploads and CLI pushes valid.
+ */
+export function normalizeTypography(values) {
+  if (!isPlainObject(values) || !LEGACY_TYPOGRAPHY.some((k) => k in values)) return values;
+  const out = Object.fromEntries(Object.entries(values).filter(([k]) => !LEGACY_TYPOGRAPHY.includes(k)));
+  const font = values.font ?? values.bodyFont ?? values.headingFont;
+  if (font !== undefined) out.font = font;
+  return out;
+}
+
 /** Scheme color slots: `auto` follows the page's light/dark tokens, `brand` / `brand-secondary` (accent only) the org brand colors. */
 export const SCHEME_COLORS = ['background', 'foreground', 'accent', 'accentForeground', 'secondaryButtonLabel', 'border', 'muted', 'shadow'];
 const HEX_RE = /^#[0-9a-f]{6}$/i;
@@ -194,7 +206,7 @@ export function validateSettings(settings) {
       out.colors = { schemes: checkSchemes(values.schemes, errors) };
       continue;
     }
-    const checked = checkFields(def.fields, values, { schemeIds }, group);
+    const checked = checkFields(def.fields, group === 'typography' ? normalizeTypography(values) : values, { schemeIds }, group);
     Object.assign(errors, checked.errors);
     out[group] = checked.value;
   }
@@ -216,7 +228,8 @@ export function resolveSettings(stored, presetSettings) {
   const base = { ...settingsDefaults(), ...(presetSettings ?? {}) };
   const out = {};
   for (const group of new Set([...Object.keys(base), ...Object.keys(stored ?? {})])) {
-    out[group] = { ...(base[group] ?? {}), ...(stored?.[group] ?? {}) };
+    const own = group === 'typography' ? normalizeTypography(stored?.[group]) : stored?.[group];
+    out[group] = { ...(base[group] ?? {}), ...(own ?? {}) };
   }
   return out;
 }

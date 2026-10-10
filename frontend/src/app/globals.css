@@ -43,27 +43,12 @@
 }
 
 /*
- * Theme typography (spec 049 card C): settingsVars sets the variables,
- * ThemeScope marks the scope. :where() keeps these at zero specificity so a
- * section's own Tailwind classes (uppercase, font-mono, tracking-*) still win.
- * --heading-case is set only for uppercase; unset, text-transform inherits.
- * Tailwind sizes are rem, so scale uses zoom.
- * ponytail: body scale zooms paragraphs only; text in spans/divs keeps its
- * size. Scale the Tailwind type ramp through variables if that is too narrow.
+ * Theme typography (spec 049): one font for the whole theme. settingsVars
+ * sets --theme-font, ThemeScope marks the scope, and every element inside
+ * (header, sections, footer, form controls via preflight) inherits it.
  */
 :where([data-theme-type]) {
-  font-family: var(--font-body);
-  letter-spacing: var(--letter-spacing);
-}
-
-:where([data-theme-type]) :where(h1, h2, h3, h4, h5, h6) {
-  font-family: var(--font-heading);
-  text-transform: var(--heading-case);
-  zoom: var(--heading-scale, 1);
-}
-
-:where([data-theme-type]) :where(p) {
-  zoom: var(--body-scale, 1);
+  font-family: var(--theme-font);
 }
 
 body {
