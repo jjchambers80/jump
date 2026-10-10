@@ -10,7 +10,7 @@
 
 import { Router } from 'express';
 import { requireAuth } from '../../middleware/auth.js';
-import { requireOrganizer } from '../../middleware/rbac.js';
+import { requireOrganizer, orgRoleFor } from '../../middleware/rbac.js';
 import { requireRecentAuth } from '../../middleware/recentAuth.js';
 import { allowDeveloperToken } from '../../middleware/developerToken.js';
 import { AuthenticationError } from '../../middleware/errorHandler.js';
@@ -63,11 +63,11 @@ router.delete('/developer/token', developerOnly, handle(async (req, res) => {
 }));
 
 router.get('/admin/developer-tokens', requireAuth, requireOrganizer, handle(async (req, res) => {
-  res.json({ tokens: await developerTokenService.list(await activeOrgFor(req), req.user) });
+  res.json({ tokens: await developerTokenService.list(await activeOrgFor(req), { ...req.user, role: await orgRoleFor(req) }) });
 }));
 
 router.delete('/admin/developer-tokens/:id', requireAuth, requireOrganizer, handle(async (req, res) => {
-  await developerTokenService.revoke(await activeOrgFor(req), req.user, req.params.id);
+  await developerTokenService.revoke(await activeOrgFor(req), { ...req.user, role: await orgRoleFor(req) }, req.params.id);
   res.status(204).end();
 }));
 

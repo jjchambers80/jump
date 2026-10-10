@@ -343,14 +343,13 @@ describe('Administration search contract', () => {
     expect(response.body.data.every((row) => row.type === 'EVENT')).toBe(true);
   });
 
-  it('scopes members, returns empty for memberless staff, and honors SYSTEM_ADMIN scope', async () => {
+  it('scopes members, refuses memberless staff, and honors SYSTEM_ADMIN scope', async () => {
     const member = await search(organizerToken);
     expect(member.status).toBe(200);
     expect(member.body.data.some((row) => row.title.includes('Foreign'))).toBe(false);
 
     const memberless = await search(memberlessToken);
-    expect(memberless.status).toBe(200);
-    expect(memberless.body).toEqual({ query: TERM, total: 0, data: [] });
+    expect(memberless.status).toBe(403);
 
     const unscoped = await search(sysAdminToken);
     expect(unscoped.body.data.some((row) => row.title === `${TERM} Foreign Festival`)).toBe(true);

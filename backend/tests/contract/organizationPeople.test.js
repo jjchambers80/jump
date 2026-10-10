@@ -112,7 +112,7 @@ describe('Organization people contract', () => {
   });
 
   it.each(['get', 'post', 'delete'])(
-    'returns 404 for %s when the authenticated user has no organization',
+    'returns 403 for %s when the authenticated user has no organization',
     async (method) => {
       const auth = tokenFor(noOrgAdmin);
       const path = method === 'delete' ? '/admin/settings/people/missing' : '/admin/settings/people';
@@ -120,7 +120,7 @@ describe('Organization people contract', () => {
       if (method === 'post') call.send(validPerson);
 
       const response = await call;
-      expect(response.status).toBe(404);
+      expect(response.status).toBe(403);
     }
   );
 

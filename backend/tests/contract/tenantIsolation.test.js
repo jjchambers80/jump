@@ -273,19 +273,19 @@ describe('Tenant isolation contract (spec 007 phase 1)', () => {
           .get('/admin/customers')
           .set('Authorization', `Bearer ${tokenFor(orphan)}`)
           .query({ search: SHARED_EMAIL });
-        expect(list.status).toBe(200);
-        expect(list.body.data).toEqual([]);
+        // No membership = no organization to act in: refused at the role check.
+        expect(list.status).toBe(403);
 
         const detail = await request(app)
           .get(`/admin/customers/${a.contact.id}`)
           .set('Authorization', `Bearer ${tokenFor(orphan)}`);
-        expect(detail.status).toBe(404);
+        expect(detail.status).toBe(403);
 
         const patch = await request(app)
           .patch(`/admin/customers/${a.contact.id}`)
           .set('Authorization', `Bearer ${tokenFor(orphan)}`)
           .send({ note: 'leaked' });
-        expect(patch.status).toBe(404);
+        expect(patch.status).toBe(403);
         const row = await prisma.contact.findUnique({ where: { id: a.contact.id } });
         expect(row.note).toBe('A-private');
       } finally {
