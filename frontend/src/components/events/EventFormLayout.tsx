@@ -26,6 +26,7 @@ export function EventFormShell({
   main,
   aside,
   mobileActions,
+  asideLabel = 'Event settings',
   children,
 }: {
   header: React.ReactNode;
@@ -34,6 +35,8 @@ export function EventFormShell({
   aside: React.ReactNode;
   /** Sticky save bar shown below `xl`, where the aside stacks under the content. */
   mobileActions: React.ReactNode;
+  /** Accessible name of the aside landmark. */
+  asideLabel?: string;
   /** Dialogs and flyouts rendered outside the grid. */
   children?: React.ReactNode;
 }) {
@@ -43,7 +46,7 @@ export function EventFormShell({
       {alerts}
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
         <div className="min-w-0 space-y-6 xl:col-span-8">{main}</div>
-        <aside aria-label="Event settings" className="flex min-w-0 flex-col gap-6 xl:col-span-4">
+        <aside aria-label={asideLabel} className="flex min-w-0 flex-col gap-6 xl:col-span-4">
           {aside}
         </aside>
       </div>
@@ -137,7 +140,7 @@ export function FormCard({
           {step != null && (
             <span
               aria-hidden
-              className="font-mono text-xs font-medium tabular-nums text-gray-400 dark:text-slate-500"
+              className="font-mono text-xs font-medium tabular-nums text-gray-500 dark:text-slate-400"
             >
               {String(step).padStart(2, '0')}
             </span>

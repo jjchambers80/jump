@@ -55,6 +55,7 @@ const GROUP_LIST_PATH: Record<AdminSearchType, string> = {
 
 const SEARCH_PARAM: Partial<Record<AdminSearchType, 'search' | 'q'>> = {
   APPLICATION: 'search',
+  VENUE: 'q',
 };
 
 export function viewAllHref(type: AdminSearchType, query: string): string {

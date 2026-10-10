@@ -364,6 +364,8 @@ describe('Venue Contract Tests', () => {
       expect(res.status).toBe(200);
       expect(res.body.id).toBe(venueId);
       expect(res.body.name).toBe('Detail Venue');
+      expect(res.body.events).toEqual([]);
+      expect(res.body._count.events).toBe(0);
     });
 
     it('should return 404 for non-existent venue', async () => {

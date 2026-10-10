@@ -6,6 +6,7 @@
 // It slides in from the right on desktop and covers the screen on phones.
 
 import React, { useEffect, useRef, useState } from 'react';
+import { X } from 'lucide-react';
 import api from '@/services/api';
 import { StateSelect } from '@/components/StateSelect';
 import SlugField from '@/components/SlugField';
@@ -156,11 +157,9 @@ export default function VenueFlyout({ orgId, onClose, onCreated }: Props) {
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-slate-300"
+            className="flex h-10 w-10 items-center justify-center rounded-md text-gray-500 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:text-slate-400 dark:hover:text-slate-200"
           >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <X className="h-5 w-5" aria-hidden />
           </button>
         </div>
 

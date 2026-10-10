@@ -60,7 +60,7 @@ export default function SlugField({
         </p>
       )}
       {url && (
-        <p className="mt-1 text-xs text-gray-400 dark:text-slate-500 break-all">
+        <p className="mt-1 text-xs text-gray-500 dark:text-slate-400 break-all">
           Live URL: {url}
         </p>
       )}
