@@ -10,8 +10,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import api from '@/services/api';
-import { useSession } from 'next-auth/react';
-import { useOrg } from '@/components/OrgContext';
+import { useOrg, useCan } from '@/components/OrgContext';
 import { formatEventDateTime } from '@/lib/eventTime';
 import { EventStatusPill } from '@/components/events/EventEditSummary';
 
@@ -75,10 +74,14 @@ export function WorkspaceTabs({
   tabs: ReturnType<typeof workspaceTabs>;
   current: WorkspaceTab;
 }) {
-  // History (spec 048-D) reads the audit trail: store admins only, like
-  // Settings › Activity log. Added here so every page's tab bar has it.
-  const { data: session } = useSession();
-  if (['ADMIN', 'SYSTEM_ADMIN'].includes((session?.user as any)?.role)) {
+  // Tabs of features the role cannot see are dropped (System › Roles).
+  // History (spec 048-D) reads the audit trail like Settings › Activity log.
+  // Added here so every page's tab bar has it.
+  const canMaps = useCan('maps');
+  const canAnalytics = useCan('analytics');
+  const canHistory = useCan('settings.activity');
+  tabs = tabs.filter((t) => (t.key !== 'map' || canMaps) && (t.key !== 'analytics' || canAnalytics));
+  if (canHistory) {
     const base = tabs[0].href.split('?')[0];
     tabs = [...tabs, { key: 'history', label: 'History', href: `${base}/history` }];
   }

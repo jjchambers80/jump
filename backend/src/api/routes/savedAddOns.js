@@ -7,14 +7,14 @@
 import express from 'express';
 import addOnProductService from '../../services/AddOnProductService.js';
 import { requireAuth } from '../../middleware/auth.js';
-import { requireAdmin, requireOrganizer } from '../../middleware/rbac.js';
+import { requirePermission, requireOrganizer } from '../../middleware/rbac.js';
 import { requireOrgMembership } from '../../middleware/orgScope.js';
 
 const router = express.Router({ mergeParams: true });
 
 const wrap = (fn) => (req, res, next) => fn(req, res).catch(next);
 const member = [requireAuth, requireOrganizer, requireOrgMembership()];
-const admin = [requireAuth, requireAdmin, requireOrgMembership()];
+const admin = [requireAuth, requirePermission('addOns.manage'), requireOrgMembership()];
 
 const truthy = (v) => v === '1' || v === 'true';
 

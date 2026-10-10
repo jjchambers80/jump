@@ -4,11 +4,11 @@
 
 import Link from 'next/link';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
-import { useSession } from 'next-auth/react';
 import { acceptanceLine, formatDate, type AdminForm, type FormKind, type FormTemplateSummary } from '@/lib/applications';
 import { useParticipantsApi } from '@/components/applications/useParticipantsApi';
 import ApplicationsHeader from '../ApplicationsHeader';
 import { describeError, useApplicationsApi } from '../useApplicationsApi';
+import { useCan } from '@/components/OrgContext';
 
 const card = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
 const btn = 'rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
@@ -24,9 +24,7 @@ const STATUS_PILL: Record<AdminForm['status'], string> = {
 export default function FormsPage({ params }: { params: { eventId: string } }) {
   const api = useApplicationsApi(params.eventId);
   const participants = useParticipantsApi();
-  const { data: session } = useSession();
-  const role = (session?.user as { role?: string } | undefined)?.role;
-  const canEdit = role === 'ADMIN' || role === 'SYSTEM_ADMIN';
+  const canEdit = useCan('applications.forms');
   const [forms, setForms] = useState<AdminForm[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);

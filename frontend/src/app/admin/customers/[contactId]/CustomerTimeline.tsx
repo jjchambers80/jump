@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import api from '@/services/api';
 import { rsvpTimelineText } from '@/lib/customers';
+import { useCan } from '@/components/OrgContext';
 
 type TimelineAuthor = {
   id: string;
@@ -109,7 +110,8 @@ export default function CustomerTimeline({ contactId }: { contactId: string }) {
     load();
   }, [load]);
 
-  const currentUser = session?.user as { id?: string; role?: string } | undefined;
+  const currentUser = session?.user as { id?: string } | undefined;
+  const canModerate = useCan('customers.comments');
   const normalizedBody = body.trim();
   const remaining = 2000 - body.length;
 
@@ -182,7 +184,7 @@ export default function CustomerTimeline({ contactId }: { contactId: string }) {
         <ol className="divide-y divide-gray-100 dark:divide-slate-700/50">
           {renderedItems.map((item) => {
             const isComment = item.kind === 'COMMENT';
-            const canDelete = isComment && (item.canDelete === true || currentUser?.role === 'ADMIN' || item.author?.id === currentUser?.id || item.authorUserId === currentUser?.id);
+            const canDelete = isComment && (item.canDelete === true || canModerate || item.author?.id === currentUser?.id || item.authorUserId === currentUser?.id);
             return (
               <li key={item.id} data-timeline-item className="flex gap-3 px-4 py-3">
                 <span aria-hidden className={`mt-1 h-2.5 w-2.5 flex-none rounded-full ${isComment ? 'bg-accent-500' : 'bg-gray-400 dark:bg-slate-500'}`} />

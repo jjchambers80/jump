@@ -8,13 +8,13 @@
 
 import { Router } from 'express';
 import { requireAuth } from '../../middleware/auth.js';
-import { requireOrganizer } from '../../middleware/rbac.js';
+import { requireFeature } from '../../middleware/rbac.js';
 import { activeOrgFor } from './adminScope.js';
 import mapExportService from '../../services/MapExportService.js';
 
 const router = Router();
 
-router.use(requireAuth, requireOrganizer);
+router.use(requireAuth, requireFeature('maps'));
 
 router.get('/:mapId/export', async (req, res, next) => {
   try {

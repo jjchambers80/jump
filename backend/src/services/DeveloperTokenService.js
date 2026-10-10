@@ -171,9 +171,9 @@ class DeveloperTokenService {
     };
   }
 
-  /** Settings › Developers: ADMIN sees every token of the organization, others their own. `user.role` is the role in this organization. */
+  /** Settings › Developers: `user.manageAll` (developer.manageAll) sees every token of the organization, others their own. */
   async list(organizationId, user) {
-    const mine = !['ADMIN', 'SYSTEM_ADMIN'].includes(user.role);
+    const mine = !user.manageAll;
     const rows = await prisma.developerToken.findMany({
       where: { organizationId, revokedAt: null, expiresAt: { gt: new Date() }, ...(mine && { userId: user.id }) },
       orderBy: { createdAt: 'desc' },
@@ -193,7 +193,7 @@ class DeveloperTokenService {
 
   async revoke(organizationId, user, tokenId) {
     const row = await prisma.developerToken.findFirst({ where: { id: tokenId, organizationId, revokedAt: null } });
-    const admin = ['ADMIN', 'SYSTEM_ADMIN'].includes(user.role);
+    const admin = user.manageAll;
     if (!row || (!admin && row.userId !== user.id)) throw new NotFoundError('Token not found');
     await prisma.developerToken.update({ where: { id: row.id }, data: { revokedAt: new Date() } });
     logger.info('Developer token revoked', { event: 'developer_token_revoked', organizationId, tokenId, by: user.id });

@@ -6,11 +6,11 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSession } from 'next-auth/react';
 import { QuestionsCard, SettingsCard, TiersCard, type EditorForm } from '@/components/applications/FormEditorCards';
 import { formatDate, type FormTemplate, type Question, type TemplateDefinition, type TemplateQuestion, type TemplateTier } from '@/lib/applications';
 import { describeError } from '@/app/admin/events/[eventId]/applications/useApplicationsApi';
 import { useParticipantsApi } from '@/components/applications/useParticipantsApi';
+import { useCan } from '@/components/OrgContext';
 
 const primary = 'rounded-md bg-accent-500 px-3 py-1.5 text-sm font-semibold text-gray-950 hover:bg-accent-hover disabled:opacity-50';
 
@@ -58,9 +58,7 @@ function questionFromBody(body: Record<string, unknown>): TemplateQuestion {
 
 export default function TemplateEditorPage({ params }: { params: { templateId: string } }) {
   const api = useParticipantsApi();
-  const { data: session } = useSession();
-  const role = (session?.user as { role?: string } | undefined)?.role;
-  const canEdit = role === 'ADMIN' || role === 'SYSTEM_ADMIN';
+  const canEdit = useCan('applications.forms');
   const [template, setTemplate] = useState<FormTemplate | null>(null);
   const [name, setName] = useState('');
   const [definition, setDefinition] = useState<TemplateDefinition | null>(null);

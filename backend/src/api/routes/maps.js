@@ -4,7 +4,7 @@
 
 import { Router } from 'express';
 import { requireAuth } from '../../middleware/auth.js';
-import { requireOrganizer } from '../../middleware/rbac.js';
+import { requireFeature } from '../../middleware/rbac.js';
 import { activeOrgFor } from './adminScope.js';
 import { validateCreateMap, validateUpdateMap } from '../validators/mapValidators.js';
 import mapService from '../../services/MapService.js';
@@ -13,7 +13,7 @@ import floorMapTemplateService from '../../services/FloorMapTemplateService.js';
 
 const router = Router();
 
-router.use(requireAuth, requireOrganizer);
+router.use(requireAuth, requireFeature('maps'));
 
 // ─── Reusable templates ──────────────────────────────────────────────
 

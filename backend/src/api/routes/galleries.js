@@ -2,14 +2,14 @@
 
 import { Router } from 'express';
 import { requireAuth } from '../../middleware/auth.js';
-import { requireOrganizer } from '../../middleware/rbac.js';
+import { requireFeature } from '../../middleware/rbac.js';
 import { activeOrgFor } from './adminScope.js';
 import galleryService from '../../services/GalleryService.js';
 import { validateCreateGallery, validateReplaceGallery } from '../validators/galleryValidators.js';
 
 const router = Router();
 router.use(requireAuth);
-router.use(requireOrganizer);
+router.use(requireFeature('content'));
 
 router.get('/', async (req, res, next) => {
   try {

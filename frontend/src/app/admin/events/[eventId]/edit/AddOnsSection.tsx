@@ -8,11 +8,11 @@
 // new saved add-on and its offering here in one call. Price stays per event.
 
 import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSession } from 'next-auth/react';
 import api from '@/services/api';
 import { formatPrice } from '@/lib/fees';
 import { addOnAllInPrice, type AdminAddOn } from '@/lib/addOns';
 import SavedAddOnPicker from '@/components/events/SavedAddOnPicker';
+import { useCan } from '@/components/OrgContext';
 
 type Scope = AdminAddOn['scope'];
 
@@ -65,9 +65,7 @@ function describeError(err: unknown, fallback: string) {
 }
 
 export default function AddOnsSection({ orgId, eventId, priceTiers, taxRate, taxInclusive, step }: AddOnsSectionProps) {
-  const { data: session } = useSession();
-  const role = (session?.user as { role?: string } | undefined)?.role;
-  const canEdit = role === 'ADMIN' || role === 'SYSTEM_ADMIN';
+  const canEdit = useCan('addOns.manage');
   const base = `/organizations/${orgId}/events/${eventId}/add-ons`;
 
   const [addOns, setAddOns] = useState<AdminAddOn[] | null>(null);

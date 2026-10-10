@@ -8,7 +8,7 @@ import { themeKit } from '@jump/theme';
 import { requireAuth } from '../../middleware/auth.js';
 import { allowDeveloperToken } from '../../middleware/developerToken.js';
 import { ForbiddenError } from '../../middleware/errorHandler.js';
-import { requireOrganizer, requireSystemAdmin } from '../../middleware/rbac.js';
+import { requireFeature, requireSystemAdmin } from '../../middleware/rbac.js';
 import { activeOrgFor } from './adminScope.js';
 import themeService from '../../services/ThemeService.js';
 import themePreviewService from '../../services/ThemePreviewService.js';
@@ -24,7 +24,7 @@ const router = Router();
 // Spec 043: the Jump CLI's developer token (scope `themes`) works here and nowhere else.
 router.use(allowDeveloperToken('themes'));
 router.use((req, res, next) => (req.user?.developerTokenId ? next() : requireAuth(req, res, next)));
-router.use(requireOrganizer);
+router.use(requireFeature('onlineStore'));
 
 const handle = (fn) => async (req, res, next) => {
   try {

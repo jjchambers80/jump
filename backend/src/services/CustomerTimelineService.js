@@ -271,7 +271,7 @@ class CustomerTimelineService {
     if (!comment) throw new NotFoundError('Comment not found');
     if (comment.kind !== 'COMMENT')
       throw new ForbiddenError('System timeline entries cannot be deleted');
-    if (comment.authorUserId !== user.id && !['ADMIN', 'SYSTEM_ADMIN'].includes(user.role)) {
+    if (comment.authorUserId !== user.id && !user.canModerate) {
       throw new ForbiddenError('Only the comment author or an admin may delete this comment');
     }
     await prisma.contactComment.delete({ where: { id: comment.id } });

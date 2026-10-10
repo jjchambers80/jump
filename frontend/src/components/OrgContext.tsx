@@ -5,6 +5,7 @@
 
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
+import { usePathname, useRouter } from 'next/navigation';
 import api, { setActiveOrganizationId } from '@/services/api';
 import { onOrganizationCreated } from '@/lib/orgChannel';
 import {
@@ -36,6 +37,15 @@ interface OrgContextValue {
   refresh: () => Promise<void>;
   /** Patch one org in memory (e.g. after Settings saves a new name) without refetching. */
   updateOrganization: (id: string, patch: Partial<Organization>) => void;
+  /** What the user may see and do in the selected organization (System › Roles). */
+  permissions: Permissions;
+}
+
+export interface Permissions {
+  /** Catalog keys granted in the selected organization (features and actions). */
+  granted: Set<string>;
+  /** Admin paths of features the user cannot see. */
+  hiddenPaths: string[];
 }
 
 const OrgContext = createContext<OrgContextValue | null>(null);
@@ -151,6 +161,38 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
 
   const selectedOrg = organizations.find((o) => o.id === selectedOrgId) ?? null;
 
+  // Permissions in the selected org, refreshed when it changes and when the
+  // tab regains focus. Until they arrive (or if the call fails) the account
+  // role stands in, which is what the backend enforced before System › Roles;
+  // the backend checks every request either way.
+  const [loaded, setLoaded] = useState<{ granted: string[]; hiddenPaths: string[] } | null>(null);
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    const load = () =>
+      api
+        .get<{ granted: string[]; hiddenPaths: string[] }>('/admin/permissions')
+        .then((data) => {
+          // A mocked or older API may answer something else: keep the stand-in.
+          if (!cancelled && Array.isArray(data?.granted) && Array.isArray(data?.hiddenPaths)) setLoaded(data);
+        })
+        .catch(() => {});
+    load();
+    window.addEventListener('focus', load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('focus', load);
+    };
+  }, [userId, selectedOrgId]);
+  const role = session?.user?.role;
+  const permissions: Permissions = React.useMemo(
+    () =>
+      loaded
+        ? { granted: new Set(loaded.granted), hiddenPaths: loaded.hiddenPaths }
+        : { granted: new Set([role === 'ADMIN' || role === 'SYSTEM_ADMIN' ? '*' : '*feature']), hiddenPaths: [] },
+    [loaded, role]
+  );
+
   return (
     <OrgContext.Provider
       value={{
@@ -162,6 +204,7 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
         error,
         refresh: fetchOrgs,
         updateOrganization,
+        permissions,
       }}
     >
       {children}
@@ -173,4 +216,36 @@ export function useOrg() {
   const ctx = useContext(OrgContext);
   if (!ctx) throw new Error('useOrg must be used within OrgProvider');
   return ctx;
+}
+/**
+ * True when the user may use catalog key `key` (a feature such as `customers`
+ * or an action such as `orders.refund`) in the selected organization. The UI
+ * hint only — the backend enforces the same key.
+ */
+export function useCan(key: string): boolean {
+  return hasPermission(useOrg().permissions, key);
+}
+
+/** `useCan` for lists: whether `permissions` grant catalog key `key`. */
+export function hasPermission({ granted }: Permissions, key: string): boolean {
+  // '*' / '*feature': the account-role stand-in before /admin/permissions answers
+  // (features have no dot in their key, actions do).
+  return granted.has(key) || granted.has('*') || (granted.has('*feature') && !key.includes('.'));
+}
+
+/** True when `pathname` belongs to a feature the user cannot see. */
+export function isHiddenPath(pathname: string, hiddenPaths: string[]): boolean {
+  return hiddenPaths.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
+/** Sends the user to the dashboard when the current page belongs to a feature hidden for their role. */
+export function HiddenPathRedirect() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { permissions } = useOrg();
+  const hidden = !!pathname && isHiddenPath(pathname, permissions.hiddenPaths);
+  useEffect(() => {
+    if (hidden) router.replace('/admin/dashboard');
+  }, [hidden, router]);
+  return null;
 }

@@ -7,10 +7,9 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSession } from 'next-auth/react';
 import { ClipboardList, Plus, Search } from 'lucide-react';
 import api from '@/services/api';
-import { useOrg } from '@/components/OrgContext';
+import { useOrg, useCan } from '@/components/OrgContext';
 import { formatDate, type AdminForm } from '@/lib/applications';
 import { FORM_STATUS_LABEL, FormStatusBadge } from './FormStatusBadge';
 
@@ -19,9 +18,7 @@ const FILTERS: StatusFilter[] = ['ALL', 'OPEN', 'DRAFT', 'CLOSED'];
 
 export default function FormsPage() {
   const { selectedOrgId, loading: orgLoading } = useOrg();
-  const { data: session } = useSession();
-  const role = (session?.user as { role?: string } | undefined)?.role;
-  const canEdit = role === 'ADMIN' || role === 'SYSTEM_ADMIN';
+  const canEdit = useCan('applications.forms');
   const [forms, setForms] = useState<AdminForm[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<StatusFilter>('ALL');

@@ -2,7 +2,7 @@
 
 import { Router } from 'express';
 import { requireAuth } from '../../middleware/auth.js';
-import { requireOrganizer } from '../../middleware/rbac.js';
+import { requireOrganizer, requireFeature } from '../../middleware/rbac.js';
 import { activeOrgFor } from './adminScope.js';
 import blogService from '../../services/BlogService.js';
 import blogPostService from '../../services/BlogPostService.js';
@@ -17,6 +17,8 @@ import {
 const router = Router();
 router.use(requireAuth);
 router.use(requireOrganizer);
+// Mounted at /admin beside the main admin router: gate only its own paths.
+router.use(['/blogs', '/blog-posts'], requireFeature('content'));
 
 // ── Blogs (containers) ──────────────────────────────────────────────────────
 

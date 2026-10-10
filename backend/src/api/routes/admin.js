@@ -4,7 +4,9 @@
 import express from 'express';
 import { prisma } from '@jump/db';
 import { requireAuth } from '../../middleware/auth.js';
-import { requireOrganizer, requireAdmin, requireSystemAdmin, isOrgAdmin, orgRoleFor } from '../../middleware/rbac.js';
+import { requireOrganizer, requireSystemAdmin, requireFeature, requirePermission, can, orgRoleFor } from '../../middleware/rbac.js';
+import permissionService from '../../services/PermissionService.js';
+import { FEATURES } from '../../permissions/catalog.js';
 import { NotFoundError, ValidationError, ForbiddenError } from '../../middleware/errorHandler.js';
 import { resolveOrgScope, isUnscoped } from '../../middleware/orgScope.js';
 import {
@@ -73,6 +75,12 @@ const router = express.Router();
 // All admin routes require authentication + admin/organizer role
 router.use(requireAuth);
 router.use(requireOrganizer);
+// Features a role can be denied (System › Roles); actions are per route.
+router.use('/customers', requireFeature('customers'));
+router.use('/finance', requireFeature('finance'));
+router.use(['/pages', '/page-templates', '/online-store'], requireFeature('onlineStore'));
+router.use('/standing-application-forms', requireFeature('content'));
+router.use('/events/:eventId/map', requireFeature('maps'));
 
 // Organization the Settings pages act on — see routes/adminScope.js.
 
@@ -211,7 +219,7 @@ router.get('/online-store/preferences', async (req, res, next) => {
 /** PATCH /admin/online-store/preferences — partial update (ADMIN: it can lock the storefront). */
 router.patch(
   '/online-store/preferences',
-  requireAdmin,
+  requirePermission('onlineStore.preferences'),
   validateUpdateStorefrontPreferences,
   async (req, res, next) => {
     try {
@@ -234,7 +242,7 @@ router.get('/settings/customer-accounts', async (req, res, next) => {
 /** PATCH /admin/settings/customer-accounts — partial update (ADMIN). */
 router.patch(
   '/settings/customer-accounts',
-  requireAdmin,
+  requirePermission('settings.customerAccounts'),
   validateUpdateCustomerAccountSettings,
   async (req, res, next) => {
     try {
@@ -264,18 +272,37 @@ router.patch('/setup-guide', async (req, res, next) => {
   }
 });
 
+/**
+ * GET /admin/permissions — what the caller may see and do in the active
+ * organization (System › Roles). `granted` lists catalog keys; `hiddenPaths`
+ * are the admin pages of features the caller cannot see.
+ */
+router.get('/permissions', async (req, res, next) => {
+  try {
+    const role = await orgRoleFor(req);
+    const { granted } = await permissionService.effective(role);
+    res.json({
+      role,
+      granted: [...granted],
+      hiddenPaths: FEATURES.filter((f) => !granted.has(f.key)).flatMap((f) => f.adminPaths),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 /** GET /admin/settings/plan — the organization's Jump plan (spec 022 phase 2). */
 router.get('/settings/plan', async (req, res, next) => {
   try {
     const status = await billingService.statusFor(await activeOrgFor(req));
-    res.json({ ...status, canEdit: await isOrgAdmin(req) });
+    res.json({ ...status, canEdit: await can(req, 'settings.plan') });
   } catch (error) {
     next(error);
   }
 });
 
 /** POST /admin/settings/plan/checkout — start the STARTER trial from Settings (embedded Checkout). */
-router.post('/settings/plan/checkout', requireAdmin, async (req, res, next) => {
+router.post('/settings/plan/checkout', requirePermission('settings.plan'), async (req, res, next) => {
   try {
     const organizationId = await activeOrgFor(req);
     res.json(await billingService.createCheckout(organizationId, req.user.id, { returnPath: '/admin/settings/plan' }));
@@ -285,7 +312,7 @@ router.post('/settings/plan/checkout', requireAdmin, async (req, res, next) => {
 });
 
 /** POST /admin/settings/plan/confirm { sessionId } — record a completed Checkout on return. */
-router.post('/settings/plan/confirm', requireAdmin, async (req, res, next) => {
+router.post('/settings/plan/confirm', requirePermission('settings.plan'), async (req, res, next) => {
   try {
     const organizationId = await activeOrgFor(req);
     const result = await billingService.confirmCheckout(organizationId, req.body?.sessionId);
@@ -296,7 +323,7 @@ router.post('/settings/plan/confirm', requireAdmin, async (req, res, next) => {
 });
 
 /** POST /admin/settings/plan/portal — Stripe customer portal link (cancel, card, invoices). */
-router.post('/settings/plan/portal', requireAdmin, async (req, res, next) => {
+router.post('/settings/plan/portal', requirePermission('settings.plan'), async (req, res, next) => {
   try {
     res.json(await billingService.portalLink(await activeOrgFor(req), { returnPath: '/admin/settings/plan' }));
   } catch (error) {
@@ -439,7 +466,7 @@ router.get('/settings/tax', async (req, res, next) => {
       regions,
       needsAddress,
       settings,
-      canEdit: await isOrgAdmin(req),
+      canEdit: await can(req, 'settings.tax'),
     });
   } catch (error) {
     next(error);
@@ -449,7 +476,7 @@ router.get('/settings/tax', async (req, res, next) => {
 /** PUT /admin/settings/tax/regions/:country/:region { collecting, source, manualRate } */
 router.put(
   '/settings/tax/regions/:country/:region',
-  requireAdmin,
+  requirePermission('settings.tax'),
   validateTaxRegionParams,
   validateUpsertTaxRegion,
   async (req, res, next) => {
@@ -464,7 +491,7 @@ router.put(
 );
 
 /** PATCH /admin/settings/tax { taxInclusivePricing } — organization-level tax options. */
-router.patch('/settings/tax', requireAdmin, validateUpdateTaxSettings, async (req, res, next) => {
+router.patch('/settings/tax', requirePermission('settings.tax'), validateUpdateTaxSettings, async (req, res, next) => {
   try {
     const organizationId = await activeOrgFor(req);
     res.json(await taxService.updateTaxSettings(organizationId, req.body));
@@ -494,7 +521,7 @@ router.get('/settings/tax/report', validateTaxReportQuery, async (req, res, next
 /** POST /admin/settings/tax/regions/:country/:region/recalculate — re-run lookups for upcoming events there. */
 router.post(
   '/settings/tax/regions/:country/:region/recalculate',
-  requireAdmin,
+  requirePermission('settings.tax'),
   validateTaxRegionParams,
   async (req, res, next) => {
     try {
@@ -532,7 +559,7 @@ router.get('/settings/payments', async (req, res, next) => {
       settings,
       // Spec 010 phase 2: `{ enabled: false }` until STRIPE_CONNECT_ENABLED is on
       connect,
-      canEdit: await isOrgAdmin(req),
+      canEdit: await can(req, 'settings.payments'),
     });
   } catch (error) {
     next(error);
@@ -540,7 +567,7 @@ router.get('/settings/payments', async (req, res, next) => {
 });
 
 /** PATCH /admin/settings/payments { statementDescriptorSuffix?, enabledPaymentMethods? } */
-router.patch('/settings/payments', requireAdmin, validateUpdatePaymentSettings, async (req, res, next) => {
+router.patch('/settings/payments', requirePermission('settings.payments'), validateUpdatePaymentSettings, async (req, res, next) => {
   try {
     const organizationId = await activeOrgFor(req);
     res.json(await paymentSettingsService.updateSettings(organizationId, req.body));
@@ -568,34 +595,34 @@ const wrap = (fn) => async (req, res, next) => {
   }
 };
 
-// Settings › Users: staff of the active organization (requireAdmin checks the
+// Settings › Users: staff of the active organization (requirePermission('settings.payments') checks the
 // caller's role in that same organization).
 const memberInviteLimiter = makeLimiter('MEMBER_INVITE', LIMITS.MEMBER_INVITE);
 
 /** GET /admin/settings/users?role=&status= */
-router.get('/settings/users', requireAdmin, wrap(async (req, res) => {
+router.get('/settings/users', requirePermission('settings.users'), wrap(async (req, res) => {
   const { role, status } = req.query;
   res.json({ users: await memberService.list(await activeOrgFor(req), { role, status }) });
 }));
 
 /** POST /admin/settings/users — add users by email and send each an invite */
-router.post('/settings/users', requireAdmin, memberInviteLimiter, validateInviteMembers, wrap(async (req, res) => {
+router.post('/settings/users', requirePermission('settings.users'), memberInviteLimiter, validateInviteMembers, wrap(async (req, res) => {
   res.status(201).json(await memberService.invite(req.user, await activeOrgFor(req), req.body));
 }));
 
 /** PATCH /admin/settings/users/:userId — role, requireTwoStep, isActive */
-router.patch('/settings/users/:userId', requireAdmin, validateUpdateMember, wrap(async (req, res) => {
+router.patch('/settings/users/:userId', requirePermission('settings.users'), validateUpdateMember, wrap(async (req, res) => {
   res.json(await memberService.update(req.user, await activeOrgFor(req), req.params.userId, req.body));
 }));
 
 /** DELETE /admin/settings/users/:userId — remove from this organization */
-router.delete('/settings/users/:userId', requireAdmin, wrap(async (req, res) => {
+router.delete('/settings/users/:userId', requirePermission('settings.users'), wrap(async (req, res) => {
   await memberService.remove(req.user, await activeOrgFor(req), req.params.userId);
   res.status(204).end();
 }));
 
 /** POST /admin/settings/users/:userId/resend — re-send a pending invite */
-router.post('/settings/users/:userId/resend', requireAdmin, memberInviteLimiter, wrap(async (req, res) => {
+router.post('/settings/users/:userId/resend', requirePermission('settings.users'), memberInviteLimiter, wrap(async (req, res) => {
   await memberService.resend(req.user, await activeOrgFor(req), req.params.userId);
   res.status(204).end();
 }));
@@ -653,20 +680,20 @@ router.get('/application-forms', wrap(async (req, res) => {
 router.get('/standing-application-forms', wrap(async (req, res) => {
   res.json({ data: await applicationFormService.listStandingForms(await activeOrgFor(req)) });
 }));
-router.post('/standing-application-forms', requireAdmin, validateFormBody, wrap(async (req, res) => {
+router.post('/standing-application-forms', requirePermission('applications.forms'), validateFormBody, wrap(async (req, res) => {
   res.status(201).json(await applicationFormService.createStandingForm(await activeOrgFor(req), req.body));
 }));
 router.get('/standing-application-forms/:formId', wrap(async (req, res) => {
   res.json(await applicationFormService.getStandingForm(await activeOrgFor(req), req.params.formId));
 }));
-router.patch('/standing-application-forms/:formId', requireAdmin, validateFormBody, wrap(async (req, res) => {
+router.patch('/standing-application-forms/:formId', requirePermission('applications.forms'), validateFormBody, wrap(async (req, res) => {
   res.json(await applicationFormService.updateStandingForm(await activeOrgFor(req), req.params.formId, req.body));
 }));
-router.delete('/standing-application-forms/:formId', requireAdmin, wrap(async (req, res) => {
+router.delete('/standing-application-forms/:formId', requirePermission('applications.forms'), wrap(async (req, res) => {
   await applicationFormService.deleteStandingForm(await activeOrgFor(req), req.params.formId);
   res.status(204).end();
 }));
-router.post('/standing-application-forms/:formId/save-as-template', requireAdmin, validateSaveAsTemplateBody, wrap(async (req, res) => {
+router.post('/standing-application-forms/:formId/save-as-template', requirePermission('applications.forms'), validateSaveAsTemplateBody, wrap(async (req, res) => {
   const organizationId = await activeOrgFor(req);
   await applicationFormService.getStandingForm(organizationId, req.params.formId);
   const form = await prisma.applicationForm.findUnique({
@@ -676,16 +703,16 @@ router.post('/standing-application-forms/:formId/save-as-template', requireAdmin
   const status = req.body.replaceTemplateId ? 200 : 201;
   res.status(status).json(await applicationFormTemplateService.saveFrom(form, organizationId, req.body, { byUserId: req.user.id }));
 }));
-router.post('/standing-application-forms/:formId/questions', requireAdmin, validateQuestionBody, wrap(async (req, res) => {
+router.post('/standing-application-forms/:formId/questions', requirePermission('applications.forms'), validateQuestionBody, wrap(async (req, res) => {
   res.status(201).json(await applicationFormService.addStandingQuestion(await activeOrgFor(req), req.params.formId, req.body));
 }));
-router.patch('/standing-application-forms/:formId/questions/reorder', requireAdmin, wrap(async (req, res) => {
+router.patch('/standing-application-forms/:formId/questions/reorder', requirePermission('applications.forms'), wrap(async (req, res) => {
   res.json({ data: await applicationFormService.reorderStandingQuestions(await activeOrgFor(req), req.params.formId, req.body?.ids) });
 }));
-router.patch('/standing-application-forms/:formId/questions/:questionId', requireAdmin, validateQuestionBody, wrap(async (req, res) => {
+router.patch('/standing-application-forms/:formId/questions/:questionId', requirePermission('applications.forms'), validateQuestionBody, wrap(async (req, res) => {
   res.json(await applicationFormService.updateStandingQuestion(await activeOrgFor(req), req.params.formId, req.params.questionId, req.body));
 }));
-router.delete('/standing-application-forms/:formId/questions/:questionId', requireAdmin, wrap(async (req, res) => {
+router.delete('/standing-application-forms/:formId/questions/:questionId', requirePermission('applications.forms'), wrap(async (req, res) => {
   res.json(await applicationFormService.removeStandingQuestion(await activeOrgFor(req), req.params.formId, req.params.questionId));
 }));
 router.get('/standing-application-forms/:formId/submissions', wrap(async (req, res) => {
@@ -744,7 +771,7 @@ router.get('/application-templates', wrap(async (req, res) => {
   if (scope.empty) return res.json({ data: [] });
   res.json({ data: await applicationFormTemplateService.list(scope.organizationId) });
 }));
-router.post('/application-templates', requireAdmin, validateFormTemplateBody, wrap(async (req, res) => {
+router.post('/application-templates', requirePermission('applications.forms'), validateFormTemplateBody, wrap(async (req, res) => {
   res.status(201).json(await applicationFormTemplateService.create(await activeOrgFor(req), req.body, { byUserId: req.user.id }));
 }));
 router.get('/application-templates/:templateId', wrap(async (req, res) => {
@@ -752,12 +779,12 @@ router.get('/application-templates/:templateId', wrap(async (req, res) => {
   if (scope.empty) throw new NotFoundError('Application form template not found');
   res.json(await applicationFormTemplateService.get(req.params.templateId, scope.organizationId));
 }));
-router.put('/application-templates/:templateId', requireAdmin, validateFormTemplateBody, wrap(async (req, res) => {
+router.put('/application-templates/:templateId', requirePermission('applications.forms'), validateFormTemplateBody, wrap(async (req, res) => {
   const scope = await participantsScopeFor(req);
   if (scope.empty) throw new NotFoundError('Application form template not found');
   res.json(await applicationFormTemplateService.update(req.params.templateId, scope.organizationId, req.body));
 }));
-router.delete('/application-templates/:templateId', requireAdmin, wrap(async (req, res) => {
+router.delete('/application-templates/:templateId', requirePermission('applications.forms'), wrap(async (req, res) => {
   const scope = await participantsScopeFor(req);
   if (scope.empty) throw new NotFoundError('Application form template not found');
   await applicationFormTemplateService.remove(req.params.templateId, scope.organizationId);
@@ -776,21 +803,21 @@ router.get('/events/:eventId/map', wrap(async (req, res) => {
 router.get('/events/:eventId/application-forms', wrap(async (req, res) => {
   res.json({ data: await applicationFormService.listForms(req.params.eventId, await scopedOrgFor(req)) });
 }));
-router.post('/events/:eventId/application-forms', requireAdmin, validateFormBody, wrap(async (req, res) => {
+router.post('/events/:eventId/application-forms', requirePermission('applications.forms'), validateFormBody, wrap(async (req, res) => {
   res.status(201).json(await applicationFormService.createForm(req.params.eventId, await scopedOrgFor(req), req.body));
 }));
 router.get('/events/:eventId/application-forms/:formId', wrap(async (req, res) => {
   res.json(await applicationFormService.getForm(req.params.eventId, req.params.formId, await scopedOrgFor(req)));
 }));
-router.patch('/events/:eventId/application-forms/:formId', requireAdmin, validateFormBody, wrap(async (req, res) => {
+router.patch('/events/:eventId/application-forms/:formId', requirePermission('applications.forms'), validateFormBody, wrap(async (req, res) => {
   res.json(await applicationFormService.updateForm(req.params.eventId, req.params.formId, await scopedOrgFor(req), req.body));
 }));
-router.delete('/events/:eventId/application-forms/:formId', requireAdmin, wrap(async (req, res) => {
+router.delete('/events/:eventId/application-forms/:formId', requirePermission('applications.forms'), wrap(async (req, res) => {
   await applicationFormService.deleteForm(req.params.eventId, req.params.formId, await scopedOrgFor(req));
   res.status(204).end();
 }));
 
-router.post('/events/:eventId/application-forms/:formId/save-as-template', requireAdmin, validateSaveAsTemplateBody, wrap(async (req, res) => {
+router.post('/events/:eventId/application-forms/:formId/save-as-template', requirePermission('applications.forms'), validateSaveAsTemplateBody, wrap(async (req, res) => {
   const { eventId, formId } = req.params;
   const event = await applicationFormService.requireEvent(eventId, await scopedOrgFor(req));
   const form = await prisma.applicationForm.findFirst({
@@ -803,33 +830,33 @@ router.post('/events/:eventId/application-forms/:formId/save-as-template', requi
 }));
 
 // Tiers
-router.post('/events/:eventId/application-forms/:formId/tiers', requireAdmin, validateTierBody, wrap(async (req, res) => {
+router.post('/events/:eventId/application-forms/:formId/tiers', requirePermission('applications.forms'), validateTierBody, wrap(async (req, res) => {
   res.status(201).json(await applicationFormService.addTier(req.params.eventId, req.params.formId, await scopedOrgFor(req), req.body));
 }));
-router.patch('/events/:eventId/application-forms/:formId/tiers/:tierId', requireAdmin, validateTierBody, wrap(async (req, res) => {
+router.patch('/events/:eventId/application-forms/:formId/tiers/:tierId', requirePermission('applications.forms'), validateTierBody, wrap(async (req, res) => {
   res.json(await applicationFormService.updateTier(req.params.eventId, req.params.formId, req.params.tierId, await scopedOrgFor(req), req.body));
 }));
-router.delete('/events/:eventId/application-forms/:formId/tiers/:tierId', requireAdmin, wrap(async (req, res) => {
+router.delete('/events/:eventId/application-forms/:formId/tiers/:tierId', requirePermission('applications.forms'), wrap(async (req, res) => {
   await applicationFormService.deleteTier(req.params.eventId, req.params.formId, req.params.tierId, await scopedOrgFor(req));
   res.status(204).end();
 }));
 
 // Questions
-router.post('/events/:eventId/application-forms/:formId/questions', requireAdmin, validateQuestionBody, wrap(async (req, res) => {
+router.post('/events/:eventId/application-forms/:formId/questions', requirePermission('applications.forms'), validateQuestionBody, wrap(async (req, res) => {
   res.status(201).json(await applicationFormService.addQuestion(req.params.eventId, req.params.formId, await scopedOrgFor(req), req.body));
 }));
-router.patch('/events/:eventId/application-forms/:formId/questions/reorder', requireAdmin, wrap(async (req, res) => {
+router.patch('/events/:eventId/application-forms/:formId/questions/reorder', requirePermission('applications.forms'), wrap(async (req, res) => {
   res.json({ data: await applicationFormService.reorderQuestions(req.params.eventId, req.params.formId, await scopedOrgFor(req), req.body?.ids) });
 }));
-router.patch('/events/:eventId/application-forms/:formId/questions/:questionId', requireAdmin, validateQuestionBody, wrap(async (req, res) => {
+router.patch('/events/:eventId/application-forms/:formId/questions/:questionId', requirePermission('applications.forms'), validateQuestionBody, wrap(async (req, res) => {
   res.json(await applicationFormService.updateQuestion(req.params.eventId, req.params.formId, req.params.questionId, await scopedOrgFor(req), req.body));
 }));
-router.delete('/events/:eventId/application-forms/:formId/questions/:questionId', requireAdmin, wrap(async (req, res) => {
+router.delete('/events/:eventId/application-forms/:formId/questions/:questionId', requirePermission('applications.forms'), wrap(async (req, res) => {
   res.json(await applicationFormService.removeQuestion(req.params.eventId, req.params.formId, req.params.questionId, await scopedOrgFor(req)));
 }));
 
 // Spec 012: which restricted add-ons a tier offers (ADMIN)
-router.put('/events/:eventId/application-forms/:formId/tiers/:tierId/add-ons', requireAdmin, validateTierAddOnsBody, wrap(async (req, res) => {
+router.put('/events/:eventId/application-forms/:formId/tiers/:tierId/add-ons', requirePermission('applications.forms'), validateTierAddOnsBody, wrap(async (req, res) => {
   const { eventId, formId, tierId } = req.params;
   res.json(await applicationFormService.setTierAddOns(eventId, formId, tierId, await scopedOrgFor(req), req.body.addOnIds));
 }));
@@ -870,7 +897,7 @@ router.post('/events/:eventId/applications/:applicationId/decision', validateDec
 router.post('/events/:eventId/applications/:applicationId/charge', wrap(async (req, res) => {
   res.json(await applicationService.retryCharge(req.params.eventId, req.params.applicationId, await scopedOrgFor(req)));
 }));
-router.post('/events/:eventId/applications/:applicationId/refund', requireAdmin, validateRefundBody, wrap(async (req, res) => {
+router.post('/events/:eventId/applications/:applicationId/refund', requirePermission('applications.money'), validateRefundBody, wrap(async (req, res) => {
   res.json(await applicationService.refund(req.params.eventId, req.params.applicationId, await scopedOrgFor(req), { ...req.body, initiatedBy: req.user.id }));
 }));
 // Spec 012: replace the add-on lines before payment (organizer+)
@@ -891,11 +918,11 @@ router.delete('/events/:eventId/applications/:applicationId/adjustments/:adjustm
   const { eventId, applicationId, adjustmentId } = req.params;
   res.json(await applicationService.removeAdjustment(eventId, applicationId, await scopedOrgFor(req), adjustmentId, { byUserId: req.user.id }));
 }));
-router.post('/events/:eventId/applications/:applicationId/waive', requireAdmin, validateWaiveBody, wrap(async (req, res) => {
+router.post('/events/:eventId/applications/:applicationId/waive', requirePermission('applications.money'), validateWaiveBody, wrap(async (req, res) => {
   const { eventId, applicationId } = req.params;
   res.json(await applicationService.waiveBalance(eventId, applicationId, await scopedOrgFor(req), req.body, { byUserId: req.user.id, sendEmail: req.body.sendEmail }));
 }));
-router.post('/events/:eventId/applications/:applicationId/offline-payment', requireAdmin, validateOfflinePaymentBody, wrap(async (req, res) => {
+router.post('/events/:eventId/applications/:applicationId/offline-payment', requirePermission('applications.money'), validateOfflinePaymentBody, wrap(async (req, res) => {
   const { eventId, applicationId } = req.params;
   res.json(await applicationService.recordOfflinePayment(eventId, applicationId, await scopedOrgFor(req), req.body, { byUserId: req.user.id, sendEmail: req.body.sendEmail }));
 }));
@@ -926,11 +953,11 @@ router.get('/settings/application-templates', wrap(async (req, res) => {
   const scope = req.query.scope === 'STANDING' ? 'STANDING' : 'EVENT';
   res.json({ data: await applicationTemplateService.listTemplates(organizationId, scope), mergeFields: applicationTemplateService.mergeFields() });
 }));
-router.put('/settings/application-templates/:action', requireAdmin, validateTemplateBody, wrap(async (req, res) => {
+router.put('/settings/application-templates/:action', requirePermission('settings.applications'), validateTemplateBody, wrap(async (req, res) => {
   const scope = req.query.scope === 'STANDING' ? 'STANDING' : 'EVENT';
   res.json(await applicationTemplateService.updateTemplate(await activeOrgFor(req), req.params.action, req.body, scope));
 }));
-router.delete('/settings/application-templates/:action', requireAdmin, wrap(async (req, res) => {
+router.delete('/settings/application-templates/:action', requirePermission('settings.applications'), wrap(async (req, res) => {
   const scope = req.query.scope === 'STANDING' ? 'STANDING' : 'EVENT';
   res.json(await applicationTemplateService.resetTemplate(await activeOrgFor(req), req.params.action, scope));
 }));
@@ -939,7 +966,7 @@ router.delete('/settings/application-templates/:action', requireAdmin, wrap(asyn
 router.get('/settings/application-digest', wrap(async (req, res) => {
   res.json(await applicationDigestService.getSettings(await activeOrgFor(req)));
 }));
-router.patch('/settings/application-digest', requireAdmin, wrap(async (req, res) => {
+router.patch('/settings/application-digest', requirePermission('settings.applications'), wrap(async (req, res) => {
   if (typeof req.body?.enabled !== 'boolean') throw new ValidationError('enabled must be a boolean');
   res.json(await applicationDigestService.updateSettings(await activeOrgFor(req), { enabled: req.body.enabled }));
 }));
@@ -947,7 +974,7 @@ router.patch('/settings/application-digest', requireAdmin, wrap(async (req, res)
 // All 404 while STRIPE_CONNECT_ENABLED is off (ConnectService._assertEnabled).
 
 /** POST /admin/settings/payments/connect/onboard → { url } Account Link (create the organization's own account on first call). */
-router.post('/settings/payments/connect/onboard', requireAdmin, async (req, res, next) => {
+router.post('/settings/payments/connect/onboard', requirePermission('settings.payments'), async (req, res, next) => {
   try {
     const organizationId = await activeOrgFor(req);
     res.json(await connectService.startOnboarding(organizationId, { actorId: req.user.id }));
@@ -961,7 +988,7 @@ router.post('/settings/payments/connect/onboard', requireAdmin, async (req, res,
  * for an organization that already has a Stripe account (spec 047 S1). 404
  * when STRIPE_CONNECT_CLIENT_ID is unset.
  */
-router.post('/settings/payments/connect/oauth', requireAdmin, async (req, res, next) => {
+router.post('/settings/payments/connect/oauth', requirePermission('settings.payments'), async (req, res, next) => {
   try {
     const organizationId = await activeOrgFor(req);
     res.json(await connectService.oauthUrl(organizationId, { userId: req.user.id }));
@@ -971,7 +998,7 @@ router.post('/settings/payments/connect/oauth', requireAdmin, async (req, res, n
 });
 
 /** POST /admin/settings/payments/connect/oauth/complete { code, state } → { connect } after Stripe's redirect. */
-router.post('/settings/payments/connect/oauth/complete', requireAdmin, async (req, res, next) => {
+router.post('/settings/payments/connect/oauth/complete', requirePermission('settings.payments'), async (req, res, next) => {
   try {
     const { code, state } = req.body || {};
     if (typeof code !== 'string' || !code || typeof state !== 'string' || !state) {
@@ -985,7 +1012,7 @@ router.post('/settings/payments/connect/oauth/complete', requireAdmin, async (re
 });
 
 /** POST /admin/settings/payments/connect/sync → { connect } pull account state from Stripe now. */
-router.post('/settings/payments/connect/sync', requireAdmin, async (req, res, next) => {
+router.post('/settings/payments/connect/sync', requirePermission('settings.payments'), async (req, res, next) => {
   try {
     const organizationId = await activeOrgFor(req);
     await connectService.syncAccount(organizationId);
@@ -996,7 +1023,7 @@ router.post('/settings/payments/connect/sync', requireAdmin, async (req, res, ne
 });
 
 /** PATCH /admin/settings/payments/connect/payouts { interval?, anchor?, statementDescriptor? } → { connect } */
-router.patch('/settings/payments/connect/payouts', requireAdmin, validateUpdatePayoutSettings, async (req, res, next) => {
+router.patch('/settings/payments/connect/payouts', requirePermission('settings.payments'), validateUpdatePayoutSettings, async (req, res, next) => {
   try {
     const organizationId = await activeOrgFor(req);
     await connectService.updatePayoutSettings(organizationId, req.body);
@@ -1019,7 +1046,7 @@ router.get('/finance/payouts', async (req, res, next) => {
       connectService.statusFor(organizationId),
       connectService.payoutActivity(organizationId),
     ]);
-    res.json({ connect, activity, canEdit: await isOrgAdmin(req) });
+    res.json({ connect, activity, canEdit: await can(req, 'settings.payments') });
   } catch (error) {
     next(error);
   }
@@ -1460,7 +1487,7 @@ router.post('/orders/:orderId/resend-confirmation', async (req, res, next) => {
  * Refund an entire order (all tickets voided, full amount returned).
  * Body: { reason?: string }
  */
-router.post('/orders/:orderId/refund', requireAdmin, async (req, res, next) => {
+router.post('/orders/:orderId/refund', requirePermission('orders.refund'), async (req, res, next) => {
   try {
     const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
 
@@ -1502,7 +1529,7 @@ router.post('/orders/:orderId/refund', requireAdmin, async (req, res, next) => {
  * Refund a single ticket (void ticket, partial refund).
  * Body: { reason?: string }
  */
-router.post('/tickets/:ticketId/refund', requireAdmin, async (req, res, next) => {
+router.post('/tickets/:ticketId/refund', requirePermission('orders.refund'), async (req, res, next) => {
   try {
     const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
 
@@ -1537,7 +1564,7 @@ router.post('/tickets/:ticketId/refund', requireAdmin, async (req, res, next) =>
  * Refund one add-on line (spec 012): all-in line amount, quantity released,
  * tickets untouched. Body: { reason?: string }
  */
-router.post('/orders/:orderId/add-ons/:orderAddOnId/refund', requireAdmin, async (req, res, next) => {
+router.post('/orders/:orderId/add-ons/:orderAddOnId/refund', requirePermission('orders.refund'), async (req, res, next) => {
   try {
     const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
 
@@ -1791,7 +1818,7 @@ router.delete('/customers/:contactId/comments/:commentId', async (req, res, next
       req.params.contactId,
       req.params.commentId,
       scope.organizationId,
-      { ...req.user, role: await orgRoleFor(req) }
+      { ...req.user, canModerate: await can(req, 'customers.comments') }
     );
     res.status(204).end();
   } catch (error) {
@@ -1811,7 +1838,7 @@ router.patch(
       }
 
       // Email change is ADMIN-only
-      if (req.body.email !== undefined && !(await isOrgAdmin(req))) {
+      if (req.body.email !== undefined && !(await can(req, 'customers.email'))) {
         throw new ForbiddenError('Only administrators can change a customer email address');
       }
 
@@ -1832,7 +1859,7 @@ router.patch(
  * GET /admin/customers/:contactId/export — the customer's data as one JSON file,
  * staff notes included, for an access request that arrived by email (spec 040 PA-11).
  */
-router.get('/customers/:contactId/export', requireAdmin, async (req, res, next) => {
+router.get('/customers/:contactId/export', requirePermission('customers.privacy'), async (req, res, next) => {
   try {
     const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);
     if (!isUnscoped(scope) && !scope.organizationId) throw new NotFoundError('Customer not found');
@@ -1866,7 +1893,7 @@ async function contactInScope(req) {
   return contact;
 }
 
-router.get('/customers/:contactId/erasure', requireAdmin, async (req, res, next) => {
+router.get('/customers/:contactId/erasure', requirePermission('customers.privacy'), async (req, res, next) => {
   try {
     const contact = await contactInScope(req);
     res.json(await contactErasureService.preview(contact.organizationId, contact.id));
@@ -1875,7 +1902,7 @@ router.get('/customers/:contactId/erasure', requireAdmin, async (req, res, next)
   }
 });
 
-router.post('/customers/:contactId/anonymize', requireAdmin, requireRecentAuth, async (req, res, next) => {
+router.post('/customers/:contactId/anonymize', requirePermission('customers.privacy'), requireRecentAuth, async (req, res, next) => {
   try {
     const contact = await contactInScope(req);
     res.json(await contactErasureService.erase(contact.id, { organizationId: contact.organizationId, actorUserId: req.user.id }));
@@ -1945,11 +1972,10 @@ router.post(
 
 // ── Agent access (spec 045C) ──
 
-// D3: only an ADMIN member of the active store manages its agent access —
-// requireAdmin checks the role in that store.
+// D3: agent access is managed per store (settings.agentAccess in that store).
 
 /** GET /admin/agent-access/settings — the store's agent access switch. ADMIN+. */
-router.get('/agent-access/settings', requireAdmin, async (req, res, next) => {
+router.get('/agent-access/settings', requirePermission('settings.agentAccess'), async (req, res, next) => {
   try {
     res.json(await agentAccessService.getSettings(await activeOrgFor(req)));
   } catch (error) {
@@ -1958,7 +1984,7 @@ router.get('/agent-access/settings', requireAdmin, async (req, res, next) => {
 });
 
 /** PATCH /admin/agent-access/settings — ADMIN toggles the switch. Needs step-up proof. */
-router.patch('/agent-access/settings', requireAdmin, requireRecentAuth, async (req, res, next) => {
+router.patch('/agent-access/settings', requirePermission('settings.agentAccess'), requireRecentAuth, async (req, res, next) => {
   try {
     const orgId = await activeOrgFor(req);
     res.json(await agentAccessService.toggleSettings(orgId, !!req.body.enabled, req.user.id));
@@ -1968,7 +1994,7 @@ router.patch('/agent-access/settings', requireAdmin, requireRecentAuth, async (r
 });
 
 /** GET /admin/agent-access/grants — list every grant for the active org. ADMIN+. */
-router.get('/agent-access/grants', requireAdmin, async (req, res, next) => {
+router.get('/agent-access/grants', requirePermission('settings.agentAccess'), async (req, res, next) => {
   try {
     res.json({ grants: await agentAccessService.listGrants(await activeOrgFor(req)) });
   } catch (error) {
@@ -1977,7 +2003,7 @@ router.get('/agent-access/grants', requireAdmin, async (req, res, next) => {
 });
 
 /** POST /admin/agent-access/grants/:id/revoke — revoke one grant. ADMIN+. Needs step-up. */
-router.post('/agent-access/grants/:id/revoke', requireAdmin, requireRecentAuth, async (req, res, next) => {
+router.post('/agent-access/grants/:id/revoke', requirePermission('settings.agentAccess'), requireRecentAuth, async (req, res, next) => {
   try {
     const result = await agentAccessService.revokeGrant(await activeOrgFor(req), req.params.id);
     if (!result) return res.status(404).json({ message: 'Grant not found' });
@@ -1988,7 +2014,7 @@ router.post('/agent-access/grants/:id/revoke', requireAdmin, requireRecentAuth, 
 });
 
 /** POST /admin/agent-access/grants/revoke-all — ADMIN revokes every grant for the org. Needs step-up. */
-router.post('/agent-access/grants/revoke-all', requireAdmin, requireRecentAuth, async (req, res, next) => {
+router.post('/agent-access/grants/revoke-all', requirePermission('settings.agentAccess'), requireRecentAuth, async (req, res, next) => {
   try {
     res.json(await agentAccessService.revokeAllGrants(await activeOrgFor(req)));
   } catch (error) {
@@ -1997,7 +2023,7 @@ router.post('/agent-access/grants/revoke-all', requireAdmin, requireRecentAuth, 
 });
 
 /** GET /admin/agent-access/audit-log — filtered audit log for the active org. ADMIN+. */
-router.get('/agent-access/audit-log', requireAdmin, async (req, res, next) => {
+router.get('/agent-access/audit-log', requirePermission('settings.agentAccess'), async (req, res, next) => {
   try {
     res.json(await agentAccessService.listAuditLog(await activeOrgFor(req), {
       grantId: req.query.grantId,
@@ -2015,7 +2041,7 @@ router.get('/agent-access/audit-log', requireAdmin, async (req, res, next) => {
 // Store ADMINs (by membership in the active org) and SYSTEM_ADMIN.
 
 /** GET /admin/audit-log — filtered, paged activity log for the active org. */
-router.get('/audit-log', requireAdmin, validateAuditLogQuery, async (req, res, next) => {
+router.get('/audit-log', requirePermission('settings.activity'), validateAuditLogQuery, async (req, res, next) => {
   try {
     res.json(await auditLogService.list(await activeOrgFor(req), req.auditQuery));
   } catch (error) {
@@ -2024,7 +2050,7 @@ router.get('/audit-log', requireAdmin, validateAuditLogQuery, async (req, res, n
 });
 
 /** GET /admin/audit-log/export.csv — the same filters, every row. Logged as an export itself. */
-router.get('/audit-log/export.csv', requireAdmin, validateAuditLogQuery, async (req, res, next) => {
+router.get('/audit-log/export.csv', requirePermission('settings.activity'), validateAuditLogQuery, async (req, res, next) => {
   try {
     const organizationId = await activeOrgFor(req);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');

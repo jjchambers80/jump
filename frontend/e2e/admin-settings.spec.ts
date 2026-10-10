@@ -619,7 +619,7 @@ test('hides the Users section from ORGANIZER and denies direct access', async ({
 
   await page.goto('/admin/settings/users');
   await expect(page.getByText(/access denied/i)).toBeVisible();
-  await expect(page.getByText(/admin role required/i)).toBeVisible();
+  await expect(page.getByText(/cannot manage users/i)).toBeVisible();
 });
 
 test('adds users by email with a role and the secure sign-in requirement', async ({ page }) => {

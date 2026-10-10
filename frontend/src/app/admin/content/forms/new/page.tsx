@@ -7,9 +7,8 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useRef, useState } from 'react';
-import { useSession } from 'next-auth/react';
 import api from '@/services/api';
-import { useOrg } from '@/components/OrgContext';
+import { useOrg, useCan } from '@/components/OrgContext';
 import { useParticipantsApi } from '@/components/applications/useParticipantsApi';
 import type { AdminForm, FormTemplateSummary } from '@/lib/applications';
 
@@ -20,9 +19,7 @@ const choice =
 export default function NewFormPage() {
   const router = useRouter();
   const { selectedOrgId } = useOrg();
-  const { data: session } = useSession();
-  const role = (session?.user as { role?: string } | undefined)?.role;
-  const canEdit = role === 'ADMIN' || role === 'SYSTEM_ADMIN';
+  const canEdit = useCan('applications.forms');
   const participants = useParticipantsApi();
   const [name, setName] = useState('');
   const [templateId, setTemplateId] = useState('');

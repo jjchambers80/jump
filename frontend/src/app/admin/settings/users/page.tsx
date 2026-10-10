@@ -10,6 +10,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
+import { useCan } from '@/components/OrgContext';
 import { useOrg } from '@/components/OrgContext';
 import { membersApi, type MemberRole, type MemberStatus, type OrgMember } from '@/services/api';
 import { ShieldIcon, UsersIcon } from '../icons';
@@ -29,15 +30,14 @@ const dangerBtn =
   'min-h-[44px] rounded px-1.5 py-1 text-sm font-semibold text-red-700 sm:min-h-0 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-50 dark:text-red-400';
 
 export default function UsersPage() {
-  const { data: session, status } = useSession();
-  const userRole = (session?.user as any)?.role;
+  const canManage = useCan('settings.users');
 
-  if (status === 'authenticated' && !['ADMIN', 'SYSTEM_ADMIN'].includes(userRole)) {
+  if (!canManage) {
     return (
       <SettingsShell>
         <section className="min-w-0 flex-1 px-4 py-16 text-center">
           <h2 className="mb-2 text-2xl font-bold text-gray-900 dark:text-white">Access denied</h2>
-          <p className="text-gray-600 dark:text-slate-400">Admin role required to manage users.</p>
+          <p className="text-gray-600 dark:text-slate-400">Your role in this organization cannot manage users.</p>
         </section>
       </SettingsShell>
     );

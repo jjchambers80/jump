@@ -11,7 +11,7 @@ import express from 'express';
 import { prisma } from '@jump/db';
 import eventService from '../../services/EventService.js';
 import { requireAuth } from '../../middleware/auth.js';
-import { requireOrganizer } from '../../middleware/rbac.js';
+import { requireOrganizer, requireFeature } from '../../middleware/rbac.js';
 import { requireOrgMembership } from '../../middleware/orgScope.js';
 import { uploadImage } from '../../middleware/imageUpload.js';
 import imageService from '../../services/ImageService.js';
@@ -225,7 +225,7 @@ orgRouter.post('/:eventId/cancel', requireAuth, requireOrganizer, requireOrgMemb
  * Get per-tier sales, redemption, and revenue analytics (org-scoped)
  * Per FR-057, contracts/api.yaml
  */
-orgRouter.get('/:eventId/analytics', requireAuth, requireOrganizer, requireOrgMembership(), async (req, res, next) => {
+orgRouter.get('/:eventId/analytics', requireAuth, requireFeature('analytics'), requireOrgMembership(), async (req, res, next) => {
   try {
     const { orgId, eventId } = req.params;
     const result = await eventService.getEventAnalytics(orgId, eventId);

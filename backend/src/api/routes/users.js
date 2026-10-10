@@ -6,7 +6,7 @@
 import { Router } from 'express';
 import { prisma } from '@jump/db';
 import { requireAuth } from '../../middleware/auth.js';
-import { requireAdmin } from '../../middleware/rbac.js';
+import { requirePermission } from '../../middleware/rbac.js';
 import { ForbiddenError } from '../../middleware/errorHandler.js';
 import { validateUpdateUser } from '../validators/userValidators.js';
 import userService from '../../services/UserService.js';
@@ -19,7 +19,7 @@ const router = Router();
  * List all users with optional filters (admin only)
  * Query params: role, organizationId, page, limit
  */
-router.get('/', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/', requireAuth, requirePermission('settings.users'), async (req, res, next) => {
   try {
     const { role, page, limit } = req.query;
     // Org ADMINs see only their active organization's members; only
@@ -42,7 +42,7 @@ router.get('/', requireAuth, requireAdmin, async (req, res, next) => {
  * PATCH /users/:id
  * Update user role or status (admin only)
  */
-router.patch('/:id', requireAuth, requireAdmin, validateUpdateUser, async (req, res, next) => {
+router.patch('/:id', requireAuth, requirePermission('settings.users'), validateUpdateUser, async (req, res, next) => {
   try {
     // System admins are granted, revoked and (de)activated only through
     // /admin/system/users, which enforces step-up, self-change and

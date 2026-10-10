@@ -6,20 +6,19 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 import EventWorkspaceHeader from '@/components/events/EventWorkspace';
 import ActivityLog from '@/app/admin/settings/activity/ActivityLog';
+import { useCan } from '@/components/OrgContext';
 
 export default function EventHistoryPage() {
   const { eventId } = useParams<{ eventId: string }>();
-  const { data: session, status } = useSession();
-  const isAdmin = ['ADMIN', 'SYSTEM_ADMIN'].includes((session?.user as any)?.role);
+  const canView = useCan('settings.activity');
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
       <EventWorkspaceHeader eventId={eventId} current="history" title="History" />
-      {status === 'authenticated' && !isAdmin ? (
-        <p className="py-16 text-center text-gray-600 dark:text-slate-400">Admin role required to view an event’s history.</p>
+      {!canView ? (
+        <p className="py-16 text-center text-gray-600 dark:text-slate-400">Your role in this organization cannot view an event’s history.</p>
       ) : (
         <ActivityLog eventId={eventId} showHeading={false} />
       )}

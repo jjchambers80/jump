@@ -33,6 +33,7 @@ import { AdjustmentDialog, ChangeTierDialog, OfflinePaymentDialog, WaiveDialog }
 import RefundDialog from '@/app/admin/events/[eventId]/applications/RefundDialog';
 import EditTagsDialog from '@/components/applications/EditTagsDialog';
 import { describeError, useApplicationsApi } from '@/app/admin/events/[eventId]/applications/useApplicationsApi';
+import { useCan } from '@/components/OrgContext';
 
 const card = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
 const btn = 'rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
@@ -75,8 +76,7 @@ export default function ApplicationDetail({ eventId = '', standingFormId, applic
   const params = { eventId, applicationId };
   const api = useApplicationsApi(eventId, standingFormId);
   const { data: session } = useSession();
-  const role = (session?.user as { role?: string } | undefined)?.role;
-  const isAdmin = role === 'ADMIN' || role === 'SYSTEM_ADMIN';
+  const isAdmin = useCan('applications.money');
   const [app, setAppRaw] = useState<AdminApplication | null>(null);
   const setApp = (next: AdminApplication) => setAppRaw(withAddOns(next));
   const [error, setError] = useState<string | null>(null);

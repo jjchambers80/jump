@@ -8,11 +8,11 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 import api from '@/services/api';
 import type { OrderAddOnLine } from '@/lib/addOns';
 import { ORDER_KIND_LABEL, ORDER_STATUS_CLASS, ORDER_STATUS_LABEL, type OrderItemKind, type OrderKind, type OrderStatus } from '@/lib/orders';
 import { formatEventDateTime } from '@/lib/eventTime';
+import { useCan } from '@/components/OrgContext';
 
 interface OrderTicket {
   id: string;
@@ -186,10 +186,8 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
 
 export default function AdminOrderDetailPage() {
   const { orderId } = useParams<{ orderId: string }>();
-  const { data: session } = useSession();
-  const role = (session?.user as { role?: string } | undefined)?.role;
-  // Refunds are ADMIN on the backend (spec 018 phase 1); organizers see the history only.
-  const canRefund = role === 'ADMIN' || role === 'SYSTEM_ADMIN';
+  // Refunds need orders.refund (System › Roles; ADMIN by default); others see the history only.
+  const canRefund = useCan('orders.refund');
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
