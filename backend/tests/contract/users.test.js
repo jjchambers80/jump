@@ -212,6 +212,33 @@ describe('User Management Contract Tests', () => {
       expect(res.status).toBe(403);
     });
 
+    test('403: SYSTEM_ADMIN role is granted only through /admin/system/users', async () => {
+      for (const token of [adminToken, sysToken]) {
+        const res = await request(app)
+          .patch(`/users/${testUserId}`)
+          .set('Authorization', `Bearer ${token}`)
+          .send({ role: 'SYSTEM_ADMIN' });
+        expect(res.status).toBe(403);
+        expect(res.body.code).toBe('USE_SYSTEM_ADMIN_USERS');
+      }
+    });
+
+    test('403: a SYSTEM_ADMIN target cannot be changed here', async () => {
+      const sys = await prisma.user.create({
+        data: { email: `sys-target-${Date.now()}@user-contract.com`, role: 'SYSTEM_ADMIN' },
+      });
+      try {
+        const res = await request(app)
+          .patch(`/users/${sys.id}`)
+          .set('Authorization', `Bearer ${sysToken}`)
+          .send({ isActive: false });
+        expect(res.status).toBe(403);
+        expect((await prisma.user.findUnique({ where: { id: sys.id } })).isActive).toBe(true);
+      } finally {
+        await prisma.user.delete({ where: { id: sys.id } });
+      }
+    });
+
     test('403: customer cannot update users', async () => {
       const res = await request(app)
         .patch(`/users/${testUserId}`)
