@@ -17,7 +17,7 @@ test.describe('theme settings panel (spec 049 C)', () => {
     await signInAsStaff(page, { id: 'editor-admin', email: 'editor-admin@test.com', role: 'ADMIN' }, baseURL!);
   });
 
-  test('heading font and scheme accent restyle the canvas, undo reverts, Save sends settings', async ({ page }) => {
+  test('theme font and scheme accent restyle the canvas, undo reverts, Save sends settings', async ({ page }) => {
     const api = await mockThemeEditorApi(page);
     await page.goto('/admin/online-store/themes/theme-main/editor');
     await expect(canvas(page).getByText('Welcome').first()).toBeVisible({ timeout: 60_000 });
@@ -29,20 +29,22 @@ test.describe('theme settings panel (spec 049 C)', () => {
     // One group open at a time.
     await panel(page).getByRole('button', { name: 'Typography' }).click();
     await expect(panel(page).getByRole('button', { name: 'Logo' })).toHaveAttribute('aria-expanded', 'false');
-    await panel(page).getByLabel('Heading font').selectOption('oswald');
-    await expect(scope(page)).toHaveAttribute('style', /--font-heading: var\(--theme-font-oswald\)/);
-    // The font's class is on the canvas scope, so the heading really uses it.
+    await panel(page).getByLabel('Font', { exact: true }).selectOption('oswald');
+    await expect(scope(page)).toHaveAttribute('style', /--theme-font: var\(--theme-font-oswald\)/);
+    // One font for the whole theme: headings and body text both use it.
     const headingFont = () => page.frames()[1].evaluate(() => getComputedStyle(document.querySelector('[data-theme-type] h1, [data-theme-type] h2')!).fontFamily);
+    const bodyFont = () => page.frames()[1].evaluate(() => getComputedStyle(document.querySelector('[data-theme-type] a, [data-theme-type] p')!).fontFamily);
     await expect.poll(headingFont).toContain('Oswald');
+    await expect.poll(bodyFont).toContain('Oswald');
     await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
 
     // Undo covers settings (they live in Puck's root props).
     await page.getByTitle('Undo').click();
-    await expect(scope(page)).toHaveAttribute('style', /--font-heading: var\(--theme-font-inter\)/);
+    await expect(scope(page)).toHaveAttribute('style', /--theme-font: var\(--theme-font-inter\)/);
     await expect.poll(headingFont).toContain('Inter');
-    await expect(panel(page).getByLabel('Heading font')).toHaveValue('inter');
+    await expect(panel(page).getByLabel('Font', { exact: true })).toHaveValue('inter');
     await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
-    await panel(page).getByLabel('Heading font').selectOption('oswald');
+    await panel(page).getByLabel('Font', { exact: true }).selectOption('oswald');
 
     await panel(page).getByRole('button', { name: 'Colors' }).click();
     await panel(page).locator('summary', { hasText: 'Inverse' }).click();
@@ -57,7 +59,7 @@ test.describe('theme settings panel (spec 049 C)', () => {
     await expect.poll(() => api.saves.length).toBe(1);
     const body = api.saves[0];
     expect(body.documents).toBeUndefined();
-    expect(body.settings.typography).toEqual({ headingFont: 'oswald' });
+    expect(body.settings.typography).toEqual({ font: 'oswald' });
     expect(body.settings.colors.schemes.map((s: any) => s.id)).toEqual(['scheme-1', 'scheme-2']);
     expect(body.settings.colors.schemes[1].accent).toBe('#ff0000');
     await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();

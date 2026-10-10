@@ -11,7 +11,6 @@ const num = (value: unknown, fallback: number) => (typeof value === 'number' && 
 
 const SYSTEM_STACK = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 const FONT_KEY = /^[a-z][a-z-]{1,30}$/;
-const LETTER_SPACING: Record<string, string> = { tight: '-0.02em', normal: 'normal', wide: '0.05em' };
 
 /** A FONTS key → font-family. `--theme-font-<key>` is set by the font's class (theme/fonts.ts). */
 export function fontStack(key: unknown): string {
@@ -30,13 +29,8 @@ export function settingsVars(settings: ThemeSettings): Record<string, string> {
     '--theme-logo-width': `${num(logo.desktopWidth, 120)}px`,
     '--theme-logo-width-mobile': `${num(logo.mobileWidth, 90)}px`,
     '--theme-button-radius': `${radius}px`,
-    '--font-heading': fontStack(type.headingFont ?? 'inter'),
-    '--font-body': fontStack(type.bodyFont ?? 'inter'),
-    '--heading-scale': String(num(type.headingScale, 100) / 100),
-    '--body-scale': String(num(type.bodyScale, 100) / 100),
-    '--letter-spacing': LETTER_SPACING[type.letterSpacing] ?? 'normal',
-    // Unset for "as typed": text-transform then inherits (globals.css).
-    ...(type.headingCase === 'uppercase' ? { '--heading-case': 'uppercase' } : {}),
+    // One font for everything in the theme: header, body, footer (globals.css).
+    '--theme-font': fontStack(type.font ?? 'inter'),
   };
 }
 
