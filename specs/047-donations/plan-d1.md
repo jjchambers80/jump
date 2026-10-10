@@ -1,6 +1,6 @@
 # Spec 047 — Donations, phase D1: gifts at event checkout and donate-only
 
-**Status**: Plan, 2026-10-09. Nothing built.
+**Status**: Plan, 2026-10-09. Nothing built. Amended 2026-10-10 for spec 050 (§0).
 **Ask**: R1–R3 from [Donation platforms](../../docs/research/2026-10-08-donation-platforms.md) §9. A buyer adds a **one-time gift** to an event ticket purchase, choosing a preset amount or a custom one. A donor can also give on an event **without a ticket**, and that works on free, RSVP and sold-out events. Every gift gets a receipt, and refunds and disputes void it. The law behind each rule is in [Donation legal compliance](../../docs/research/2026-10-08-donation-legal-compliance.md) (cited as "compliance"). D1 ships dark behind `DONATIONS_ENABLED` / `NEXT_PUBLIC_DONATIONS_ENABLED`.
 
 **Depends on** (all assumed merged before D1 code starts):
@@ -27,6 +27,26 @@
 - Event analytics shows Gifts separately.
 - Customers stays the one contact list.
 - Buyer email is store-branded.
+
+## 0. Amendment, 2026-10-10: spec 050 event setup wizard
+
+Spec 050 ([plan](../050-event-setup-wizard/plan.md) §10, merged in PR #396) changes two of the surfaces D1 builds on. Nothing in D1's data model, money rules or compliance changes. Only where the UI mounts moves.
+
+1. **The event Donations card moves into the wizard.** 050-P deletes the Sales editor (`admin/events/[eventId]/edit/sales`), and the wizard becomes the one form for every event field (050 decision 15). D1-G therefore builds the card as a standalone component, `components/gifts/EventGiftSettings.tsx`, and mounts it in the wizard's **Collect more** step (050-K, step key `collect-more`, preview anchor `#add-ons`).
+   - **D1-G lands before 050-K:** it mounts the component on the Sales tab, and 050-K moves it.
+   - **050-K lands first:** D1-G mounts it in the step.
+   - **Either way, one component.** The Sales tab mount goes when 050-P deletes the tab.
+2. **Review suggestion.** On the wizard's Review step (050-N), an eligible org with `acceptGifts` off sees one line: "Accept donations on this event?", which links to the Collect more step. The line is hidden when the org is not eligible or gifts are already on. D1-G wires it if 050-N has merged; otherwise 050-N reads the D1 payload once D1 has merged.
+3. **Wizard visibility.** The step registry shows Collect more when the event is TICKETED, **or** when `NEXT_PUBLIC_DONATIONS_ENABLED` is on and the org is eligible (Connect direct charges on, DV-verified, `DONATION_TERMS` accepted). The eligibility answer comes from the D1 settings payload (§3.8). RSVP events see the step only for gifts, because they have no add-ons.
+4. **The event page is split.** 050-G breaks `EventDetailClient.tsx` into a container plus `EventPageView` and section components. If 050-G lands first, the §4.4 entries go here:
+   - "Can't make it? Give without a ticket" and the sold-out box link go in `EventTickets`;
+   - the RSVP entry goes in `EventRsvp`;
+   - the desktop sticky cart link goes in the cart component.
+
+   In `preview` mode (wizard preview and signed draft preview, 050-F) the links render but are inert, like checkout.
+5. **Preview payload.** 050-F's `GET …/preview-payload` returns the same `gifts` block as the public event payload (§3.8), so the wizard preview shows the gift entries. D1-B adds `gifts` to both payloads.
+6. **Roles.** The event gift fields (`acceptGifts`, `giftWithoutTicket`, `giftPresetAmounts`, `giftAppeal`) ride on the event PATCH, which is ORGANIZER. That matches 050's decision that every wizard step is open to organizers. Org gift settings (`/admin/organization/gift-settings`), **Refund gift** and every other money-moving action stay ADMIN, unchanged.
+7. **UI rules.** D1-F and D1-G follow spec 050 §11, the UI design contract, which is mobile first and WCAG 2.1 AA. Each loads the `frontend-ui-engineering` skill first and runs an axe check and a 390px Playwright run.
 
 ## 1. What exists today (origin/main e3a35ce)
 
@@ -327,6 +347,8 @@ The compliance §3.5 block, always visible, never collapsed. It sits under the p
 
 ### 4.4 Event page (`EventDetailClient.tsx`)
 
+> Amended (§0.4): if spec 050-G has merged, these entries go in `EventTickets`, `EventRsvp` and the cart component of `EventPageView`, and render inert in `preview` mode.
+
 When `gifts?.withoutTicket` is set and the event isn't past, a secondary **Give to {Org}** link to `?gift=1` appears in three places:
 
 - under the tier list, as "Can't make it? Give without a ticket";
@@ -347,7 +369,7 @@ The desktop sticky cart gets a small "or give without a ticket" link. Nothing is
 ### 4.6 Admin
 
 - **Settings › Donations** (DV's page; if DV names it differently, use that page): a "Gift amounts" card with presets as a tag-style list of number inputs, min, max and appeal. Saved through the partial PATCH.
-- **Event editor › Sales tab** (`admin/events/[eventId]/edit/sales`): a "Donations" card with:
+- **Event Donations card**, `components/gifts/EventGiftSettings.tsx`, mounted in the spec 050 wizard **Collect more** step. If 050-K has not merged yet, it is mounted on the Sales tab (`admin/events/[eventId]/edit/sales`) until it has; see §0.1. The card holds:
   - **Accept donations**, disabled with a link to Settings › Donations until the org is eligible;
   - **Allow gifts without a ticket**;
   - amounts: "Use organization amounts" / "Custom for this event";
@@ -440,12 +462,12 @@ Receipt paragraphs (`config/giftReceipt.js`), from IRS Pub 1771 and compliance �
 | Card | What | Depends on |
 |---|---|---|
 | **D1-A** | Schema (§2, both migrations, trigger, audit registration) + fee rule §3.1 in both libraries + fixture cases | D0-B/C merged |
-| **D1-B** | Checkout backend: validator, `createOrder` gift + donate-only, BNPL filter, billing address, ticket-only inventory paths (`TicketService`, `failOrder`, sweep), settings endpoints, public `gifts` payload, geofence pre-check | A, DV, D0-S |
+| **D1-B** | Checkout backend: validator, `createOrder` gift + donate-only, BNPL filter, billing address, ticket-only inventory paths (`TicketService`, `failOrder`, sweep), settings endpoints, public `gifts` payload (+ the 050-F preview payload if merged, §0.5), geofence pre-check | A, DV, D0-S |
 | **D1-C** | Completion: receipts (`GiftReceiptService.issue`, `config/giftReceipt.js`), geofence refund at completion, confirmation/receipt email, resend route, `gift` on order payloads | B |
 | **D1-D** | Refunds and disputes: `refundGiftLine` + route, `openOrderLines`, full/external refund handling, dispute close/reinstate, void email | C |
 | **D1-E** | Money readers: `giftTotals`, dashboard / analytics / mcp exclusions, tax report, orders `gift` filter + CSV, customers chip, export | A (parallel with B–D) |
-| **D1-F** | Donor UI: `GiftPicker`, `AboutThisGift`, checkout + donate-only, event-page entries, `GiftReceiptBlock` on confirmation / order / account receipt, Playwright | B (API shape), C for receipts |
-| **D1-G** | Admin UI: Settings gift amounts, event Donations card, Orders Gifts chip + badges, order detail gift row/refund/resend, analytics Gifts | D, E |
+| **D1-F** | Donor UI: `GiftPicker`, `AboutThisGift`, checkout + donate-only, event-page entries (in `EventPageView` sections if 050-G merged, §0.4), `GiftReceiptBlock` on confirmation / order / account receipt, Playwright (390 px + axe) | B (API shape), C for receipts; rebase on 050-G if merged |
+| **D1-G** | Admin UI: Settings gift amounts, `EventGiftSettings` in the wizard Collect more step (Sales tab only until 050-K merges, §0.1), the Review suggestion (§0.2), Orders Gifts chip + badges, order detail gift row/refund/resend, analytics Gifts | D, E; coordinate with 050-K / 050-N |
 | **D1-H** | Docs: `docs/wiki/features/donations.md`, AGENTS Gotchas 12/16/17 + a donations gotcha, env table, launch checklist rows | F, G |
 
 ## 8. Done when, and open questions
