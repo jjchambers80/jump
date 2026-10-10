@@ -76,6 +76,7 @@ npm test --workspace=packages/cli   # Jump CLI (spec 043), node --test against a
 | `ORDER_MAX_PENDING_PER_CONTACT`, `ORDER_SWEEP_INTERVAL_MS`, `ORDER_SWEEP_GRACE_MS` | backend | Optional. Open checkouts one email may hold per event (default 3, then 409); abandoned-checkout sweep interval (default 5 min) and grace past the 30-minute Checkout session (default 5 min) |
 | `SECURITY_CONTACT_EMAIL` | frontend | Optional. Serves RFC 9116 `/.well-known/security.txt` with this `Contact:` address (spec 023 phase 0); unset → 404 until the `security@` mailbox exists (launch checklist) |
 | `LEGAL_IP_SALT` | backend | Optional. Salt for the hashed IP on `LegalAcceptance` rows (spec 024 phase 3); falls back to `AUTH_SECRET`. The raw IP is never stored |
+| `TWO_STEP_SETUP_ENFORCED` | frontend | Optional. `true` forces SYSTEM_ADMINs and members of orgs that require two-step to set it up before using the admin. Default off during development; turn on before launch |
 | `TWO_STEP_TRUST_DAYS` | backend + frontend | Optional. "Remember this device" lifetime for two-step (default 30) (spec 030 C) |
 | `HIBP_CHECK` | backend | Optional. `false` skips the Have I Been Pwned range check when a password is set (default on, fail-open) (spec 030 B) |
 | `WEBAUTHN_RP_ID` | backend | Optional. Passkey relying-party id (default: host of the first `FRONTEND_URL`) |
