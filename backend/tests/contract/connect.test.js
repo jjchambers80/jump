@@ -136,18 +136,17 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
     expect(res.body.connect).toEqual({ enabled: false, status: 'not_started', account: null });
   });
 
-  it('flag on, no account: not_started and the order charges on the platform account', async () => {
+  it('flag on, no account: not_started and paid checkout is refused', async () => {
     const res = await request(app).get('/admin/settings/payments').set('Authorization', `Bearer ${adminToken}`);
     expect(res.body.connect).toEqual({ enabled: true, status: 'not_started', account: null, oauthAvailable: false });
 
     const order = await placeOrder(eventId, tierId, `platform@${TAG}.test`);
-    expect(order.status).toBe(201);
-    const params = mockSessionsCreate.mock.calls[0][0];
-    expect(params.payment_intent_data).toEqual({ statement_descriptor_suffix: 'CONNECT CT ORG' });
-    expect(params.metadata.stripeAccountId).toBeUndefined();
-    const tx = await prisma.paymentTransaction.findUnique({ where: { orderId: order.body.orderId } });
-    expect(tx.stripeAccountId).toBeNull();
-    expect(tx.applicationFee).toBeNull();
+    expect(order.status).toBe(409);
+    expect(order.body).toMatchObject({
+      code: 'PAYMENTS_UNAVAILABLE',
+      message: "This organizer can't take payments right now. Please try again later.",
+    });
+    expect(mockSessionsCreate).not.toHaveBeenCalled();
   });
 
   describe('admin routes', () => {
@@ -364,11 +363,11 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
       data: { organizationId: org.id, mode: 'test', stripeAccountId: ACCT, detailsSubmitted: false },
     });
 
-    // Charges not yet enabled → still the platform account
+    // Charges not yet enabled → refuse instead of using the platform account.
     const before = await placeOrder(eventId, tierId, `onboarding@${TAG}.test`);
-    expect(before.status).toBe(201);
-    expect(mockSessionsCreate.mock.calls[0][0].payment_intent_data.application_fee_amount).toBeUndefined();
-    expect(mockSessionsCreate.mock.calls[0][1]).toBeUndefined();
+    expect(before.status).toBe(409);
+    expect(before.body.code).toBe('PAYMENTS_UNAVAILABLE');
+    expect(mockSessionsCreate).not.toHaveBeenCalled();
 
     const hook = await request(app)
       .post('/webhooks/stripe/connect')
@@ -450,8 +449,9 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
     expect(status.body.connect.status).toBe('disconnected');
 
     const order = await placeOrder(eventId, tierId, `deauth@${TAG}.test`);
-    expect(mockSessionsCreate.mock.calls[0][1]).toBeUndefined();
-    expect(order.status).toBe(201);
+    expect(order.status).toBe(409);
+    expect(order.body.code).toBe('PAYMENTS_UNAVAILABLE');
+    expect(mockSessionsCreate).not.toHaveBeenCalled();
   });
 
   it('rejects a bad signature when a Connect secret is configured', async () => {

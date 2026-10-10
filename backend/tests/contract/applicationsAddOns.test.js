@@ -564,6 +564,51 @@ describe('Applications with add-ons (spec 012 phase 2)', () => {
       expect(await addOnRow(table.id)).toMatchObject({ quantitySold: 2, quantityReserved: 0 });
       expect(await tierRow(corner.id)).toMatchObject({ quantityReserved: 0, quantityApproved: 0 });
     });
+
+    it('Connect unavailability never strands saved-card, pay-now, or retry flows in PROCESSING', async () => {
+      const ids = [];
+      const sessionsBefore = mockSessionsCreate.mock.calls.length;
+      try {
+        const savedCardId = await approved(form.slug, booth.id, `connect-saved@${TAG}.test`, 'Connect Saved LLC');
+        ids.push(savedCardId);
+        await giveSavedCard(savedCardId);
+
+        const payNowId = await chosen(form.slug, booth.id, `connect-pay@${TAG}.test`, [], 'Connect Pay LLC');
+        ids.push(payNowId);
+
+        const retryId = await chosen(form.slug, booth.id, `connect-retry@${TAG}.test`, [], 'Connect Retry LLC');
+        ids.push(retryId);
+        await giveSavedCard(retryId);
+
+        process.env.STRIPE_CONNECT_ENABLED = 'true';
+
+        const saved = await select(savedCardId, { useSavedCard: true });
+        expect(saved.status).toBe(409);
+        expect(saved.body.code).toBe('PAYMENTS_UNAVAILABLE');
+        expect(await appRow(savedCardId)).toMatchObject({ paymentStatus: 'PAYMENT_DUE' });
+
+        const hosted = await pay(payNowId);
+        expect(hosted.status).toBe(409);
+        expect(hosted.body.code).toBe('PAYMENTS_UNAVAILABLE');
+        expect(await appRow(payNowId)).toMatchObject({ paymentStatus: 'PAYMENT_DUE', stripeCheckoutSessionId: null });
+
+        const retry = await request(app)
+          .post(`${adminBase()}/applications/${retryId}/charge`)
+          .set(...auth(organizerToken));
+        expect(retry.status).toBe(409);
+        expect(retry.body.code).toBe('PAYMENTS_UNAVAILABLE');
+        expect(await appRow(retryId)).toMatchObject({ paymentStatus: 'PAYMENT_DUE' });
+
+        expect(mockSessionsCreate).toHaveBeenCalledTimes(sessionsBefore);
+        expect(mockIntentsCreate).not.toHaveBeenCalled();
+      } finally {
+        delete process.env.STRIPE_CONNECT_ENABLED;
+        for (const id of ids) {
+          await applicationPaymentService.releaseSelection(id, { reason: 'Test cleanup', force: true }).catch(() => {});
+          await decide(id, 'WITHDRAW').catch(() => {});
+        }
+      }
+    });
   });
 
   // ─── List, CSV, duplicate ────────────────────────────────────────────────

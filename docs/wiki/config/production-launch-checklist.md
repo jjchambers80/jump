@@ -1,6 +1,6 @@
 # Production Launch Checklist
 
-**Last Updated**: 2026-09-18
+**Last Updated**: 2026-10-10
 
 Things a human has to do or decide before Jump takes real money. Code and tests are done for every item here; each needs an account setting, a business decision, or a data review that no deploy can perform. Tick items off in place and date them.
 
@@ -30,7 +30,7 @@ Found during production verification on 2026-09-14: the platform Stripe account 
 
 ## Tax product decisions (spec 009 plan §5)
 
-- [x] **Seller of record** — decided 2026-10-09 (spec 047 option C): an organization with a connected Stripe account is the seller of record and remits; Stripe Tax uses **its** account's registrations. Organizations still charged on the platform account (not connected) keep the platform as seller until they connect.
+- [x] **Seller of record** — decided 2026-10-09 (spec 047 option C): with Connect enabled, every organization is the seller of record and remits; Stripe Tax uses **its** account's registrations. The platform remains seller only for legacy payments while the flag is off; an organization that is not ready for Connect cannot take a paid sale.
 - [ ] **Tax on service fees** — platform and processing fees are currently untaxed (`tax = subtotal × rate`). Several states tax admission service charges. Needs a tax professional; one-line change in `FeeService.js` + `fees.ts` once decided.
 - [ ] **Confirm tax-inclusive math** — built as fees on the *net* (ex-tax) amount, total = listed + fees. If fees should apply to the listed price instead, change both fee libraries and both fixture files together.
 
@@ -71,8 +71,14 @@ Vendor / sponsor application charges use the same Stripe account, statement desc
 
   Copy the secret to `STRIPE_CONNECT_WEBHOOK_SECRET`. The platform endpoint keeps its events for orders charged before an organization connected.
 - [ ] Set `STRIPE_CONNECT_ENABLED=true` on the backend service and redeploy. The startup log `Stripe webhook configuration` should show `platformSecret: true, connectSecret: true, connectEnabled: true`.
+- [ ] **Before enabling Connect, finish onboarding every production organization, including `raleigh-retro-gamers`, and verify `charges_enabled=true`.** Connect is a hard cutover: an organization with no account, incomplete onboarding, a disconnected account, or paused charges cannot take paid checkout/application payments. Jump never falls back to charging the platform account. Have ready (source: `docs/research/2026-10-10-zeffy-payment-collection.md` §2.2):
+  - the IRS EIN letter (147C, CP 575 or SS-4), with the legal name and address entered exactly as shown; an EIN under three months old may need manual review
+  - a street address, not a PO box
+  - a bank account in the organization's name, not a personal account
+  - a representative with photo ID, a selfie and the last four digits of their SSN
+  - a public website or social page
 - [ ] **Verify with one internal organization** (test mode first: `npm run verify:stripe -- --direct acct_…` against a test connected account): Settings › Payments › *Connect Stripe* → connect an existing test account (OAuth) **and**, with a second organization, *Create a Stripe account* → `Connected` → place a test order and confirm in the **organization's** Stripe dashboard that the payment is there with an application fee = the platform fee, and in Jump's Connect › Collected fees → refund one ticket and confirm the refund is on the organization's account with the fee returned pro rata → open a test dispute and confirm the `Dispute` row and organizer email → check Settings › Tax reads the organization's own Stripe Tax status.
-- [ ] Decide the cutover policy for organizations that never connect (plan-phase-2 §5.7: no deadline, persistent dashboard banner), and whether a connected account with charges disabled should fall back to the platform account (today it does) before gifts (spec 047 D1) ship.
+- [x] **Connect cutover policy decided 2026-10-10:** every organization processes through Jump's Connect platform; bring-your-own processing and platform-account fallback are out of scope. Paid sales stop until the organization's connected account can take charges.
 
 ## Abuse protection and edge layer (spec 020)
 

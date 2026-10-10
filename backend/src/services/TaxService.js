@@ -441,7 +441,20 @@ class TaxService {
    * @returns {Promise<{ provider: 'STRIPE_TAX', status: 'active'|'pending'|'unavailable', registrations: Array<{country: string, region: string|null}>, manageUrl: string, error: string|null, seller: 'ORGANIZATION'|'PLATFORM' }>}
    */
   async getServiceStatus(organizationId = null) {
-    const stripeAccount = organizationId ? await this._sellerAccount(organizationId) : null;
+    let stripeAccount = null;
+    try {
+      stripeAccount = organizationId ? await this._sellerAccount(organizationId) : null;
+    } catch (error) {
+      logger.warn('Stripe Tax seller unavailable', { event: 'tax_seller_unavailable', organizationId, error: error.message });
+      return {
+        provider: 'STRIPE_TAX',
+        status: 'unavailable',
+        registrations: [],
+        manageUrl: STRIPE_TAX_DASHBOARD_URL,
+        error: error.message,
+        seller: organizationId ? 'ORGANIZATION' : 'PLATFORM',
+      };
+    }
     const now = Date.now();
     const cached = stripeAccount ? this._accountStatusCache.get(stripeAccount) : this._statusCache;
     if (cached?.value && cached.expiresAt > now) return cached.value;
@@ -473,16 +486,19 @@ class TaxService {
     return value;
   }
 
-  /** The organization's connected account when charges run on it (spec 047), else null. */
+  /** The seller account for tax lookup; never reinterpret unavailable Connect payments as a platform sale. */
   async _sellerAccount(organizationId) {
     try {
       const account = await connectService.chargeAccountFor(organizationId);
       return account?.stripeAccountId ?? null;
     } catch (error) {
-      // Charges paused on a connected account: it is still the seller, so tax
-      // settings keep reading its registrations.
       if (error.code !== 'PAYMENTS_UNAVAILABLE') throw error;
-      return (await connectService.accountFor(organizationId))?.stripeAccountId ?? null;
+      // A paused or onboarding account remains the seller for tax discovery,
+      // even though it cannot accept money. Missing and disconnected accounts
+      // have no usable seller account, so tax is unavailable too.
+      const row = await connectService.accountFor(organizationId);
+      if (row && !row.disconnectedAt) return row.stripeAccountId;
+      throw error;
     }
   }
 
