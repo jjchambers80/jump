@@ -85,6 +85,7 @@ Generated and maintained by running `/doc-feature` after completing feature work
 - [Storefront Theme Sections](features/theme-sections.md) — Section registry, Hero carousel and FAQ (spec 041), how to add a section
 - [Theme Code Editor](features/theme-code-editor.md) — Online Store › Edit code: the CLI's theme files in Monaco, server checks in the browser, same save path
 - [Theme Developer CLI](features/theme-developer-cli.md) — `npx jump` sign-in (loopback + PKCE, `jmp_` developer tokens, deny-by-default), theme pull/check/dev/push/publish, draft themes + preview links, Settings › Developers (spec 043, 038J2/K)
+- [Theme Card Previews](features/theme-card-previews.md) — Online Store theme cards show the live home page (scaled inert iframes); draft rows render through 10-min cookie-free `/theme-thumbnail` tokens (spec 038 C7, PRs #353/#355)
 - [Account Settings › General](features/account-settings.md) — `/admin/account` from the org menu: photo, name, verified email change, phone, language, time zone; `locale`/`timeZone`/`picture` JWT claims (spec 030 A)
 - [Account Security — sign-in methods](features/account-security.md) — Account › Security: step-up proof, passkeys, password (scrypt + HIBP), Google connect/disconnect, secondary email + recovery, `token-bridge` provider (spec 030 B)
 - [Two-step Authentication](features/two-step-authentication.md) — authenticator app / security key / recovery codes, `mfa` claim gate in middleware + `requireAuth`, `/auth/two-step`, trusted devices (spec 030 C)
