@@ -422,10 +422,11 @@ describe('Stripe Connect contract (spec 010 phase 2)', () => {
     row = await prisma.organizationStripeAccount.findUnique({ where: { stripeAccountId: ACCT } });
     expect(row.lastPayoutFailure).toBe('Bank account closed');
 
-    // Charges disabled → platform account again
+    // Onboarded but charges paused → refused, never the platform account (spec 047)
     const order = await placeOrder(eventId, tierId, `restricted@${TAG}.test`);
-    expect(order.status).toBe(201);
-    expect(mockSessionsCreate.mock.calls[0][1]).toBeUndefined();
+    expect(order.status).toBe(409);
+    expect(order.body.code).toBe('PAYMENTS_UNAVAILABLE');
+    expect(mockSessionsCreate).not.toHaveBeenCalled();
   });
 
   it('account.application.deauthorized disconnects and stops routing', async () => {

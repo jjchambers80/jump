@@ -282,7 +282,7 @@ describe('checkoutOptionsFor with a connected account (spec 047 D0-S: direct cha
     expect(options.payment_method_types).toEqual(['card', 'link', 'klarna']);
   });
 
-  test('platform account when routing says no, when no charge context is given, or when the cents are inconsistent', async () => {
+  test('platform account when the organization never connected or no charge context is given; inconsistent cents refuse', async () => {
     const { fees, lineItems } = charge();
     expect(await service.checkoutOptionsFor(org(), { fees, lineItems })).toEqual({
       payment_method_types: ['card'],
@@ -293,15 +293,12 @@ describe('checkoutOptionsFor with a connected account (spec 047 D0-S: direct cha
     expect(mockChargeAccountFor).toHaveBeenCalledTimes(1); // no charge → no routing lookup
 
     mockChargeAccountFor.mockResolvedValueOnce(connected());
-    const bad = await service.checkoutOptionsFor(org(), { fees: { platformFee: 9999 }, lineItems });
-    expect(bad).toEqual({ payment_method_types: ['card'], payment_intent_data: { statement_descriptor_suffix: 'ROMAN SKIN CARE' } });
+    await expect(service.checkoutOptionsFor(org(), { fees: { platformFee: 9999 }, lineItems })).rejects.toThrow('Inconsistent charge amounts');
   });
 
-  test('a routing failure keeps the phase 1 options and charges on the platform account', async () => {
-    mockChargeAccountFor.mockRejectedValueOnce(new Error('boom'));
-    expect(await service.checkoutOptionsFor(org(), charge())).toEqual({
-      payment_method_types: ['card'],
-      payment_intent_data: { statement_descriptor_suffix: 'ROMAN SKIN CARE' },
-    });
+  test('a routing refusal propagates: never a platform charge for a connected organization', async () => {
+    const refused = Object.assign(new Error('paused'), { statusCode: 409, code: 'PAYMENTS_UNAVAILABLE' });
+    mockChargeAccountFor.mockRejectedValueOnce(refused);
+    await expect(service.checkoutOptionsFor(org(), charge())).rejects.toBe(refused);
   });
 });

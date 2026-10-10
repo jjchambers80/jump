@@ -217,8 +217,10 @@ class PaymentSettingsService {
   async checkoutOptionsFor(organization, charge = null) {
     const fallback = { payment_method_types: ['card'] };
     if (!organization) return fallback;
+    // Outside the try: a connected organization that cannot take charges, or a
+    // routing fault, must refuse the checkout, never fall back to the platform.
+    const routing = charge ? await this._connectRouting(organization, charge) : null;
     try {
-      const routing = charge ? await this._connectRouting(organization, charge) : null;
       if (routing) {
         const active = new Set(routing.activeCapabilities);
         const extras = (organization.enabledPaymentMethods || []).filter((type) => {
@@ -260,31 +262,22 @@ class PaymentSettingsService {
   // ---------------------------------------------------------------------------
 
   /**
-   * Direct-charge routing (spec 047 D0-S). Null = platform account. Inconsistent
-   * cents fall back to the platform account rather than risk a wrong fee; the
-   * log line is the reconciliation breadcrumb.
+   * Direct-charge routing (spec 047 D0-S). Null = the organization never
+   * connected (legacy platform charge). Throws 409 PAYMENTS_UNAVAILABLE for a
+   * connected account that cannot take charges, and an error for inconsistent
+   * cents: refusing beats charging on the wrong account or with a wrong fee.
    */
   async _connectRouting(organization, charge) {
-    let account;
-    try {
-      account = await connectService.chargeAccountFor(organization.id);
-    } catch (error) {
-      logger.error('Connect routing skipped: lookup failed', {
-        event: 'connect_routing_skipped',
-        organizationId: organization.id,
-        error: error.message,
-      });
-      return null;
-    }
+    const account = await connectService.chargeAccountFor(organization.id);
     if (!account) return null;
     const cents = applicationFeeCents(charge);
     if (cents === null) {
-      logger.error('Connect routing skipped: inconsistent charge amounts', {
-        event: 'connect_routing_skipped',
+      logger.error('Connect routing refused: inconsistent charge amounts', {
+        event: 'connect_routing_refused',
         organizationId: organization.id,
         stripeAccountId: account.stripeAccountId,
       });
-      return null;
+      throw new Error('Inconsistent charge amounts for a direct charge');
     }
     return { ...account, applicationFeeCents: cents };
   }

@@ -179,13 +179,18 @@ describe('chargeAccountFor (routing rule, spec 047 direct charges)', () => {
     expect(mockFindUnique).not.toHaveBeenCalled();
   });
 
-  test('platform account when there is no row for this mode, charges are disabled, or disconnected', async () => {
-    mockFindUnique.mockResolvedValueOnce(null);
+  test('platform account when the organization never connected, is still onboarding, or disconnected', async () => {
+    mockFindUnique.mockResolvedValueOnce(row({ chargesEnabled: false, detailsSubmitted: false }));
     expect(await service.chargeAccountFor('org_1')).toBeNull();
-    mockFindUnique.mockResolvedValueOnce(row({ chargesEnabled: false }));
+    mockFindUnique.mockResolvedValueOnce(null);
     expect(await service.chargeAccountFor('org_1')).toBeNull();
     mockFindUnique.mockResolvedValueOnce(row({ disconnectedAt: new Date() }));
     expect(await service.chargeAccountFor('org_1')).toBeNull();
+  });
+
+  test('refuses (409 PAYMENTS_UNAVAILABLE) a connected account that cannot take charges', async () => {
+    mockFindUnique.mockResolvedValueOnce(row({ chargesEnabled: false, detailsSubmitted: true }));
+    await expect(service.chargeAccountFor('org_1')).rejects.toMatchObject({ statusCode: 409, code: 'PAYMENTS_UNAVAILABLE' });
   });
 
   test('payouts paused or transfers inactive do not block routing', async () => {
@@ -193,9 +198,9 @@ describe('chargeAccountFor (routing rule, spec 047 direct charges)', () => {
     expect(await service.chargeAccountFor('org_1')).toEqual({ stripeAccountId: 'acct_1', activeCapabilities: [] });
   });
 
-  test('never throws: a DB failure charges on the platform account', async () => {
+  test('a DB failure refuses the charge instead of guessing the platform account', async () => {
     mockFindUnique.mockRejectedValueOnce(new Error('db down'));
-    expect(await service.chargeAccountFor('org_1')).toBeNull();
+    await expect(service.chargeAccountFor('org_1')).rejects.toThrow('db down');
   });
 });
 

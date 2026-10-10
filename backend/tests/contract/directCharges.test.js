@@ -152,6 +152,27 @@ describe('Direct charges on the organization account (spec 047 D0-S)', () => {
     mockChargesRetrieve.mockReset();
   });
 
+  // ─── Paused account: refuse, never fall back to the platform ────────────
+
+  it('refuses checkout (409 PAYMENTS_UNAVAILABLE) and releases the reservation when the account cannot take charges', async () => {
+    await prisma.organizationStripeAccount.update({ where: { stripeAccountId: ACCT }, data: { chargesEnabled: false } });
+    try {
+      const before = await prisma.priceTier.findUnique({ where: { id: tierId } });
+      const res = await request(app)
+        .post('/orders')
+        .send({ eventId, priceTierId: tierId, quantity: 1, contact: { email: `paused@${TAG}.test`, firstName: 'Pau', lastName: 'Sed' } });
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('PAYMENTS_UNAVAILABLE');
+      expect(mockSessionsCreate).not.toHaveBeenCalled();
+      const after = await prisma.priceTier.findUnique({ where: { id: tierId } });
+      expect(after.quantityReserved).toBe(before.quantityReserved);
+      const orders = await prisma.order.findMany({ where: { eventId, contact: { email: `paused@${TAG}.test` } } });
+      expect(orders.map((o) => o.status)).toEqual(['FAILED']);
+    } finally {
+      await prisma.organizationStripeAccount.update({ where: { stripeAccountId: ACCT }, data: { chargesEnabled: true } });
+    }
+  });
+
   // ─── S3: webhooks ───────────────────────────────────────────────────────
 
   it('the order is created on the account and completes from the Connect endpoint', async () => {

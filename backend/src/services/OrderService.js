@@ -434,14 +434,18 @@ class OrderService {
     // connected account (spec 047 D0-S) the session is a direct charge on that
     // account: `stripeAccount` is the request option, Jump's platform fee the
     // application fee. The outcome is recorded on the payment row below.
-    const { stripeAccount = null, ...checkoutOptions } = await PaymentSettingsService.checkoutOptionsFor(event.venue.organization, {
-      fees,
-      lineItems,
-    });
-    const routedTo = stripeAccount;
-    const applicationFeeCents = checkoutOptions.payment_intent_data?.application_fee_amount ?? 0;
+    // Inside the try: a refused routing (409 PAYMENTS_UNAVAILABLE) releases the
+    // reservation exactly like a Stripe failure.
+    let routedTo = null;
+    let applicationFeeCents = 0;
     let stripeSession;
     try {
+      const { stripeAccount = null, ...checkoutOptions } = await PaymentSettingsService.checkoutOptionsFor(event.venue.organization, {
+        fees,
+        lineItems,
+      });
+      routedTo = stripeAccount;
+      applicationFeeCents = checkoutOptions.payment_intent_data?.application_fee_amount ?? 0;
       stripeSession = await stripe.checkout.sessions.create(
         {
           mode: 'payment',
@@ -463,7 +467,7 @@ class OrderService {
       );
     } catch (stripeError) {
       // Roll back reservation if Stripe fails
-      logger.error('Stripe session creation failed, rolling back reservation', {
+      logger.error('Checkout session not created, rolling back reservation', {
         orderId: order.id,
         error: stripeError.message,
       });

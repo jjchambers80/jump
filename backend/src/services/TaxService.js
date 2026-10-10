@@ -475,8 +475,15 @@ class TaxService {
 
   /** The organization's connected account when charges run on it (spec 047), else null. */
   async _sellerAccount(organizationId) {
-    const account = await connectService.chargeAccountFor(organizationId);
-    return account?.stripeAccountId ?? null;
+    try {
+      const account = await connectService.chargeAccountFor(organizationId);
+      return account?.stripeAccountId ?? null;
+    } catch (error) {
+      // Charges paused on a connected account: it is still the seller, so tax
+      // settings keep reading its registrations.
+      if (error.code !== 'PAYMENTS_UNAVAILABLE') throw error;
+      return (await connectService.accountFor(organizationId))?.stripeAccountId ?? null;
+    }
   }
 
   /** Drop the cached service status (tests). */

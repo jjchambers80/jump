@@ -104,6 +104,13 @@ export function readOAuthState(state, now = Date.now()) {
 }
 
 /** Master gate. Off: routes 404, checkout never routes, page hides payouts. */
+/** 409 for a connected organization whose Stripe account cannot take charges. */
+export function paymentsUnavailable(organizationId) {
+  const error = new ConflictError("This organizer can't take payments right now. Please try again later.", { organizationId });
+  error.code = 'PAYMENTS_UNAVAILABLE';
+  return error;
+}
+
 export function connectEnabled() {
   return String(process.env.STRIPE_CONNECT_ENABLED || '').toLowerCase() === 'true';
 }
@@ -176,18 +183,19 @@ class ConnectService {
    */
   async chargeAccountFor(organizationId) {
     if (!this.enabled() || !organizationId) return null;
-    try {
-      const row = await this.accountFor(organizationId);
-      if (!row || row.disconnectedAt || !row.chargesEnabled) return null;
-      return { stripeAccountId: row.stripeAccountId, activeCapabilities: row.activeCapabilities || [] };
-    } catch (error) {
-      logger.error('Connect routing lookup failed; charging on the platform account', {
-        event: 'connect_routing_skipped',
-        organizationId,
-        error: error.message,
-      });
-      return null;
+    const row = await this.accountFor(organizationId);
+    // Never connected (or disconnected): legacy platform charge.
+    if (!row || row.disconnectedAt) return null;
+    if (!row.chargesEnabled) {
+      // Still onboarding: keep selling on the platform account until Stripe
+      // enables charges, so starting onboarding never stops ticket sales.
+      if (!row.detailsSubmitted) return null;
+      // Onboarded but Stripe has paused charges: refuse rather than fall back
+      // to the platform account, which would make Jump the merchant of record
+      // again (spec 047 option C).
+      throw paymentsUnavailable(organizationId);
     }
+    return { stripeAccountId: row.stripeAccountId, activeCapabilities: row.activeCapabilities || [] };
   }
 
   // ---------------------------------------------------------------------------

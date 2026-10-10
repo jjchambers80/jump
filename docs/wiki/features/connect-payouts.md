@@ -179,7 +179,7 @@ Alternatives considered (2026-09-19, research note in the vault: `jump--research
 - **Stripe objects do not cross accounts.** A Customer, PaymentMethod or session created on the platform cannot be used on the organization's account and vice versa; `ensureCustomer` re-creates the Customer on the current account and a card saved before the switch must be collected again.
 - **Connected accounts are per Stripe mode.** Rows for the other mode are invisible; re-connect every organization after go-live.
 - **Two webhook endpoints, two secrets**, and since spec 047 the Connect endpoint needs the money events too (launch checklist).
-- **A connected account whose charges are disabled falls back to the platform account** for new charges (the current fallback rule; Jump becomes the merchant for those orders). Revisit before gifts (D1) rely on the organization always being the merchant.
+- **An onboarded account whose charges Stripe has paused is refused** (409 `PAYMENTS_UNAVAILABLE`, "This organizer can't take payments right now"; the tier reservation is released), never charged on the platform account, so the organization stays the merchant of record. An organization that never connected, or is still onboarding (`detailsSubmitted` false), keeps selling on the platform account so starting onboarding never stops sales.
 - **Account Link URLs are single-use and expire in minutes**; `?onboarding=refresh` exists for the expired case. **OAuth codes are single use and expire in 5 minutes**; redeeming one twice revokes the connection.
 - **Reconciliation**: `SELECT "stripeAccountId", "applicationFee", amount FROM "PaymentTransaction" WHERE "stripeAccountId" IS NOT NULL` against Connect › Collected fees in the Stripe dashboard.
 
