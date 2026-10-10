@@ -106,6 +106,25 @@ describe('guard coverage', () => {
     }
   });
 
+  // Every new admin area ships with a visibility setting (AGENTS.md gotcha 38):
+  // a catalog feature whose adminPaths own its pages, so System › Roles can
+  // hide it per role or turn it off platform-wide.
+  test('every admin area has a visibility feature in the catalog', () => {
+    // Areas that are not organization features, each with the reason.
+    const EXEMPT = {
+      account: "the signed-in user's own profile, never role-gated",
+      system: 'SYSTEM_ADMIN only, outside the member-role matrix',
+      settings: 'organization settings: each section is a catalog action (settings.*)',
+    };
+    const adminDir = path.resolve(srcDir, '../../frontend/src/app/admin');
+    const owned = FEATURES.flatMap((f) => f.adminPaths);
+    const areas = readdirSync(adminDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && !(d.name in EXEMPT))
+      .map((d) => `/admin/${d.name}`);
+    const missing = areas.filter((area) => !owned.some((p) => area === p || area.startsWith(`${p}/`)));
+    expect(missing).toEqual([]);
+  });
+
   test('catalog keys are unique', () => {
     const keys = FEATURES.flatMap((f) => [f.key, ...f.actions.map((a) => a.key)]);
     expect(new Set(keys).size).toBe(keys.length);
