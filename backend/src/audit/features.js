@@ -4,6 +4,8 @@
 //   org     — relation path to the organization, for models without an
 //             organizationId column (used when the request has no active org,
 //             e.g. a Stripe webhook)
+//   event   — relation path to a row with an eventId, for children of an
+//             event that carry no eventId themselves (History tab)
 // A unit test fails when a model is neither listed here nor excluded in
 // packages/db/src/audit.js, so every new model makes that call.
 
@@ -34,18 +36,18 @@ export const MODEL_FEATURES = {
   TierPreset: { feature: 'Tickets', label: 'name' },
   AddOnProduct: { feature: 'Add-ons', label: 'name' },
   AddOn: { feature: 'Add-ons', label: 'name', org: 'event.venue' },
-  PriceTierAddOn: { feature: 'Add-ons', org: 'priceTier.event.venue' },
-  ApplicationTierAddOn: { feature: 'Add-ons', org: 'tier.form' },
+  PriceTierAddOn: { feature: 'Add-ons', org: 'priceTier.event.venue', event: 'priceTier' },
+  ApplicationTierAddOn: { feature: 'Add-ons', org: 'tier.form', event: 'tier.form' },
   EventRsvp: { feature: 'RSVPs', org: 'event.venue' },
 
   // Orders and money
   Order: { feature: 'Orders' },
-  OrderItem: { feature: 'Orders', org: 'order' },
-  OrderAddOn: { feature: 'Orders', label: 'name', org: 'order' },
+  OrderItem: { feature: 'Orders', org: 'order', event: 'order' },
+  OrderAddOn: { feature: 'Orders', label: 'name', org: 'order', event: 'order' },
   Ticket: { feature: 'Orders', org: 'event.venue' },
-  PaymentTransaction: { feature: 'Orders', org: 'order' },
-  Refund: { feature: 'Orders', org: 'order' },
-  Dispute: { feature: 'Orders', org: 'order' },
+  PaymentTransaction: { feature: 'Orders', org: 'order', event: 'order' },
+  Refund: { feature: 'Orders', org: 'order', event: 'order' },
+  Dispute: { feature: 'Orders', org: 'order', event: 'order' },
 
   // Customers
   Contact: { feature: 'Customers', label: 'email' },
@@ -54,18 +56,18 @@ export const MODEL_FEATURES = {
 
   // Applications and maps
   ApplicationForm: { feature: 'Applications', label: 'name' },
-  ApplicationTier: { feature: 'Applications', label: 'name', org: 'form' },
-  ApplicationQuestion: { feature: 'Applications', label: 'label', org: 'form' },
+  ApplicationTier: { feature: 'Applications', label: 'name', org: 'form', event: 'form' },
+  ApplicationQuestion: { feature: 'Applications', label: 'label', org: 'form', event: 'form' },
   ApplicationFormTemplate: { feature: 'Applications', label: 'name' },
   ApplicationMessageTemplate: { feature: 'Applications' },
   Application: { feature: 'Applications' },
-  ApplicationAnswer: { feature: 'Applications', org: 'application' },
-  ApplicationDecision: { feature: 'Applications', org: 'application' },
+  ApplicationAnswer: { feature: 'Applications', org: 'application', event: 'application' },
+  ApplicationDecision: { feature: 'Applications', org: 'application', event: 'application' },
   ApplicantProfile: { feature: 'Applications' },
   ApplicantProfileImage: { feature: 'Applications', org: 'profile' },
   FloorMap: { feature: 'Floor maps', label: 'name' },
   FloorMapTemplate: { feature: 'Floor maps', label: 'name' },
-  Booth: { feature: 'Floor maps', label: 'label', org: 'map' },
+  Booth: { feature: 'Floor maps', label: 'label', org: 'map', event: 'map' },
 
   // Content and online store
   File: { feature: 'Content › Files' },

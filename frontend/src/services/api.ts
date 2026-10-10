@@ -924,6 +924,7 @@ export interface AuditLogEntry {
   entityType: string;
   entityId: string | null;
   entityLabel: string | null;
+  eventId: string | null;
   /** { field: [before, after] }; secret fields read "[changed]". */
   changes: Record<string, [unknown, unknown]> | null;
   meta: Record<string, unknown> | null;
@@ -943,6 +944,8 @@ export interface AuditLogFilters {
   operation?: AuditOperation;
   entityType?: string;
   entityId?: string;
+  /** History tab (048-D): changes filed under one event. */
+  eventId?: string;
   from?: string;
   to?: string;
 }

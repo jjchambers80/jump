@@ -247,3 +247,62 @@ describe('Activity log API (048-C)', () => {
     expect(await prisma.auditLog.count({ where: { organizationId: orgA.id, entityLabel: 'Home' } })).toBe(1);
   });
 });
+
+describe('Event history (048-D)', () => {
+  const D_TAG = 'audit-log-d-ct';
+  const adminEmail = `admin@${D_TAG}.test`;
+  let organization;
+  let adminToken;
+  let event;
+  let otherEvent;
+
+  beforeAll(async () => {
+    await prisma.organization.deleteMany({ where: { name: { startsWith: `${D_TAG} ` } } }).catch(() => {});
+    adminToken = await staffToken({ email: adminEmail, role: 'ADMIN' });
+    organization = await prisma.organization.create({ data: { name: `${D_TAG} Store` } });
+    await joinOrgByToken(adminToken, organization.id, 'ADMIN');
+    const venue = await prisma.venue.create({
+      data: { organizationId: organization.id, name: 'History Hall', address: '1 Main St', city: 'Raleigh', state: 'NC', postalCode: '27601' },
+    });
+    const make = (name) => prisma.event.create({
+      data: {
+        venueId: venue.id,
+        name,
+        date: new Date('2027-01-10T01:00:00.000Z'),
+        capacity: 100,
+        priceTiers: { create: [{ name: 'General', price: 20, quantityTotal: 50, displayOrder: 0, isActive: true }] },
+      },
+      include: { priceTiers: true },
+    });
+    event = await make('History Night');
+    otherEvent = await make('Other Night');
+  });
+
+  afterAll(async () => {
+    await prisma.auditLog.deleteMany({ where: { organizationId: organization.id } });
+    await prisma.priceTier.deleteMany({ where: { eventId: { in: [event.id, otherEvent.id] } } });
+    await prisma.event.deleteMany({ where: { id: { in: [event.id, otherEvent.id] } } });
+    await prisma.venue.deleteMany({ where: { organizationId: organization.id } });
+    await prisma.organization.deleteMany({ where: { id: organization.id } }).catch(() => {});
+    await cleanupStaff([adminEmail]);
+  });
+
+  it('files event and tier changes under the event, and filters by it', async () => {
+    const base = `/organizations/${organization.id}/events`;
+    expect((await request(app).patch(`${base}/${event.id}`).set(...auth(adminToken)).send({ name: 'History Night II' })).status).toBe(200);
+    expect((await request(app).patch(`${base}/${event.id}/price-tiers/${event.priceTiers[0].id}`).set(...auth(adminToken)).send({ price: 25 })).status).toBe(200);
+    expect((await request(app).patch(`${base}/${otherEvent.id}`).set(...auth(adminToken)).send({ name: 'Other Night II' })).status).toBe(200);
+    await rowsFor({ organizationId: organization.id, eventId: event.id }, { atLeast: 2 });
+
+    const response = await request(app)
+      .get(`/admin/audit-log?eventId=${event.id}`)
+      .set(...auth(adminToken))
+      .set('X-Jump-Org', organization.id);
+    expect(response.status).toBe(200);
+    const types = response.body.rows.map((r) => r.entityType).sort();
+    expect(types).toEqual(['Event', 'PriceTier']);
+    expect(response.body.rows.every((r) => r.eventId === event.id)).toBe(true);
+    const tier = response.body.rows.find((r) => r.entityType === 'PriceTier');
+    expect(tier.changes.price).toEqual(['20', '25']);
+  });
+});
