@@ -30,7 +30,16 @@ function useReducedMotion() {
   return reduced;
 }
 
-export default function FloorMapButton({ eventId, eventName }: { eventId: string; eventName?: string }) {
+export default function FloorMapButton({
+  eventId,
+  eventName,
+  preview = false,
+}: {
+  eventId: string;
+  eventName?: string;
+  /** Preview mode (spec 050 §8.2): the pill shows, but opens no dialog. */
+  preview?: boolean;
+}) {
   const [mapData, setMapData] = useState<PublicMap | null>(null);
   const [open, setOpen] = useState(false);
 
@@ -55,9 +64,20 @@ export default function FloorMapButton({ eventId, eventName }: { eventId: string
 
   if (!mapData) return null;
 
+  if (preview) {
+    return (
+      <span id="floor-map" data-testid="floor-map-button" className="inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm font-medium text-white/70 ring-1 ring-inset ring-white/15">
+        <MapIcon className="h-4 w-4" aria-hidden />
+        <span>Floor map</span>
+        <span className="text-xs text-white/60">· Preview</span>
+      </span>
+    );
+  }
+
   return (
     <>
       <button
+        id="floor-map"
         type="button"
         onClick={() => {
           setOpen(true);

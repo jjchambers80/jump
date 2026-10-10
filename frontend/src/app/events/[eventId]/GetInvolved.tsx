@@ -59,7 +59,7 @@ export default function GetInvolved({
   const ambiguous = new Set(labels).size < labels.length;
 
   return (
-    <ul className={`flex flex-wrap gap-2 ${className}`} aria-label="Get involved" data-testid="get-involved">
+    <ul id="get-involved" className={`flex flex-wrap gap-2 ${className}`} aria-label="Get involved" data-testid="get-involved">
       {forms.map((form, i) => {
         const closed = preview ? 'Preview' : acceptanceLine(form.acceptance);
         const label = ambiguous ? form.name : labels[i];
