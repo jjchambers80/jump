@@ -1,4 +1,4 @@
-// Spec 049: the data step of 20261031100000_org_brand_identity copies each
+// Spec 049: the data step of 20261031110000_org_brand_identity copies each
 // organization's MAIN theme brand text and social links into the empty
 // organization columns. Runs the migration's own UPDATE against the migrated
 // test database; nothing mocked.
@@ -10,7 +10,7 @@ import { prisma } from '@jump/db';
 
 const sqlFile = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  '../../../packages/db/prisma/migrations/20261031100000_org_brand_identity/migration.sql'
+  '../../../packages/db/prisma/migrations/20261031110000_org_brand_identity/migration.sql'
 );
 const sql = fs.readFileSync(sqlFile, 'utf8');
 const copyStep = sql.slice(sql.indexOf('WITH main AS'));

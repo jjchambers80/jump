@@ -92,7 +92,7 @@ Docs:
 - After deploy: `railway deployment list`, then check the RRG footer, favicon and fonts in prod.
 
 ## Card A — as built
-- Migration `20261031100000_org_brand_identity`: six `Organization` columns plus the one-time copy from each MAIN theme (`settings.brand.headline` → `slogan`, `.description` → `shortDescription`, https `settings.social` → `socialLinks`), only into empty columns. Theme values stay in place. The copy is asserted by `backend/tests/contract/orgBrandIdentityMigration.test.js`, which runs the migration's own `WITH main AS …` statement.
+- Migration `20261031110000_org_brand_identity`: six `Organization` columns plus the one-time copy from each MAIN theme (`settings.brand.headline` → `slogan`, `.description` → `shortDescription`, https `settings.social` → `socialLinks`), only into empty columns. Theme values stay in place. The copy is asserted by `backend/tests/contract/orgBrandIdentityMigration.test.js`, which runs the migration's own `WITH main AS …` statement.
 - The square logo is stored as the lazy `square` image variant (512 × 512 cover crop, `ImageService`), warmed by the upload route so a public bucket has it too. `squareLogoUrl` points at it.
 - `socialLinks` reuses `checkFields(SETTINGS_GROUPS.social.fields, …)`; blank entries are dropped and an empty object is stored as `NULL`.
 - Public identity payloads (`getPublicOrganization`, `publicOrganizationIdentity`) carry `squareLogoUrl`, `brandSecondaryColor`, `slogan`, `shortDescription`, `socialLinks` (`BRAND_IDENTITY_SELECT`). Nothing renders them yet: card B does.

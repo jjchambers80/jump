@@ -63,7 +63,7 @@ Uploads go through `uploadImage` (multer, field `logo`) → `ImageService.proces
 
 - `slogan` (≤ 120) and `shortDescription` (≤ 300) are trimmed; blank stores `null`.
 - `socialLinks` is `{ instagram?, tiktok?, facebook?, x?, youtube?, linkedin?, threads?, reddit?, twitch?, website? }`, validated with the theme's own rules (`checkFields(SETTINGS_GROUPS.social.fields)` from `@jump/theme`: https only, per-network host). Blank entries are dropped; an empty object stores `NULL`.
-- Migration `20261031100000_org_brand_identity` copied each MAIN theme's `settings.brand.headline` / `.description` / https `settings.social` into these empty columns once; the theme values stay as identical overrides.
+- Migration `20261031110000_org_brand_identity` copied each MAIN theme's `settings.brand.headline` / `.description` / https `settings.social` into these empty columns once; the theme values stay as identical overrides.
 
 ## API Endpoints
 
