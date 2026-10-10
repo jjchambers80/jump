@@ -40,6 +40,8 @@ Admin users can manage all user accounts in the system — view users, change ro
 - Role changes take effect on next JWT refresh (existing tokens retain old role until expiry)
 - Org affiliation is `OrganizationMember`, not `User.organizationId`. `PATCH /users/:id { organizationId }` replaces the user's memberships (null clears); memberships exist only for ADMIN/ORGANIZER and are cleared when a user is demoted to CUSTOMER or promoted to SYSTEM_ADMIN. Responses expose the first membership as `organizationId` / `organizationName` plus `organizations: [{ id, name, role }]`. See [Tenant Identity](tenant-identity.md)
 
+- SYSTEM_ADMIN role changes are refused here (403 `USE_SYSTEM_ADMIN_USERS`); use System › Users. See [System Administration](system-administration.md)
+
 ## Related Features
 
 - [RBAC](rbac.md) — Role definitions and middleware
