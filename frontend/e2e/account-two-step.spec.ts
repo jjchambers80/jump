@@ -45,7 +45,10 @@ async function completeReauth(page: Page) {
  * when it sees the proof.
  */
 async function signInPending(page: Page, baseURL: string) {
-  await signInAsStaff(page, { ...USER, mfa: 'pending' }, baseURL);
+  // The session token is tracked here, not read back with context.cookies():
+  // the app polls the session after a test ends, and cookies() then throws on
+  // the closed context ("Test ended" in a route callback fails the CI shard).
+  let current = await signInAsStaff(page, { ...USER, mfa: 'pending' }, baseURL);
   const okToken = await mintSessionToken({ ...USER, mfa: 'ok' });
   const { hostname } = new URL(baseURL);
   const updates: unknown[] = [];
@@ -56,11 +59,10 @@ async function signInPending(page: Page, baseURL: string) {
       updates.push(body?.data);
       if (body?.data?.mfaProof === PROOF) {
         await page.context().addCookies([{ name: 'authjs.session-token', value: okToken, domain: hostname, path: '/', httpOnly: true, sameSite: 'Lax' }]);
+        current = okToken;
         return route.fulfill(json({ user: USER, accessToken: okToken, mfaPending: false, expires: '2099-01-01T00:00:00.000Z' }));
       }
     }
-    const cookies = await page.context().cookies();
-    const current = cookies.find((c) => c.name === 'authjs.session-token')?.value;
     const pending = current !== okToken;
     return route.fulfill(json({ user: USER, accessToken: current, mfaPending: pending, expires: '2099-01-01T00:00:00.000Z' }));
   });
