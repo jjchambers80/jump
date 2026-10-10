@@ -167,7 +167,10 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
   // the backend checks every request either way.
   const [loaded, setLoaded] = useState<{ granted: string[]; hiddenPaths: string[] } | null>(null);
   useEffect(() => {
-    if (!userId) return;
+    // Only with an org selected: every admin call must carry X-Jump-Org (a
+    // SYSTEM_ADMIN without one gets 404). Until then the stand-in applies.
+    setLoaded(null);
+    if (!userId || !selectedOrgId) return;
     let cancelled = false;
     const load = () =>
       api
