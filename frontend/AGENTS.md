@@ -7,6 +7,7 @@ Loads when agent touches `frontend/` files. For root-level commands and env vars
 ```
 app/
 ├── admin/           # Organizer/admin dashboard (session-protected)
+│   └── system/      # SYSTEM_ADMIN platform area (no active org; layout guard + middleware role check)
 ├── events/          # Public event browsing + detail pages; [eventId]/apply/* application forms + status page (spec 011)
 ├── auth/            # Sign-in page
 ├── checkout/        # Cart + payment flow
