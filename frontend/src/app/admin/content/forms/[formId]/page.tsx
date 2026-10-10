@@ -8,9 +8,8 @@
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { useSession } from 'next-auth/react';
 import { Check, Copy, ExternalLink } from 'lucide-react';
-import { useOrg } from '@/components/OrgContext';
+import { useOrg, useCan } from '@/components/OrgContext';
 import SubmissionsTable from '@/components/applications/SubmissionsTable';
 import { QuestionsCard, SettingsCard } from '@/components/applications/FormEditorCards';
 import { SaveAsTemplateDialog } from '@/components/applications/TemplateDialogs';
@@ -41,9 +40,7 @@ function StandingForm({ formId }: { formId: string }) {
   const pathname = usePathname();
   const tab: Tab = (['fields', 'settings'] as const).find((t) => t === searchParams.get('tab')) ?? 'submissions';
   const { selectedOrg, loading: orgLoading } = useOrg();
-  const { data: session } = useSession();
-  const role = (session?.user as { role?: string } | undefined)?.role;
-  const canEdit = role === 'ADMIN' || role === 'SYSTEM_ADMIN';
+  const canEdit = useCan('applications.forms');
   const api = useApplicationsApi('', formId);
   const participants = useParticipantsApi();
   const [form, setForm] = useState<AdminForm | null>(null);

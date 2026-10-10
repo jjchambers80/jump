@@ -5,6 +5,7 @@ import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import { mapsApi } from '@/services/api';
 import type { MapBooth, AssignableApplication } from '@/services/api';
+import { useCan } from '@/components/OrgContext';
 import { STATUS_BADGE_COLORS, STATUS_LABELS } from './mapTheme';
 
 interface BoothPanelProps {
@@ -26,7 +27,6 @@ export default function BoothPanel({
   mapId,
   eventId,
   mapStatus,
-  role,
   onStatusChange,
   onAssign,
   onUnassign,
@@ -42,7 +42,8 @@ export default function BoothPanel({
   const [force, setForce] = useState(false);
   const [assignError, setAssignError] = useState<string | null>(null);
 
-  const isAdmin = role === 'ADMIN' || role === 'SYSTEM_ADMIN';
+  // Forcing a tier mismatch: application form managers (applications.forms).
+  const isAdmin = useCan('applications.forms');
   const holder = booth.status === 'SOLD' ? booth.holder ?? null : null;
   const hasHolder = holder !== null;
 

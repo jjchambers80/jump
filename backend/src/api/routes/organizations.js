@@ -6,7 +6,7 @@ import { Router } from 'express';
 import { prisma } from '@jump/db';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { requireAuth } from '../../middleware/auth.js';
-import { requireAdminOf, requireRole, requireSystemAdmin } from '../../middleware/rbac.js';
+import { requirePermission, requireRole, requireSystemAdmin } from '../../middleware/rbac.js';
 import onboardingService from '../../services/OnboardingService.js';
 import { requireOrgMembership } from '../../middleware/orgScope.js';
 import {
@@ -105,7 +105,7 @@ router.get('/onboarding/funnel', requireAuth, requireSystemAdmin, async (req, re
  * GET /organizations/:id
  * Get organization details (admin only)
  */
-router.get('/:id', requireAuth, requireAdminOf('id'), verifyOrgOwnership, async (req, res, next) => {
+router.get('/:id', requireAuth, requirePermission('settings.business', { param: 'id' }), verifyOrgOwnership, async (req, res, next) => {
   try {
     const organization = await organizationService.getOrganizationById(req.params.id);
     if (!organization) {
@@ -124,7 +124,7 @@ router.get('/:id', requireAuth, requireAdminOf('id'), verifyOrgOwnership, async 
 router.patch(
   '/:id',
   requireAuth,
-  requireAdminOf('id'),
+  requirePermission('settings.business', { param: 'id' }),
   verifyOrgOwnership,
   validateUpdateOrganization,
   async (req, res, next) => {
@@ -371,7 +371,7 @@ router.post('/:id/storefront-access', unlockLimiter, validateStorefrontUnlock, a
  * POST /organizations/:id/logo
  * Upload organization logo (admin only)
  */
-router.post('/:id/logo', requireAuth, requireAdminOf('id'), verifyOrgOwnership, uploadImage, async (req, res, next) => {
+router.post('/:id/logo', requireAuth, requirePermission('settings.business', { param: 'id' }), verifyOrgOwnership, uploadImage, async (req, res, next) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded' });
@@ -401,7 +401,7 @@ router.post('/:id/logo', requireAuth, requireAdminOf('id'), verifyOrgOwnership, 
  * DELETE /organizations/:id/logo
  * Remove organization logo (admin only)
  */
-router.delete('/:id/logo', requireAuth, requireAdminOf('id'), verifyOrgOwnership, async (req, res, next) => {
+router.delete('/:id/logo', requireAuth, requirePermission('settings.business', { param: 'id' }), verifyOrgOwnership, async (req, res, next) => {
   try {
     const { organization, previousLogoImageId } = await organizationService.setOrganizationLogo(
       req.params.id,
@@ -421,7 +421,7 @@ router.delete('/:id/logo', requireAuth, requireAdminOf('id'), verifyOrgOwnership
  * POST /organizations/:id/square-logo
  * Upload the square logo (spec 049; admin only). Stored as the 512 px square crop.
  */
-router.post('/:id/square-logo', requireAuth, requireAdminOf('id'), verifyOrgOwnership, uploadImage, async (req, res, next) => {
+router.post('/:id/square-logo', requireAuth, requirePermission('settings.business', { param: 'id' }), verifyOrgOwnership, uploadImage, async (req, res, next) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded' });
@@ -452,7 +452,7 @@ router.post('/:id/square-logo', requireAuth, requireAdminOf('id'), verifyOrgOwne
  * DELETE /organizations/:id/square-logo
  * Remove the square logo (admin only)
  */
-router.delete('/:id/square-logo', requireAuth, requireAdminOf('id'), verifyOrgOwnership, async (req, res, next) => {
+router.delete('/:id/square-logo', requireAuth, requirePermission('settings.business', { param: 'id' }), verifyOrgOwnership, async (req, res, next) => {
   try {
     const { organization, previousSquareLogoImageId } = await organizationService.setOrganizationSquareLogo(
       req.params.id,
@@ -472,7 +472,7 @@ router.delete('/:id/square-logo', requireAuth, requireAdminOf('id'), verifyOrgOw
  * POST /organizations/:id/cover
  * Upload organization cover image (admin only)
  */
-router.post('/:id/cover', requireAuth, requireAdminOf('id'), verifyOrgOwnership, uploadImage, async (req, res, next) => {
+router.post('/:id/cover', requireAuth, requirePermission('settings.business', { param: 'id' }), verifyOrgOwnership, uploadImage, async (req, res, next) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded' });
@@ -501,7 +501,7 @@ router.post('/:id/cover', requireAuth, requireAdminOf('id'), verifyOrgOwnership,
  * DELETE /organizations/:id/cover
  * Remove organization cover image (admin only)
  */
-router.delete('/:id/cover', requireAuth, requireAdminOf('id'), verifyOrgOwnership, async (req, res, next) => {
+router.delete('/:id/cover', requireAuth, requirePermission('settings.business', { param: 'id' }), verifyOrgOwnership, async (req, res, next) => {
   try {
     const { organization, previousCoverImageId } = await organizationService.setOrganizationCover(
       req.params.id,

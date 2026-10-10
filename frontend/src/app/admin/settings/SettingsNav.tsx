@@ -2,13 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useSession } from 'next-auth/react';
+import { useOrg, hasPermission, isHiddenPath } from '@/components/OrgContext';
 
 interface Section {
   href: string;
   label: string;
-  /** Only show for these roles. Undefined shows the section to every staff role. */
-  roles?: string[];
+  /** Catalog action required to see the section (System › Roles). */
+  permission?: string;
 }
 
 const SECTIONS: Section[] = [
@@ -20,13 +20,13 @@ const SECTIONS: Section[] = [
   { href: '/admin/settings/tax', label: 'Tax' },
   { href: '/admin/settings/applications', label: 'Applications' },
   { href: '/admin/settings/customer-accounts', label: 'Customer accounts' },
-  { href: '/admin/settings/users', label: 'Users', roles: ['ADMIN', 'SYSTEM_ADMIN'] },
+  { href: '/admin/settings/users', label: 'Users', permission: 'settings.users' },
   { href: '/admin/settings/developers', label: 'Developers' },
   // Spec 045: hidden until agent access launches (NEXT_PUBLIC_AGENT_ACCESS_ENABLED)
   ...(process.env.NEXT_PUBLIC_AGENT_ACCESS_ENABLED === 'true'
-    ? [{ href: '/admin/settings/agent-access', label: 'Agent access', roles: ['ADMIN', 'SYSTEM_ADMIN'] }]
+    ? [{ href: '/admin/settings/agent-access', label: 'Agent access', permission: 'settings.agentAccess' }]
     : []),
-  { href: '/admin/settings/activity', label: 'Activity log', roles: ['ADMIN', 'SYSTEM_ADMIN'] },
+  { href: '/admin/settings/activity', label: 'Activity log', permission: 'settings.activity' },
 ];
 
 const active = 'bg-accent-50 text-accent-700 dark:bg-accent-900/30 dark:text-accent-300';
@@ -35,9 +35,10 @@ const idle = 'text-gray-700 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-
 /** Left-hand section list shared by every Settings page. */
 export default function SettingsNav() {
   const pathname = usePathname();
-  const { data: session } = useSession();
-  const userRole = (session?.user as any)?.role;
-  const visible = SECTIONS.filter((s) => !s.roles || s.roles.includes(userRole));
+  const { permissions } = useOrg();
+  const visible = SECTIONS.filter(
+    (s) => (!s.permission || hasPermission(permissions, s.permission)) && !isHiddenPath(s.href, permissions.hiddenPaths)
+  );
   return (
     <nav aria-label="Settings sections" className="w-full shrink-0 md:w-56">
       <ul className="space-y-1">

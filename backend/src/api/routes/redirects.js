@@ -2,7 +2,7 @@
 
 import { Router } from 'express';
 import { requireAuth } from '../../middleware/auth.js';
-import { requireOrganizer } from '../../middleware/rbac.js';
+import { requireFeature } from '../../middleware/rbac.js';
 import { activeOrgFor } from './adminScope.js';
 import urlRedirectService from '../../services/UrlRedirectService.js';
 import {
@@ -13,7 +13,7 @@ import {
 
 const router = Router();
 router.use(requireAuth);
-router.use(requireOrganizer);
+router.use(requireFeature('content'));
 
 router.get('/', async (req, res, next) => {
   try {

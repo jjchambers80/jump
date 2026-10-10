@@ -16,7 +16,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useSession } from 'next-auth/react';
+import { useOrg, isHiddenPath } from './OrgContext';
 import {
   ArrowLeft,
   CalendarDays,
@@ -48,8 +48,6 @@ interface NavItem {
   icon?: LucideIcon;
   /** Sub-pages rendered beneath this link when the section is expanded. */
   children?: NavItem[];
-  /** Only show for these roles. If undefined, show for all allowed roles. */
-  roles?: string[];
 }
 
 const navItems: NavItem[] = [
@@ -133,8 +131,9 @@ interface AdminSidebarProps {
 
 export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
   const pathname = usePathname();
-  const { data: session } = useSession();
-  const userRole = (session?.user as any)?.role;
+  // Features hidden for the user's role in this org (System › Roles).
+  const { permissions } = useOrg();
+  const visible = (item: NavItem) => !isHiddenPath(item.href, permissions.hiddenPaths);
   // System mode: platform-wide pages, so no org setup guide or org Settings.
   const systemMode = isSystemPath(pathname);
   // Onboarding checklist link, pinned above the nav until every step is done
@@ -190,7 +189,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
     return false;
   };
 
-  const visibleItems = (systemMode ? systemNavItems : navItems).filter((item) => !item.roles || item.roles.includes(userRole));
+  const visibleItems = (systemMode ? systemNavItems : navItems).filter(visible);
 
   return (
     <>
@@ -289,9 +288,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
             {visibleItems.map((item) => {
               const active = isActive(item.href);
               const Icon = item.icon;
-              const children = item.children?.filter(
-                (child) => !child.roles || child.roles.includes(userRole)
-              );
+              const children = item.children?.filter(visible);
               const link = (
                 <Link
                   href={item.href}

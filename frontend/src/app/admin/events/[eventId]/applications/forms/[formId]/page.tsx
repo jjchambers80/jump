@@ -7,21 +7,19 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useSession } from 'next-auth/react';
 import { type AdminForm, type FormTemplateSummary } from '@/lib/applications';
 import { QuestionsCard, SettingsCard, TiersCard } from '@/components/applications/FormEditorCards';
 import { SaveAsTemplateDialog } from '@/components/applications/TemplateDialogs';
 import { useParticipantsApi } from '@/components/applications/useParticipantsApi';
 import ApplicationsHeader from '../../ApplicationsHeader';
 import { describeError, useApplicationsApi } from '../../useApplicationsApi';
+import { useCan } from '@/components/OrgContext';
 
 const btn = 'rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
 
 export default function FormEditorPage({ params }: { params: { eventId: string; formId: string } }) {
   const api = useApplicationsApi(params.eventId);
-  const { data: session } = useSession();
-  const role = (session?.user as { role?: string } | undefined)?.role;
-  const canEdit = role === 'ADMIN' || role === 'SYSTEM_ADMIN';
+  const canEdit = useCan('applications.forms');
   const participants = useParticipantsApi();
   const [form, setForm] = useState<AdminForm | null>(null);
   const [templates, setTemplates] = useState<FormTemplateSummary[]>([]);

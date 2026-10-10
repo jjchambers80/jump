@@ -10,7 +10,7 @@
 
 import { Router } from 'express';
 import { requireAuth } from '../../middleware/auth.js';
-import { requireOrganizer, orgRoleFor } from '../../middleware/rbac.js';
+import { requireFeature, can } from '../../middleware/rbac.js';
 import { requireRecentAuth } from '../../middleware/recentAuth.js';
 import { allowDeveloperToken } from '../../middleware/developerToken.js';
 import { AuthenticationError } from '../../middleware/errorHandler.js';
@@ -34,11 +34,11 @@ const developerOnly = [
   (req, res, next) => (req.user?.developerTokenId ? next() : next(new AuthenticationError('A developer token is required'))),
 ];
 
-router.get('/developer/authorize', requireAuth, requireOrganizer, handle(async (req, res) => {
+router.get('/developer/authorize', requireAuth, requireFeature('developer'), handle(async (req, res) => {
   res.json({ organization: await developerTokenService.organizationFor(req.user, String(req.query.store || '')) });
 }));
 
-router.post('/developer/authorize', requireAuth, requireOrganizer, requireRecentAuth, handle(async (req, res) => {
+router.post('/developer/authorize', requireAuth, requireFeature('developer'), requireRecentAuth, handle(async (req, res) => {
   const { store, codeChallenge, redirectUri, name } = req.body || {};
   const { code, organization } = await developerTokenService.createCode(req.user, { store, codeChallenge, redirectUri, name });
   res.status(201).json({ code, organization });
@@ -62,12 +62,12 @@ router.delete('/developer/token', developerOnly, handle(async (req, res) => {
   res.status(204).end();
 }));
 
-router.get('/admin/developer-tokens', requireAuth, requireOrganizer, handle(async (req, res) => {
-  res.json({ tokens: await developerTokenService.list(await activeOrgFor(req), { ...req.user, role: await orgRoleFor(req) }) });
+router.get('/admin/developer-tokens', requireAuth, requireFeature('developer'), handle(async (req, res) => {
+  res.json({ tokens: await developerTokenService.list(await activeOrgFor(req), { ...req.user, manageAll: await can(req, 'developer.manageAll') }) });
 }));
 
-router.delete('/admin/developer-tokens/:id', requireAuth, requireOrganizer, handle(async (req, res) => {
-  await developerTokenService.revoke(await activeOrgFor(req), { ...req.user, role: await orgRoleFor(req) }, req.params.id);
+router.delete('/admin/developer-tokens/:id', requireAuth, requireFeature('developer'), handle(async (req, res) => {
+  await developerTokenService.revoke(await activeOrgFor(req), { ...req.user, manageAll: await can(req, 'developer.manageAll') }, req.params.id);
   res.status(204).end();
 }));
 

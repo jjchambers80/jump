@@ -8,8 +8,7 @@
 
 import Link from 'next/link';
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
-import { useSession } from 'next-auth/react';
-import { useOrg } from '@/components/OrgContext';
+import { useOrg, useCan } from '@/components/OrgContext';
 import api, { type BuyerSignInMethod, type CustomerAccountSettings, type CustomerAccountSettingsInput, type SelfServeRefundFeeType } from '@/services/api';
 import SettingsNav from '../SettingsNav';
 import { UsersIcon } from '../icons';
@@ -67,9 +66,7 @@ function Toggle({
 
 export default function CustomerAccountsSettingsPage() {
   const { selectedOrgId, loading: orgLoading } = useOrg();
-  const { data: session } = useSession();
-  const role = (session?.user as any)?.role as string | undefined;
-  const canEdit = role === 'ADMIN' || role === 'SYSTEM_ADMIN';
+  const canEdit = useCan('settings.customerAccounts');
 
   const [settings, setSettings] = useState<CustomerAccountSettings | null>(null);
   const [error, setError] = useState<string | null>(null);

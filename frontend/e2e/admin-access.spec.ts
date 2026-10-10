@@ -136,7 +136,7 @@ test.describe('US2 - Organizer accesses the admin area', () => {
     // Should see an access denied message
     await expect(page.getByText(/access denied/i)).toBeVisible();
     // Should see role requirement message
-    await expect(page.getByText(/admin role required/i)).toBeVisible();
+    await expect(page.getByText(/cannot manage users/i)).toBeVisible();
   });
 });
 

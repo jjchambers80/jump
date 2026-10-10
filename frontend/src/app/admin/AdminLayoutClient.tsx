@@ -11,7 +11,7 @@ import AdminSearch from '@/components/AdminSearch';
 import AdminSidebar, { isSystemPath } from '@/components/AdminSidebar';
 import EventimusLogo from '@/components/EventimusLogo';
 import OrgSwitcher from '@/components/OrgSwitcher';
-import { OrgProvider } from '@/components/OrgContext';
+import { OrgProvider, HiddenPathRedirect } from '@/components/OrgContext';
 
 // Full-screen admin tools that bring their own chrome (spec 038 theme editor).
 const FULL_SCREEN = /^\/admin\/online-store\/themes\/[^/]+\/(editor|code)\/?$/;
@@ -28,7 +28,10 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
   if (pathname && FULL_SCREEN.test(pathname)) {
     return (
       <AdminRoute>
-        <OrgProvider>{children}</OrgProvider>
+        <OrgProvider>
+          <HiddenPathRedirect />
+          {children}
+        </OrgProvider>
       </AdminRoute>
     );
   }
@@ -36,6 +39,7 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
   return (
     <AdminRoute>
       <OrgProvider>
+        <HiddenPathRedirect />
         <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-slate-900">
           <AdminSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 

@@ -3,11 +3,11 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useSession } from 'next-auth/react';
 import SettingsNav from '../SettingsNav';
 import { fieldClass, labelClass } from '../formShared';
 import { useTemplatesApi, describeError, type DigestSettings } from '@/app/admin/events/[eventId]/applications/useApplicationsApi';
 import type { MessageTemplate, TemplateAction } from '@/lib/applications';
+import { useCan } from '@/components/OrgContext';
 
 const card = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
 const btn = 'rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
@@ -40,9 +40,7 @@ const keyOf = (scope: Scope, action: TemplateAction) => `${scope}:${action}`;
 
 export default function ApplicationTemplatesPage() {
   const api = useTemplatesApi();
-  const { data: session } = useSession();
-  const role = (session?.user as { role?: string } | undefined)?.role;
-  const canEdit = role === 'ADMIN' || role === 'SYSTEM_ADMIN';
+  const canEdit = useCan('settings.applications');
   const [eventTemplates, setEventTemplates] = useState<MessageTemplate[]>([]);
   const [standingTemplates, setStandingTemplates] = useState<MessageTemplate[]>([]);
   const [eventMergeFields, setEventMergeFields] = useState<{ key: string; description: string }[]>([]);

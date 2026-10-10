@@ -10,6 +10,13 @@ import { staffToken, joinOrgByToken, cleanupStaff } from '../helpers/staff.js';
 
 const { default: app } = await import('../../src/api/server.js');
 const { prisma } = await import('@jump/db');
+const { default: permissionService } = await import('../../src/services/PermissionService.js');
+
+// Overrides are pinned in this worker's cache, never written: suites share one
+// database and run in parallel.
+function pinRoles(value) {
+  permissionService._cache = { at: Date.now() + 3_600_000, value: { ADMIN: {}, ORGANIZER: {}, disabled: [], ...value } };
+}
 
 const TAG = `org-role-ct-${process.pid}-${Date.now()}`;
 const staffEmails = [`both@${TAG}.test`, `outsider@${TAG}.test`];
@@ -82,5 +89,44 @@ describe('role in the active organization', () => {
   test('a non-member gets nothing in an org it does not belong to', async () => {
     const res = await request(app).get(`/organizations/${orgA.id}`).set(...auth(outsiderToken));
     expect(res.status).toBe(403);
+  });
+
+  describe('System › Roles overrides', () => {
+    afterEach(() => permissionService.clearCache());
+
+    test('an action granted to ORGANIZER passes the guard; by default it is refused', async () => {
+      const refund = () =>
+        request(app).post('/admin/orders/no-such-order/refund').set(...auth(token)).set('X-Jump-Org', orgB.id).send({});
+      pinRoles({});
+      expect((await refund()).status).toBe(403);
+      pinRoles({ ORGANIZER: { 'orders.refund': true } });
+      expect((await refund()).status).not.toBe(403);
+    });
+
+    test('a feature hidden for ORGANIZER answers 403 to them and stays open to ADMIN', async () => {
+      pinRoles({ ORGANIZER: { maps: false } });
+      expect((await request(app).get('/admin/maps').set(...auth(token)).set('X-Jump-Org', orgB.id)).status).toBe(403);
+      expect((await request(app).get('/admin/maps').set(...auth(token)).set('X-Jump-Org', orgA.id)).status).toBe(200);
+    });
+
+    test('a feature turned off platform-wide is 404 for every role', async () => {
+      pinRoles({ disabled: ['finance'] });
+      expect((await request(app).get('/admin/finance/payouts').set(...auth(token)).set('X-Jump-Org', orgA.id)).status).toBe(404);
+    });
+
+    test('GET /admin/permissions describes the caller in the active org', async () => {
+      pinRoles({ ORGANIZER: { customers: false, 'orders.refund': true } });
+      const b = await request(app).get('/admin/permissions').set(...auth(token)).set('X-Jump-Org', orgB.id);
+      expect(b.status).toBe(200);
+      expect(b.body.role).toBe('ORGANIZER');
+      expect(b.body.granted).toEqual(expect.arrayContaining(['events', 'orders.refund']));
+      expect(b.body.granted).not.toContain('customers');
+      expect(b.body.granted).not.toContain('settings.tax');
+      expect(b.body.hiddenPaths).toEqual(['/admin/customers']);
+      const a = await request(app).get('/admin/permissions').set(...auth(token)).set('X-Jump-Org', orgA.id);
+      expect(a.body.role).toBe('ADMIN');
+      expect(a.body.granted).toContain('settings.tax');
+      expect(a.body.hiddenPaths).toEqual([]);
+    });
   });
 });

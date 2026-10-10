@@ -7,7 +7,7 @@ import multer from 'multer';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { requireAuth } from '../../middleware/auth.js';
 import { allowDeveloperToken } from '../../middleware/developerToken.js';
-import { requireOrganizer } from '../../middleware/rbac.js';
+import { requireFeature } from '../../middleware/rbac.js';
 import { NotFoundError, ValidationError } from '../../middleware/errorHandler.js';
 import { activeOrgFor } from './adminScope.js';
 import storeFileService from '../../services/StoreFileService.js';
@@ -55,7 +55,7 @@ adminFilesRouter.use((req, res, next) =>
   req.path === '/' && (req.method === 'GET' || req.method === 'POST') ? cliToken(req, res, next) : next()
 );
 adminFilesRouter.use((req, res, next) => (req.user?.developerTokenId ? next() : requireAuth(req, res, next)));
-adminFilesRouter.use(requireOrganizer);
+adminFilesRouter.use(requireFeature('content'));
 
 /** GET /admin/files — list (q, type, sort, page). */
 adminFilesRouter.get('/', async (req, res, next) => {
