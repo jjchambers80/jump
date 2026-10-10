@@ -977,24 +977,63 @@ export const membersApi = {
 
 /**
  * System administration (SYSTEM_ADMIN only, platform-wide: the backend
- * ignores X-Jump-Org on /admin/system). Fields are optional so the page
- * renders whatever the API returns.
+ * ignores X-Jump-Org on /admin/system). Shapes mirror SystemAdminService /
+ * OrganizationService.listOrganizationsPage.
  */
+export type SystemOrgStatus = 'ACTIVE' | 'INACTIVE';
+
 export interface SystemOverview {
-  organizations?: { total?: number; active?: number; suspended?: number; pending?: number };
-  users?: { total?: number; systemAdmins?: number; inactive?: number };
-  recentSignups?: Array<{
+  organizations: { total: number; active: number; inactive: number; pending: number };
+  users: { total: number; active: number; inactive: number; systemAdmins: number };
+  onboarding: { windows: Record<string, { started: number; completed: number; subscribed: number }>; pending: number };
+  recentSignups: Array<{
     id: string;
     name: string;
-    slug?: string | null;
-    createdAt: string;
-    onboardingCompletedAt?: string | null;
-    ownerEmail?: string | null;
+    slug: string;
+    status: SystemOrgStatus;
+    onboardingCompletedAt: string | null;
+    plan: 'FREE' | 'STARTER';
+    signedUpAt: string;
+    owner: { id: string; email: string; name: string | null } | null;
   }>;
 }
 
+export interface SystemOrganization {
+  id: string;
+  name: string;
+  slug: string;
+  status: SystemOrgStatus;
+  createdAt: string;
+  /** null while the organization is still in /signup */
+  onboardingCompletedAt: string | null;
+  memberCount: number;
+  venueCount: number;
+  /** null for an organization with no PlatformCustomer row (pre-spec 022) */
+  plan: 'FREE' | 'STARTER' | null;
+  subscriptionStatus: string | null;
+}
+
+export interface SystemOrganizationPage {
+  organizations: SystemOrganization[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+}
+
+/** PENDING = signup never finished, whatever the status. */
+export type SystemOrgFilter = SystemOrgStatus | 'PENDING';
+
 export const systemAdminApi = {
   overview: () => api.get<SystemOverview>('/admin/system/overview'),
+  organizations: (params: { q?: string; status?: SystemOrgFilter; page?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set('q', params.q);
+    if (params.status) qs.set('status', params.status);
+    if (params.page && params.page > 1) qs.set('page', String(params.page));
+    return api.get<SystemOrganizationPage>(`/admin/system/organizations${qs.size ? `?${qs}` : ''}`);
+  },
+  organization: (id: string) =>
+    api.get<{ organization: SystemOrganization; members: OrgMember[] }>(`/admin/system/organizations/${id}`),
+  setOrganizationStatus: (id: string, status: SystemOrgStatus) =>
+    api.patch<SystemOrganization>(`/admin/system/organizations/${id}/status`, { status }),
 };
 
 export const api = new ApiClient();

@@ -1,9 +1,9 @@
 import { expect, test, type Route } from '@playwright/test';
 import { signInAsStaff } from './helpers/session';
 
-// Spec 022 phase 3: SYSTEM_ADMIN Organizations page shows the signup funnel
-// and each organization's survey summary / plan; the dashboard setup guide
-// gains the check-in card.
+// Spec 022 phase 3: the signup funnel now sits on System administration ›
+// Organizations (the old /admin/organizations redirects there); the
+// dashboard setup guide gains the check-in card.
 
 const API = 'http://localhost:3002';
 const json = (route: Route, body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
@@ -17,67 +17,44 @@ const base = {
   _count: { venues: 1, users: 1 },
 };
 
-const orgs = [
-  {
-    ...base,
-    id: 'org-a',
-    name: 'Raleigh Retro Gamers',
-    plan: 'STARTER',
-    subscriptionStatus: 'trialing',
-    onboarding: { source: 'admin', goals: ['sell_online', 'vendor_applications'], eventTypes: ['convention_expo'], eventsPerYear: 'two_to_five', attendance: '500_2000', movingFrom: 'eventeny', surveySkipped: false },
-  },
-  {
-    ...base,
-    id: 'org-b',
-    name: 'Durham Pinball Society',
-    plan: 'FREE',
-    subscriptionStatus: null,
-    onboarding: { source: 'public', goals: [], eventTypes: [], eventsPerYear: null, attendance: null, movingFrom: null, surveySkipped: true },
-  },
-  { ...base, id: 'org-c', name: 'Legacy Org', plan: 'FREE', subscriptionStatus: null, onboarding: null },
-];
+const page1 = {
+  organizations: [
+    { id: 'org-a', name: 'Raleigh Retro Gamers', slug: 'rrg', status: 'ACTIVE', createdAt: base.createdAt, onboardingCompletedAt: base.createdAt, memberCount: 2, venueCount: 1, plan: 'STARTER', subscriptionStatus: 'trialing' },
+  ],
+  pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+};
 
-test('SYSTEM_ADMIN sees the funnel, survey chips and plan pills', async ({ page, baseURL }) => {
+test('SYSTEM_ADMIN: /admin/organizations redirects to the system list with the funnel', async ({ page, baseURL }) => {
   await signInAsStaff(page, { id: 'sys', email: 'sys@test.com', role: 'SYSTEM_ADMIN' }, baseURL!);
   await page.route(`${API}/**`, (route) => {
     const path = new URL(route.request().url()).pathname;
-    if (path === '/organizations') return json(route, orgs);
+    if (path === '/organizations') return json(route, [{ ...base, id: 'org-a', name: 'Raleigh Retro Gamers' }]);
+    if (path === '/admin/system/organizations') return json(route, page1);
     if (path === '/organizations/onboarding/funnel') return json(route, { windows: { 7: { started: 3, completed: 2, subscribed: 1 }, 30: { started: 9, completed: 6, subscribed: 2 } }, pending: 1 });
     return json(route, []);
   });
   await page.goto('/admin/organizations');
+  await expect(page).toHaveURL(/\/admin\/system\/organizations$/);
 
   const funnel = page.getByTestId('onboarding-funnel');
   await expect(funnel).toContainText('1 pending now');
+  await funnel.getByText('Signup funnel').click();
   await expect(page.getByTestId('funnel-7')).toContainText('Last 7 days');
   await expect(page.getByTestId('funnel-7')).toContainText('3');
   await expect(page.getByTestId('funnel-30')).toContainText('9');
-
-  const rows = page.getByTestId('org-survey');
-  await expect(rows).toHaveCount(1);
-  await expect(rows.first()).toContainText('Sell tickets online');
-  await expect(rows.first()).toContainText('Manage vendor & sponsor applications');
-  await expect(rows.first()).toContainText('Conventions & expos');
-  await expect(rows.first()).toContainText('2–5 / yr');
-  await expect(rows.first()).toContainText('500–2,000 attendees');
-  await expect(rows.first()).toContainText('from Eventeny');
-  await expect(page.getByText('Survey skipped')).toBeVisible();
-  await expect(page.getByTestId('org-plan')).toHaveCount(1);
-  await expect(page.getByTestId('org-plan')).toHaveText('Starter · trial');
+  await expect(page.getByTestId('system-org-list')).toContainText('Starter · trial');
 });
 
-test('ADMIN sees no funnel card', async ({ page, baseURL }) => {
+test('ADMIN: /admin/organizations ends on the dashboard', async ({ page, baseURL }) => {
   await signInAsStaff(page, { id: 'adm', email: 'adm@test.com', role: 'ADMIN' }, baseURL!);
   await page.route(`${API}/**`, (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path === '/organizations') return json(route, [{ ...base, id: 'org-c', name: 'Legacy Org' }]);
-    if (path === '/organizations/onboarding/funnel') return json(route, { error: 'ForbiddenError' }, 403);
     return json(route, []);
   });
   await page.goto('/admin/organizations');
-  await expect(page.getByRole('heading', { name: 'Legacy Org' })).toBeVisible();
+  await expect(page).toHaveURL(/\/admin\/dashboard$/);
   await expect(page.getByTestId('onboarding-funnel')).toHaveCount(0);
-  await expect(page.getByTestId('org-survey')).toHaveCount(0);
 });
 
 test('onboarding checklist shows the check-in step for door sellers', async ({ page, baseURL }) => {

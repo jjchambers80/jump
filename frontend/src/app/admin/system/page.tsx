@@ -25,7 +25,7 @@ function tilesFrom(o: SystemOverview): Tile[] {
     {
       label: 'Organizations',
       value: n(o.organizations?.total),
-      detail: `${n(o.organizations?.active)} active · ${n(o.organizations?.suspended)} suspended`,
+      detail: `${n(o.organizations?.active)} active · ${n(o.organizations?.inactive)} suspended`,
       icon: Building2,
     },
     { label: 'Unfinished signups', value: n(o.organizations?.pending), detail: 'Setup not completed', icon: Hourglass },
@@ -94,13 +94,13 @@ function RecentSignups({ signups }: { signups: NonNullable<SystemOverview['recen
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-gray-900 dark:text-white">{org.name}</p>
                   <p className="truncate text-xs text-gray-500 dark:text-slate-400">
-                    {[org.ownerEmail, org.slug && `/${org.slug}`].filter(Boolean).join(' · ') || ' '}
+                    {[org.owner?.email, org.slug && `/${org.slug}`].filter(Boolean).join(' · ') || ' '}
                   </p>
                 </div>
                 <div className="shrink-0 text-right text-xs">
                   <p className="text-gray-700 dark:text-slate-300">
-                    <time dateTime={org.createdAt} title={formatDateTime(org.createdAt)}>
-                      {timeAgo(org.createdAt)}
+                    <time dateTime={org.signedUpAt} title={formatDateTime(org.signedUpAt)}>
+                      {timeAgo(org.signedUpAt)}
                     </time>
                   </p>
                   <p className="text-gray-500 dark:text-slate-400">

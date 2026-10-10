@@ -9,17 +9,21 @@ import { mintSessionToken, signInAsStaff, type StaffUser } from './helpers/sessi
 const API = 'http://localhost:3002';
 const json = (body: unknown, status = 200) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
+// Shape of SystemAdminService.overview().
 const OVERVIEW = {
-  organizations: { total: 128, active: 120, suspended: 3, pending: 5 },
-  users: { total: 412, systemAdmins: 2, inactive: 7 },
+  organizations: { total: 128, active: 120, inactive: 3, pending: 5 },
+  users: { total: 412, active: 405, inactive: 7, systemAdmins: 2 },
+  onboarding: { windows: { 7: { started: 4, completed: 2, subscribed: 1 } }, pending: 5 },
   recentSignups: [
     {
       id: 'org-new',
       name: 'Raleigh Retro Gamers',
       slug: 'raleigh-retro-gamers',
-      createdAt: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+      status: 'ACTIVE',
       onboardingCompletedAt: null,
-      ownerEmail: 'owner@rrg.test',
+      plan: 'FREE',
+      signedUpAt: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+      owner: { id: 'u-owner', email: 'owner@rrg.test', name: null },
     },
   ],
 };

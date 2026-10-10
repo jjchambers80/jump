@@ -2,7 +2,7 @@
 
 // Online store settings editor for one organization: store name, handle
 // (slug), public theme mode, and branding (logo, cover image, brand color).
-// Shared by /admin/online-store (active org) and the legacy Organizations list.
+// Shared by /admin/online-store and Online store › Preferences (active org).
 
 import React, { useEffect, useState } from 'react';
 import api from '@/services/api';
