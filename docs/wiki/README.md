@@ -105,6 +105,7 @@ Generated and maintained by running `/doc-feature` after completing feature work
 - [Environment Variables](config/environment-variables.md)
 - [Stripe Setup](config/stripe-setup.md)
 - [Stripe Live Activation](config/stripe-live-activation.md) — The founder's ordered runbook for the live-mode changes only they can make: account activation, live webhook endpoint + signing secret, statement descriptor, Stripe Tax, Connect, subscription billing, and how to undo each
+- [Stripe Test Mode: Direct Charges](config/stripe-test-mode-direct-charges.md) — Local runbook for spec 047 D0-S in Stripe test mode: private DB, `stripe listen` for both endpoints, onboarding test values, test cards (success, decline, dispute), what to check after purchase, refund and a paused account
 - [Production Launch Checklist](config/production-launch-checklist.md) — Human steps before taking real money: Stripe Tax activation/registrations, tax backfill review, open tax decisions, live Stripe keys
 - [Database Setup](config/database-setup.md)
 
