@@ -1,7 +1,7 @@
 # Spec Lifecycle Status
 
 This index records the verified lifecycle state of every spec document in this directory.
-Last updated: 2026-09-22.
+Last updated: 2026-10-10.
 
 | # | Title | Lifecycle | Notes |
 |---|-------|-----------|-------|
@@ -42,6 +42,7 @@ Last updated: 2026-09-22.
 | 046 | Photo galleries — Content › Galleries with sections over Content › Files; masonry + lightbox or carousel on Puck pages, classic pages and blog posts | **Implemented** | 2026-10-07: cards A–D merged (PRs #322, #324, #326, 046D); 046E (Hero carousel a11y fixes) open. See `docs/wiki/features/galleries.md`. Supersedes the spec 038 inline `Gallery` section. See `specs/046-photo-galleries/plan.md` and `docs/research/2026-10-07-photo-galleries.md`. |
 | 047 | Donations — one-time gifts at ticket checkout, preset or custom amounts, donate-only, recurring monthly gifts; nonprofit verification and receipts | **Planned** | 2026-10-09: D0 groundwork merged (`specs/047-donations/plan-d0.md`); DV plan (`specs/047-donations/plan-dv.md`): nonprofit verification by SYSTEM_ADMIN, flat 3% ticket fee for verified nonprofits, charity agreement, state disclosures, good-standing gate; D1 plan (`plan-d1.md`): gifts at ticket checkout, presets or custom amount, donate-only, receipts; option C decided: direct charges on the organization's own Stripe account (also settles 010 §11.1). Full phase plan and law in `docs/research/2026-10-08-donation-platforms.md` and `-donation-legal-compliance.md`. v1 = D0 + DV + D1 + D3 |
 | 049 | Brand settings + Theme settings panel — org brand identity at Settings › General › Brand (logos, square logo, primary/secondary colors, theme mode, slogan, short description, social links); themes override, empty inherits; editor gear panel (logo, colors, typography) | **In progress** | 2026-10-09: card A (data + Settings › Brand page) built. Cards B (theme inherits brand, favicon) and C (gear panel) planned. Supersedes 038 D16. See `specs/049-brand-and-theme-settings/plan.md`. |
+| 050 | Event setup wizard — every Create Event opens a step wizard (name → venue → date creates the draft → description, image, tickets/RSVP, collect more, vendor / special guest / volunteer / other application steps, optional floor map, review & publish); the same wizard is the one editor (Details sections link to `setup?step=`); `ApplicationForm.purpose`, unpublish, close sales, signed draft preview, guest lineup; forms and add-on config open to ORGANIZER | **Planned** | 2026-10-10: plan only, cards 050-A…S. UI behind `NEXT_PUBLIC_EVENT_WIZARD_ENABLED` until parity (050-P). Volunteer shifts are phase 2. See `specs/050-event-setup-wizard/plan.md` and `docs/research/2026-10-10-event-creation-wizard.md`. |
 
 ## Documents archived as historical
 
