@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { signInAsStaff } from './helpers/session';
 
 // Spec 045C: Settings › Agent access, Account › Connected apps and
-// Settings › Platform load their data, and switch flips go through the
+// System administration › Settings load their data, and switch flips go through the
 // "Confirm it's you" step-up. Backend mocked. The nav entries for the first
 // two stay hidden until NEXT_PUBLIC_AGENT_ACCESS_ENABLED, so tests open them by URL.
 
@@ -90,9 +90,9 @@ test.describe('as SYSTEM_ADMIN', () => {
     await signInAsStaff(page, { id: 'agent-sys', email: 'sys@test.com', role: 'SYSTEM_ADMIN' }, baseURL!);
   });
 
-  test('Platform loads the global switch and stats', async ({ page }) => {
+  test('System settings load the global switch and stats', async ({ page }) => {
     await mockApi(page);
-    await page.goto('/admin/settings/platform');
+    await page.goto('/admin/system/settings');
     await expect(page.getByText('42').first()).toBeVisible();
     await expect(page.getByRole('switch').first()).toHaveAttribute('aria-checked', 'true');
   });

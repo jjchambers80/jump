@@ -42,6 +42,8 @@ export default {
     session({ session, token }) {
       (session as any).mfaPending = token.mfa === 'pending';
       (session as any).twoStepSetupRequired = token.twoStepSetup === 'required';
+      // Lets middleware.ts route SYSTEM_ADMIN (/admin landing, /admin/system guard).
+      (session as any).role = token.role ?? null;
       return session;
     },
   },

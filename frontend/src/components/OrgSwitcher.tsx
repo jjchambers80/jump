@@ -11,6 +11,7 @@ import React, { useState, useRef, useEffect, type KeyboardEvent } from 'react';
 import Link from 'next/link';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+import { ShieldCheck } from 'lucide-react';
 import { useOrg } from './OrgContext';
 import { resolveAssetUrl } from '@/lib/assets';
 
@@ -171,6 +172,24 @@ export default function OrgSwitcher() {
               <span className="font-medium">Create organization</span>
             </button>
           </div>
+
+          {/* Platform-wide administration, SYSTEM_ADMIN only */}
+          {(session?.user as { role?: string } | undefined)?.role === 'SYSTEM_ADMIN' && (
+            <div role="none" className="border-t border-gray-100 dark:border-slate-700">
+              <Link
+                href="/admin/system"
+                role="menuitem"
+                onClick={() => setOpen(false)}
+                data-testid="org-switcher-system"
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors min-h-11 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500"
+              >
+                <span aria-hidden className="flex items-center justify-center w-8 h-8">
+                  <ShieldCheck className="w-5 h-5 text-gray-400 dark:text-slate-500" />
+                </span>
+                <span className="font-medium">System administration</span>
+              </Link>
+            </div>
+          )}
 
           {/* User info (links to the personal account settings, spec 030) & logout */}
           <div role="none" className="border-t border-gray-100 dark:border-slate-700 py-1">

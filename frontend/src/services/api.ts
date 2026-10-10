@@ -975,6 +975,28 @@ export const membersApi = {
   resend: (userId: string) => api.post<void>(`/admin/settings/users/${userId}/resend`, {}),
 };
 
+/**
+ * System administration (SYSTEM_ADMIN only, platform-wide: the backend
+ * ignores X-Jump-Org on /admin/system). Fields are optional so the page
+ * renders whatever the API returns.
+ */
+export interface SystemOverview {
+  organizations?: { total?: number; active?: number; suspended?: number; pending?: number };
+  users?: { total?: number; systemAdmins?: number; inactive?: number };
+  recentSignups?: Array<{
+    id: string;
+    name: string;
+    slug?: string | null;
+    createdAt: string;
+    onboardingCompletedAt?: string | null;
+    ownerEmail?: string | null;
+  }>;
+}
+
+export const systemAdminApi = {
+  overview: () => api.get<SystemOverview>('/admin/system/overview'),
+};
+
 export const api = new ApiClient();
 export default api;
 

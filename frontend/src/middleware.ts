@@ -34,6 +34,9 @@ const { auth } = NextAuth({
 
 const STAFF_ONLY_PREFIXES = ['/admin', '/oauth'];
 
+/** Sign-in's default callbackUrl; routed by role below (auth/signin/page.tsx). */
+const SIGN_IN_LANDING = '/auth/landing';
+
 function oauthFrameProtection(response: NextResponse, pathname: string) {
   if (pathname === '/oauth/consent') {
     response.headers.set('Content-Security-Policy', "frame-ancestors 'none'");
@@ -128,6 +131,20 @@ export default auth(async (req: NextRequest & { auth: unknown }) => {
     const staffOnly = STAFF_ONLY_PREFIXES.some(
       (p) => pathname === p || pathname.startsWith(`${p}/`)
     );
+    // Default post-sign-in destination (no explicit callbackUrl): the role is
+    // only known once the session exists, and Google / email links redirect
+    // straight to the callbackUrl, so the decision is made here for every
+    // provider. SYSTEM_ADMIN → /admin (→ /admin/system below, via
+    // /auth/two-step first when the second step is pending); everyone else
+    // keeps the old /events default.
+    if (pathname === SIGN_IN_LANDING) {
+      const session = req.auth as { role?: string; mfaPending?: boolean } | null;
+      let to = '/events';
+      if (session?.role === 'SYSTEM_ADMIN') {
+        to = session.mfaPending ? `/auth/two-step?callbackUrl=${encodeURIComponent('/admin')}` : '/admin';
+      }
+      return NextResponse.redirect(new URL(to, req.nextUrl));
+    }
     if (staffOnly && !req.auth) {
       const signInUrl = new URL('/auth/signin', req.nextUrl);
       signInUrl.searchParams.set('callbackUrl', pathname + req.nextUrl.search);
@@ -148,6 +165,20 @@ export default auth(async (req: NextRequest & { auth: unknown }) => {
       !(pathname === '/admin/account' || pathname.startsWith('/admin/account/'))
     ) {
       return oauthFrameProtection(NextResponse.redirect(new URL(TWO_STEP_SETUP_PATH, req.nextUrl)), pathname);
+    }
+    // System administration: SYSTEM_ADMIN lands there from /admin, nobody
+    // else gets in. The role claim can lag the DB by up to 60 s; the
+    // system layout re-checks on the client and the API enforces it.
+    if (staffOnly) {
+      const isSystemAdmin = (req.auth as { role?: string } | null)?.role === 'SYSTEM_ADMIN';
+      if (pathname === '/admin' || pathname === '/admin/') {
+        const home = new URL(isSystemAdmin ? '/admin/system' : '/admin/dashboard', req.nextUrl);
+        home.search = req.nextUrl.search;
+        return NextResponse.redirect(home);
+      }
+      if (!isSystemAdmin && (pathname === '/admin/system' || pathname.startsWith('/admin/system/'))) {
+        return NextResponse.redirect(new URL('/admin/dashboard', req.nextUrl));
+      }
     }
     return oauthFrameProtection(NextResponse.next(), pathname);
   }

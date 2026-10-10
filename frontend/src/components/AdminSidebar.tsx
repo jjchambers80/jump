@@ -18,6 +18,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import {
+  ArrowLeft,
   CalendarDays,
   ChartColumn,
   ChevronRight,
@@ -30,6 +31,7 @@ import {
   MapPin,
   ScanLine,
   Settings,
+  ShieldCheck,
   ShoppingCart,
   Store,
   Users,
@@ -90,8 +92,21 @@ const navItems: NavItem[] = [
   },
 ];
 
+// System administration (SYSTEM_ADMIN, platform-wide). Organizations and
+// Users join this list as their pages land.
+const systemNavItems: NavItem[] = [
+  { label: 'Overview', href: '/admin/system', icon: ShieldCheck },
+  { label: 'Settings', href: '/admin/system/settings', icon: Settings },
+];
+
 /** Every link, parents and children alike, for the "more specific route" check. */
-const allItems: NavItem[] = navItems.flatMap((item) => [item, ...(item.children ?? [])]);
+const allItems: NavItem[] = [...navItems, ...systemNavItems].flatMap((item) => [
+  item,
+  ...(item.children ?? []),
+]);
+
+export const isSystemPath = (pathname: string | null) =>
+  pathname === '/admin/system' || !!pathname?.startsWith('/admin/system/');
 
 /** The section whose href is a prefix of the current path, if any. */
 function sectionFor(pathname: string): string | undefined {
@@ -118,10 +133,12 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
   const pathname = usePathname();
   const { data: session } = useSession();
   const userRole = (session?.user as any)?.role;
+  // System mode: platform-wide pages, so no org setup guide or org Settings.
+  const systemMode = isSystemPath(pathname);
   // Onboarding checklist link, pinned above the nav until every step is done
   // or the guide is dismissed. Nothing renders while the guide loads.
   const setup = useSetupGuide();
-  const showSetup = !!setup.guide && !setup.guide.dismissedAt && setup.total > 0 && !setup.complete;
+  const showSetup = !systemMode && !!setup.guide && !setup.guide.dismissedAt && setup.total > 0 && !setup.complete;
 
   // Sections are collapsed until toggled; the one holding the current page is
   // opened whenever the route changes into it.
@@ -171,7 +188,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
     return false;
   };
 
-  const visibleItems = navItems.filter((item) => !item.roles || item.roles.includes(userRole));
+  const visibleItems = (systemMode ? systemNavItems : navItems).filter((item) => !item.roles || item.roles.includes(userRole));
 
   return (
     <>
@@ -204,7 +221,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
             }`}
           >
             <Link
-              href="/admin/dashboard"
+              href={systemMode ? '/admin/system' : '/admin/dashboard'}
               className="rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
               onClick={onClose}
             >
@@ -235,7 +252,17 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
           </div>
 
           {/* Navigation links */}
-          <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          <nav
+            aria-label={systemMode ? 'System administration' : 'Store administration'}
+            className="flex-1 px-3 py-4 space-y-1 overflow-y-auto"
+          >
+            {systemMode && (
+              <p
+                className={`px-3 pb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400 ${labelClass}`}
+              >
+                System administration
+              </p>
+            )}
             {showSetup && (
               <div className="pb-3 mb-3 border-b border-gray-200 dark:border-slate-700">
                 <Link
@@ -341,22 +368,30 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
             }`}
           >
             <Link
-              href="/admin/settings"
+              href={systemMode ? '/admin/dashboard' : '/admin/settings'}
               onClick={onClose}
-              title={collapsed ? 'Settings' : undefined}
+              title={collapsed ? (systemMode ? 'Back to store admin' : 'Settings') : undefined}
+              data-testid={systemMode ? 'sidebar-back-to-store' : undefined}
               className={`flex flex-1 items-center min-w-0 px-3 py-2 text-sm font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-accent-500 ${
                 collapsed ? 'md:w-full md:flex-none md:justify-center md:px-0' : ''
               } ${
-                isActive('/admin/settings')
+                !systemMode && isActive('/admin/settings')
                   ? 'bg-accent-50 dark:bg-accent-900/30 text-accent-700 dark:text-accent-300'
                   : 'text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700'
               }`}
             >
-              <Settings
-                className={`w-4 h-4 mr-3 shrink-0 ${collapsed ? 'md:mr-0' : ''}`}
-                aria-hidden="true"
-              />
-              <span className={labelClass}>Settings</span>
+              {systemMode ? (
+                <ArrowLeft
+                  className={`w-4 h-4 mr-3 shrink-0 ${collapsed ? 'md:mr-0' : ''}`}
+                  aria-hidden="true"
+                />
+              ) : (
+                <Settings
+                  className={`w-4 h-4 mr-3 shrink-0 ${collapsed ? 'md:mr-0' : ''}`}
+                  aria-hidden="true"
+                />
+              )}
+              <span className={labelClass}>{systemMode ? 'Back to store admin' : 'Settings'}</span>
             </Link>
             <button
               type="button"

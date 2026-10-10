@@ -22,8 +22,10 @@ function SignInForm() {
   const params = useSearchParams();
   // /signup and the edge middleware pass callbackUrl so a new organizer lands
   // back where they were going (spec 022)
-  const callbackUrl = safeCallbackUrl(params.get('callbackUrl'), '/events');
-  const devCallbackUrl = safeCallbackUrl(params.get('callbackUrl'), '/admin/dashboard');
+  // Without one, /auth/landing (edge middleware) routes by role once the
+  // session exists: SYSTEM_ADMIN → /admin/system, everyone else → /events.
+  const callbackUrl = safeCallbackUrl(params.get('callbackUrl'), '/auth/landing');
+  const devCallbackUrl = safeCallbackUrl(params.get('callbackUrl'), '/admin');
   // Staff invite link (Settings › Users): ?invite=<orgId>&email=<invitee>.
   // The org name comes from the public lookup, never from the query.
   const inviteOrgId = params.get('invite');

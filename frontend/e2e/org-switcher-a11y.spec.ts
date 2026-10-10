@@ -30,8 +30,8 @@ test('keyboard: focus moves into the menu, arrows wrap, Home/End, Escape returns
   const menu = page.getByRole('menu', { name: 'Account menu' });
   await expect(menu).toBeVisible();
   const items = menu.getByRole('menuitem');
-  // 3 orgs + Create organization + account + Log out
-  await expect(items).toHaveCount(6);
+  // 3 orgs + Create organization + System administration + account + Log out
+  await expect(items).toHaveCount(7);
   await expect(items.first()).toBeFocused();
 
   await page.keyboard.press('ArrowDown');
