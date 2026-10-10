@@ -58,6 +58,11 @@ router.post('/enable', requireAuth, requireRecentAuth, wrap(async (req, res) => 
 router.post('/disable', requireAuth, requireRecentAuth, wrap(async (req, res) => {
   const factor = pickFactor(req.body);
   if (!factor.code && !factor.recoveryCode) throw new ValidationError('Enter a current code to turn two-step off');
+  if (req.user.role === 'SYSTEM_ADMIN') {
+    const error = new ConflictError('System administrators must keep two-step authentication on, so it can\'t be turned off.');
+    error.code = 'TWO_STEP_REQUIRED_BY_ROLE';
+    throw error;
+  }
   // Settings › Users "secure sign-in method": an organization that requires
   // two-step keeps it on; an admin there must lift the requirement first.
   const requiring = await prisma.organizationMember.findFirst({

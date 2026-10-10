@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CLAIMS_REFRESH_MS,
   applyUserClaims,
+  isTwoStepSetupRequired,
   shouldRefreshClaims,
   type ClaimsToken,
 } from '@/lib/sessionClaims';
@@ -88,5 +89,15 @@ describe('applyUserClaims secure sign-in requirement (Settings › Users)', () =
     const token: ClaimsToken = { sub: 'u1', twoStepSetup: 'required' };
     applyUserClaims(token, { ...base, twoStepSetupRequired: false }, NOW);
     expect(token.twoStepSetup).toBeUndefined();
+  });
+});
+
+describe('isTwoStepSetupRequired', () => {
+  it('requires setup for a SYSTEM_ADMIN or a requiring membership while two-step is off', () => {
+    expect(isTwoStepSetupRequired('SYSTEM_ADMIN', false, 0)).toBe(true);
+    expect(isTwoStepSetupRequired('ADMIN', false, 1)).toBe(true);
+    expect(isTwoStepSetupRequired('ADMIN', false, 0)).toBe(false);
+    expect(isTwoStepSetupRequired('SYSTEM_ADMIN', true, 0)).toBe(false);
+    expect(isTwoStepSetupRequired('ADMIN', true, 2)).toBe(false);
   });
 });

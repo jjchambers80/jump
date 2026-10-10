@@ -58,8 +58,13 @@ function SignInForm() {
     setError('');
     try {
       const result = await signIn('password', { email, password, redirect: false, callbackUrl });
-      if (result?.error) setError('Wrong email or password.');
-      else window.location.href = result?.url || callbackUrl;
+      if (result?.error) {
+        setError(
+          result.code === 'account_deactivated'
+            ? 'This account has been deactivated. Contact an administrator.'
+            : 'Wrong email or password.'
+        );
+      } else window.location.href = result?.url || callbackUrl;
     } catch {
       setError('An unexpected error occurred.');
     } finally {

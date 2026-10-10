@@ -117,6 +117,12 @@ describe('Account security contract', () => {
     await request(app).post('/auth/password').set('X-Jump-Internal', AUTH_SECRET).send({ email: emails[0], password: 'wrong password here' }).expect(401);
     await request(app).post('/auth/password').set('X-Jump-Internal', AUTH_SECRET).send({ email: emails[1], password: PASSWORD }).expect(401); // no password set
     expect(await prisma.securityEvent.count({ where: { userId: me.id, type: 'SIGN_IN_FAILED' } })).toBeGreaterThanOrEqual(1);
+    // A deactivated account is told so, but only once the password matched
+    await prisma.user.update({ where: { id: me.id }, data: { isActive: false } });
+    const inactive = await request(app).post('/auth/password').set('X-Jump-Internal', AUTH_SECRET).send({ email: emails[0], password: PASSWORD }).expect(403);
+    expect(inactive.body.code).toBe('ACCOUNT_DEACTIVATED');
+    await request(app).post('/auth/password').set('X-Jump-Internal', AUTH_SECRET).send({ email: emails[0], password: 'wrong password here' }).expect(401);
+    await prisma.user.update({ where: { id: me.id }, data: { isActive: true } });
 
     // Password now counts as a step-up method, and changing it revokes other sessions
     const overview = await request(app).get('/account/security').set(...auth(token)).expect(200);

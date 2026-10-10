@@ -22,7 +22,7 @@ export async function verifyPasswordWithBackend(
   email: string,
   password: string,
   request?: Request
-): Promise<{ id: string; email: string; name: string | null } | null> {
+): Promise<{ id: string; email: string; name: string | null } | 'deactivated' | null> {
   const secret = process.env.AUTH_SECRET;
   if (!secret) return null;
   const headers: Record<string, string> = { 'Content-Type': 'application/json', 'X-Jump-Internal': secret };
@@ -40,7 +40,14 @@ export async function verifyPasswordWithBackend(
       body: JSON.stringify({ email, password }),
       cache: 'no-store',
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      // The password matched but the account was deactivated (403 ACCOUNT_DEACTIVATED)
+      if (res.status === 403) {
+        const body = (await res.json().catch(() => null)) as { code?: string } | null;
+        if (body?.code === 'ACCOUNT_DEACTIVATED') return 'deactivated';
+      }
+      return null;
+    }
     const user = (await res.json()) as { id: string; email: string; name: string | null };
     return user?.id ? user : null;
   } catch {
