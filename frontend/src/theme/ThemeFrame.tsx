@@ -78,6 +78,7 @@ export default function ThemeFrame({
   return (
     <ThemeScope
       brandColor={data.organization.brandColor}
+      brandSecondaryColor={data.organization.brandSecondaryColor}
       themeMode={data.organization.themeMode}
       vars={settingsVars(data.settings)}
       css={schemeCss(data.settings)}

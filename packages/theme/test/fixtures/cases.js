@@ -84,6 +84,8 @@ export const SETTINGS_CASES = [
   { name: 'free-form CSS value refused', settings: { layout: { pageWidth: '100vw' } }, errors: ['layout.pageWidth'] },
   { name: 'no schemes', settings: { colors: { schemes: [] } }, errors: ['colors.schemes'] },
   { name: 'scheme hex', settings: { colors: { schemes: [{ id: 'scheme-1', name: 'A', background: '#FFFFFF', foreground: 'auto', accent: 'brand', accentForeground: 'auto', secondaryButtonLabel: 'auto', border: 'auto', muted: 'auto', shadow: 'auto' }] } }, errors: [] },
+  { name: 'scheme accent brand-secondary', settings: { colors: { schemes: [{ id: 'scheme-1', name: 'A', background: 'auto', foreground: 'auto', accent: 'brand-secondary', accentForeground: 'auto', secondaryButtonLabel: 'auto', border: 'auto', muted: 'auto', shadow: 'auto' }] } }, errors: [] },
+  { name: 'brand-secondary only on the accent slot', settings: { colors: { schemes: [{ id: 'scheme-1', name: 'A', background: 'brand-secondary', foreground: 'auto', accent: 'brand', accentForeground: 'auto', secondaryButtonLabel: 'auto', border: 'auto', muted: 'auto', shadow: 'auto' }] } }, errors: ['colors.schemes[0].background'] },
   { name: 'scheme bad color', settings: { colors: { schemes: [{ id: 'scheme-1', name: 'A', background: 'red', foreground: 'auto', accent: 'brand', accentForeground: 'auto', secondaryButtonLabel: 'auto', border: 'auto', muted: 'auto', shadow: 'auto' }] } }, errors: ['colors.schemes[0].background'] },
   { name: 'social link on the wrong host', settings: { social: { instagram: 'https://evil.example/instagram.com' } }, errors: ['social.instagram'] },
   { name: 'reddit and twitch links', settings: { social: { reddit: 'https://www.reddit.com/user/riverside', twitch: 'https://www.twitch.tv/riverside' } }, errors: [] },

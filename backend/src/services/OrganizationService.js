@@ -2,7 +2,7 @@
 // CRUD operations for organizations per FR-048
 
 import { prisma, Prisma } from '@jump/db';
-import { storefrontLogoFor } from './storefrontLogo.js';
+import { faviconUrlFor, storefrontLogoFor } from './storefrontLogo.js';
 import logger from '../utils/logger.js';
 import storefrontPreferencesService from './StorefrontPreferencesService.js';
 import { NotFoundError } from '../middleware/errorHandler.js';
@@ -328,7 +328,7 @@ class OrganizationService {
   async getPublicMeta(identifier) {
     const org = await findByPublicIdentifier(prisma.organization, identifier, {
       where: { status: 'ACTIVE' },
-      select: { id: true, slug: true, name: true, logoUrl: true, seoTitle: true, seoDescription: true, coverUrl: true },
+      select: { id: true, slug: true, name: true, logoUrl: true, seoTitle: true, seoDescription: true, coverUrl: true, squareLogoUrl: true, themesEnabled: true },
     });
     if (!org) throw new NotFoundError('Organization not found');
     return {
@@ -341,6 +341,8 @@ class OrganizationService {
       description: org.seoDescription,
       // Social sharing image: the cover from Settings › Brand.
       imageUrl: org.coverUrl,
+      // Spec 049: theme favicon ?? square logo ?? null (platform default).
+      faviconUrl: await faviconUrlFor(org),
     };
   }
 

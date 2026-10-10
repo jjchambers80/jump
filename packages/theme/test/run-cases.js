@@ -11,6 +11,8 @@ import {
   validateContent,
   validateDocument,
   validateSettings,
+  withBrand,
+  resolveSettings,
   DOCUMENTS,
 } from '../src/index.js';
 
@@ -51,6 +53,34 @@ export function runThemeCases({ describe, it, expect }) {
     }
     it('preset settings validate', () => {
       expect(validateSettings(preset.settings).errors).toEqual({});
+    });
+  });
+
+  describe('@jump/theme withBrand (spec 049)', () => {
+    const org = {
+      slogan: 'Play more games',
+      shortDescription: 'Retro markets in Raleigh',
+      socialLinks: { instagram: 'https://instagram.com/rrg', twitch: 'https://twitch.tv/rrg' },
+    };
+    it('empty theme values inherit the organization brand', () => {
+      const out = withBrand(resolveSettings({}, preset.settings), org);
+      expect(out.brand.headline).toBe('Play more games');
+      expect(out.brand.description).toBe('Retro markets in Raleigh');
+      expect(out.social.instagram).toBe('https://instagram.com/rrg');
+      expect(out.social.twitch).toBe('https://twitch.tv/rrg');
+    });
+    it('non-empty theme values win and other settings are untouched', () => {
+      const resolved = resolveSettings({ brand: { headline: 'Theme headline', showLogoInFooter: true }, social: { instagram: 'https://instagram.com/theme' } }, preset.settings);
+      const out = withBrand(resolved, org);
+      expect(out.brand).toMatchObject({ headline: 'Theme headline', description: 'Retro markets in Raleigh', showLogoInFooter: true });
+      expect(out.social.instagram).toBe('https://instagram.com/theme');
+      expect(out.layout).toEqual(resolved.layout);
+      expect(resolved.brand.description).toBe('');
+    });
+    it('no organization, or an empty brand, changes nothing', () => {
+      const resolved = resolveSettings({}, preset.settings);
+      expect(withBrand(resolved, null)).toBe(resolved);
+      expect(withBrand(resolved, { slogan: null, socialLinks: null })).toEqual(resolved);
     });
   });
 
