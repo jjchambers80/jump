@@ -9,7 +9,7 @@
 import React, { Suspense, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { ChevronRight, ExternalLink, MapPin, Pencil, CalendarDays } from 'lucide-react';
+import { ChevronRight, ExternalLink, Lock, MapPin, Pencil, CalendarDays } from 'lucide-react';
 import api from '@/services/api';
 import { useOrg } from '@/components/OrgContext';
 import { imageVariantUrl } from '@/lib/assets';
@@ -127,7 +127,8 @@ function EventDetailsContent() {
     );
   }
 
-  if (loading) return <DetailsSkeleton />;
+  // A refresh (org context settling, a lifecycle action) keeps the page mounted, so open dialogs survive.
+  if (loading && !overview) return <DetailsSkeleton />;
 
   if (!overview) {
     return (
@@ -200,6 +201,18 @@ function EventDetailsContent() {
               selectedOrgId={orgId}
               onDuplicate={() => setDuplicating(true)}
               onCancelEvent={() => setCancelling(true)}
+              status={event.status}
+              salesClosed={event.salesClosed}
+              onLifecycleDone={(action) => {
+                if (action === 'delete') {
+                  router.push('/admin/events');
+                  return;
+                }
+                setNotice(
+                  ({ 'close-sales': 'Sales closed. The event page stays up.', 'reopen-sales': 'Sales reopened.', unpublish: 'Unpublished. The event is a draft again.' } as Record<string, string>)[action]
+                );
+                load();
+              }}
             />
           </>
         }
@@ -402,10 +415,16 @@ function EventHero({
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <EventStatusPill status={event.status} />
+              {event.status === 'PUBLISHED' && event.salesClosed && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-900 ring-1 ring-inset ring-amber-600/30 dark:bg-amber-900/30 dark:text-amber-200 dark:ring-amber-400/30">
+                  <Lock className="h-3 w-3" aria-hidden />
+                  Sales closed
+                </span>
+              )}
               {event.status !== 'CANCELLED' && (
                 <span className="text-xs font-medium text-gray-500 dark:text-slate-400">{past ? 'Ended' : 'Starts'} {relativeDays(event.date)}</span>
               )}
-              <span className="text-xs text-gray-400 dark:text-slate-500">·</span>
+              <span aria-hidden className="text-xs text-gray-400 dark:text-slate-500">·</span>
               <span className="text-xs font-medium text-gray-500 dark:text-slate-400">{ticketed ? 'Ticketed' : 'RSVP'}</span>
             </div>
             <h1 id="event-title" className="mt-1.5 text-2xl font-bold tracking-tight text-gray-900 [overflow-wrap:anywhere] dark:text-white sm:text-3xl">

@@ -18,7 +18,8 @@ export type TemplateAction = 'RECEIVED' | 'APPROVED' | 'CHOOSE_SPACE' | 'REJECTE
 
 export interface Acceptance {
   open: boolean;
-  reason: 'not_published' | 'closed' | 'not_yet_open' | null;
+  /** sales_closed: the organizer closed sales on the whole event (spec 050-D). */
+  reason: 'not_published' | 'closed' | 'not_yet_open' | 'sales_closed' | null;
   opensAt?: string;
   closesAt?: string;
 }
@@ -718,7 +719,7 @@ export function addOnSummary(lines: { name: string | null; quantity: number }[] 
 export function acceptanceLine(a: Acceptance): string | null {
   if (a.open) return null;
   if (a.reason === 'not_yet_open') return a.opensAt ? `Opens ${formatDate(a.opensAt)}` : 'Not open yet';
-  if (a.reason === 'closed') return 'Closed';
+  if (a.reason === 'closed' || a.reason === 'sales_closed') return 'Closed';
   return 'Not available';
 }
 

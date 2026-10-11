@@ -364,6 +364,10 @@ function EventsListContent() {
                 publishBlockers={blockers?.eventId === event.id ? blockers.items : undefined}
                 onDuplicate={() => setDuplicating({ id: event.id, name: event.name })}
                 onCancelEvent={() => setCancelling({ id: event.id, name: event.name })}
+                onLifecycleDone={() => {
+                  fetchEvents();
+                  fetchSummary();
+                }}
               />
             );
           })}

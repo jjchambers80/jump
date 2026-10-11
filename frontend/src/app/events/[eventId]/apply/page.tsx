@@ -2,7 +2,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Lock } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import api from '@/services/api';
 import { acceptanceLine, money, type PublicForm } from '@/lib/applications';
@@ -32,6 +32,12 @@ export default function ApplyIndexPage({ params }: { params: { eventId: string }
       {() => (
         <div className="space-y-3" data-testid="apply-forms">
           {error && <p role="alert" className="text-red-700 dark:text-red-300">{error}</p>}
+          {forms?.some((form) => form.acceptance.reason === 'sales_closed') && (
+            <p role="status" data-testid="apply-sales-closed" className="flex items-center gap-2 rounded-2xl border border-gray-200 bg-white p-4 font-semibold text-gray-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
+              <Lock className="h-5 w-5 shrink-0 text-gray-500 dark:text-slate-400" aria-hidden />
+              Applications are closed.
+            </p>
+          )}
           {forms && forms.length === 0 && <p className="rounded-2xl border border-gray-200 bg-white p-6 text-gray-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">This event is not taking applications right now.</p>}
           {forms?.map((form, i) => {
             const closed = acceptanceLine(form.acceptance);
