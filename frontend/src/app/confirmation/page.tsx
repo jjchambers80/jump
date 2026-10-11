@@ -252,7 +252,7 @@ function ConfirmationContent() {
   const isPending = order.status === 'PENDING';
   const tierNames = Array.from(new Set((order.tickets ?? []).map((ticket) => ticket.priceTierName).filter(Boolean))).join(', ');
   const organizationId = org?.id;
-  const moreEventsHref = organizationId ? storefrontHref(`/organizations/${organizationId}`, organizationId) : '/events';
+  const moreEventsHref = organizationId ? storefrontHref(`/organizations/${organizationId}`) : '/events';
 
   return (
     <BrandScope

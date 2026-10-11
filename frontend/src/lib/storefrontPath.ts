@@ -1,4 +1,4 @@
-// Menu hrefs come from the backend in platform form (/organizations/:id/...).
+// Menu hrefs come from the backend in platform form (/organizations/:slug/...).
 // On a tenant host (custom domain or store subdomain) the same pages live at short paths, so
 // links are rewritten client-side; platform hosts keep them as-is.
 
@@ -15,12 +15,12 @@ export function isTenantHost(host: string | null | undefined) {
   return !isPlatformHost(host, PLATFORM_HOSTS, process.env.NEXT_PUBLIC_STOREFRONT_ROOT_DOMAIN);
 }
 
-export function storefrontHref(href: string, orgId: string, host?: string | null) {
+// A tenant host serves exactly one organization, so any /organizations/:idOrSlug prefix
+// is that organization: menu and theme links name it by slug, routes by id.
+export function storefrontHref(href: string, host?: string | null) {
   const current = host ?? (typeof window === 'undefined' ? null : window.location.host);
   if (!isTenantHost(current)) return href;
-  const prefix = `/organizations/${orgId}`;
-  if (href === prefix) return '/';
-  if (href.startsWith(`${prefix}#`)) return `/${href.slice(prefix.length)}`;
-  if (href.startsWith(`${prefix}/`)) return href.slice(prefix.length);
-  return href;
+  const m = href.match(/^\/organizations\/[^/?#]+(.*)$/);
+  if (!m) return href;
+  return !m[1] || /^[?#]/.test(m[1]) ? `/${m[1]}` : m[1];
 }

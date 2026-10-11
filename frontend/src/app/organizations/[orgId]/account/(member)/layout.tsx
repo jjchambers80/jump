@@ -122,7 +122,7 @@ export default function AccountLayout({ children, params }: { children: React.Re
             rsvps,
             reloadRsvps,
             href: (section = '') =>
-              storefrontHref(`/organizations/${org.id}/account${section ? `/${section}` : ''}`, org.id),
+              storefrontHref(`/organizations/${org.id}/account${section ? `/${section}` : ''}`),
           }
         : null,
     [org, profile, applications, reloadApplications, rsvps, reloadRsvps]

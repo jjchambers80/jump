@@ -21,9 +21,7 @@ export interface LinkContext {
 
 /** Platform paths shortened on a custom domain (menu hrefs use the slug, routes may use the id). */
 export function shortenHref(href: string, ctx: Pick<LinkContext, 'organization' | 'host'>) {
-  if (!ctx.host) return href;
-  const bySlug = storefrontHref(href, ctx.organization.slug, ctx.host);
-  return bySlug !== href ? bySlug : storefrontHref(href, ctx.organization.id, ctx.host);
+  return ctx.host ? storefrontHref(href, ctx.host) : href;
 }
 
 export function linkHref(link: ThemeLink | null | undefined, ctx: LinkContext): string | null {

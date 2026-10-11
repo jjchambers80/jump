@@ -215,7 +215,7 @@ function CheckoutContent({ params }: { params: { eventId: string } }) {
   const showSignInLink = event?.organizationSignInLinks !== false && !buyer;
   const signInHref =
     event?.organizationId && typeof window !== 'undefined'
-      ? `${storefrontHref(`/organizations/${event.organizationId}/account`, event.organizationId)}?next=${encodeURIComponent(
+      ? `${storefrontHref(`/organizations/${event.organizationId}/account`)}?next=${encodeURIComponent(
           `${window.location.pathname}${window.location.search}`
         )}`
       : null;

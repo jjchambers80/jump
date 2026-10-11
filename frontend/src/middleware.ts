@@ -53,25 +53,29 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
 const PLATFORM_HOSTS = platformHostsFromEnv(process.env as Record<string, string | undefined>);
 const STORE_ROOT = process.env.NEXT_PUBLIC_STOREFRONT_ROOT_DOMAIN;
 
-// host -> { orgId | null, expires }. Per edge isolate; the backend also caches.
+// host -> { tenant | null, expires }. Per edge isolate; the backend also caches.
 const RESOLVE_TTL_MS = 60 * 1000;
-const hostCache = new Map<string, { orgId: string | null; expires: number }>();
+type Tenant = { orgId: string; slug: string | null };
+const hostCache = new Map<string, { tenant: Tenant | null; expires: number }>();
 
-async function resolveTenantHost(host: string): Promise<string | null> {
+async function resolveTenantHost(host: string): Promise<Tenant | null> {
   const hit = hostCache.get(host);
-  if (hit && hit.expires > Date.now()) return hit.orgId;
-  let orgId: string | null = null;
+  if (hit && hit.expires > Date.now()) return hit.tenant;
+  let tenant: Tenant | null = null;
   try {
     const res = await fetch(`${API_URL}/domains/resolve?host=${encodeURIComponent(host)}`, {
       headers: { accept: 'application/json' },
       cache: 'no-store',
     });
-    if (res.ok) orgId = (await res.json())?.organizationId ?? null;
+    if (res.ok) {
+      const body = await res.json();
+      if (body?.organizationId) tenant = { orgId: body.organizationId, slug: body.slug ?? null };
+    }
   } catch {
-    orgId = null; // backend unreachable: behave as unknown host
+    tenant = null; // backend unreachable: behave as unknown host
   }
-  hostCache.set(host, { orgId, expires: Date.now() + RESOLVE_TTL_MS });
-  return orgId;
+  hostCache.set(host, { tenant, expires: Date.now() + RESOLVE_TTL_MS });
+  return tenant;
 }
 
 // (kind:id) -> { orgId | null, expires }. Ownership never changes, so cache longer.
@@ -188,10 +192,16 @@ export default auth(async (req: NextRequest & { auth: unknown }) => {
   }
 
   // Tenant host (custom domain or store subdomain): one organization's storefront, no staff surface
-  const orgId = await resolveTenantHost(host);
-  if (!orgId) return notFound(req);
+  const tenant = await resolveTenantHost(host);
+  if (!tenant) return notFound(req);
+  const { orgId } = tenant;
 
-  const route = routeForTenantHost(req.nextUrl.pathname, orgId);
+  const route = routeForTenantHost(req.nextUrl.pathname, orgId, tenant.slug);
+  if (route.kind === 'redirect') {
+    const url = req.nextUrl.clone();
+    url.pathname = route.pathname;
+    return NextResponse.redirect(url, 308);
+  }
   if (route.kind === 'notFound') {
     const to = await redirectTarget(orgId, req.nextUrl.pathname);
     if (to)

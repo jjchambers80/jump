@@ -14,8 +14,8 @@ function ConfirmInner({ orgId }: { orgId: string }) {
   const token = useSearchParams().get('token');
   const [state, setState] = useState<{ status: 'working' } | { status: 'done'; email: string } | { status: 'error'; message: string }>({ status: 'working' });
   const attempted = useRef(false);
-  const accountHref = storefrontHref(`/organizations/${orgId}/account`, orgId);
-  const profileHref = storefrontHref(`/organizations/${orgId}/account/profile`, orgId);
+  const accountHref = storefrontHref(`/organizations/${orgId}/account`);
+  const profileHref = storefrontHref(`/organizations/${orgId}/account/profile`);
 
   useEffect(() => {
     if (attempted.current) return; // single use: never retry on re-render

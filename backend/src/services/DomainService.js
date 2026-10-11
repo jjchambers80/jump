@@ -415,6 +415,14 @@ class DomainService {
     return organizationId;
   }
 
+  /** resolveHost plus the organization's slug: storefront links use /organizations/:slug/... */
+  async resolveTenant(host) {
+    const organizationId = await this.resolveHost(host);
+    if (!organizationId) return null;
+    const org = await prisma.organization.findUnique({ where: { id: organizationId }, select: { slug: true } });
+    return { organizationId, slug: org?.slug ?? null };
+  }
+
   /** All ACTIVE hostnames (cached), for CORS. */
   async activeHostnames() {
     if (this._activeCache.hosts && this._activeCache.expires > Date.now()) return this._activeCache.hosts;

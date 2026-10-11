@@ -148,7 +148,7 @@ describe('Storefront domains contract (spec 007 phase 3)', () => {
 
     const resolve = await request(app).get('/domains/resolve').query({ host: host.toUpperCase() });
     expect(resolve.status).toBe(200);
-    expect(resolve.body).toEqual({ organizationId: orgA.id });
+    expect(resolve.body).toEqual({ organizationId: orgA.id, slug: orgA.slug });
 
     const cors = await request(app).options('/events').set('Origin', `https://${host}`).set('Access-Control-Request-Method', 'GET');
     expect(cors.headers['access-control-allow-origin']).toBe(`https://${host}`);
