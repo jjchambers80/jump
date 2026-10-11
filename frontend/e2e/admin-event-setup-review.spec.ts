@@ -249,7 +249,7 @@ test.describe('desktop', () => {
     await main(page).getByRole('button', { name: 'Publish' }).click();
     const summary = main(page).getByRole('alert').filter({ hasText: 'Fix 1 thing before publishing' });
     await expect(summary).toBeFocused();
-    await expect(summary.getByRole('link', { name: /The start time has passed\./ })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/setup?step=date`);
+    await expect(summary.getByRole('link', { name: /The start time has passed\./ })).toHaveAttribute("href", `/admin/events/${EVENT_ID}/setup?step=date&org=${ORG_ID}`);
     await expect(heading(page, 'Review and publish')).toBeVisible();
   });
 

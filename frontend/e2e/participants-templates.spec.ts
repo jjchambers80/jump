@@ -224,15 +224,20 @@ test('Add a form in the wizard: Start from offers same-kind saved templates; cre
   test.setTimeout(120000);
   const { calls } = await mockAdmin(page, baseURL!);
   await mockWizard(page, DRAFT_EVENT);
+  // Axe must not catch the wizard's motion-safe fades mid-opacity.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(`/admin/events/${DRAFT_EVENT.id}/setup?step=vendors`);
-  await main(page).getByRole('button', { name: 'Add a vendor application' }).click(COLD);
+  // The step has settled (it focuses its heading) before anything is added.
+  await expect(main(page).getByRole('heading', { level: 1, name: 'Vendor applications' })).toBeFocused(COLD);
+  await main(page).getByRole('button', { name: 'Add a vendor application' }).click();
   const dialog = page.getByRole('dialog', { name: 'Add a vendor application' });
-  // Free by default → only the free template.
+  // A vendor form charges by default → only the paid template; free → only the free one.
+  await expect(dialog.getByRole('radio', { name: /Exhibitor booths/ })).toBeVisible();
+  await expect(dialog.getByRole('radio', { name: /Press pass/ })).toHaveCount(0);
+  await dialog.getByLabel('Charge for space').uncheck();
   await expect(dialog.getByRole('radio', { name: /Press pass/ })).toBeVisible();
   await expect(dialog.getByRole('radio', { name: /Exhibitor booths/ })).toHaveCount(0);
   await dialog.getByLabel('Charge for space').check();
-  await expect(dialog.getByRole('radio', { name: /Exhibitor booths/ })).toBeVisible();
-  await expect(dialog.getByRole('radio', { name: /Press pass/ })).toHaveCount(0);
   await expect(dialog.getByRole('link', { name: 'Edit template Exhibitor booths' })).toHaveAttribute('href', '/admin/events/templates/tpl-booths');
 
   await dialog.getByLabel('Name').fill('Winter vendors');
@@ -242,6 +247,8 @@ test('Add a form in the wizard: Start from offers same-kind saved templates; cre
 
   const create = calls.find((c) => c.method === 'POST' && c.path === `/admin/events/${DRAFT_EVENT.id}/application-forms`);
   expect(create?.body).toEqual({ kind: 'PAID', name: 'Winter vendors', purpose: 'VENDOR', templateId: 'tpl-booths' });
+  // The new form opens inline, deep-linked.
+  await expect(page).toHaveURL(/form=form-new-\d+/);
   await expect(main(page).getByText(/Created from the\s+Exhibitor booths\s+template/)).toBeVisible();
   await expect(main(page).getByTestId('form-questions')).toContainText('Booth style');
   await expect(main(page).getByTestId('form-tiers')).toContainText('Corner');

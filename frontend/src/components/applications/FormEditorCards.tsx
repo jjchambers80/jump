@@ -461,10 +461,11 @@ export function TiersCard({
                 </td>
               </tr>
             ) : (
-              <tr key={t.id} className={t.isActive ? '' : 'opacity-60'} data-testid={`tier-row-${t.id}`}>
+              // An inactive option says so in words; fading the row would drop its text below 4.5:1 (WCAG 1.4.3).
+              <tr key={t.id} className={t.isActive ? '' : 'bg-gray-50 dark:bg-slate-900/40'} data-testid={`tier-row-${t.id}`}>
                 <td className="py-2 pr-3 font-medium text-gray-900 dark:text-white">
                   {t.name}
-                  {!t.isActive && <span className="ml-2 text-xs text-gray-500">inactive</span>}
+                  {!t.isActive && <span className="ml-2 text-xs text-gray-600 dark:text-slate-400">inactive</span>}
                   {t.description && <div className="text-xs font-normal text-gray-600 dark:text-slate-400">{t.description}</div>}
                   {(t.addOns ?? []).length > 0 && (
                     <div className="text-xs font-normal text-gray-500 dark:text-slate-400" data-testid={`tier-add-ons-summary-${t.id}`}>

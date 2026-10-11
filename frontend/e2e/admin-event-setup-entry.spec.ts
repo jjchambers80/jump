@@ -216,7 +216,8 @@ test.describe('desktop', () => {
 });
 
 test.describe('mobile', () => {
-  test.use({ viewport: { width: 390, height: 844 } });
+  // Axe must not catch the motion-safe card fade mid-opacity (wizard specs' rule).
+  test.use({ viewport: { width: 390, height: 844 }, contextOptions: { reducedMotion: 'reduce' } });
 
   for (const scheme of ['light', 'dark'] as const) {
     test(`past-event dialog and Done pass axe with no horizontal scroll (${scheme})`, async ({ page }) => {
