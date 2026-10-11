@@ -270,6 +270,28 @@ describe('Unpublish, close sales and delete draft (spec 050-D)', () => {
       expect((await prisma.event.findUnique({ where: { id: event.id } })).status).toBe('PUBLISHED');
     });
 
+    it('a concurrent checkout and unpublish settle consistently (event row lock)', async () => {
+      for (let round = 0; round < 5; round += 1) {
+        const event = await mkEvent();
+        const [order, unpublish] = await Promise.all([checkout(event), act(event.id, 'unpublish')]);
+        const live = await prisma.order.count({ where: { eventId: event.id, status: { notIn: ['FAILED', 'CANCELLED'] } } });
+        const { status } = await prisma.event.findUnique({ where: { id: event.id } });
+        if (unpublish.status === 200) {
+          // Unpublish won: the checkout saw the DRAFT and sold nothing.
+          expect(order.status).toBe(400);
+          expect([status, live]).toEqual(['DRAFT', 0]);
+        } else {
+          // Checkout won: unpublish counted its order.
+          expect(unpublish.status).toBe(409);
+          expect(unpublish.body.details.reasons).toEqual(['1 order']);
+          expect(order.status).toBe(201);
+          expect([status, live]).toEqual(['PUBLISHED', 1]);
+        }
+        // Drop the open hold so the abandoned-checkout sweep test never sees it.
+        await prisma.order.updateMany({ where: { eventId: event.id }, data: { status: 'FAILED' } });
+      }
+    });
+
     it('ignores a cancelled RSVP and a draft application', async () => {
       const event = await mkEvent();
       await prisma.eventRsvp.create({ data: { eventId: event.id, contactId: (await mkContact('gone')).id, status: 'CANCELLED' } });
