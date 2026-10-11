@@ -87,6 +87,8 @@ class BuyerDataExportService {
             },
           },
           decisions: { select: { action: true, createdAt: true }, orderBy: { createdAt: 'asc' } },
+          // Spec 050 §6.4: volunteer shift picks belong to the application.
+          shifts: { select: { assigned: true, shift: { select: { name: true, startsAt: true, endsAt: true } } } },
         },
       }),
       prisma.applicantProfile.findMany({
@@ -190,6 +192,7 @@ class BuyerDataExportService {
           value: ans.image ? imageUrl(ans.image) : ans.valueJson ?? ans.valueText,
         })),
         decisions: a.decisions,
+        shifts: a.shifts.map((p) => ({ name: p.shift.name, startsAt: p.shift.startsAt, endsAt: p.shift.endsAt, assigned: p.assigned })),
         ...(includeStaffNotes && { internalNote: a.internalNote, tags: a.tags }),
       })),
       legalAcceptances: acceptances,

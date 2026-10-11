@@ -16,6 +16,7 @@ import feeService from './FeeService.js';
 import applicationFormTemplateService from './ApplicationFormTemplateService.js';
 import logger from '../utils/logger.js';
 import { FORM_PURPOSES, FREE_ONLY_PURPOSES, defaultsFor } from './applicationFormDefaults.js';
+import volunteerShiftService, { SHIFTS_INCLUDE } from './VolunteerShiftService.js';
 
 const FORM_KINDS = new Set(['PAID', 'FREE']);
 const FORM_STATUSES = new Set(['DRAFT', 'OPEN', 'CLOSED']);
@@ -117,6 +118,7 @@ const FORM_INCLUDE = {
   organization: { select: { id: true, name: true, taxInclusivePricing: true, logoUrl: true, brandColor: true } },
   tiers: { orderBy: { displayOrder: 'asc' }, include: { addOns: { select: { addOnId: true } } } },
   questions: { where: { archivedAt: null }, orderBy: { displayOrder: 'asc' } },
+  shifts: SHIFTS_INCLUDE, // spec 050 §6.4
   _count: { select: { applications: true } },
 };
 
@@ -347,13 +349,18 @@ class ApplicationFormService {
    * source tier id → copied tier id so add-on attachments can follow (spec 012).
    */
   async copyForms(fromEventId, toEventId, tx = prisma) {
-    const target = await tx.event.findUnique({ where: { id: toEventId }, select: { venue: { select: { organizationId: true } } } });
+    const target = await tx.event.findUnique({ where: { id: toEventId }, select: { date: true, venue: { select: { organizationId: true } } } });
     if (!target) throw new NotFoundError('Event not found');
+    // Spec 050 §6.4: shift times move with the event, like endDate in duplicateEvent.
+    const source = await tx.event.findUnique({ where: { id: fromEventId }, select: { date: true } });
+    const shiftBy = source?.date && target.date ? target.date.getTime() - source.date.getTime() : 0;
+    const moved = (d) => (d ? new Date(d.getTime() + shiftBy) : null);
     const forms = await tx.applicationForm.findMany({
       where: { eventId: fromEventId },
       include: {
         tiers: { orderBy: { displayOrder: 'asc' } },
         questions: { where: { archivedAt: null }, orderBy: { displayOrder: 'asc' } },
+        shifts: { orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }] },
       },
       orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
     });
@@ -391,6 +398,12 @@ class ApplicationFormService {
         tiers: f.tiers.map((t) => ({ name: t.name, description: t.description, price: t.price, quantityTotal: t.quantityTotal, displayOrder: t.displayOrder, isActive: t.isActive })),
         questions: f.questions.map((q) => ({ label: q.label, helpText: q.helpText, type: q.type, required: q.required, options: q.options, displayOrder: q.displayOrder, pinned: q.pinned })),
       });
+      // Shifts copy without picks: volunteers apply again for the new edition.
+      if (f.shifts.length) {
+        await tx.volunteerShift.createMany({
+          data: f.shifts.map((sh) => ({ formId: created.id, name: sh.name, description: sh.description, startsAt: moved(sh.startsAt), endsAt: moved(sh.endsAt), capacity: sh.capacity, displayOrder: sh.displayOrder })),
+        });
+      }
       // Tiers were created in source order, so index i of each list is the same tier.
       f.tiers.forEach((t, i) => tierIdMap.set(t.id, tiers[i]?.id));
       copied += 1;
@@ -984,6 +997,9 @@ class ApplicationFormService {
       applicationCount: form._count?.applications ?? 0,
       tiers: event ? (form.tiers || []).map((t) => this._serializeTier(t, form, event, addOns)) : [],
       questions: (form.questions || []).map((q) => this._serializeQuestion(q)),
+      // Spec 050 §6.4: volunteer shifts (VOLUNTEER forms only), times in `timezone`.
+      shifts: form.purpose === 'VOLUNTEER' ? (form.shifts || []).map((sh) => volunteerShiftService.serialize(sh)) : [],
+      timezone: event?.venue?.timezone ?? null,
       // Spec 012: every application add-on of the event, so the tier dialog can offer restricted ones.
       addOns: addOns.map((a) => ({ id: a.id, name: a.name, price: Number(a.price), allTiers: a.allTiers, isActive: a.isActive, scope: a.scope })),
       createdAt: form.createdAt,
@@ -1028,6 +1044,9 @@ class ApplicationFormService {
           };
         }) : [],
       questions: (form.questions || []).map((q) => this._serializeQuestion(q)),
+      // Spec 050 §6.4: shifts to pick, rendered in the venue zone; a full one is still pickable as a preference.
+      shifts: form.purpose === 'VOLUNTEER' ? (form.shifts || []).map((sh) => volunteerShiftService.serializePublic(sh)) : [],
+      timezone: event?.venue?.timezone ?? null,
     };
   }
 

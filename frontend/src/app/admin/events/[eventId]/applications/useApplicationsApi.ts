@@ -75,7 +75,7 @@ export function useApplicationsApi(eventId: string, standingFormId?: string) {
       // Spec 039: `tierId: null` approves without a category (the vendor picks, TIERS forms).
       preview: (id: string, decision: Decision, tierId?: string | null) =>
         api.post<{ subject: string; body: string }>(`${apps}/${id}/preview`, { decision, ...(tierId !== undefined && { tierId }) }),
-      decide: (id: string, body: { decision: Decision; tierId?: string | null; note?: string; message?: { subject: string; body: string } | null; sendEmail?: boolean }) =>
+      decide: (id: string, body: { decision: Decision; tierId?: string | null; shiftIds?: string[]; note?: string; message?: { subject: string; body: string } | null; sendEmail?: boolean }) =>
         api.post<AdminApplication>(`${apps}/${id}/decision`, body),
       bulk: (body: { ids: string[]; decision: Decision; note?: string }) =>
         api.post<{ results: { id: string; ok: boolean; error?: string }[]; succeeded: number; failed: number }>(`${apps}/bulk`, body),

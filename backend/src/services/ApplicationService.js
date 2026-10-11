@@ -45,6 +45,7 @@ import {
   NotFoundError,
   ValidationError,
 } from '../middleware/errorHandler.js';
+import volunteerShiftService, { SHIFTS_INCLUDE } from './VolunteerShiftService.js';
 import applicationFormService, { paymentsEnabled } from './ApplicationFormService.js';
 import addOnService from './AddOnService.js';
 import applicantProfileService from './ApplicantProfileService.js';
@@ -161,7 +162,10 @@ const DETAIL_INCLUDE = {
       overduePolicy: true,
       reserveOnApproval: true,
       spaceSelection: true, // spec 039
+      purpose: true, // spec 050
       organization: { select: { id: true, name: true, email: true, logoUrl: true, brandColor: true, taxInclusivePricing: true } },
+      // Spec 050 §6.4: every shift of a VOLUNTEER form, with what is left, for the approval dialog.
+      shifts: SHIFTS_INCLUDE,
       // Spec 037 phase 5: the categories the organizer can assign on approval.
       tiers: {
         orderBy: { displayOrder: 'asc' },
@@ -184,6 +188,8 @@ const DETAIL_INCLUDE = {
   order: { include: ORDER_INCLUDE },
   // Spec 014: booth assignment for map-bound applications.
   booth: { select: { id: true, label: true, mapId: true } },
+  // Spec 050 §6.4: the volunteer's shift picks and which were assigned.
+  shifts: { select: { shiftId: true, assigned: true } },
 };
 
 const OFFLINE_METHODS = new Set(['CHEQUE', 'CASH', 'BANK_TRANSFER', 'COMPED', 'OTHER']);
@@ -364,6 +370,8 @@ class ApplicationService {
     if (!form.collectBusiness && (files.profilePhotos || []).length) throw new ValidationError('This form does not collect business details');
     if ((files.profilePhotos || []).length > MAX_PROFILE_PHOTOS) throw new ValidationError(`At most ${MAX_PROFILE_PHOTOS} profile photos`);
     const answers = this._validateAnswers(form.questions, body.answers || {}, files.answerPhotos || {});
+    // Spec 050 §6.4: shift picks are preferences, full shifts included.
+    const shiftIds = await volunteerShiftService.validatePicks(form, body.shiftIds);
 
     // Spec 024 phase 3: the consent trail. Terms and privacy; no card is saved
     // at submission any more, so there is no card-on-file authorization.
@@ -449,6 +457,7 @@ class ApplicationService {
           optInMarketing,
           statusTokenHash: `pending-${Date.now()}-${Math.random()}`,
           answers: { create: answerRows },
+          ...(shiftIds.length && { shifts: { create: shiftIds.map((shiftId) => ({ shiftId })) } }),
         },
         select: { id: true, eventId: true, contactId: true },
       });
@@ -1339,10 +1348,12 @@ class ApplicationService {
       if (application.paymentStatus === 'PROCESSING') throw new ConflictError('A payment is in progress for this application; try again in a moment');
       const form = await tx.applicationForm.findUnique({
         where: { id: application.formId },
-        select: { kind: true, eventId: true, reserveOnApproval: true, spaceSelection: true, tiers: { orderBy: { displayOrder: 'asc' } } },
+        select: { kind: true, eventId: true, reserveOnApproval: true, spaceSelection: true, purpose: true, tiers: { orderBy: { displayOrder: 'asc' } } },
       });
 
       const data = { status: spec.to, decidedAt: new Date(), decidedById: input.byUserId };
+      // Spec 050 §6.4: the approval dialog assigns shifts within capacity (409 SHIFT_FULL).
+      if (spec.to === 'APPROVED' && input.shiftIds !== undefined) await volunteerShiftService.assign(tx, application, form, input.shiftIds);
       // Any decision ends the pay-now session the vendor may still have open
       // (it is expired on Stripe after commit), so it can never pay a
       // withdrawn, rejected or re-approved application.
@@ -1938,6 +1949,8 @@ class ApplicationService {
    * `include: null` returns only the id, status and paymentStatus.
    */
   async _transition(tx, applicationId, data, { include = DETAIL_INCLUDE, orderData = {} } = {}) {
+    // Spec 050 §6.4: only an APPROVED volunteer holds assigned shifts.
+    if (data.status && data.status !== 'APPROVED') await volunteerShiftService.unassignAll(tx, applicationId);
     const row = await tx.application.update({
       where: { id: applicationId },
       data,
@@ -2167,6 +2180,7 @@ class ApplicationService {
             image: { include: { file: true } },
           },
         },
+        shifts: { select: { assigned: true, shift: { select: { name: true, displayOrder: true } } }, orderBy: { shift: { displayOrder: 'asc' } } },
         order: {
           select: {
             orderRef: true,
@@ -2221,6 +2235,7 @@ class ApplicationService {
       'applicantPays',
       'orgReceives',
       'boothLabel',
+      'shifts',
       'tags',
       'checkedInAt',
       'checkedOutAt',
@@ -2261,6 +2276,7 @@ class ApplicationService {
         Number(a.order?.totalAmount ?? 0).toFixed(2),
         Number(a.order?.orgReceives ?? 0).toFixed(2),
         a.boothLabel ?? '',
+        volunteerShiftService.csvCell(a.shifts),
         (a.tags || []).join('; '),
         a.checkedInAt?.toISOString() ?? '',
         a.checkedOutAt?.toISOString() ?? '',
@@ -2675,7 +2691,8 @@ class ApplicationService {
   _serializeAdmin(a) {
     const m = moneyOf(a);
     const refunded = m.refundedTotal;
-    const { tiers: formTiers = [], ...form } = a.form || {};
+    const { tiers: formTiers = [], shifts: formShifts = [], ...form } = a.form || {};
+    const picks = new Map((a.shifts || []).map((p) => [p.shiftId, p]));
     return {
       id: a.id,
       orderId: m.orderId,
@@ -2690,6 +2707,10 @@ class ApplicationService {
         remaining: Math.max(0, t.quantityTotal - t.quantityApproved - t.quantityReserved),
       })),
       event: a.event ? { id: a.event.id, name: a.event.name, date: a.event.date, timezone: a.event.venue?.timezone ?? null } : null,
+      // Spec 050 §6.4: every shift of a VOLUNTEER form, flagged with this volunteer's picks.
+      shifts: form.purpose === 'VOLUNTEER'
+        ? formShifts.map((sh) => ({ ...volunteerShiftService.serialize(sh), picked: picks.has(sh.id), assignedToApplication: picks.get(sh.id)?.assigned === true }))
+        : [],
       status: a.status,
       paymentStatus: a.paymentStatus,
       capacitySlot: a.capacitySlot,

@@ -54,7 +54,8 @@ export const validateQuestionBody = (req, res, next) => {
 export const validateDecisionBody = (req, res, next) => {
   try {
     const body = req.body || {};
-    onlyFields(body, new Set(['decision', 'note', 'message', 'sendEmail', 'tierId']), 'decision');
+    onlyFields(body, new Set(['decision', 'note', 'message', 'sendEmail', 'tierId', 'shiftIds']), 'decision');
+    if (body.shiftIds !== undefined && (body.decision !== 'APPROVE' || !Array.isArray(body.shiftIds) || body.shiftIds.some((id) => typeof id !== 'string' || !id))) throw new ValidationError('shiftIds must be an array of shift ids, on APPROVE only');
     if (body.tierId !== undefined && body.tierId !== null && (typeof body.tierId !== 'string' || !body.tierId)) throw new ValidationError('tierId must be an id');
     if (!DECISIONS.has(body.decision)) throw new ValidationError('decision must be APPROVE, REJECT, WAITLIST or WITHDRAW');
     if (body.note !== undefined && body.note !== null && typeof body.note !== 'string') throw new ValidationError('note must be a string');
