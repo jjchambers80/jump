@@ -134,6 +134,21 @@ describe('Special guest lineup (spec 050 §7.6)', () => {
     const app1 = await application();
     expect([403, 404]).toContain((await request(app).post(`/admin/events/${eventId}/applications/${app1.id}/add-to-lineup`).set('Authorization', `Bearer ${tokens.OUTSIDER}`)).status);
     expect(await prisma.eventGuest.count({ where: { applicationId: app1.id } })).toBe(0);
+
+    const png = await sharp({ create: { width: 20, height: 20, channels: 3, background: { r: 1, g: 2, b: 3 } } }).png().toBuffer();
+    const upload = await request(app).post(`${base()}/${guest.id}/image`).set('Authorization', `Bearer ${tokens.OUTSIDER}`).attach('logo', png, { filename: 'x.png', contentType: 'image/png' });
+    expect([403, 404]).toContain(upload.status);
+    expect([403, 404]).toContain((await outsider('delete', `${base()}/${guest.id}/image`)).status);
+  });
+
+  it('refuses a reorder that names a guest of another event in the same organization', async () => {
+    const venueId = (await prisma.event.findUnique({ where: { id: eventId }, select: { venueId: true } })).venueId;
+    const other = await prisma.event.create({ data: { venueId, name: `${TAG} Other`, date: new Date('2027-10-18T15:00:00Z'), status: 'DRAFT', capacity: 10 } });
+    const foreign = await prisma.eventGuest.create({ data: { eventId: other.id, name: 'Elsewhere' } });
+    const ids = (await call('get', base())).body.data.map((g) => g.id);
+    const res = await call('post', `${base()}/reorder`, undefined, { ids: [...ids.slice(1), foreign.id] });
+    expect(res.status).toBe(400);
+    expect((await prisma.eventGuest.findUnique({ where: { id: foreign.id } })).eventId).toBe(other.id);
   });
 
   describe('add to lineup', () => {
@@ -149,6 +164,24 @@ describe('Special guest lineup (spec 050 §7.6)', () => {
       expect(again.body.code).toBe('ALREADY_IN_LINEUP');
       const detail = await call('get', `/admin/events/${eventId}/applications/${a.id}`);
       expect(detail.body.lineupGuestId).toBe(res.body.id);
+    });
+
+    it('a concurrent double click creates one row and answers 409 to the other', async () => {
+      const a = await application();
+      const results = await Promise.all([addToLineup(a.id), addToLineup(a.id)]);
+      expect(results.map((r) => r.status).sort()).toEqual([201, 409]);
+      expect(results.find((r) => r.status === 409).body.code).toBe('ALREADY_IN_LINEUP');
+      expect(await prisma.eventGuest.count({ where: { applicationId: a.id } })).toBe(1);
+    });
+
+    it('hides the lineup row when the application leaves APPROVED (withdrawn); the organizer can show it again', async () => {
+      const a = await application();
+      const guest = (await addToLineup(a.id)).body;
+      const res = await call('post', `/admin/events/${eventId}/applications/${a.id}/decision`, undefined, { decision: 'WITHDRAW', sendEmail: false });
+      expect(res.status).toBe(200);
+      expect((await prisma.eventGuest.findUnique({ where: { id: guest.id } })).isVisible).toBe(false);
+      const shown = await call('patch', `${base()}/${guest.id}`, undefined, { isVisible: true });
+      expect(shown.body.isVisible).toBe(true);
     });
 
     it('falls back to the applicant name when the form collected no profile', async () => {

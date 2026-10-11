@@ -45,8 +45,18 @@ export function useGuestLineup(orgId: string, eventId: string, refreshPreview: (
     loadError,
     reload: load,
     /** Create or update, then upload / remove the image. Returns the saved row. */
-    save: async (id: string | null, input: GuestInput, image: { file?: File | null; remove?: boolean }) => {
+    /**
+     * `onCreated` fires as soon as a new row exists, before the photo upload:
+     * the caller keeps its id so a retry after a failed upload updates that
+     * row instead of creating a second one.
+     */
+    save: async (id: string | null, input: GuestInput, image: { file?: File | null; remove?: boolean }, onCreated?: (row: AdminEventGuest) => void) => {
       let row = id ? await api.patch<AdminEventGuest>(`${base}/${id}`, input) : await api.post<AdminEventGuest>(base, input);
+      if (!id) {
+        const created = row;
+        setGuests((list) => [...(list ?? []), created]);
+        onCreated?.(created);
+      }
       if (image.file) {
         const form = new FormData();
         form.append('logo', image.file);
@@ -54,7 +64,7 @@ export function useGuestLineup(orgId: string, eventId: string, refreshPreview: (
       } else if (image.remove && row.imageUrl) {
         row = await api.delete<AdminEventGuest>(`${base}/${row.id}/image`);
       }
-      setGuests((list) => (id ? (list ?? []).map((g) => (g.id === row.id ? row : g)) : [...(list ?? []), row]));
+      setGuests((list) => (list ?? []).map((g) => (g.id === row.id ? row : g)));
       return done(row);
     },
     setVisible: async (guest: AdminEventGuest, isVisible: boolean) => {

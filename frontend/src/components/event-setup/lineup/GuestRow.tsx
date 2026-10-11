@@ -20,7 +20,7 @@ export default function GuestRow({ guest, index, count, onMove, onToggle, onEdit
   const src = resolveAssetUrl(guest.imageUrl);
   const toggleId = `guest-visible-${guest.id}`;
   return (
-    <li className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800" data-testid="lineup-row">
+    <li className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800" data-testid="lineup-row" data-guest-id={guest.id}>
       <div className="relative size-12 shrink-0 overflow-hidden rounded-md bg-gray-100 dark:bg-slate-700">
         {src ? <img src={src} alt="" className="h-full w-full object-cover" /> : <UserRound className="absolute inset-0 m-auto size-6 text-gray-400" aria-hidden />}
       </div>
@@ -37,13 +37,13 @@ export default function GuestRow({ guest, index, count, onMove, onToggle, onEdit
           Show on event page
         </label>
         <div className="flex items-center">
-          <button type="button" className={`${iconButton} disabled:opacity-40`} onClick={() => onMove(-1)} disabled={index === 0} aria-label={`Move ${guest.name} up`}>
+          <button type="button" className={`${iconButton} disabled:opacity-40`} data-action="up" onClick={() => onMove(-1)} disabled={index === 0} aria-label={`Move ${guest.name} up`}>
             <ArrowUp className="h-5 w-5" aria-hidden />
           </button>
-          <button type="button" className={`${iconButton} disabled:opacity-40`} onClick={() => onMove(1)} disabled={index === count - 1} aria-label={`Move ${guest.name} down`}>
+          <button type="button" className={`${iconButton} disabled:opacity-40`} data-action="down" onClick={() => onMove(1)} disabled={index === count - 1} aria-label={`Move ${guest.name} down`}>
             <ArrowDown className="h-5 w-5" aria-hidden />
           </button>
-          <button type="button" className={iconButton} onClick={onEdit} aria-label={`Edit ${guest.name}`}>
+          <button type="button" className={iconButton} data-action="edit" onClick={onEdit} aria-label={`Edit ${guest.name}`}>
             <Pencil className="h-5 w-5" aria-hidden />
           </button>
           <button type="button" className={iconButton} onClick={onRemove} aria-label={`Remove ${guest.name}`}>

@@ -176,6 +176,8 @@ test.describe('wizard lineup editor', () => {
     expect(await serious(page)).toEqual([]);
     await dialog.getByRole('button', { name: 'Add guest' }).click();
     await expect(dialog).toBeHidden();
+    // The empty state's Add button is gone: focus lands on the new row.
+    await expect(pane.getByRole('button', { name: 'Edit Mara Voss' })).toBeFocused();
     expect(state.posts).toEqual([{ name: 'Mara Voss', role: 'Voice actor', bio: 'Voice of Captain Rook.', links: { instagram: 'https://instagram.com/mara' } }]);
 
     await pane.getByRole('button', { name: 'Add a guest' }).click();
@@ -197,7 +199,13 @@ test.describe('wizard lineup editor', () => {
     await expect(pane.getByRole('status')).toHaveText('Sam Lee moved to position 1 of 2');
     expect(state.reorders.at(-1)).toEqual(['g-11', 'g-10']);
     await expect(pane.getByTestId('lineup-row').first()).toContainText('Sam Lee');
-    await expect(page.locator(':focus')).toHaveAttribute('aria-label', /^Move Sam Lee/);
+    // Up is disabled at the top, so focus moves to the row's other move button.
+    await expect(pane.getByRole('button', { name: 'Move Sam Lee down' })).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(pane.getByRole('status')).toHaveText('Sam Lee moved to position 2 of 2');
+    await expect(pane.getByRole('button', { name: 'Move Sam Lee up' })).toBeFocused();
+    await pane.getByRole('button', { name: 'Move Sam Lee up' }).press('Enter');
+    await expect(pane.getByTestId('lineup-row').first()).toContainText('Sam Lee');
     await expect.poll(() => state.previews).toBeGreaterThan(previewsBefore);
 
     // Hide, then delete.
@@ -205,13 +213,37 @@ test.describe('wizard lineup editor', () => {
     await expect(pane.getByRole('status')).toHaveText('Sam Lee hidden from the event page');
     expect(state.patches.at(-1)).toEqual({ isVisible: false });
     page.once('dialog', (d) => d.accept());
-    await pane.getByRole('button', { name: 'Remove Mara Voss' }).click();
+    await pane.getByRole('button', { name: 'Remove Sam Lee' }).click();
     await expect(pane.getByTestId('lineup-row')).toHaveCount(1);
+    // Focus goes to the next row, never lost to <body>.
+    await expect(pane.getByRole('button', { name: 'Edit Mara Voss' })).toBeFocused();
     for (const button of await pane.getByRole('button').all()) {
       const box = await button.boundingBox();
       if (box) expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     expect(await serious(page)).toEqual([]);
+  });
+
+  test('a retry after a failed photo upload updates the created guest instead of adding another', async ({ page }) => {
+    const state = await mockWizard(page);
+    let uploads = 0;
+    await page.route(new RegExp(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/guests/[^/]+/image$`), (route) => {
+      uploads += 1;
+      return uploads === 1 ? route.fulfill(json({ message: 'Storage unavailable' }, 500)) : route.fulfill(json({ id: 'g-10', name: 'Mara Voss', role: null, bio: null, imageUrl: null, links: null, isVisible: true, displayOrder: 0, applicationId: null, imageId: 'img' }));
+    });
+    await page.goto(STEP_URL);
+    const pane = editor(page);
+    await pane.getByRole('button', { name: 'Add a guest' }).click({ timeout: 90000 });
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel('Name').fill('Mara Voss');
+    await dialog.getByLabel(/^Photo/).setInputFiles({ name: 'mara.png', mimeType: 'image/png', buffer: PIXEL });
+    await dialog.getByRole('button', { name: /Add guest|Save guest/ }).click();
+    await expect(dialog.getByRole('alert')).toContainText('Storage unavailable');
+    await dialog.getByRole('button', { name: 'Save guest' }).click();
+    await expect(dialog).toBeHidden();
+    expect(state.posts).toHaveLength(1);
+    expect(uploads).toBe(2);
+    await expect(pane.getByTestId('lineup-row')).toHaveCount(1);
   });
 });

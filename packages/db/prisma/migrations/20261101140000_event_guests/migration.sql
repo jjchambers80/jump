@@ -21,6 +21,9 @@ CREATE TABLE "EventGuest" (
 -- CreateIndex
 CREATE INDEX "EventGuest_eventId_displayOrder_idx" ON "EventGuest"("eventId", "displayOrder");
 
+-- CreateIndex
+CREATE UNIQUE INDEX "EventGuest_applicationId_key" ON "EventGuest"("applicationId");
+
 -- AddForeignKey
 ALTER TABLE "EventGuest" ADD CONSTRAINT "EventGuest_eventId_fkey" FOREIGN KEY ("eventId") REFERENCES "Event"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 

@@ -168,7 +168,7 @@ class EventGuestService {
     if (!application || application.status === 'DRAFT') throw new NotFoundError('Application not found');
     if (application.form?.purpose !== 'SPECIAL_GUEST') throw coded(new ValidationError('Only special guest applications can join the lineup'), 'NOT_SPECIAL_GUEST');
     if (application.status !== 'APPROVED') throw coded(new ConflictError('Approve the application before adding it to the lineup'), 'NOT_APPROVED');
-    if (await prisma.eventGuest.findFirst({ where: { applicationId, eventId }, select: { id: true } })) {
+    if (await prisma.eventGuest.findUnique({ where: { applicationId }, select: { id: true } })) {
       throw coded(new ConflictError('This guest is already in the lineup'), 'ALREADY_IN_LINEUP');
     }
 
@@ -180,10 +180,18 @@ class EventGuestService {
     const photo = profile?.images?.[0]?.image;
     const image = photo ? await prisma.image.create({ data: { fileId: photo.fileId, usageType: 'event_guest', focalX: photo.focalX, focalY: photo.focalY } }) : null;
 
-    const guest = await prisma.eventGuest.create({
-      data: { eventId, applicationId, name, bio, links: linksFromProfile(profile) ?? undefined, imageId: image?.id ?? null, displayOrder: await this._nextOrder(eventId) },
-      ...ONE,
-    });
+    let guest;
+    try {
+      guest = await prisma.eventGuest.create({
+        data: { eventId, applicationId, name, bio, links: linksFromProfile(profile) ?? undefined, imageId: image?.id ?? null, displayOrder: await this._nextOrder(eventId) },
+        ...ONE,
+      });
+    } catch (error) {
+      if (image) await imageService.deleteImage(image.id).catch(() => {});
+      // @@unique([applicationId]): a concurrent second click lost the race.
+      if (error?.code === 'P2002') throw coded(new ConflictError('This guest is already in the lineup'), 'ALREADY_IN_LINEUP');
+      throw error;
+    }
     if (image) await imageService.getVariantData(image.id, SQUARE_VARIANT).catch(() => {});
     return this.serialize(guest);
   }

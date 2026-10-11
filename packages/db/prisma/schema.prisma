@@ -2527,5 +2527,6 @@ model EventGuest {
   image       Image?       @relation(fields: [imageId], references: [id], onDelete: SetNull)
   application Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
 
+  @@unique([applicationId]) // one lineup row per application (add-to-lineup 409)
   @@index([eventId, displayOrder])
 }

@@ -1952,6 +1952,8 @@ class ApplicationService {
   async _transition(tx, applicationId, data, { include = DETAIL_INCLUDE, orderData = {} } = {}) {
     // Spec 050 §6.4: only an APPROVED volunteer holds assigned shifts.
     if (data.status && data.status !== 'APPROVED') await volunteerShiftService.unassignAll(tx, applicationId);
+    // Spec 050-Q: a guest who is no longer approved leaves the public lineup (the organizer may show them again by hand).
+    if (data.status && data.status !== 'APPROVED') await tx.eventGuest.updateMany({ where: { applicationId, isVisible: true }, data: { isVisible: false } });
     const row = await tx.application.update({
       where: { id: applicationId },
       data,
