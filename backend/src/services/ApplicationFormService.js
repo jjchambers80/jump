@@ -16,6 +16,7 @@ import feeService from './FeeService.js';
 import applicationFormTemplateService from './ApplicationFormTemplateService.js';
 import logger from '../utils/logger.js';
 import { FORM_PURPOSES, FREE_ONLY_PURPOSES, defaultsFor } from './applicationFormDefaults.js';
+import volunteerShiftService, { SHIFTS_INCLUDE } from './VolunteerShiftService.js';
 
 const FORM_KINDS = new Set(['PAID', 'FREE']);
 const FORM_STATUSES = new Set(['DRAFT', 'OPEN', 'CLOSED']);
@@ -117,6 +118,7 @@ const FORM_INCLUDE = {
   organization: { select: { id: true, name: true, taxInclusivePricing: true, logoUrl: true, brandColor: true } },
   tiers: { orderBy: { displayOrder: 'asc' }, include: { addOns: { select: { addOnId: true } } } },
   questions: { where: { archivedAt: null }, orderBy: { displayOrder: 'asc' } },
+  shifts: SHIFTS_INCLUDE, // spec 050 §6.4
   _count: { select: { applications: true } },
 };
 
@@ -984,6 +986,9 @@ class ApplicationFormService {
       applicationCount: form._count?.applications ?? 0,
       tiers: event ? (form.tiers || []).map((t) => this._serializeTier(t, form, event, addOns)) : [],
       questions: (form.questions || []).map((q) => this._serializeQuestion(q)),
+      // Spec 050 §6.4: volunteer shifts (VOLUNTEER forms only), times in `timezone`.
+      shifts: form.purpose === 'VOLUNTEER' ? (form.shifts || []).map((sh) => volunteerShiftService.serialize(sh)) : [],
+      timezone: event?.venue?.timezone ?? null,
       // Spec 012: every application add-on of the event, so the tier dialog can offer restricted ones.
       addOns: addOns.map((a) => ({ id: a.id, name: a.name, price: Number(a.price), allTiers: a.allTiers, isActive: a.isActive, scope: a.scope })),
       createdAt: form.createdAt,
@@ -1028,6 +1033,9 @@ class ApplicationFormService {
           };
         }) : [],
       questions: (form.questions || []).map((q) => this._serializeQuestion(q)),
+      // Spec 050 §6.4: shifts to pick, rendered in the venue zone; a full one is still pickable as a preference.
+      shifts: form.purpose === 'VOLUNTEER' ? (form.shifts || []).map((sh) => volunteerShiftService.serializePublic(sh)) : [],
+      timezone: event?.venue?.timezone ?? null,
     };
   }
 

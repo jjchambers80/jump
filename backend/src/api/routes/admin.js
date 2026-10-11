@@ -49,6 +49,7 @@ import applicationFormService from '../../services/ApplicationFormService.js';
 import applicationService from '../../services/ApplicationService.js';
 import applicationTemplateService from '../../services/ApplicationTemplateService.js';
 import applicationFormTemplateService from '../../services/ApplicationFormTemplateService.js';
+import volunteerShiftService from '../../services/VolunteerShiftService.js';
 import applicationDigestService from '../../services/ApplicationDigestService.js';
 import vendorCheckInService from '../../services/VendorCheckInService.js';
 import setupGuideService from '../../services/SetupGuideService.js';
@@ -853,6 +854,21 @@ router.patch('/events/:eventId/application-forms/:formId/questions/:questionId',
 }));
 router.delete('/events/:eventId/application-forms/:formId/questions/:questionId', requirePermission('applications.forms'), wrap(async (req, res) => {
   res.json(await applicationFormService.removeQuestion(req.params.eventId, req.params.formId, req.params.questionId, await scopedOrgFor(req)));
+}));
+
+// Spec 050 §6.4: volunteer shifts on a VOLUNTEER form (ORGANIZER through the forms permission)
+router.get('/events/:eventId/application-forms/:formId/shifts', wrap(async (req, res) => {
+  res.json({ data: await volunteerShiftService.list(req.params.eventId, req.params.formId, await scopedOrgFor(req)) });
+}));
+router.post('/events/:eventId/application-forms/:formId/shifts', requirePermission('applications.forms'), wrap(async (req, res) => {
+  res.status(201).json(await volunteerShiftService.create(req.params.eventId, req.params.formId, await scopedOrgFor(req), req.body || {}));
+}));
+router.patch('/events/:eventId/application-forms/:formId/shifts/:shiftId', requirePermission('applications.forms'), wrap(async (req, res) => {
+  res.json(await volunteerShiftService.update(req.params.eventId, req.params.formId, req.params.shiftId, await scopedOrgFor(req), req.body || {}));
+}));
+router.delete('/events/:eventId/application-forms/:formId/shifts/:shiftId', requirePermission('applications.forms'), wrap(async (req, res) => {
+  await volunteerShiftService.remove(req.params.eventId, req.params.formId, req.params.shiftId, await scopedOrgFor(req));
+  res.status(204).end();
 }));
 
 // Spec 012: which restricted add-ons a tier offers (ADMIN)
