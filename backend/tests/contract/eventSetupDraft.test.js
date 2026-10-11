@@ -165,15 +165,40 @@ describe('Event setup drafts (spec 050-A)', () => {
   });
 
   describe('null capacity readers', () => {
-    it('adds tiers without a ceiling while capacity is null, then setting capacity checks the sum', async () => {
+    it('a wizard draft takes tiers over capacity (warned, not refused); publish blocks it (050-J)', async () => {
+      const { body: draft } = await setupCreate();
+      const addTier = (quantityTotal) =>
+        request(app).post(`${base()}/${draft.id}/price-tiers`).set('Authorization', `Bearer ${token}`)
+          .send({ name: 'GA', price: 10, quantityTotal });
+      expect((await addTier(80)).status).toBe(201);
+      expect((await patch(draft.id, { capacity: 50 })).status).toBe(200);
+      const extra = await addTier(30);
+      expect(extra.status).toBe(201);
+      const grow = await request(app)
+        .patch(`${base()}/${draft.id}/price-tiers/${extra.body.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ quantityTotal: 40 });
+      expect(grow.status).toBe(200);
+      const res = await request(app).post(`${base()}/${draft.id}/publish`).set('Authorization', `Bearer ${token}`);
+      expect(res.status).toBe(422);
+      expect(res.body.details.blockers.map((b) => b.code)).toContain('TIERS_EXCEED_CAPACITY');
+    });
+
+    it('once setup is complete the tier-sum ceiling applies again', async () => {
       const { body: draft } = await setupCreate();
       const tier = await request(app)
         .post(`${base()}/${draft.id}/price-tiers`)
         .set('Authorization', `Bearer ${token}`)
         .send({ name: 'GA', price: 10, quantityTotal: 80 });
       expect(tier.status).toBe(201);
+      expect((await patch(draft.id, { setupCompleted: true })).status).toBe(200);
       expect((await patch(draft.id, { capacity: 50 })).status).toBe(400);
       expect((await patch(draft.id, { capacity: 80 })).status).toBe(200);
+      const over = await request(app)
+        .post(`${base()}/${draft.id}/price-tiers`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ name: 'VIP', price: 20, quantityTotal: 1 });
+      expect([400, 422]).toContain(over.status);
     });
 
     it('publish refuses a ticketed draft without capacity', async () => {

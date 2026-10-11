@@ -414,9 +414,10 @@ class EventService {
       if (isNaN(cap) || cap < 1 || cap > 100000) {
         throw new ValidationError('Capacity must be between 1 and 100,000');
       }
-      // Capacity floor check: can't go below sum of tier quantities
+      // Capacity floor check: can't go below sum of tier quantities (a wizard
+      // draft only warns; publish refuses it, spec 050 §6.1).
       const totalTierQuantity = existing.priceTiers.reduce((sum, t) => sum + t.quantityTotal, 0);
-      if (cap < totalTierQuantity) {
+      if (existing.setupCompletedAt !== null && cap < totalTierQuantity) {
         throw new ValidationError(
           `Capacity cannot be less than total tier inventory (${totalTierQuantity})`
         );
