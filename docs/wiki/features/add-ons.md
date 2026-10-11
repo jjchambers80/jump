@@ -1,7 +1,7 @@
 # Add-ons
 
 **Status**: Implemented — phase 1 (product + ticket checkout), phase 2 (application tiers) and phase 3 (sales report, purchasers CSV, digest counts) 2026-09-17. Saved add-ons backend (spec 037 phase 4) 2026-09-26. Specs: `specs/012-add-ons/`, `specs/037-event-workspace/plan.md` §4.2.
-**Last Updated**: 2026-09-26
+**Last Updated**: 2026-10-11
 
 ## Overview
 
@@ -49,7 +49,7 @@ No new environment variables. Application add-ons run inside the spec 011 flag:
 ## How It Works
 
 ### Product
-1. Staff with `addOns.manage` (ADMIN and ORGANIZER by default, spec 050-E) create add-ons on **Admin › Event › Edit › Add-ons** (or from a preset: Booth power, Extra vendor badge, Table & chairs, Parking pass, VIP lounge). Fields: name, description, price, `scope` (TICKET / APPLICATION / BOTH), `allTiers` or explicit tier attachments, `quantityTotal` (null = unlimited), `maxPerOrder`, `taxable`.
+1. Staff with `addOns.manage` (ADMIN and ORGANIZER by default, spec 050-E) create add-ons on **Admin › Event › Edit › Add-ons**, or in the setup wizard's **Collect more** step (`setup?step=collect-more`, spec 050-K; the same `AddOnsSection`, every admission mode) when `NEXT_PUBLIC_EVENT_WIZARD_ENABLED` is on (or from a preset: Booth power, Extra vendor badge, Table & chairs, Parking pass, VIP lounge). Fields: name, description, price, `scope` (TICKET / APPLICATION / BOTH), `allTiers` or explicit tier attachments, `quantityTotal` (null = unlimited), `maxPerOrder`, `taxable`.
 2. Ticket-tier attachments are picked in the add-on dialog. Application-tier attachments are picked in the **form editor's tier edit row** ("Add-ons offered"): `allTiers` add-ons are shown as included on every option; restricted ones are checkboxes saved with `PUT …/application-forms/:formId/tiers/:tierId/add-ons`.
 3. Delete only while nothing has been sold (409 otherwise — deactivate). Event duplicate copies add-ons and remaps both kinds of attachment.
 
@@ -87,7 +87,7 @@ An organization's add-ons are **saved add-ons** (`AddOnProduct`); an event's `Ad
 
 ### Admin picker (spec 037 D2)
 
-The event's Sales editor (`/admin/events/:id/edit/sales` › Add-ons) has one combobox, `SavedAddOnPicker` (`frontend/src/components/events/SavedAddOnPicker.tsx`), in place of the old preset menu and "+ Add Add-on":
+The event's Sales editor (`/admin/events/:id/edit/sales` › Add-ons; flag on: the wizard's Collect more step) has one combobox, `SavedAddOnPicker` (`frontend/src/components/events/SavedAddOnPicker.tsx`), in place of the old preset menu and "+ Add Add-on":
 
 - Empty query: the organization's saved add-ons (those already on the event are listed but disabled, "on this event") and the five suggestions.
 - Typing searches `GET /organizations/:orgId/saved-add-ons?q=&eventId=`; **Create "<name>"** appears only when no saved add-on has that name (case-insensitive). It opens the add-on dialog, whose Create posts to the event's add-ons endpoint, which finds or creates the saved add-on.
@@ -133,6 +133,7 @@ The event's Sales editor (`/admin/events/:id/edit/sales` › Add-ons) has one co
 - Fee mode is inherited from the parent (tickets PASS, applications the form's mode). Per-add-on fee mode, per-ticket add-ons, required add-ons and post-payment additions are out of scope (see `specs/012-add-ons/plan.md` §7).
 - `updateAddOns` refuses a no-op with 400 and PAID / PROCESSING / REJECTED / WITHDRAWN with 409; it clears `stripeCheckoutSessionId` after expiring the session so the status page mints a fresh pay-now.
 - The analytics page formats API amounts as dollars; before phase 3 it divided by 100 (a pre-schema-redesign leftover).
+- `AddOnsSection` is split into the container, `AddOnRow.tsx` and `AddOnDialog.tsx` (spec 050-K) and takes an optional `onChange` (the wizard bumps its preview revision and keeps `addOnCount`). It stays at `app/admin/events/[eventId]/edit/`; there is one add-ons editor, mounted by both the old Sales editor and the wizard.
 
 ## Related Features
 

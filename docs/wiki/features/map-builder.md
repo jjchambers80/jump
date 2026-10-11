@@ -1,7 +1,7 @@
 # Floor Map Builder
 
 **Status**: Implemented
-**Last Updated**: 2026-09-26
+**Last Updated**: 2026-10-11
 
 ## Overview
 
@@ -73,6 +73,8 @@ Unchanged; see [floor-maps.md](floor-maps.md).
 - Deleting a SOLD / HELD / RESERVED booth is refused in the UI (the backend would 409 `BOOTH_IN_USE`); the others in the selection are still deleted.
 - `MapElement` draws text labels and walls inside their `x, y, w, h` box (walls as a bar along the box, text centred). Before this change a label's text sat above `y`; no layouts had elements then because the old toolbar never placed anything.
 - The global key handler ignores keys while a field is focused or any `aria-modal` dialog is open.
+- **`?returnTo=`** (spec 050-M, from the event setup wizard's Floor map step): Back (labelled "Back to setup"), a **Done** button and the error screen's back button go to the validated target. `safeAdminReturnTo` (`frontend/src/lib/returnTo.ts`, Vitest) accepts only a same-origin `/admin…` path after URL normalisation; never navigate to the raw parameter. Leaving goes through `components/maps/useLeaveAfterSave.ts`: it waits for an autosave in flight, saves what is left, and stays on the page (with the save error banner) if that fails.
+- **Force assign** (vendor panel, a booth of a category other than the application's) needs `maps.forceAssign` (ADMIN by default), enforced on `POST /admin/maps/:mapId/booths/:boothId/assign` with `force` (403 otherwise); `BoothPanel` shows the toggle through `useCan`.
 
 ## Spot prices (spec 039)
 

@@ -1,7 +1,7 @@
 # Price Tiers
 
 **Status:** Active
-**Last Updated:** 2026-09-07
+**Last Updated:** 2026-10-11
 
 ## Overview
 
@@ -36,8 +36,9 @@ Each event supports multiple price tiers (Early Bird, VIP, General Admission, et
 
 ## How It Works
 
-1. **Create** (`POST .../price-tiers`): Validates `quantityTotal` is positive and that adding it to existing tiers does not exceed `Event.capacity`. Auto-assigns `displayOrder` as `max + 1` if not provided.
+1. **Create** (`POST .../price-tiers`): Validates `quantityTotal` is positive and that adding it to existing tiers does not exceed `Event.capacity` (skipped while capacity is null, and on wizard drafts with `setupCompletedAt` null, where publish readiness blocks `TIERS_EXCEED_CAPACITY` instead — spec 050-A/J). Auto-assigns `displayOrder` as `max + 1` if not provided.
 2. **Update** (`PATCH .../price-tiers/:priceTierId`): Validates new `quantityTotal` against capacity ceiling and floor (`quantitySold + quantityReserved`). Cannot reduce below already committed inventory.
+   **Delete** (`DELETE .../price-tiers/:priceTierId`, spec 050-J): 204 for an unused tier; 409 `TIER_IN_USE` while it has tickets, order lines of any status, sales or holds. One transaction that locks the tier row first (`SELECT … FOR UPDATE OF pt`, joined to the org) and recounts after the lock, so a checkout reserving at the same time either commits first and is counted or waits. `OrderItem.priceTierId` is `ON DELETE SET NULL`, so an unlocked delete could strand a paid line with no tier.
 3. **Activate/Deactivate** (`POST .../activate` or `.../deactivate`): Toggles `isActive` flag. Inactive tiers cannot be purchased.
 4. **Reorder** (`POST .../price-tiers/reorder`): Accepts ordered `tierIds` array. Updates `displayOrder` for each tier in a transaction.
 5. **List** (`GET .../price-tiers`): Public view filters out `HIDDEN` tiers and tiers outside sale window. Pass `?includeAll=true` for admin view.
@@ -55,6 +56,7 @@ Each event supports multiple price tiers (Early Bird, VIP, General Admission, et
 | POST | `.../price-tiers/:priceTierId/activate` | Organizer | Activate tier |
 | POST | `.../price-tiers/:priceTierId/deactivate` | Organizer | Deactivate tier |
 | POST | `.../price-tiers/reorder` | Organizer | Reorder tiers |
+| DELETE | `.../price-tiers/:priceTierId` | Organizer | Delete an unused tier (409 `TIER_IN_USE`) |
 
 ## Gotchas
 

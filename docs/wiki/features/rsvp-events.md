@@ -71,6 +71,14 @@ model EventRsvp {
 - **D11: Mode switch locked** once anything happened. `TICKETED→RSVP` refused while the event has any order; `RSVP→TICKETED` refused while it has any GOING RSVP (409 `ADMISSION_MODE_LOCKED`).
 - **D13: Consent trail.** Forms accept `acceptances[]`, `LegalAcceptanceService` writes rows with `source: 'RSVP'`, `referenceType: 'EventRsvp'`.
 
+## Event setup wizard (spec 050)
+
+- The wizard's **Tickets or RSVP** step sets the mode with `AdmissionModeField`; switching to RSVP hides tiers and capacity and shows `RsvpSettingsFields` (branch on the mode). The lock (D11) is shown with its reason, worked out client-side from the overview; the server's 409 `ADMISSION_MODE_LOCKED` (any order of any kind) wins.
+- **Readiness** skips capacity, tier and payments checks for RSVP events; Review shows no tax summary.
+- **Collect more** stays visible for RSVP events (add-ons for application tiers; the storefront RSVP path never sells ticket add-ons).
+- `capacity` may stay null (the DB CHECK allows null for `admissionMode = 'RSVP'`).
+- **Close sales** (spec 050-D) refuses new RSVPs (409 `SALES_CLOSED`, `assertSalesOpen` inside the Event `FOR UPDATE` lock); a GOING RSVP blocks unpublish and delete draft.
+
 ## Customer list — RSVP'd filter (phase 3)
 
 The customers list gains an **RSVP** dropdown filter (next to the segment filter). `rsvp=going` shows contacts with at least one GOING RSVP, bypassing the default money-collected predicate. An optional `eventId` scopes it to one event. The admin RSVPs tab links to the filtered customer list via `View customers`.

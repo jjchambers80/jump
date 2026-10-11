@@ -1,7 +1,7 @@
 # Participants
 
 **Status**: Implemented — all three phases 2026-09-18 (organization-wide submissions list and shared table; Applications tab with forms across events and form templates; tags and on-site check-in). Spec: `specs/019-participants/`.
-**Last Updated**: 2026-09-26
+**Last Updated**: 2026-10-11
 
 > **Spec 037 (2026-09-26) changed this.** There is no Participants page any more: `/admin/participants*` 308 to `/admin/events`, and each event's **Applications** tab (inside the event workspace) is the only review list. An applicant's history across events lives on their Customer detail page. Templates are picked, edited and deleted from a form's **New form › Start from** picker; the template editor moved to `/admin/events/templates/:templateId`. The org-wide API routes (`/admin/applications*`, `/admin/application-forms`, `/admin/application-templates*`) stay — admin search and the template picker use them. The rest of this page describes the shared table and templates as built in spec 019; read "`/admin/participants`" below as history.
 
@@ -75,9 +75,9 @@ Same builder as the per-event export. Org-wide adds `event`, `eventDate` (and `o
 
 A template is a **snapshot**, not a live form: `ApplicationFormTemplate.definition` holds `{ intro, chargeTiming, feeMode, taxable, paymentDueDays, overduePolicy, reserveOnApproval, tiers[], questions[] }` (`reserveOnApproval` since spec 037 phase 5; older templates read as `true`; `chargeTiming` is legacy) (PAID settings are `null` on FREE). Every write runs the definition through the form validators, so a template can never hold a value the editor would refuse; unknown keys are 400s. `kind` is fixed at creation. Names are unique per organization (409).
 
-- **Save as template** (`POST …/application-forms/:formId/save-as-template`, ADMIN): `snapshotForm` — non-archived questions, tiers without add-on attachments, no status / window / slug. `replaceTemplateId` overwrites an existing same-kind template's definition instead of creating one.
-- **Create from template** (`POST …/application-forms { name, kind, templateId }`, ADMIN): `kind` must match (400), the template must be in scope (404), `tiers` / `questions` in the body are refused; explicit body settings win over the template's. The form is created and `_materialise`d in one transaction — DRAFT, no window, tiers at full quantity — with `createdFromTemplateId` set (informational; survives template deletion).
-- Editing a template never changes forms created from it. Writes are ADMIN; reads follow the Participants scope. SYSTEM_ADMIN creates under the active organization (X-Jump-Org).
+- **Save as template** (`POST …/application-forms/:formId/save-as-template`, `applications.forms`: ADMIN + ORGANIZER by default since spec 050-E): `snapshotForm` — non-archived questions, tiers without add-on attachments, no status / window / slug. `replaceTemplateId` overwrites an existing same-kind template's definition instead of creating one.
+- **Create from template** (`POST …/application-forms { name, kind, templateId }`, `applications.forms`): `kind` must match (400), the template must be in scope (404), `tiers` / `questions` in the body are refused; explicit body settings win over the template's. The form is created and `_materialise`d in one transaction — DRAFT, no window, tiers at full quantity — with `createdFromTemplateId` set (informational; survives template deletion).
+- Editing a template never changes forms created from it. Writes need `applications.forms` (ADMIN + ORGANIZER by default); reads follow the Participants scope. Since spec 050-B a snapshot also carries `purpose` and `collectBusiness` (older snapshots materialise as OTHER). With the wizard flag on, Start from / template Edit / Delete live in the wizard's add-form dialog (filtered by purpose + kind, "Show templates for all purposes"); the template editor `/admin/events/templates/[templateId]` stays. SYSTEM_ADMIN creates under the active organization (X-Jump-Org).
 
 ### Tags and check-in (phase 3)
 
@@ -96,17 +96,21 @@ The organizer daily digest (spec 011 phase 3) links here: per event `/admin/part
 
 | Method | Path | Auth |
 |--------|------|------|
-| GET | `/admin/applications` (`event,form,status,payment,tier,addOn,q,sort,page,pageSize`) | organizer+ |
+| GET | `/admin/applications` (`event,form,status,payment,tier,addOn,shift,shiftMode,q,sort,page,pageSize`) | organizer+ |
 | GET | `/admin/applications/summary`, `/admin/applications/export.csv` | organizer+ |
 | POST | `/admin/applications/bulk` `{ ids, decision, note? }` | organizer+ |
 | GET | `/admin/application-forms` | organizer+ |
 | GET | `/admin/applications/tags`, `/admin/events/:eventId/applications/tags` | organizer+ |
 | PATCH | `/admin/events/:eventId/applications/:id` `{ boothLabel?, internalNote?, tags?, checkedIn?, checkedOut? }` | organizer+ |
-| POST/PATCH | `…/application-forms/:formId/questions[/:questionId]` `+ pinned` (≤ 2 per form) | admin |
-| GET/POST | `/admin/application-templates` (POST `{ name, kind, definition? }`) | organizer+ / admin |
-| GET/PUT/DELETE | `/admin/application-templates/:templateId` (PUT `{ name?, definition? }`) | organizer+ / admin / admin |
-| POST | `/admin/events/:eventId/application-forms/:formId/save-as-template` `{ name }` or `{ replaceTemplateId, name? }` | admin |
-| POST | `/admin/events/:eventId/application-forms` `+ templateId` | admin |
+| POST/PATCH | `…/application-forms/:formId/questions[/:questionId]` `+ pinned` (≤ 2 per form) | `applications.forms` |
+| GET/POST | `/admin/application-templates` (POST `{ name, kind, definition? }`) | organizer+ / `applications.forms` |
+| GET/PUT/DELETE | `/admin/application-templates/:templateId` (PUT `{ name?, definition? }`) | organizer+ / `applications.forms` |
+| POST | `/admin/events/:eventId/application-forms/:formId/save-as-template` `{ name }` or `{ replaceTemplateId, name? }` | `applications.forms` |
+| POST | `/admin/events/:eventId/application-forms` `+ templateId` | `applications.forms` |
+
+`applications.forms` = ADMIN + ORGANIZER by default (spec 050-E); standing forms use `applications.standingForms` (ADMIN). See [Roles & permissions](rbac.md).
+
+**Shift roster (spec 050-S):** `shift=<id>` matches applications that picked or were assigned the shift; `shiftMode=assigned` only assigned picks (the day-of roster). Rows carry `shifts: [{ id, name, assigned }]`; the table gets a Shift filter (options from the forms' shifts, narrowed by Form; `listFormsInScope` returns VOLUNTEER shifts so the org-wide mount fills too) and a Shifts column; the CSV honours the filter. Extends the one `SubmissionsTable`, never a fork (gotcha 18).
 
 ## Testing
 

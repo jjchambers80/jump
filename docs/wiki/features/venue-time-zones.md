@@ -95,6 +95,13 @@ Two DST edge cases, both fixture-covered:
 - **Spring-forward gap** — 02:30 on 2026-03-08 in New York never happens; it resolves *forward* to 03:30 EDT.
 - **Fall-back overlap** — 01:30 on 2026-11-01 happens twice; it resolves to the first, still-DST occurrence.
 
+### Event wizard and form windows (spec 050)
+
+- The setup wizard's date step reads and writes the start and the optional **end** (`Event.endDate`, after `date`) through the same helpers in the selected venue's zone, and always shows the zone. A venue change on a saved event re-sends `date` / `endDate` so the typed wall clock stays and moves to the new zone. The zone is shown read-only (not `VenueTimeZoneField`, which edits the venue); a venue with no zone falls back to `DEFAULT_ZONE` and says so.
+- The event page renders the end with `formatEventTimeRange` (`frontend/src/lib/eventTimeRange.ts`, frontend-only, not a parity pair): "4:00 – 8:00 PM EDT", a date on the end when it crosses midnight at the venue, both abbreviations across a DST change.
+- **Application form open / close times** (`FormEditorCards` `SettingsCard`) are now edited on the event venue's clock with the zone shown, wizard and old Forms pages alike (they used the browser clock; the Details `FormSettingsFlyout` was the only venue-zone editor). Standing forms and templates have no venue and keep the browser clock.
+- **Volunteer shift times** (spec 050-R/S) and **Start from a past event** (the source event's venue zone) go through the same helpers; shift rows render with `formatEventDateTime` / `formatEventTime` plus the zone.
+
 ## Parity rule
 
 Two pairs of files must stay behaviourally identical, the same standing rule as the fee libraries:

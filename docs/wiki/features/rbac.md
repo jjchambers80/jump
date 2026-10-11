@@ -1,7 +1,7 @@
 # Roles & permissions (RBAC)
 
 **Status:** Implemented
-**Last Updated:** 2026-10-10
+**Last Updated:** 2026-10-11
 
 ## Overview
 
@@ -14,7 +14,9 @@ The defaults:
 
 - both roles see every feature;
 - ADMIN has every action;
-- ORGANIZER has only the event-configuration actions marked `organizer: true` in the catalog: `applications.forms` (event application forms, categories, questions, form templates) and `addOns.manage` (add-ons and saved add-ons). Spec 050-E opened them so an organizer can set up a whole event. Money (`applications.money`, `orders.refund`), every `settings.*` action standing forms (`applications.standingForms`, Content › Forms) and forcing a spot onto an application of another category (`maps.forceAssign`, enforced on `POST /admin/maps/:mapId/booths/:boothId/assign` with `force`) stay ADMIN.
+- ORGANIZER has only the event-configuration actions marked `organizer: true` in the catalog: `applications.forms` (event application forms, categories, questions, form templates) and `addOns.manage` (add-ons and saved add-ons). Spec 050-E opened them so an organizer can set up a whole event. Money (`applications.money`, `orders.refund`), every `settings.*` action, standing forms (`applications.standingForms`, Content › Forms) and forcing a spot onto an application of another category (`maps.forceAssign`, enforced on `POST /admin/maps/:mapId/booths/:boothId/assign` with `force`) stay ADMIN.
+
+With these defaults every step of the event setup wizard (spec 050) works for ORGANIZER; event routes themselves (create, PATCH, publish, readiness, unpublish, close sales, delete draft, previews, price tiers, guest lineup) are plain `requireOrganizer` + `requireOrgMembership()`, and volunteer shift writes use `applications.forms`. See [Event Setup Wizard](event-setup-wizard.md).
 
 `applications.standingForms` was split out of `applications.forms`. An override of `applications.forms` saved before the split also applies to it until System › Roles saves one of its own (`SPLIT_KEYS` in `PermissionService`).
 

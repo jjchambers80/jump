@@ -1,7 +1,7 @@
 # Applications
 
 **Status**: Implemented — phase 1 (FREE forms end to end), phase 2 (card on file at submission, off-session charge at approval, pay-now, refunds, overdue sweep) and phase 3 (CSV photo URLs, saved views, bulk waitlist/reject on PAID, applicant profile self-service, price-changed notice, organizer daily digest, event duplication) 2026-09-17. **Spec 037 phase 5 (2026-09-26) replaced the PAID-form money flow with apply-then-choose** — see [Apply-then-choose](#apply-then-choose-spec-037-phase-5); the phase 2 card-on-file sections below describe rows from before it. Paid forms run behind `APPLICATIONS_PAYMENTS_ENABLED`. Specs: `specs/011-applications/`, `specs/037-event-workspace/plan.md` (decisions D4–D7).
-**Last Updated**: 2026-09-26
+**Last Updated**: 2026-10-11
 
 ## Overview
 
@@ -85,6 +85,15 @@ In-flight rows from before the change move with `npm run db:backfill:037-applica
 - PAID-only settings: `feeMode` PASS|ABSORB, `taxable`, `paymentDueDays` 1–30 (days from approval to choose and pay), `overduePolicy` WITHDRAW|HOLD, `reserveOnApproval` (spec 037 D5). `chargeTiming` SUBMIT|APPROVAL is legacy since spec 037 phase 5: stored, copied by templates / duplication, not shown and not read.
 - `tierAmounts(price, form, event, org)` runs `FeeService.computeOrderFees` once: PASS → applicant pays `total`, org receives `subtotal`; ABSORB → applicant pays `subtotal + tax`, org receives `subtotal − fees`. Admin sees both numbers per tier; the public form shows only the applicant price ("$303.30 incl. $28.30 fees").
 - Questions are archived (`archivedAt`) instead of deleted once answered; type cannot change after answers exist. Slug unique per event, auto-derived from the name.
+- `opensAt` / `closesAt` are edited on the event venue's clock with the zone shown (`FormEditorCards` `SettingsCard`, spec 050-O, gotcha 28); standing forms and templates have no venue and keep the browser clock.
+
+### Purpose, wizard, shifts, lineup (spec 050)
+
+- **`purpose`** (`VENDOR SPONSOR PRESS PANEL SPECIAL_GUEST VOLUNTEER OTHER`, default OTHER; backfilled from the form name by `20261101110000_application_form_purpose`) says what a form is for. It is in the admin, scoped, public and preview payloads; `GetInvolved` labels come from `PURPOSE_CTA` (`lib/applications.ts`), no name regex. Rules: SPECIAL_GUEST and VOLUNTEER are FREE only (400 `PURPOSE_KIND_MISMATCH`); purpose is fixed once a non-DRAFT application exists (409 `PURPOSE_LOCKED`); `collectBusiness: false` is allowed on FREE event forms (a volunteer applies with name, email and answers, `profile: null` — readers must allow it), PAID forms keep the business profile (400). `createForm` without a template or questions uses `applicationFormDefaults.js` per purpose.
+- **Configuration moves into the setup wizard** with `NEXT_PUBLIC_EVENT_WIZARD_ENABLED` on: the Vendor applications / Special guests / Volunteers / Other applications steps list, add, edit (the same `FormEditorCards`) and delete forms, several per step; `applications/forms` and `applications/forms/<id>` redirect there. Review stays on the Applications tab. Publish opens the forms ticked on Review (`openFormIds`). See [Event Setup Wizard](event-setup-wizard.md).
+- **Volunteer shifts** (`VolunteerShift`, `ApplicationShift`): VOLUNTEER forms only (400 `NOT_VOLUNTEER_FORM`); applicants pick any shift as a preference (`shiftIds` on submit), approval assigns within capacity under per-shift row locks (409 `SHIFT_FULL`, capacity counts assigned picks only), leaving APPROVED releases them; CSV `shifts` column, detail Shifts section, export / erasure. Bulk approve assigns none.
+- **Guest lineup**: "Add to lineup" on an APPROVED SPECIAL_GUEST application copies its profile into an `EventGuest` row (one per application, 409 `ALREADY_IN_LINEUP`); the detail carries `lineupGuestId`.
+- **Close sales** (spec 050-D) refuses new submissions (409 `SALES_CLOSED`; public forms report `acceptance.reason: 'sales_closed'`, apply pages say "Applications are closed"); approved vendors still select and pay.
 
 ### Submission (before spec 037 phase 5)
 
@@ -142,11 +151,11 @@ Redesigned 2026-09-26 to match the event page's language (hero from PR #202, tic
 - **Applicant profile self-service**: `ApplicantProfileSection` on the account page edits name / description / website / socials (`PATCH /buyer/me/applicant-profile`), adds photos (`POST …/photos`, multipart `photos`, cap 6) and removes them. Changes apply to future applications only — submitted answers are not rewritten.
 - **Price-changed notice**: `_serializeAdmin` adds `pricing: { currentApplicantPays, currentOrgReceives, changed }` by recomputing `tierAmounts` with today's tier price, fee mode and tax; the detail page shows an amber note while the snapshot stays the only amount charged.
 - **Daily digest**: the hourly sweep calls `ApplicationDigestService.sendDue`. An organization is due when `applicationDigestAt` is null or ≥ 23 h old; the window is `(applicationDigestAt ?? now − 24 h, now]`, claimed with a conditional `updateMany` before reading so two backend instances never double-send. Submissions in the window are grouped by event → form (25 rows per form, then "…and N more") and mailed to every `OrganizationMember` (ORGANIZER and ADMIN) with an inline link per event to `/admin/events/:id/applications?status=SUBMITTED` and one **Open** button to `/admin/events` (spec 037; was the Participants list). Quiet windows still advance. Off switch: Settings › Applications → Daily digest (`applicationDigestEnabled`).
-- **Event duplicate**: `POST /organizations/:orgId/events/:eventId/duplicate { date, name? }` (ORGANIZER+, `requireOrgMembership`) creates a DRAFT with the source's venue, description, image, capacity, category, cached tax rate and price tiers (inventory 0, sale windows cleared), then `copyForms` copies every form as DRAFT with no open/close window, tiers at full quantity, non-archived questions. Orders, tickets and applications are never copied. Response is the event detail plus `copiedForms`.
+- **Event duplicate**: `POST /organizations/:orgId/events/:eventId/duplicate { date, name? }` (ORGANIZER+, `requireOrgMembership`) creates a DRAFT with the source's venue, description, image, capacity, category, cached tax rate and price tiers (inventory 0, sale windows cleared), then `copyForms` copies every form as DRAFT with no open/close window, tiers at full quantity, non-archived questions. Orders, tickets and applications are never copied; `purpose`, `collectBusiness` and volunteer shifts (moved by the date offset, no picks) are. `{ setup: true }` makes the copy a wizard draft (`setupCompletedAt: null`, `setupStep: 'date'`). Response is the event detail plus `copiedForms`.
 
 ### Roles
 
-ORGANIZER+ views forms/applications and decides. Configuring event forms, tiers, questions, tier add-ons and form templates is `applications.forms`, ADMIN and ORGANIZER by default (spec 050-E); refunds, waivers and offline payments stay `applications.money` (ADMIN). See `rbac.md`. Members are scoped through `resolveOrgScope` → `requireEvent(eventId, orgId)` (404 for another org's event); SYSTEM_ADMIN passes `null`.
+ORGANIZER+ views forms/applications and decides. Configuring event forms, tiers, questions, tier add-ons and form templates is `applications.forms`, ADMIN and ORGANIZER by default (spec 050-E); refunds, waivers and offline payments stay `applications.money` (ADMIN), standing forms `applications.standingForms` (ADMIN) and forcing a booth of another category `maps.forceAssign` (ADMIN). See `rbac.md`. Members are scoped through `resolveOrgScope` → `requireEvent(eventId, orgId)` (404 for another org's event); SYSTEM_ADMIN passes `null`.
 
 ## API Endpoints
 
@@ -203,7 +212,7 @@ ORGANIZER+ views forms/applications and decides. Configuring event forms, tiers,
 - **Storefront hosts**: `/events/:id/apply/*` passes through the tenant-host middleware like the event page; the buyer account section works on `/account` there.
 - **Digest cadence is anchored to the first run**, not a wall-clock hour: with the default hourly sweep it settles on the hour of the first send after deploy. `applicationDigestAt` is set even for quiet windows, so "Last checked" in Settings is the window end, not the last email.
 - **Duplicate keeps the image row shared** (`imageId` copied, no new upload) — deleting the image from one event affects both. Sale windows on price tiers are cleared because they would be in the past; re-set them on the copy.
-- **`requireOrgMembership` guards only the duplicate route** in `routes/events.js`; the older org event routes still rely on service-level `venue.organizationId` scoping. Worth aligning when those routes are next touched.
+- **Org event routes in `routes/events.js`** added since spec 050 (readiness, publish, unpublish, close / reopen sales, delete, preview link / payload, duplicate) are `requireAuth → requireOrganizer → requireOrgMembership()`; the older ones still also rely on service-level `venue.organizationId` scoping.
 - Frontend `e2e` runs of unrelated specs (`theme-modes`, `admin-access`, `wcag-contrast`) fail on a clean tree in this environment too — not related to this feature.
 
 ## Related Features
