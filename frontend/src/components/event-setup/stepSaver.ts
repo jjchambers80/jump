@@ -68,6 +68,13 @@ export function createStepSaver({ autosave, delay = 800, save, onChange }: StepS
     return ok;
   }
 
+  /** Saves until nothing is pending, including changes typed during a save. */
+  async function flush(): Promise<boolean> {
+    let ok = await run();
+    while (ok && pending) ok = await run();
+    return ok;
+  }
+
   return {
     get snapshot() {
       return snapshot;
@@ -89,9 +96,17 @@ export function createStepSaver({ autosave, delay = 800, save, onChange }: StepS
       if (autosave) timer = setTimeout(() => void run(), delay);
     },
     /** Save now. Resolves true when nothing is left unsaved. */
-    flush: run,
-    retry: run,
-    dispose: clearTimer,
+    flush,
+    retry: flush,
+    /**
+     * Unmount. A DRAFT change still waiting for its debounce is sent now
+     * (leaving within 800 ms of typing must not lose it); explicit mode keeps
+     * nothing to send, a live event saves only when asked.
+     */
+    dispose() {
+      clearTimer();
+      if (autosave && pending) void run();
+    },
   };
 }
 

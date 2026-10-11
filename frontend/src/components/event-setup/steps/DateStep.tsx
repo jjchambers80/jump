@@ -6,7 +6,7 @@
 
 import { useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
-import { formatEventDateTime, zonedInputToInstant } from '@/lib/eventTime';
+import { DEFAULT_ZONE, formatEventDateTime, zonedInputToInstant } from '@/lib/eventTime';
 import { FIELD_IDS } from '../steps';
 import { describedBy, errorText, hintClass, inputClass, labelClass, secondaryButton, textButton } from '../ui';
 import { zoneText } from './VenueStep';
@@ -43,7 +43,7 @@ function TimeField({
         className={inputClass}
       />
       <p id={`${id}-hint`} className={hintClass}>
-        {instant ? `${formatEventDateTime(instant, zone)} at the venue` : `In the venue's time zone: ${zoneText(zone)}`}
+        {instant ? `${formatEventDateTime(instant, zone || DEFAULT_ZONE)} at the venue` : `In the venue's time zone: ${zoneText(zone)}`}
       </p>
       {error && (
         <p id={`${id}-error`} className={errorText}>
@@ -54,14 +54,21 @@ function TimeField({
   );
 }
 
-export default function DateStep({ fields, onChange, errors, zone }: StepFormProps & { zone: string | null }) {
+export default function DateStep({
+  fields,
+  onChange,
+  errors,
+  zone,
+  hasVenue,
+}: StepFormProps & { zone: string | null; hasVenue: boolean }) {
   const [showEnd, setShowEnd] = useState(!!fields.endDate);
+  const start = zonedInputToInstant(fields.date, zone);
   const addEndRef = useRef<HTMLButtonElement>(null);
 
   return (
     <div className="space-y-5">
       <p className="rounded-md bg-gray-100 px-3 py-2 text-sm text-gray-700 dark:bg-slate-800 dark:text-slate-300">
-        Time zone: <span className="font-medium text-gray-900 dark:text-white">{zoneText(zone) || 'choose a venue first'}</span>
+        Time zone: <span className="font-medium text-gray-900 dark:text-white">{hasVenue ? zoneText(zone, start) : 'choose a venue first'}</span>
       </p>
 
       <TimeField

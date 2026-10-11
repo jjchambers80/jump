@@ -18,6 +18,7 @@ import { StepMenuSheet, StepRail, type MenuItem } from './StepMenu';
 import { isReachable, stepState, type StepKey } from './steps';
 import { useSetupFlow } from './useSetupFlow';
 import { useSetupActions } from './useSetupActions';
+import { takeStepFocus } from './stepFocus';
 import { secondaryButton } from './ui';
 
 function useIsDesktop() {
@@ -56,14 +57,19 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
   const firstStep = useRef(true);
 
   const position = `Step ${at + 1} of ${list.length}`;
-  // Step change: focus the h1 and announce it (§11.4). Not on first load.
+  // Step change: focus the h1 (or the field an error link named) and announce
+  // the step (§11.4). Not on a plain first load, but after the create, which
+  // remounts this page on the event's own route.
   useEffect(() => {
     if (!flow.initialised) return;
-    if (firstStep.current) {
+    const queued = takeStepFocus();
+    if (firstStep.current && !queued) {
       firstStep.current = false;
       return;
     }
-    headingRef.current?.focus();
+    firstStep.current = false;
+    const field = queued?.field ? document.getElementById(queued.field) : null;
+    (field ?? headingRef.current)?.focus();
     setAnnouncement(`${position}, ${step.title}`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current, flow.initialised]);
@@ -107,7 +113,7 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
         summary={actions.summary}
         inline={actions.inline}
         summaryRef={actions.summaryRef}
-        onOpenStep={(error) => error.step && actions.go(error.step as StepKey)}
+        onOpenStep={(error) => error.step && actions.go(error.step as StepKey, error.field)}
         status={saved?.status ?? null}
         orgId={orgId ?? ''}
         venues={data.venues}

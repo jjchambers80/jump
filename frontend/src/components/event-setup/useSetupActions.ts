@@ -8,7 +8,8 @@
 import { useEffect, useRef, useState } from 'react';
 import api from '@/services/api';
 import { clearSessionDraft, ensureRequestKey } from './sessionDraft';
-import { FIELD_IDS, stepByKey, visibleSteps, type FieldError, type StepKey } from './steps';
+import { FIELD_IDS, sameInstant, stepByKey, visibleSteps, type FieldError, type StepKey } from './steps';
+import { focusAfterStepChange } from './stepFocus';
 import type { SetupFlow } from './useSetupFlow';
 import { toSaved } from './useSetupData';
 import type { OverviewEvent } from '@/lib/eventOverview';
@@ -31,6 +32,32 @@ export function serverErrors(err: { status?: number; message?: string; details?:
   if (mapped.length) return mapped;
   const reason = err?.status === 403 ? "You don't have access to create events here." : err?.message || 'Something went wrong.';
   return [{ field: FIELD_IDS.date, message: `Couldn't create the event. ${reason}` }];
+}
+
+interface CreatedRow {
+  id: string;
+  name: string;
+  date: string | null;
+  endDate?: string | null;
+  venue?: { id: string } | null;
+}
+
+/**
+ * A replayed create (same Idempotency-Key, e.g. after a lost response) returns
+ * the first row as it was. If the organizer changed anything since, PATCH the
+ * difference, so what they see is what was saved.
+ */
+async function reconcileReplay(
+  orgId: string,
+  row: CreatedRow,
+  sent: { name: string; venueId: string; date: string | null; endDate: string | null }
+) {
+  const body: Record<string, unknown> = {};
+  if (row.name !== sent.name) body.name = sent.name;
+  if (row.venue?.id !== sent.venueId) body.venueId = sent.venueId;
+  if (!sameInstant(row.date, sent.date)) body.date = sent.date;
+  if (!sameInstant(row.endDate ?? null, sent.endDate)) body.endDate = sent.endDate;
+  if (Object.keys(body).length) await api.patch(`/organizations/${orgId}/events/${encodeURIComponent(row.id)}`, body);
 }
 
 const dedupe = (list: FieldError[]) => list.filter((e, i) => list.findIndex((o) => o.field === e.field) === i);
@@ -65,9 +92,13 @@ export function useSetupActions(flow: SetupFlow) {
     setSummaryTick((n) => n + 1);
   };
 
-  const go = (key: StepKey) => {
-    if (saved) void saveState.flush();
+  const go = (key: StepKey, field?: string) => {
+    // Moving between steps saves a DRAFT; a live event keeps its edits pending
+    // until Save / Next / Save & exit (§11.5). Nothing is lost: every built
+    // step's changes stay in the form and in the next save body.
+    if (saved?.status === 'DRAFT') void saveState.flush();
     setShowErrors(false);
+    if (field) focusAfterStepChange({ field });
     router.push(urlFor(key));
   };
   const prev = at > 0 ? list[at - 1] : null;
@@ -77,16 +108,19 @@ export function useSetupActions(flow: SetupFlow) {
     if (!orgId) return;
     setCreating(true);
     const requestKey = ensureRequestKey(orgId, { ...fields, step: 'date' });
+    const sent = { name: fields.name.trim(), venueId: fields.venueId, date: iso.date, endDate: iso.endDate };
     try {
-      const created = await api.post<{ id: string }>(
+      const created = await api.post<CreatedRow>(
         `/organizations/${orgId}/events`,
         {
-          setup: true, name: fields.name.trim(), slug: fields.slug || undefined, venueId: fields.venueId,
-          date: iso.date, ...(iso.endDate ? { endDate: iso.endDate } : {}), admissionMode: 'TICKETED',
+          setup: true, name: sent.name, slug: fields.slug || undefined, venueId: sent.venueId,
+          date: sent.date, ...(sent.endDate ? { endDate: sent.endDate } : {}), admissionMode: 'TICKETED',
         },
         { headers: { 'Idempotency-Key': requestKey } }
       );
+      await reconcileReplay(orgId, created, sent);
       clearSessionDraft(orgId);
+      focusAfterStepChange();
       router.replace(`/admin/events/${created.id}/setup?step=description`);
     } catch (err) {
       setCreating(false);

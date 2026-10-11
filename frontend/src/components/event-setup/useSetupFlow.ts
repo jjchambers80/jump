@@ -21,6 +21,7 @@ import {
 import { PREVIEW_MESSAGE, type PreviewMessage, type PreviewOverlay } from './previewMessages';
 import { toSaved, useSetupData } from './useSetupData';
 import { useStepSave } from './useStepSave';
+import { useHistoryGuard } from './useHistoryGuard';
 import type { OverviewEvent } from '@/lib/eventOverview';
 
 export const EMPTY_FIELDS: SetupFields = { name: '', slug: '', venueId: '', date: '', endDate: '' };
@@ -111,6 +112,9 @@ export function useSetupFlow(eventId: string | null) {
 
   const unsaved = !!saved && ['dirty', 'saving', 'error', 'invalid'].includes(saveState.status);
   useUnsavedChanges(unsaved);
+  // Live edits wait for an explicit save; failed or invalid ones cannot be sent.
+  const stuck = !!saved && (saveState.status === 'error' || saveState.status === 'invalid' || (saved.status !== 'DRAFT' && saveState.status === 'dirty'));
+  useHistoryGuard(stuck, 'You have unsaved changes. Leave without saving?');
 
   const venue = venues.find((v) => v.id === fields.venueId);
   const iso = { date: zonedInputToIso(fields.date, zone), endDate: zonedInputToIso(fields.endDate, zone) };

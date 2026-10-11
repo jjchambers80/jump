@@ -28,8 +28,24 @@ export interface PreviewMessage {
   anchor: string;
 }
 
+const ID = /^[\w-]{1,64}$/;
+const ANCHOR = /^[\w-]{1,64}$/;
+const optionalString = (value: unknown) => value === undefined || value === null || typeof value === 'string';
+
+/** The full shape, checked at the boundary: the ids go into an API path. */
 export function isPreviewMessage(data: unknown): data is PreviewMessage {
-  return !!data && typeof data === 'object' && (data as { type?: unknown }).type === PREVIEW_MESSAGE;
+  if (!data || typeof data !== 'object') return false;
+  const m = data as Record<string, unknown>;
+  if (m.type !== PREVIEW_MESSAGE || typeof m.orgId !== 'string' || !ID.test(m.orgId)) return false;
+  if (m.eventId !== null && (typeof m.eventId !== 'string' || !ID.test(m.eventId))) return false;
+  if (typeof m.revision !== 'number' || !Number.isFinite(m.revision)) return false;
+  if (typeof m.anchor !== 'string' || !ANCHOR.test(m.anchor)) return false;
+  const o = m.overlay as Record<string, unknown> | null;
+  if (!o || typeof o !== 'object') return false;
+  if (!optionalString(o.name) || !optionalString(o.date) || !optionalString(o.endDate)) return false;
+  const venue = o.venue as Record<string, unknown> | null | undefined;
+  if (venue !== undefined && venue !== null && (typeof venue !== 'object' || typeof venue.id !== 'string' || typeof venue.name !== 'string')) return false;
+  return true;
 }
 
 /** Only messages from this origin and the expected window count. */

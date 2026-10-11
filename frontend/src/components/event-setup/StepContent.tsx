@@ -62,7 +62,7 @@ const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(p
           <legend className="sr-only">{step.title}</legend>
           {step.key === 'name' && <NameStep {...form} />}
           {step.key === 'venue' && <VenueStep {...form} orgId={props.orgId} venues={props.venues} onVenueCreated={props.onVenueCreated} />}
-          {step.key === 'date' && <DateStep {...form} zone={props.zone} />}
+          {step.key === 'date' && <DateStep {...form} zone={props.zone} hasVenue={props.venues.some((v) => v.id === fields.venueId)} />}
           {!step.built && <PendingStep />}
         </fieldset>
       </div>

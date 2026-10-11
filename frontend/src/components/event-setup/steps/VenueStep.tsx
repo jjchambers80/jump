@@ -7,15 +7,21 @@
 import { useState } from 'react';
 import { MapPin, Plus } from 'lucide-react';
 import VenueFlyout, { type CreatedVenue } from '@/components/VenueFlyout';
-import { zoneAbbreviation } from '@/lib/eventTime';
+import { DEFAULT_ZONE, zoneAbbreviation } from '@/lib/eventTime';
 import { timeZoneLabel } from '@/lib/timeZones';
 import { FIELD_IDS } from '../steps';
 import { describedBy, errorText, hintClass, inputClass, labelClass, secondaryButton } from '../ui';
 import type { SetupVenue, StepFormProps } from './types';
 
-export function zoneText(zone: string | null) {
-  if (!zone) return '';
-  return `${zoneAbbreviation(new Date(), zone)}, ${timeZoneLabel(zone)}`;
+/**
+ * The zone as words, never blank (gotcha 28). The abbreviation (EST / EDT)
+ * belongs to the event's own date, so it shows only once there is one; a
+ * venue without a zone says so and names the fallback the times use.
+ */
+export function zoneText(zone: string | null | undefined, at?: Date | null) {
+  const resolved = zone || DEFAULT_ZONE;
+  const label = at ? `${zoneAbbreviation(at, resolved)}, ${timeZoneLabel(resolved, at)}` : timeZoneLabel(resolved);
+  return zone ? label : `Venue time zone not set; using ${label}`;
 }
 
 export default function VenueStep({

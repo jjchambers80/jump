@@ -78,24 +78,25 @@ export default function PreviewPane({
     >
       <div className="flex items-center justify-between gap-3 border-b border-gray-200 bg-white px-4 py-2 dark:border-slate-800 dark:bg-slate-900">
         <h2 className="text-sm font-medium text-gray-700 dark:text-slate-300">Preview</h2>
-        <div role="radiogroup" aria-label="Preview size" className="inline-flex rounded-md border border-gray-300 p-0.5 dark:border-slate-600">
+        {/* Native radios: arrow keys move the choice, one Tab stop (§8.3: a radio group, not a switch). */}
+        <fieldset className="inline-flex rounded-md border border-gray-300 p-0.5 dark:border-slate-600">
+          <legend className="sr-only">Preview size</legend>
           {(['phone', 'desktop'] as Device[]).map((value) => (
-            <button
-              key={value}
-              type="button"
-              role="radio"
-              aria-checked={device === value}
-              onClick={() => setDevice(value)}
-              className={`min-h-11 rounded px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 sm:min-h-9 ${
-                device === value
-                  ? 'bg-gray-900 text-white dark:bg-slate-100 dark:text-slate-900'
-                  : 'text-gray-700 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800'
-              }`}
-            >
-              {value === 'phone' ? 'Phone' : 'Desktop'}
-            </button>
+            <label key={value} className="relative">
+              <input
+                type="radio"
+                name="setup-preview-size"
+                value={value}
+                checked={device === value}
+                onChange={() => setDevice(value)}
+                className="peer sr-only"
+              />
+              <span className="flex min-h-11 cursor-pointer items-center rounded px-3 text-sm font-medium text-gray-700 hover:bg-gray-100 peer-checked:bg-gray-900 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500 dark:text-slate-300 dark:hover:bg-slate-800 dark:peer-checked:bg-slate-100 dark:peer-checked:text-slate-900 sm:min-h-9">
+                {value === 'phone' ? 'Phone' : 'Desktop'}
+              </span>
+            </label>
           ))}
-        </div>
+        </fieldset>
         {sheet && (
           <button
             type="button"

@@ -60,7 +60,7 @@ export default function PreviewFrame() {
     if (!eventId || !orgId) return;
     let cancelled = false;
     api
-      .get<{ event: EventPageEvent }>(`/organizations/${orgId}/events/${eventId}/preview-payload`)
+      .get<{ event: EventPageEvent }>(`/organizations/${encodeURIComponent(orgId)}/events/${encodeURIComponent(eventId)}/preview-payload`)
       .then((payload) => {
         if (cancelled) return;
         setSaved({ id: eventId, revision, event: payload.event });
