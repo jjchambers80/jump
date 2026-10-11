@@ -12,6 +12,7 @@ import ContentHtml from '@/components/storefront/ContentHtml';
 import { CapacityMeter, tierAccent } from '@/components/events/EventEditSummary';
 import { formatEventDate, formatEventDateTime, formatEventTime } from '@/lib/eventTime';
 import { timeZoneLabel } from '@/lib/timeZones';
+import { EVENT_WIZARD_ENABLED } from '@/lib/eventWizard';
 import {
   formatCount as n,
   formatMoney,
@@ -25,7 +26,9 @@ import {
 
 const eyebrow = 'text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-slate-400';
 const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-800';
-const editButton = `inline-flex min-h-8 items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 text-xs font-semibold text-gray-700 hover:border-accent-300 hover:text-accent-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-accent-400/60 dark:hover:text-accent-200 ${focusRing}`;
+// Spec 050-O: with the wizard flag on, Edit controls are 44 px targets.
+const target = EVENT_WIZARD_ENABLED ? 'min-h-11' : 'min-h-8';
+const editButton = `inline-flex ${target} items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 text-xs font-semibold text-gray-700 hover:border-accent-300 hover:text-accent-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-accent-400/60 dark:hover:text-accent-200 ${focusRing}`;
 const quietLink = `inline-flex items-center gap-1 rounded text-sm font-medium text-accent-600 hover:text-accent-600 hover:underline dark:text-accent-300 dark:hover:text-accent-200 ${focusRing}`;
 
 /** One card on the page: a numbered-free eyebrow title and its Edit link. */
@@ -130,15 +133,23 @@ function saleWindow(tier: OverviewTier, zone: string | null | undefined): string
 export function SalesSection({
   overview,
   editHref,
+  editLabel = 'Edit tiers and add-ons',
   ordersHref,
   onEditTier,
+  tierHref,
+  addOnsHref,
   delay,
 }: {
   overview: EventOverview;
   editHref: string;
+  editLabel?: string;
   ordersHref: string;
   /** Opens the one-tier flyout; `null` adds a tier. */
   onEditTier?: (tier: OverviewTier | null) => void;
+  /** Spec 050-O: each tier links to its dialog in the wizard (no flyout). */
+  tierHref?: (tierId: string) => string;
+  /** Spec 050-O: add-ons are edited on their own wizard step. */
+  addOnsHref?: string;
   delay?: number;
 }) {
   const { event, money, addOns } = overview;
@@ -151,7 +162,7 @@ export function SalesSection({
       id="sales"
       title="Sales"
       editHref={editHref}
-      editLabel="Edit tiers and add-ons"
+      editLabel={editLabel}
       delay={delay}
       flush
       aside={
@@ -207,7 +218,15 @@ export function SalesSection({
                     <td className="py-3 pl-5 pr-3">
                       <div className="flex items-center gap-2">
                         <span aria-hidden className={`h-2.5 w-2.5 shrink-0 rounded-sm ${tierAccent(i).dot}`} />
-                        {onEditTier ? (
+                        {tierHref ? (
+                          <Link
+                            href={tierHref(tier.id)}
+                            aria-label={`Edit tier ${tier.name}`}
+                            className={`inline-flex min-h-11 items-center rounded text-left font-medium text-gray-900 underline decoration-gray-300 decoration-dotted underline-offset-4 hover:text-accent-700 hover:decoration-accent-400 dark:text-white dark:decoration-slate-500 dark:hover:text-accent-200 ${focusRing}`}
+                          >
+                            {tier.name}
+                          </Link>
+                        ) : onEditTier ? (
                           <button
                             type="button"
                             onClick={() => onEditTier(tier)}
@@ -235,7 +254,7 @@ export function SalesSection({
                     <td className="px-3 py-3">
                       <p className="tabular-nums text-gray-900 dark:text-slate-100">
                         {n(tier.quantitySold)}
-                        <span className="text-gray-400 dark:text-slate-500"> / {n(tier.quantityTotal)}</span>
+                        <span className="text-gray-500 dark:text-slate-400"> / {n(tier.quantityTotal)}</span>
                       </p>
                       <div aria-hidden className="mt-1.5 h-1 w-24 overflow-hidden rounded-full bg-gray-100 dark:bg-slate-700">
                         <div className={`h-full ${tierAccent(i).bar}`} style={{ width: `${pct * 100}%` }} />
@@ -264,9 +283,18 @@ export function SalesSection({
         </div>
       )}
 
-      {ticketAddOns.length > 0 && (
+      {(ticketAddOns.length > 0 || addOnsHref) && (
         <div className="border-t border-gray-100 px-5 py-4 dark:border-slate-700/70">
-          <h3 className={eyebrow}>Add-ons</h3>
+          <div className="flex items-center justify-between gap-3">
+            <h3 className={eyebrow}>Add-ons</h3>
+            {addOnsHref && (
+              <Link href={addOnsHref} aria-label="Edit add-ons" className={editButton}>
+                <Pencil className="h-3.5 w-3.5" aria-hidden />
+                Edit
+              </Link>
+            )}
+          </div>
+          {ticketAddOns.length === 0 && <p className="mt-2 text-sm text-gray-600 dark:text-slate-400">No add-ons yet.</p>}
           <ul className="mt-2 divide-y divide-gray-100 text-sm dark:divide-slate-700/70">
             {ticketAddOns.map((a) => (
               <li key={a.id} className="flex items-baseline justify-between gap-4 py-1.5">
@@ -276,7 +304,7 @@ export function SalesSection({
                 </span>
                 <span className="shrink-0 tabular-nums text-gray-600 dark:text-slate-300">
                   {formatMoney(a.price)} · {n(a.sold)}
-                  {a.quantityTotal != null && <span className="text-gray-400 dark:text-slate-500"> / {n(a.quantityTotal)}</span>} sold
+                  {a.quantityTotal != null && <span className="text-gray-500 dark:text-slate-400"> / {n(a.quantityTotal)}</span>} sold
                 </span>
               </li>
             ))}
@@ -307,11 +335,14 @@ export function RsvpSection({
   overview,
   editHref,
   rsvpsHref,
+  addOnsHref,
   delay,
 }: {
   overview: EventOverview;
   editHref: string;
   rsvpsHref: string;
+  /** Spec 050-O: add-ons (e.g. what vendor tiers offer) are edited on their wizard step for RSVP events too. */
+  addOnsHref?: string;
   delay?: number;
 }) {
   const { event, rsvp } = overview;
@@ -357,6 +388,17 @@ export function RsvpSection({
         Up to {event.rsvpMaxPartySize} {event.rsvpMaxPartySize === 1 ? 'guest' : 'guests'} per RSVP. RSVPs are free and never
         count as revenue.
       </p>
+      {addOnsHref && (
+        <div className="mt-3 flex items-center justify-between gap-3 border-t border-gray-100 pt-3 dark:border-slate-700/70">
+          <p className="text-sm text-gray-700 dark:text-slate-300">
+            <span className={eyebrow}>Add-ons</span> {n(overview.addOns.addOns.length)}
+          </p>
+          <Link href={addOnsHref} aria-label="Edit add-ons" className={editButton}>
+            <Pencil className="h-3.5 w-3.5" aria-hidden />
+            Edit
+          </Link>
+        </div>
+      )}
     </OverviewSection>
   );
 }
@@ -411,6 +453,8 @@ export function ApplicationsSection({
   overview,
   base,
   onFormSettings,
+  formHref = (form) => `${base}/forms/${form.id}`,
+  newFormHref = `${base}/forms`,
   delay,
 }: {
   overview: EventOverview;
@@ -418,6 +462,9 @@ export function ApplicationsSection({
   base: string;
   /** Opens the form settings flyout (name, status, window). */
   onFormSettings?: (form: OverviewForm) => void;
+  /** Where a form is edited: its editor page, or (spec 050-O) its wizard step. */
+  formHref?: (form: OverviewForm) => string;
+  newFormHref?: string;
   delay?: number;
 }) {
   const { forms } = overview.applications;
@@ -441,7 +488,7 @@ export function ApplicationsSection({
       {forms.length === 0 ? (
         <Empty
           action={
-            <Link href={`${base}/forms`} className={quietLink}>
+            <Link href={newFormHref} className={quietLink}>
               Set up an application form
             </Link>
           }
@@ -486,9 +533,9 @@ export function ApplicationsSection({
                     </button>
                   )}
                   <Link
-                    href={`${base}/forms/${form.id}`}
+                    href={formHref(form)}
                     aria-label={`Edit form ${form.name}`}
-                    className={`inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white ${focusRing}`}
+                    className={`inline-flex ${target} items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white ${focusRing}`}
                   >
                     <Pencil className="h-3.5 w-3.5" aria-hidden />
                     Edit form
@@ -541,10 +588,12 @@ export function ApplicationsSection({
 export function DescriptionSection({
   overview,
   editHref,
+  editLabel = 'Edit event details',
   delay,
 }: {
   overview: EventOverview;
   editHref: string;
+  editLabel?: string;
   delay?: number;
 }) {
   const { event } = overview;
@@ -554,7 +603,7 @@ export function DescriptionSection({
   const long = html.replace(/<[^>]+>/g, '').length > 600;
 
   return (
-    <OverviewSection id="details" title="Event details" editHref={editHref} editLabel="Edit event details" delay={delay}>
+    <OverviewSection id="details" title="Event details" editHref={editHref} editLabel={editLabel} delay={delay}>
       {html ? (
         <div>
           <div className={`relative ${long && !expanded ? 'max-h-60 overflow-hidden' : ''}`}>
@@ -591,10 +640,13 @@ export function DescriptionSection({
 export function WhenWhereCard({
   overview,
   editHref,
+  venueHref,
   delay,
 }: {
   overview: EventOverview;
   editHref: string;
+  /** Spec 050-O: the venue has its own wizard step. */
+  venueHref?: string;
   delay?: number;
 }) {
   const { event } = overview;
@@ -617,6 +669,11 @@ export function WhenWhereCard({
           </>
         ) : (
           <p className="text-sm text-gray-600 dark:text-slate-400">No venue</p>
+        )}
+        {venueHref && (
+          <Link href={venueHref} className={`${quietLink} mt-2 min-h-11`}>
+            Change venue
+          </Link>
         )}
       </div>
     </OverviewSection>
@@ -722,18 +779,33 @@ function BoothMatrix({ map }: { map: OverviewMap }) {
   );
 }
 
-export function MapCard({ overview, delay }: { overview: EventOverview; delay?: number }) {
+export function MapCard({
+  overview,
+  wizardHref,
+  delay,
+}: {
+  overview: EventOverview;
+  /**
+   * Spec 050-O, flag on: the wizard's floor-map step when a vendor form picks
+   * spaces on a map, else null (the Map tab). Undefined: today's links.
+   */
+  wizardHref?: string | null;
+  delay?: number;
+}) {
   const { map } = overview;
+  const mapTab = `/admin/events/${overview.event.id}/map`;
+  const wizard = wizardHref !== undefined;
+  const editHref = wizard ? wizardHref ?? (map ? mapTab : undefined) : map ? `/admin/maps/${map.id}` : undefined;
   return (
     <OverviewSection
       id="map"
       title="Floor map"
       delay={delay}
-      editHref={map ? `/admin/maps/${map.id}` : undefined}
-      editLabel="Open the map builder"
+      editHref={editHref}
+      editLabel={wizard ? 'Edit floor map' : 'Open the map builder'}
     >
       {!map ? (
-        <Empty action={<Link href={`/admin/events/${overview.event.id}/map`} className={quietLink}>Create a floor map</Link>}>
+        <Empty action={<Link href={wizardHref ?? mapTab} className={quietLink}>Create a floor map</Link>}>
           No floor map. A map lets approved vendors pick their own booth.
         </Empty>
       ) : (
@@ -783,7 +855,7 @@ export function ListingCard({
     <OverviewSection id="listing" title="Listing" editHref={editHref} onEdit={onEdit} editLabel="Edit listing" delay={delay}>
       <Facts
         rows={[
-          ['Category', event.category || <span className="font-normal text-gray-400 dark:text-slate-500">None</span>],
+          ['Category', event.category || <span className="font-normal text-gray-500 dark:text-slate-400">None</span>],
           [
             'Page',
             <a

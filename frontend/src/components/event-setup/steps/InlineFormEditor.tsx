@@ -5,14 +5,19 @@
 // vendors choose their space" lives in SettingsCard (PAID); choosing MAP adds
 // the Floor map step as soon as it is saved. Other applications also pick the
 // form's purpose here, fixed once it has applications (PATCH answers 409).
+// "Save as template" and "View public form" came from the old form editor
+// page (050-O parity: that page now redirects here).
 
-import { useState } from 'react';
-import type { AdminForm, FormPurpose } from '@/lib/applications';
+import { useRef, useState } from 'react';
+import { ExternalLink } from 'lucide-react';
+import type { AdminForm, FormPurpose, FormTemplateSummary } from '@/lib/applications';
 import { QuestionsCard, SettingsCard, TiersCard } from '@/components/applications/FormEditorCards';
+import { SaveAsTemplateDialog } from '@/components/applications/TemplateDialogs';
+import Link from 'next/link';
 import type { useApplicationsApi } from '@/app/admin/events/[eventId]/applications/useApplicationsApi';
 import { PURPOSE_LABEL, wizardLink } from '../applicationSteps';
 import ShiftsCard from './ShiftsCard';
-import { hintClass, inputClass, labelClass } from '../ui';
+import { hintClass, inputClass, labelClass, secondaryButton } from '../ui';
 
 interface Props {
   form: AdminForm;
@@ -25,11 +30,18 @@ interface Props {
   /** Event start / end (ISO): volunteer shifts outside them get a soft warning (050-S). */
   eventStart?: string | null;
   eventEnd?: string | null;
+  /** The org's templates (loaded once by the step): "Created from" and Save as template's replace list. */
+  templates: FormTemplateSummary[];
+  /** After Save as template: the step reloads the list. */
+  onTemplatesChanged: () => void;
 }
 
-export default function InlineFormEditor({ form, api, canEdit, purposes, onSaved, eventStart, eventEnd }: Props) {
+export default function InlineFormEditor({ form, api, canEdit, purposes, onSaved, eventStart, eventEnd, templates, onTemplatesChanged }: Props) {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [savingAs, setSavingAs] = useState(false);
+  const saveAsRef = useRef<HTMLButtonElement>(null);
+  const createdFrom = form.createdFromTemplateId ? templates.find((t) => t.id === form.createdFromTemplateId) : null;
 
   const run = async (label: string, fn: () => Promise<unknown>) => {
     setError(null);
@@ -68,6 +80,31 @@ export default function InlineFormEditor({ form, api, canEdit, purposes, onSaved
           )}
         </div>
       )}
+      {(canEdit || form.status !== 'DRAFT') && (
+        <div className="flex flex-wrap gap-2">
+          {canEdit && (
+            <button ref={saveAsRef} type="button" onClick={() => setSavingAs(true)} className={secondaryButton}>
+              Save as template
+            </button>
+          )}
+          {form.status !== 'DRAFT' && (
+            <a href={`/events/${form.eventId}/apply/${form.slug}`} target="_blank" rel="noreferrer" className={secondaryButton}>
+              View public form
+              <ExternalLink className="h-4 w-4" aria-hidden />
+              <span className="sr-only">(opens in a new tab)</span>
+            </a>
+          )}
+        </div>
+      )}
+      {createdFrom && (
+        <p className="text-sm text-gray-600 dark:text-slate-400">
+          Created from the{' '}
+          <Link href={`/admin/events/templates/${createdFrom.id}`} className="font-medium text-gray-900 underline underline-offset-2 dark:text-white">
+            {createdFrom.name}
+          </Link>{' '}
+          template.
+        </p>
+      )}
       <p role="status" className="sr-only">{notice}</p>
       {error && (
         <p role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
@@ -95,6 +132,20 @@ export default function InlineFormEditor({ form, api, canEdit, purposes, onSaved
         onRemove={(id) => run('Question removed.', () => api.removeQuestion(form.id, id))}
         onReorder={(ids) => run('Order saved.', () => api.reorderQuestions(form.id, ids))}
       />
+      {savingAs && (
+        <SaveAsTemplateDialog
+          form={form}
+          templates={templates}
+          onSave={(body) => api.saveAsTemplate(form.id, body)}
+          onSaved={(t, replaced) => {
+            setSavingAs(false);
+            onTemplatesChanged();
+            setNotice(replaced ? `Template "${t.name}" replaced.` : `Saved as the "${t.name}" template.`);
+          }}
+          returnFocusRef={saveAsRef}
+          onClose={() => setSavingAs(false)}
+        />
+      )}
     </div>
   );
 }

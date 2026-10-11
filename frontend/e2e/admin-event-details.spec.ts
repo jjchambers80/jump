@@ -125,6 +125,17 @@ test('shows the event read-only, with an Edit link per section', async ({ page }
   await expect(page.getByRole('link', { name: 'Edit form Vendors' })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/applications/forms/form-1`);
 });
 
+test('flag off (spec 050-O): Details never links into the setup wizard', async ({ page }) => {
+  await page.goto(`/admin/events/${EVENT_ID}?orgId=${ORG_ID}`);
+  await expect(page.getByRole('heading', { level: 1, name: 'Game & Geek 2026' })).toBeVisible();
+  await expect(page.locator('a[href*="/setup"]')).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Edit event', exact: true })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/edit/details?orgId=${ORG_ID}`);
+  await expect(page.getByRole('button', { name: 'Edit tier General Admission' })).toHaveAttribute('aria-haspopup', 'dialog');
+  await expect(page.getByRole('button', { name: 'Settings for Vendors' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Edit image' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Change venue' })).toHaveCount(0);
+});
+
 test('headline numbers, tiers, applications and the map', async ({ page }) => {
   await page.goto(`/admin/events/${EVENT_ID}?orgId=${ORG_ID}`);
 

@@ -160,7 +160,9 @@ export function useSetupActions(flow: SetupFlow) {
     }
     const ok = await saveState.flush();
     if (!ok && !window.confirm('Your latest changes are not saved. Leave anyway?')) return;
-    router.push(`/admin/events/${saved.id}`);
+    // Details reports the real outcome (050-O): "Saved", or that the latest
+    // changes were not, and focuses the Edit control the organizer came from.
+    router.push(`/admin/events/${saved.id}?saved=${ok ? '1' : '0'}`);
   }
 
   return {

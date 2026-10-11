@@ -16,6 +16,7 @@ export default function SetupHeader({
   onMenu,
   onPreview,
   onExit,
+  viewEvent,
 }: {
   eventName: string | null;
   hasRow: boolean;
@@ -28,6 +29,8 @@ export default function SetupHeader({
   onMenu: () => void;
   onPreview: () => void;
   onExit: () => void;
+  /** "View event" (once the row exists). */
+  viewEvent?: React.ReactNode;
 }) {
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 border-b border-gray-200 bg-white px-2 dark:border-slate-700 dark:bg-slate-900 sm:px-4">
@@ -54,6 +57,7 @@ export default function SetupHeader({
           </span>
         )}
       </div>
+      {viewEvent}
       <button type="button" onClick={onExit} disabled={saving} className={secondaryButton}>
         {hasRow ? 'Save & exit' : 'Exit'}
       </button>

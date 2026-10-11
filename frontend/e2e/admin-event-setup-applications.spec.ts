@@ -202,7 +202,7 @@ test.describe('desktop', () => {
     await main(page).getByRole('button', { name: 'Add a volunteer application' }).click();
     const dialog = page.getByRole('dialog', { name: 'Add a volunteer application' });
     await expect(dialog.getByText('Volunteer applications are always free: volunteers give their time.')).toBeVisible();
-    await expect(dialog.getByRole('checkbox')).toHaveCount(0);
+    await expect(dialog.getByRole('checkbox', { name: /Charge/ })).toHaveCount(0);
     await dialog.getByRole('button', { name: 'Create form' }).click();
     await expect.poll(() => calls.create.length).toBe(1);
     expect(calls.create[0].postDataJSON()).toMatchObject({ kind: 'FREE', purpose: 'VOLUNTEER' });

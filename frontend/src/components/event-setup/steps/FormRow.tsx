@@ -5,7 +5,8 @@
 // editor below it) and Delete, or Close once it has submissions (the server
 // refuses to delete those, and the reason is written out).
 
-import { ChevronDown, ChevronUp, Trash2, XCircle } from 'lucide-react';
+import Link from 'next/link';
+import { ChevronDown, ChevronUp, Inbox, Trash2, XCircle } from 'lucide-react';
 import type { AdminForm } from '@/lib/applications';
 import { PURPOSE_LABEL } from '../applicationSteps';
 import { secondaryButton, textButton } from '../ui';
@@ -17,6 +18,8 @@ const chip = 'rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray
 
 interface Props {
   form: AdminForm;
+  /** The Applications tab filtered to this form (submission review stays there). */
+  applicationsHref: string;
   expanded: boolean;
   showPurpose: boolean;
   canEdit: boolean;
@@ -27,7 +30,7 @@ interface Props {
   children?: React.ReactNode;
 }
 
-export default function FormRow({ form, expanded, showPurpose, canEdit, busy, onToggle, onDelete, onClose, children }: Props) {
+export default function FormRow({ form, applicationsHref, expanded, showPurpose, canEdit, busy, onToggle, onDelete, onClose, children }: Props) {
   const questions = form.questions.length;
   const submitted = form.applicationCount > 0;
   const editorId = `setup-form-editor-${form.id}`;
@@ -57,6 +60,12 @@ export default function FormRow({ form, expanded, showPurpose, canEdit, busy, on
           )}
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {submitted && (
+            <Link href={applicationsHref} className={textButton} aria-label={`View applications for ${form.name}`}>
+              <Inbox className="h-4 w-4" aria-hidden />
+              View applications
+            </Link>
+          )}
           <button type="button" onClick={onToggle} aria-expanded={expanded} aria-controls={expanded ? editorId : undefined} className={secondaryButton} aria-label={`${expanded ? 'Hide' : canEdit ? 'Edit' : 'View'} ${form.name}`}>
             {expanded ? <ChevronUp className="h-4 w-4" aria-hidden /> : <ChevronDown className="h-4 w-4" aria-hidden />}
             {expanded ? 'Hide' : canEdit ? 'Edit' : 'View'}

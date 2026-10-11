@@ -13,6 +13,7 @@ import { AdmissionModeField, RsvpSettingsFields } from '@/components/events/Even
 import { capacityOverflow } from '@/components/events/tierForm';
 import { SALES_FIELD_IDS, modeOf } from '../contentSteps';
 import { describedBy, errorText, hintClass, inputClass, labelClass } from '../ui';
+import EventTaxSummary from '@/components/events/EventTaxSummary';
 import TierList from './TierList';
 import type { SavedRowProps, StepFormProps } from './types';
 
@@ -93,6 +94,8 @@ export default function TicketsStep(props: StepFormProps & SavedRowProps & { rea
             )}
           </div>
           <TierList {...props} />
+          {/* Read-only, as on Review: the rate comes from Settings › Tax (050-O parity with the sales editor). */}
+          {props.saved.tax && <EventTaxSummary tax={props.saved.tax} className="text-sm" />}
         </>
       ) : (
         <RsvpSettingsFields

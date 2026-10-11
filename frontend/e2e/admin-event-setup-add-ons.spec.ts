@@ -241,13 +241,14 @@ test.describe('desktop', () => {
     await expect(main(page).getByRole('heading', { level: 2, name: 'Add-ons' })).toBeFocused();
   });
 
-  test('RSVP events skip the step while donations are not eligible', async ({ page }) => {
+  test('RSVP events keep the step: add-ons work for every admission mode (050-O parity)', async ({ page }) => {
     await mockApi(page, adminEvent({ admissionMode: 'RSVP', priceTiers: [], setupStep: 'tickets' }));
     await page.goto(`/admin/events/${EVENT_ID}/setup?step=tickets`);
     await expect(main(page).getByRole('heading', { level: 1, name: 'Tickets or RSVP' })).toBeVisible(COLD);
-    await expect(page.getByRole('list', { name: 'Setup steps' }).getByText('Collect more')).toHaveCount(0);
+    await expect(page.getByRole('list', { name: 'Setup steps' }).getByText('Collect more')).toHaveCount(1);
     await page.goto(STEP_URL);
-    await expect(page).not.toHaveURL(/step=collect-more/, COLD);
+    await expect(heading(page)).toBeVisible(COLD);
+    await expect(main(page).getByRole('heading', { level: 2, name: 'Add-ons' })).toBeVisible();
   });
 });
 

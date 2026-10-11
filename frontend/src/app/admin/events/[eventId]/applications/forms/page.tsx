@@ -9,6 +9,8 @@ import { useParticipantsApi } from '@/components/applications/useParticipantsApi
 import ApplicationsHeader from '../ApplicationsHeader';
 import { describeError, useApplicationsApi } from '../useApplicationsApi';
 import { useCan } from '@/components/OrgContext';
+import WizardRedirect from '@/components/event-setup/WizardRedirect';
+import { EVENT_WIZARD_ENABLED, wizardStepHref } from '@/lib/eventWizard';
 
 const card = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
 const btn = 'rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
@@ -21,7 +23,7 @@ const STATUS_PILL: Record<AdminForm['status'], string> = {
   CLOSED: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
 };
 
-export default function FormsPage({ params }: { params: { eventId: string } }) {
+function LegacyFormsPage({ params }: { params: { eventId: string } }) {
   const api = useApplicationsApi(params.eventId);
   const participants = useParticipantsApi();
   const canEdit = useCan('applications.forms');
@@ -211,4 +213,12 @@ export default function FormsPage({ params }: { params: { eventId: string } }) {
       </ul>
     </div>
   );
+}
+
+// Spec 050-O: with the wizard flag on, forms are configured in the wizard's
+// application steps; this page sends old links to the first of them.
+export default function FormsPage({ params }: { params: { eventId: string } }) {
+  if (!EVENT_WIZARD_ENABLED) return <LegacyFormsPage params={params} />;
+  const href = wizardStepHref(params.eventId, 'vendors');
+  return <WizardRedirect to={() => href} fallback={href} />;
 }

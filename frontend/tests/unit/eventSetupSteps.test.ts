@@ -49,9 +49,9 @@ describe('visible and counting', () => {
     expect(stepPosition('date', ctx())).toEqual(stepPosition('date', ctx({ saved: row() })));
   });
 
-  test('RSVP hides Collect more unless donations are eligible', () => {
+  test('Collect more shows for RSVP events too (050-O: old editor parity)', () => {
     const rsvp = row({ admissionMode: 'RSVP' });
-    expect(keys(ctx({ saved: rsvp }))).not.toContain('collect-more');
+    expect(keys(ctx({ saved: rsvp }))).toContain('collect-more');
     expect(keys(ctx({ saved: rsvp, donationsEligible: true }))).toContain('collect-more');
   });
 

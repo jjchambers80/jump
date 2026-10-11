@@ -6,13 +6,16 @@
 import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import EventSetupPage from '@/components/event-setup/EventSetupPage';
+import OrgFromUrlGate from '@/components/event-setup/OrgFromUrlGate';
 import { EVENT_WIZARD_ENABLED } from '@/lib/eventWizard';
 
 export default function EventSetupRoute({ params }: { params: { eventId: string } }) {
   if (!EVENT_WIZARD_ENABLED) notFound();
   return (
     <Suspense fallback={null}>
-      <EventSetupPage eventId={params.eventId} />
+      <OrgFromUrlGate>
+        <EventSetupPage eventId={params.eventId} />
+      </OrgFromUrlGate>
     </Suspense>
   );
 }

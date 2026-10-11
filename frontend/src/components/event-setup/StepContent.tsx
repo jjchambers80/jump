@@ -93,7 +93,7 @@ const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(p
         )}
         <fieldset disabled={readOnly} className="min-w-0">
           <legend className="sr-only">{step.title}</legend>
-          {step.key === 'name' && <NameStep {...form} />}
+          {step.key === 'name' && <NameStep {...form} savedSlug={props.event?.slug ?? null} />}
           {step.key === 'venue' && <VenueStep {...form} orgId={props.orgId} venues={props.venues} onVenueCreated={props.onVenueCreated} />}
           {step.key === 'date' && <DateStep {...form} zone={props.zone} hasVenue={props.venues.some((v) => v.id === fields.venueId)} />}
           {step.key === 'review' && props.event && <ReviewStep orgId={props.orgId} saved={props.event} {...props.review} />}
@@ -101,7 +101,7 @@ const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(p
           {step.key === 'image' && props.row && <ImageStep orgId={props.orgId} {...props.row} />}
           {step.key === 'tickets' && props.row && <TicketsStep {...form} orgId={props.orgId} {...props.row} readOnly={readOnly} />}
           {step.key === 'collect-more' && props.event && (
-            <CollectMoreStep orgId={props.orgId} eventId={props.event.id} ticketed={props.event.admissionMode !== 'RSVP'} onSaved={props.onAddOnsSaved} />
+            <CollectMoreStep orgId={props.orgId} eventId={props.event.id} onSaved={props.onAddOnsSaved} />
           )}
           {isApplicationStep(step.key) && props.row && (
             <ApplicationsStep stepKey={step.key} orgId={props.orgId} eventId={props.row.saved.id} eventName={props.row.saved.name} forms={props.forms} refreshPreview={props.row.refreshPreview}

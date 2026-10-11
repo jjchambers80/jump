@@ -3,15 +3,20 @@
 // "Add a … application" dialog (spec 050 §5.2): name, what the form is for
 // (Other applications only), whether it charges, and where it starts: blank
 // with Jump's defaults for the purpose (backend applicationFormDefaults.js),
-// or one of the org's templates for that purpose. Modal: focus trap, Escape,
-// focus back to the opener (useDialog).
+// or one of the org's templates for that purpose ("Show templates for all
+// purposes" widens the list to every template of the same kind). Templates are
+// edited (name, settings, questions) on their editor page and deleted here:
+// there is no template library page (spec 037 D2), and since 050-O this dialog
+// is where the old forms page's Edit / Delete live. Modal: focus trap,
+// Escape, focus back to the opener (useDialog).
 
+import Link from 'next/link';
 import { FormEvent, useEffect, useState } from 'react';
-import { X } from 'lucide-react';
+import { Pencil, Trash2, X } from 'lucide-react';
 import { useDialog } from '@/lib/useDialog';
 import type { FormKind, FormPurpose, FormTemplateSummary } from '@/lib/applications';
 import { FREE_ONLY, PURPOSE_LABEL, templatesFor, type ApplicationStepConfig } from '../applicationSteps';
-import { hintClass, iconButton, inputClass, labelClass, primaryButton, secondaryButton } from '../ui';
+import { hintClass, iconButton, inputClass, labelClass, primaryButton, secondaryButton, textButton } from '../ui';
 
 /** Purposes whose blank form starts with Jump's suggested questions. */
 const SUGGESTED = new Set<FormPurpose>(['VENDOR', 'SPECIAL_GUEST', 'VOLUNTEER']);
@@ -27,11 +32,15 @@ interface Props {
   config: ApplicationStepConfig;
   eventName: string;
   templates: FormTemplateSummary[];
+  /** May edit and delete templates (the same permission as configuring forms). */
+  canManage: boolean;
+  /** Confirms, deletes, and resolves true when the template is gone. */
+  onDeleteTemplate: (template: FormTemplateSummary) => Promise<boolean>;
   onCreate: (body: NewFormBody) => Promise<void>;
   onClose: () => void;
 }
 
-export default function AddFormDialog({ config, eventName, templates, onCreate, onClose }: Props) {
+export default function AddFormDialog({ config, eventName, templates, canManage, onDeleteTemplate, onCreate, onClose }: Props) {
   const panelRef = useDialog<HTMLDivElement>(true, onClose);
   // After useDialog's own first focus (the Close button): start on the Name field.
   useEffect(() => document.getElementById('add-form-name')?.focus(), []);
@@ -41,9 +50,18 @@ export default function AddFormDialog({ config, eventName, templates, onCreate, 
   const [templateId, setTemplateId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [allPurposes, setAllPurposes] = useState(false);
   const freeOnly = FREE_ONLY[purpose];
   const kind: FormKind = paid && !freeOnly ? 'PAID' : 'FREE';
-  const options = templatesFor(templates, purpose, kind);
+  const options = allPurposes ? templates.filter((t) => t.kind === kind) : templatesFor(templates, purpose, kind);
+  const removeTemplate = async (template: FormTemplateSummary) => {
+    setError(null);
+    try {
+      if ((await onDeleteTemplate(template)) && templateId === template.id) setTemplateId('');
+    } catch (err) {
+      setError((err as Error)?.message || "Couldn't delete the template");
+    }
+  };
   const chosen = options.some((t) => t.id === templateId) ? templateId : '';
 
   const submit = async (e: FormEvent) => {
@@ -108,6 +126,10 @@ export default function AddFormDialog({ config, eventName, templates, onCreate, 
             )}
             <fieldset>
               <legend className={labelClass}>Start from</legend>
+              <label className="mt-1 flex min-h-11 items-center gap-2 text-sm text-gray-800 dark:text-slate-200">
+                <input type="checkbox" checked={allPurposes} onChange={(e) => setAllPurposes(e.target.checked)} className="h-5 w-5 accent-accent-600" />
+                Show templates for all purposes
+              </label>
               <ul className="mt-1 space-y-2">
                 {[{ id: '', name: 'Blank form' }, ...options].map((t) => (
                   <li key={t.id || 'blank'}>
@@ -120,6 +142,18 @@ export default function AddFormDialog({ config, eventName, templates, onCreate, 
                         </span>
                       </span>
                     </label>
+                    {t.id && canManage && (
+                      <div className="mt-1 flex flex-wrap gap-1 pl-7">
+                        <Link href={`/admin/events/templates/${t.id}`} className={textButton} aria-label={`Edit template ${t.name}`}>
+                          <Pencil className="h-4 w-4" aria-hidden />
+                          Edit
+                        </Link>
+                        <button type="button" onClick={() => void removeTemplate(t as FormTemplateSummary)} className={`${textButton} text-red-700 dark:text-red-300`} aria-label={`Delete template ${t.name}`}>
+                          <Trash2 className="h-4 w-4" aria-hidden />
+                          Delete
+                        </button>
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>
