@@ -77,7 +77,7 @@ export interface DashboardOverview {
   }[];
   checkedInLast24h: number;
   attention: {
-    draftEvents: { id: string; name: string; date: string; timezone: string | null }[];
+    draftEvents: { id: string; name: string; date: string; timezone: string | null; setupStep?: string | null; setupCompletedAt?: string | null }[];
     applicationsToReview: { eventId: string | null; formId: string | null; name: string; count: number }[];
   };
 }

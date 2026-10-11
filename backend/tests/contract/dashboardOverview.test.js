@@ -127,6 +127,8 @@ describe('Dashboard overview contract', () => {
     expect(res.body.recentOrders.map((o) => o.total)).toEqual([40, 10, 500]);
     expect(res.body.recentOrders[0]).toMatchObject({ buyer: 'Bea Buyer', eventName: `${TAG} Soon`, kind: 'TICKET', quantity: 2 });
     expect(res.body.attention.draftEvents.map((e) => e.name)).toEqual([`${TAG} Draft`]);
+    // Spec 050-I: the wizard fields drive "Continue setup"; existing rows are set up (default now).
+    expect(res.body.attention.draftEvents[0]).toMatchObject({ setupStep: null, setupCompletedAt: expect.any(String) });
     expect(res.body.attention.applicationsToReview).toEqual([{ eventId: events.soon.id, formId: null, name: `${TAG} Soon`, count: 2 }]);
   });
 

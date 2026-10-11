@@ -7,6 +7,8 @@ import { BellRing, CheckCircle2, ClipboardList, FilePen } from 'lucide-react';
 import type { DashboardOverview } from '@/services/adminService';
 import { formatEventDate } from '@/lib/eventTime';
 import { Panel, Skeleton } from './ui';
+import ContinueSetupLink from '@/components/event-setup/ContinueSetupLink';
+import { continueSetupHref } from '@/lib/eventWizard';
 
 type Attention = DashboardOverview['attention'];
 
@@ -77,6 +79,8 @@ export default function NeedsAttention({
                   Draft · {formatEventDate(event.date, event.timezone)}
                 </p>
               </div>
+              <ContinueSetupLink event={{ ...event, status: 'DRAFT' }} />
+              {!continueSetupHref({ ...event, status: 'DRAFT' }) && (
               <button
                 type="button"
                 onClick={() => onPublish(event.id)}
@@ -86,6 +90,7 @@ export default function NeedsAttention({
               >
                 {publishingId === event.id ? 'Publishing…' : 'Publish'}
               </button>
+              )}
             </li>
           ))}
         </ul>
