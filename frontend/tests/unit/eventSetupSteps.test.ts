@@ -56,9 +56,13 @@ describe('visible and counting', () => {
   });
 
   test('a MAP vendor form shows the Floor map step right after Vendors', () => {
-    const list = keys(ctx({ saved: row(), forms: [{ spaceSelection: 'MAP' }] }));
+    const list = keys(ctx({ saved: row(), forms: [{ purpose: 'VENDOR', spaceSelection: 'MAP' }] }));
     expect(list[list.indexOf('vendors') + 1]).toBe('floor-map');
-    expect(stepPosition('review', ctx({ saved: row(), forms: [{ spaceSelection: 'MAP' }] })).total).toBe(13);
+    expect(stepPosition('review', ctx({ saved: row(), forms: [{ purpose: 'VENDOR', spaceSelection: 'MAP' }] })).total).toBe(13);
+  });
+
+  test('a PAID sponsor form with MAP does not add the Floor map step', () => {
+    expect(keys(ctx({ saved: row(), forms: [{ purpose: 'SPONSOR', spaceSelection: 'MAP' }] }))).not.toContain('floor-map');
   });
 
   test('later steps need the server row', () => {

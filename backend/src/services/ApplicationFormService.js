@@ -120,6 +120,8 @@ const FORM_INCLUDE = {
   questions: { where: { archivedAt: null }, orderBy: { displayOrder: 'asc' } },
   shifts: SHIFTS_INCLUDE, // spec 050 §6.4
   _count: { select: { applications: true } },
+  // Spec 050-L: one submitted application is enough to fix the purpose (updateForm's PURPOSE_LOCKED rule).
+  applications: { where: { status: { not: 'DRAFT' } }, select: { id: true }, take: 1 },
 };
 
 class ApplicationFormService {
@@ -995,6 +997,7 @@ class ApplicationFormService {
       acceptance: this.acceptance(form),
       paymentsEnabled: paymentsEnabled(),
       applicationCount: form._count?.applications ?? 0,
+      purposeLocked: (form.applications?.length ?? 0) > 0,
       tiers: event ? (form.tiers || []).map((t) => this._serializeTier(t, form, event, addOns)) : [],
       questions: (form.questions || []).map((q) => this._serializeQuestion(q)),
       // Spec 050 §6.4: volunteer shifts (VOLUNTEER forms only), times in `timezone`.

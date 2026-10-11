@@ -68,6 +68,8 @@ export interface EventPageEvent {
   addOns?: AddOn[];
   /** Staff draft preview (spec 050 F): set by the backend after it verified X-Event-Preview. */
   preview?: boolean;
+  /** Wizard preview (spec 050 L): the event's forms from preview-payload, DRAFT ones too. */
+  previewForms?: import('@/lib/applications').PublicForm[];
   createdAt?: string;
   updatedAt?: string;
 }

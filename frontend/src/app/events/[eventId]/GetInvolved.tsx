@@ -20,15 +20,20 @@ export default function GetInvolved({
   eventId,
   className = '',
   preview = false,
+  forms: given,
 }: {
   eventId: string;
   className?: string;
   /** Staff draft preview (spec 050 F): pills show, but nothing opens the form. */
   preview?: boolean;
+  /** Wizard preview: the forms it already has (DRAFT included), so nothing is fetched. */
+  forms?: PublicForm[];
 }) {
-  const [forms, setForms] = useState<PublicForm[]>([]);
+  const [fetched, setForms] = useState<PublicForm[]>([]);
+  const forms = given ?? fetched;
 
   useEffect(() => {
+    if (given) return;
     let cancelled = false;
     api
       .get<{ data: PublicForm[] }>(`/events/${eventId}/applications/forms`)
@@ -41,7 +46,7 @@ export default function GetInvolved({
     return () => {
       cancelled = true;
     };
-  }, [eventId]);
+  }, [eventId, given]);
 
   if (forms.length === 0) return null;
 

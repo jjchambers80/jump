@@ -155,6 +155,8 @@ export interface AdminForm {
   acceptance: Acceptance;
   paymentsEnabled: boolean;
   applicationCount: number;
+  /** Spec 050-L: a submitted (non-DRAFT) application fixes the purpose. */
+  purposeLocked?: boolean;
   tiers: AdminTier[];
   questions: Question[];
   /** Every application add-on of the event (spec 012), for the tier dialog. */
@@ -473,6 +475,8 @@ export interface FormTemplateSummary {
   id: string;
   name: string;
   kind: FormKind;
+  /** Spec 050 §6.2: optional snapshot key; null on older templates. */
+  purpose?: FormPurpose | null;
   tierCount: number;
   questionCount: number;
   sourceFormId: string | null;
