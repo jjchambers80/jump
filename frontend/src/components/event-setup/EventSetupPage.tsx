@@ -63,14 +63,15 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
   useEffect(() => {
     if (!flow.initialised) return;
     const queued = takeStepFocus();
-    if (firstStep.current && !queued) {
+    // Done moves focus to its heading even on a fresh load (050-I).
+    if (firstStep.current && !queued && current !== 'done') {
       firstStep.current = false;
       return;
     }
     firstStep.current = false;
     const field = queued?.field ? document.getElementById(queued.field) : null;
     (field ?? headingRef.current)?.focus();
-    setAnnouncement(`${position}, ${step.title}`);
+    setAnnouncement(current === 'done' ? '' : `${position}, ${step.title}`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current, flow.initialised]);
   useEffect(() => {
@@ -119,6 +120,7 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
         venues={data.venues}
         zone={flow.zone}
         readOnly={readOnly}
+        event={saved}
         onVenueCreated={(venue) => {
           data.addVenue({ id: venue.id, name: venue.name, address: venue.address, timezone: venue.timezone, city: venue.city, state: venue.state });
           setFields((f) => ({ ...f, venueId: venue.id }));
@@ -127,7 +129,8 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
     );
 
   const ready = flow.initialised && !loadError;
-  const railed = mode === 'edit';
+  const done = current === 'done';
+  const railed = mode === 'edit' && !done;
 
   return (
     <SetupShell
@@ -145,7 +148,7 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
         />
       }
       progress={
-        ready && (
+        ready && !done && (
           <SetupProgress
             steps={list}
             states={states}
@@ -158,7 +161,7 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
       }
       rail={ready && railed ? <StepRail items={items} onGo={actions.go} /> : undefined}
       footer={
-        ready && (
+        ready && !done && (
           <SetupFooter
             onBack={actions.onBack}
             onSkip={actions.onSkip}

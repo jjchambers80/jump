@@ -73,7 +73,8 @@ export function useSetupFlow(eventId: string | null) {
   const mode: 'create' | 'edit' = saved?.setupCompletedAt ? 'edit' : 'create';
   const list = visibleSteps(ctx);
   const requested = stepByKey(params.get('step'));
-  const valid = !!requested && list.includes(requested) && isReachable(requested.key, ctx);
+  // Done (create mode's last screen) is not a counted step; it follows Review, which sets setupCompletedAt.
+  const valid = !!requested && (requested.key === 'done' ? !!saved?.setupCompletedAt : list.includes(requested) && isReachable(requested.key, ctx));
   const current: StepKey = valid ? requested.key : mode === 'edit' ? 'name' : resumeKey(ctx, saved ? saved.setupStep : draftStep);
   const step = stepByKey(current)!;
   const at = list.indexOf(step);
