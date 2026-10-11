@@ -24,8 +24,16 @@ import { useStepSave } from './useStepSave';
 import { useHistoryGuard } from './useHistoryGuard';
 import { clearSetupFinished, setupJustFinished } from './doneMarker';
 import type { OverviewEvent } from '@/lib/eventOverview';
+import { salesFieldsFromSaved } from './contentSteps';
 
 export const EMPTY_FIELDS: SetupFields = { name: '', slug: '', venueId: '', date: '', endDate: '' };
+
+/** Keeps what PATCH responses do not carry (lock, tax) when the saved row is replaced. */
+export const mergeSaved = (prev: SavedEvent | null, next: SavedEvent): SavedEvent => ({
+  ...next,
+  admissionLock: next.admissionLock ?? prev?.admissionLock ?? null,
+  tax: next.tax ?? prev?.tax,
+});
 const BUILT = EVENT_STEPS.filter((step) => step.built);
 
 export function fieldsFromSaved(saved: SavedEvent, zone: string | null): SetupFields {
@@ -35,6 +43,7 @@ export function fieldsFromSaved(saved: SavedEvent, zone: string | null): SetupFi
     venueId: saved.venueId,
     date: instantToZonedInput(saved.date, zone),
     endDate: instantToZonedInput(saved.endDate, zone),
+    ...salesFieldsFromSaved(saved),
   };
 }
 
@@ -62,7 +71,7 @@ export function useSetupFlow(eventId: string | null) {
       const preset = params.get('venueId') ?? '';
       if (draft) {
         const { step, requestKey: _key, ...rest } = draft;
-        setFields(rest);
+        setFields({ ...EMPTY_FIELDS, ...rest });
         setDraftStep(step);
       } else if (venues.some((v) => v.id === preset)) setFields({ ...EMPTY_FIELDS, venueId: preset });
     }
@@ -112,8 +121,23 @@ export function useSetupFlow(eventId: string | null) {
     invalidCount,
     save: async (patch) => {
       if (!orgId || !saved) return;
-      const updated = await patchEvent(api, { orgId, eventId: saved.id }, patch);
-      const next = toSaved(updated as OverviewEvent);
+      let updated: unknown;
+      try {
+        updated = await patchEvent(api, { orgId, eventId: saved.id }, patch);
+      } catch (err) {
+        // Orders or RSVPs arrived since the page loaded: show the server's reason
+        // on the Tickets step and go back to the saved mode (nothing left to retry).
+        const e = err as { code?: string; message?: string };
+        if (e?.code === 'ADMISSION_MODE_LOCKED') {
+          data.setSaved((row) => (row ? { ...row, admissionLock: e.message || 'The admission mode can no longer change.' } : row));
+          setFields((f) => ({ ...f, admissionMode: saved.admissionMode }));
+        }
+        throw err;
+      }
+      const next = mergeSaved(saved, toSaved(updated as OverviewEvent));
+      // The server sanitises the description (gotcha 20); compare against what was
+      // sent, or the editor's HTML would look unsaved forever.
+      if ('description' in patch) next.description = (patch.description as string | null) ?? null;
       data.setSaved(next);
       // The server owns the final slug; adopt it so the form matches.
       if ('slug' in patch) setFields((f) => ({ ...f, slug: next.slug }));
@@ -135,6 +159,9 @@ export function useSetupFlow(eventId: string | null) {
     overlay.venue = venue ? { id: venue.id, name: venue.name, address: venue.address, timezone: venue.timezone ?? undefined } : null;
   if (!saved || !sameInstant(iso.date, saved.date)) overlay.date = iso.date;
   if (!saved || !sameInstant(iso.endDate, saved.endDate)) overlay.endDate = iso.endDate;
+  // No description overlay: ContentHtml renders only server-sanitised HTML
+  // (gotcha 20), so the preview shows it after the save, from preview-payload.
+  if (saved && fields.admissionMode && fields.admissionMode !== saved.admissionMode) overlay.admissionMode = fields.admissionMode;
   const preview: PreviewMessage = {
     type: PREVIEW_MESSAGE, orgId: orgId ?? '', eventId: saved?.id ?? null, overlay, revision, anchor: step.anchor,
   };
@@ -142,6 +169,8 @@ export function useSetupFlow(eventId: string | null) {
   return {
     orgId, data, fields, setFields, ctx, mode, list, current, step, at, zone, iso,
     saveState, unsaved, preview, initialised, urlFor, router,
+    /** After a dialog or upload saved on its own: the frame reloads the event. */
+    refreshPreview: () => setRevision((r) => r + 1),
   };
 }
 

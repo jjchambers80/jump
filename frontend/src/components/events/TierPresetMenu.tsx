@@ -103,7 +103,7 @@ export default function TierPresetMenu({
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-controls="tier-preset-menu"
-        className={`inline-flex min-h-9 items-center gap-1 rounded-md border border-accent-300 px-3 py-1.5 text-xs font-medium text-accent-700 hover:bg-accent-50 dark:border-accent-700 dark:text-accent-300 dark:hover:bg-accent-900/20 ${focusRing}`}
+        className={`inline-flex min-h-11 items-center gap-1 rounded-md border border-accent-300 px-3 py-1.5 text-sm font-medium text-accent-700 hover:bg-accent-50 dark:border-accent-700 dark:text-accent-300 dark:hover:bg-accent-900/20 ${focusRing}`}
       >
         Saved tiers
         <ChevronDown className="h-3.5 w-3.5" aria-hidden />

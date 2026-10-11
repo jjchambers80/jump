@@ -29,8 +29,15 @@ export function toSaved(event: OverviewEvent): SavedEvent {
     logoUrl: event.logoUrl,
     capacity: event.capacity,
     tierCount: event.priceTiers?.length ?? 0,
+    category: event.category ?? null,
+    rsvpLimit: event.rsvpLimit ?? null,
+    rsvpMaxPartySize: event.rsvpMaxPartySize ?? 1,
+    tiers: [...(event.priceTiers ?? [])].sort((a, b) => a.displayOrder - b.displayOrder),
+    tax: event.tax,
+    taxInclusive: event.taxInclusivePricing === true,
   };
 }
+
 
 export function useSetupData(orgId: string | null, orgLoading: boolean, eventId: string | null) {
   const [load, setLoad] = useState<LoadState>({ status: 'loading' });
@@ -49,7 +56,7 @@ export function useSetupData(orgId: string | null, orgLoading: boolean, eventId:
       .then(([venueList, overview]) => {
         if (cancelled) return;
         setVenues(venueList);
-        setSaved(overview ? toSaved(overview.event) : null);
+        setSaved(overview ? { ...toSaved(overview.event), admissionLock: overview.admissionLock?.reason ?? null } : null);
         setLoad({ status: 'ready' });
       })
       .catch((err) => {

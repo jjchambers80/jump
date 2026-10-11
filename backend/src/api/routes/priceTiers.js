@@ -1,6 +1,6 @@
 // Price Tier Routes
 // Nested under /organizations/:orgId/events/:eventId/price-tiers
-// GET (public), POST/PATCH/activate/deactivate/reorder (org-scoped)
+// GET (public), POST/PATCH/DELETE/activate/deactivate/reorder (org-scoped)
 // Per FR-051, contracts/api.yaml
 
 import express from 'express';
@@ -66,6 +66,20 @@ router.patch(
     }
   }
 );
+
+/**
+ * DELETE /organizations/:orgId/events/:eventId/price-tiers/:priceTierId
+ * Delete an unsold tier (org-scoped); 409 TIER_IN_USE once it has orders.
+ */
+router.delete('/:priceTierId', requireAuth, requireOrganizer, requireOrgMembership(), async (req, res, next) => {
+  try {
+    const { orgId, eventId, priceTierId } = req.params;
+    await priceTierService.deletePriceTier(orgId, eventId, priceTierId);
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
 
 /**
  * POST /organizations/:orgId/events/:eventId/price-tiers/:priceTierId/activate

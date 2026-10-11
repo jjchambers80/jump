@@ -40,6 +40,22 @@ function admissionConflict(message) {
   return error;
 }
 
+/**
+ * Why an event's admission mode cannot change (spec 034 D11), or null. The one
+ * rule: updateEvent refuses with it, the overview reports it (spec 050-J), so
+ * the wizard shows the same reason the server enforces. Ticketed → RSVP needs
+ * no order at all (any status); RSVP → ticketed needs no GOING RSVP.
+ */
+export async function admissionLockReason(eventId, admissionMode) {
+  if (admissionMode === 'RSVP')
+    return (await prisma.eventRsvp.count({ where: { eventId, status: 'GOING' } }))
+      ? 'People have RSVP\'d, so this event stays RSVP.'
+      : null;
+  return (await prisma.order.count({ where: { eventId } }))
+    ? 'This event has orders, so it stays ticketed.'
+    : null;
+}
+
 // Everything the public event page renders (getEventById, preview payload).
 const PUBLIC_EVENT_INCLUDE = {
   venue: { include: { organization: { select: { id: true, slug: true, name: true, logoUrl: true, brandColor: true, themeMode: true, taxInclusivePricing: true, buyerSignInLinks: true, themesEnabled: true } } } },
@@ -325,12 +341,8 @@ class EventService {
     if (updates.admissionMode !== undefined && !['TICKETED', 'RSVP'].includes(updates.admissionMode))
       throw new ValidationError('admissionMode must be TICKETED or RSVP');
     if (updates.admissionMode && updates.admissionMode !== existing.admissionMode) {
-      if (updates.admissionMode === 'RSVP') {
-        if (await prisma.order.count({ where: { eventId } }))
-          throw admissionConflict('An event with orders cannot switch to RSVP admission');
-      } else if (await prisma.eventRsvp.count({ where: { eventId, status: 'GOING' } })) {
-        throw admissionConflict('An event with active RSVPs cannot switch to ticketed admission');
-      }
+      const locked = await admissionLockReason(eventId, existing.admissionMode);
+      if (locked) throw admissionConflict(locked);
       updateData.admissionMode = updates.admissionMode;
     }
     if (updates.rsvpLimit !== undefined) {
@@ -414,9 +426,10 @@ class EventService {
       if (isNaN(cap) || cap < 1 || cap > 100000) {
         throw new ValidationError('Capacity must be between 1 and 100,000');
       }
-      // Capacity floor check: can't go below sum of tier quantities
+      // Capacity floor check: can't go below sum of tier quantities (a wizard
+      // draft only warns; publish refuses it, spec 050 §6.1).
       const totalTierQuantity = existing.priceTiers.reduce((sum, t) => sum + t.quantityTotal, 0);
-      if (cap < totalTierQuantity) {
+      if (existing.setupCompletedAt !== null && cap < totalTierQuantity) {
         throw new ValidationError(
           `Capacity cannot be less than total tier inventory (${totalTierQuantity})`
         );
@@ -1319,10 +1332,12 @@ class EventService {
 
     // The public page on the org's storefront host (custom domain, store subdomain or platform), for sharing.
     const { base: storefrontBase } = await storefrontFor(orgId);
+    const lockReason = await admissionLockReason(event.id, event.admissionMode);
 
     return {
       event: this._formatEventDetail(event),
       publicUrl: `${storefrontBase}/events/${encodeURIComponent(event.slug || event.id)}`,
+      admissionLock: { locked: !!lockReason, reason: lockReason },
       money: {
         gross,
         orgReceives: round(kinds.reduce((s, k) => s + sumOf(byKind(k), 'orgReceives'), 0)),

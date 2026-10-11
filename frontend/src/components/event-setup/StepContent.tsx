@@ -14,14 +14,20 @@ import PendingStep from './steps/PendingStep';
 import DoneStep from './steps/DoneStep';
 import ReviewStep, { type ReviewStepProps } from './review/ReviewStep';
 import StartFromPastEvent from './StartFromPastEvent';
+import DescribeStep from './steps/DescribeStep';
+import ImageStep from './steps/ImageStep';
+import TicketsStep from './steps/TicketsStep';
 import type { EventStep, FieldError, SavedEvent, SetupFields } from './steps';
-import type { SetupVenue } from './steps/types';
+import type { SavedRowProps, SetupVenue } from './steps/types';
 
 const INTRO: Partial<Record<EventStep['key'], string>> = {
   name: 'The name buyers will see and search for.',
   venue: 'Where it happens. The venue sets the time zone for every time on this event.',
   date: 'When it starts, and if you like, when it ends.',
   review: 'Check what buyers will see, then publish.',
+  description: 'What buyers read before they decide. You can change it any time.',
+  image: 'The picture at the top of the event page.',
+  tickets: 'Sell tickets in tiers, or take free RSVPs.',
 };
 
 interface Props {
@@ -42,6 +48,8 @@ interface Props {
   /** The server row; null before the date step creates it. */
   event: SavedEvent | null;
   review: Pick<ReviewStepProps, 'createMode' | 'flush' | 'onFinished' | 'onBusyChange'>;
+  /** Steps 5–6 save on their own; null before the row exists. */
+  row: Omit<SavedRowProps, 'orgId'> | null;
 }
 
 const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(props, headingRef) {
@@ -72,6 +80,9 @@ const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(p
           {step.key === 'venue' && <VenueStep {...form} orgId={props.orgId} venues={props.venues} onVenueCreated={props.onVenueCreated} />}
           {step.key === 'date' && <DateStep {...form} zone={props.zone} hasVenue={props.venues.some((v) => v.id === fields.venueId)} />}
           {step.key === 'review' && props.event && <ReviewStep orgId={props.orgId} saved={props.event} {...props.review} />}
+          {step.key === 'description' && <DescribeStep {...form} />}
+          {step.key === 'image' && props.row && <ImageStep orgId={props.orgId} {...props.row} />}
+          {step.key === 'tickets' && props.row && <TicketsStep {...form} orgId={props.orgId} {...props.row} readOnly={readOnly} />}
           {!step.built && <PendingStep />}
         </fieldset>
         {step.key === 'name' && !props.event && props.orgId && <StartFromPastEvent orgId={props.orgId} />}

@@ -146,6 +146,39 @@ describe('Price Tier Contract Tests', () => {
     });
   });
 
+  describe('DELETE /organizations/:orgId/events/:eventId/price-tiers/:priceTierId (spec 050-J)', () => {
+    const add = () =>
+      request(app)
+        .post(`/organizations/${testOrgId}/events/${testEventId}/price-tiers`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({ name: 'Doomed', price: 5, quantityTotal: 1 });
+    const del = (id, token = organizerToken) =>
+      request(app)
+        .delete(`/organizations/${testOrgId}/events/${testEventId}/price-tiers/${id}`)
+        .set('Authorization', `Bearer ${token}`);
+
+    it('deletes an unsold tier with 204', async () => {
+      const { body } = await add();
+      expect((await del(body.id)).status).toBe(204);
+      expect(await prisma.priceTier.findUnique({ where: { id: body.id } })).toBeNull();
+    });
+
+    it('refuses a tier with sales: 409 TIER_IN_USE', async () => {
+      const { body } = await add();
+      await prisma.priceTier.update({ where: { id: body.id }, data: { quantitySold: 1 } });
+      const res = await del(body.id);
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('TIER_IN_USE');
+      await prisma.priceTier.update({ where: { id: body.id }, data: { quantitySold: 0 } });
+    });
+
+    it('is 403 for a customer and 404 for an unknown tier', async () => {
+      const { body } = await add();
+      expect((await del(body.id, customerToken)).status).toBe(403);
+      expect((await del('missing-tier')).status).toBe(404);
+    });
+  });
+
   describe('GET /organizations/:orgId/events/:eventId/price-tiers', () => {
     it('should return 200 with price tiers list', async () => {
       const res = await request(app)

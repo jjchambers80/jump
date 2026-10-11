@@ -7,6 +7,7 @@
 // Pure module: no React, no api import. Saves take the client as an argument.
 
 import { zonedInputToIso, zonedInputToInstant } from '@/lib/eventTime';
+import { DESCRIBE_STEP, IMAGE_STEP, TICKETS_STEP, type SalesFields, type SalesSaved } from './contentSteps';
 
 export type StepKey =
   | 'name' | 'venue' | 'date' | 'description' | 'image' | 'tickets' | 'attendee-questions'
@@ -17,7 +18,7 @@ export type StepKey =
 export type StepRule = 'R' | 'S' | 'C';
 
 /** What a step's form edits. Dates are `datetime-local` strings in the venue zone. */
-export interface SetupFields {
+export interface SetupFields extends SalesFields {
   name: string;
   slug: string;
   venueId: string;
@@ -26,7 +27,7 @@ export interface SetupFields {
 }
 
 /** The server row as last saved (ISO instants), or null before step 3 creates it. */
-export interface SavedEvent {
+export interface SavedEvent extends SalesSaved {
   id: string;
   name: string;
   slug: string;
@@ -175,12 +176,9 @@ export const EVENT_STEPS: EventStep[] = [
     payload: datePayload,
     save: patchEvent,
   },
-  { key: 'description', title: 'Describe it', rule: 'S', anchor: 'about', built: false, visible: always, complete: (ctx) => !!ctx.saved?.description },
-  { key: 'image', title: 'Add an image', rule: 'S', anchor: 'event-hero-image', built: false, visible: always, complete: (ctx) => !!ctx.saved?.logoUrl },
-  {
-    key: 'tickets', title: 'Tickets or RSVP', rule: 'R', anchor: 'tickets', built: false, visible: always,
-    complete: (ctx) => !ticketed(ctx) || (!!ctx.saved?.capacity && (ctx.saved?.tierCount ?? 0) > 0),
-  },
+  DESCRIBE_STEP,
+  IMAGE_STEP,
+  TICKETS_STEP,
   { key: 'attendee-questions', title: 'Attendee questions', rule: 'S', anchor: 'tickets', built: false, reserved: true, visible: never, complete: never },
   { key: 'collect-more', title: 'Collect more', rule: 'S', anchor: 'add-ons', built: false, visible: (ctx) => ticketed(ctx) || !!ctx.donationsEligible, complete: never },
   { key: 'discounts', title: 'Discount codes', rule: 'S', anchor: 'tickets', built: false, reserved: true, visible: never, complete: never },
