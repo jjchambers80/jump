@@ -186,6 +186,19 @@ test.describe('Details links into the wizard', () => {
 });
 
 test.describe('edit mode', () => {
+  test('the expanded form keeps the old editor page actions: Save as template, View public form', async ({ page }) => {
+    await mockApi(page);
+    await page.goto(setupUrl('step=volunteers&form=f-volunteers'));
+    await expect(heading(page, 'Volunteers')).toBeFocused(COLD);
+    await expect(main(page).getByRole('link', { name: /View public form/ })).toHaveAttribute('href', `/events/${EVENT_ID}/apply/f-volunteers`);
+    const saveAs = main(page).getByRole('button', { name: 'Save as template' });
+    await saveAs.click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toBeHidden();
+    await expect(saveAs).toBeFocused();
+  });
+
   test('the progress shows the step list, not "Step n of N"', async ({ page }) => {
     await mockApi(page);
     await page.goto(setupUrl('step=description'));

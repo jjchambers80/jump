@@ -48,7 +48,6 @@ export function detailsEditLinks(
     /** The floor-map step exists only while a vendor form picks spaces on a map; else the Map tab. */
     map: mapForm ? at('floor-map') : null,
     listing: at('description'),
-    guests: at('special-guests'),
   };
 }
 

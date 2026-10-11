@@ -26,7 +26,7 @@ describe('edit-mode links (050-O)', () => {
     expect(links).toMatchObject({
       name: at('step=name'), venue: at('step=venue'), date: at('step=date'), description: at('step=description'),
       image: at('step=image'), tickets: at('step=tickets'), addOns: at('step=collect-more'), listing: at('step=description'),
-      newForm: at('step=vendors'), guests: at('step=special-guests'), map: null,
+      newForm: at('step=vendors'), map: null,
     });
     expect(links.tier('t 1')).toBe(at('step=tickets&tier=t+1'));
     expect(links.form({ id: 'f-g', purpose: 'SPECIAL_GUEST' })).toBe(at('step=special-guests&form=f-g'));
