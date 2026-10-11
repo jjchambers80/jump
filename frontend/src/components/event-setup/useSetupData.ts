@@ -5,7 +5,7 @@
 // setupCompletedAt). Fetches only after the org context settles and refetches
 // on an org change, not on loading toggles (frontend AGENTS › Org switcher).
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import api from '@/services/api';
 import type { EventOverview, OverviewEvent } from '@/lib/eventOverview';
 import type { SavedEvent } from './steps';
@@ -13,7 +13,7 @@ import type { SetupVenue } from './steps/types';
 
 export type LoadState = { status: 'loading' } | { status: 'error'; code: number; message: string } | { status: 'ready' };
 
-export function toSaved(event: OverviewEvent): SavedEvent {
+export function toSaved(event: OverviewEvent, addOnCount?: number): SavedEvent {
   return {
     id: event.id,
     name: event.name,
@@ -35,6 +35,7 @@ export function toSaved(event: OverviewEvent): SavedEvent {
     tiers: [...(event.priceTiers ?? [])].sort((a, b) => a.displayOrder - b.displayOrder),
     tax: event.tax,
     taxInclusive: event.taxInclusivePricing === true,
+    ...(addOnCount !== undefined && { addOnCount }),
   };
 }
 
@@ -42,7 +43,17 @@ export function toSaved(event: OverviewEvent): SavedEvent {
 export function useSetupData(orgId: string | null, orgLoading: boolean, eventId: string | null) {
   const [load, setLoad] = useState<LoadState>({ status: 'loading' });
   const [venues, setVenues] = useState<SetupVenue[]>([]);
-  const [saved, setSaved] = useState<SavedEvent | null>(null);
+  const [saved, setSavedRaw] = useState<SavedEvent | null>(null);
+  // An event PATCH answers without add-ons: keep the count the overview gave.
+  const setSaved = useCallback<Dispatch<SetStateAction<SavedEvent | null>>>(
+    (action) =>
+      setSavedRaw((prev) => {
+        const next = typeof action === 'function' ? action(prev) : action;
+        return next && next.addOnCount === undefined && prev?.id === next.id ? { ...next, addOnCount: prev.addOnCount } : next;
+      }),
+    []
+  );
+  const setAddOnCount = useCallback((addOnCount: number) => setSavedRaw((prev) => (prev ? { ...prev, addOnCount } : prev)), []);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
@@ -56,7 +67,7 @@ export function useSetupData(orgId: string | null, orgLoading: boolean, eventId:
       .then(([venueList, overview]) => {
         if (cancelled) return;
         setVenues(venueList);
-        setSaved(overview ? { ...toSaved(overview.event), admissionLock: overview.admissionLock?.reason ?? null } : null);
+        setSaved(overview ? { ...toSaved(overview.event, overview.addOns?.addOns?.length ?? 0), admissionLock: overview.admissionLock?.reason ?? null } : null);
         setLoad({ status: 'ready' });
       })
       .catch((err) => {
@@ -71,5 +82,5 @@ export function useSetupData(orgId: string | null, orgLoading: boolean, eventId:
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
   const addVenue = useCallback((venue: SetupVenue) => setVenues((list) => [...list, venue]), []);
 
-  return { load, venues, saved, setSaved, reload, addVenue };
+  return { load, venues, saved, setSaved, setAddOnCount, reload, addVenue };
 }

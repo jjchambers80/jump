@@ -22,7 +22,7 @@ import {
 } from './previewMessages';
 
 function scrollToAnchor(anchor: string) {
-  const target = document.getElementById(anchor) ?? document.getElementById('event-hero');
+  const target = document.getElementById(anchor) ?? document.getElementById('tickets') ?? document.getElementById('event-hero');
   if (!target) return;
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const top = target.getBoundingClientRect().top + window.scrollY - 16;
@@ -74,12 +74,14 @@ export default function PreviewFrame() {
 
   const anchor = message?.anchor ?? null;
   const ready = !!message && (!eventId || saved?.id === eventId);
+  // Scroll on a step change, and again once a save's reload has rendered.
+  const scrollKey = anchor ? `${anchor}:${saved?.revision ?? 0}` : null;
   useEffect(() => {
-    if (!ready || !anchor || anchor === lastAnchor.current) return;
-    lastAnchor.current = anchor;
+    if (!ready || !anchor || scrollKey === lastAnchor.current) return;
+    lastAnchor.current = scrollKey;
     // After the view has laid out the overlay.
     requestAnimationFrame(() => scrollToAnchor(anchor));
-  }, [ready, anchor]);
+  }, [ready, anchor, scrollKey]);
 
   if (!message || !ready) {
     return (

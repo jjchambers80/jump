@@ -17,6 +17,7 @@ import StartFromPastEvent from './StartFromPastEvent';
 import DescribeStep from './steps/DescribeStep';
 import ImageStep from './steps/ImageStep';
 import TicketsStep from './steps/TicketsStep';
+import CollectMoreStep from './steps/CollectMoreStep';
 import type { EventStep, FieldError, SavedEvent, SetupFields } from './steps';
 import type { SavedRowProps, SetupVenue } from './steps/types';
 
@@ -28,6 +29,7 @@ const INTRO: Partial<Record<EventStep['key'], string>> = {
   description: 'What buyers read before they decide. You can change it any time.',
   image: 'The picture at the top of the event page.',
   tickets: 'Sell tickets in tiers, or take free RSVPs.',
+  'collect-more': 'Extras buyers can add to their order, like parking or merch.',
 };
 
 interface Props {
@@ -50,6 +52,8 @@ interface Props {
   review: Pick<ReviewStepProps, 'createMode' | 'flush' | 'onFinished' | 'onBusyChange'>;
   /** Steps 5–6 save on their own; null before the row exists. */
   row: Omit<SavedRowProps, 'orgId'> | null;
+  /** Collect more saved an add-on: the new count (step state) and a preview refresh. */
+  onAddOnsSaved: (addOnCount: number) => void;
 }
 
 const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(props, headingRef) {
@@ -83,6 +87,9 @@ const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(p
           {step.key === 'description' && <DescribeStep {...form} />}
           {step.key === 'image' && props.row && <ImageStep orgId={props.orgId} {...props.row} />}
           {step.key === 'tickets' && props.row && <TicketsStep {...form} orgId={props.orgId} {...props.row} readOnly={readOnly} />}
+          {step.key === 'collect-more' && props.event && (
+            <CollectMoreStep orgId={props.orgId} eventId={props.event.id} ticketed={props.event.admissionMode !== 'RSVP'} onSaved={props.onAddOnsSaved} />
+          )}
           {!step.built && <PendingStep />}
         </fieldset>
         {step.key === 'name' && !props.event && props.orgId && <StartFromPastEvent orgId={props.orgId} />}

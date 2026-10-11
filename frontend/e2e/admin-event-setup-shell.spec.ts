@@ -294,7 +294,8 @@ test.describe('desktop', () => {
 
   for (const scheme of ['light', 'dark'] as const) {
     test(`no serious axe findings (${scheme})`, async ({ page }) => {
-      await page.emulateMedia({ colorScheme: scheme });
+      // No fades while axe scans: a sheet mid-fade blends its colours (false contrast failure).
+      await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
       await mockApi(page);
       await page.goto('/admin/events/new');
       await expect(heading(page, 'Name your event')).toBeVisible(COLD);
@@ -348,7 +349,8 @@ test.describe('mobile', () => {
 
   for (const scheme of ['light', 'dark'] as const) {
     test(`no serious axe findings and no horizontal scroll (${scheme})`, async ({ page }) => {
-      await page.emulateMedia({ colorScheme: scheme });
+      // No fades while axe scans: a sheet mid-fade blends its colours (false contrast failure).
+      await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
       await mockApi(page);
       await page.goto(`/admin/events/${EVENT_ID}/setup?step=date`);
       await expect(heading(page, 'When is it?')).toBeVisible(COLD);

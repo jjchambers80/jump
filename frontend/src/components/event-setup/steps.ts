@@ -42,6 +42,8 @@ export interface SavedEvent extends SalesSaved {
   logoUrl?: string | null;
   capacity?: number | null;
   tierCount?: number;
+  /** Add-ons on the event, every scope (overview `addOns`; kept current by Collect more). */
+  addOnCount?: number;
 }
 
 export interface StepCtx {
@@ -180,7 +182,10 @@ export const EVENT_STEPS: EventStep[] = [
   IMAGE_STEP,
   TICKETS_STEP,
   { key: 'attendee-questions', title: 'Attendee questions', rule: 'S', anchor: 'tickets', built: false, reserved: true, visible: never, complete: never },
-  { key: 'collect-more', title: 'Collect more', rule: 'S', anchor: 'add-ons', built: false, visible: (ctx) => ticketed(ctx) || !!ctx.donationsEligible, complete: never },
+  { key: 'collect-more', title: 'Collect more', rule: 'S', anchor: 'add-ons', built: true,
+    visible: (ctx) => ticketed(ctx) || !!ctx.donationsEligible,
+    complete: (ctx) => (ctx.saved?.addOnCount ?? 0) > 0,
+  },
   { key: 'discounts', title: 'Discount codes', rule: 'S', anchor: 'tickets', built: false, reserved: true, visible: never, complete: never },
   { key: 'vendors', title: 'Vendor applications', rule: 'S', anchor: 'get-involved', built: false, visible: always, complete: never },
   { key: 'floor-map', title: 'Floor map', rule: 'C', anchor: 'floor-map', built: false, visible: (ctx) => !!ctx.forms?.some((f) => f.spaceSelection === 'MAP'), complete: never },

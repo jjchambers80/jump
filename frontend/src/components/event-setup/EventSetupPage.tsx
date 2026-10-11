@@ -125,6 +125,10 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
           flow.router.push(urlFor('done'));
         } }}
         row={saved ? { saved, setSaved: data.setSaved, zone: ctx.savedZone, refreshPreview: flow.refreshPreview } : null}
+        onAddOnsSaved={(count) => {
+          flow.setAddOnCount(count);
+          flow.refreshPreview();
+        }}
         onVenueCreated={(venue) => {
           data.addVenue({ id: venue.id, name: venue.name, address: venue.address, timezone: venue.timezone, city: venue.city, state: venue.state });
           setFields((f) => ({ ...f, venueId: venue.id }));
