@@ -15,12 +15,14 @@ import applicationFormService from './ApplicationFormService.js';
 import logger from '../utils/logger.js';
 
 const KINDS = new Set(['PAID', 'FREE']);
-const SETTING_KEYS = ['intro', 'chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy', 'reserveOnApproval', 'spaceSelection'];
+const SETTING_KEYS = ['purpose', 'collectBusiness', 'intro', 'chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy', 'reserveOnApproval', 'spaceSelection'];
 const TIER_KEYS = new Set(['name', 'description', 'price', 'quantityTotal', 'isActive']);
 const QUESTION_KEYS = new Set(['label', 'helpText', 'type', 'required', 'options', 'pinned']);
 
 /** The settings a definition carries when the caller sends none. */
 const EMPTY_DEFINITION = (kind) => ({
+  purpose: null, // spec 050 §6.2: optional; a form made from a template without one is OTHER
+  collectBusiness: null, // optional; null = the form's default (ask for the business profile)
   intro: null,
   chargeTiming: kind === 'PAID' ? 'APPROVAL' : null,
   feeMode: kind === 'PAID' ? 'PASS' : null,
@@ -124,6 +126,9 @@ class ApplicationFormTemplateService {
     // `name` is validated separately; give the form validator one it accepts.
     const settings = applicationFormService._validateFormFields({ name: 'Template', ...settingsBody }, kind, null);
     delete settings.name;
+    if (settings.purpose || settings.collectBusiness !== undefined) {
+      applicationFormService._assertEventFormRules(settings.purpose ?? 'OTHER', kind, settings.collectBusiness ?? true);
+    }
 
     const tiers = definition.tiers ?? [];
     const questions = definition.questions ?? [];
@@ -171,6 +176,7 @@ class ApplicationFormTemplateService {
       id: t.id,
       name: t.name,
       kind: t.kind,
+      purpose: t.definition?.purpose ?? null,
       tierCount: (t.definition?.tiers || []).length,
       questionCount: (t.definition?.questions || []).length,
       sourceFormId: t.sourceFormId,
