@@ -40,7 +40,10 @@ export function useSetupForms(eventId: string | null) {
     setAttempt((n) => n + 1);
   }, []);
 
-  return { forms, load, reload, retry };
+  /** A form the client just created, in the list at once (before the reload answers). */
+  const upsert = useCallback((form: AdminForm) => setForms((list) => [...list.filter((f) => f.id !== form.id), form]), []);
+
+  return { forms, load, reload, retry, upsert };
 }
 
 export type SetupForms = ReturnType<typeof useSetupForms>;

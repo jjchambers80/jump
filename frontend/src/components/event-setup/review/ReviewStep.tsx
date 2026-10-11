@@ -142,7 +142,6 @@ export default function ReviewStep({ orgId, saved, createMode, flush, onFinished
         warnings={readiness.warnings}
         selected={chosen}
         published={saved.status !== 'DRAFT'}
-        eventId={saved.id}
         onToggle={(id, open) =>
           setSelected((prev) => {
             const next = new Set(prev ?? []);

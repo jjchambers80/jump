@@ -15,7 +15,7 @@ import { instantToZonedInput, zonedInputToIso } from '@/lib/eventTime';
 import { useUnsavedChanges } from '@/lib/useUnsavedChanges';
 import { readSessionDraft, writeSessionDraft } from './sessionDraft';
 import {
-  EVENT_STEPS, isReachable, patchEvent, resumeKey, sameInstant, stepByKey, visibleSteps,
+  EVENT_STEPS, FORMER_STEPS, isReachable, patchEvent, resumeKey, sameInstant, stepByKey, visibleSteps,
   type SavedEvent, type SetupFields, type StepCtx, type StepKey,
 } from './steps';
 import { PREVIEW_MESSAGE, type PreviewMessage, type PreviewOverlay } from './previewMessages';
@@ -27,6 +27,7 @@ import { clearSetupFinished, setupJustFinished } from './doneMarker';
 import { useDonationsEligible } from './useDonationsEligible';
 import type { OverviewEvent } from '@/lib/eventOverview';
 import { salesFieldsFromSaved } from './contentSteps';
+import { legacyFlowHref } from './formFlows';
 
 export const EMPTY_FIELDS: SetupFields = { name: '', slug: '', venueId: '', date: '', endDate: '' };
 
@@ -67,7 +68,7 @@ export function useSetupFlow(eventId: string | null) {
 
   // Fill the form once: the server row, else this tab's draft, else ?venueId=.
   useEffect(() => {
-    // Wait for the forms too: they decide whether the floor map step exists.
+    // Wait for the forms too: an old application step link needs them to find its flow.
     if (initialised || data.load.status !== 'ready' || !orgId || (eventId && forms.load.status === 'loading')) return;
     if (saved) setFields(fieldsFromSaved(saved, zoneOf(saved.venueId)));
     else {
@@ -98,12 +99,20 @@ export function useSetupFlow(eventId: string | null) {
 
   const urlFor = (key: StepKey) => (saved ? `/admin/events/${saved.id}/setup?step=${key}` : `/admin/events/new?step=${key}`);
 
+  // An application step link from before spec 051 (email, bookmark, readiness item): its flow now.
+  const rawStep = params.get('step');
+  const redirect = eventId && rawStep && FORMER_STEPS.has(rawStep)
+    ? legacyFlowHref(eventId, rawStep, params.get('form'), forms.forms, params.get('org'))
+    : null;
+
   // Each step is a URL (§11.4): put the resolved step in it, so Back works.
   useEffect(() => {
-    if (!initialised || valid) return;
+    if (!initialised) return;
+    if (redirect) return router.replace(redirect);
+    if (valid) return;
     router.replace(requested?.key === 'done' && saved && mode === 'edit' ? `/admin/events/${saved.id}` : urlFor(current));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialised, valid, current]);
+  }, [initialised, valid, current, redirect]);
   // Leaving Done for a step ends the create flow: Done is not shown again.
   const lastStep = useRef(current);
   useEffect(() => {
@@ -175,6 +184,8 @@ export function useSetupFlow(eventId: string | null) {
   return {
     orgId, data, forms, fields, setFields, ctx, mode, list, current, step, at, zone, iso,
     saveState, unsaved, preview, initialised, urlFor, router,
+    /** Leaving for an application flow: show nothing of the event steps. */
+    redirecting: !!redirect,
     /** After a dialog or upload saved on its own: the frame reloads the event. */
     refreshPreview: () => setRevision((r) => r + 1),
     setAddOnCount: data.setAddOnCount,

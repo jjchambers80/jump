@@ -26,7 +26,7 @@ import ViewEventLink from './ViewEventLink';
 import { LOCKED_REASON_ID } from './SetupFooter';
 import { secondaryButton } from './ui';
 
-function useIsDesktop() {
+export function useIsDesktop() {
   const query = '(min-width: 1024px)';
   const [matches, setMatches] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches);
   useEffect(() => {
@@ -102,7 +102,7 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
         </div>
       </div>
     );
-  } else if (!flow.initialised) body = <LoadingFields />;
+  } else if (!flow.initialised || flow.redirecting) body = <LoadingFields />;
   else
     body = (
       <StepContent
@@ -127,9 +127,7 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
           focusAfterStepChange();
           flow.router.push(urlFor('done'));
         } }}
-        forms={flow.forms}
         row={saved ? { saved, setSaved: data.setSaved, zone: ctx.savedZone, refreshPreview: flow.refreshPreview } : null}
-        onMapStatus={flow.setMapStatus}
         onAddOnsSaved={(count) => {
           flow.setAddOnCount(count);
           flow.refreshPreview();
@@ -141,7 +139,7 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
       />
     );
 
-  const ready = flow.initialised && !loadError;
+  const ready = flow.initialised && !loadError && !flow.redirecting;
   const done = current === 'done';
   const railed = mode === 'edit' && !done;
 

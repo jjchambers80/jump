@@ -142,7 +142,8 @@ async function mockWizard(page: Page, initial: Partial<Row>[] = []) {
 }
 
 const STAFF = { id: 'lineup-organizer', email: 'lineup-organizer@test.com', role: 'ORGANIZER' as const };
-const STEP_URL = `/admin/events/${EVENT_ID}/setup?step=special-guests`;
+// Spec 051: the lineup is the first step of the special guests flow.
+const STEP_URL = `/admin/events/${EVENT_ID}/setup/special-guests?step=lineup`;
 
 test.describe('wizard lineup editor', () => {
   test.describe.configure({ timeout: 120000 });

@@ -169,7 +169,7 @@ test.describe('desktop', () => {
     const state = await mockApi(page);
     await page.goto(STEP_URL);
     await expect(heading(page)).toBeVisible(COLD);
-    await expect(page.getByText(/Step 7 of 12 — Collect more/)).toBeVisible();
+    await expect(page.getByText(/Step 7 of 8 — Collect more/)).toBeVisible();
     await expect.poll(() => state.previews).toBeGreaterThan(0);
     // Nothing yet: the step offers Skip, the preview holds the #add-ons slot.
     await expect(page.getByRole('button', { name: 'Skip for now' })).toBeVisible();

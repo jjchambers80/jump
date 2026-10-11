@@ -143,8 +143,10 @@ test.beforeAll(async ({ browser }) => {
   await mockApi(page);
   await page.goto(DETAILS, { timeout: 120000 });
   await expect(page.getByRole('heading', { level: 1, name: 'Spring Fair' })).toBeVisible({ timeout: 120000 });
-  await page.goto(setupUrl('step=name'), { timeout: 120000 });
-  await expect(page.locator('main h1').first()).toBeVisible({ timeout: 120000 });
+  for (const url of [setupUrl('step=name'), `/admin/events/${EVENT_ID}/setup/volunteers?step=details&form=f-volunteers`]) {
+    await page.goto(url, { timeout: 120000 });
+    await expect(page.locator('main h1').first()).toBeVisible({ timeout: 120000 });
+  }
   // The redirect pages compile on first visit; each lands on the (warm) wizard.
   for (const path of [`${DETAILS}/edit`, `${DETAILS}/edit/details`, `${DETAILS}/edit/sales`, `${DETAILS}/applications/forms`, `${DETAILS}/applications/forms/f-vendors`, `${DETAILS}/applications`]) {
     await page.goto(path, { timeout: 120000 });
@@ -153,30 +155,32 @@ test.beforeAll(async ({ browser }) => {
   await page.close();
 });
 
-/** Details section control → [wizard step URL, step h1]. */
+/** Details section control → [path after /setup, step h1]. Forms and the floor map open their flows (spec 051). */
 const LINKS: [string, string, string][] = [
-  ['Edit event', 'step=name', 'Name your event'],
-  ['Edit image', 'step=image', 'Add an image'],
-  ['Edit date and venue', 'step=date', 'When is it?'],
-  ['Change venue', 'step=venue', 'Where is it?'],
-  ['Edit description', 'step=description', 'Describe it'],
-  ['Edit tickets', 'step=tickets', 'Tickets or RSVP'],
-  ['Edit tier General Admission', 'step=tickets&tier=t-ga', 'Tickets or RSVP'],
-  ['Edit add-ons', 'step=collect-more', 'Collect more'],
-  ['Edit admission', 'step=tickets', 'Tickets or RSVP'],
-  ['Edit listing', 'step=description', 'Describe it'],
-  ['Edit form Vendor booths', 'step=vendors&form=f-vendors', 'Vendor applications'],
-  ['Edit form Volunteer crew', 'step=volunteers&form=f-volunteers', 'Volunteers'],
-  ['Edit floor map', 'step=floor-map', 'Floor map'],
+  ['Edit event', '?step=name', 'Name your event'],
+  ['Edit image', '?step=image', 'Add an image'],
+  ['Edit date and venue', '?step=date', 'When is it?'],
+  ['Change venue', '?step=venue', 'Where is it?'],
+  ['Edit description', '?step=description', 'Describe it'],
+  ['Edit tickets', '?step=tickets', 'Tickets or RSVP'],
+  ['Edit tier General Admission', '?step=tickets&tier=t-ga', 'Tickets or RSVP'],
+  ['Edit add-ons', '?step=collect-more', 'Collect more'],
+  ['Edit admission', '?step=tickets', 'Tickets or RSVP'],
+  ['Edit listing', '?step=description', 'Describe it'],
+  ['Edit form Vendor booths', '/vendors?step=details&form=f-vendors', 'Form details'],
+  ['Edit form Volunteer crew', '/volunteers?step=details&form=f-volunteers', 'Form details'],
+  ['Edit floor map', '/vendors?step=floor-map&form=f-vendors', 'Floor map'],
 ];
+const linkHref = (path: string) => `/admin/events/${EVENT_ID}/setup${path}${ORG_Q}`;
+const flowUrl = (path: string) => `/admin/events/${EVENT_ID}/setup/${path}`;
 
 test.describe('Details links into the wizard', () => {
   test('every section links to its step and no flyout is offered', async ({ page }) => {
     await mockApi(page);
     await page.goto(DETAILS);
     await expect(page.getByRole('heading', { level: 1, name: 'Spring Fair' })).toBeVisible(COLD);
-    for (const [name, query] of LINKS) {
-      await expect(page.getByRole('link', { name, exact: true }).first(), name).toHaveAttribute('href', setupUrl(query) + ORG_Q);
+    for (const [name, path] of LINKS) {
+      await expect(page.getByRole('link', { name, exact: true }).first(), name).toHaveAttribute('href', linkHref(path));
     }
     // One form per field: no Edit control opens a dialog here any more.
     await expect(page.locator('button[aria-haspopup="dialog"]').filter({ hasText: /Edit|Settings|Add tier/ })).toHaveCount(0);
@@ -184,13 +188,13 @@ test.describe('Details links into the wizard', () => {
     await expect(page.locator('a[href*="/edit/"], a[href*="/applications/forms"]')).toHaveCount(0);
   });
 
-  for (const [name, query, title] of LINKS) {
+  for (const [name, path, title] of LINKS) {
     test(`${name} opens "${title}" with focus on its heading`, async ({ page }) => {
       await mockApi(page);
       await page.goto(DETAILS);
       await page.getByRole('link', { name, exact: true }).first().click();
-      await expect(page).toHaveURL(new RegExp(`/setup\\?${query}${ORG_Q}$`));
-      if (query.includes('tier=')) {
+      await expect(page).toHaveURL((url) => url.pathname + url.search === linkHref(path));
+      if (path.includes('tier=')) {
         // The tier's own dialog opens over the step.
         await expect(page.getByRole('dialog')).toBeVisible(COLD);
         await expect(page.getByRole('dialog').getByLabel('Tier Name *')).toHaveValue('General Admission');
@@ -198,16 +202,15 @@ test.describe('Details links into the wizard', () => {
         return;
       }
       await expect(heading(page, title)).toBeFocused(COLD);
-      if (query.includes('form=')) await expect(main(page).locator('[aria-expanded="true"]').first()).toBeVisible();
     });
   }
 });
 
 test.describe('edit mode', () => {
-  test('the expanded form keeps the old editor page actions: Save as template, View public form', async ({ page }) => {
+  test('a form\'s Review step keeps the old editor page actions: Save as template, View public form', async ({ page }) => {
     await mockApi(page);
-    await page.goto(setupUrl('step=volunteers&form=f-volunteers'));
-    await expect(heading(page, 'Volunteers')).toBeFocused(COLD);
+    await page.goto(flowUrl('volunteers?step=review&form=f-volunteers'));
+    await expect(heading(page, 'Review and open')).toBeFocused(COLD);
     await expect(main(page).getByRole('link', { name: /View public form/ })).toHaveAttribute('href', `/events/${EVENT_ID}/apply/f-volunteers`);
     const saveAs = main(page).getByRole('button', { name: 'Save as template' });
     await saveAs.click();
@@ -271,13 +274,15 @@ test.describe('edit mode', () => {
 
   test('a form shows its template, its applications and its window in the venue zone', async ({ page }) => {
     await mockApi(page);
-    await page.goto(setupUrl('step=volunteers&form=f-volunteers'));
-    await expect(heading(page, 'Volunteers')).toBeFocused(COLD);
+    await page.goto(flowUrl('volunteers?step=review&form=f-volunteers'));
+    await expect(heading(page, 'Review and open')).toBeFocused(COLD);
     await expect(main(page).getByRole('link', { name: 'Crew sign-up' })).toHaveAttribute('href', '/admin/events/templates/tpl-crew');
-    await expect(main(page).getByRole('link', { name: 'View applications for Volunteer crew' })).toHaveAttribute(
+    await expect(main(page).getByRole('link', { name: 'View applications' })).toHaveAttribute(
       'href',
       `/admin/events/${EVENT_ID}/applications?form=f-volunteers`
     );
+    await page.goto(flowUrl('volunteers?step=details&form=f-volunteers'));
+    await expect(heading(page, 'Form details')).toBeFocused(COLD);
     // 14:00 UTC is 10:00 on the venue's clock (New York, EDT).
     await expect(main(page).getByLabel('Opens')).toHaveValue('2031-05-01T10:00');
     await expect(main(page).getByText(/Times are the venue's clock: New York/)).toBeVisible();
@@ -285,10 +290,9 @@ test.describe('edit mode', () => {
 
   test('templates stay manageable from Start from: edit, delete, all purposes', async ({ page }) => {
     const calls = await mockApi(page);
-    await page.goto(setupUrl('step=volunteers'));
-    await expect(heading(page, 'Volunteers')).toBeFocused(COLD);
-    await main(page).getByRole('button', { name: 'Add a volunteer application' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Add a volunteer application' });
+    await page.goto(flowUrl('volunteers'));
+    await expect(heading(page, 'Start a volunteer application')).toBeFocused(COLD);
+    const dialog = main(page);
     await expect(dialog.getByRole('link', { name: 'Edit template Crew sign-up' })).toHaveAttribute('href', '/admin/events/templates/tpl-crew');
     // Other purposes' templates appear on request; a PAID one is another kind and never fits a free-only step.
     await expect(dialog.getByText('Press desk')).toHaveCount(0);
@@ -298,7 +302,7 @@ test.describe('edit mode', () => {
     page.once('dialog', (d) => void d.accept());
     await dialog.getByRole('button', { name: 'Delete template Crew sign-up' }).click();
     await expect.poll(() => calls.templateDelete.length).toBe(1);
-    await expect(dialog.getByText('Crew sign-up')).toHaveCount(0);
+    await expect(dialog.getByRole('radio', { name: /Crew sign-up/ })).toHaveCount(0);
   });
 
   test('the progress shows the step list, not "Step n of N"', async ({ page }) => {
@@ -371,20 +375,21 @@ test.describe('edit mode', () => {
 });
 
 test.describe('redirects to the wizard', () => {
+  // Forms open their application flow (spec 051).
   const cases: [string, string][] = [
-    [`${DETAILS}/edit#event-add-ons`, 'step=collect-more'],
-    [`${DETAILS}/edit/details#event-media`, 'step=image'],
-    [`${DETAILS}/edit/details`, 'step=name'],
-    [`${DETAILS}/edit/sales#event-admission`, 'step=tickets'],
-    [`${DETAILS}/edit/sales`, 'step=tickets'],
-    [`${DETAILS}/applications/forms`, 'step=vendors'],
-    [`${DETAILS}/applications/forms/f-volunteers`, 'step=volunteers&form=f-volunteers'],
+    [`${DETAILS}/edit#event-add-ons`, '?step=collect-more'],
+    [`${DETAILS}/edit/details#event-media`, '?step=image'],
+    [`${DETAILS}/edit/details`, '?step=name'],
+    [`${DETAILS}/edit/sales#event-admission`, '?step=tickets'],
+    [`${DETAILS}/edit/sales`, '?step=tickets'],
+    [`${DETAILS}/applications/forms`, '/vendors?step=start'],
+    [`${DETAILS}/applications/forms/f-volunteers`, '/volunteers?step=details&form=f-volunteers'],
   ];
-  for (const [from, query] of cases) {
-    test(`${from.replace(DETAILS, '…')} → ${query}`, async ({ page }) => {
+  for (const [from, path] of cases) {
+    test(`${from.replace(DETAILS, '…')} → ${path}`, async ({ page }) => {
       await mockApi(page);
       await page.goto(from);
-      await expect(page).toHaveURL(new RegExp(`/setup\\?${query}$`), COLD);
+      await expect(page).toHaveURL((url) => url.pathname + url.search === `${DETAILS}/setup${path}`, COLD);
     });
   }
 

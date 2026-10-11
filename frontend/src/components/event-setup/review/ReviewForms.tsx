@@ -5,7 +5,6 @@
 // says cannot open (a PAID form while APPLICATIONS_PAYMENTS_ENABLED is off,
 // gotcha 15) is disabled with that reason as its description.
 
-import Link from 'next/link';
 import type { OverviewForm } from '@/lib/eventOverview';
 import type { ReadinessItem } from '@/lib/eventReadiness';
 
@@ -21,12 +20,11 @@ interface Props {
   warnings: ReadinessItem[];
   selected: Set<string>;
   onToggle: (formId: string, open: boolean) => void;
-  eventId: string;
   /** Live events: forms open from their own step, not from here. */
   published: boolean;
 }
 
-export default function ReviewForms({ forms, warnings, selected, onToggle, eventId, published }: Props) {
+export default function ReviewForms({ forms, warnings, selected, onToggle, published }: Props) {
   return (
     <section aria-labelledby="review-forms" className="rounded-lg border border-gray-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800 sm:p-6">
       <h2 id="review-forms" className="text-base font-semibold text-gray-900 dark:text-white">
@@ -35,9 +33,7 @@ export default function ReviewForms({ forms, warnings, selected, onToggle, event
       {forms.length === 0 ? (
         <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">
           No application forms on this event.{' '}
-          <Link href={`/admin/events/${eventId}/setup?step=vendors`} className="font-medium text-gray-900 underline underline-offset-2 dark:text-white">
-            Add a vendor application
-          </Link>
+          After setup, add vendor, special guest and volunteer applications from the event page.
         </p>
       ) : (
         <ul className="mt-2 divide-y divide-gray-200 dark:divide-slate-700">

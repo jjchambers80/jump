@@ -42,7 +42,8 @@ Sections are `OverviewSection` cards (`components/events/EventOverviewSections.t
 | Event details, Listing | `step=description` |
 | Sales, Admission, RSVPs; one tier (click its name) | `step=tickets`; `&tier=<id>` opens that tier's dialog |
 | Add-ons (**Edit add-ons** on Sales and RSVPs) | `step=collect-more` |
-| An application form's **Edit form** / **Set up an application form** | `step=<purpose step>&form=<id>` / `step=vendors` |
+| An application form's **Edit form** | its flow at Form details, `setup/<flow>?step=details&form=<id>` (spec 051) |
+| **Add to this event** (vendor application, special guests, volunteer application, other application) | `setup/<flow>`; special guests at `?step=lineup` ([Application setup flows](application-setup-flows.md)) |
 | Floor map | `step=floor-map` while a VENDOR MAP form exists, else the Map tab |
 | Special guests (**Edit special guests** / **Add a special guest**) | `step=special-guests` |
 
@@ -57,7 +58,7 @@ Every page of one event mounts `EventWorkspaceHeader` — breadcrumb (Events ›
 | Tab | Route | Notes |
 |---|---|---|
 | Overview | `/admin/events/:id` | This page |
-| Applications | `/admin/events/:id/applications` | `ApplicationsHeader` = workspace header + **Manage forms** (→ `setup?step=vendors`; forms are configured only in the wizard) |
+| Applications | `/admin/events/:id/applications` | `ApplicationsHeader` = workspace header + **Add a form** (a disclosure listing the four application flows; forms are configured only there, spec 051) |
 | Map | `/admin/events/:id/map` | With a map: `router.replace` to the builder `/admin/maps/:mapId` (its back arrow returns to the event). Without: Blank map or a saved floor plan (`mapsApi.createFromFloorPlan`) |
 | Attendees | `/admin/events/:id/attendees` | `TicketRowsView` with `eventId` (event filter locked and hidden) — Orders › Tickets stays the cross-event lookup |
 | Guest list | `/admin/events/:id/rsvps` | RSVP events |

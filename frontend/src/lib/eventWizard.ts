@@ -1,6 +1,6 @@
 // Spec 050: links into the event setup wizard, the one editor for every
-// event field and event application form (always on since 050-P).
-import { stepForPurpose } from '@/components/event-setup/applicationSteps';
+// event field (always on since 050-P), and its application flows (spec 051).
+import { formEditHref, formFlowHref, type FormFlowKey } from '@/components/event-setup/formFlows';
 import type { FormPurpose } from '@/lib/applications';
 
 /**
@@ -37,7 +37,7 @@ export function detailsEditLinks(
   orgId?: string | null
 ) {
   const at = (step: string, extra?: Record<string, string>) => withOrg(wizardStepHref(eventId, step, extra), orgId);
-  const mapForm = forms.some((f) => f.purpose === 'VENDOR' && f.spaceSelection === 'MAP');
+  const mapForm = forms.find((f) => f.purpose === 'VENDOR' && f.spaceSelection === 'MAP');
   return {
     name: at('name'),
     venue: at('venue'),
@@ -47,12 +47,13 @@ export function detailsEditLinks(
     tickets: at('tickets'),
     tier: (tierId: string) => at('tickets', { tier: tierId }),
     addOns: at('collect-more'),
-    form: (form: { id: string; purpose?: FormPurpose | null }) => at(stepForPurpose(form.purpose), { form: form.id }),
-    newForm: at('vendors'),
-    /** The floor-map step exists only while a vendor form picks spaces on a map; else the Map tab. */
-    map: mapForm ? at('floor-map') : null,
+    /** Application forms are set up in their own flows (spec 051), one form per run. */
+    form: (form: { id: string; purpose?: FormPurpose | null }) => formEditHref(eventId, form, orgId),
+    addForm: (flow: FormFlowKey) => formFlowHref(eventId, flow, { org: orgId, step: flow === 'special-guests' ? 'lineup' : undefined }),
+    /** The vendor flow's Floor map step exists only while a vendor form picks spaces on a map; else the Map tab. */
+    map: mapForm ? formFlowHref(eventId, 'vendors', { form: mapForm.id, step: 'floor-map', org: orgId }) : null,
     listing: at('description'),
-    guests: at('special-guests'),
+    guests: formFlowHref(eventId, 'special-guests', { step: 'lineup', org: orgId }),
   };
 }
 

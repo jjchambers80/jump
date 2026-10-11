@@ -8,13 +8,11 @@
 
 import { zonedInputToIso, zonedInputToInstant } from '@/lib/eventTime';
 import { DESCRIBE_STEP, IMAGE_STEP, TICKETS_STEP, type SalesFields, type SalesSaved } from './contentSteps';
-import { OTHER_APPLICATIONS_STEP, SPECIAL_GUESTS_STEP, VENDORS_STEP, VOLUNTEERS_STEP } from './applicationSteps';
 import type { FormPurpose } from '@/lib/applications';
 
 export type StepKey =
   | 'name' | 'venue' | 'date' | 'description' | 'image' | 'tickets' | 'attendee-questions'
-  | 'collect-more' | 'discounts' | 'vendors' | 'floor-map' | 'special-guests' | 'volunteers'
-  | 'other-applications' | 'reminders' | 'review' | 'done';
+  | 'collect-more' | 'discounts' | 'reminders' | 'review' | 'done';
 
 /** R = required to publish, S = skippable ("Skip for now" when empty), C = conditional. */
 export type StepRule = 'R' | 'S' | 'C';
@@ -56,8 +54,8 @@ export interface StepCtx {
   /** Zone of the venue currently chosen in the form, and of the saved venue. */
   zone: string | null;
   savedZone: string | null;
-  /** Forms on the event (050-L): their purpose places them in a step. */
-  forms?: { purpose?: FormPurpose | null; spaceSelection?: 'TIERS' | 'MAP' | null }[];
+  /** Forms on the event: old application step links resolve to their flow (spec 051). */
+  forms?: { id: string; purpose?: FormPurpose | null; kind?: string; spaceSelection?: 'TIERS' | 'MAP' | null }[];
   donationsEligible?: boolean;
   now?: Date;
 }
@@ -192,11 +190,8 @@ export const EVENT_STEPS: EventStep[] = [
     complete: (ctx) => (ctx.saved?.addOnCount ?? 0) > 0,
   },
   { key: 'discounts', title: 'Discount codes', rule: 'S', anchor: 'tickets', built: false, reserved: true, visible: never, complete: never },
-  VENDORS_STEP,
-  { key: 'floor-map', title: 'Floor map', rule: 'C', anchor: 'floor-map', built: true, visible: (ctx) => !!ctx.forms?.some((f) => f.purpose === 'VENDOR' && f.spaceSelection === 'MAP'), complete: (ctx) => ctx.saved?.mapStatus === 'PUBLISHED' },
-  SPECIAL_GUESTS_STEP,
-  VOLUNTEERS_STEP,
-  OTHER_APPLICATIONS_STEP,
+  // Applications, special guests, volunteers and the floor map are their own
+  // flows since spec 051 (formFlows.ts), started from the event's Overview.
   { key: 'reminders', title: 'Reminders', rule: 'S', anchor: 'event-hero', built: false, reserved: true, visible: never, complete: never },
   { key: 'review', title: 'Review and publish', rule: 'R', anchor: 'event-hero', built: true, visible: always, complete: (ctx) => !!ctx.saved?.setupCompletedAt },
   { key: 'done', title: 'Your event is saved', rule: 'R', anchor: 'event-hero', built: false, visible: never, complete: never },
@@ -216,7 +211,7 @@ export function visibleSteps(ctx: StepCtx, steps: EventStep[] = EVENT_STEPS): Ev
   return steps.filter((step) => !step.reserved && step.key !== 'done' && step.visible(ctx));
 }
 
-/** 1-based position and total, e.g. "Step 3 of 12". */
+/** 1-based position and total, e.g. "Step 3 of 8". */
 export function stepPosition(key: StepKey, ctx: StepCtx) {
   const list = visibleSteps(ctx);
   return { index: list.findIndex((step) => step.key === key) + 1, total: list.length };
@@ -225,6 +220,9 @@ export function stepPosition(key: StepKey, ctx: StepCtx) {
 /** Can the organizer open this step now? Later steps need the server row. */
 export const isReachable = (key: StepKey, ctx: StepCtx) => !!ctx.saved || CLIENT_STEPS.includes(key);
 
+/** Spec 050 application steps, now flows (spec 051): still in old drafts' `setupStep`. */
+export const FORMER_STEPS = new Set(['vendors', 'floor-map', 'special-guests', 'volunteers', 'other-applications']);
+
 /**
  * Where a visit resumes. A saved `setupStep` that is still visible wins; one
  * that is hidden now (a MAP form became TIERS) resumes at the next visible step
@@ -232,7 +230,8 @@ export const isReachable = (key: StepKey, ctx: StepCtx) => !!ctx.saved || CLIENT
  */
 export function resumeKey(ctx: StepCtx, setupStep: string | null | undefined): StepKey {
   const list = visibleSteps(ctx);
-  const target = setupStep ?? (ctx.saved ? 'description' : null);
+  // A draft saved on an application step before spec 051 moved them out: those came after Collect more.
+  const target = setupStep && FORMER_STEPS.has(setupStep) ? 'review' : setupStep ?? (ctx.saved ? 'description' : null);
   const at = EVENT_STEPS.findIndex((step) => step.key === target);
   if (at >= 0) {
     const next = EVENT_STEPS.slice(at).find((step) => list.includes(step));

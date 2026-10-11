@@ -118,8 +118,10 @@ test.use({ contextOptions: { reducedMotion: 'reduce' } });
 const COLD = { timeout: 30000 };
 test.describe.configure({ timeout: 90000 });
 const STAFF = { id: 'map-organizer', email: 'map-organizer@test.com', role: 'ORGANIZER' as const };
-const setupUrl = (query: string) => `/admin/events/${EVENT_ID}/setup?${query}`;
-const RETURN_TO = encodeURIComponent(`/admin/events/${EVENT_ID}/setup?step=floor-map`);
+// Spec 051: the floor map is a step of the vendor application flow.
+const flowUrl = (query: string) => `/admin/events/${EVENT_ID}/setup/vendors?${query}`;
+const MAP_STEP = flowUrl('step=floor-map&form=form-map');
+const RETURN_TO = encodeURIComponent(MAP_STEP);
 
 const main = (page: Page) => page.locator('main');
 const heading = (page: Page, name: string) => main(page).getByRole('heading', { level: 1, name });
@@ -129,7 +131,7 @@ const serious = async (page: Page) =>
   (await new AxeBuilder({ page }).analyze()).violations.filter((v) => ['serious', 'critical'].includes(v.impact || ''));
 const MAP_FORM = form({ id: 'form-map', spaceSelection: 'MAP' });
 const builderUrl = `/admin/maps/map-1?returnTo=${RETURN_TO}`;
-const wizardMapStep = new RegExp(`/admin/events/${EVENT_ID}/setup\\?step=floor-map$`);
+const wizardMapStep = new RegExp(`/admin/events/${EVENT_ID}/setup/vendors\\?step=floor-map&form=form-map$`);
 const done = (page: Page) => page.getByTestId('map-builder').getByRole('button', { name: /^(Done|Saving…)$/ });
 
 // Compile the wizard route and the preview frame once, before any timed step.
@@ -138,8 +140,8 @@ test.beforeAll(async ({ browser }) => {
   const page = await browser.newPage({ baseURL: BASE_URL, viewport: { width: 1440, height: 900 } });
   await signInAsStaff(page, STAFF, BASE_URL);
   await mockApi(page, { forms: [MAP_FORM] });
-  for (const step of ['vendors', 'floor-map']) {
-    await page.goto(setupUrl(`step=${step}`), { timeout: 120000 });
+  for (const url of [flowUrl('step=payment&form=form-map'), MAP_STEP]) {
+    await page.goto(url, { timeout: 120000 });
     await expect(page.locator('main h1')).toBeVisible({ timeout: 120000 });
   }
   await expect(preview(page).getByRole('heading', { level: 1 })).toBeVisible({ timeout: 120000 });
@@ -158,33 +160,29 @@ test.describe('desktop', () => {
 
   test('the step follows a vendor form between TIERS and MAP', async ({ page }) => {
     const calls = await mockApi(page, { forms: [form({ id: 'form-paid' })] });
-    await page.goto(setupUrl('step=vendors&form=form-paid'));
-    await expect(heading(page, 'Vendor applications')).toBeVisible(COLD);
+    const next = page.locator('footer').getByRole('button', { name: 'Next' });
+    await page.goto(flowUrl('step=payment&form=form-paid'));
+    await expect(heading(page, 'Spaces and pricing')).toBeVisible(COLD);
     await expect(steps(page)).toBeVisible();
     await expect(steps(page).getByText('Floor map')).toHaveCount(0);
-    const settings = main(page).getByTestId('form-settings');
-    await settings.getByTestId('form-space-map').check();
-    await settings.getByRole('button', { name: 'Save settings' }).click();
+    await main(page).getByTestId('form-space-map').check();
+    await next.click();
     await expect.poll(() => calls.patch.map((r) => r.postDataJSON().spaceSelection)).toContain('MAP');
+    await expect(heading(page, 'Floor map')).toBeVisible();
     await expect(steps(page).getByText('Floor map')).toBeVisible();
 
-    await settings.getByTestId('form-space-tiers').check();
-    await settings.getByRole('button', { name: 'Save settings' }).click();
+    await page.locator('footer').getByRole('button', { name: 'Back' }).click();
+    await expect(heading(page, 'Spaces and pricing')).toBeVisible();
+    await main(page).getByTestId('form-space-tiers').check();
+    await next.click();
     await expect.poll(() => calls.patch.map((r) => r.postDataJSON().spaceSelection)).toContain('TIERS');
-    await expect(steps(page).getByText('Floor map')).toHaveCount(0);
-  });
-
-  test('a sponsor form on MAP does not add the step', async ({ page }) => {
-    await mockApi(page, { forms: [form({ id: 'form-sponsor', purpose: 'SPONSOR', name: 'Sponsors', spaceSelection: 'MAP' })] });
-    await page.goto(setupUrl('step=vendors'));
-    await expect(heading(page, 'Vendor applications')).toBeVisible(COLD);
-    await expect(steps(page)).toBeVisible();
+    await expect(heading(page, 'Questions')).toBeVisible();
     await expect(steps(page).getByText('Floor map')).toHaveCount(0);
   });
 
   test('no map yet: create a blank map, then open the builder with returnTo', async ({ page }) => {
     const calls = await mockApi(page, { forms: [MAP_FORM] });
-    await page.goto(setupUrl('step=floor-map'));
+    await page.goto(MAP_STEP);
     await expect(heading(page, 'Floor map')).toBeVisible(COLD);
     await expect(main(page).getByRole('heading', { level: 2, name: 'Create the floor map' })).toBeVisible();
     await expect(main(page).getByText(/No floor map yet\. Vendors choose spots/)).toBeVisible();
@@ -211,7 +209,7 @@ test.describe('desktop', () => {
       ],
     });
     await mockApi(page, { forms: [MAP_FORM], map });
-    await page.goto(setupUrl('step=floor-map'));
+    await page.goto(MAP_STEP);
     await expect(heading(page, 'Floor map')).toBeVisible(COLD);
     const summary = main(page).getByTestId('setup-map-summary');
     await expect(summary.getByText('Published', { exact: true })).toBeVisible();
@@ -222,7 +220,7 @@ test.describe('desktop', () => {
 
   test('start from a floor plan', async ({ page }) => {
     const calls = await mockApi(page, { forms: [MAP_FORM] });
-    await page.goto(setupUrl('step=floor-map'));
+    await page.goto(MAP_STEP);
     await expect(heading(page, 'Floor map')).toBeVisible(COLD);
     await main(page).getByRole('button', { name: /Use floor plan Union Hall layout/ }).click();
     await expect.poll(() => calls.createMap.length).toBe(1);
@@ -232,7 +230,7 @@ test.describe('desktop', () => {
 
   test('a map made meanwhile (409 MAP_EXISTS) is shown instead of the error', async ({ page }) => {
     await mockApi(page, { forms: [MAP_FORM], create: 'exists' });
-    await page.goto(setupUrl('step=floor-map'));
+    await page.goto(MAP_STEP);
     await expect(heading(page, 'Floor map')).toBeVisible(COLD);
     await main(page).getByRole('button', { name: 'Create a blank map' }).click();
     const summary = main(page).getByTestId('setup-map-summary');
@@ -243,17 +241,10 @@ test.describe('desktop', () => {
 
   test('a 403 says the organizer has no access', async ({ page }) => {
     await mockApi(page, { forms: [MAP_FORM], create: 'forbidden' });
-    await page.goto(setupUrl('step=floor-map'));
+    await page.goto(MAP_STEP);
     await expect(heading(page, 'Floor map')).toBeVisible(COLD);
     await main(page).getByRole('button', { name: 'Create a blank map' }).click();
     await expect(main(page).getByRole('alert').filter({ hasText: "You don't have access to this map." })).toBeVisible();
-  });
-
-  test('a published map completes the step', async ({ page }) => {
-    await mockApi(page, { forms: [MAP_FORM], map: mapDetail({ status: 'PUBLISHED' }) });
-    await page.goto(setupUrl('step=vendors'));
-    await expect(heading(page, 'Vendor applications')).toBeVisible(COLD);
-    await expect(steps(page).getByRole('listitem').filter({ hasText: 'Floor map' })).toContainText('Completed');
   });
 
   test('the builder returns to the wizard on Back and on Done', async ({ page }) => {
@@ -299,7 +290,7 @@ test.describe('desktop', () => {
     test(`no serious axe findings on the floor map step (${scheme})`, async ({ page }) => {
       await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
       await mockApi(page, { forms: [MAP_FORM] });
-      await page.goto(setupUrl('step=floor-map'));
+      await page.goto(MAP_STEP);
       await expect(heading(page, 'Floor map')).toBeVisible(COLD);
       if (scheme === 'dark') await expect(page.locator('html')).toHaveClass(/dark/);
       await expect(main(page).getByRole('button', { name: 'Create a blank map' })).toBeVisible();
@@ -315,7 +306,7 @@ test.describe('mobile', () => {
   test('floor map step at 390 × 844: both states, axe, 44 px targets, no horizontal scroll', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await mockApi(page, { forms: [MAP_FORM] });
-    await page.goto(setupUrl('step=floor-map'));
+    await page.goto(MAP_STEP);
     await expect(heading(page, 'Floor map')).toBeVisible(COLD);
     const create = main(page).getByRole('button', { name: 'Create a blank map' });
     const plan = main(page).getByRole('button', { name: /Use floor plan Union Hall layout/ });

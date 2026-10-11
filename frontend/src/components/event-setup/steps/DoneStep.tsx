@@ -16,12 +16,16 @@ import type { EventOverview } from '@/lib/eventOverview';
 import type { SavedEvent } from '../steps';
 import { clearSetupFinished } from '../doneMarker';
 import FormResults from '../review/FormResults';
+import { ADD_TO_EVENT } from '@/components/events/AddToEvent';
+import { formFlowHref } from '../formFlows';
+import { useCan } from '@/components/OrgContext';
 import { primaryButton, textButton } from '../ui';
 
 const row =
   'flex min-h-14 w-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 text-left text-sm font-medium text-gray-900 hover:border-gray-300 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700 dark:focus-visible:ring-offset-slate-900';
 const tile = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent-50 text-accent-800 dark:bg-slate-700 dark:text-accent-300';
-const sub = 'block text-xs font-normal text-gray-600 dark:text-slate-400';
+// slate-300: still 4.5:1 on the dark row's hover background (slate-700).
+const sub = 'block text-xs font-normal text-gray-600 dark:text-slate-300';
 const alertBox = 'flex flex-wrap items-center gap-2 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200';
 
 type Load<T> = { status: 'loading' } | { status: 'ready'; value: T } | { status: 'error' };
@@ -101,6 +105,7 @@ const DoneStep = forwardRef<HTMLHeadingElement, { event: SavedEvent; orgId: stri
   const viewHref = live ? shareUrl : preview.state.status === 'ready' ? preview.state.value.url : null;
   const viewState = live ? overview : preview;
   const hasForms = (ov?.applications.forms.length ?? 0) > 0;
+  const canAdd = useCan('applications.forms');
 
   return (
     <div className="mx-auto w-full max-w-[640px] px-4 py-6 motion-safe:animate-fade-in sm:px-6 sm:py-8">
@@ -149,6 +154,24 @@ const DoneStep = forwardRef<HTMLHeadingElement, { event: SavedEvent; orgId: stri
           )}
         </li>
       </ul>
+      {canAdd && (
+        <section aria-labelledby="done-whats-next" className="mt-8">
+          <h2 id="done-whats-next" className="text-base font-semibold text-gray-900 dark:text-white">What&apos;s next</h2>
+          <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">Add applications to this event, one at a time. You can also do this later from the event page.</p>
+          <ul className="mt-3 space-y-3">
+            {ADD_TO_EVENT.map(({ flow, title, icon: Icon, detail }) => (
+              <li key={flow}>
+                <CardLink
+                  href={formFlowHref(event.id, flow, { step: flow === 'special-guests' ? 'lineup' : undefined, org: orgId })}
+                  icon={<Icon className="h-4 w-4" aria-hidden />}
+                  title={title}
+                  detail={detail}
+                />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <p role="status" className="mt-2 text-sm text-gray-700 dark:text-slate-300">
         {copied === 'done' && 'Link copied to the clipboard.'}
       </p>

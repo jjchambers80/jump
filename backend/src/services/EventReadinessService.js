@@ -10,7 +10,8 @@ import { paymentsEnabled } from './ApplicationFormService.js';
 import connectService from './ConnectService.js';
 import taxService from './TaxService.js';
 
-// Spec 050-B adds ApplicationForm.purpose; until then every event form is a vendor form.
+// The spec 050 step key of a form's purpose. Since spec 051 forms are set up in
+// their own flows; the frontend (readinessHref) maps these keys and `formId` there.
 const FORM_STEP = { VENDOR: 'vendors', SPECIAL_GUEST: 'special-guests', VOLUNTEER: 'volunteers' };
 export const stepForForm = (form) => (form.purpose ? FORM_STEP[form.purpose] || 'other-applications' : 'vendors');
 
@@ -61,8 +62,9 @@ export function evaluate(event, { now = new Date(), paymentsEnabled: gateOn = fa
       warnings.push(item('FORM_HAS_NO_QUESTIONS', step, `${form.name} has no questions.`, { formId: form.id }));
     }
   }
-  if (forms.some((f) => f.kind === 'PAID' && f.spaceSelection === 'MAP') && event.floorMap?.status !== 'PUBLISHED') {
-    warnings.push(item('MAP_FORM_WITHOUT_PUBLISHED_MAP', 'floor-map', 'Vendors choose spots on the floor map, but the map is not published.'));
+  const mapForm = forms.find((f) => f.kind === 'PAID' && f.spaceSelection === 'MAP');
+  if (mapForm && event.floorMap?.status !== 'PUBLISHED') {
+    warnings.push(item('MAP_FORM_WITHOUT_PUBLISHED_MAP', 'floor-map', 'Vendors choose spots on the floor map, but the map is not published.', { formId: mapForm.id }));
   }
   if (taxError) warnings.push(item('TAX_RATE_UNRESOLVED', 'review', `Sales tax could not be looked up: ${taxError}`));
 

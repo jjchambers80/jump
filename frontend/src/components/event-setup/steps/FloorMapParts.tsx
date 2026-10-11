@@ -9,10 +9,10 @@ import { primaryButton, secondaryButton } from '../ui';
 
 const card = 'rounded-lg border border-gray-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800 sm:p-6';
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
-export const builderHref = (mapId: string, eventId: string) =>
-  `/admin/maps/${mapId}?returnTo=${encodeURIComponent(`/admin/events/${eventId}/setup?step=floor-map`)}`;
+/** The map builder, coming back to `returnTo` (the vendor flow's Floor map step) on Back and Done. */
+export const builderHref = (mapId: string, returnTo: string) => `/admin/maps/${mapId}?returnTo=${encodeURIComponent(returnTo)}`;
 
-export function MapSummary({ map, eventId, headingRef }: { map: AdminMapDetail; eventId: string; headingRef: Ref<HTMLHeadingElement> }) {
+export function MapSummary({ map, returnTo, headingRef }: { map: AdminMapDetail; returnTo: string; headingRef: Ref<HTMLHeadingElement> }) {
   const bound = map.tiers.filter((t) => map.booths.some((b) => b.tierId === t.id));
   const unpriced = map.booths.filter((b) => !b.tierId).length;
   const published = map.status === 'PUBLISHED';
@@ -30,7 +30,7 @@ export function MapSummary({ map, eventId, headingRef }: { map: AdminMapDetail; 
         <dt className="font-medium text-gray-900 dark:text-white">Tiers on the map</dt>
         <dd>{bound.length ? bound.map((t) => t.name).join(', ') : 'None yet: give booths a tier in the builder so vendors can buy them'}</dd>
       </dl>
-      <Link href={builderHref(map.id, eventId)} className={`${primaryButton} mt-4 w-full sm:w-auto`}>
+      <Link href={builderHref(map.id, returnTo)} className={`${primaryButton} mt-4 w-full sm:w-auto`}>
         <MapIcon className="h-4 w-4" aria-hidden />
         Open map builder
       </Link>

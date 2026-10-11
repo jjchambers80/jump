@@ -87,6 +87,8 @@ describe('EventReadinessService.evaluate', () => {
     expect(codes(run(ready({ applicationForms: [mapForm] }), ctx).warnings)).toEqual(['MAP_FORM_WITHOUT_PUBLISHED_MAP']);
     expect(codes(run(ready({ applicationForms: [mapForm], floorMap: { status: 'DRAFT' } }), ctx).warnings)).toEqual(['MAP_FORM_WITHOUT_PUBLISHED_MAP']);
     expect(run(ready({ applicationForms: [mapForm], floorMap: { status: 'PUBLISHED' } }), ctx).warnings).toEqual([]);
+    // Spec 051: the floor map is a step of that vendor form's flow, so the item names the form.
+    expect(run(ready({ applicationForms: [mapForm] }), ctx).warnings[0]).toMatchObject({ step: 'floor-map', formId: 'f1' });
   });
 
   it('warns when the tax rate could not be resolved', () => {

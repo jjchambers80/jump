@@ -14,8 +14,8 @@ import OrgSwitcher from '@/components/OrgSwitcher';
 import { OrgProvider, HiddenPathRedirect } from '@/components/OrgContext';
 
 // Full-screen admin tools that bring their own chrome (spec 038 theme editor,
-// spec 050 event setup wizard and its preview frame).
-const FULL_SCREEN = /^\/admin\/(online-store\/themes\/[^/]+\/(editor|code)|events\/(new|preview-frame|[^/]+\/setup))\/?$/;
+// spec 050 event setup wizard, its preview frame and the spec 051 application flows).
+const FULL_SCREEN = /^\/admin\/(online-store\/themes\/[^/]+\/(editor|code)|events\/(new|preview-frame|[^/]+\/setup(\/[^/]+)?))\/?$/;
 
 export default function AdminLayoutClient({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

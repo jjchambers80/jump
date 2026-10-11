@@ -2,19 +2,20 @@
 
 // "Add to lineup" on an approved special guest application (spec 050 §7.6,
 // card 050-Q): copies the profile (name, bio, first photo, links) into the
-// event's guest lineup. Edits to the lineup row happen in the event setup
-// wizard's Special guests step; this button only creates it once.
+// event's guest lineup. Edits to the lineup row happen in the special guests
+// flow's Lineup step (spec 051); this button only creates it once.
 
 import { useState } from 'react';
 import Link from 'next/link';
 import { Check, UserPlus } from 'lucide-react';
 import api from '@/services/api';
+import { formFlowHref } from '@/components/event-setup/formFlows';
 import { describeError } from '@/app/admin/events/[eventId]/applications/useApplicationsApi';
 
 export default function AddToLineup({ eventId, applicationId, guestId, onAdded }: { eventId: string; applicationId: string; guestId: string | null; onAdded: (guestId: string) => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const editHref = `/admin/events/${eventId}/setup?step=special-guests`;
+  const editHref = formFlowHref(eventId, 'special-guests', { step: 'lineup' });
 
   const add = async () => {
     setBusy(true);

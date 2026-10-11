@@ -1,6 +1,9 @@
 // Event readiness (spec 050 §7.2): the shape GET …/readiness returns and the
 // blockers a 422 EVENT_NOT_READY publish carries in `details`.
 
+import { FORMER_STEPS } from '@/components/event-setup/steps';
+import { formFlowHref, type FormFlowKey } from '@/components/event-setup/formFlows';
+
 export interface ReadinessItem {
   code: string;
   step: string;
@@ -40,6 +43,11 @@ export function readinessSettingsFix(item: ReadinessItem): { permission: string;
 export function readinessHref(item: ReadinessItem, eventId: string, orgId: string | null = null): string {
   const fix = SETTINGS_FIX[item.code]?.href;
   if (fix) return fix;
+  // Application items name the spec 050 step; the form is fixed in its flow (spec 051).
+  if (FORMER_STEPS.has(item.step)) {
+    const flow = item.step === 'floor-map' ? 'vendors' : (item.step as FormFlowKey);
+    return formFlowHref(eventId, flow, { form: item.formId, step: item.formId ? (item.step === 'floor-map' ? 'floor-map' : 'details') : undefined, org: orgId });
+  }
   const org = orgId ? `&org=${encodeURIComponent(orgId)}` : '';
   return `/admin/events/${eventId}/setup?step=${encodeURIComponent(item.step)}${org}`;
 }

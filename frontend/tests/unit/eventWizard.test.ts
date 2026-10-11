@@ -25,13 +25,17 @@ describe('edit-mode links (050-O)', () => {
     expect(links).toMatchObject({
       name: at('step=name'), venue: at('step=venue'), date: at('step=date'), description: at('step=description'),
       image: at('step=image'), tickets: at('step=tickets'), addOns: at('step=collect-more'), listing: at('step=description'),
-      newForm: at('step=vendors'), map: null,
+      map: null, guests: '/admin/events/e1/setup/special-guests?step=lineup',
     });
     expect(links.tier('t 1')).toBe(at('step=tickets&tier=t+1'));
-    expect(links.form({ id: 'f-g', purpose: 'SPECIAL_GUEST' })).toBe(at('step=special-guests&form=f-g'));
-    expect(links.form({ id: 'f-p', purpose: 'PRESS' })).toBe(at('step=other-applications&form=f-p'));
-    expect(links.form({ id: 'f-x', purpose: null })).toBe(at('step=other-applications&form=f-x'));
-    expect(links.form({ id: 'f-vol', purpose: 'VOLUNTEER' })).toBe(at('step=volunteers&form=f-vol'));
+    // Spec 051: forms open their own flow at Form details; Add opens a new run.
+    const flow = (path: string) => `/admin/events/e1/setup/${path}`;
+    expect(links.form({ id: 'f-g', purpose: 'SPECIAL_GUEST' })).toBe(flow('special-guests?step=details&form=f-g'));
+    expect(links.form({ id: 'f-p', purpose: 'PRESS' })).toBe(flow('other-applications?step=details&form=f-p'));
+    expect(links.form({ id: 'f-x', purpose: null })).toBe(flow('other-applications?step=details&form=f-x'));
+    expect(links.form({ id: 'f-vol', purpose: 'VOLUNTEER' })).toBe(flow('volunteers?step=details&form=f-vol'));
+    expect(links.addForm('vendors')).toBe(flow('vendors'));
+    expect(links.addForm('special-guests')).toBe(flow('special-guests?step=lineup'));
   });
 
   it('carries the organization on wizard links only', () => {
@@ -41,8 +45,8 @@ describe('edit-mode links (050-O)', () => {
     expect(withOrg(at('step=date'), null)).toBe(at('step=date'));
   });
 
-  it('links the map card to the floor-map step only while a vendor form uses a map', () => {
-    expect(detailsEditLinks('e1', [{ id: 'f', purpose: 'VENDOR', spaceSelection: 'MAP' }]).map).toBe(at('step=floor-map'));
+  it('links the map card to the vendor flow\'s floor-map step only while a vendor form uses a map', () => {
+    expect(detailsEditLinks('e1', [{ id: 'f', purpose: 'VENDOR', spaceSelection: 'MAP' }], 'o1').map).toBe('/admin/events/e1/setup/vendors?step=floor-map&form=f&org=o1');
     expect(detailsEditLinks('e1', [{ id: 'f', purpose: 'SPONSOR', spaceSelection: 'MAP' }]).map).toBeNull();
   });
 

@@ -1,6 +1,6 @@
 'use client';
 
-// Step 9, Floor map (spec 050 §5.1, card 050-M): shown when a vendor form lets
+// Floor map step of the vendor flow (spec 050-M, moved by spec 051): shown when a vendor form lets
 // vendors pick their space on a map. No map yet → a blank map or a copy of a
 // saved floor plan (the Event › Map tab's create calls). A map → its status,
 // booths and tier bindings, and the builder, which comes back here (`returnTo`).
@@ -26,12 +26,14 @@ const messageOf = (err: unknown, fallback: string) => {
 
 interface Props {
   eventId: string;
+  /** Where the map builder comes back to. */
+  returnTo: string;
   refreshPreview: () => void;
   /** The map's status once loaded or created (the step is complete when PUBLISHED). */
   onMapStatus: (status: AdminMapDetail['status'] | null) => void;
 }
 
-export default function FloorMapStep({ eventId, refreshPreview, onMapStatus }: Props) {
+export default function FloorMapStep({ eventId, returnTo, refreshPreview, onMapStatus }: Props) {
   const [load, setLoad] = useState<Load>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
@@ -130,7 +132,7 @@ export default function FloorMapStep({ eventId, refreshPreview, onMapStatus }: P
           </span>
         </p>
       )}
-      {map ? <MapSummary map={map} eventId={eventId} headingRef={summaryHeading} /> : <NewMap plans={plans} busy={busy} onCreate={create} />}
+      {map ? <MapSummary map={map} returnTo={returnTo} headingRef={summaryHeading} /> : <NewMap plans={plans} busy={busy} onCreate={create} />}
     </div>
   );
 }

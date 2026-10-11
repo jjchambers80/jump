@@ -407,15 +407,13 @@ export function ApplicationsSection({
   overview,
   base,
   formHref,
-  newFormHref,
   delay,
 }: {
   overview: EventOverview;
   /** /admin/events/:eventId/applications */
   base: string;
-  /** The wizard step that edits a form (spec 050-O). */
+  /** The application flow that edits a form (spec 051). */
   formHref: (form: OverviewForm) => string;
-  newFormHref: string;
   delay?: number;
 }) {
   const { forms } = overview.applications;
@@ -437,15 +435,7 @@ export function ApplicationsSection({
       }
     >
       {forms.length === 0 ? (
-        <Empty
-          action={
-            <Link href={newFormHref} className={`${quietLink} min-h-11`}>
-              Set up an application form
-            </Link>
-          }
-        >
-          Vendors, sponsors and press apply through a form. This event has none yet.
-        </Empty>
+        <Empty>Vendors, sponsors and press apply through a form. This event has none yet. Start one from Add to this event.</Empty>
       ) : (
         <ul className="space-y-5">
           {forms.map((form) => (
