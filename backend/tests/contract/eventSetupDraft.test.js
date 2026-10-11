@@ -208,6 +208,26 @@ describe('Event setup drafts (spec 050-A)', () => {
     expect(res.body.capacity).toBe(10);
   });
 
+  it('duplicate {setup:true} leaves the copy mid-setup at the date step; without it the copy is complete (spec 050 §7.7)', async () => {
+    const { body: source } = await setupCreate({ capacity: 10 });
+    await patch(source.id, { setupStep: 'review', setupCompleted: true });
+    const dup = (body) =>
+      request(app).post(`${base()}/${source.id}/duplicate`).set('Authorization', `Bearer ${token}`).send(body);
+
+    const wizard = await dup({ date: '2027-11-01T18:00:00.000Z', name: 'Next Year', setup: true });
+    expect(wizard.status).toBe(201);
+    expect(wizard.body).toMatchObject({ name: 'Next Year', status: 'DRAFT', setupStep: 'date', setupCompletedAt: null, capacity: 10 });
+
+    const plain = await dup({ date: '2027-11-02T18:00:00.000Z' });
+    expect(plain.status).toBe(201);
+    expect(plain.body.setupCompletedAt).not.toBeNull();
+    expect(plain.body.setupStep).toBeNull();
+
+    // Only a literal true opts in.
+    const loose = await dup({ date: '2027-11-03T18:00:00.000Z', setup: 'true' });
+    expect(loose.body.setupCompletedAt).not.toBeNull();
+  });
+
   it('the DB CHECK refuses null capacity on a PUBLISHED TICKETED event', async () => {
     const { body: draft } = await setupCreate({ capacity: 10 });
     await prisma.event.update({ where: { id: draft.id }, data: { status: 'PUBLISHED' } });
