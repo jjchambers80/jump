@@ -240,6 +240,7 @@ model Image {
   applicationAnswers     ApplicationAnswer[]
   storeFile              StoreFile?
   userAvatars            User[]                  @relation("UserAvatar")
+  eventGuests            EventGuest[]
 
   @@index([fileId])
   @@index([usageType])
@@ -967,6 +968,7 @@ model Event {
   addOns           AddOn[]
   floorMap         FloorMap? // spec 014: one optional map per event
   rsvps            EventRsvp[]
+  guests           EventGuest[] // spec 050 §6.3: special guest lineup
 
   @@index([venueId])
   @@index([status])
@@ -1942,6 +1944,7 @@ model Application {
   order     Order?
   booth     Booth?
   shifts    ApplicationShift[] // spec 050 §6.4: volunteer shift picks
+  guests    EventGuest[] // spec 050 §6.3: lineup rows added from this application
 
   @@index([eventId, status])
   @@index([formId, status])
@@ -2502,4 +2505,27 @@ model ApplicationShift {
 
   @@id([applicationId, shiftId])
   @@index([shiftId, assigned])
+}
+
+// Spec 050 §6.3 (050-Q): the special guest lineup on the event page. Added by
+// hand or from an approved SPECIAL_GUEST application. `bio` is plain text.
+model EventGuest {
+  id            String   @id @default(cuid())
+  eventId       String
+  name          String // <= 120
+  role          String? // "Voice actor", "Panel host" <= 80
+  bio           String? // plain text <= 600, rendered as text, never HTML
+  imageId       String?
+  links         Json? // same keys and host rules as Organization.socialLinks
+  applicationId String? // set when added from an approved SPECIAL_GUEST application
+  isVisible     Boolean  @default(true)
+  displayOrder  Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  event       Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  image       Image?       @relation(fields: [imageId], references: [id], onDelete: SetNull)
+  application Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+
+  @@index([eventId, displayOrder])
 }

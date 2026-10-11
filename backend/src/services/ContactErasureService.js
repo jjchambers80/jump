@@ -282,6 +282,10 @@ class ContactErasureService {
       await tx.applicationAnswer.updateMany({ where: { application: { contactId } }, data: { valueText: null, imageId: null } });
       // Spec 050 §6.4: volunteer shift picks go with the answers.
       await tx.applicationShift.deleteMany({ where: { application: { contactId } } });
+      // Spec 050 §6.3: lineup rows copied from their applications are content about the person.
+      const guests = await tx.eventGuest.findMany({ where: { application: { contactId } }, select: { imageId: true } });
+      imageIds.push(...guests.map((g) => g.imageId).filter(Boolean));
+      await tx.eventGuest.deleteMany({ where: { application: { contactId } } });
 
       // Staff notes about the person go too; one audit line remains.
       await tx.contactComment.deleteMany({ where: { contactId } });

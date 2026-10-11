@@ -39,6 +39,7 @@ export const MODEL_FEATURES = {
   PriceTierAddOn: { feature: 'Add-ons', org: 'priceTier.event.venue', event: 'priceTier' },
   ApplicationTierAddOn: { feature: 'Add-ons', org: 'tier.form', event: 'tier.form' },
   EventRsvp: { feature: 'RSVPs', org: 'event.venue' },
+  EventGuest: { feature: 'Events', label: 'name', org: 'event.venue' }, // spec 050 §6.3
 
   // Orders and money
   Order: { feature: 'Orders' },

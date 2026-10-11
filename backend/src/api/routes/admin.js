@@ -50,6 +50,7 @@ import applicationService from '../../services/ApplicationService.js';
 import applicationTemplateService from '../../services/ApplicationTemplateService.js';
 import applicationFormTemplateService from '../../services/ApplicationFormTemplateService.js';
 import volunteerShiftService from '../../services/VolunteerShiftService.js';
+import eventGuestService from '../../services/EventGuestService.js';
 import applicationDigestService from '../../services/ApplicationDigestService.js';
 import vendorCheckInService from '../../services/VendorCheckInService.js';
 import setupGuideService from '../../services/SetupGuideService.js';
@@ -899,6 +900,10 @@ router.post('/events/:eventId/applications/bulk', validateBulkBody, wrap(async (
 }));
 router.get('/events/:eventId/applications/:applicationId', wrap(async (req, res) => {
   res.json(await applicationService.get(req.params.eventId, req.params.applicationId, await scopedOrgFor(req)));
+}));
+// Spec 050 §7.6: copy an APPROVED SPECIAL_GUEST application into the event's lineup (409 when already there).
+router.post('/events/:eventId/applications/:applicationId/add-to-lineup', wrap(async (req, res) => {
+  res.status(201).json(await eventGuestService.addFromApplication(req.params.eventId, req.params.applicationId, await scopedOrgFor(req)));
 }));
 router.patch('/events/:eventId/applications/:applicationId', validateMetaBody, wrap(async (req, res) => {
   res.json(await applicationService.updateMeta(req.params.eventId, req.params.applicationId, await scopedOrgFor(req), req.body, { byUserId: req.user.id }));
