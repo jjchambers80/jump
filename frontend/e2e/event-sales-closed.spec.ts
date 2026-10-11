@@ -84,9 +84,9 @@ test('ticketed: no steppers, cart or apply pills, and "Sales are closed"', async
   expect(await seriousViolations(page)).toEqual([]);
 });
 
-test('RSVP: the pass says sales are closed instead of showing the form', async ({ page }) => {
+test('RSVP: the pass says RSVPs are closed instead of showing the form', async ({ page }) => {
   await page.goto(`/events/${RSVP}`);
-  await expect(page.getByRole('heading', { name: 'Sales are closed' }).filter({ visible: true })).toBeVisible({ timeout: 30000 });
+  await expect(page.getByRole('heading', { name: 'RSVPs are closed' }).filter({ visible: true })).toBeVisible({ timeout: 30000 });
   await expect(page.locator('#rsvp-form')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Reserve my spot/ })).toHaveCount(0);
 

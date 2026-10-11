@@ -129,9 +129,11 @@ export default function RsvpPass({ event, isPastEvent, preview = false, legalVer
     }
   };
 
-  const stubLabel = isPastEvent ? 'Event ended' : closed ? 'Sales are closed' : full ? 'RSVPs are full' : submitted ? 'Confirmed' : 'Free admission';
-  const stubNote = isPastEvent || closed
+  const stubLabel = isPastEvent ? 'Event ended' : closed ? 'RSVPs are closed' : full ? 'RSVPs are full' : submitted ? 'Confirmed' : 'Free admission';
+  const stubNote = isPastEvent
     ? 'RSVPs are closed'
+    : closed
+      ? 'Sales are closed'
     : full
       ? 'Every spot is reserved'
       : submitted

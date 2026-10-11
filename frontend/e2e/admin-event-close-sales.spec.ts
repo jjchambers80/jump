@@ -51,7 +51,7 @@ const overviewOf = (event: Record<string, unknown>) => ({
 });
 
 async function mockApi(page: Page) {
-  const state = { salesClosed: false };
+  const state = { salesClosed: false, draftDeleted: false };
   await page.route(`${API}/organizations`, (route) => route.fulfill(json([{ id: ORG_ID, name: 'Close Org', status: 'ACTIVE' }])));
   await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/overview`, (route) =>
     route.fulfill(json(overviewOf({ ...baseEvent, salesClosed: state.salesClosed })))
@@ -72,7 +72,7 @@ async function mockApi(page: Page) {
     )
   );
   await page.route(`${API}/organizations/${ORG_ID}/events/${DRAFT_ID}`, (route) =>
-    route.request().method() === 'DELETE' ? route.fulfill(json({ deleted: true, id: DRAFT_ID })) : route.fallback()
+    route.request().method() === 'DELETE' ? ((state.draftDeleted = true), route.fulfill(json({ deleted: true, id: DRAFT_ID }))) : route.fallback()
   );
   // The events list the delete lands on
   await page.route(`${API}/organizations/${ORG_ID}/events/summary*`, (route) =>
@@ -86,7 +86,15 @@ async function mockApi(page: Page) {
       }))
   );
   await page.route(`${API}/organizations/${ORG_ID}/events?*`, (route) =>
-    route.fulfill(json({ events: [{ ...baseEvent, salesClosed: true }], pagination: { page: 1, limit: 25, total: 1, totalPages: 1 } }))
+    route.fulfill(
+      json({
+        events: [
+          { ...baseEvent, salesClosed: true },
+          ...(state.draftDeleted ? [] : [{ ...baseEvent, id: DRAFT_ID, slug: 'draft-fair', name: 'Draft Fair', status: 'DRAFT' }]),
+        ],
+        pagination: { page: 1, limit: 25, total: state.draftDeleted ? 1 : 2, totalPages: 1 },
+      })
+    )
   );
 }
 
@@ -170,4 +178,15 @@ test('delete draft confirms and returns to the events list, which shows the sale
 
   await expect(page).toHaveURL(/\/admin\/events$/);
   await expect(page.getByText('Sales closed').filter({ visible: true }).first()).toBeVisible({ timeout: 30000 });
+});
+
+test('deleting from the events list announces it and moves focus to the list heading', async ({ page }) => {
+  await page.goto(`/admin/events?orgId=${ORG_ID}`);
+  await menuTrigger(page, 'Draft Fair').click({ timeout: 30000 });
+  await page.getByRole('menuitem', { name: 'Delete draft…' }).click();
+  await page.getByRole('dialog', { name: 'Delete draft' }).getByRole('button', { name: 'Delete draft' }).click();
+
+  await expect(page.getByRole('status').filter({ hasText: 'Draft Fair was deleted.' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Events' })).toBeFocused();
+  await expect(menuTrigger(page, 'Draft Fair')).toHaveCount(0);
 });

@@ -36,7 +36,7 @@ export default function EventsPageHeader({ selectedOrgId, total, filterParams = 
         </div>
         <div className="min-w-0">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Events</h1>
+            <h1 id="events-heading" tabIndex={-1} className="text-2xl font-bold text-gray-900 focus:outline-none dark:text-white">Events</h1>
             <span className="inline-flex items-center rounded-full border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800 px-2.5 py-0.5 text-xs font-semibold text-gray-600 dark:text-slate-300 tabular-nums">
               {total} total
             </span>
