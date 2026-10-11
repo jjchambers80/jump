@@ -28,6 +28,7 @@ export default function SetupProgress({
   index,
   total,
   title,
+  editMode = false,
   aside,
 }: {
   steps: EventStep[];
@@ -35,15 +36,22 @@ export default function SetupProgress({
   index: number;
   total: number;
   title: string;
+  /**
+   * Edit mode (050-O) is non-linear: no fill bar and no "Step n of N", only
+   * the step list (which the rail replaces from xl) and the step's name.
+   */
+  editMode?: boolean;
   /** The save indicator, beside the step line. */
   aside: React.ReactNode;
 }) {
   return (
     <div className="border-b border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-900">
-      <div className="h-1 bg-gray-200 dark:bg-slate-700" aria-hidden>
-        <div className="h-1 bg-accent-500 motion-safe:transition-[width] motion-safe:duration-200" style={{ width: `${(index / total) * 100}%` }} />
-      </div>
-      <ol aria-label="Setup steps" className="hidden gap-1 px-4 pt-2 lg:flex">
+      {!editMode && (
+        <div className="h-1 bg-gray-200 dark:bg-slate-700" aria-hidden>
+          <div className="h-1 bg-accent-500 motion-safe:transition-[width] motion-safe:duration-200" style={{ width: `${(index / total) * 100}%` }} />
+        </div>
+      )}
+      <ol aria-label="Setup steps" className={`hidden gap-1 px-4 pt-2 lg:flex ${editMode ? 'xl:hidden' : ''}`}>
         {steps.map((step, i) => (
           <li
             key={step.key}
@@ -62,7 +70,15 @@ export default function SetupProgress({
       </ol>
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-2">
         <p className="text-sm text-gray-700 dark:text-slate-300">
-          Step {index} of {total} — {title}
+          {editMode ? (
+            <>
+              <span className="text-gray-500 dark:text-slate-400">Editing</span> {title}
+            </>
+          ) : (
+            <>
+              Step {index} of {total} — {title}
+            </>
+          )}
         </p>
         {aside}
       </div>

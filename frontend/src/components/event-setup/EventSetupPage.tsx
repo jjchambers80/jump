@@ -52,15 +52,17 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
   const [announcement, setAnnouncement] = useState('');
   const firstStep = useRef(true);
 
-  const position = `Step ${at + 1} of ${list.length}`;
+  // Edit mode is non-linear (050-O): no "Step n of N", just the step's name.
+  const position = mode === 'edit' ? 'Editing' : `Step ${at + 1} of ${list.length}`;
   // Step change: focus the h1 (or the field an error link named) and announce
   // the step (§11.4). Not on a plain first load, but after the create, which
   // remounts this page on the event's own route.
   useEffect(() => {
     if (!flow.initialised) return;
     const queued = takeStepFocus();
-    // Done moves focus to its heading even on a fresh load (050-I).
-    if (firstStep.current && !queued && current !== 'done') {
+    // Done moves focus to its heading even on a fresh load (050-I), and so does
+    // edit mode: the organizer arrives from a Details section's Edit (050-O).
+    if (firstStep.current && !queued && current !== 'done' && mode !== 'edit') {
       firstStep.current = false;
       return;
     }
@@ -166,6 +168,7 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
             index={at + 1}
             total={list.length}
             title={step.title}
+            editMode={railed}
             aside={<SaveIndicator status={saveState.status} invalidCount={saveState.invalidCount} savedAt={saveState.savedAt} hasRow={!!saved} onRetry={() => void saveState.retry()} />}
           />
         )

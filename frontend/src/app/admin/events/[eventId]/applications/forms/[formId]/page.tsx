@@ -14,10 +14,14 @@ import { useParticipantsApi } from '@/components/applications/useParticipantsApi
 import ApplicationsHeader from '../../ApplicationsHeader';
 import { describeError, useApplicationsApi } from '../../useApplicationsApi';
 import { useCan } from '@/components/OrgContext';
+import api from '@/services/api';
+import WizardRedirect from '@/components/event-setup/WizardRedirect';
+import { stepForPurpose } from '@/components/event-setup/applicationSteps';
+import { EVENT_WIZARD_ENABLED, wizardStepHref } from '@/lib/eventWizard';
 
 const btn = 'rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
 
-export default function FormEditorPage({ params }: { params: { eventId: string; formId: string } }) {
+function LegacyFormEditorPage({ params }: { params: { eventId: string; formId: string } }) {
   const api = useApplicationsApi(params.eventId);
   const canEdit = useCan('applications.forms');
   const participants = useParticipantsApi();
@@ -142,5 +146,22 @@ export default function FormEditorPage({ params }: { params: { eventId: string; 
         />
       )}
     </div>
+  );
+}
+
+// Spec 050-O: with the wizard flag on, a form is edited inline on the wizard
+// step of its purpose (`&form=` expands it). If the lookup fails, the vendors
+// step opens; its `&form=` handling moves to the right step once forms load.
+export default function FormEditorPage({ params }: { params: { eventId: string; formId: string } }) {
+  if (!EVENT_WIZARD_ENABLED) return <LegacyFormEditorPage params={params} />;
+  const { eventId, formId } = params;
+  return (
+    <WizardRedirect
+      to={async () => {
+        const form = await api.get<AdminForm>(`/admin/events/${eventId}/application-forms/${formId}`);
+        return wizardStepHref(eventId, stepForPurpose(form.purpose), { form: formId });
+      }}
+      fallback={wizardStepHref(eventId, 'vendors', { form: formId })}
+    />
   );
 }

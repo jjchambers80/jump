@@ -3,6 +3,7 @@
 // Amounts are dollars (Prisma Decimal), not cents.
 
 import type { AddOnSales } from './addOns';
+import type { FormPurpose } from './applications';
 
 export type EventStatus = 'DRAFT' | 'PUBLISHED' | 'CANCELLED';
 export type AdmissionMode = 'TICKETED' | 'RSVP';
@@ -65,6 +66,9 @@ export interface OverviewForm {
   slug: string;
   kind: 'PAID' | 'FREE';
   status: 'DRAFT' | 'OPEN' | 'CLOSED';
+  /** Spec 050-O: optional so older payloads (and fixtures) still type-check. */
+  purpose?: FormPurpose | null;
+  spaceSelection?: 'TIERS' | 'MAP' | null;
   opensAt: string | null;
   closesAt: string | null;
   paid: boolean;

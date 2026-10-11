@@ -160,7 +160,8 @@ export function useSetupActions(flow: SetupFlow) {
     }
     const ok = await saveState.flush();
     if (!ok && !window.confirm('Your latest changes are not saved. Leave anyway?')) return;
-    router.push(`/admin/events/${saved.id}`);
+    // Details announces "Saved" and focuses this step's Edit link (050-O).
+    router.push(`/admin/events/${saved.id}?saved=${encodeURIComponent(current)}`);
   }
 
   return {

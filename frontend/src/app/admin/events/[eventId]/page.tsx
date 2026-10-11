@@ -6,7 +6,7 @@
 // Duplicate and Cancel, which are the same actions as on the list card.
 // Numbers come from one request: GET /organizations/:orgId/events/:id/overview.
 
-import React, { Suspense, useCallback, useEffect, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ChevronRight, ExternalLink, Lock, MapPin, Pencil, CalendarDays } from 'lucide-react';
@@ -18,10 +18,10 @@ import { EventStatusPill, Perforation } from '@/components/events/EventEditSumma
 import EventActionsMenu from '@/components/events/EventActionsMenu';
 import CancelEventDialog from '@/components/events/CancelEventDialog';
 import PublishBlockers from '@/components/events/PublishBlockers';
-import { publishBlockers, type ReadinessItem } from '@/lib/eventReadiness';
+import { publishBlockers, wizardReadinessHref, type ReadinessItem } from '@/lib/eventReadiness';
 import DuplicateEventDialog from '../DuplicateEventDialog';
 import ContinueSetupLink from '@/components/event-setup/ContinueSetupLink';
-import { continueSetupHref } from '@/lib/eventWizard';
+import { continueSetupHref, detailsEditLinks, EVENT_WIZARD_ENABLED, wizardStepHref } from '@/lib/eventWizard';
 import { WorkspaceTabs, workspaceTabs } from '@/components/events/EventWorkspace';
 import {
   AdmissionCard,
@@ -65,6 +65,10 @@ function EventDetailsContent() {
     | null
   >(null);
 
+  // Spec 050-O: Save & exit in the wizard returns here with ?saved=<step>.
+  const savedStep = EVENT_WIZARD_ENABLED ? searchParams.get('saved') : null;
+  const returned = useRef<string | null>(null);
+
   const load = useCallback(async () => {
     if (orgLoading || !orgId || !eventId) return;
     try {
@@ -83,6 +87,24 @@ function EventDetailsContent() {
     setLoading(true);
     load();
   }, [load]);
+
+  // Back from the wizard: announce "Saved" and put focus back on the Edit
+  // control of the section that was edited (else the event title), once.
+  useEffect(() => {
+    if (!savedStep || !overview || returned.current === savedStep) return;
+    returned.current = savedStep;
+    setNotice('Saved.');
+    const href = wizardStepHref(eventId, savedStep);
+    const target =
+      document.querySelector<HTMLElement>(`a[href="${CSS.escape(href)}"]`) ??
+      document.querySelector<HTMLElement>(`a[href^="${CSS.escape(`${href}&`)}"]`) ??
+      document.getElementById('event-title');
+    target?.focus();
+    // Drop the marker so a refresh does not say "Saved" again.
+    const rest = new URLSearchParams(searchParams.toString());
+    rest.delete('saved');
+    router.replace(`/admin/events/${eventId}${rest.size ? `?${rest}` : ''}`, { scroll: false });
+  }, [savedStep, overview, eventId, router, searchParams]);
 
   const publish = async () => {
     if (!orgId) return;
@@ -157,6 +179,10 @@ function EventDetailsContent() {
   };
   const publicPath = `/events/${encodeURIComponent(event.slug || event.id)}`;
   const ticketed = event.admissionMode === 'TICKETED';
+  // Spec 050-O: with the wizard flag on, every Edit opens its wizard step and
+  // no flyout mounts (one form per field). Flag off: the editors and flyouts as before.
+  const wizard = EVENT_WIZARD_ENABLED ? detailsEditLinks(eventId, overview.applications.forms) : null;
+  const cancelled = event.status === 'CANCELLED';
 
   return (
     <PageFrame>
@@ -165,6 +191,7 @@ function EventDetailsContent() {
       <EventHero
         overview={overview}
         publicPath={publicPath}
+        imageHref={wizard && !cancelled ? wizard.image : undefined}
         actions={
           <>
             <a
@@ -190,8 +217,8 @@ function EventDetailsContent() {
             )}
             {event.status !== 'CANCELLED' && (
               <Link
-                href={`${base}/edit/details${q}`}
-                className={`inline-flex min-h-9 items-center gap-1.5 rounded-md bg-accent-500 px-3 text-sm font-semibold text-gray-950 shadow-sm hover:bg-accent-hover ${focusRing}`}
+                href={wizard?.name ?? `${base}/edit/details${q}`}
+                className={`inline-flex ${wizard ? 'min-h-11' : 'min-h-9'} items-center gap-1.5 rounded-md bg-accent-500 px-3 text-sm font-semibold text-gray-950 shadow-sm hover:bg-accent-hover ${focusRing}`}
               >
                 <Pencil className="h-3.5 w-3.5" aria-hidden />
                 Edit event
@@ -237,55 +264,84 @@ function EventDetailsContent() {
       </div>
 
       {blockers.length > 0 && event.status === 'DRAFT' && (
-        <PublishBlockers blockers={blockers} eventId={eventId} orgId={orgId} className="mt-4" />
+        <PublishBlockers
+          blockers={blockers}
+          eventId={eventId}
+          orgId={orgId}
+          hrefFor={wizard ? (item) => wizardReadinessHref(item, eventId) : undefined}
+          className="mt-4"
+        />
       )}
 
-      {(notice || error) && (
-        <p
-          role="status"
-          className={`mt-4 rounded-lg px-4 py-2.5 text-sm ${
-            error
-              ? 'bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-200'
-              : 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200'
-          }`}
-        >
-          {error || notice}
-        </p>
-      )}
+      {/* Always mounted, so a notice set on arrival (back from the wizard) is announced. */}
+      <div role="status">
+        {(notice || error) && (
+          <p
+            className={`mt-4 rounded-lg px-4 py-2.5 text-sm ${
+              error
+                ? 'bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-200'
+                : 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200'
+            }`}
+          >
+            {error || notice}
+          </p>
+        )}
+      </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] xl:grid-cols-[minmax(0,1fr)_24rem]">
         <div className="min-w-0 space-y-6">
           {ticketed ? (
             <SalesSection
               overview={overview}
-              editHref={edit('event-price-tiers')}
+              editHref={wizard?.tickets ?? edit('event-price-tiers')}
+              editLabel={wizard ? 'Edit tickets' : undefined}
               ordersHref={`/admin/orders?eventId=${eventId}`}
-              onEditTier={event.status === 'CANCELLED' ? undefined : (tier) => setFlyout({ kind: 'tier', tier })}
+              onEditTier={wizard || cancelled ? undefined : (tier) => setFlyout({ kind: 'tier', tier })}
+              tierHref={wizard && !cancelled ? wizard.tier : undefined}
+              addOnsHref={wizard?.addOns}
               delay={40}
             />
           ) : (
-            <RsvpSection overview={overview} editHref={edit('event-admission')} rsvpsHref={`${base}/rsvps`} delay={40} />
+            <RsvpSection overview={overview} editHref={wizard?.tickets ?? edit('event-admission')} rsvpsHref={`${base}/rsvps`} delay={40} />
           )}
-          <ApplicationsSection overview={overview} base={`${base}/applications`} onFormSettings={(form) => setFlyout({ kind: 'form', form })} delay={80} />
-          <DescriptionSection overview={overview} editHref={edit('event-details')} delay={120} />
+          <ApplicationsSection
+            overview={overview}
+            base={`${base}/applications`}
+            onFormSettings={wizard ? undefined : (form) => setFlyout({ kind: 'form', form })}
+            formHref={wizard?.form}
+            newFormHref={wizard?.newForm}
+            delay={80}
+          />
+          <DescriptionSection overview={overview} editHref={wizard?.description ?? edit('event-details')} editLabel={wizard ? 'Edit description' : undefined} delay={120} />
         </div>
         <aside className="min-w-0 space-y-6" aria-label="Event settings">
-          <WhenWhereCard overview={overview} editHref={edit('event-when-where')} delay={60} />
-          <AdmissionCard overview={overview} editHref={edit('event-admission')} onEdit={() => setFlyout({ kind: 'admission' })} delay={100} />
-          <MapCard overview={overview} delay={140} />
-          <ListingCard overview={overview} editHref={edit('event-listing')} onEdit={() => setFlyout({ kind: 'listing' })} publicHref={publicPath} delay={180} />
+          <WhenWhereCard overview={overview} editHref={wizard?.date ?? edit('event-when-where')} venueHref={wizard?.venue} delay={60} />
+          <AdmissionCard
+            overview={overview}
+            editHref={wizard?.tickets ?? edit('event-admission')}
+            onEdit={wizard ? undefined : () => setFlyout({ kind: 'admission' })}
+            delay={100}
+          />
+          <MapCard overview={overview} wizardHref={wizard ? wizard.map : undefined} delay={140} />
+          <ListingCard
+            overview={overview}
+            editHref={wizard?.listing ?? edit('event-listing')}
+            onEdit={wizard ? undefined : () => setFlyout({ kind: 'listing' })}
+            publicHref={publicPath}
+            delay={180}
+          />
           <PaymentsCard overview={overview} delay={220} />
         </aside>
       </div>
 
-      {flyout?.kind === 'admission' && (
+      {!wizard && flyout?.kind === 'admission' && (
         <AdmissionFlyout orgId={orgId} event={event} hasSales={hasSales} onClose={() => setFlyout(null)} onSaved={reload} />
       )}
-      {flyout?.kind === 'listing' && <ListingFlyout orgId={orgId} event={event} onClose={() => setFlyout(null)} onSaved={reload} />}
-      {flyout?.kind === 'tier' && (
+      {!wizard && flyout?.kind === 'listing' && <ListingFlyout orgId={orgId} event={event} onClose={() => setFlyout(null)} onSaved={reload} />}
+      {!wizard && flyout?.kind === 'tier' && (
         <TierFlyout orgId={orgId} event={event} tier={flyout.tier} onClose={() => setFlyout(null)} onSaved={reload} />
       )}
-      {flyout?.kind === 'form' && (
+      {!wizard && flyout?.kind === 'form' && (
         <FormSettingsFlyout event={event} form={flyout.form} onClose={() => setFlyout(null)} onSaved={reload} />
       )}
 
@@ -342,10 +398,13 @@ function Breadcrumb({ name }: { name?: string }) {
 function EventHero({
   overview,
   publicPath,
+  imageHref,
   actions,
 }: {
   overview: EventOverview;
   publicPath: string;
+  /** Spec 050-O: the image tile opens the wizard's image step. */
+  imageHref?: string;
   actions: React.ReactNode;
 }) {
   const { event, money, tickets, rsvp, applications } = overview;
@@ -404,6 +463,18 @@ function EventHero({
                 </div>
               )}
             </div>
+            {imageHref && (
+              <Link
+                href={imageHref}
+                aria-label="Edit image"
+                title="Edit image"
+                className={`group absolute inset-0 rounded-xl ${focusRing}`}
+              >
+                <span className="absolute left-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-md border border-gray-200 bg-white/95 text-gray-700 shadow-sm group-hover:text-accent-700 dark:border-slate-600 dark:bg-slate-900/95 dark:text-slate-200">
+                  <Pencil className="h-3.5 w-3.5" aria-hidden />
+                </span>
+              </Link>
+            )}
             {dateParts && (
               <div
                 aria-hidden
@@ -430,7 +501,7 @@ function EventHero({
               <span aria-hidden className="text-xs text-gray-400 dark:text-slate-500">·</span>
               <span className="text-xs font-medium text-gray-500 dark:text-slate-400">{ticketed ? 'Ticketed' : 'RSVP'}</span>
             </div>
-            <h1 id="event-title" className="mt-1.5 text-2xl font-bold tracking-tight text-gray-900 [overflow-wrap:anywhere] dark:text-white sm:text-3xl">
+            <h1 id="event-title" tabIndex={-1} className="mt-1.5 text-2xl font-bold tracking-tight text-gray-900 [overflow-wrap:anywhere] dark:text-white sm:text-3xl">
               {event.name}
             </h1>
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600 dark:text-slate-300">
