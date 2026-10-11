@@ -1,7 +1,7 @@
 // Permission catalog + PermissionService (System › Roles & permissions).
 //
-// Defaults must reproduce the pre-catalog rules exactly: every feature for
-// both member roles, every action for ADMIN only. The guard-coverage checks
+// Defaults: every feature for both member roles, every action for ADMIN, and
+// for ORGANIZER only the event-configuration actions (spec 050-E). The guard-coverage checks
 // keep routes on catalog keys instead of role strings.
 
 import { jest } from '@jest/globals';
@@ -25,7 +25,7 @@ function stored(value) {
   platformSetting.findUnique.mockResolvedValue(value === undefined ? null : { key: 'roles', value });
 }
 
-describe('permission defaults (parity with the pre-catalog rules)', () => {
+describe('permission defaults', () => {
   beforeEach(() => stored(undefined));
 
   test('ADMIN has every feature and every action', async () => {
@@ -33,9 +33,9 @@ describe('permission defaults (parity with the pre-catalog rules)', () => {
     expect([...granted].sort()).toEqual([...FEATURE_KEYS, ...ACTION_KEYS].sort());
   });
 
-  test('ORGANIZER has every feature and no action', async () => {
+  test('ORGANIZER has every feature and only the event-configuration actions (050-E)', async () => {
     const { granted } = await permissionService.effective('ORGANIZER');
-    expect([...granted].sort()).toEqual([...FEATURE_KEYS].sort());
+    expect([...granted].sort()).toEqual([...FEATURE_KEYS, 'addOns.manage', 'applications.forms'].sort());
   });
 
   test('a non-member gets nothing; SYSTEM_ADMIN gets everything', async () => {
@@ -53,6 +53,24 @@ describe('overrides', () => {
     expect(organizer.has('settings.users')).toBe(false);
     expect(organizer.has('events')).toBe(true);
     expect((await permissionService.effective('ADMIN')).granted.has('settings.users')).toBe(true);
+  });
+
+  test('an applications.forms override saved before the split carries to applications.standingForms (050-E)', async () => {
+    stored({ ORGANIZER: { 'applications.forms': true } });
+    expect((await permissionService.effective('ORGANIZER')).granted.has('applications.standingForms')).toBe(true);
+    stored({ ADMIN: { 'applications.forms': false } });
+    const admin = (await permissionService.effective('ADMIN')).granted;
+    expect(admin.has('applications.forms')).toBe(false);
+    expect(admin.has('applications.standingForms')).toBe(false);
+  });
+
+  test('a saved applications.standingForms value wins over the carried one', async () => {
+    stored({ ORGANIZER: { 'applications.forms': true, 'applications.standingForms': false } });
+    const organizer = (await permissionService.effective('ORGANIZER')).granted;
+    expect(organizer.has('applications.forms')).toBe(true);
+    expect(organizer.has('applications.standingForms')).toBe(false);
+    stored({ ORGANIZER: { 'applications.forms': false } });
+    expect((await permissionService.effective('ORGANIZER')).granted.has('applications.standingForms')).toBe(false);
   });
 
   test('a platform-disabled feature is gone for every role, SYSTEM_ADMIN included', async () => {

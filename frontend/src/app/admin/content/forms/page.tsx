@@ -18,7 +18,7 @@ const FILTERS: StatusFilter[] = ['ALL', 'OPEN', 'DRAFT', 'CLOSED'];
 
 export default function FormsPage() {
   const { selectedOrgId, loading: orgLoading } = useOrg();
-  const canEdit = useCan('applications.forms');
+  const canEdit = useCan('applications.standingForms');
   const [forms, setForms] = useState<AdminForm[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<StatusFilter>('ALL');

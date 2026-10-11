@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 import { LEGAL_VERSIONS, mockLegalVersions } from './helpers/legal';
 
 // Add-ons on the storefront (spec 012 phase 1): the picker appears once a
@@ -294,8 +295,8 @@ test.describe('admin add-ons section', () => {
     await expect(section.getByTestId('admin-add-on-addon-vip')).toContainText('tiers: VIP');
   });
 
-  test('ORGANIZER sees add-ons read-only', async ({ page, baseURL }) => {
-    await signInAsStaff(page, { id: 'addons-org', email: 'addons-org@test.com', role: 'ORGANIZER' }, baseURL!);
+  async function mockOrganizer(page: Page, baseURL: string) {
+    await signInAsStaff(page, { id: 'addons-org', email: 'addons-org@test.com', role: 'ORGANIZER' }, baseURL);
     const future = new Date();
     future.setFullYear(future.getFullYear() + 1);
     const event = { id: EVENT_ID, name: 'Add-ons Test Event', description: '', date: future.toISOString(), capacity: 200, category: 'music', status: 'PUBLISHED', logoUrl: null, venue: { id: 'venue-1', name: 'Test Hall', address: '1 Main St' }, priceTiers: [] };
@@ -304,7 +305,23 @@ test.describe('admin add-ons section', () => {
     await page.route(`${API}/organizations/${ORG_ID}/venues`, (route) => route.fulfill(json([event.venue])));
     await page.route(`${API}/organizations/${ORG_ID}/tier-presets`, (route) => route.fulfill(json({ tierPresets: [] })));
     await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/add-ons`, (route) => route.fulfill(json({ addOns: [adminAddOn()] })));
+  }
 
+  // Spec 050-E: add-on configuration is an ORGANIZER default (addOns.manage).
+  test('ORGANIZER configures add-ons', async ({ page, baseURL }) => {
+    await mockOrganizer(page, baseURL!);
+    await page.goto(`/admin/events/${EVENT_ID}/edit/sales?orgId=${ORG_ID}`);
+    const section = page.getByTestId('add-ons-section');
+    await expect(section.getByTestId('admin-add-on-addon-parking')).toBeVisible();
+    await expect(section.getByRole('combobox', { name: 'Add an add-on' })).toBeVisible();
+    await expect(section.getByRole('button', { name: 'Edit' }).first()).toBeVisible();
+    const a11y = await new AxeBuilder({ page }).include('[data-testid="add-ons-section"]').analyze();
+    expect(a11y.violations).toEqual([]);
+  });
+
+  test('ORGANIZER sees add-ons read-only when System › Roles takes addOns.manage away', async ({ page, baseURL }) => {
+    await mockOrganizer(page, baseURL!);
+    await page.route(`${API}/admin/permissions`, (route) => route.fulfill(json({ granted: ['events', 'venues', 'orders', 'settings', 'dashboard'], hiddenPaths: [] })));
     await page.goto(`/admin/events/${EVENT_ID}/edit/sales?orgId=${ORG_ID}`);
     const section = page.getByTestId('add-ons-section');
     await expect(section.getByTestId('admin-add-on-addon-parking')).toBeVisible();

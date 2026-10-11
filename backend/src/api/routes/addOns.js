@@ -1,6 +1,6 @@
 // Add-on Routes (spec 012)
 // Nested under /organizations/:orgId/events/:eventId/add-ons
-// Reads: any member. Writes: ADMIN (configuration), membership-guarded.
+// Reads: any member. Writes: addOns.manage (ADMIN and ORGANIZER by default), membership-guarded.
 
 import express from 'express';
 import addOnService from '../../services/AddOnService.js';
@@ -12,7 +12,7 @@ const router = express.Router({ mergeParams: true });
 
 const wrap = (fn) => (req, res, next) => fn(req, res).catch(next);
 const member = [requireAuth, requireOrganizer, requireOrgMembership()];
-const admin = [requireAuth, requirePermission('addOns.manage'), requireOrgMembership()];
+const manage = [requireAuth, requirePermission('addOns.manage'), requireOrgMembership()];
 
 /** GET / — every add-on of the event with attachments and sales counts. */
 router.get('/', ...member, wrap(async (req, res) => {
@@ -37,7 +37,7 @@ router.get('/purchasers.csv', ...member, wrap(async (req, res) => {
   res.send(csv);
 }));
 
-router.post('/', ...admin, wrap(async (req, res) => {
+router.post('/', ...manage, wrap(async (req, res) => {
   res.status(201).json(await addOnService.create(req.params.orgId, req.params.eventId, req.body || {}));
 }));
 
@@ -48,31 +48,31 @@ router.post('/', ...admin, wrap(async (req, res) => {
  * price). 201 `{ addOn, savedAddOn, createdSavedAddOn }`; 409
  * ADD_ON_ALREADY_ON_EVENT / SAVED_ADD_ON_EXISTS.
  */
-router.post('/attach', ...admin, wrap(async (req, res) => {
+router.post('/attach', ...manage, wrap(async (req, res) => {
   res.status(201).json(await addOnService.attach(req.params.orgId, req.params.eventId, req.body || {}));
 }));
 
-router.post('/reorder', ...admin, wrap(async (req, res) => {
+router.post('/reorder', ...manage, wrap(async (req, res) => {
   res.json(await addOnService.reorder(req.params.orgId, req.params.eventId, req.body?.addOnIds));
 }));
 
-router.patch('/:addOnId', ...admin, wrap(async (req, res) => {
+router.patch('/:addOnId', ...manage, wrap(async (req, res) => {
   const { orgId, eventId, addOnId } = req.params;
   res.json(await addOnService.update(orgId, eventId, addOnId, req.body || {}));
 }));
 
-router.post('/:addOnId/activate', ...admin, wrap(async (req, res) => {
+router.post('/:addOnId/activate', ...manage, wrap(async (req, res) => {
   const { orgId, eventId, addOnId } = req.params;
   res.json(await addOnService.setActive(orgId, eventId, addOnId, true));
 }));
 
-router.post('/:addOnId/deactivate', ...admin, wrap(async (req, res) => {
+router.post('/:addOnId/deactivate', ...manage, wrap(async (req, res) => {
   const { orgId, eventId, addOnId } = req.params;
   res.json(await addOnService.setActive(orgId, eventId, addOnId, false));
 }));
 
 /** DELETE — only while nothing has been sold (409 otherwise: deactivate). */
-router.delete('/:addOnId', ...admin, wrap(async (req, res) => {
+router.delete('/:addOnId', ...manage, wrap(async (req, res) => {
   const { orgId, eventId, addOnId } = req.params;
   res.json(await addOnService.remove(orgId, eventId, addOnId));
 }));

@@ -84,9 +84,7 @@ describe('Application form templates (spec 019 phase 2)', () => {
   // ─── Save as ──────────────────────────────────────────────────────────────
 
   describe('save-as-template', () => {
-    it('ADMIN snapshots a form: settings, tiers without add-ons, non-archived questions; ORGANIZER is refused', async () => {
-      const forbidden = await request(app).post(`/admin/events/${expo.id}/application-forms/${vendorForm.id}/save-as-template`).set(...auth(organizerToken)).send({ name: 'Nope' });
-      expect(forbidden.status).toBe(403);
+    it('ADMIN snapshots a form: settings, tiers without add-ons, non-archived questions', async () => {
 
       const res = await request(app).post(`/admin/events/${expo.id}/application-forms/${vendorForm.id}/save-as-template`).set(...auth(adminToken)).send({ name: 'Exhibitor booths' });
       expect(res.status).toBe(201);
@@ -135,7 +133,7 @@ describe('Application form templates (spec 019 phase 2)', () => {
   // ─── CRUD + RBAC ──────────────────────────────────────────────────────────
 
   describe('templates CRUD', () => {
-    it('ORGANIZER lists and reads; only ADMIN writes; other organizations see nothing, no-membership staff are refused', async () => {
+    it('ORGANIZER lists and reads; writes are covered by organizerFormConfig.test.js; other organizations see nothing, no-membership staff are refused', async () => {
       const list = await request(app).get('/admin/application-templates').set(...auth(organizerToken));
       expect(list.status).toBe(200);
       expect(list.body.data).toEqual([expect.objectContaining({ id: template.id, name: 'Exhibitor booths', kind: 'PAID', tierCount: 2, questionCount: 2 })]);
@@ -144,10 +142,6 @@ describe('Application form templates (spec 019 phase 2)', () => {
       const read = await request(app).get(`/admin/application-templates/${template.id}`).set(...auth(organizerToken));
       expect(read.status).toBe(200);
       expect(read.body.definition.tiers).toHaveLength(2);
-
-      expect((await request(app).post('/admin/application-templates').set(...auth(organizerToken)).send({ name: 'X', kind: 'FREE' })).status).toBe(403);
-      expect((await request(app).put(`/admin/application-templates/${template.id}`).set(...auth(organizerToken)).send({ name: 'Y' })).status).toBe(403);
-      expect((await request(app).delete(`/admin/application-templates/${template.id}`).set(...auth(organizerToken))).status).toBe(403);
 
       expect((await request(app).get('/admin/application-templates').set(...auth(adminBToken))).body.data).toEqual([]);
       expect((await request(app).get(`/admin/application-templates/${template.id}`).set(...auth(adminBToken))).status).toBe(404);

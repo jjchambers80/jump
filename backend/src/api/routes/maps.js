@@ -4,7 +4,8 @@
 
 import { Router } from 'express';
 import { requireAuth } from '../../middleware/auth.js';
-import { requireFeature } from '../../middleware/rbac.js';
+import { requireFeature, can } from '../../middleware/rbac.js';
+import { ForbiddenError } from '../../middleware/errorHandler.js';
 import { activeOrgFor } from './adminScope.js';
 import { validateCreateMap, validateUpdateMap } from '../validators/mapValidators.js';
 import mapService from '../../services/MapService.js';
@@ -138,6 +139,8 @@ router.post('/:mapId/booths/:boothId/assign', async (req, res, next) => {
     const orgId = await activeOrgFor(req);
     const { applicationId, force } = req.body;
     if (!applicationId) return res.status(400).json({ error: 'ValidationError', message: 'applicationId is required' });
+    // Overriding the category check is its own action (ADMIN by default).
+    if (force && !(await can(req, 'maps.forceAssign'))) throw new ForbiddenError('Your role cannot assign a spot from a different category');
     res.json(await boothService.assign(orgId, req.params.mapId, req.params.boothId, applicationId, req.user.id, { force: !!force }));
   } catch (error) { next(error); }
 });

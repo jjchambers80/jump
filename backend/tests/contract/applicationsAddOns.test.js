@@ -231,9 +231,6 @@ describe('Applications with add-ons (spec 012 phase 2)', () => {
 
   describe('tier attachments and payloads', () => {
     it('ADMIN attaches a restricted add-on to a tier; allTiers add-ons are offered everywhere; TICKET scope is refused', async () => {
-      const forbidden = await request(app).put(`${adminBase()}/application-forms/${form.id}/tiers/${booth.id}/add-ons`).set(...auth(organizerToken)).send({ addOnIds: [badge.id] });
-      expect(forbidden.status).toBe(403);
-
       const bad = await request(app).put(`${adminBase()}/application-forms/${form.id}/tiers/${booth.id}/add-ons`).set(...auth(adminToken)).send({ addOnIds: [parking.id] });
       expect(bad.status).toBe(400);
 

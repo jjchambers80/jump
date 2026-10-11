@@ -119,11 +119,24 @@ class PermissionService {
   }
 }
 
+// Keys split out of an older key: an override saved before the split applies
+// to the new key too, until one is saved for it (050-E: standing forms left
+// applications.forms).
+const SPLIT_KEYS = { 'applications.standingForms': 'applications.forms' };
+
+function roleOverrides(raw) {
+  const overrides = raw && typeof raw === 'object' ? { ...raw } : {};
+  for (const [key, from] of Object.entries(SPLIT_KEYS)) {
+    if (typeof overrides[key] !== 'boolean' && typeof overrides[from] === 'boolean') overrides[key] = overrides[from];
+  }
+  return overrides;
+}
+
 function normalize(value) {
   const v = value && typeof value === 'object' ? value : {};
   return {
-    ADMIN: v.ADMIN && typeof v.ADMIN === 'object' ? v.ADMIN : {},
-    ORGANIZER: v.ORGANIZER && typeof v.ORGANIZER === 'object' ? v.ORGANIZER : {},
+    ADMIN: roleOverrides(v.ADMIN),
+    ORGANIZER: roleOverrides(v.ORGANIZER),
     disabled: Array.isArray(v.disabled) ? v.disabled.filter((k) => SWITCHABLE_FEATURES.has(k)) : [],
   };
 }
