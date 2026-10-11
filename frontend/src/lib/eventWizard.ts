@@ -27,12 +27,19 @@ export function wizardStepHref(eventId: string, step: string, extra: Record<stri
   return `/admin/events/${encodeURIComponent(eventId)}/setup?${query.toString()}`;
 }
 
+/** Adds `org=<id>` to a wizard link, so a member of two orgs opens it in the right one (OrgFromUrlGate). */
+export function withOrg(href: string, orgId: string | null | undefined): string {
+  if (!orgId || !href.includes('/setup?')) return href;
+  return `${href}&org=${encodeURIComponent(orgId)}`;
+}
+
 /** Where each Details section's Edit control opens the wizard. */
 export function detailsEditLinks(
   eventId: string,
-  forms: { id: string; purpose?: FormPurpose | null; spaceSelection?: string | null }[]
+  forms: { id: string; purpose?: FormPurpose | null; spaceSelection?: string | null }[],
+  orgId?: string | null
 ) {
-  const at = (step: string, extra?: Record<string, string>) => wizardStepHref(eventId, step, extra);
+  const at = (step: string, extra?: Record<string, string>) => withOrg(wizardStepHref(eventId, step, extra), orgId);
   const mapForm = forms.some((f) => f.purpose === 'VENDOR' && f.spaceSelection === 'MAP');
   return {
     name: at('name'),
@@ -63,8 +70,20 @@ const SECTION_STEP: Record<string, string> = {
   'event-admission': 'tickets',
   'event-price-tiers': 'tickets',
   'event-add-ons': 'collect-more',
+  'event-category': 'description',
+  'event-description': 'description',
+  'event-slug': 'name',
+  'event-image-tile': 'image',
+  'event-date-zone': 'date',
+  'event-capacity': 'tickets',
+  'event-capacity-warning': 'tickets',
+  'event-admission-lock': 'tickets',
+  'event-tax-summary': 'tickets',
 };
 
 export function legacyEditStep(scope: 'details' | 'sales' | null, hash: string): string {
-  return SECTION_STEP[hash.replace(/^#/, '')] ?? (scope === 'sales' ? 'tickets' : 'name');
+  const id = hash.replace(/^#/, '');
+  // RSVP fields (`event-rsvp-limit`, `event-rsvp-party-size`, their hints and errors) live with admission.
+  if (id.startsWith('event-rsvp-')) return 'tickets';
+  return SECTION_STEP[id] ?? (scope === 'sales' ? 'tickets' : 'name');
 }

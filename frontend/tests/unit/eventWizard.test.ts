@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { continueSetupHref, detailsEditLinks, legacyEditStep, wizardStepHref } from '@/lib/eventWizard';
+import { continueSetupHref, detailsEditLinks, legacyEditStep, wizardStepHref, withOrg } from '@/lib/eventWizard';
 
 describe('continueSetupHref (050-I)', () => {
   const draft = { id: 'e1', status: 'DRAFT', setupStep: 'tickets', setupCompletedAt: null };
@@ -35,6 +35,13 @@ describe('edit-mode links (050-O)', () => {
     expect(links.form({ id: 'f-vol', purpose: 'VOLUNTEER' })).toBe(at('step=volunteers&form=f-vol'));
   });
 
+  it('carries the organization on wizard links only', () => {
+    expect(detailsEditLinks('e1', [], 'o 1').name).toBe(at('step=name&org=o%201'));
+    expect(detailsEditLinks('e1', [], 'o1').tier('t1')).toBe(at('step=tickets&tier=t1&org=o1'));
+    expect(withOrg('/admin/settings/tax', 'o1')).toBe('/admin/settings/tax');
+    expect(withOrg(at('step=date'), null)).toBe(at('step=date'));
+  });
+
   it('links the map card to the floor-map step only while a vendor form uses a map', () => {
     expect(detailsEditLinks('e1', [{ id: 'f', purpose: 'VENDOR', spaceSelection: 'MAP' }]).map).toBe(at('step=floor-map'));
     expect(detailsEditLinks('e1', [{ id: 'f', purpose: 'SPONSOR', spaceSelection: 'MAP' }]).map).toBeNull();
@@ -46,6 +53,11 @@ describe('edit-mode links (050-O)', () => {
     expect(legacyEditStep(null, '#event-media')).toBe('image');
     expect(legacyEditStep(null, '#event-when-where')).toBe('date');
     expect(legacyEditStep(null, '#event-listing')).toBe('description');
+    expect(legacyEditStep(null, '#event-category')).toBe('description');
+    expect(legacyEditStep(null, '#event-capacity')).toBe('tickets');
+    expect(legacyEditStep(null, '#event-rsvp-limit')).toBe('tickets');
+    expect(legacyEditStep(null, '#event-rsvp-party-size')).toBe('tickets');
+    expect(legacyEditStep(null, '#event-tax-summary')).toBe('tickets');
     expect(legacyEditStep('details', '')).toBe('name');
     expect(legacyEditStep('sales', '')).toBe('tickets');
     expect(legacyEditStep('sales', '#unknown')).toBe('tickets');

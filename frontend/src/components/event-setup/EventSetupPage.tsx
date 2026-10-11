@@ -22,6 +22,7 @@ import { focusAfterStepChange, takeStepFocus } from './stepFocus';
 import { toSaved } from './useSetupData';
 import { markSetupFinished } from './doneMarker';
 import LoadingFields from './LoadingFields';
+import ViewEventLink from './ViewEventLink';
 import { LOCKED_REASON_ID } from './SetupFooter';
 import { secondaryButton } from './ui';
 
@@ -158,6 +159,7 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
           onMenu={() => !publishing && setMenuOpen(true)}
           onPreview={() => setPreviewOpen(true)}
           onExit={actions.onExit}
+          viewEvent={saved && orgId ? <ViewEventLink orgId={orgId} event={saved} /> : undefined}
         />
       }
       progress={

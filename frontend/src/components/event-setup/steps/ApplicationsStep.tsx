@@ -8,7 +8,7 @@
 // delete while a form has no applications, else close. Every save reloads the
 // wizard's forms (step visibility, progress) and refreshes the preview.
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Plus } from 'lucide-react';
 import { useCan } from '@/components/OrgContext';
@@ -70,10 +70,18 @@ export default function ApplicationsStep({ stepKey, orgId, eventId, eventName, f
     if (moveTo && expanded) router.replace(`${pathname}?step=${moveTo}&form=${encodeURIComponent(expanded)}`, { scroll: false });
   }, [moveTo, expanded, pathname, router]);
 
-  useEffect(() => {
+  const loadTemplates = useCallback(() => {
     if (!canEdit) return;
     participants.templates().then((r) => setTemplates(r.data)).catch(() => setTemplates([]));
   }, [participants, canEdit]);
+  useEffect(loadTemplates, [loadTemplates]);
+  const deleteTemplate = async (template: FormTemplateSummary) => {
+    if (!window.confirm(`Delete the "${template.name}" template? Forms already created from it are kept.`)) return false;
+    await participants.deleteTemplate(template.id);
+    setTemplates((list) => list.filter((t) => t.id !== template.id));
+    setStatus(`Template ${template.name} deleted.`);
+    return true;
+  };
 
   /** Opens one form (or none) and keeps it in the URL, so a link and a reload land on it. */
   const expand = (formId: string | null) => {
@@ -163,6 +171,7 @@ export default function ApplicationsStep({ stepKey, orgId, eventId, eventName, f
               <FormRow
                 key={form.id}
                 form={form}
+                applicationsHref={`/admin/events/${eventId}/applications?form=${encodeURIComponent(form.id)}`}
                 expanded={expanded === form.id}
                 showPurpose={config.purposes.length > 1}
                 canEdit={canEdit}
@@ -175,14 +184,14 @@ export default function ApplicationsStep({ stepKey, orgId, eventId, eventName, f
                 }}
                 onClose={() => void act(`${form.name} closed.`, () => api.updateForm(form.id, { status: 'CLOSED' }))}
               >
-                <InlineFormEditor form={form} api={api} canEdit={canEdit} purposes={config.purposes.length > 1 ? config.purposes : null} onSaved={saved} eventStart={eventStart} eventEnd={eventEnd} />
+                <InlineFormEditor form={form} api={api} canEdit={canEdit} purposes={config.purposes.length > 1 ? config.purposes : null} onSaved={saved} eventStart={eventStart} eventEnd={eventEnd} templates={templates} onTemplatesChanged={loadTemplates} />
               </FormRow>
             ))}
           </ul>
           {addButton}
         </>
       )}
-      {adding && <AddFormDialog config={config} eventName={eventName} templates={templates} onCreate={create} onClose={() => setAdding(false)} />}
+      {adding && <AddFormDialog config={config} eventName={eventName} templates={templates} canManage={canEdit} onDeleteTemplate={deleteTemplate} onCreate={create} onClose={() => setAdding(false)} />}
       {lineup}
     </div>
   );

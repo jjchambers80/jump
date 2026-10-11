@@ -3,10 +3,21 @@
 // Spec 050-O: with the wizard flag on, the old event editors and the
 // event-level forms configuration pages send bookmarks and email links to the
 // wizard step that now owns their fields. `to` may look something up first
-// (a form's purpose); if that fails the fallback step still opens.
+// (a form's purpose); if that fails the fallback step still opens. The
+// organization in the old link (`?orgId=`, or `?org=`) rides along as `?org=`,
+// which the wizard selects before it loads (OrgFromUrlGate).
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+
+function withOrg(href: string): string {
+  const query = new URLSearchParams(window.location.search);
+  const org = query.get('orgId') || query.get('org');
+  if (!org) return href;
+  const url = new URL(href, window.location.origin);
+  url.searchParams.set('org', org);
+  return url.pathname + url.search;
+}
 
 export default function WizardRedirect({ to, fallback }: { to: () => string | Promise<string>; fallback: string }) {
   const router = useRouter();
@@ -15,7 +26,7 @@ export default function WizardRedirect({ to, fallback }: { to: () => string | Pr
     Promise.resolve()
       .then(to)
       .catch(() => fallback)
-      .then((href) => live && router.replace(href));
+      .then((href) => live && router.replace(withOrg(href)));
     return () => {
       live = false;
     };

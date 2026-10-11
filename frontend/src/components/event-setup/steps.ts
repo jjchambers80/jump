@@ -102,7 +102,6 @@ export const FIELD_IDS = {
 
 const always = () => true;
 const never = () => false;
-const ticketed = (ctx: StepCtx) => (ctx.saved?.admissionMode ?? 'TICKETED') === 'TICKETED';
 
 export const patchEvent = (client: PatchClient, { orgId, eventId }: { orgId: string; eventId: string }, body: Record<string, unknown>) =>
   client.patch(`/organizations/${orgId}/events/${eventId}`, body);
@@ -187,7 +186,9 @@ export const EVENT_STEPS: EventStep[] = [
   TICKETS_STEP,
   { key: 'attendee-questions', title: 'Attendee questions', rule: 'S', anchor: 'tickets', built: false, reserved: true, visible: never, complete: never },
   { key: 'collect-more', title: 'Collect more', rule: 'S', anchor: 'add-ons', built: true,
-    visible: (ctx) => ticketed(ctx) || !!ctx.donationsEligible,
+    // Every admission mode: add-ons are also what vendor application tiers
+    // offer, and the old editor showed them for RSVP events too (050-O parity).
+    visible: always,
     complete: (ctx) => (ctx.saved?.addOnCount ?? 0) > 0,
   },
   { key: 'discounts', title: 'Discount codes', rule: 'S', anchor: 'tickets', built: false, reserved: true, visible: never, complete: never },

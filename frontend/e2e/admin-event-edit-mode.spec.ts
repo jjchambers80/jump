@@ -47,26 +47,35 @@ const adminForm = (f: ReturnType<typeof overviewForm>) => ({
   ...f, eventId: EVENT_ID, intro: null, chargeTiming: 'APPROVAL', feeMode: 'PASS', taxable: false, paymentDueDays: 7,
   overduePolicy: 'WITHDRAW', reserveOnApproval: true, displayOrder: 0, createdFromTemplateId: null,
   acceptance: { accepting: true, reason: null }, paymentsEnabled: true, applicationCount: 0, collectBusiness: f.purpose !== 'VOLUNTEER',
-  addOns: [], questions: [],
+  addOns: [], questions: [], shifts: [], timezone: VENUE.timezone,
+  ...(f.id === 'f-volunteers' && { applicationCount: 2, createdFromTemplateId: 'tpl-crew', opensAt: '2031-05-01T14:00:00.000Z' }),
 });
+
+const TEMPLATES = [
+  { id: 'tpl-crew', name: 'Crew sign-up', kind: 'FREE', purpose: 'VOLUNTEER', tierCount: 0, questionCount: 2, sourceFormId: null, createdAt: '2031-01-01T00:00:00Z', updatedAt: '2031-01-01T00:00:00Z' },
+  { id: 'tpl-press', name: 'Press desk', kind: 'FREE', purpose: 'PRESS', tierCount: 0, questionCount: 1, sourceFormId: null, createdAt: '2031-01-01T00:00:00Z', updatedAt: '2031-01-01T00:00:00Z' },
+  { id: 'tpl-market', name: 'Makers market', kind: 'PAID', purpose: 'VENDOR', tierCount: 1, questionCount: 3, sourceFormId: null, createdAt: '2031-01-01T00:00:00Z', updatedAt: '2031-01-01T00:00:00Z' },
+];
+const OTHER_ORG = { id: 'org-other', name: 'Other Org', slug: 'other-org', status: 'ACTIVE', brandColor: '#0f766e', themeMode: 'LIGHT' };
 
 const FORMS = [overviewForm('f-vendors', 'Vendor booths', 'VENDOR', 'MAP'), overviewForm('f-volunteers', 'Volunteer crew', 'VOLUNTEER')];
 
-type Calls = { patch: Request[] };
+type Calls = { patch: Request[]; templateDelete: Request[] };
+type Options = { failPatch?: boolean; otherOrgFirst?: boolean };
 
 /** A stateful fake API: PATCH changes the event that later loads return. */
-async function mockApi(page: Page, initial = baseEvent()) {
+async function mockApi(page: Page, initial = baseEvent(), options: Options = {}) {
   const event: Record<string, any> = structuredClone(initial);
-  const calls: Calls = { patch: [] };
+  const calls: Calls = { patch: [], templateDelete: [] };
+  const org = { id: ORG_ID, name: 'Edit Org', slug: 'edit-org', status: 'ACTIVE', brandColor: '#0f766e', themeMode: 'LIGHT' };
   await page.route(`${API}/**`, (route) => route.fulfill(json({ message: 'Not found' }, 404)));
-  await page.route(`${API}/organizations`, (route) =>
-    route.fulfill(json([{ id: ORG_ID, name: 'Edit Org', slug: 'edit-org', status: 'ACTIVE', brandColor: '#0f766e', themeMode: 'LIGHT' }]))
-  );
+  await page.route(`${API}/organizations`, (route) => route.fulfill(json(options.otherOrgFirst ? [OTHER_ORG, org] : [org])));
   await page.route(`${API}/admin/permissions`, (route) => route.fulfill(json({ granted: ['*'], hiddenPaths: [] })));
   await page.route(`${API}/organizations/${ORG_ID}/venues`, (route) => route.fulfill(json([VENUE])));
   await page.route(`${API}/organizations/${ORG_ID}/tier-presets`, (route) => route.fulfill(json({ tierPresets: [] })));
   await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}`, (route) => {
     calls.patch.push(route.request());
+    if (options.failPatch) return route.fulfill(json({ message: 'Server unavailable' }, 500));
     Object.assign(event, route.request().postDataJSON());
     route.fulfill(json(event));
   });
@@ -93,7 +102,14 @@ async function mockApi(page: Page, initial = baseEvent()) {
     const found = FORMS.find((f) => f.id === id);
     route.fulfill(found ? json(adminForm(found)) : json({ message: 'Not found' }, 404));
   });
-  await page.route(`${API}/admin/application-templates`, (route) => route.fulfill(json({ data: [] })));
+  let templates = structuredClone(TEMPLATES);
+  await page.route(`${API}/admin/application-templates`, (route) => route.fulfill(json({ data: templates })));
+  await page.route(new RegExp(`${API}/admin/application-templates/[^/]+$`), (route) => {
+    calls.templateDelete.push(route.request());
+    const id = route.request().url().split('/').pop();
+    templates = templates.filter((t) => t.id !== id);
+    route.fulfill({ status: 204, body: '' });
+  });
   return calls;
 }
 
@@ -108,8 +124,14 @@ const setupUrl = (query: string) => `/admin/events/${EVENT_ID}/setup?${query}`;
 
 const main = (page: Page) => page.locator('main');
 const heading = (page: Page, name: string) => main(page).getByRole('heading', { level: 1, name });
+/** Serious / critical axe findings as "rule: targets" lines, so a failure names what failed. */
 const serious = async (page: Page) =>
-  (await new AxeBuilder({ page }).analyze()).violations.filter((v) => ['serious', 'critical'].includes(v.impact || ''));
+  (await new AxeBuilder({ page }).analyze()).violations
+    .filter((v) => ['serious', 'critical'].includes(v.impact || ''))
+    .map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`);
+const ORG_Q = `&org=${ORG_ID}`;
+/** Arms once a live edit is pending: the history guard's entry is on top. */
+const guardArmed = (page: Page) => page.waitForFunction(() => !!(window.history.state as Record<string, unknown> | null)?.__jumpSetupGuard);
 
 test.beforeEach(async ({ page }) => {
   await signInAsStaff(page, STAFF, WIZARD_URL!);
@@ -140,7 +162,7 @@ const LINKS: [string, string, string][] = [
   ['Edit event', 'step=name', 'Name your event'],
   ['Edit image', 'step=image', 'Add an image'],
   ['Edit date and venue', 'step=date', 'When is it?'],
-  ['Edit venue', 'step=venue', 'Where is it?'],
+  ['Change venue', 'step=venue', 'Where is it?'],
   ['Edit description', 'step=description', 'Describe it'],
   ['Edit tickets', 'step=tickets', 'Tickets or RSVP'],
   ['Edit tier General Admission', 'step=tickets&tier=t-ga', 'Tickets or RSVP'],
@@ -158,7 +180,7 @@ test.describe('Details links into the wizard', () => {
     await page.goto(DETAILS);
     await expect(page.getByRole('heading', { level: 1, name: 'Spring Fair' })).toBeVisible(COLD);
     for (const [name, query] of LINKS) {
-      await expect(page.getByRole('link', { name, exact: true }).first(), name).toHaveAttribute('href', setupUrl(query));
+      await expect(page.getByRole('link', { name, exact: true }).first(), name).toHaveAttribute('href', setupUrl(query) + ORG_Q);
     }
     // One form per field: no Edit control opens a dialog here any more.
     await expect(page.locator('button[aria-haspopup="dialog"]').filter({ hasText: /Edit|Settings|Add tier/ })).toHaveCount(0);
@@ -171,7 +193,7 @@ test.describe('Details links into the wizard', () => {
       await mockApi(page);
       await page.goto(DETAILS);
       await page.getByRole('link', { name, exact: true }).first().click();
-      await expect(page).toHaveURL(new RegExp(`/setup\\?${query.replace('?', '\\?')}$`));
+      await expect(page).toHaveURL(new RegExp(`/setup\\?${query}${ORG_Q}$`));
       if (query.includes('tier=')) {
         // The tier's own dialog opens over the step.
         await expect(page.getByRole('dialog')).toBeVisible(COLD);
@@ -197,6 +219,90 @@ test.describe('edit mode', () => {
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog')).toBeHidden();
     await expect(saveAs).toBeFocused();
+  });
+
+  test('a failed save then "Leave anyway" never says "Saved."; focus returns to the exact control', async ({ page }) => {
+    await mockApi(page, baseEvent(), { failPatch: true });
+    await page.goto(DETAILS);
+    // Edit admission and Edit tickets both open the Tickets step: focus must come back to the one used.
+    await page.getByRole('link', { name: 'Edit admission', exact: true }).click();
+    await expect(heading(page, 'Tickets or RSVP')).toBeFocused(COLD);
+    await main(page).getByLabel(/Capacity/).first().fill('250');
+    page.once('dialog', (dialog) => void dialog.accept());
+    await page.getByRole('button', { name: 'Save & exit' }).click();
+    await expect(page).toHaveURL(new RegExp(`${DETAILS}$`), COLD);
+    await expect(page.getByRole('status').filter({ hasText: 'Your latest changes were not saved.' })).toBeVisible();
+    await expect(page.getByText('Saved.', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Edit admission', exact: true })).toBeFocused();
+  });
+
+  test('links that leave the wizard ask first while a live edit is unsaved', async ({ page }) => {
+    const calls = await mockApi(page);
+    await page.goto(setupUrl('step=name'));
+    await expect(heading(page, 'Name your event')).toBeFocused(COLD);
+    await main(page).getByLabel('Event name').fill('Unsaved Name');
+    await guardArmed(page);
+    await page.getByRole('navigation', { name: 'Jump to edit' }).getByRole('link', { name: /Tickets or RSVP/ }).click();
+    await expect(heading(page, 'Tickets or RSVP')).toBeFocused();
+    const asked: string[] = [];
+    page.once('dialog', (dialog) => {
+      asked.push(dialog.message());
+      void dialog.dismiss();
+    });
+    await main(page).getByRole('link', { name: 'Settings › Tax' }).click();
+    await expect.poll(() => asked).toEqual(['You have unsaved changes. Leave without saving?']);
+    await expect(page).toHaveURL(/step=tickets/);
+    expect(calls.patch).toHaveLength(0);
+  });
+
+  test('Tickets shows the tax summary read-only; the header links to the live page', async ({ page }) => {
+    await mockApi(page);
+    await page.goto(setupUrl('step=tickets'));
+    await expect(heading(page, 'Tickets or RSVP')).toBeVisible(COLD);
+    await expect(main(page).getByTestId('event-tax-summary')).toContainText('Tax: 0%');
+    await expect(page.getByRole('banner').getByRole('link', { name: /View event/ })).toHaveAttribute('href', '/events/spring-fair');
+  });
+
+  test('changing the URL of a live event warns that shared links break', async ({ page }) => {
+    await mockApi(page);
+    await page.goto(setupUrl('step=name'));
+    await expect(heading(page, 'Name your event')).toBeFocused(COLD);
+    // A saved slug opens the panel already.
+    await expect(main(page).getByRole('button', { name: 'Edit URL' })).toHaveAttribute('aria-expanded', 'true');
+    await main(page).getByLabel('URL slug').fill('spring-fair-2031');
+    await expect(main(page).getByText('The event is live. Links already shared with the old address stop working.')).toBeVisible();
+  });
+
+  test('a form shows its template, its applications and its window in the venue zone', async ({ page }) => {
+    await mockApi(page);
+    await page.goto(setupUrl('step=volunteers&form=f-volunteers'));
+    await expect(heading(page, 'Volunteers')).toBeFocused(COLD);
+    await expect(main(page).getByRole('link', { name: 'Crew sign-up' })).toHaveAttribute('href', '/admin/events/templates/tpl-crew');
+    await expect(main(page).getByRole('link', { name: 'View applications for Volunteer crew' })).toHaveAttribute(
+      'href',
+      `/admin/events/${EVENT_ID}/applications?form=f-volunteers`
+    );
+    // 14:00 UTC is 10:00 on the venue's clock (New York, EDT).
+    await expect(main(page).getByLabel('Opens')).toHaveValue('2031-05-01T10:00');
+    await expect(main(page).getByText(/Times are the venue's clock: New York/)).toBeVisible();
+  });
+
+  test('templates stay manageable from Start from: edit, delete, all purposes', async ({ page }) => {
+    const calls = await mockApi(page);
+    await page.goto(setupUrl('step=volunteers'));
+    await expect(heading(page, 'Volunteers')).toBeFocused(COLD);
+    await main(page).getByRole('button', { name: 'Add a volunteer application' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Add a volunteer application' });
+    await expect(dialog.getByRole('link', { name: 'Edit template Crew sign-up' })).toHaveAttribute('href', '/admin/events/templates/tpl-crew');
+    // Other purposes' templates appear on request; a PAID one is another kind and never fits a free-only step.
+    await expect(dialog.getByText('Press desk')).toHaveCount(0);
+    await dialog.getByLabel('Show templates for all purposes').check();
+    await expect(dialog.getByText('Press desk')).toBeVisible();
+    await expect(dialog.getByText('Makers market')).toHaveCount(0);
+    page.once('dialog', (d) => void d.accept());
+    await dialog.getByRole('button', { name: 'Delete template Crew sign-up' }).click();
+    await expect.poll(() => calls.templateDelete.length).toBe(1);
+    await expect(dialog.getByText('Crew sign-up')).toHaveCount(0);
   });
 
   test('the progress shows the step list, not "Step n of N"', async ({ page }) => {
@@ -254,6 +360,7 @@ test.describe('edit mode', () => {
     await expect(heading(page, 'Describe it')).toBeFocused(COLD);
     await main(page).getByLabel('Category (optional)').fill('Craft fair');
     await expect(page.getByRole('status').filter({ hasText: 'Unsaved changes' })).toBeVisible();
+    await guardArmed(page);
     const asked: string[] = [];
     page.once('dialog', (dialog) => {
       asked.push(dialog.message());
@@ -285,6 +392,13 @@ test.describe('redirects to the wizard', () => {
     });
   }
 
+  test('an old link keeps its organization: a member of two orgs lands on the right event', async ({ page }) => {
+    await mockApi(page, baseEvent(), { otherOrgFirst: true });
+    await page.goto(`${DETAILS}/edit/sales?orgId=${ORG_ID}#event-capacity`);
+    await expect(page).toHaveURL(new RegExp(`/setup\\?step=tickets&org=${ORG_ID}$`), COLD);
+    await expect(heading(page, 'Tickets or RSVP')).toBeVisible(COLD);
+  });
+
   test('submission review stays on the Applications tab', async ({ page }) => {
     await mockApi(page);
     await page.goto(`${DETAILS}/applications`);
@@ -312,6 +426,8 @@ test.describe('mobile 390', () => {
 
       await page.getByRole('link', { name: 'Edit description', exact: true }).click();
       await expect(heading(page, 'Describe it')).toBeFocused(COLD);
+      // Tiptap mounts client-side after the step; scan the finished editor, not its placeholder.
+      await expect(main(page).locator('.ProseMirror')).toBeVisible(COLD);
       // The mobile "Jump to edit" sheet starts on the current step.
       await page.getByRole('button', { name: 'Setup steps' }).click();
       const sheet = page.getByRole('dialog', { name: 'Setup steps' });

@@ -133,7 +133,7 @@ test('flag off (spec 050-O): Details never links into the setup wizard', async (
   await expect(page.getByRole('button', { name: 'Edit tier General Admission' })).toHaveAttribute('aria-haspopup', 'dialog');
   await expect(page.getByRole('button', { name: 'Settings for Vendors' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Edit image' })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'Edit venue' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Change venue' })).toHaveCount(0);
 });
 
 test('headline numbers, tiers, applications and the map', async ({ page }) => {

@@ -13,7 +13,7 @@ import { ExternalLink } from 'lucide-react';
 import type { AdminForm, FormPurpose, FormTemplateSummary } from '@/lib/applications';
 import { QuestionsCard, SettingsCard, TiersCard } from '@/components/applications/FormEditorCards';
 import { SaveAsTemplateDialog } from '@/components/applications/TemplateDialogs';
-import { useParticipantsApi } from '@/components/applications/useParticipantsApi';
+import Link from 'next/link';
 import type { useApplicationsApi } from '@/app/admin/events/[eventId]/applications/useApplicationsApi';
 import { PURPOSE_LABEL, wizardLink } from '../applicationSteps';
 import ShiftsCard from './ShiftsCard';
@@ -30,20 +30,18 @@ interface Props {
   /** Event start / end (ISO): volunteer shifts outside them get a soft warning (050-S). */
   eventStart?: string | null;
   eventEnd?: string | null;
+  /** The org's templates (loaded once by the step): "Created from" and Save as template's replace list. */
+  templates: FormTemplateSummary[];
+  /** After Save as template: the step reloads the list. */
+  onTemplatesChanged: () => void;
 }
 
-export default function InlineFormEditor({ form, api, canEdit, purposes, onSaved, eventStart, eventEnd }: Props) {
+export default function InlineFormEditor({ form, api, canEdit, purposes, onSaved, eventStart, eventEnd, templates, onTemplatesChanged }: Props) {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const participants = useParticipantsApi();
-  const [templates, setTemplates] = useState<FormTemplateSummary[] | null>(null);
+  const [savingAs, setSavingAs] = useState(false);
   const saveAsRef = useRef<HTMLButtonElement>(null);
-  const openSaveAs = () =>
-    participants
-      .templates()
-      .then((r) => setTemplates(r.data))
-      // Without the list the dialog still saves a new template.
-      .catch(() => setTemplates([]));
+  const createdFrom = form.createdFromTemplateId ? templates.find((t) => t.id === form.createdFromTemplateId) : null;
 
   const run = async (label: string, fn: () => Promise<unknown>) => {
     setError(null);
@@ -85,7 +83,7 @@ export default function InlineFormEditor({ form, api, canEdit, purposes, onSaved
       {(canEdit || form.status !== 'DRAFT') && (
         <div className="flex flex-wrap gap-2">
           {canEdit && (
-            <button ref={saveAsRef} type="button" onClick={openSaveAs} className={secondaryButton}>
+            <button ref={saveAsRef} type="button" onClick={() => setSavingAs(true)} className={secondaryButton}>
               Save as template
             </button>
           )}
@@ -97,6 +95,15 @@ export default function InlineFormEditor({ form, api, canEdit, purposes, onSaved
             </a>
           )}
         </div>
+      )}
+      {createdFrom && (
+        <p className="text-sm text-gray-600 dark:text-slate-400">
+          Created from the{' '}
+          <Link href={`/admin/events/templates/${createdFrom.id}`} className="font-medium text-gray-900 underline underline-offset-2 dark:text-white">
+            {createdFrom.name}
+          </Link>{' '}
+          template.
+        </p>
       )}
       <p role="status" className="sr-only">{notice}</p>
       {error && (
@@ -125,17 +132,18 @@ export default function InlineFormEditor({ form, api, canEdit, purposes, onSaved
         onRemove={(id) => run('Question removed.', () => api.removeQuestion(form.id, id))}
         onReorder={(ids) => run('Order saved.', () => api.reorderQuestions(form.id, ids))}
       />
-      {templates && (
+      {savingAs && (
         <SaveAsTemplateDialog
           form={form}
           templates={templates}
           onSave={(body) => api.saveAsTemplate(form.id, body)}
           onSaved={(t, replaced) => {
-            setTemplates(null);
+            setSavingAs(false);
+            onTemplatesChanged();
             setNotice(replaced ? `Template "${t.name}" replaced.` : `Saved as the "${t.name}" template.`);
           }}
           returnFocusRef={saveAsRef}
-          onClose={() => setTemplates(null)}
+          onClose={() => setSavingAs(false)}
         />
       )}
     </div>

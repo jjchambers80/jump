@@ -10,6 +10,8 @@
 
 import Link from 'next/link';
 import { FormEvent, useEffect, useState } from 'react';
+import { instantToZonedInput, zonedInputToIso } from '@/lib/eventTime';
+import { timeZoneLabel } from '@/lib/timeZones';
 import { MAX_PINNED_QUESTIONS, money, QUESTION_TYPE_LABEL, type AdminForm, type AdminTier, type Question, type QuestionType } from '@/lib/applications';
 
 const card = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
@@ -50,6 +52,8 @@ export interface EditorForm {
   status?: AdminForm['status'];
   opensAt?: string | null;
   closesAt?: string | null;
+  /** The venue's zone (gotcha 28): the open / close window is its wall clock. */
+  timezone?: string | null;
   chargeTiming: AdminForm['chargeTiming'];
   feeMode: AdminForm['feeMode'];
   taxable: boolean;
@@ -65,11 +69,22 @@ export interface EditorForm {
   addOns?: AdminForm['addOns'];
 }
 
-function toLocalInput(iso: string | null | undefined): string {
+/**
+ * The open / close window as `datetime-local` text. Event forms read and write
+ * it in the venue's zone (gotcha 28); a standing form has no venue, so it keeps
+ * the browser's clock.
+ */
+function toLocalInput(iso: string | null | undefined, zone?: string | null): string {
+  if (zone) return instantToZonedInput(iso, zone);
   if (!iso) return '';
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fromLocalInput(local: string, zone?: string | null): string | null {
+  if (!local) return null;
+  return zone ? zonedInputToIso(local, zone) : new Date(local).toISOString();
 }
 
 // ─── Settings ────────────────────────────────────────────────────────────────
@@ -100,8 +115,8 @@ export function SettingsCard({
     slug: form.slug ?? '',
     intro: form.intro ?? '',
     status: form.status ?? 'DRAFT',
-    opensAt: toLocalInput(form.opensAt),
-    closesAt: toLocalInput(form.closesAt),
+    opensAt: toLocalInput(form.opensAt, form.timezone),
+    closesAt: toLocalInput(form.closesAt, form.timezone),
     chargeTiming: form.chargeTiming,
     feeMode: form.feeMode,
     taxable: form.taxable,
@@ -120,8 +135,8 @@ export function SettingsCard({
       slug: form.slug ?? '',
       intro: form.intro ?? '',
       status: form.status ?? 'DRAFT',
-      opensAt: toLocalInput(form.opensAt),
-      closesAt: toLocalInput(form.closesAt),
+      opensAt: toLocalInput(form.opensAt, form.timezone),
+      closesAt: toLocalInput(form.closesAt, form.timezone),
       chargeTiming: form.chargeTiming,
       feeMode: form.feeMode,
       taxable: form.taxable,
@@ -152,8 +167,8 @@ export function SettingsCard({
       slug: state.slug,
       intro: state.intro || null,
       status: state.status,
-      opensAt: state.opensAt ? new Date(state.opensAt).toISOString() : null,
-      closesAt: state.closesAt ? new Date(state.closesAt).toISOString() : null,
+      opensAt: fromLocalInput(state.opensAt, form.timezone),
+      closesAt: fromLocalInput(state.closesAt, form.timezone),
       ...paidSettings(state),
       ...(standing && { buttonLabel: state.buttonLabel.trim() || null, successMessage: state.successMessage.trim() || null }),
     };
@@ -199,12 +214,17 @@ export function SettingsCard({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label htmlFor="f-opens" className={labelClass}>Opens</label>
-            <input id="f-opens" type="datetime-local" value={state.opensAt} disabled={!canEdit} onChange={(e) => update({ opensAt: e.target.value })} className={field} />
+            <input id="f-opens" type="datetime-local" aria-describedby={form.timezone ? "f-window-zone" : undefined} value={state.opensAt} disabled={!canEdit} onChange={(e) => update({ opensAt: e.target.value })} className={field} />
           </div>
           <div>
             <label htmlFor="f-closes" className={labelClass}>Closes</label>
-            <input id="f-closes" type="datetime-local" value={state.closesAt} disabled={!canEdit} onChange={(e) => update({ closesAt: e.target.value })} className={field} />
+            <input id="f-closes" type="datetime-local" aria-describedby={form.timezone ? "f-window-zone" : undefined} value={state.closesAt} disabled={!canEdit} onChange={(e) => update({ closesAt: e.target.value })} className={field} />
           </div>
+          {form.timezone && (
+            <p id="f-window-zone" className="col-span-2 text-xs text-gray-600 dark:text-slate-400">
+              Times are the venue&apos;s clock: {timeZoneLabel(form.timezone)}.
+            </p>
+          )}
         </div>
         </>
         )}

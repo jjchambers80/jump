@@ -22,7 +22,7 @@ import { PREVIEW_MESSAGE, type PreviewMessage, type PreviewOverlay } from './pre
 import { toSaved, useSetupData } from './useSetupData';
 import { useStepSave } from './useStepSave';
 import { useSetupForms } from './useSetupForms';
-import { useHistoryGuard } from './useHistoryGuard';
+import { useHistoryGuard, useLinkGuard } from './useHistoryGuard';
 import { clearSetupFinished, setupJustFinished } from './doneMarker';
 import { useDonationsEligible } from './useDonationsEligible';
 import type { OverviewEvent } from '@/lib/eventOverview';
@@ -155,6 +155,7 @@ export function useSetupFlow(eventId: string | null) {
   // Live edits wait for an explicit save; failed or invalid ones cannot be sent.
   const stuck = !!saved && (saveState.status === 'error' || saveState.status === 'invalid' || (saved.status !== 'DRAFT' && saveState.status === 'dirty'));
   useHistoryGuard(stuck, 'You have unsaved changes. Leave without saving?');
+  useLinkGuard(stuck, 'You have unsaved changes. Leave without saving?');
 
   const venue = venues.find((v) => v.id === fields.venueId);
   const iso = { date: zonedInputToIso(fields.date, zone), endDate: zonedInputToIso(fields.endDate, zone) };

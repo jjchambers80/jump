@@ -38,3 +38,30 @@ export function useHistoryGuard(armed: boolean, message: string) {
     return () => window.removeEventListener('popstate', onPopState);
   }, [armed, message]);
 }
+
+/**
+ * Links that leave the wizard (map builder, Settings › Brand, Go to event, a
+ * template's editor…) while a change cannot be saved silently: same rule and
+ * message as Back (050-O). One capture listener on the document, so every
+ * link is covered without wiring each one; it runs before React's handlers,
+ * so a cancelled click never reaches next/link. Links to another step of this
+ * wizard (same path), new tabs and other origins (beforeunload covers those)
+ * pass through.
+ */
+export function useLinkGuard(armed: boolean, message: string) {
+  useEffect(() => {
+    if (!armed) return;
+    const onClick = (event: MouseEvent) => {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const link = (event.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
+      if (!link || (link.target && link.target !== '_self') || link.hasAttribute('download')) return;
+      const url = new URL(link.href, window.location.href);
+      if (url.origin !== window.location.origin || url.pathname === window.location.pathname) return;
+      if (window.confirm(message)) return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    document.addEventListener('click', onClick, true);
+    return () => document.removeEventListener('click', onClick, true);
+  }, [armed, message]);
+}

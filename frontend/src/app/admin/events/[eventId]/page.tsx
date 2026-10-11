@@ -21,7 +21,8 @@ import PublishBlockers from '@/components/events/PublishBlockers';
 import { publishBlockers, wizardReadinessHref, type ReadinessItem } from '@/lib/eventReadiness';
 import DuplicateEventDialog from '../DuplicateEventDialog';
 import ContinueSetupLink from '@/components/event-setup/ContinueSetupLink';
-import { continueSetupHref, detailsEditLinks, EVENT_WIZARD_ENABLED, wizardStepHref } from '@/lib/eventWizard';
+import { continueSetupHref, detailsEditLinks, EVENT_WIZARD_ENABLED, withOrg } from '@/lib/eventWizard';
+import { rememberEditControl, takeEditControl } from '@/lib/detailsReturn';
 import { WorkspaceTabs, workspaceTabs } from '@/components/events/EventWorkspace';
 import {
   AdmissionCard,
@@ -65,9 +66,10 @@ function EventDetailsContent() {
     | null
   >(null);
 
-  // Spec 050-O: Save & exit in the wizard returns here with ?saved=<step>.
-  const savedStep = EVENT_WIZARD_ENABLED ? searchParams.get('saved') : null;
-  const returned = useRef<string | null>(null);
+  // Spec 050-O: Save & exit in the wizard returns here with ?saved=1 (saved)
+  // or ?saved=0 (the organizer left after a failed save).
+  const savedParam = EVENT_WIZARD_ENABLED ? searchParams.get('saved') : null;
+  const returned = useRef(false);
 
   const load = useCallback(async () => {
     if (orgLoading || !orgId || !eventId) return;
@@ -88,23 +90,19 @@ function EventDetailsContent() {
     load();
   }, [load]);
 
-  // Back from the wizard: announce "Saved" and put focus back on the Edit
-  // control of the section that was edited (else the event title), once.
+  // Back from the wizard: say whether it saved (never "Saved" after a failed
+  // save) and put focus back on the Edit control that was used, else the title.
   useEffect(() => {
-    if (!savedStep || !overview || returned.current === savedStep) return;
-    returned.current = savedStep;
-    setNotice('Saved.');
-    const href = wizardStepHref(eventId, savedStep);
-    const target =
-      document.querySelector<HTMLElement>(`a[href="${CSS.escape(href)}"]`) ??
-      document.querySelector<HTMLElement>(`a[href^="${CSS.escape(`${href}&`)}"]`) ??
-      document.getElementById('event-title');
-    target?.focus();
-    // Drop the marker so a refresh does not say "Saved" again.
+    if (!savedParam || !overview || returned.current) return;
+    returned.current = true;
+    if (savedParam === '1') setNotice('Saved.');
+    else setError('Your latest changes were not saved.');
+    (takeEditControl(eventId) ?? document.getElementById('event-title'))?.focus();
+    // Drop the marker so a refresh does not repeat the notice.
     const rest = new URLSearchParams(searchParams.toString());
     rest.delete('saved');
     router.replace(`/admin/events/${eventId}${rest.size ? `?${rest}` : ''}`, { scroll: false });
-  }, [savedStep, overview, eventId, router, searchParams]);
+  }, [savedParam, overview, eventId, router, searchParams]);
 
   const publish = async () => {
     if (!orgId) return;
@@ -181,11 +179,11 @@ function EventDetailsContent() {
   const ticketed = event.admissionMode === 'TICKETED';
   // Spec 050-O: with the wizard flag on, every Edit opens its wizard step and
   // no flyout mounts (one form per field). Flag off: the editors and flyouts as before.
-  const wizard = EVENT_WIZARD_ENABLED ? detailsEditLinks(eventId, overview.applications.forms) : null;
+  const wizard = EVENT_WIZARD_ENABLED ? detailsEditLinks(eventId, overview.applications.forms, orgId) : null;
   const cancelled = event.status === 'CANCELLED';
 
   return (
-    <PageFrame>
+    <PageFrame onClickCapture={wizard ? (e) => rememberEditControl(eventId, e.target) : undefined}>
       <Breadcrumb name={event.name} />
 
       <EventHero
@@ -268,7 +266,7 @@ function EventDetailsContent() {
           blockers={blockers}
           eventId={eventId}
           orgId={orgId}
-          hrefFor={wizard ? (item) => wizardReadinessHref(item, eventId) : undefined}
+          hrefFor={wizard ? (item) => withOrg(wizardReadinessHref(item, eventId), orgId) : undefined}
           className="mt-4"
         />
       )}
@@ -302,7 +300,7 @@ function EventDetailsContent() {
               delay={40}
             />
           ) : (
-            <RsvpSection overview={overview} editHref={wizard?.tickets ?? edit('event-admission')} rsvpsHref={`${base}/rsvps`} delay={40} />
+            <RsvpSection overview={overview} editHref={wizard?.tickets ?? edit('event-admission')} addOnsHref={wizard?.addOns} rsvpsHref={`${base}/rsvps`} delay={40} />
           )}
           <ApplicationsSection
             overview={overview}
@@ -363,8 +361,12 @@ function EventDetailsContent() {
   );
 }
 
-function PageFrame({ children }: { children: React.ReactNode }) {
-  return <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 sm:py-8">{children}</div>;
+function PageFrame({ children, onClickCapture }: { children: React.ReactNode; onClickCapture?: React.MouseEventHandler }) {
+  return (
+    <div onClickCapture={onClickCapture} className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 sm:py-8">
+      {children}
+    </div>
+  );
 }
 
 function Breadcrumb({ name }: { name?: string }) {

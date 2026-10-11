@@ -335,11 +335,14 @@ export function RsvpSection({
   overview,
   editHref,
   rsvpsHref,
+  addOnsHref,
   delay,
 }: {
   overview: EventOverview;
   editHref: string;
   rsvpsHref: string;
+  /** Spec 050-O: add-ons (e.g. what vendor tiers offer) are edited on their wizard step for RSVP events too. */
+  addOnsHref?: string;
   delay?: number;
 }) {
   const { event, rsvp } = overview;
@@ -385,6 +388,17 @@ export function RsvpSection({
         Up to {event.rsvpMaxPartySize} {event.rsvpMaxPartySize === 1 ? 'guest' : 'guests'} per RSVP. RSVPs are free and never
         count as revenue.
       </p>
+      {addOnsHref && (
+        <div className="mt-3 flex items-center justify-between gap-3 border-t border-gray-100 pt-3 dark:border-slate-700/70">
+          <p className="text-sm text-gray-700 dark:text-slate-300">
+            <span className={eyebrow}>Add-ons</span> {n(overview.addOns.addOns.length)}
+          </p>
+          <Link href={addOnsHref} aria-label="Edit add-ons" className={editButton}>
+            <Pencil className="h-3.5 w-3.5" aria-hidden />
+            Edit
+          </Link>
+        </div>
+      )}
     </OverviewSection>
   );
 }
@@ -657,7 +671,7 @@ export function WhenWhereCard({
           <p className="text-sm text-gray-600 dark:text-slate-400">No venue</p>
         )}
         {venueHref && (
-          <Link href={venueHref} aria-label="Edit venue" className={`${quietLink} mt-2 min-h-11`}>
+          <Link href={venueHref} className={`${quietLink} mt-2 min-h-11`}>
             Change venue
           </Link>
         )}
