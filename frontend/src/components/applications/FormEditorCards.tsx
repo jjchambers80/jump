@@ -12,6 +12,8 @@ import Link from 'next/link';
 import { FormEvent, useEffect, useState } from 'react';
 import { instantToZonedInput, zonedInputToIso } from '@/lib/eventTime';
 import { timeZoneLabel } from '@/lib/timeZones';
+// The event setup wizard's floor-map and collect-more steps (spec 050-L).
+import { wizardLink } from '@/components/event-setup/applicationSteps';
 import { MAX_PINNED_QUESTIONS, money, QUESTION_TYPE_LABEL, type AdminForm, type AdminTier, type Question, type QuestionType } from '@/lib/applications';
 
 const card = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
@@ -25,14 +27,6 @@ const CHOICE = new Set<QuestionType>(['SINGLE_CHOICE', 'MULTI_CHOICE']);
 
 export type EditorMode = 'form' | 'template';
 
-/** Where the cards link out to: the event's floor map, and where add-ons are created. */
-export type EditorLinkTarget = 'floor-map' | 'add-ons';
-/** The old event pages; the setup wizard passes its own steps (spec 050-L). */
-export type EditorLinks = (eventId: string, target: EditorLinkTarget) => { href: string; label: string };
-export const eventPageLink: EditorLinks = (eventId, target) =>
-  target === 'floor-map'
-    ? { href: `/admin/events/${eventId}/map`, label: 'Open the floor map' }
-    : { href: `/admin/events/${eventId}/edit`, label: 'event page' };
 
 /** A tier as the cards need it; `AdminTier` satisfies it, a template tier carries only the base fields. */
 export type EditorTier = Pick<AdminTier, 'id' | 'name' | 'description' | 'price' | 'quantityTotal' | 'isActive'> & Partial<Pick<AdminTier, 'amounts' | 'quantityApproved' | 'quantityReserved' | 'addOns'>>;
@@ -95,14 +89,12 @@ export function SettingsCard({
   onSave,
   mode = 'form',
   onChange,
-  linkTo = eventPageLink,
 }: {
   form: EditorForm;
   canEdit: boolean;
   /** Form mode: PATCH the form. */
   onSave?: (body: Record<string, unknown>) => Promise<void>;
   mode?: EditorMode;
-  linkTo?: EditorLinks;
   /** Template mode: every change is reported as the settings half of a definition. */
   onChange?: (settings: Record<string, unknown>) => void;
 }) {
@@ -280,8 +272,8 @@ export function SettingsCard({
                   {!template && form.eventId && (
                     <>
                       {' '}
-                      <Link href={linkTo(form.eventId, 'floor-map').href} className="font-medium text-accent-600 underline dark:text-accent-400">
-                        {linkTo(form.eventId, 'floor-map').label}
+                      <Link href={wizardLink(form.eventId, 'floor-map').href} className="font-medium text-accent-600 underline dark:text-accent-400">
+                        {wizardLink(form.eventId, 'floor-map').label}
                       </Link>
                     </>
                   )}
@@ -364,7 +356,6 @@ export function TiersCard({
   onDelete,
   onSetAddOns,
   mode = 'form',
-  linkTo = eventPageLink,
 }: {
   form: EditorForm;
   canEdit: boolean;
@@ -374,7 +365,6 @@ export function TiersCard({
   /** Omitted (template mode): the add-on picker is hidden. */
   onSetAddOns?: (tierId: string, addOnIds: string[]) => Promise<void>;
   mode?: EditorMode;
-  linkTo?: EditorLinks;
 }) {
   const template = mode === 'template';
   const [draft, setDraft] = useState({ name: '', price: '', quantityTotal: '' });
@@ -402,7 +392,7 @@ export function TiersCard({
         {!template && eventAddOns.length === 0 && (
           <>
             {' '}Add-ons (power, badges, tables) are created on the{' '}
-            <Link href={linkTo(form.eventId!, 'add-ons').href} className="text-accent-600 underline dark:text-accent-300">{linkTo(form.eventId!, 'add-ons').label}</Link>.
+            <Link href={wizardLink(form.eventId!, 'add-ons').href} className="text-accent-600 underline dark:text-accent-300">{wizardLink(form.eventId!, 'add-ons').label}</Link>.
           </>
         )}
       </p>

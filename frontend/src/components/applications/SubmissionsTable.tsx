@@ -38,6 +38,7 @@ import { useParticipantsApi, type ParticipantsQuery } from '@/components/applica
 import BusinessCell from './BusinessCell';
 import RowActionsMenu from './RowActionsMenu';
 import { formatEventDate } from '@/lib/eventTime';
+import { wizardStepHref } from '@/lib/eventWizard';
 
 const STATUS_ORDER: ApplicationStatus[] = ['SUBMITTED', 'WAITLISTED', 'APPROVED', 'REJECTED', 'WITHDRAWN'];
 /** Organization mount page size (plan §7.4); the per-event mount keeps the API default. */
@@ -591,7 +592,7 @@ export default function SubmissionsTable({ eventId, standingFormId }: { eventId?
                         Create a form on an event
                       </Link>
                     ) : (
-                      <Link href={`/admin/events/${eventId}/applications/forms`} className="text-accent-600 hover:underline dark:text-accent-300">
+                      <Link href={wizardStepHref(eventId!, 'vendors')} className="text-accent-600 hover:underline dark:text-accent-300">
                         Create a form
                       </Link>
                     ))}

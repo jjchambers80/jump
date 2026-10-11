@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { publishBlockers, readinessHref, readinessSettingsFix, wizardReadinessHref } from '@/lib/eventReadiness';
+import { publishBlockers, readinessHref, readinessSettingsFix } from '@/lib/eventReadiness';
 
 const item = (code: string, step: string) => ({ code, step, message: code });
 
@@ -14,24 +14,21 @@ describe('publishBlockers', () => {
 });
 
 describe('readinessHref', () => {
-  const base = '/admin/events/e1';
+  const base = '/admin/events/e1/setup';
   it.each([
-    ['NAME_MISSING', 'name', `${base}/edit/details?orgId=o1#event-details`],
-    ['VENUE_MISSING', 'venue', `${base}/edit/details?orgId=o1#event-when-where`],
-    ['DATE_IN_PAST', 'date', `${base}/edit/details?orgId=o1#event-when-where`],
-    ['CAPACITY_MISSING', 'tickets', `${base}/edit/sales?orgId=o1#event-admission`],
-    ['TIERS_EXCEED_CAPACITY', 'tickets', `${base}/edit/sales?orgId=o1#event-price-tiers`],
-    ['NO_IMAGE', 'image', `${base}/edit/details?orgId=o1#event-media`],
-    ['FORM_HAS_NO_QUESTIONS', 'vendors', `${base}/applications/forms?orgId=o1`],
-    ['MAP_FORM_WITHOUT_PUBLISHED_MAP', 'floor-map', `${base}/map?orgId=o1`],
+    ['NAME_MISSING', 'name', `${base}?step=name&org=o1`],
+    ['CAPACITY_MISSING', 'tickets', `${base}?step=tickets&org=o1`],
+    ['FORM_HAS_NO_QUESTIONS', 'vendors', `${base}?step=vendors&org=o1`],
+    ['MAP_FORM_WITHOUT_PUBLISHED_MAP', 'floor-map', `${base}?step=floor-map&org=o1`],
     ['PAYMENTS_UNAVAILABLE', 'review', '/admin/settings/payments'],
     ['TAX_RATE_UNRESOLVED', 'review', '/admin/settings/tax'],
-  ])('%s links to its editor', (code, step, href) => {
+  ])('%s opens its wizard step or settings page', (code, step, href) => {
     expect(readinessHref(item(code, step), 'e1', 'o1')).toBe(href);
   });
 
-  it('omits the org query when there is none', () => {
-    expect(readinessHref(item('NO_ACTIVE_TIER', 'tickets'), 'e1', null)).toBe(`${base}/edit/sales#event-price-tiers`);
+  it('omits the org when there is none', () => {
+    expect(readinessHref(item('NO_ACTIVE_TIER', 'tickets'), 'e1', null)).toBe(`${base}?step=tickets`);
+    expect(readinessHref(item('NO_IMAGE', 'image'), 'e1')).toBe(`${base}?step=image`);
   });
 });
 
@@ -40,14 +37,5 @@ describe('readinessSettingsFix', () => {
     expect(readinessSettingsFix(item('PAYMENTS_UNAVAILABLE', 'review'))).toMatchObject({ permission: 'settings.payments', who: 'An admin needs to finish payments setup.' });
     expect(readinessSettingsFix(item('TAX_RATE_UNRESOLVED', 'review'))).toMatchObject({ permission: 'settings.tax', who: 'An admin needs to finish tax setup.' });
     expect(readinessSettingsFix(item('NO_ACTIVE_TIER', 'tickets'))).toBeNull();
-  });
-});
-
-describe('wizardReadinessHref', () => {
-  it('opens the item’s wizard step, and keeps org settings fixes on their settings page', () => {
-    expect(wizardReadinessHref(item('CAPACITY_MISSING', 'tickets'), 'e1')).toBe('/admin/events/e1/setup?step=tickets');
-    expect(wizardReadinessHref(item('MAP_FORM_WITHOUT_PUBLISHED_MAP', 'floor-map'), 'e1')).toBe('/admin/events/e1/setup?step=floor-map');
-    expect(wizardReadinessHref(item('PAYMENTS_UNAVAILABLE', 'review'), 'e1')).toBe('/admin/settings/payments');
-    expect(wizardReadinessHref(item('TAX_RATE_UNRESOLVED', 'review'), 'e1')).toBe('/admin/settings/tax');
   });
 });

@@ -15,7 +15,7 @@ import { QuestionsCard, SettingsCard, TiersCard } from '@/components/application
 import { SaveAsTemplateDialog } from '@/components/applications/TemplateDialogs';
 import Link from 'next/link';
 import type { useApplicationsApi } from '@/app/admin/events/[eventId]/applications/useApplicationsApi';
-import { PURPOSE_LABEL, wizardLink } from '../applicationSteps';
+import { PURPOSE_LABEL } from '../applicationSteps';
 import ShiftsCard from './ShiftsCard';
 import { hintClass, inputClass, labelClass, secondaryButton } from '../ui';
 
@@ -111,12 +111,11 @@ export default function InlineFormEditor({ form, api, canEdit, purposes, onSaved
           {error}
         </p>
       )}
-      <SettingsCard form={form} canEdit={canEdit} linkTo={wizardLink} onSave={(body) => run('Form settings saved.', () => api.updateForm(form.id, body))} />
+      <SettingsCard form={form} canEdit={canEdit} onSave={(body) => run('Form settings saved.', () => api.updateForm(form.id, body))} />
       {form.kind === 'PAID' && (
         <TiersCard
           form={form}
           canEdit={canEdit}
-          linkTo={wizardLink}
           onAdd={(body) => run('Tier added.', () => api.addTier(form.id, body))}
           onUpdate={(tierId, body) => run('Tier saved.', () => api.updateTier(form.id, tierId, body))}
           onDelete={(tierId) => run('Tier deleted.', () => api.deleteTier(form.id, tierId))}

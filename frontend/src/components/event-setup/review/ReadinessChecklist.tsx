@@ -8,7 +8,7 @@
 import Link from 'next/link';
 import { AlertTriangle, CheckCircle2, ChevronRight, XCircle } from 'lucide-react';
 import { hasPermission, useOrg } from '@/components/OrgContext';
-import { readinessSettingsFix, wizardReadinessHref, type EventReadiness, type ReadinessItem } from '@/lib/eventReadiness';
+import { readinessSettingsFix, readinessHref, type EventReadiness, type ReadinessItem } from '@/lib/eventReadiness';
 
 const KIND = {
   blocker: { Icon: XCircle, label: 'Must fix', iconClass: 'text-red-700 dark:text-red-400' },
@@ -36,7 +36,7 @@ function Item({ item, kind, eventId }: { item: ReadinessItem; kind: keyof typeof
         <div className="flex min-h-11 items-center py-2 text-sm">{text}</div>
       ) : (
         <Link
-          href={wizardReadinessHref(item, eventId)}
+          href={readinessHref(item, eventId)}
           className="flex min-h-11 items-center justify-between gap-3 rounded py-2 text-sm text-gray-800 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:text-slate-200"
         >
           {text}

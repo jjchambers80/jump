@@ -33,39 +33,13 @@ export function readinessSettingsFix(item: ReadinessItem): { permission: string;
 }
 
 /**
- * Where an item is fixed. Until the wizard's edit mode (050-O) these are the
- * existing editors; then this becomes `/admin/events/<id>/setup?step=<step>`.
+ * Where an item is fixed: its setup wizard step (spec 050), with `&org=` when
+ * given so a member of two orgs opens it in the right one; org settings fixes
+ * keep their settings page.
  */
-export function readinessHref(item: ReadinessItem, eventId: string, orgId: string | null): string {
-  const q = orgId ? `?orgId=${encodeURIComponent(orgId)}` : '';
-  const base = `/admin/events/${eventId}`;
-  if (SETTINGS_FIX[item.code]) return SETTINGS_FIX[item.code].href;
-  if (item.code === 'CAPACITY_MISSING') return `${base}/edit/sales${q}#event-admission`;
-  switch (item.step) {
-    case 'name':
-      return `${base}/edit/details${q}#event-details`;
-    case 'venue':
-    case 'date':
-      return `${base}/edit/details${q}#event-when-where`;
-    case 'description':
-      return `${base}/edit/details${q}#event-details`;
-    case 'image':
-      return `${base}/edit/details${q}#event-media`;
-    case 'tickets':
-      return `${base}/edit/sales${q}#event-price-tiers`;
-    case 'floor-map':
-      return `${base}/map${q}`;
-    case 'vendors':
-    case 'special-guests':
-    case 'volunteers':
-    case 'other-applications':
-      return `${base}/applications/forms${q}`;
-    default:
-      return `${base}${q}`;
-  }
-}
-
-/** In the setup wizard an item opens its own step; org settings fixes keep their settings page. */
-export function wizardReadinessHref(item: ReadinessItem, eventId: string): string {
-  return SETTINGS_FIX[item.code]?.href ?? `/admin/events/${eventId}/setup?step=${encodeURIComponent(item.step)}`;
+export function readinessHref(item: ReadinessItem, eventId: string, orgId: string | null = null): string {
+  const fix = SETTINGS_FIX[item.code]?.href;
+  if (fix) return fix;
+  const org = orgId ? `&org=${encodeURIComponent(orgId)}` : '';
+  return `/admin/events/${eventId}/setup?step=${encodeURIComponent(item.step)}${org}`;
 }

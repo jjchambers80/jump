@@ -1,20 +1,17 @@
-// Spec 050: the event setup wizard ships dark behind this build-time flag
-// until 050-O reaches parity; 050-P flips it on in prod and deletes it.
+// Spec 050: links into the event setup wizard, the one editor for every
+// event field and event application form (always on since 050-P).
 import { stepForPurpose } from '@/components/event-setup/applicationSteps';
 import type { FormPurpose } from '@/lib/applications';
 
-export const EVENT_WIZARD_ENABLED = process.env.NEXT_PUBLIC_EVENT_WIZARD_ENABLED === 'true';
-
 /**
  * "Continue setup" target (spec 050 §4): a DRAFT whose create flow has not
- * finished resumes at its last step. Null when the flag is off, the event is
- * set up, or the payload predates the wizard fields (undefined ≠ null).
+ * finished resumes at its last step. Null when the event is set up, or the
+ * payload predates the wizard fields (undefined ≠ null).
  */
 export function continueSetupHref(
-  event: { id: string; status: string; setupStep?: string | null; setupCompletedAt?: string | null },
-  enabled = EVENT_WIZARD_ENABLED
+  event: { id: string; status: string; setupStep?: string | null; setupCompletedAt?: string | null }
 ): string | null {
-  if (!enabled || event.status !== 'DRAFT' || event.setupCompletedAt !== null) return null;
+  if (event.status !== 'DRAFT' || event.setupCompletedAt !== null) return null;
   const step = event.setupStep ? `?step=${encodeURIComponent(event.setupStep)}` : '';
   return `/admin/events/${encodeURIComponent(event.id)}/setup${step}`;
 }
@@ -55,6 +52,7 @@ export function detailsEditLinks(
     /** The floor-map step exists only while a vendor form picks spaces on a map; else the Map tab. */
     map: mapForm ? at('floor-map') : null,
     listing: at('description'),
+    guests: at('special-guests'),
   };
 }
 

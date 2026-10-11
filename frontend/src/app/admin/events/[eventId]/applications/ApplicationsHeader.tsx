@@ -1,22 +1,16 @@
 'use client';
 
 // Header shared by the admin applications pages of one event (spec 011): the
-// event workspace header (spec 037) plus the Queue / Forms switch. Door
-// check-in is a workspace tab of its own.
+// event workspace header (spec 037) plus "Manage forms", which opens the setup
+// wizard's application steps (spec 050-P: forms are configured only there).
+// Door check-in is a workspace tab of its own.
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { Settings2 } from 'lucide-react';
 import EventWorkspaceHeader from '@/components/events/EventWorkspace';
-
-const tab = 'rounded-md px-3 py-1.5 text-sm font-medium';
-const activeTab = 'bg-accent-50 text-accent-700 dark:bg-accent-900/30 dark:text-accent-300';
-const idleTab = 'text-gray-700 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800';
+import { wizardStepHref } from '@/lib/eventWizard';
 
 export default function ApplicationsHeader({ eventId, title, subtitle }: { eventId: string; title?: string; subtitle?: string }) {
-  const pathname = usePathname();
-  const base = `/admin/events/${eventId}/applications`;
-  const onForms = pathname.startsWith(`${base}/forms`);
-
   return (
     <EventWorkspaceHeader
       eventId={eventId}
@@ -24,14 +18,13 @@ export default function ApplicationsHeader({ eventId, title, subtitle }: { event
       title={title ?? 'Applications'}
       subtitle={subtitle ? <span>{subtitle}</span> : undefined}
       actions={
-        <nav aria-label="Applications sections" className="flex gap-1">
-          <Link href={base} aria-current={!onForms ? 'page' : undefined} className={`${tab} ${!onForms ? activeTab : idleTab}`}>
-            Queue
-          </Link>
-          <Link href={`${base}/forms`} aria-current={onForms ? 'page' : undefined} className={`${tab} ${onForms ? activeTab : idleTab}`}>
-            Forms
-          </Link>
-        </nav>
+        <Link
+          href={wizardStepHref(eventId, 'vendors')}
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 text-sm font-semibold text-gray-800 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+        >
+          <Settings2 className="h-4 w-4" aria-hidden />
+          Manage forms
+        </Link>
       }
     />
   );

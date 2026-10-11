@@ -1,8 +1,7 @@
 'use client';
 
-// Spec 050-O: with the wizard flag on, the old event editors and the
-// event-level forms configuration pages send bookmarks and email links to the
-// wizard step that now owns their fields. `to` may look something up first
+// Spec 050-O/P: the old event editor and event-level forms configuration
+// routes send bookmarks and email links to the wizard step that now owns their fields. `to` may look something up first
 // (a form's purpose); if that fails the fallback step still opens. The
 // organization in the old link (`?orgId=`, or `?org=`) rides along as `?org=`,
 // which the wizard selects before it loads (OrgFromUrlGate).
