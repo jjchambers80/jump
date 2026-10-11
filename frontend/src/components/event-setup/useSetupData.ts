@@ -44,16 +44,22 @@ export function useSetupData(orgId: string | null, orgLoading: boolean, eventId:
   const [load, setLoad] = useState<LoadState>({ status: 'loading' });
   const [venues, setVenues] = useState<SetupVenue[]>([]);
   const [saved, setSavedRaw] = useState<SavedEvent | null>(null);
-  // An event PATCH answers without add-ons: keep the count the overview gave.
+  // An event PATCH answers without add-ons or the map: keep what the overview gave.
   const setSaved = useCallback<Dispatch<SetStateAction<SavedEvent | null>>>(
     (action) =>
       setSavedRaw((prev) => {
         const next = typeof action === 'function' ? action(prev) : action;
-        return next && next.addOnCount === undefined && prev?.id === next.id ? { ...next, addOnCount: prev.addOnCount } : next;
+        if (!next || prev?.id !== next.id) return next;
+        return {
+          ...next,
+          ...(next.addOnCount === undefined && { addOnCount: prev.addOnCount }),
+          ...(next.mapStatus === undefined && { mapStatus: prev.mapStatus }),
+        };
       }),
     []
   );
   const setAddOnCount = useCallback((addOnCount: number) => setSavedRaw((prev) => (prev ? { ...prev, addOnCount } : prev)), []);
+  const setMapStatus = useCallback((mapStatus: SavedEvent['mapStatus']) => setSavedRaw((prev) => (prev ? { ...prev, mapStatus } : prev)), []);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
@@ -67,7 +73,7 @@ export function useSetupData(orgId: string | null, orgLoading: boolean, eventId:
       .then(([venueList, overview]) => {
         if (cancelled) return;
         setVenues(venueList);
-        setSaved(overview ? { ...toSaved(overview.event, overview.addOns?.addOns?.length ?? 0), admissionLock: overview.admissionLock?.reason ?? null } : null);
+        setSaved(overview ? { ...toSaved(overview.event, overview.addOns?.addOns?.length ?? 0), mapStatus: overview.map?.status ?? null, admissionLock: overview.admissionLock?.reason ?? null } : null);
         setLoad({ status: 'ready' });
       })
       .catch((err) => {
@@ -82,5 +88,5 @@ export function useSetupData(orgId: string | null, orgLoading: boolean, eventId:
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
   const addVenue = useCallback((venue: SetupVenue) => setVenues((list) => [...list, venue]), []);
 
-  return { load, venues, saved, setSaved, setAddOnCount, reload, addVenue };
+  return { load, venues, saved, setSaved, setAddOnCount, setMapStatus, reload, addVenue };
 }

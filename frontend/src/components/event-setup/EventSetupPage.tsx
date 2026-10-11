@@ -126,6 +126,7 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
         } }}
         forms={flow.forms}
         row={saved ? { saved, setSaved: data.setSaved, zone: ctx.savedZone, refreshPreview: flow.refreshPreview } : null}
+        onMapStatus={flow.setMapStatus}
         onAddOnsSaved={(count) => {
           flow.setAddOnCount(count);
           flow.refreshPreview();

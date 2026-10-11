@@ -63,6 +63,8 @@ interface Props {
   row: Omit<SavedRowProps, 'orgId'> | null;
   /** Collect more saved an add-on: the new count (step state) and a preview refresh. */
   onAddOnsSaved: (addOnCount: number) => void;
+  /** The Floor map step loaded or created the map: its status (step progress). */
+  onMapStatus: (status: SavedEvent['mapStatus']) => void;
   /** The event's application forms (steps 8, 10–12). */
   forms: SetupForms;
 }
@@ -104,7 +106,7 @@ const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(p
           {isApplicationStep(step.key) && props.row && (
             <ApplicationsStep stepKey={step.key} orgId={props.orgId} eventId={props.row.saved.id} eventName={props.row.saved.name} forms={props.forms} refreshPreview={props.row.refreshPreview} />
           )}
-          {step.key === 'floor-map' && props.row && <FloorMapStep eventId={props.row.saved.id} refreshPreview={props.row.refreshPreview} />}
+          {step.key === 'floor-map' && props.row && <FloorMapStep eventId={props.row.saved.id} refreshPreview={props.row.refreshPreview} onMapStatus={props.onMapStatus} />}
           {!step.built && <PendingStep />}
         </fieldset>
         {step.key === 'name' && !props.event && props.orgId && <StartFromPastEvent orgId={props.orgId} />}

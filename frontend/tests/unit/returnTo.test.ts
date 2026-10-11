@@ -24,6 +24,7 @@ describe('safeAdminReturnTo', () => {
     '/events/e1',
     '/admin/../events',
     '/admin/%2e%2e/events',
+    `/admin/${'a'.repeat(2048)}`,
   ])('rejects %s', (value) => {
     expect(safeAdminReturnTo(value)).toBeNull();
   });

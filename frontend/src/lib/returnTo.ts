@@ -3,10 +3,11 @@
 // open redirect (external, protocol-relative, `javascript:`, `..` escapes).
 
 const BASE = 'http://returnto.invalid';
+const MAX_LENGTH = 2048;
 
 /** The normalised `/admin…` path (with query and hash), or null when it is not one. */
 export function safeAdminReturnTo(value: string | null | undefined): string | null {
-  if (!value || !value.startsWith('/')) return null;
+  if (!value || value.length > MAX_LENGTH || !value.startsWith('/')) return null;
   let url: URL;
   try {
     url = new URL(value, BASE);

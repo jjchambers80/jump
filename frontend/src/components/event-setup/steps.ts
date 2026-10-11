@@ -46,6 +46,8 @@ export interface SavedEvent extends SalesSaved {
   tierCount?: number;
   /** Add-ons on the event, every scope (overview `addOns`; kept current by Collect more). */
   addOnCount?: number;
+  /** The event's floor map (overview `map`; null = none; kept current by the Floor map step). */
+  mapStatus?: 'DRAFT' | 'PUBLISHED' | null;
 }
 
 export interface StepCtx {
@@ -190,7 +192,7 @@ export const EVENT_STEPS: EventStep[] = [
   },
   { key: 'discounts', title: 'Discount codes', rule: 'S', anchor: 'tickets', built: false, reserved: true, visible: never, complete: never },
   VENDORS_STEP,
-  { key: 'floor-map', title: 'Floor map', rule: 'C', anchor: 'floor-map', built: true, visible: (ctx) => !!ctx.forms?.some((f) => f.purpose === 'VENDOR' && f.spaceSelection === 'MAP'), complete: never },
+  { key: 'floor-map', title: 'Floor map', rule: 'C', anchor: 'floor-map', built: true, visible: (ctx) => !!ctx.forms?.some((f) => f.purpose === 'VENDOR' && f.spaceSelection === 'MAP'), complete: (ctx) => ctx.saved?.mapStatus === 'PUBLISHED' },
   SPECIAL_GUESTS_STEP,
   VOLUNTEERS_STEP,
   OTHER_APPLICATIONS_STEP,
