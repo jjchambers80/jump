@@ -959,7 +959,8 @@ class ApplicationFormService {
       collectBusiness: form.collectBusiness,
       buttonLabel: form.buttonLabel,
       successMessage: form.successMessage,
-      acceptance: this.acceptance(form),
+      // Spec 050-D: an event-level sales close shuts every form without touching its status.
+      acceptance: event?.salesClosedAt ? { open: false, reason: 'sales_closed' } : this.acceptance(form),
       chargeTiming: form.kind === 'PAID' ? form.chargeTiming : null,
       feeMode: form.kind === 'PAID' ? form.feeMode : null,
       // Spec 024 phase 3: the card-authorization label names the pay-now window.

@@ -58,8 +58,14 @@ export default function ApplyFormPage({ params }: { params: { eventId: string; f
                 <Lock className="h-5 w-5" />
               </span>
               <div>
-                <p className="font-semibold text-gray-900 dark:text-slate-100">This form is {closedLine.toLowerCase()}.</p>
-                <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">Check back later, or head back to the event page for tickets.</p>
+                <p className="font-semibold text-gray-900 dark:text-slate-100">
+                  {form.acceptance.reason === 'sales_closed' ? 'Applications are closed.' : `This form is ${closedLine.toLowerCase()}.`}
+                </p>
+                <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">
+                  {form.acceptance.reason === 'sales_closed'
+                    ? 'The organizer has closed sales for this event.'
+                    : 'Check back later, or head back to the event page for tickets.'}
+                </p>
               </div>
             </div>
           );

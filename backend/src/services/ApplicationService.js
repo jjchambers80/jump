@@ -74,6 +74,7 @@ import { storefrontFor } from '../utils/storefrontUrl.js';
 import logger from '../utils/logger.js';
 import { normalizeEmail } from '../utils/normalizeEmail.js';
 import { upsertContactFillBlanks } from './contactRecord.js';
+import { assertSalesOpen } from './salesOpen.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const URL_RE = /^https?:\/\/[^\s]+$/i;
@@ -332,6 +333,7 @@ class ApplicationService {
   async submit(eventId, body, files = { profilePhotos: [], answerPhotos: {} }, { requestMeta = { ipHash: null, userAgent: null }, organizationId: standingOrganizationId = null } = {}) {
     const event = eventId ? await applicationFormService.requireEvent(eventId) : null;
     if (event && event.status !== 'PUBLISHED') throw new NotFoundError('Event not found');
+    if (event) assertSalesOpen(event);
     const organization = event?.venue?.organization || (standingOrganizationId ? await applicationFormService.requireOrganization(standingOrganizationId) : null);
     if (!organization) throw new NotFoundError('Organization not found');
     const form = await prisma.applicationForm.findFirst({
@@ -372,6 +374,14 @@ class ApplicationService {
     const presentedText = { PRIVACY: applyConsentText({ organizationName }) };
 
     const application = await prisma.$transaction(async (tx) => {
+      // Spec 050-D: re-check the event under a shared lock, so an unpublish
+      // either counts this submission or this submission sees the draft.
+      if (eventId) {
+        await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${eventId} FOR SHARE`;
+        const locked = await tx.event.findUnique({ where: { id: eventId }, select: { status: true, salesClosedAt: true } });
+        if (locked?.status !== 'PUBLISHED') throw new NotFoundError('Event not found');
+        assertSalesOpen(locked);
+      }
       // Opt-ins are recorded on the application and applied by
       // ContactOptInService once it reaches SUBMITTED, never here (spec 024 phase 3).
       // Fill in a missing name only; never overwrite one (spec 037 D12).

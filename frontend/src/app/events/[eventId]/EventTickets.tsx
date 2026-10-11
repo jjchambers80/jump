@@ -2,7 +2,7 @@
 // lib/fees.ts), then the add-ons the cart's tiers offer. In `preview` a draft
 // with no tiers yet shows a placeholder stub instead of "Sold out".
 
-import { Clock } from 'lucide-react';
+import { Clock, Lock } from 'lucide-react';
 import TierStub from './TierStub';
 import EventAddOns from './EventAddOns';
 import Placeholder from './Placeholder';
@@ -25,7 +25,7 @@ interface EventTicketsProps {
 const EMPTY_BOX = 'rounded-2xl border border-dashed border-gray-300 px-6 py-10 text-center dark:border-slate-600';
 
 export default function EventTickets({ event, state, cart, preview, checkoutCancelled, formattedDate, onQuantityChange, onAddOnChange, onShowTier }: EventTicketsProps) {
-  const { isPastEvent, activeTiers } = state;
+  const { isPastEvent, activeTiers, salesClosed } = state;
   const awaitingTiers = preview && activeTiers.length === 0;
   const isSoldOut = state.isSoldOut && !awaitingTiers;
   const taxRate = event.taxRate ?? 0;
@@ -52,7 +52,7 @@ export default function EventTickets({ event, state, cart, preview, checkoutCanc
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-slate-400">Admission</p>
           <h2 className="mt-0.5 text-2xl font-bold tracking-tight text-gray-900 dark:text-slate-100">Tickets</h2>
         </div>
-        {!isPastEvent && !isSoldOut && activeTiers.length > 0 && (
+        {!isPastEvent && !isSoldOut && !salesClosed && activeTiers.length > 0 && (
           <p className="pb-1 text-right text-xs text-gray-500 dark:text-slate-400">
             Prices include fees{event.taxRate > 0 ? ' and tax' : ''}
           </p>
@@ -60,7 +60,7 @@ export default function EventTickets({ event, state, cart, preview, checkoutCanc
       </div>
 
       {/* No handler (the wizard pane): steppers are aria-disabled and point here */}
-      {!onQuantityChange && !isPastEvent && !isSoldOut && activeTiers.length > 0 && (
+      {!onQuantityChange && !isPastEvent && !isSoldOut && !salesClosed && activeTiers.length > 0 && (
         <PreviewNote id="tickets-off" className="-mt-3 mb-4">
           Choosing tickets is off in preview
         </PreviewNote>
@@ -72,6 +72,14 @@ export default function EventTickets({ event, state, cart, preview, checkoutCanc
           <h3 className="text-lg font-semibold text-gray-700 dark:text-slate-300 mb-2">This event has ended</h3>
           <p className="text-sm text-gray-500 dark:text-slate-400 max-w-sm mx-auto">
             This event took place on {formattedDate}. Tickets are no longer available for purchase.
+          </p>
+        </div>
+      ) : salesClosed ? (
+        <div className={EMPTY_BOX} role="status" data-testid="sales-closed">
+          <Lock className="mx-auto mb-4 h-12 w-12 text-gray-300 dark:text-slate-600" strokeWidth={1.5} aria-hidden />
+          <h3 className="text-lg font-semibold text-gray-700 dark:text-slate-300 mb-2">Sales are closed</h3>
+          <p className="text-sm text-gray-500 dark:text-slate-400 max-w-sm mx-auto">
+            Tickets are no longer on sale for this event. Tickets already bought stay valid.
           </p>
         </div>
       ) : awaitingTiers ? (
@@ -108,7 +116,7 @@ export default function EventTickets({ event, state, cart, preview, checkoutCanc
         </div>
       )}
 
-      {!isPastEvent && !isSoldOut && (
+      {!isPastEvent && !isSoldOut && !salesClosed && (
         <EventAddOns offered={cart.offered} quantities={cart.addOnQuantities} onChange={onAddOnChange} taxRate={taxRate} taxInclusive={taxInclusive} />
       )}
     </>

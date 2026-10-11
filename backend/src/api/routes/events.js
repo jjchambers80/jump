@@ -4,7 +4,9 @@
 //             PATCH .../events/:eventId,
 //             POST .../events/:eventId/publish, GET .../events/:eventId/readiness,
 //             POST .../events/:eventId/duplicate,
-//             POST .../events/:eventId/cancel
+//             POST .../events/:eventId/cancel,
+//             POST .../events/:eventId/{unpublish,close-sales,reopen-sales},
+//             DELETE .../events/:eventId (draft only)
 // Per FR-050, contracts/api.yaml
 
 import express from 'express';
@@ -266,6 +268,26 @@ orgRouter.post('/:eventId/cancel', requireAuth, requireOrganizer, requireOrgMemb
     next(error);
   }
 });
+
+// Spec 050-D lifecycle actions: same guard chain as publish and cancel.
+const staffEvent = [requireAuth, requireOrganizer, requireOrgMembership()];
+const lifecycle = (run) => async (req, res, next) => {
+  try {
+    res.json(await run(req.params.orgId, req.params.eventId, req));
+  } catch (error) {
+    next(error);
+  }
+};
+
+/** POST .../events/:eventId/unpublish: PUBLISHED → DRAFT; 409 UNPUBLISH_BLOCKED + details.reasons */
+orgRouter.post('/:eventId/unpublish', ...staffEvent, lifecycle((orgId, eventId) => eventService.unpublishEvent(orgId, eventId)));
+
+/** POST .../events/:eventId/close-sales and /reopen-sales: PUBLISHED only, idempotent */
+orgRouter.post('/:eventId/close-sales', ...staffEvent, lifecycle((orgId, eventId, req) => eventService.closeSales(orgId, eventId, req.user.id)));
+orgRouter.post('/:eventId/reopen-sales', ...staffEvent, lifecycle((orgId, eventId) => eventService.reopenSales(orgId, eventId)));
+
+/** DELETE .../events/:eventId: a DRAFT only, under the unpublish guards; 409 DELETE_BLOCKED + details.reasons */
+orgRouter.delete('/:eventId', ...staffEvent, lifecycle((orgId, eventId) => eventService.deleteDraftEvent(orgId, eventId)));
 
 /**
  * GET /organizations/:orgId/events/:eventId/analytics

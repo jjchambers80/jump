@@ -3,10 +3,14 @@
 // The ⋯ menu on an event card (spec 035 D3). Follows the RowActionsMenu keyboard
 // pattern from spec 019: arrows move between items, Escape closes, focus returns
 // to the trigger button. Items: Event page, Applications, Duplicate, Copy link,
-// Cancel event… (destructive, last, red).
+// then the lifecycle group (spec 050-D): Unpublish… and Close sales… / Reopen
+// sales on a published event, Cancel event…, Delete draft… on a draft. Each
+// lifecycle item opens EventLifecycleDialog, which calls the endpoint.
 
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import { Ban, EyeOff, Lock, LockOpen, Trash2 } from 'lucide-react';
+import EventLifecycleDialog, { type LifecycleAction } from './EventLifecycleDialog';
 
 interface EventActionsMenuProps {
   eventId: string;
@@ -16,10 +20,15 @@ interface EventActionsMenuProps {
   selectedOrgId: string | null;
   onDuplicate: () => void;
   onCancelEvent: () => void;
+  /** Spec 050-D: drives which lifecycle items show. */
+  status?: string;
+  salesClosed?: boolean;
+  /** Called after a lifecycle action succeeded (reload, or leave the page after a delete). */
+  onLifecycleDone?: (action: LifecycleAction) => void;
 }
 
 const itemBase =
-  'block w-full px-3 py-1.5 text-left text-sm text-gray-800 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none dark:text-slate-100 dark:hover:bg-slate-700 dark:focus:bg-slate-700';
+  'flex min-h-11 w-full items-center gap-2 px-3 py-1.5 text-left aria-disabled:cursor-not-allowed aria-disabled:opacity-50 text-sm text-gray-800 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none dark:text-slate-100 dark:hover:bg-slate-700 dark:focus:bg-slate-700';
 
 const destructiveItem = `${itemBase} text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 focus:bg-red-50 dark:focus:bg-red-900/20`;
 
@@ -30,9 +39,26 @@ export default function EventActionsMenu({
   selectedOrgId,
   onDuplicate,
   onCancelEvent,
+  status,
+  salesClosed = false,
+  onLifecycleDone,
 }: EventActionsMenuProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [lifecycle, setLifecycle] = useState<LifecycleAction | null>(null);
+  const published = status === 'PUBLISHED';
+  // Lifecycle calls are org-scoped: without a selected org they stay visible but off, with the reason.
+  const noOrgId = `lifecycle-no-org-${eventId}`;
+  const lifecycleOff = selectedOrgId ? {} : { 'aria-disabled': true as const, 'aria-describedby': noOrgId };
+  const startLifecycle = (action: LifecycleAction) => {
+    if (!selectedOrgId) return;
+    close(false);
+    setLifecycle(action);
+  };
+  const endLifecycle = () => {
+    setLifecycle(null);
+    buttonRef.current?.focus();
+  };
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -87,7 +113,7 @@ export default function EventActionsMenu({
         aria-expanded={open}
         aria-label={`More actions for ${eventName}`}
         onClick={() => setOpen((o) => !o)}
-        className="flex min-h-[28px] min-w-[28px] items-center justify-center rounded-md text-lg leading-none text-gray-500 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+        className="flex min-h-11 min-w-11 sm:min-h-[28px] sm:min-w-[28px] items-center justify-center rounded-md text-lg leading-none text-gray-500 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
       >
         ⋯
       </button>
@@ -97,7 +123,7 @@ export default function EventActionsMenu({
           role="menu"
           aria-label={`More actions for ${eventName}`}
           onKeyDown={onMenuKey}
-          className="absolute right-0 z-20 mt-1 w-48 overflow-hidden rounded-md border border-gray-200 bg-white py-1 shadow-lg dark:border-slate-600 dark:bg-slate-800"
+          className="absolute right-0 z-20 mt-1 w-56 overflow-hidden rounded-md border border-gray-200 bg-white py-1 shadow-lg dark:border-slate-600 dark:bg-slate-800"
         >
           <button
             type="button"
@@ -132,15 +158,59 @@ export default function EventActionsMenu({
             Copy link
           </button>
           <hr className="my-1 border-gray-200 dark:border-slate-600" />
+          {!selectedOrgId && (
+            <p id={noOrgId} className="px-3 py-1.5 text-xs text-gray-600 dark:text-slate-300">
+              Choose an organization to change sales or publishing.
+            </p>
+          )}
+          {published && (
+            <button type="button" role="menuitem" className={itemBase} {...lifecycleOff} onClick={() => startLifecycle('unpublish')}>
+              <EyeOff className="h-4 w-4 shrink-0" aria-hidden />
+              Unpublish…
+            </button>
+          )}
+          {published && salesClosed && (
+            <button type="button" role="menuitem" className={itemBase} {...lifecycleOff} onClick={() => startLifecycle('reopen-sales')}>
+              <LockOpen className="h-4 w-4 shrink-0" aria-hidden />
+              Reopen sales
+            </button>
+          )}
+          {published && !salesClosed && (
+            <button type="button" role="menuitem" className={itemBase} {...lifecycleOff} onClick={() => startLifecycle('close-sales')}>
+              <Lock className="h-4 w-4 shrink-0" aria-hidden />
+              Close sales…
+            </button>
+          )}
           <button
             type="button"
             role="menuitem"
             className={destructiveItem}
             onClick={() => { close(false); onCancelEvent(); }}
           >
+            <Ban className="h-4 w-4 shrink-0" aria-hidden />
             Cancel event…
           </button>
+          {status === 'DRAFT' && (
+            <button type="button" role="menuitem" className={destructiveItem} {...lifecycleOff} onClick={() => startLifecycle('delete')}>
+              <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
+              Delete draft…
+            </button>
+          )}
         </div>
+      )}
+      {lifecycle && selectedOrgId && (
+        <EventLifecycleDialog
+          action={lifecycle}
+          orgId={selectedOrgId}
+          eventId={eventId}
+          eventName={eventName}
+          onClose={endLifecycle}
+          onDone={(action) => {
+            setLifecycle(null);
+            if (action !== 'delete') buttonRef.current?.focus();
+            onLifecycleDone?.(action);
+          }}
+        />
       )}
     </div>
   );

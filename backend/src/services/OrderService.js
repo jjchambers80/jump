@@ -20,6 +20,7 @@ import { checkoutAcceptanceRequired } from '../config/legal.js';
 import { normalizeEmail } from '../utils/normalizeEmail.js';
 import { upsertContactFillBlanks } from './contactRecord.js';
 import { PAID_ORDER_STATUSES } from './paidStatuses.js';
+import { assertSalesOpen } from './salesOpen.js';
 
 /** Include for org-wide order rows (spec 024 phase 2): enough to describe either kind without a second query. */
 const LIST_INCLUDE = {
@@ -189,7 +190,10 @@ class OrderService {
     );
 
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Validate event
+      // 1. Validate event. A shared row lock (spec 050-D): checkouts run side by
+      // side, but an unpublish (FOR UPDATE) waits for this order to commit and
+      // counts it, or this checkout waits and then sees the DRAFT.
+      await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${eventId} FOR SHARE`;
       const event = await tx.event.findUnique({
         where: { id: eventId },
         include: {
@@ -216,6 +220,7 @@ class OrderService {
       if (event.status !== 'PUBLISHED') {
         throw new ValidationError('Event is not available for purchase');
       }
+      assertSalesOpen(event);
 
       if (new Date(event.date) < new Date()) {
         throw new ValidationError('Event has already occurred');

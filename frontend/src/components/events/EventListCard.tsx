@@ -19,10 +19,12 @@ import {
   ChevronRight,
   BarChart3,
   Users,
+  Lock,
 } from 'lucide-react';
 import EventActionsMenu from './EventActionsMenu';
 import PublishBlockers from './PublishBlockers';
 import type { ReadinessItem } from '@/lib/eventReadiness';
+import type { LifecycleAction } from './EventLifecycleDialog';
 import type { AdmissionMode } from './EventFormLayout';
 
 export interface PriceTier {
@@ -59,6 +61,8 @@ export interface AdminEvent {
   setupCompletedAt?: string | null;
   category?: string;
   status: string;
+  /** Spec 050-D: published but checkout, RSVPs and new applications are off. */
+  salesClosed?: boolean;
   venue: EventVenue | null;
   priceTiers: PriceTier[];
   createdAt: string;
@@ -83,6 +87,7 @@ interface EventListCardProps {
   onCancelEvent: () => void;
   /** What stopped the last Publish (spec 050-C, 422 EVENT_NOT_READY). */
   publishBlockers?: ReadinessItem[];
+  onLifecycleDone?: (action: LifecycleAction) => void;
 }
 
 function formatPrice(dollars: number): string {
@@ -113,6 +118,7 @@ export default function EventListCard({
   onDuplicate,
   onCancelEvent,
   publishBlockers = [],
+  onLifecycleDone,
 }: EventListCardProps) {
   const zone = event.venue?.timezone;
   const now = new Date();
@@ -240,6 +246,13 @@ export default function EventListCard({
               >
                 {event.status}
               </span>
+              {/* Sales closed (spec 050-D): text + icon, never color alone */}
+              {event.status === 'PUBLISHED' && event.salesClosed && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200">
+                  <Lock className="h-3 w-3" aria-hidden />
+                  Sales closed
+                </span>
+              )}
               {/* Ended pill */}
               {isPast && (
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-600 dark:bg-slate-600 dark:text-slate-300">
@@ -386,6 +399,9 @@ export default function EventListCard({
                 selectedOrgId={selectedOrgId}
                 onDuplicate={onDuplicate}
                 onCancelEvent={onCancelEvent}
+                status={event.status}
+                salesClosed={event.salesClosed}
+                onLifecycleDone={onLifecycleDone}
               />
             </div>
           </div>
