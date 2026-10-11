@@ -20,6 +20,7 @@ import { checkoutAcceptanceRequired } from '../config/legal.js';
 import { normalizeEmail } from '../utils/normalizeEmail.js';
 import { upsertContactFillBlanks } from './contactRecord.js';
 import { PAID_ORDER_STATUSES } from './paidStatuses.js';
+import { assertSalesOpen } from './salesOpen.js';
 
 /** Include for org-wide order rows (spec 024 phase 2): enough to describe either kind without a second query. */
 const LIST_INCLUDE = {
@@ -216,6 +217,7 @@ class OrderService {
       if (event.status !== 'PUBLISHED') {
         throw new ValidationError('Event is not available for purchase');
       }
+      assertSalesOpen(event);
 
       if (new Date(event.date) < new Date()) {
         throw new ValidationError('Event has already occurred');

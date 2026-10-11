@@ -9,6 +9,7 @@ import { checkoutAcceptanceRequired } from '../config/legal.js';
 import emailService from './EmailService.js';
 import { cancelUrlFor, rsvpIdFromCancelToken } from './rsvpLinks.js';
 import { upsertContactFillBlanks } from './contactRecord.js';
+import { assertSalesOpen } from './salesOpen.js';
 
 function coded(ErrorType, code, message, details = {}) {
   const error = new ErrorType(message, details);
@@ -58,6 +59,7 @@ class RsvpService {
         throw coded(ConflictError, 'EVENT_NOT_RSVP', 'This event does not accept RSVPs');
       if (event.status !== 'PUBLISHED')
         throw coded(ValidationError, 'RSVP_UNAVAILABLE', 'This event is not accepting RSVPs');
+      assertSalesOpen(event);
       if (new Date(event.date) <= new Date())
         throw coded(ValidationError, 'RSVP_UNAVAILABLE', 'This event has already occurred');
       if (data.partySize > event.rsvpMaxPartySize)

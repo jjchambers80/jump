@@ -574,6 +574,125 @@ class EventService {
   }
 
   /**
+   * Why an event cannot go back to a draft (spec 050-D): live orders, GOING
+   * RSVPs, applications past DRAFT. Empty = nothing a buyer holds.
+   * @returns {Promise<string[]>} human-readable reasons
+   */
+  async _liveActivityReasons(eventId) {
+    const [orders, rsvps, applications] = await Promise.all([
+      prisma.order.count({ where: { eventId, status: { notIn: ['FAILED', 'CANCELLED'] } } }),
+      prisma.eventRsvp.count({ where: { eventId, status: 'GOING' } }),
+      prisma.application.count({ where: { eventId, status: { not: 'DRAFT' } } }),
+    ]);
+    const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+    return [
+      orders && plural(orders, 'order'),
+      rsvps && plural(rsvps, 'RSVP'),
+      applications && plural(applications, 'submitted application'),
+    ].filter(Boolean);
+  }
+
+  async _orgEvent(orgId, eventId) {
+    const event = await prisma.event.findFirst({ where: { id: eventId, venue: { organizationId: orgId } } });
+    if (!event) throw new NotFoundError('Event not found');
+    return event;
+  }
+
+  _blocked(code, verb, reasons) {
+    const error = new ConflictError(`Cannot ${verb} this event: it has ${reasons.join(', ')}.`, { reasons });
+    error.code = code;
+    return error;
+  }
+
+  /**
+   * Unpublish (PUBLISHED → DRAFT, spec 050-D). Refused with 409
+   * UNPUBLISH_BLOCKED + details.reasons while anything is sold, RSVP'd or
+   * submitted. Clears a sales close.
+   */
+  async unpublishEvent(orgId, eventId) {
+    const existing = await this._orgEvent(orgId, eventId);
+    if (existing.status !== 'PUBLISHED') {
+      throw new ConflictError(`Cannot unpublish event with status ${existing.status}. Only PUBLISHED events can be unpublished.`);
+    }
+    const reasons = await this._liveActivityReasons(eventId);
+    if (reasons.length) throw this._blocked('UNPUBLISH_BLOCKED', 'unpublish', reasons);
+    // ponytail: check-then-write, no lock; a checkout landing in between keeps its order on a draft (same as tier sale windows).
+    await prisma.event.update({
+      where: { id: eventId },
+      data: { status: 'DRAFT', salesClosedAt: null, salesClosedById: null },
+    });
+    logger.info('Event unpublished', { event: 'event_unpublished', orgId, eventId });
+    return this._adminEventDetail(eventId);
+  }
+
+  /**
+   * Close sales (spec 050-D): stays PUBLISHED; new checkouts, RSVPs and
+   * application submissions are refused (assertSalesOpen). Idempotent.
+   */
+  async closeSales(orgId, eventId, userId) {
+    return this._setSalesClosed(orgId, eventId, true, userId);
+  }
+
+  /** Reopen sales (spec 050-D). PUBLISHED only, idempotent. */
+  async reopenSales(orgId, eventId) {
+    return this._setSalesClosed(orgId, eventId, false);
+  }
+
+  async _setSalesClosed(orgId, eventId, closed, userId = null) {
+    const existing = await this._orgEvent(orgId, eventId);
+    if (existing.status !== 'PUBLISHED') {
+      throw new ConflictError(`Cannot ${closed ? 'close' : 'reopen'} sales on an event with status ${existing.status}. Only PUBLISHED events.`);
+    }
+    if (Boolean(existing.salesClosedAt) !== closed) {
+      await prisma.event.update({
+        where: { id: eventId },
+        data: closed ? { salesClosedAt: new Date(), salesClosedById: userId } : { salesClosedAt: null, salesClosedById: null },
+      });
+      logger.info(closed ? 'Event sales closed' : 'Event sales reopened', {
+        event: closed ? 'event_sales_closed' : 'event_sales_reopened',
+        orgId,
+        eventId,
+      });
+    }
+    return this._adminEventDetail(eventId);
+  }
+
+  /**
+   * Delete a DRAFT (spec 050 §14 #1) under the unpublish guards. Money rows
+   * are never cascaded: an event with any order history (even failed or
+   * cancelled checkouts) is refused, so the ledger keeps its rows.
+   */
+  async deleteDraftEvent(orgId, eventId) {
+    const existing = await this._orgEvent(orgId, eventId);
+    if (existing.status !== 'DRAFT') {
+      throw new ConflictError(`Cannot delete event with status ${existing.status}. Only DRAFT events can be deleted.`);
+    }
+    const reasons = await this._liveActivityReasons(eventId);
+    if (!reasons.length) {
+      const history = await prisma.order.count({ where: { eventId } });
+      if (history) reasons.push(`${history} past checkout${history === 1 ? '' : 's'}`);
+    }
+    if (reasons.length) throw this._blocked('DELETE_BLOCKED', 'delete', reasons);
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        // Only rows nobody paid for: abandoned application drafts, non-GOING RSVPs, tiers.
+        // Forms, maps and add-ons cascade from the event.
+        await tx.application.deleteMany({ where: { eventId, status: 'DRAFT' } });
+        await tx.eventRsvp.deleteMany({ where: { eventId } });
+        await tx.priceTier.deleteMany({ where: { eventId } });
+        await tx.event.delete({ where: { id: eventId } });
+      });
+    } catch (error) {
+      // A restricting FK (tickets, an order line) means money history the guards did not count.
+      if (error?.code === 'P2003') throw this._blocked('DELETE_BLOCKED', 'delete', ['order history']);
+      throw error;
+    }
+    logger.info('Draft event deleted', { event: 'event_draft_deleted', orgId, eventId, eventName: existing.name });
+    return { deleted: true, id: eventId };
+  }
+
+  /**
    * Cancel an event (PUBLISHED → CANCELLED)
    * @param {string} orgId - Organization ID
    * @param {string} eventId - Event ID
@@ -1526,6 +1645,9 @@ class EventService {
       status: event.status,
       // Wizard state (spec 050) is admin-only; the public payload stays minimal.
       ...(!publicView && { setupStep: event.setupStep ?? null, setupCompletedAt: event.setupCompletedAt ?? null }),
+      // Spec 050-D: checkout, RSVPs and new applications off; the event stays PUBLISHED.
+      salesClosed: Boolean(event.salesClosedAt),
+      ...(!publicView && { salesClosedAt: event.salesClosedAt ?? null }),
       admissionMode: event.admissionMode || 'TICKETED',
       rsvpLimit: event.rsvpLimit ?? null,
       rsvpMaxPartySize: event.rsvpMaxPartySize ?? 1,
