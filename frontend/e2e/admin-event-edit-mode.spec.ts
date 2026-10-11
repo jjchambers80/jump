@@ -1,15 +1,14 @@
-// Edit mode (spec 050 §8.4, card 050-O): with the wizard flag on, every Event
+// Edit mode (spec 050 §8.4, card 050-O): every Event
 // Details section's Edit opens its wizard step, the flyouts are gone, the old
 // editors and forms configuration pages redirect, and a set-up event opens
 // the wizard non-linearly ("Jump to edit", Save & exit back to Details with a
-// "Saved" notice; a PUBLISHED event saves only when asked). Runs on the
-// flag-on dev server (PLAYWRIGHT_WIZARD_BASE_URL); every API call is mocked by
+// "Saved" notice; a PUBLISHED event saves only when asked). Every API call is mocked by
 // a small stateful fake. Wizard assertions are scoped to the form pane
 // (<main>): the preview frame repeats names.
 
 import AxeBuilder from '@axe-core/playwright';
 import { expect as baseExpect, test, type Page, type Request } from '@playwright/test';
-import { signInAsStaff } from './helpers/session';
+import { BASE_URL, signInAsStaff } from './helpers/session';
 
 const API = 'http://localhost:3002';
 const ORG_ID = 'org-edit';
@@ -113,9 +112,7 @@ async function mockApi(page: Page, initial = baseEvent(), options: Options = {})
   return calls;
 }
 
-const WIZARD_URL = process.env.PLAYWRIGHT_WIZARD_BASE_URL;
-test.skip(!WIZARD_URL, 'needs the flag-on dev server (PLAYWRIGHT_WIZARD_BASE_URL)');
-test.use({ baseURL: WIZARD_URL, contextOptions: { reducedMotion: 'reduce' } });
+test.use({ contextOptions: { reducedMotion: 'reduce' } });
 const COLD = { timeout: 30000 };
 test.describe.configure({ timeout: 120000 });
 const STAFF = { id: 'edit-admin', email: 'edit-admin@test.com', role: 'ADMIN' as const };
@@ -134,16 +131,15 @@ const ORG_Q = `&org=${ORG_ID}`;
 const guardArmed = (page: Page) => page.waitForFunction(() => !!(window.history.state as Record<string, unknown> | null)?.__jumpSetupGuard);
 
 test.beforeEach(async ({ page }) => {
-  await signInAsStaff(page, STAFF, WIZARD_URL!);
+  await signInAsStaff(page, STAFF, BASE_URL);
   await page.setViewportSize({ width: 1440, height: 900 });
 });
 
 // Compile the routes once, so the first test does not spend its budget on cold builds.
 test.beforeAll(async ({ browser }) => {
   test.setTimeout(300000);
-  if (!WIZARD_URL) return;
-  const page = await browser.newPage({ baseURL: WIZARD_URL });
-  await signInAsStaff(page, STAFF, WIZARD_URL);
+  const page = await browser.newPage({ baseURL: BASE_URL });
+  await signInAsStaff(page, STAFF, BASE_URL);
   await mockApi(page);
   await page.goto(DETAILS, { timeout: 120000 });
   await expect(page.getByRole('heading', { level: 1, name: 'Spring Fair' })).toBeVisible({ timeout: 120000 });

@@ -1,12 +1,11 @@
 // Event setup wizard steps 4–6 (spec 050-J): Describe it, Add an image,
-// Tickets or RSVP. Runs on the flag-on dev server (playwright.config.ts ›
-// PLAYWRIGHT_WIZARD_BASE_URL); every API call is mocked by a small stateful
+// Tickets or RSVP. Every API call is mocked by a small stateful
 // fake, so saves change what the next request returns. Assertions are scoped
 // to the form pane (<main>): the preview frame repeats names and prices.
 
 import AxeBuilder from '@axe-core/playwright';
 import { expect as baseExpect, test, type Page, type Request } from '@playwright/test';
-import { signInAsStaff } from './helpers/session';
+import { BASE_URL, signInAsStaff } from './helpers/session';
 
 const API = 'http://localhost:3002';
 const ORG_ID = 'org-tickets';
@@ -95,9 +94,6 @@ async function mockApi(page: Page, initial = baseEvent(), extra: Extra = {}) {
   return calls;
 }
 
-const WIZARD_URL = process.env.PLAYWRIGHT_WIZARD_BASE_URL;
-test.skip(!WIZARD_URL, 'needs the flag-on dev server (PLAYWRIGHT_WIZARD_BASE_URL)');
-test.use({ baseURL: WIZARD_URL });
 const COLD = { timeout: 30000 };
 // axe scans the page and the preview frame: give each test room beyond 30 s.
 test.describe.configure({ timeout: 90000 });
@@ -124,9 +120,8 @@ async function overflowsAt(page: Page) {
 // Compile the wizard route and the preview frame once, before any timed step.
 test.beforeAll(async ({ browser }) => {
   test.setTimeout(180000);
-  if (!WIZARD_URL) return;
-  const page = await browser.newPage({ baseURL: WIZARD_URL, viewport: { width: 1440, height: 900 } });
-  await signInAsStaff(page, STAFF, WIZARD_URL);
+  const page = await browser.newPage({ baseURL: BASE_URL, viewport: { width: 1440, height: 900 } });
+  await signInAsStaff(page, STAFF, BASE_URL);
   await mockApi(page);
   for (const step of ['description', 'image', 'tickets']) {
     await page.goto(setupUrl(`step=${step}`), { timeout: 120000 });
@@ -264,6 +259,52 @@ test.describe('desktop', () => {
       .poll(() => calls.patch.map((r) => r.postDataJSON()).reduce((a, b) => ({ ...a, ...b }), {}), COLD)
       .toEqual({ admissionMode: 'RSVP', rsvpLimit: 40, rsvpMaxPartySize: 2 });
     await expect(indicator(page)).toHaveText('Saved');
+  });
+
+  // Carried over from the old create / edit form specs (retired in 050-P).
+  test('admission is a keyboard radio group and tier reorder buttons meet 24 px (WCAG 2.5.8)', async ({ page }) => {
+    await mockApi(page, baseEvent({ priceTiers: [tier(), tier({ id: 't-vip', name: 'VIP', displayOrder: 1 })] }));
+    await page.goto(setupUrl('step=tickets'));
+    await expect(heading(page, 'Tickets or RSVP')).toBeVisible(COLD);
+    for (const name of ['Move General Admission down', 'Move VIP up']) {
+      const box = (await main(page).getByRole('button', { name }).boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(24);
+      expect(box.height).toBeGreaterThanOrEqual(24);
+    }
+    const ticketed = main(page).getByRole('radio', { name: 'Ticketed' });
+    await expect(ticketed).toBeChecked();
+    await ticketed.focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(main(page).getByRole('radio', { name: 'RSVP' })).toBeChecked();
+    await expect(main(page).getByRole('switch', { name: 'Limit RSVPs' })).toBeVisible();
+    await expect(main(page).getByLabel('Capacity')).toHaveCount(0);
+  });
+
+  test('a tier cannot drop below what it has sold', async ({ page }) => {
+    const calls = await mockApi(page, baseEvent({ priceTiers: [tier({ quantitySold: 50, quantityAvailable: 30 })] }));
+    await page.goto(setupUrl('step=tickets&tier=t-ga'));
+    const dialog = page.getByRole('dialog', { name: 'Edit Tier 1' });
+    await expect(dialog).toBeVisible(COLD);
+    await dialog.getByLabel('Quantity *').fill('40');
+    await dialog.getByRole('button', { name: 'Save tier' }).click();
+    await expect(dialog.getByRole('alert')).toContainText('Quantity must be at least 50 (sold + reserved)');
+    expect(calls.tierPatch).toHaveLength(0);
+    await dialog.getByLabel('Quantity *').fill('60');
+    await dialog.getByRole('button', { name: 'Save tier' }).click();
+    await expect(dialog).toHaveCount(0);
+    expect(calls.tierPatch[0].postDataJSON()).toEqual({ quantityTotal: 60 });
+  });
+
+  test('an uploaded image offers replace and remove', async ({ page }) => {
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkaPhfDwAEhgGAfq3m2wAAAABJRU5ErkJggg==', 'base64');
+    await page.route('https://images.test/logo.png', (route) => route.fulfill({ status: 200, contentType: 'image/png', body: png }));
+    await mockApi(page, baseEvent({ logoUrl: 'https://images.test/logo.png', setupStep: 'image' }));
+    await page.goto(setupUrl('step=image'));
+    await expect(heading(page, 'Add an image')).toBeVisible(COLD);
+    await expect(main(page).getByRole('img', { name: 'Spring Fair event image' })).toBeVisible();
+    await expect(main(page).getByRole('button', { name: 'Replace' })).toBeVisible();
+    await expect(main(page).getByRole('button', { name: 'Remove image' })).toBeAttached();
+    await expect(main(page).getByRole('button', { name: 'Upload new' })).toHaveCount(0);
   });
 
   test('the admission lock comes from the server, with its reason', async ({ page }) => {

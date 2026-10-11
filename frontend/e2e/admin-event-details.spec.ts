@@ -1,5 +1,6 @@
 // Event Details page (spec 037 phase 1): the read-only event home the list
-// card opens. Mocked API, signInAsStaff.
+// card opens. Every Edit opens the setup wizard (spec 050-O/P; the flyouts
+// and section editors are gone). Mocked API, signInAsStaff.
 import { expect, test, type Page } from '@playwright/test';
 import { signInAsStaff } from './helpers/session';
 
@@ -81,7 +82,17 @@ const rsvpOverview = {
   map: null,
 };
 
+const guests = [
+  { id: 'g1', name: 'Ada Lovelace', role: 'Keynote', bio: null, imageUrl: null, links: null, isVisible: true, displayOrder: 0, applicationId: null, imageId: null },
+  { id: 'g2', name: 'Grace Hopper', role: null, bio: null, imageUrl: null, links: null, isVisible: false, displayOrder: 1, applicationId: null, imageId: null },
+  ...['Alan Turing', 'Katherine Johnson', 'Linus Torvalds'].map((name, i) => ({
+    id: `g${i + 3}`, name, role: null, bio: null, imageUrl: null, links: null, isVisible: true, displayOrder: i + 2, applicationId: null, imageId: null,
+  })),
+];
+
 async function mockApi(page: Page) {
+  await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/guests`, (route) => route.fulfill(json({ data: guests })));
+  await page.route(`${API}/organizations/${ORG_ID}/events/${RSVP_ID}/guests`, (route) => route.fulfill(json({ data: [] })));
   await page.route(`${API}/organizations`, (route) =>
     route.fulfill(json([{ id: ORG_ID, name: 'Details Org', status: 'ACTIVE' }]))
   );
@@ -98,42 +109,64 @@ test.beforeEach(async ({ page, baseURL }) => {
   await mockApi(page);
 });
 
-test('shows the event read-only, with an Edit link per section', async ({ page }) => {
+test('shows the event read-only, with an Edit link per section into the wizard', async ({ page }) => {
   await page.goto(`/admin/events/${EVENT_ID}?orgId=${ORG_ID}`);
 
   await expect(page.getByRole('heading', { level: 1, name: 'Game & Geek 2026' })).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Events' })).toHaveAttribute('href', '/admin/events');
 
-  // No form fields: this page never edits in place.
+  // No form fields and no flyouts: this page never edits in place.
   await expect(page.getByRole('textbox')).toHaveCount(0);
+  await expect(page.locator('button[aria-haspopup="dialog"]').filter({ hasText: /^Edit$|Settings|Add tier/ })).toHaveCount(0);
 
+  const setup = (query: string) => `/admin/events/${EVENT_ID}/setup?${query}&org=${ORG_ID}`;
   const edits: [string, string][] = [
-    ['Edit tiers and add-ons', 'sales#event-price-tiers'],
-    ['Edit event details', 'details#event-details'],
-    ['Edit date and venue', 'details#event-when-where'],
+    ['Edit event', 'step=name'],
+    ['Edit tickets', 'step=tickets'],
+    ['Edit tier General Admission', 'step=tickets&tier=t-ga'],
+    ['Edit description', 'step=description'],
+    ['Edit date and venue', 'step=date'],
+    ['Edit admission', 'step=tickets'],
+    ['Edit listing', 'step=description'],
+    ['Edit form Vendors', 'step=other-applications&form=form-1'],
+    ['Edit special guests', 'step=special-guests'],
   ];
-  for (const [name, target] of edits) {
-    await expect(page.getByRole('link', { name, exact: true })).toHaveAttribute(
-      'href',
-      `/admin/events/${EVENT_ID}/edit/${target.replace('#', `?orgId=${ORG_ID}#`)}`
-    );
+  for (const [name, query] of edits) {
+    await expect(page.getByRole('link', { name, exact: true }).first()).toHaveAttribute('href', setup(query));
   }
-  // Small sections edit in a flyout (spec 037 D10).
-  await expect(page.getByRole('button', { name: 'Edit admission' })).toHaveAttribute('aria-haspopup', 'dialog');
-  await expect(page.getByRole('button', { name: 'Edit listing' })).toHaveAttribute('aria-haspopup', 'dialog');
-  await expect(page.getByRole('link', { name: 'Open the map builder' })).toHaveAttribute('href', '/admin/maps/map-1');
-  await expect(page.getByRole('link', { name: 'Edit form Vendors' })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/applications/forms/form-1`);
+  // No MAP form, so the floor map is edited from the Map tab.
+  await expect(page.getByRole('link', { name: 'Edit floor map' })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/map`);
+  // No link anywhere points at a retired editor.
+  await expect(page.locator('a[href*="/edit"], a[href*="/applications/forms"]')).toHaveCount(0);
 });
 
-test('flag off (spec 050-O): Details never links into the setup wizard', async ({ page }) => {
+test('special guests: count, the first names, which are hidden, and the wizard step', async ({ page }) => {
   await page.goto(`/admin/events/${EVENT_ID}?orgId=${ORG_ID}`);
-  await expect(page.getByRole('heading', { level: 1, name: 'Game & Geek 2026' })).toBeVisible();
-  await expect(page.locator('a[href*="/setup"]')).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'Edit event', exact: true })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/edit/details?orgId=${ORG_ID}`);
-  await expect(page.getByRole('button', { name: 'Edit tier General Admission' })).toHaveAttribute('aria-haspopup', 'dialog');
-  await expect(page.getByRole('button', { name: 'Settings for Vendors' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Edit image' })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'Change venue' })).toHaveCount(0);
+  const card = page.getByRole('region', { name: 'Special guests' });
+  await expect(card.getByText(/5\s+guests · 4 on the event page, 1 hidden/)).toBeVisible();
+  const names = card.getByRole('listitem');
+  await expect(names).toHaveCount(4);
+  await expect(names.first()).toHaveText(/Ada Lovelace · Keynote/);
+  await expect(names.filter({ hasText: 'Grace Hopper' }).getByText('Hidden')).toBeVisible();
+  await expect(card.getByText('Linus Torvalds')).toHaveCount(0);
+  await expect(card.getByText('and 1 more')).toBeVisible();
+  const edit = card.getByRole('link', { name: 'Edit special guests' });
+  await expect(edit).toHaveAttribute('href', `/admin/events/${EVENT_ID}/setup?step=special-guests&org=${ORG_ID}`);
+  const box = (await edit.boundingBox())!;
+  expect(box.height).toBeGreaterThanOrEqual(44);
+});
+
+test('special guests: an empty lineup offers to add one; a failed load says so', async ({ page }) => {
+  await page.goto(`/admin/events/${RSVP_ID}?orgId=${ORG_ID}`);
+  const card = page.getByRole('region', { name: 'Special guests' });
+  await expect(card.getByText('No special guests yet.', { exact: false })).toBeVisible();
+  await expect(card.getByRole('link', { name: 'Add a special guest' })).toHaveAttribute('href', `/admin/events/${RSVP_ID}/setup?step=special-guests&org=${ORG_ID}`);
+
+  await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/guests`, (route) => route.fulfill(json({ message: 'boom' }, 500)));
+  await page.goto(`/admin/events/${EVENT_ID}?orgId=${ORG_ID}`);
+  await expect(page.getByRole('region', { name: 'Special guests' }).getByText('The lineup could not be loaded.', { exact: false })).toBeVisible();
+  // The rest of the page still loads.
+  await expect(page.getByRole('region', { name: 'Sales' })).toBeVisible();
 });
 
 test('headline numbers, tiers, applications and the map', async ({ page }) => {
@@ -195,11 +228,6 @@ test('paid sales show setup guidance until Stripe enables charges', async ({ pag
   const notice = page.getByTestId('payments-not-ready');
   await expect(notice).toBeVisible();
   await expect(notice.getByRole('link', { name: 'Set up payments' })).toHaveAttribute('href', '/admin/settings/payments');
-
-  await page.getByRole('button', { name: 'Settings for Vendors' }).click();
-  const flyout = page.getByRole('dialog', { name: 'Vendors settings' });
-  await expect(flyout.getByRole('radio', { name: 'Open' })).toBeDisabled();
-  await expect(flyout.getByRole('link', { name: 'Set up payments' })).toHaveAttribute('href', '/admin/settings/payments');
 });
 
 test('no horizontal scroll at 390px', async ({ page }) => {
@@ -209,92 +237,3 @@ test('no horizontal scroll at 390px', async ({ page }) => {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
 });
-
-// ── Flyouts (spec 037 phase 3) ─────────────────────────────────────────────
-
-async function capturePatches(page: Page) {
-  const calls: { method: string; path: string; body: unknown }[] = [];
-  await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}`, async (route) => {
-    calls.push({ method: route.request().method(), path: new URL(route.request().url()).pathname, body: route.request().postDataJSON() });
-    return route.fulfill(json({ ...baseEvent }));
-  });
-  await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/price-tiers**`, async (route) => {
-    calls.push({ method: route.request().method(), path: new URL(route.request().url()).pathname, body: route.request().postDataJSON() });
-    return route.fulfill(json({ id: 't-new' }, route.request().method() === 'POST' ? 201 : 200));
-  });
-  await page.route(`${API}/admin/events/${EVENT_ID}/application-forms/form-1`, async (route) => {
-    calls.push({ method: route.request().method(), path: new URL(route.request().url()).pathname, body: route.request().postDataJSON() });
-    return route.fulfill(json({ id: 'form-1' }));
-  });
-  return calls;
-}
-
-test('Admission edits capacity in a flyout and refuses one below the tiers', async ({ page }) => {
-  const calls = await capturePatches(page);
-  await page.goto(`/admin/events/${EVENT_ID}?orgId=${ORG_ID}`);
-  await page.getByRole('button', { name: 'Edit admission' }).click();
-  const flyout = page.getByRole('dialog', { name: 'Admission' });
-  await expect(flyout).toBeVisible();
-  // Orders exist, so the mode is locked.
-  await expect(flyout.getByRole('radio', { name: 'RSVP' })).toBeDisabled();
-  await flyout.getByLabel('Capacity').fill('400');
-  await expect(flyout.getByText(/Tiers already hold 450 tickets/)).toBeVisible();
-  await expect(flyout.getByRole('button', { name: 'Save' })).toBeDisabled();
-  await flyout.getByLabel('Capacity').fill('600');
-  await flyout.getByRole('button', { name: 'Save' }).click();
-  await expect(flyout).toHaveCount(0);
-  expect(calls.find((c) => c.method === 'PATCH')?.body).toEqual({ capacity: 600 });
-});
-
-test('a tier edits in a flyout: sale window in the venue zone, PATCH only that tier', async ({ page }) => {
-  const calls = await capturePatches(page);
-  await page.goto(`/admin/events/${EVENT_ID}?orgId=${ORG_ID}`);
-  await page.getByRole('button', { name: 'Edit tier VIP' }).click();
-  const flyout = page.getByRole('dialog', { name: 'Edit VIP' });
-  await expect(flyout.getByLabel('Name')).toHaveValue('VIP');
-  // 50 sold: quantity cannot go below it.
-  await flyout.getByLabel('Quantity').fill('40');
-  await expect(flyout.getByRole('button', { name: 'Save tier' })).toBeDisabled();
-  await flyout.getByLabel('Quantity').fill('60');
-  await flyout.getByLabel('Price ($)').fill('90');
-  await flyout.getByRole('button', { name: 'Save tier' }).click();
-  await expect(flyout).toHaveCount(0);
-  const patch = calls.find((c) => c.method === 'PATCH' && c.path.endsWith('/price-tiers/t-vip'));
-  expect(patch?.body).toMatchObject({ name: 'VIP', price: 90, quantityTotal: 60, isRefundable: true });
-});
-
-test('Add tier opens an empty flyout and POSTs', async ({ page }) => {
-  const calls = await capturePatches(page);
-  await page.goto(`/admin/events/${EVENT_ID}?orgId=${ORG_ID}`);
-  await page.getByRole('region', { name: 'Sales' }).getByRole('button', { name: 'Add tier' }).click();
-  const flyout = page.getByRole('dialog', { name: 'New ticket tier' });
-  await flyout.getByLabel('Name').fill('Early bird');
-  await flyout.getByLabel('Price ($)').fill('15');
-  await flyout.getByLabel('Quantity').fill('50');
-  await flyout.getByRole('button', { name: 'Add tier' }).click();
-  await expect(flyout).toHaveCount(0);
-  expect(calls.find((c) => c.method === 'POST')?.body).toMatchObject({ name: 'Early bird', price: 15, quantityTotal: 50 });
-});
-
-test('Listing and form settings save through flyouts; Escape asks before discarding', async ({ page }) => {
-  const calls = await capturePatches(page);
-  await page.goto(`/admin/events/${EVENT_ID}?orgId=${ORG_ID}`);
-
-  await page.getByRole('button', { name: 'Edit listing' }).click();
-  const listing = page.getByRole('dialog', { name: 'Listing' });
-  await listing.getByLabel('Category').fill('Convention');
-  page.once('dialog', (d) => d.dismiss());
-  await page.keyboard.press('Escape');
-  await expect(listing).toBeVisible();
-  await listing.getByRole('button', { name: 'Save' }).click();
-  await expect(listing).toHaveCount(0);
-  expect(calls.find((c) => c.method === 'PATCH' && c.path.endsWith(`/events/${EVENT_ID}`))?.body).toEqual({ category: 'Convention' });
-
-  await page.getByRole('button', { name: 'Settings for Vendors' }).click();
-  const form = page.getByRole('dialog', { name: 'Vendors settings' });
-  await form.getByText('Closed', { exact: true }).click();
-  await form.getByRole('button', { name: 'Save' }).click();
-  await expect(form).toHaveCount(0);
-  expect(calls.find((c) => c.path.endsWith('/application-forms/form-1'))?.body).toEqual({ status: 'CLOSED' });
-});
-

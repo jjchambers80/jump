@@ -1,11 +1,13 @@
-// Event setup wizard, step 7 Collect more (spec 050-K). Runs on the flag-on
-// dev server (PLAYWRIGHT_WIZARD_BASE_URL) as an ORGANIZER (050-E grants
-// addOns.manage); every API call is mocked with 2xx answers. Assertions are
+// Event setup wizard, step 7 Collect more (spec 050-K). Runs as an ORGANIZER
+// (050-E grants addOns.manage); every API call is mocked with 2xx answers.
+// Since 050-P this is the only add-on editor, so it also carries the old Sales
+// editor's add-on checks (sales counts, all-in price, read-only without
+// addOns.manage). Assertions are
 // scoped to the form pane (<main>) or the add-on dialog.
 
 import AxeBuilder from '@axe-core/playwright';
 import { expect as baseExpect, test, type Page } from '@playwright/test';
-import { signInAsStaff } from './helpers/session';
+import { BASE_URL, signInAsStaff } from './helpers/session';
 
 const API = 'http://localhost:3002';
 const ORG_ID = 'org-collect';
@@ -106,9 +108,6 @@ async function mockApi(page: Page, event = adminEvent(), opts: { addOns?: Record
   return state;
 }
 
-const WIZARD_URL = process.env.PLAYWRIGHT_WIZARD_BASE_URL;
-test.skip(!WIZARD_URL, 'needs the flag-on dev server (PLAYWRIGHT_WIZARD_BASE_URL)');
-test.use({ baseURL: WIZARD_URL });
 
 const STAFF = { id: 'collect-organizer', email: 'collect-organizer@test.com', role: 'ORGANIZER' as const };
 const STEP_URL = `/admin/events/${EVENT_ID}/setup?step=collect-more`;
@@ -121,10 +120,9 @@ const serious = async (page: Page) =>
 // Compile the wizard route and the preview frame once, before any test times a step.
 test.beforeAll(async ({ browser }) => {
   test.setTimeout(180000);
-  if (!WIZARD_URL) return;
   // Desktop, so the preview pane (and its frame route) renders inline.
-  const page = await browser.newPage({ baseURL: WIZARD_URL, viewport: { width: 1440, height: 900 } });
-  await signInAsStaff(page, STAFF, WIZARD_URL);
+  const page = await browser.newPage({ baseURL: BASE_URL, viewport: { width: 1440, height: 900 } });
+  await signInAsStaff(page, STAFF, BASE_URL);
   await mockApi(page);
   await page.goto(STEP_URL, { timeout: 120000 });
   await expect(page.locator('main h1')).toBeVisible({ timeout: 120000 });
@@ -239,6 +237,48 @@ test.describe('desktop', () => {
     page.once('dialog', (d) => d.accept());
     await row.getByRole('button', { name: 'Delete' }).click();
     await expect(main(page).getByRole('heading', { level: 2, name: 'Add-ons' })).toBeFocused();
+  });
+
+  test('a row shows its sales and all-in price; a saved add-on on the event is not offered twice', async ({ page }) => {
+    const sold = addOn({ quantitySold: 3, quantityReserved: 1, orderLineCount: 3 });
+    const state = await mockApi(page, adminEvent({ tax: { rate: 0.1, source: 'MANUAL', region: 'NC' } }), { addOns: [sold] });
+    await page.goto(STEP_URL);
+    const row = main(page).getByTestId('admin-add-on-addon-parking');
+    await expect(row).toContainText('Sold 3', COLD);
+    await expect(row).toContainText('reserved 1');
+    await expect(row).toContainText('buyer pays $18.01');
+
+    const picker = main(page).getByRole('combobox', { name: 'Add an add-on' });
+    await picker.click();
+    const list = page.getByRole('listbox', { name: 'Saved add-ons' });
+    await expect(list.getByRole('option', { name: /Parking pass/ })).toHaveAttribute('aria-disabled', 'true');
+    // An existing name in any case offers no Create.
+    await picker.fill('parking PASS');
+    await expect(list.getByRole('option', { name: /Create/ })).toHaveCount(0);
+
+    // A new one limited to one tier carries those limits to the API.
+    await picker.fill('VIP lounge');
+    await list.getByRole('option', { name: 'Create “VIP lounge”' }).click();
+    const dialog = page.getByRole('dialog', { name: 'New add-on' });
+    await dialog.getByLabel('Price ($)').fill('50');
+    await dialog.getByLabel('Sold with').selectOption('TICKET');
+    await dialog.getByLabel('Only these tiers').check();
+    await dialog.getByLabel('VIP', { exact: true }).check();
+    await dialog.getByLabel('Max per order').fill('2');
+    await dialog.getByRole('button', { name: 'Create' }).click();
+    await expect.poll(() => state.create).toEqual([
+      expect.objectContaining({ name: 'VIP lounge', price: 50, scope: 'TICKET', allTiers: false, priceTierIds: [VIP.id], maxPerOrder: 2, taxable: true }),
+    ]);
+  });
+
+  test('read-only when System › Roles takes addOns.manage away', async ({ page }) => {
+    await mockApi(page, adminEvent(), { addOns: [addOn()] });
+    await page.route(`${API}/admin/permissions`, (route) => route.fulfill(json({ granted: ['events', 'venues', 'dashboard'], hiddenPaths: [] })));
+    await page.goto(STEP_URL);
+    const row = main(page).getByTestId('admin-add-on-addon-parking');
+    await expect(row).toBeVisible(COLD);
+    await expect(main(page).getByRole('combobox', { name: 'Add an add-on' })).toHaveCount(0);
+    await expect(row.getByRole('button', { name: 'Edit' })).toHaveCount(0);
   });
 
   test('RSVP events keep the step: add-ons work for every admission mode (050-O parity)', async ({ page }) => {

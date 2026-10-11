@@ -1,13 +1,13 @@
 // Event setup wizard application steps (spec 050-L): Vendor applications,
-// Special guests, Volunteers, Other applications. Runs on the flag-on dev
-// server (PLAYWRIGHT_WIZARD_BASE_URL) as an ORGANIZER (050-E opened form
+// Special guests, Volunteers, Other applications. Runs as an
+// ORGANIZER (050-E opened form
 // configuration to them). Every API call is mocked by a small stateful fake,
 // so a create, patch or delete changes what the next list returns. Assertions
 // are scoped to the form pane (<main>): the preview frame repeats names.
 
 import AxeBuilder from '@axe-core/playwright';
 import { expect as baseExpect, test, type Page, type Request } from '@playwright/test';
-import { signInAsStaff } from './helpers/session';
+import { BASE_URL, signInAsStaff } from './helpers/session';
 
 const API = 'http://localhost:3002';
 const ORG_ID = 'org-apps';
@@ -95,9 +95,7 @@ async function mockApi(page: Page, initialForms: Record<string, any>[] = []) {
   return calls;
 }
 
-const WIZARD_URL = process.env.PLAYWRIGHT_WIZARD_BASE_URL;
-test.skip(!WIZARD_URL, 'needs the flag-on dev server (PLAYWRIGHT_WIZARD_BASE_URL)');
-test.use({ baseURL: WIZARD_URL, contextOptions: { reducedMotion: 'reduce' } });
+test.use({ contextOptions: { reducedMotion: 'reduce' } });
 const COLD = { timeout: 30000 };
 test.describe.configure({ timeout: 90000 });
 const STAFF = { id: 'apps-organizer', email: 'apps-organizer@test.com', role: 'ORGANIZER' as const };
@@ -112,9 +110,8 @@ const serious = async (page: Page) =>
 // Compile the wizard route and the preview frame once, before any timed step.
 test.beforeAll(async ({ browser }) => {
   test.setTimeout(180000);
-  if (!WIZARD_URL) return;
-  const page = await browser.newPage({ baseURL: WIZARD_URL, viewport: { width: 1440, height: 900 } });
-  await signInAsStaff(page, STAFF, WIZARD_URL);
+  const page = await browser.newPage({ baseURL: BASE_URL, viewport: { width: 1440, height: 900 } });
+  await signInAsStaff(page, STAFF, BASE_URL);
   await mockApi(page, [form({ purpose: 'VENDOR', kind: 'PAID', name: 'Warm-up' })]);
   for (const step of ['vendors', 'volunteers', 'other-applications']) {
     await page.goto(setupUrl(`step=${step}`), { timeout: 120000 });

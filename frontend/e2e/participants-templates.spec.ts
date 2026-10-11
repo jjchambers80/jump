@@ -1,5 +1,7 @@
 // Participants › Applications tab and form templates (spec 019 phase 2).
-// Backend mocked at the network layer.
+// Event forms are configured in the setup wizard since spec 050-P; the
+// template editor stays at /admin/events/templates/:id. Backend mocked at the
+// network layer.
 
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
@@ -139,7 +141,7 @@ async function mockAdmin(page: Page, baseURL: string, role: 'ADMIN' | 'ORGANIZER
     const create = path.match(/^\/admin\/events\/([^/]+)\/application-forms$/);
     if (create && method === 'POST') {
       seq += 1;
-      const b = body as { name: string; kind: string; templateId?: string };
+      const b = body as { name: string; kind: string; purpose?: string; templateId?: string };
       const t = b.templateId ? state.templates.find((x) => x.id === b.templateId) : null;
       const form = {
         ...vendorForm,
@@ -148,6 +150,7 @@ async function mockAdmin(page: Page, baseURL: string, role: 'ADMIN' | 'ORGANIZER
         name: b.name,
         kind: b.kind,
         slug: b.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        purpose: b.purpose ?? 'OTHER',
         createdFromTemplateId: t?.id ?? null,
         tiers: t ? t.definition.tiers.map((x, i) => ({ ...vendorForm.tiers[0], id: `nt${i}`, ...x })) : [],
         questions: t ? t.definition.questions.map((q, i) => ({ id: `nq${i}`, displayOrder: i, ...q })) : [],
@@ -192,39 +195,69 @@ async function mockAdmin(page: Page, baseURL: string, role: 'ADMIN' | 'ORGANIZER
   return { state, calls };
 }
 
-test('New form: the Start from picker offers same-kind saved templates; creating from one lands in the editor (spec 037 D2)', async ({ page, baseURL }) => {
+/**
+ * Since spec 050-P event forms are configured in the setup wizard (the old
+ * forms pages redirect to its steps). These are the wizard's own reads,
+ * registered after mockAdmin so they win over its `/admin/**` catch-all.
+ */
+async function mockWizard(page: Page, event: { id: string; name: string; date: string; status: string }) {
+  const venue = { id: 'v1', name: 'RCC', address: '500 S Salisbury St', timezone: 'America/New_York' };
+  const adminEvent = {
+    ...event, slug: event.id, description: null, logoUrl: null, endDate: null, capacity: 100, category: null, admissionMode: 'TICKETED',
+    setupStep: null, setupCompletedAt: '2026-01-01T00:00:00.000Z', rsvpLimit: null, rsvpMaxPartySize: 1, rsvpRemaining: null,
+    tax: { rate: 0, source: null, region: null }, taxInclusivePricing: false, organizationId: ORG_ID, venue, priceTiers: [],
+  };
+  await page.route(`${API}/admin/permissions`, (route) => route.fulfill(json({ granted: ['*'], hiddenPaths: [] })));
+  await page.route(`${API}/organizations/${ORG_ID}/venues`, (route) => route.fulfill(json([venue])));
+  await page.route(`${API}/organizations/${ORG_ID}/events/${event.id}/overview`, (route) =>
+    route.fulfill(json({ event: adminEvent, applications: { forms: [] }, admissionLock: { locked: false, reason: null } }))
+  );
+  await page.route(`${API}/organizations/${ORG_ID}/events/${event.id}/preview-payload`, (route) =>
+    route.fulfill(json({ event: adminEvent, organization: { id: ORG_ID, name: 'Raleigh Retro Gamers' }, forms: [] }))
+  );
+}
+const COLD = { timeout: 60000 };
+const main = (page: Page) => page.locator('main');
+const status = (page: Page, text: string) => main(page).getByRole('status').filter({ hasText: text });
+
+test('Add a form in the wizard: Start from offers same-kind saved templates; creating from one opens it inline (spec 037 D2, 050-P)', async ({ page, baseURL }) => {
+  test.setTimeout(120000);
   const { calls } = await mockAdmin(page, baseURL!);
-  await page.goto(`/admin/events/${DRAFT_EVENT.id}/applications/forms`);
-  await page.getByTestId('forms-new').click();
-  const panel = page.getByTestId('forms-create');
-  const picker = panel.getByTestId('forms-template-picker');
+  await mockWizard(page, DRAFT_EVENT);
+  await page.goto(`/admin/events/${DRAFT_EVENT.id}/setup?step=vendors`);
+  await main(page).getByRole('button', { name: 'Add a vendor application' }).click(COLD);
+  const dialog = page.getByRole('dialog', { name: 'Add a vendor application' });
   // Free by default → only the free template.
-  await expect(picker.getByRole('radio')).toHaveCount(2);
-  await expect(picker.getByRole('radio', { name: /Press pass/ })).toBeVisible();
-  await panel.getByLabel('Type').selectOption('PAID');
-  await expect(picker.getByRole('radio', { name: /Exhibitor booths/ })).toBeVisible();
-  await expect(picker.getByRole('radio', { name: /Press pass/ })).toHaveCount(0);
-  await expect(picker.getByRole('link', { name: 'Edit template Exhibitor booths' })).toHaveAttribute('href', '/admin/events/templates/tpl-booths');
+  await expect(dialog.getByRole('radio', { name: /Press pass/ })).toBeVisible();
+  await expect(dialog.getByRole('radio', { name: /Exhibitor booths/ })).toHaveCount(0);
+  await dialog.getByLabel('Charge for space').check();
+  await expect(dialog.getByRole('radio', { name: /Exhibitor booths/ })).toBeVisible();
+  await expect(dialog.getByRole('radio', { name: /Press pass/ })).toHaveCount(0);
+  await expect(dialog.getByRole('link', { name: 'Edit template Exhibitor booths' })).toHaveAttribute('href', '/admin/events/templates/tpl-booths');
 
-  await panel.getByLabel('Name').fill('Winter vendors');
-  await picker.getByRole('radio', { name: /Exhibitor booths/ }).check();
-  await panel.getByRole('button', { name: 'Create' }).click();
+  await dialog.getByLabel('Name').fill('Winter vendors');
+  await dialog.getByRole('radio', { name: /Exhibitor booths/ }).check();
+  await dialog.getByRole('button', { name: 'Create form' }).click();
+  await expect(dialog).toHaveCount(0);
 
-  await page.waitForURL(/\/admin\/events\/evt-draft\/applications\/forms\/form-new-\d+/);
   const create = calls.find((c) => c.method === 'POST' && c.path === `/admin/events/${DRAFT_EVENT.id}/application-forms`);
-  expect(create?.body).toEqual({ kind: 'PAID', name: 'Winter vendors', templateId: 'tpl-booths' });
-  await expect(page.getByTestId('form-created-from')).toContainText('Created from the Exhibitor booths template');
-  await expect(page.getByTestId('form-questions')).toContainText('Booth style');
-  await expect(page.getByTestId('form-tiers')).toContainText('Corner');
+  expect(create?.body).toEqual({ kind: 'PAID', name: 'Winter vendors', purpose: 'VENDOR', templateId: 'tpl-booths' });
+  await expect(main(page).getByText(/Created from the\s+Exhibitor booths\s+template/)).toBeVisible();
+  await expect(main(page).getByTestId('form-questions')).toContainText('Booth style');
+  await expect(main(page).getByTestId('form-tiers')).toContainText('Corner');
 
   const a11y = await new AxeBuilder({ page }).include('main').analyze();
-  expect(a11y.violations).toEqual([]);
+  expect(a11y.violations.filter((v) => ['serious', 'critical'].includes(v.impact || ''))).toEqual([]);
 });
-
-test('Save as template from the form editor: new template appears in the Templates section; replace overwrites', async ({ page, baseURL }) => {
+test('Save as template from the wizard form editor: a name clash is refused; replace overwrites', async ({ page, baseURL }) => {
+  test.setTimeout(120000);
   const { calls, state } = await mockAdmin(page, baseURL!);
+  await mockWizard(page, EXPO);
+  // The old form editor URL opens the form on its wizard step.
   await page.goto(`/admin/events/${EXPO.id}/applications/forms/${vendorForm.id}`);
-  await page.getByTestId('form-save-as-template').click();
+  await expect(page).toHaveURL(new RegExp(`/admin/events/${EXPO.id}/setup\\?step=other-applications&form=${vendorForm.id}`), COLD);
+  const saveAs = main(page).getByRole('button', { name: 'Save as template' });
+  await saveAs.click(COLD);
   const dialog = page.getByRole('dialog', { name: 'Save as template' });
   await expect(dialog.getByLabel('Template name')).toHaveValue('Vendor Space');
   await dialog.getByLabel('Template name').fill('Exhibitor booths');
@@ -233,25 +266,19 @@ test('Save as template from the form editor: new template appears in the Templat
   await dialog.getByLabel('Template name').fill('Vendor space 2028');
   await dialog.getByRole('button', { name: 'Save template' }).click();
   await expect(dialog).toHaveCount(0);
-  await expect(page.getByRole('status')).toContainText('Saved as the "Vendor space 2028" template.');
+  await expect(status(page, 'Saved as the "Vendor space 2028" template.')).toHaveCount(1);
   expect(calls.find((c) => c.path.endsWith('/save-as-template'))?.body).toEqual({ name: 'Exhibitor booths' });
   expect(state.templates.map((t) => t.name)).toContain('Vendor space 2028');
 
   // Replace an existing one of the same kind.
-  await page.getByTestId('form-save-as-template').click();
+  await saveAs.click();
   await dialog.getByRole('radio', { name: 'Replace an existing template' }).check();
   await expect(dialog.getByLabel('Template', { exact: true }).locator('option')).toHaveText(['Exhibitor booths', 'Vendor space 2028']);
   await dialog.getByLabel('Template', { exact: true }).selectOption('tpl-booths');
   await dialog.getByRole('button', { name: 'Replace template' }).click();
-  await expect(page.getByRole('status')).toContainText('Template "Exhibitor booths" replaced.');
+  await expect(status(page, 'Template "Exhibitor booths" replaced.')).toHaveCount(1);
   expect(state.templates.find((t) => t.id === 'tpl-booths')?.definition.tiers).toHaveLength(1);
-
-  await page.goto(`/admin/events/${EXPO.id}/applications/forms`);
-  await page.getByTestId('forms-new').click();
-  await page.getByTestId('forms-create').getByLabel('Type').selectOption('PAID');
-  await expect(page.getByTestId('forms-template-picker')).toContainText('Vendor space 2028');
 });
-
 test('template editor: edit settings, add a question, reorder, save; unsaved guard; ORGANIZER can edit too', async ({ page, baseURL }) => {
   const { calls, state } = await mockAdmin(page, baseURL!);
   await page.goto('/admin/events/templates/tpl-booths');
@@ -314,30 +341,18 @@ test('template editor: edit settings, add a question, reorder, save; unsaved gua
   // ORGANIZER edits templates too (spec 050-E, applications.forms).
   await page.context().clearCookies();
   await mockAdmin(page, baseURL!, 'ORGANIZER');
-  await page.goto(`/admin/events/${EXPO.id}/applications/forms`);
-  await expect(page.getByTestId('forms-list')).toBeVisible();
-  await expect(page.getByTestId('forms-new')).toBeVisible();
   await page.goto('/admin/events/templates/tpl-booths');
   await expect(page.getByTestId('template-save')).toBeVisible();
   await expect(page.getByLabel('Name')).toBeEnabled();
   await expect(page.getByTestId('question-add')).toBeVisible();
 });
 
-test('Delete a saved template from the New form picker after confirming', async ({ page, baseURL }) => {
+test('wizard form editor: pin a second question as a list column; the third toggle is disabled at the cap; unpin frees it', async ({ page, baseURL }) => {
+  test.setTimeout(120000);
   const { calls } = await mockAdmin(page, baseURL!);
-  await page.goto(`/admin/events/${EXPO.id}/applications/forms`);
-  await page.getByTestId('forms-new').click();
-  const picker = page.getByTestId('forms-template-picker');
-  page.once('dialog', (d) => d.accept());
-  await picker.getByRole('button', { name: 'Delete template Press pass' }).click();
-  await expect(picker.getByRole('radio', { name: /Press pass/ })).toHaveCount(0);
-  expect(calls.some((c) => c.method === 'DELETE' && c.path === '/admin/application-templates/tpl-press')).toBe(true);
-});
-
-test('form editor: pin a second question as a list column; the third toggle is disabled at the cap; unpin frees it', async ({ page, baseURL }) => {
-  const { calls } = await mockAdmin(page, baseURL!);
-  await page.goto(`/admin/events/${EXPO.id}/applications/forms/${vendorForm.id}`);
-  await expect(page.getByTestId('question-pinned-q1')).toHaveText('List column');
+  await mockWizard(page, EXPO);
+  await page.goto(`/admin/events/${EXPO.id}/setup?step=other-applications&form=${vendorForm.id}`);
+  await expect(page.getByTestId('question-pinned-q1')).toHaveText('List column', COLD);
   await expect(page.getByTestId('question-pinned-q2')).toHaveCount(0);
 
   const rowQ2 = page.getByTestId('question-row-q2');

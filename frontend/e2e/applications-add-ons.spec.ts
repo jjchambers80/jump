@@ -66,6 +66,7 @@ const adminTier = (t: typeof boothTier) => ({
 const adminForm = {
   ...publicForm,
   eventId: EVENT_ID,
+  purpose: 'VENDOR',
   status: 'OPEN',
   opensAt: null,
   closesAt: null,
@@ -183,6 +184,29 @@ async function mockAdmin(page: Page, baseURL: string, role: 'ADMIN' | 'ORGANIZER
     return route.fulfill(json({ error: 'NotFoundError', message: `unmocked ${method} ${path}` }, 404));
   });
   return { calls, state };
+}
+
+
+/**
+ * Since spec 050-P a form is configured in the setup wizard: the old form
+ * editor URL redirects to its step. These are the extra reads the wizard makes,
+ * registered after mockAdmin so they win over its `/admin/**` catch-all.
+ */
+async function mockWizard(page: Page) {
+  const adminEvent = {
+    ...event, slug: 'maker-fair-2027', logoUrl: null, endDate: null, category: null, admissionMode: 'TICKETED',
+    setupStep: null, setupCompletedAt: '2026-01-01T00:00:00.000Z', rsvpLimit: null, rsvpMaxPartySize: 1, rsvpRemaining: null,
+    tax: { rate: 0.1, source: 'MANUAL', region: 'NC' }, taxInclusivePricing: false,
+  };
+  await page.route(`${API}/admin/permissions`, (route) => route.fulfill(json({ granted: ['*'], hiddenPaths: [] })));
+  await page.route(`${API}/admin/application-templates`, (route) => route.fulfill(json({ data: [] })));
+  await page.route(`${API}/organizations/${ORG_ID}/venues`, (route) => route.fulfill(json([event.venue])));
+  await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/overview`, (route) =>
+    route.fulfill(json({ event: adminEvent, applications: { forms: [] }, admissionLock: { locked: false, reason: null } }))
+  );
+  await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/preview-payload`, (route) =>
+    route.fulfill(json({ event: adminEvent, organization: { id: ORG_ID, name: 'Durham Makers' }, forms: [] }))
+  );
 }
 
 // ─── Public ──────────────────────────────────────────────────────────────────
@@ -465,37 +489,44 @@ test('admin list: add-ons column and "has add-on" filter', async ({ page, baseUR
   await expect(page).toHaveURL(/addOn=addon-badge/);
 });
 
-test('form editor: tier rows show offered add-ons; ADMIN attaches a restricted one on save', async ({ page, baseURL }) => {
+test('form editor (wizard step): tier rows show offered add-ons; ADMIN attaches a restricted one on save', async ({ page, baseURL }) => {
   const { calls } = await mockAdmin(page, baseURL!, 'ADMIN');
+  test.setTimeout(120000);
+  await mockWizard(page);
+  // The old form editor URL opens the form on its wizard step.
   await page.goto(`/admin/events/${EVENT_ID}/applications/forms/${FORM_ID}`);
-  await expect(page.getByTestId(`tier-add-ons-summary-${cornerTier.id}`)).toContainText('Booth power, Table & chairs');
+  await expect(page).toHaveURL(new RegExp(`/admin/events/${EVENT_ID}/setup\\?step=vendors&form=${FORM_ID}`), { timeout: 60000 });
+  await expect(page.getByTestId(`tier-add-ons-summary-${cornerTier.id}`)).toContainText('Booth power, Table & chairs', { timeout: 30000 });
   await page.getByTestId(`tier-row-${cornerTier.id}`).getByRole('button', { name: 'Edit' }).click();
   const fieldset = page.getByTestId(`tier-add-ons-${cornerTier.id}`);
   await expect(fieldset).toContainText('Included on every option: Booth power, Table & chairs');
   await fieldset.getByRole('checkbox', { name: /Extra vendor badge/ }).check();
   await page.getByTestId('form-tiers').getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('Add-ons saved.');
+  await expect(page.locator('main').getByRole('status').filter({ hasText: 'Add-ons saved.' })).toBeVisible();
   const put = calls.find((c) => c.method === 'PUT' && c.path.endsWith(`/tiers/${cornerTier.id}/add-ons`));
   expect(put?.body).toEqual({ addOnIds: [BADGE.id] });
   await expect(page.getByTestId(`tier-add-ons-summary-${cornerTier.id}`)).toContainText('Extra vendor badge');
 });
 
-test('form editor: how vendors choose their space (spec 039); an open form cannot switch to the map before it is ready', async ({ page, baseURL }) => {
+test('form editor (wizard step): how vendors choose their space (spec 039); an open form cannot switch to the map before it is ready', async ({ page, baseURL }) => {
   const { calls } = await mockAdmin(page, baseURL!, 'ADMIN');
+  test.setTimeout(120000);
+  await mockWizard(page);
+  // The old form editor URL opens the form on its wizard step.
   await page.goto(`/admin/events/${EVENT_ID}/applications/forms/${FORM_ID}`);
   const settings = page.getByTestId('form-settings');
-  await expect(settings.getByText('How vendors choose their space')).toBeVisible();
+  await expect(settings.getByText('How vendors choose their space')).toBeVisible({ timeout: 60000 });
   await expect(page.getByTestId('form-space-tiers')).toBeChecked();
 
   await page.getByTestId('form-space-map').check();
   await expect(page.getByTestId('form-space-map-hint')).toContainText('publish the event');
-  await expect(page.getByTestId('form-space-map-hint').getByRole('link', { name: 'Open the floor map' })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/map`);
+  await expect(page.getByTestId('form-space-map-hint').getByRole('link', { name: 'Go to the Floor map step' })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/setup?step=floor-map`);
   await settings.getByRole('button', { name: 'Save settings' }).click();
   await expect(page.getByText('Add spots on the floor map for: Corner')).toBeVisible();
   expect(calls.filter((c) => c.method === 'PATCH').at(-1)?.body).toMatchObject({ spaceSelection: 'MAP' });
 
   await page.getByTestId('form-space-tiers').check();
   await settings.getByRole('button', { name: 'Save settings' }).click();
-  await expect(page.getByRole('status')).toContainText('Form settings saved.');
+  await expect(page.locator('main').getByRole('status').filter({ hasText: 'Form settings saved.' })).toBeVisible();
   expect(calls.filter((c) => c.method === 'PATCH').at(-1)?.body).toMatchObject({ spaceSelection: 'TIERS' });
 });

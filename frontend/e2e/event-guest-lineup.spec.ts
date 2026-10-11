@@ -1,9 +1,8 @@
 // Special guest lineup (spec 050-Q). Storefront: the #guests section on the
 // public event page (visible guests, photo alt = name, named links, hidden
 // with no guests, placeholder in preview). Wizard: the lineup editor in the
-// Special guests step (add by hand, edit, reorder with buttons, hide, delete),
-// on the flag-on dev server. Every API call is mocked; assertions are scoped
-// to #guests or the form pane. Axe runs with reduced motion at 390 × 844.
+// Special guests step (add by hand, edit, reorder with buttons, hide, delete).
+// Every API call is mocked; assertions are scoped to #guests or the form pane. Axe runs with reduced motion at 390 × 844.
 
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
@@ -142,13 +141,10 @@ async function mockWizard(page: Page, initial: Partial<Row>[] = []) {
   return state;
 }
 
-const WIZARD_URL = process.env.PLAYWRIGHT_WIZARD_BASE_URL;
 const STAFF = { id: 'lineup-organizer', email: 'lineup-organizer@test.com', role: 'ORGANIZER' as const };
 const STEP_URL = `/admin/events/${EVENT_ID}/setup?step=special-guests`;
 
 test.describe('wizard lineup editor', () => {
-  test.skip(!WIZARD_URL, 'needs the flag-on dev server (PLAYWRIGHT_WIZARD_BASE_URL)');
-  test.use({ baseURL: WIZARD_URL });
   test.describe.configure({ timeout: 120000 });
 
   test.beforeEach(async ({ page, baseURL }) => {
