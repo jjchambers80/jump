@@ -3,6 +3,7 @@
 
 import AddOnPicker from '@/components/AddOnPicker';
 import type { AddOn } from '@/lib/addOns';
+import { PreviewNote } from './PreviewOff';
 
 interface EventAddOnsProps {
   offered: AddOn[];
@@ -23,7 +24,14 @@ export default function EventAddOns({ offered, quantities, onChange, taxRate, ta
         taxRate={taxRate}
         taxInclusive={taxInclusive}
         hint="Optional extras bought with your tickets."
+        offReasonId={onChange ? undefined : 'add-ons-off'}
       />
+      {/* No handler (the wizard pane): the steppers are aria-disabled and point here */}
+      {!onChange && (
+        <PreviewNote id="add-ons-off" className="mt-2">
+          Choosing add-ons is off in preview
+        </PreviewNote>
+      )}
     </div>
   );
 }

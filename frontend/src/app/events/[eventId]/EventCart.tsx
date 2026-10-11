@@ -8,6 +8,7 @@ import OrderTotals from '@/components/OrderTotals';
 import ExpandCollapseAll from '@/components/ExpandCollapseAll';
 import EmptyCart from '@/components/EmptyCart';
 import type { EventCart as Cart } from './useEventCart';
+import { offProps, PreviewNote } from './PreviewOff';
 
 interface EventCartProps {
   cart: Cart;
@@ -19,7 +20,12 @@ interface EventCartProps {
 
 export const ticketCount = (quantity: number) => `${quantity} ${quantity === 1 ? 'ticket' : 'tickets'}`;
 
+const NOTE_ID = 'checkout-off-desktop';
+
 export default function EventCart({ cart, preview, onCheckout, onToggleLine, onToggleAllLines }: EventCartProps) {
+  // Off = preview, or no handler (the wizard pane): focusable, aria-disabled, explained by the note.
+  const checkoutOff = preview || !onCheckout;
+  const off = (handler: unknown) => (handler ? undefined : NOTE_ID);
   return (
     <div className="hidden lg:block lg:w-[21rem] flex-shrink-0">
       <div className="sticky top-8">
@@ -27,12 +33,23 @@ export default function EventCart({ cart, preview, onCheckout, onToggleLine, onT
           <div className="mb-4">
             <div className="flex items-center justify-between gap-4">
               <h3 className="text-lg font-bold tracking-tight text-gray-900 dark:text-slate-100">Order Summary</h3>
-              <ExpandCollapseAll allOpen={cart.allLinesOpen} onToggle={onToggleAllLines ?? (() => {})} disabled={cart.lines.length === 0} />
+              <ExpandCollapseAll
+                allOpen={cart.allLinesOpen}
+                onToggle={onToggleAllLines ?? (() => {})}
+                disabled={cart.lines.length === 0}
+                offReasonId={off(onToggleAllLines)}
+              />
             </div>
             <p className="text-sm text-gray-500 dark:text-slate-400">
               {cart.totalQuantity > 0 ? `${ticketCount(cart.totalQuantity)} selected` : 'Review your selection'}
             </p>
           </div>
+
+          {(checkoutOff || !onToggleLine || !onToggleAllLines) && (
+            <PreviewNote id={NOTE_ID} className="mb-3">
+              Checkout is off in preview
+            </PreviewNote>
+          )}
 
           {cart.items.length === 0 ? (
             <EmptyCart />
@@ -46,6 +63,7 @@ export default function EventCart({ cart, preview, onCheckout, onToggleLine, onT
                   line={cart.fees.lines[index]}
                   open={!!cart.openLines[line.key]}
                   onToggle={() => onToggleLine?.(line.key)}
+                  offReasonId={off(onToggleLine)}
                   variant="compact"
                 />
               ))}
@@ -61,9 +79,9 @@ export default function EventCart({ cart, preview, onCheckout, onToggleLine, onT
               />
 
               <button
-                onClick={onCheckout}
-                disabled={preview}
-                className="group flex disabled:cursor-not-allowed disabled:opacity-60 w-full items-center justify-center gap-2 rounded-[var(--theme-button-radius,0.75rem)] bg-brand px-6 py-3.5 text-lg font-bold text-brand-fg transition-colors duration-200 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800"
+                onClick={checkoutOff ? undefined : onCheckout}
+                {...offProps(checkoutOff ? NOTE_ID : undefined)}
+                className="group flex aria-disabled:cursor-not-allowed aria-disabled:opacity-60 w-full items-center justify-center gap-2 rounded-[var(--theme-button-radius,0.75rem)] bg-brand px-6 py-3.5 text-lg font-bold text-brand-fg transition-colors duration-200 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800"
               >
                 Proceed to Checkout
                 <ChevronRight className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-0.5 motion-reduce:transition-none" aria-hidden />

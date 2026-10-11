@@ -2,8 +2,9 @@
 
 // Mobile floating bar. RSVP: "Reserve my spot" scrolls to the pass and hides
 // while the pass is on screen or once submitted. Ticketed: "Get tickets" jumps
-// to the tier list until the cart has a ticket, then cart + checkout. The
-// scrolling is this document's own (inside the wizard's preview iframe too).
+// to the tier list until the cart has a ticket, then cart + checkout.
+// Scrolling moves this window only (window.scrollTo): scrollIntoView would also
+// scroll the admin page around the wizard's preview iframe (050-H).
 
 import { useEffect, useState } from 'react';
 import { ChevronRight, ShoppingCart } from 'lucide-react';
@@ -11,6 +12,16 @@ import { formatPrice } from '@/lib/fees';
 import { ticketCount } from './EventCart';
 import type { EventCart } from './useEventCart';
 import type { EventPageState } from './eventPage';
+import { offProps, OFF_CLASS, PreviewNote } from './PreviewOff';
+
+const NOTE_ID = 'checkout-off-mobile';
+
+/** Scroll this window (never a parent frame) to `el`, clearing the 1.5rem scroll margin. */
+function scrollToElement(el: HTMLElement | null) {
+  if (!el) return;
+  const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 24, behavior: reduced ? 'auto' : 'smooth' });
+}
 
 interface EventMobileBarProps {
   state: EventPageState;
@@ -44,13 +55,16 @@ export default function EventMobileBar({ state, cart, preview, rsvpSubmitted, on
   const ticketsInView = useInView('tickets', !isRsvp, 0.1);
   if (isPastEvent || (isRsvp && rsvpFull)) return null;
 
+  // Off = preview, or no handler (the wizard pane): focusable, aria-disabled, explained by the note.
+  const cartOff = preview || !onOpenCart;
+  const checkoutOff = preview || !onCheckout;
   const shown = isRsvp ? !rsvpSubmitted && !rsvpPassInView : cart.totalQuantity > 0 || (canBuy && !ticketsInView);
 
   return (
     <div className={`lg:hidden fixed bottom-0 left-0 right-0 z-40 transition-transform duration-300 ease-out ${shown ? 'translate-y-0' : 'translate-y-full'}`}>
       {isRsvp ? (
         <div className={BAR}>
-          <button type="button" onClick={() => document.getElementById('rsvp-pass')?.scrollIntoView({ behavior: 'smooth' })} className={PRIMARY}>
+          <button type="button" onClick={() => scrollToElement(document.getElementById('rsvp-pass'))} className={PRIMARY}>
             Reserve my spot · Free
           </button>
         </div>
@@ -60,7 +74,7 @@ export default function EventMobileBar({ state, cart, preview, rsvpSubmitted, on
             type="button"
             onClick={() => {
               const tickets = document.getElementById('tickets');
-              tickets?.scrollIntoView({ behavior: 'smooth' });
+              scrollToElement(tickets);
               // First "+" stepper under the Tickets heading, for keyboard and screen reader users
               tickets?.parentElement?.querySelector<HTMLElement>('button[aria-label^="Increase"]')?.focus({ preventScroll: true });
             }}
@@ -73,12 +87,17 @@ export default function EventMobileBar({ state, cart, preview, rsvpSubmitted, on
         </div>
       ) : (
         <div className={BAR}>
+          {(cartOff || checkoutOff) && (
+            <PreviewNote id={NOTE_ID} className="mb-2 text-center">
+              Checkout is off in preview
+            </PreviewNote>
+          )}
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={onOpenCart}
-              disabled={preview}
-              className="relative flex items-center justify-center w-12 h-12 rounded-[var(--theme-button-radius,8px)] bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-200 disabled:cursor-not-allowed"
+              onClick={cartOff ? undefined : onOpenCart}
+              {...offProps(cartOff ? NOTE_ID : undefined)}
+              className={`relative flex items-center justify-center w-12 h-12 rounded-[var(--theme-button-radius,8px)] bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-200 ${OFF_CLASS}`}
               aria-label={`View cart, ${ticketCount(cart.totalQuantity)}`}
               aria-haspopup="dialog"
             >
@@ -89,9 +108,10 @@ export default function EventMobileBar({ state, cart, preview, rsvpSubmitted, on
             </button>
 
             <button
-              onClick={onCheckout}
-              disabled={cart.items.length === 0 || preview}
-              className="flex-1 bg-brand hover:bg-brand-hover disabled:bg-gray-400 disabled:cursor-not-allowed text-brand-fg disabled:text-white font-bold py-3 px-4 rounded-[var(--theme-button-radius,8px)] transition-colors duration-200 text-base flex items-center justify-center gap-2"
+              onClick={checkoutOff ? undefined : onCheckout}
+              disabled={cart.items.length === 0}
+              {...offProps(checkoutOff ? NOTE_ID : undefined)}
+              className="flex-1 bg-brand hover:bg-brand-hover disabled:bg-gray-400 disabled:cursor-not-allowed aria-disabled:cursor-not-allowed aria-disabled:opacity-60 text-brand-fg disabled:text-white font-bold py-3 px-4 rounded-[var(--theme-button-radius,8px)] transition-colors duration-200 text-base flex items-center justify-center gap-2"
             >
               <span>Checkout {formatPrice(cart.totalAmount)}</span>
               <ChevronRight className="w-5 h-5" aria-hidden />

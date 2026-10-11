@@ -321,6 +321,7 @@ Form body additions (050-B): `purpose` (enum; immutable once the form has submis
 - `EventPageView({ event, org, preview, cart?, on… })` (presentation) inside `BrandScope` with the org's `brandColor` and `themeMode` (gotchas 6/7, never `setTheme`).
 - Section components: `EventHero` (`#event-hero`, `#event-hero-image`, `#event-date`, `#event-venue`), `EventAbout` (`#about`, via `ContentHtml`), `EventTickets` (`#tickets`, `TierStub`, all-in prices via `computeTierAllInPrice`), `EventRsvp` (`#rsvp-pass`), `EventAddOns` (`#add-ons`), `GetInvolved` (`#get-involved`, label from `purpose`), `FloorMapButton` (`#floor-map`), cart (desktop sticky + mobile sheet), and later `EventGuests` (`#guests`, 050-Q).
 - `preview` disables cart, checkout, RSVP submit and dialogs, and renders unset fields as faded placeholders ("Add a date", "$ –").
+- Ticket steppers stay usable in the 050-F draft preview (the container passes handlers; checkout stays off). Any control whose handler is missing (the wizard pane) is `aria-disabled` and stays focusable, with `aria-describedby` pointing to a visible note ("Checkout is off in preview", "RSVP is off in preview").
 - No visual or behaviour change for buyers. Existing specs (`event-ticket-tiers`, `event-rsvp-pass`, `eventDescriptionHtml`, add-on and checkout specs) are the regression net.
 - End time: the hero renders "4:00 – 8:00 PM EDT" (same zone, `formatEventTime`) when `endDate` is set.
 
@@ -413,7 +414,7 @@ Load the `frontend-ui-engineering` skill before implementing **any** UI card. Th
 - **Touch targets** ≥ 44 × 44 px. `prefers-reduced-motion`: no slide between steps, no smooth scrolling, no progress animation. Motion otherwise ≤ 200 ms, opacity/transform only.
 - **"Jump to edit…" menu:** a `<nav aria-label="Jump to edit">` with a list of links; arrow keys not required (Tab order is the list order), each link names its state ("Tickets, needs attention"). In the mobile sheet, focus starts on the current step.
 - **Preview pane:** `<section aria-label="Live preview of the event page">` with the iframe `title="Event page preview"`. It is not a focus trap; Tab moves past it. When hidden (mobile/tablet, sheet closed) it is `inert` and `aria-hidden`. Preview scrolling happens inside the iframe document only.
-- **Contrast:** text and controls ≥ 4.5:1 (3:1 for large text and UI component boundaries) in light and dark; faded preview placeholders are decorative and marked `aria-hidden` with the real state announced in the form.
+- **Contrast:** text and controls ≥ 4.5:1 (3:1 for large text and UI component boundaries) in light and dark; faded preview placeholders are real text ("Add a date", "$ –"), not `aria-hidden` and not colour alone, and keep 4.5:1 in light and dark.
 - **Language:** plain verbs ("Add", "Publish"), sentence case, no "Oops".
 
 ### 11.5 Save behaviour

@@ -6,6 +6,7 @@ import { Clock } from 'lucide-react';
 import TierStub from './TierStub';
 import EventAddOns from './EventAddOns';
 import Placeholder from './Placeholder';
+import { PreviewNote } from './PreviewOff';
 import type { EventCart } from './useEventCart';
 import type { EventPageEvent, EventPageState, PriceTier } from './eventPage';
 
@@ -58,6 +59,13 @@ export default function EventTickets({ event, state, cart, preview, checkoutCanc
         )}
       </div>
 
+      {/* No handler (the wizard pane): steppers are aria-disabled and point here */}
+      {!onQuantityChange && !isPastEvent && !isSoldOut && activeTiers.length > 0 && (
+        <PreviewNote id="tickets-off" className="-mt-3 mb-4">
+          Choosing tickets is off in preview
+        </PreviewNote>
+      )}
+
       {isPastEvent ? (
         <div className={EMPTY_BOX}>
           <Clock className="mx-auto mb-4 h-12 w-12 text-gray-300 dark:text-slate-600" strokeWidth={1.5} aria-hidden />
@@ -94,6 +102,7 @@ export default function EventTickets({ event, state, cart, preview, checkoutCanc
               taxInclusive={taxInclusive}
               onChange={(direction) => onQuantityChange?.(tier, direction)}
               onShowDetails={onShowTier && (() => onShowTier(tier))}
+              offReasonId={onQuantityChange ? undefined : 'tickets-off'}
             />
           ))}
         </div>

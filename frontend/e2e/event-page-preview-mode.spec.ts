@@ -99,8 +99,16 @@ test('ticketed preview: tiers show, checkout and the cart stay shut, no dialogs'
   await expect(page.getByRole('button', { name: 'General details' })).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Increase General quantity' }).filter({ visible: true }).first().click();
-  await expect(page.getByRole('button', { name: /Checkout/ }).filter({ visible: true }).first()).toBeDisabled();
-  await expect(page.getByRole('button', { name: /View cart/ }).filter({ visible: true }).first()).toBeDisabled();
+  // Off, but focusable and explained: aria-disabled + a visible note.
+  const checkout = page.getByRole('button', { name: /Checkout/ }).filter({ visible: true }).first();
+  await expect(checkout).toHaveAttribute('aria-disabled', 'true');
+  await expect(checkout).toHaveAccessibleDescription('Checkout is off in preview');
+  await expect(page.getByRole('button', { name: /View cart/ }).filter({ visible: true }).first()).toHaveAttribute('aria-disabled', 'true');
+  await expect(visible(page, 'Checkout is off in preview')).toBeVisible();
+  await checkout.focus();
+  await expect(checkout).toBeFocused();
+  await checkout.click({ force: true });
+  await expect(page).toHaveURL(/\/events\/e2e-preview-ticketed$/);
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   expect(await seriousViolations(page)).toEqual([]);
@@ -116,7 +124,10 @@ test('RSVP preview: the pass shows a placeholder About and never submits', async
   await page.goto('/events/e2e-preview-rsvp');
 
   const pass = page.locator('#rsvp-pass');
-  await expect(pass.getByRole('button', { name: 'Reserve my spot' })).toBeDisabled({ timeout: 30000 });
+  const submit = pass.getByRole('button', { name: 'Reserve my spot' });
+  await expect(submit).toHaveAttribute('aria-disabled', 'true', { timeout: 30000 });
+  await expect(submit).toHaveAccessibleDescription('RSVP is off in preview');
+  await expect(pass.getByText('RSVP is off in preview')).toBeVisible();
   await expect(visible(page, 'Add a description')).toBeVisible();
   expect(posted).toBe(false);
   expect(await seriousViolations(page)).toEqual([]);
