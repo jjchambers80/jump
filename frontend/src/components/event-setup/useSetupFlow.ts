@@ -7,7 +7,7 @@
 // Every built step's unsaved changes are saved together, so a change made on
 // one step is never dropped by moving to another (browser Back included).
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import api from '@/services/api';
 import { useOrg } from '@/components/OrgContext';
@@ -22,6 +22,7 @@ import { PREVIEW_MESSAGE, type PreviewMessage, type PreviewOverlay } from './pre
 import { toSaved, useSetupData } from './useSetupData';
 import { useStepSave } from './useStepSave';
 import { useHistoryGuard } from './useHistoryGuard';
+import { clearSetupFinished, setupJustFinished } from './doneMarker';
 import type { OverviewEvent } from '@/lib/eventOverview';
 
 export const EMPTY_FIELDS: SetupFields = { name: '', slug: '', venueId: '', date: '', endDate: '' };
@@ -73,7 +74,10 @@ export function useSetupFlow(eventId: string | null) {
   const mode: 'create' | 'edit' = saved?.setupCompletedAt ? 'edit' : 'create';
   const list = visibleSteps(ctx);
   const requested = stepByKey(params.get('step'));
-  const valid = !!requested && list.includes(requested) && isReachable(requested.key, ctx);
+  // Done is the create flow's last screen, not a counted step: only right after
+  // Review finished this event in this tab (doneMarker). In edit mode it goes to Details.
+  const doneOk = !!saved?.setupCompletedAt && setupJustFinished(saved.id);
+  const valid = !!requested && (requested.key === 'done' ? doneOk : list.includes(requested) && isReachable(requested.key, ctx));
   const current: StepKey = valid ? requested.key : mode === 'edit' ? 'name' : resumeKey(ctx, saved ? saved.setupStep : draftStep);
   const step = stepByKey(current)!;
   const at = list.indexOf(step);
@@ -82,9 +86,16 @@ export function useSetupFlow(eventId: string | null) {
 
   // Each step is a URL (§11.4): put the resolved step in it, so Back works.
   useEffect(() => {
-    if (initialised && !valid) router.replace(urlFor(current));
+    if (!initialised || valid) return;
+    router.replace(requested?.key === 'done' && saved && mode === 'edit' ? `/admin/events/${saved.id}` : urlFor(current));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialised, valid, current]);
+  // Leaving Done for a step ends the create flow: Done is not shown again.
+  const lastStep = useRef(current);
+  useEffect(() => {
+    if (saved && lastStep.current === 'done' && current !== 'done') clearSetupFinished(saved.id);
+    lastStep.current = current;
+  }, [current, saved]);
 
   // Before the row exists, the form lives in this tab's session (§4).
   useEffect(() => {

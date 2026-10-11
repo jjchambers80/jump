@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import EventActionsMenu from './EventActionsMenu';
 import PublishBlockers from './PublishBlockers';
+import ContinueSetupLink from '@/components/event-setup/ContinueSetupLink';
+import { continueSetupHref } from '@/lib/eventWizard';
 import type { ReadinessItem } from '@/lib/eventReadiness';
 import type { AdmissionMode } from './EventFormLayout';
 
@@ -332,8 +334,9 @@ export default function EventListCard({
                   Duplicate
                 </button>
               )}
-              {/* Publish secondary for DRAFT */}
-              {event.status === 'DRAFT' && (
+              {/* A draft still in the setup wizard resumes there; Publish is its Review step (spec 050). */}
+              <ContinueSetupLink event={event} />
+              {event.status === 'DRAFT' && !continueSetupHref(event) && (
                 <button
                   type="button"
                   onClick={onPublish}

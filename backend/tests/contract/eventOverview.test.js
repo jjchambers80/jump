@@ -162,6 +162,8 @@ describe('Event overview API', () => {
     expect(body.event).toMatchObject({ id: event.id, admissionMode: 'TICKETED' });
     expect(body.event.venue.timezone).toBe('America/New_York');
     expect(body.event.priceTiers).toHaveLength(1);
+    // Spec 050-I: the share link is the storefront URL (platform frontend here: no custom domain).
+    expect(body.publicUrl).toMatch(new RegExp(`^https?://[^/]+/events/${body.event.slug || event.id}$`));
 
     // Only the COMPLETED order counts; the refund comes off net.
     expect(body.money).toMatchObject({ gross: 66, orgReceives: 60, refunded: 10, net: 56 });

@@ -20,6 +20,8 @@ import CancelEventDialog from '@/components/events/CancelEventDialog';
 import PublishBlockers from '@/components/events/PublishBlockers';
 import { publishBlockers, type ReadinessItem } from '@/lib/eventReadiness';
 import DuplicateEventDialog from '../DuplicateEventDialog';
+import ContinueSetupLink from '@/components/event-setup/ContinueSetupLink';
+import { continueSetupHref } from '@/lib/eventWizard';
 import { WorkspaceTabs, workspaceTabs } from '@/components/events/EventWorkspace';
 import {
   AdmissionCard,
@@ -174,7 +176,8 @@ function EventDetailsContent() {
               <ExternalLink className="h-3.5 w-3.5" aria-hidden />
               <span className="sr-only">(opens in a new tab)</span>
             </a>
-            {event.status === 'DRAFT' && (
+            <ContinueSetupLink event={event} />
+            {event.status === 'DRAFT' && !continueSetupHref(event) && (
               <button
                 type="button"
                 onClick={publish}

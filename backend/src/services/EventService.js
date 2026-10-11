@@ -221,9 +221,10 @@ class EventService {
    * questions. Orders, tickets and applications are never copied.
    * @param {string} orgId
    * @param {string} eventId
-   * @param {{ name?: string, date: string }} input - new date is required; name defaults to "Copy of <name>"
+   * @param {{ name?: string, date: string, setup?: boolean }} input - new date is required; name defaults to "Copy of <name>".
+   *   `setup: true` (spec 050 §7.7, the wizard's "Start from a past event") leaves the copy mid-setup at the date step.
    */
-  async duplicateEvent(orgId, eventId, { name, date } = {}) {
+  async duplicateEvent(orgId, eventId, { name, date, setup } = {}) {
     const source = await prisma.event.findFirst({
       where: { id: eventId, venue: { organizationId: orgId } },
       include: { priceTiers: { orderBy: { displayOrder: 'asc' } } },
@@ -255,6 +256,7 @@ class EventService {
           rsvpMaxPartySize: source.rsvpMaxPartySize,
           category: source.category,
           status: 'DRAFT',
+          ...(setup === true && { setupCompletedAt: null, setupStep: 'date' }),
           taxRate: source.taxRate,
           taxRateSource: source.taxRateSource,
           priceTiers: {
@@ -1315,8 +1317,12 @@ class EventService {
         }
       : null;
 
+    // The public page on the org's storefront host (custom domain, store subdomain or platform), for sharing.
+    const { base: storefrontBase } = await storefrontFor(orgId);
+
     return {
       event: this._formatEventDetail(event),
+      publicUrl: `${storefrontBase}/events/${encodeURIComponent(event.slug || event.id)}`,
       money: {
         gross,
         orgReceives: round(kinds.reduce((s, k) => s + sumOf(byKind(k), 'orgReceives'), 0)),

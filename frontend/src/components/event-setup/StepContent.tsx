@@ -11,7 +11,9 @@ import NameStep from './steps/NameStep';
 import VenueStep from './steps/VenueStep';
 import DateStep from './steps/DateStep';
 import PendingStep from './steps/PendingStep';
-import type { EventStep, FieldError, SetupFields } from './steps';
+import DoneStep from './steps/DoneStep';
+import StartFromPastEvent from './StartFromPastEvent';
+import type { EventStep, FieldError, SavedEvent, SetupFields } from './steps';
 import type { SetupVenue } from './steps/types';
 
 const INTRO: Partial<Record<EventStep['key'], string>> = {
@@ -35,11 +37,14 @@ interface Props {
   zone: string | null;
   readOnly: boolean;
   onVenueCreated: (venue: CreatedVenue) => void;
+  /** The server row; null before the date step creates it. */
+  event: SavedEvent | null;
 }
 
 const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(props, headingRef) {
   const { step, fields, onChange, summary, summaryRef, onOpenStep, status, readOnly } = props;
   const form = { fields, onChange, errors: Object.fromEntries(props.inline.map((e) => [e.field, e.message])), status };
+  if (step.key === 'done' && props.event) return <DoneStep ref={headingRef} event={props.event} orgId={props.orgId} />;
 
   return (
     <div key={step.key} className="mx-auto w-full max-w-[640px] px-4 py-6 motion-safe:animate-fade-in sm:px-6 sm:py-8">
@@ -65,6 +70,7 @@ const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(p
           {step.key === 'date' && <DateStep {...form} zone={props.zone} hasVenue={props.venues.some((v) => v.id === fields.venueId)} />}
           {!step.built && <PendingStep />}
         </fieldset>
+        {step.key === 'name' && !props.event && props.orgId && <StartFromPastEvent orgId={props.orgId} />}
       </div>
     </div>
   );
