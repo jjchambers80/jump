@@ -19,6 +19,7 @@ import { zoneOffsetMinutes } from '../utils/eventTime.js';
 import { storefrontFor } from '../utils/storefrontUrl.js';
 import rsvpService, { remainingFor } from './RsvpService.js';
 import emailService from './EmailService.js';
+import { assertPaymentsReady } from './paymentReadiness.js';
 
 /**
  * Safe CSV cell: quotes `,`, `"`, newlines, and protects against formula
@@ -510,6 +511,11 @@ class EventService {
         error.code = 'CAPACITY_REQUIRED';
         throw error;
       }
+      const hasPaidTier = await prisma.priceTier.findFirst({
+        where: { eventId, isActive: true, price: { gt: 0 } },
+        select: { id: true },
+      });
+      if (hasPaidTier) await assertPaymentsReady(orgId);
     }
 
     const event = await prisma.event.update({

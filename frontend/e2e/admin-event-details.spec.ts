@@ -176,6 +176,21 @@ test('an event of another organization reads as not found', async ({ page }) => 
   await expect(page.getByRole('alert').filter({ hasText: 'not in the selected organization' })).toBeVisible();
 });
 
+test('paid sales show setup guidance until Stripe enables charges', async ({ page }) => {
+  await page.route(`${API}/admin/settings/payments`, (route) =>
+    route.fulfill(json({ connect: { enabled: true, status: 'not_started', account: null }, canEdit: true }))
+  );
+  await page.goto(`/admin/events/${EVENT_ID}?orgId=${ORG_ID}`);
+  const notice = page.getByTestId('payments-not-ready');
+  await expect(notice).toBeVisible();
+  await expect(notice.getByRole('link', { name: 'Set up payments' })).toHaveAttribute('href', '/admin/settings/payments');
+
+  await page.getByRole('button', { name: 'Settings for Vendors' }).click();
+  const flyout = page.getByRole('dialog', { name: 'Vendors settings' });
+  await expect(flyout.getByRole('radio', { name: 'Open' })).toBeDisabled();
+  await expect(flyout.getByRole('link', { name: 'Set up payments' })).toHaveAttribute('href', '/admin/settings/payments');
+});
+
 test('no horizontal scroll at 390px', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`/admin/events/${EVENT_ID}?orgId=${ORG_ID}`);

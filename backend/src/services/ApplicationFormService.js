@@ -15,6 +15,7 @@ import { CHOICE_TYPES, MAX_OPTIONS, MAX_PINNED_QUESTIONS, QUESTION_TYPES } from 
 import feeService from './FeeService.js';
 import applicationFormTemplateService from './ApplicationFormTemplateService.js';
 import logger from '../utils/logger.js';
+import { assertPaymentsReady } from './paymentReadiness.js';
 
 const FORM_KINDS = new Set(['PAID', 'FREE']);
 const FORM_STATUSES = new Set(['DRAFT', 'OPEN', 'CLOSED']);
@@ -234,6 +235,9 @@ class ApplicationFormService {
     if (body.tiers !== undefined) {
       if (body.kind === 'FREE' && body.tiers.length > 0) throw new ValidationError('FREE forms cannot have tiers');
       data.tiers = { create: body.tiers.map((t, i) => this._validateTier(t, i)) };
+    }
+    if (body.kind === 'PAID' && data.status === 'OPEN') {
+      await assertPaymentsReady(data.organizationId);
     }
     if (body.questions !== undefined) {
       data.questions = { create: body.questions.map((q, i) => this._validateQuestion(q, i)) };
@@ -799,6 +803,7 @@ class ApplicationFormService {
     if (form.kind !== 'PAID') return;
     if (!paymentsEnabled()) throw new ConflictError('Paid application forms cannot open until application payments are enabled');
     if (!(form.tiers || []).some((t) => t.isActive)) throw new ValidationError('A PAID form needs at least one active tier before it can open');
+    await assertPaymentsReady(form.organizationId);
     if (form.spaceSelection === 'MAP') await this._assertMapReady(form);
   }
 
