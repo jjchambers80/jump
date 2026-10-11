@@ -11,6 +11,8 @@ import { useSession } from 'next-auth/react';
 import { AlertCircle, Plus, RefreshCw, ScanLine } from 'lucide-react';
 import adminService, { DashboardOverview, DashboardStats } from '@/services/adminService';
 import { useOrg } from '@/components/OrgContext';
+import PublishBlockers from '@/components/events/PublishBlockers';
+import { publishBlockers, type ReadinessItem } from '@/lib/eventReadiness';
 import { useAccountFormat } from '@/lib/accountFormat';
 import PayoutsBanner from './PayoutsBanner';
 import SetupGuide from './SetupGuide';
@@ -35,6 +37,7 @@ export default function DashboardPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [publishingId, setPublishingId] = useState<string | null>(null);
+  const [blockers, setBlockers] = useState<{ eventId: string; items: ReadinessItem[] } | null>(null);
 
   const fetchData = useCallback(async () => {
     setRefreshing(true);
@@ -66,12 +69,16 @@ export default function DashboardPage() {
   }, [selectedOrgId, fetchData]);
 
   const handlePublish = async (eventId: string) => {
+    if (!selectedOrgId) return;
     setPublishingId(eventId);
+    setBlockers(null);
     try {
-      await adminService.publishEvent(eventId);
+      await adminService.publishEvent(selectedOrgId, eventId);
       await fetchData();
     } catch (err: any) {
-      setError(err.message || 'Could not publish the event.');
+      const found = publishBlockers(err);
+      if (found) setBlockers({ eventId, items: found });
+      else setError(err.message || 'Could not publish the event.');
     } finally {
       setPublishingId(null);
     }
@@ -136,6 +143,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Attention first on phones: it is what to do next. */}
           <div className="space-y-6 lg:order-2">
+            {blockers && <PublishBlockers blockers={blockers.items} eventId={blockers.eventId} orgId={selectedOrgId} />}
             <NeedsAttention attention={overview?.attention ?? null} publishingId={publishingId} onPublish={handlePublish} />
             <RecentOrders orders={overview?.recentOrders ?? null} />
           </div>

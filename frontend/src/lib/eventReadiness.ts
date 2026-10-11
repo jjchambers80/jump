@@ -21,6 +21,17 @@ export function publishBlockers(err: unknown): ReadinessItem[] | null {
   return e.details.blockers;
 }
 
+/** Org settings an item is fixed in, with the permission catalog action (backend/src/permissions/catalog.js) that may change them. */
+const SETTINGS_FIX: Record<string, { href: string; permission: string; who: string }> = {
+  PAYMENTS_UNAVAILABLE: { href: '/admin/settings/payments', permission: 'settings.payments', who: 'An admin needs to finish payments setup.' },
+  TAX_RATE_UNRESOLVED: { href: '/admin/settings/tax', permission: 'settings.tax', who: 'An admin needs to finish tax setup.' },
+};
+
+/** The catalog permission needed to follow an item's link, and what to say without it; null when anyone can. */
+export function readinessSettingsFix(item: ReadinessItem): { permission: string; who: string } | null {
+  return SETTINGS_FIX[item.code] ?? null;
+}
+
 /**
  * Where an item is fixed. Until the wizard's edit mode (050-O) these are the
  * existing editors; then this becomes `/admin/events/<id>/setup?step=<step>`.
@@ -28,8 +39,7 @@ export function publishBlockers(err: unknown): ReadinessItem[] | null {
 export function readinessHref(item: ReadinessItem, eventId: string, orgId: string | null): string {
   const q = orgId ? `?orgId=${encodeURIComponent(orgId)}` : '';
   const base = `/admin/events/${eventId}`;
-  if (item.code === 'PAYMENTS_UNAVAILABLE') return '/admin/settings/payments';
-  if (item.code === 'TAX_RATE_UNRESOLVED') return '/admin/settings/tax';
+  if (SETTINGS_FIX[item.code]) return SETTINGS_FIX[item.code].href;
   if (item.code === 'CAPACITY_MISSING') return `${base}/edit/sales${q}#event-admission`;
   switch (item.step) {
     case 'name':

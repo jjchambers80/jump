@@ -35,11 +35,14 @@ const blockers = [
   { code: 'NO_ACTIVE_TIER', step: 'tickets', message: 'Add at least one active ticket tier.' },
 ];
 
-async function mockApi(page: Page) {
+const paymentsBlocker = { code: 'PAYMENTS_UNAVAILABLE', step: 'review', message: 'Payments are not set up for this organization yet, so paid tickets cannot sell.' };
+
+async function mockApi(page: Page, list = blockers, granted: string[] = ['events', 'settings']) {
+  await page.route(`${API}/admin/permissions`, (route) => route.fulfill(json({ granted, hiddenPaths: [] })));
   await page.route(`${API}/organizations`, (route) => route.fulfill(json([{ id: ORG_ID, name: 'Blockers Org', status: 'ACTIVE' }])));
   await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/overview`, (route) => route.fulfill(json(overview)));
   await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/publish`, (route) =>
-    route.fulfill(json({ error: 'UnprocessableEntityError', message: 'This event is not ready to publish', code: 'EVENT_NOT_READY', details: { blockers, warnings: [] } }, 422))
+    route.fulfill(json({ error: 'UnprocessableEntityError', message: 'This event is not ready to publish', code: 'EVENT_NOT_READY', details: { blockers: list, warnings: [] } }, 422))
   );
 }
 
@@ -48,10 +51,24 @@ test.beforeEach(async ({ page, baseURL }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   // Light mode is where admin gray text is closest to the contrast limit.
   await page.emulateMedia({ colorScheme: 'light' });
-  await mockApi(page);
 });
 
+async function axeSerious(page: Page) {
+  const results = await new AxeBuilder({ page }).include('main').analyze();
+  return results.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
+}
+
+async function refusePublish(page: Page) {
+  await page.goto(`/admin/events/${EVENT_ID}?orgId=${ORG_ID}`);
+  await expect(page.getByRole('heading', { level: 1, name: 'Spring Swap Meet' })).toBeVisible();
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  const alert = page.getByRole('alert').filter({ hasText: 'before publishing' });
+  await expect(alert).toBeVisible();
+  return alert;
+}
+
 test('a refused publish lists the blockers as text with links to fix them', async ({ page }) => {
+  await mockApi(page);
   await page.goto(`/admin/events/${EVENT_ID}?orgId=${ORG_ID}`);
   await expect(page.getByRole('heading', { level: 1, name: 'Spring Swap Meet' })).toBeVisible();
 
@@ -62,6 +79,8 @@ test('a refused publish lists the blockers as text with links to fix them', asyn
   const alert = page.getByRole('alert').filter({ hasText: 'before publishing' });
   await expect(alert).toBeVisible();
   await expect(alert).toContainText('Fix 2 things before publishing');
+  // Plan §11.4: focus moves to the list so keyboard and screen reader users land on it.
+  await expect(alert).toBeFocused();
   const links = alert.getByRole('link');
   await expect(links).toHaveCount(2);
   await expect(alert.getByRole('link', { name: /Set the event capacity/ })).toHaveAttribute(
@@ -79,7 +98,27 @@ test('a refused publish lists the blockers as text with links to fix them', asyn
   // No horizontal scroll at phone width.
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
-  const results = await new AxeBuilder({ page }).include('main').analyze();
-  const serious = results.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
-  expect(serious).toEqual([]);
+  expect(await axeSerious(page)).toEqual([]);
+});
+
+test('the blocker list passes axe in dark mode', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await mockApi(page);
+  await refusePublish(page);
+  await expect(page.locator('html')).toHaveClass(/\bdark\b/);
+  expect(await axeSerious(page)).toEqual([]);
+});
+
+test('an organizer without payment settings is told an admin must finish them', async ({ page }) => {
+  await mockApi(page, [paymentsBlocker], ['events']);
+  const alert = await refusePublish(page);
+  await expect(alert).toContainText('An admin needs to finish payments setup.');
+  await expect(alert.getByRole('link')).toHaveCount(0);
+});
+
+test('an admin gets the payment settings link', async ({ page }) => {
+  await mockApi(page, [paymentsBlocker], ['events', 'settings', 'settings.payments']);
+  const alert = await refusePublish(page);
+  await expect(alert.getByRole('link', { name: /Payments are not set up/ })).toHaveAttribute('href', '/admin/settings/payments');
+  await expect(alert).not.toContainText('An admin needs');
 });

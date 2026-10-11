@@ -44,7 +44,7 @@ export function evaluate(event, { now = new Date(), paymentsEnabled: gateOn = fa
       blockers.push(item('TIERS_EXCEED_CAPACITY', 'tickets', `Ticket tiers add up to ${total}, more than the capacity of ${event.capacity}.`));
     }
     if (paymentsUnavailable && tiers.some((t) => t.isActive && Number(t.price) > 0)) {
-      blockers.push(item('PAYMENTS_UNAVAILABLE', 'review', 'Finish setting up payments before selling paid tickets.'));
+      blockers.push(item('PAYMENTS_UNAVAILABLE', 'review', 'Payments are not set up for this organization yet, so paid tickets cannot sell.'));
     }
   }
 

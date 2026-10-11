@@ -242,6 +242,9 @@ All event routes stay `requireAuth → requireOrganizer → requireOrgMembership
 
 - `GET /organizations/:orgId/events/:eventId/readiness` → `{ ready, blockers: [{ code, step, message }], warnings: [{ code, step, message }] }`. `EventReadinessService.check(orgId, eventId)` is the only implementation; `publishEvent` calls it and answers 422 `EVENT_NOT_READY` with the same `blockers`.
   - Blockers: `DATE_IN_PAST` (date), `CAPACITY_MISSING` (tickets, TICKETED), `NO_ACTIVE_TIER` (tickets, TICKETED), `TIERS_EXCEED_CAPACITY` (tickets), `END_BEFORE_START` (date).
+    - `NAME_MISSING` (name): the name is blank.
+    - `VENUE_MISSING` (venue): the event has no venue.
+    - `PAYMENTS_UNAVAILABLE` (review, TICKETED): an active tier has a price while Connect is on and `ConnectService.chargeAccountFor` refuses. Settings › Payments fixes it, so organizers without `settings.payments` see "An admin needs to finish payments setup" instead of a link.
   - Warnings: `NO_DESCRIPTION`, `NO_IMAGE`, `MAP_FORM_WITHOUT_PUBLISHED_MAP` (floor-map), `PAID_FORMS_DISABLED` (vendors/other; `APPLICATIONS_PAYMENTS_ENABLED` off), `FORM_HAS_NO_QUESTIONS`, `TAX_RATE_UNRESOLVED` (Review; `TaxService` threw, gotcha 12).
   - RSVP events skip tier and capacity checks (gotcha 29: branch on `admissionMode`).
 - `POST …/publish` body `{ openFormIds?: string[] }`. In one transaction: status PUBLISHED, `setupCompletedAt` if null, listed DRAFT forms → OPEN (PAID refused when the payments gate is off, reported per form in the response, never failing the publish). Tax refresh as today (`EventService.js:432`).
