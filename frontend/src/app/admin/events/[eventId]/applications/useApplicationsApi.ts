@@ -6,7 +6,7 @@
 
 import { useMemo } from 'react';
 import api from '@/services/api';
-import type { AddOnLineInput, AdminApplication, AdminForm, AdminTier, ApplicationList, Decision, FormTemplate, MessageTemplate, Question } from '@/lib/applications';
+import type { AddOnLineInput, AdminApplication, AdminForm, AdminShift, ShiftInput, AdminTier, ApplicationList, Decision, FormTemplate, MessageTemplate, Question } from '@/lib/applications';
 
 export interface DigestSettings {
   enabled: boolean;
@@ -22,6 +22,8 @@ export interface ListQuery {
   addOn?: string;
   /** Spec 019 phase 3: exact tag. */
   tag?: string;
+  /** Spec 050-S: picked or assigned this volunteer shift. */
+  shift?: string;
   /** Spec 014 phase 2: `none` = approved on a map-bound tier with no booth yet; `chosen` = owns one. */
   booth?: 'none' | 'chosen';
   q?: string;
@@ -105,6 +107,10 @@ export function useApplicationsApi(eventId: string, standingFormId?: string) {
       addTier: (formId: string, body: Record<string, unknown>) => api.post(`${forms}/${formId}/tiers`, body),
       updateTier: (formId: string, tierId: string, body: Record<string, unknown>) => api.patch(`${forms}/${formId}/tiers/${tierId}`, body),
       deleteTier: (formId: string, tierId: string) => api.delete(`${forms}/${formId}/tiers/${tierId}`),
+      // Spec 050 §6.4: volunteer shifts (VOLUNTEER forms; 409 SHIFT_CAPACITY_BELOW_ASSIGNED / SHIFT_HAS_ASSIGNED).
+      addShift: (formId: string, body: ShiftInput) => api.post<AdminShift>(`${forms}/${formId}/shifts`, body),
+      updateShift: (formId: string, shiftId: string, body: ShiftInput) => api.patch<AdminShift>(`${forms}/${formId}/shifts/${shiftId}`, body),
+      deleteShift: (formId: string, shiftId: string) => api.delete(`${forms}/${formId}/shifts/${shiftId}`),
       setTierAddOns: (formId: string, tierId: string, addOnIds: string[]) => api.put<AdminTier>(`${forms}/${formId}/tiers/${tierId}/add-ons`, { addOnIds }),
       addQuestion: (formId: string, body: Record<string, unknown>) => api.post<Question>(`${forms}/${formId}/questions`, body),
       updateQuestion: (formId: string, questionId: string, body: Record<string, unknown>) => api.patch<Question>(`${forms}/${formId}/questions/${questionId}`, body),

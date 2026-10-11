@@ -122,6 +122,8 @@ const LIST_INCLUDE = {
     include: { question: { select: { id: true, label: true, type: true, displayOrder: true } }, image: { include: { file: true } } },
     orderBy: { question: { displayOrder: 'asc' } },
   },
+  // Spec 050 §6.4 (050-S): the volunteer's shift picks for the Shifts column.
+  shifts: { select: { assigned: true, shift: { select: { id: true, name: true } } }, orderBy: { shift: { displayOrder: 'asc' } } },
 };
 
 /** Organizer decisions: which statuses they leave from and land on. */
@@ -2499,6 +2501,8 @@ class ApplicationService {
       ];
     }
     if (query.tag) where.tags = { has: String(query.tag) };
+    // Spec 050 §6.4 (050-S): the shift roster — anyone who picked the shift or is assigned to it.
+    if (query.shift) where.shifts = { some: { shiftId: String(query.shift) } };
     if (query.status) {
       const list = String(query.status).split(',').filter((s) => STATUSES.has(s) && s !== 'DRAFT');
       if (list.length) where.status = { in: list };
@@ -2676,6 +2680,7 @@ class ApplicationService {
       mapBound: a.tierMapBound === true,
       selectionHeldUntil: a.selectionHeldUntil ?? null,
       tags: a.tags ?? [],
+      shifts: (a.shifts || []).map((p) => ({ id: p.shift.id, name: p.shift.name, assigned: p.assigned })),
       checkedInAt: a.checkedInAt ?? null,
       checkedOutAt: a.checkedOutAt ?? null,
       pinnedAnswers: (a.answers || []).map((ans) => ({ questionId: ans.question.id, label: ans.question.label, type: ans.question.type, value: this._answerText(ans) })),
