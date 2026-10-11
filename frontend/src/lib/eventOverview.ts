@@ -42,6 +42,9 @@ export interface OverviewEvent {
   setupCompletedAt?: string | null;
   category: string | null;
   status: EventStatus;
+  /** Spec 050-D: published but checkout, RSVPs and new applications are off. */
+  salesClosed?: boolean;
+  salesClosedAt?: string | null;
   admissionMode: AdmissionMode;
   rsvpLimit: number | null;
   rsvpMaxPartySize: number;

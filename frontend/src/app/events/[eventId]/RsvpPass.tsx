@@ -19,6 +19,8 @@ export interface RsvpPassEvent {
   id: string;
   name: string;
   date: string;
+  /** Spec 050-D: organizer closed sales; the pass shows that instead of the form. */
+  salesClosed?: boolean;
   rsvpLimit?: number | null;
   rsvpMaxPartySize?: number;
   rsvpRemaining?: number | null;
@@ -90,7 +92,9 @@ export default function RsvpPass({ event, isPastEvent, preview = false, legalVer
   const tile = dateTile(event.date, zone);
   const time = formatEventTime(event.date, zone);
   const organizer = event.organizationName || 'the organizer';
-  const full = !isPastEvent && event.rsvpRemaining != null && event.rsvpRemaining <= 0;
+  // Spec 050-D: the organizer closed sales; the pass says so instead of offering the form.
+  const closed = !isPastEvent && event.salesClosed === true;
+  const full = !isPastEvent && !closed && event.rsvpRemaining != null && event.rsvpRemaining <= 0;
   const low = full ? null : scarcity(event.rsvpLimit, event.rsvpRemaining);
   // Never offer a party the event can no longer seat; the backend enforces it too.
   const maxParty = Math.max(1, Math.min(event.rsvpMaxPartySize ?? 1, event.rsvpRemaining ?? Infinity));
@@ -125,9 +129,11 @@ export default function RsvpPass({ event, isPastEvent, preview = false, legalVer
     }
   };
 
-  const stubLabel = isPastEvent ? 'Event ended' : full ? 'RSVPs are full' : submitted ? 'Confirmed' : 'Free admission';
+  const stubLabel = isPastEvent ? 'Event ended' : closed ? 'RSVPs are closed' : full ? 'RSVPs are full' : submitted ? 'Confirmed' : 'Free admission';
   const stubNote = isPastEvent
     ? 'RSVPs are closed'
+    : closed
+      ? 'Sales are closed'
     : full
       ? 'Every spot is reserved'
       : submitted
@@ -135,7 +141,7 @@ export default function RsvpPass({ event, isPastEvent, preview = false, legalVer
         : low
           ? `Only ${low.remaining} ${low.remaining === 1 ? 'spot' : 'spots'} left`
           : 'RSVP required';
-  const muted = isPastEvent || full;
+  const muted = isPastEvent || closed || full;
 
   return (
     <div className="drop-shadow-[0_10px_24px_rgba(15,23,42,0.10)] dark:drop-shadow-[0_12px_28px_rgba(0,0,0,0.45)]">
@@ -180,6 +186,10 @@ export default function RsvpPass({ event, isPastEvent, preview = false, legalVer
             <p className="text-sm leading-relaxed text-gray-600 dark:text-slate-400">
               This event took place on {formatEventDate(event.date, zone, { weekday: 'long', month: 'long' })}. RSVPs are no
               longer being accepted.
+            </p>
+          ) : closed ? (
+            <p className="text-sm leading-relaxed text-gray-600 dark:text-slate-400" data-testid="sales-closed">
+              {organizer} is no longer taking RSVPs for this event. If you already RSVP&apos;d, your spot is kept.
             </p>
           ) : full ? (
             <p className="text-sm leading-relaxed text-gray-600 dark:text-slate-400">

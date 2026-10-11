@@ -45,6 +45,8 @@ export interface EventPageEvent {
   capacity: number | null;
   category?: string | null;
   status: string;
+  /** Spec 050-D: published, but checkout, RSVPs and new applications are off. */
+  salesClosed?: boolean;
   admissionMode?: 'TICKETED' | 'RSVP';
   rsvpLimit?: number | null;
   rsvpMaxPartySize?: number;
@@ -80,13 +82,15 @@ export function eventPageState(event: EventPageEvent) {
   const totalAvailable = isRsvp ? 0 : activeTiers.reduce((sum, tier) => sum + tier.quantityAvailable, 0);
   const isSoldOut = !isRsvp && totalAvailable === 0;
   const isPastEvent = !!event.date && new Date(event.date) < new Date();
-  const canBuy = !isRsvp && !isPastEvent && !isSoldOut && activeTiers.some((tier) => tier.quantityAvailable > 0);
+  // An ended event says "ended", not "sales closed".
+  const salesClosed = event.salesClosed === true && !isPastEvent;
+  const canBuy = !isRsvp && !isPastEvent && !isSoldOut && !salesClosed && activeTiers.some((tier) => tier.quantityAvailable > 0);
   const prices = activeTiers
     .filter((tier) => tier.quantityAvailable > 0 && tier.price != null)
     .map((tier) => computeTierAllInPrice(tier.price ?? 0, event.taxRate ?? 0, event.taxInclusivePricing === true).total);
   const fromPrice = canBuy && prices.length > 0 ? Math.min(...prices) : null;
   const rsvpFull = isRsvp && !isPastEvent && event.rsvpRemaining != null && event.rsvpRemaining <= 0;
-  return { isRsvp, activeTiers, isSoldOut, isPastEvent, canBuy, fromPrice, rsvpFull };
+  return { isRsvp, activeTiers, isSoldOut, isPastEvent, salesClosed, canBuy, fromPrice, rsvpFull };
 }
 
 export type EventPageState = ReturnType<typeof eventPageState>;

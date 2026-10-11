@@ -93,7 +93,8 @@ export default function EventHero({ event, org, preview = false, onShowDescripti
             {/* Floor map (spec 014): opens full screen; renders only once a map is published */}
             <FloorMapButton eventId={event.id} eventName={event.name} preview={preview} />
             {/* Applications (spec 011): vendors, sponsors, press, panels — above the fold */}
-            <GetInvolved eventId={event.id} preview={preview} />
+            {/* Spec 050-D: a sales close shuts every form, so the pills go */}
+            {!event.salesClosed && <GetInvolved eventId={event.id} preview={preview} />}
           </div>
         </div>
 
